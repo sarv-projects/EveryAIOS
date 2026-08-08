@@ -1,0 +1,12 @@
+[package]
+name = "everyaios-cdp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EveryAIOS CDP client — WebSocket client + discovery over system Chrome/Edge (P0.1 skeleton; P2.1 full client)"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

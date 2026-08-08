@@ -1,0 +1,25 @@
+# Rust
+crates/target/
+crates/Cargo.lock.orig
+
+# Node / TS (P0.3+)
+node_modules/
+packages/*/node_modules/
+ui/node_modules/
+dist/
+*.tsbuildinfo
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor / local
+*.swp
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# Local runtime state (never commit user data)
+*.db
+*.db-shm
+*.db-wal

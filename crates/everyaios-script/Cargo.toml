@@ -1,0 +1,11 @@
+[package]
+name = "everyaios-script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EveryAIOS script-eval sandbox — rquickjs (P0.1 placeholder; P2.5 sandbox)"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }

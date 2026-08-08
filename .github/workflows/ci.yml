@@ -1,0 +1,54 @@
+# EveryAIOS — Rust workspace CI (P0.1)
+# Runs cargo test + clippy + fmt on every push/PR, on all 3 desktop platforms.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  rust:
+    name: cargo test/clippy/fmt (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: crates
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy --all-targets
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --all-features
+
+      # SQLCipher bundled build needs a C compiler on Windows:
+      - name: Ensure MSVC build tools (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Visual Studio Build Tools are preinstalled on GitHub runners;
+          # this step guards against missing C compilation for SQLCipher.
+          vswhere.exe -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 | Out-Null

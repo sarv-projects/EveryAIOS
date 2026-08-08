@@ -1,0 +1,12 @@
+[package]
+name = "everyaios-audit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EveryAIOS audit — NDJSON append-only event log (P0.1 stub; full ingest/replay in P2.10/P3.1)"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

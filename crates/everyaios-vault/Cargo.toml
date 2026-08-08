@@ -1,0 +1,11 @@
+[package]
+name = "everyaios-vault"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EveryAIOS vault — SQLCipher key-ring store (P0.1 init; full key pools/OAuth in P1.1)"
+
+[dependencies]
+rusqlite = { workspace = true }
+thiserror = { workspace = true }

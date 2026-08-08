@@ -1,0 +1,10 @@
+[package]
+name = "everyaios-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EveryAIOS MCP server — 17-tool catalog + stateless Streamable HTTP (P0.1 catalog; P6.7 server)"
+
+[dependencies]
+serde = { workspace = true }

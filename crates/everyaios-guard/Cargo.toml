@@ -1,0 +1,11 @@
+[package]
+name = "everyaios-guard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EveryAIOS Guard-1 — compiled regex blocklist scanning (P0.1 stub; full hardening in P7.4)"
+
+[dependencies]
+regex = { workspace = true }
+thiserror = { workspace = true }
