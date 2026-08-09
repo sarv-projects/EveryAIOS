@@ -38,7 +38,7 @@ jobs:
       # SQLCipher (bundled) requires OpenSSL for encryption.
       # Linux: libssl-dev is preinstalled on ubuntu-latest runners.
       # macOS: LibreSSL ships with Xcode CLI tools (already available).
-      # Windows: install via vcpkg and set OPENSSL_DIR.
+      # Windows: install via vcpkg and set OPENSSL_DIR + link system libs.
       - name: Install OpenSSL (windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -46,6 +46,9 @@ jobs:
           vcpkg install openssl:x64-windows-static-md
           echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $env:GITHUB_ENV
           echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+          # OpenSSL static needs these Windows system libs at link time
+          $libs = "-Clink-arg=advapi32.lib -Clink-arg=user32.lib -Clink-arg=crypt32.lib -Clink-arg=gdi32.lib"
+          echo "RUSTFLAGS=-D warnings $libs" >> $env:GITHUB_ENV
 
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
