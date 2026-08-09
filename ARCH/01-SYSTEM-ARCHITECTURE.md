@@ -14,16 +14,16 @@
 │  ┌──────────────┬───────────────┬───────────────┬────────────────────────┐ │
 │  │ BrowserSvc   │ ScriptEval    │ GuardRail     │ Audit/Replay           │ │
 │  │ (CDP child,  │ (rquickjs     │ (regex        │ (NDJSON ingest,        │ │
-│  │  17 tools,   │  sandbox)     │  interceptors,│  recording index,      │ │
+│  │  34 tools,   │  sandbox)     │  interceptors,│  recording index,      │ │
 │  │  snapshot/   │               │  diff cards)  │  token estimates)      │ │
 │  │  refs/diff)  │               │               │                        │ │
 │  └──────────────┴───────────────┴───────────────┴────────────────────────┘ │
 │  · MCP server (official `modelcontextprotocol/rust-sdk`, http://127.0.0.1:9200/mcp)  · Key-ring vault          │
-│  · ProcessSupervisor for the Node sidecar (spawn/restart/backoff)          │
+│  · ProcessSupervisor for the Bun-compiled sidecar (spawn/restart/backoff)          │
 └───────────────▲────────────────────────────────────────┬───────────────────┘
                 │ stdio JSON-RPC (supervised child)       │ events
 ┌───────────────┴────────────────────────────────────────▼───────────────────┐
-│  TS SIDECAR — `coordinator` (Node, reuses @personal-ai/core-* engine)       │
+│  TS SIDECAR — `coordinator` (Bun-compiled, reuses @personal-ai/core-* engine)       │
 │  · Agent loop (pi-style: length-guard, model swap, cost ledger)             │
 │  · Spec/blueprint loader → agent registry (core-agents)                    │
 │  · Memory+RAG (core-memory, core-files: 7 algos, FTS5+vec, KG)             │
@@ -52,14 +52,14 @@
 | Process | Parent | Starts | Dies | Restart policy |
 |---|---|---|---|---|
 | `everyaios-core` (Rust) | OS (tray) | app launch | app quit | — (the root) |
-| `coordinator` (Node sidecar) | everyaios-core | on demand / at launch | crash, idle, explicit stop | Supervisor: exponential backoff (1s→2s→4s→60s cap), circuit breaker after 5 crashes/10min, `reconnecting` state surfaced to UI (doc 03, v2.0 §4.3) |
+| `coordinator` (Bun-compiled sidecar) | everyaios-core | pre-spawned at boot (J16) | crash, idle, explicit stop | Supervisor: exponential backoff (1s→2s→4s→60s cap), circuit breaker after 5 crashes/10min, `reconnecting` state surfaced to UI (doc 03, v2.0 §4.3) |
 | Chromium child | everyaios-core | on first browser use | idle sweep (session retention 60min default), explicit close | one-shot spawn; no auto-restart |
 
 **Browser children are tiered (08 §8.8):** system Chrome/Edge = interactive default; **Obscura** (default) / **Lightpanda** (opt-in) = lightweight CDP tier for scrape/RAG at ~16× less memory; optional user-gated stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard bot defenses. One CDP driver (`everyaios-cdp`), task tier picks the engine. Sessions/accounts live in the encrypted **Session Vault** (08 §8.9) with Trust-Ladder-gated access; challenges go through the handler tier (08 §8.10).
 | Ollama / llamafile | everyaios-core (optional) | on local-model use | user stop | spawned only when a local model is selected |
 | searxng instance | everyaios-core (optional) | on search use (if user-installed) | user stop | optional; primary path is public-instance cascade (core-search built) |
 
-**Startup order:** everyaios-core boots (config, vault, SQLite) → UI window → sidecar spawned lazily (first chat/agent action) → browser on first browser tool. **Idle RSS target:** <30MB before sidecar, <80MB with sidecar warm (no browser), browser adds only when used. No service is loaded at boot unless needed (spec §6.5).
+**Startup order:** everyaios-core boots (config, vault, SQLite) → UI window → sidecar pre-spawned at Tauri boot (hidden, ~200ms perceived cold start per J16) → browser on first browser tool. **Idle RSS target:** <30MB before sidecar, <80MB with sidecar warm (no browser), browser adds only when used. No service is loaded at boot unless needed (spec §6.5).
 
 ## 1.4 IPC contracts
 
@@ -88,3 +88,23 @@
 - All mutating OS/browser actions pass the **dual-guard** (deterministic regex + human diff-card click).
 - Browser tabs are ownership-isolated: `mine | user | other-agent` (BrowserOS model, doc 33 §6).
 - Audit is append-only and replayable.
+
+---
+
+## 1.7 Data Layer Concurrency (SQLite WAL)
+
+All local databases use **WAL (Write-Ahead Logging)** journal mode:
+- Reads NEVER block (multiple readers concurrent with one writer)
+- Single-writer at the DB level (serialized via Rust mutex)
+- Per-agent write queues drain into a FIFO merge queue before hitting the writer
+- `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` set on every connection open
+- Vault (SQLCipher) also uses WAL mode
+
+**Concurrency model:**
+```
+Agent A write ┐
+Agent B write ├→ FIFO merge queue → single SQLite writer → WAL → readers see instantly
+Agent C write ┘
+```
+
+This avoids SQLITE_BUSY errors entirely while maintaining append-only audit guarantees.

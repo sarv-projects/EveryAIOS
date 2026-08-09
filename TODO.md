@@ -1,8 +1,8 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 · **Spec:** v3.7 · **Architecture:** ARCH/00–11 + DIAGRAMS.md
+> **Generated:** 2026-08-07 · **Spec:** v3.7 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
-> **Scope:** Complete product — 109 capabilities, 32 algorithms, 13 build phases (P0–P12).
+> **Scope:** Complete product — 124 capabilities, 32 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
 
 ---
@@ -24,20 +24,20 @@
 - [ ] `[PARTIAL]` CI: GitHub Actions cargo test + clippy + fmt check — **workflow file written + local gates verified (fmt/clippy/test all pass), but the Actions run itself is UNVERIFIED: requires git init + GitHub remote to execute**
 
 ### P0.2 Tauri Shell
-- [ ] `[NOT DONE]` Init Tauri v2 app in `desktop_app/` root
-- [ ] `[NOT DONE]` Configure `tauri.conf.json` — window, bundler (AppImage/MSI/DMG), identifier
-- [ ] `[NOT DONE]` Wire everyaios-core as Tauri's Rust backend (Tauri commands + events)
-- [ ] `[NOT DONE]` Verify `tauri dev` boots and shows empty webview window
-- [ ] `[NOT DONE]` Add system tray with basic status icon
+- [x] `[DONE]` Init Tauri v2 app in `desktop_app/` root (`src-tauri/` — Cargo.toml, build.rs, tauri.conf.json, capabilities, lib.rs, main.rs)
+- [x] `[DONE]` Configure `tauri.conf.json` — window 1200×800 (main, resizable, centered), bundler targets appimage/msi/dmg, identifier `com.everyaios.desktop`
+- [x] `[DONE]` Wire everyaios-core as Tauri's Rust backend (Tauri commands: version, core_boot_report, scan_text, probe_vault — boot report, Guard-1 scan, vault probe)
+- [x] `[DONE]` Verify `tauri dev` boots and shows empty webview window — **verified headless on Xvfb (never on the user's display)**: 1280×800 window mapped, webview page renders (985K white px + accent-blue boot card), process + WebKitWebProcess/NetworkProcess alive; tray icon present in X tree
+- [x] `[DONE]` Add system tray with basic status icon (Show EveryAIOS / Quit menu, `icons/32x32.png`, generated via `scripts/gen-icons.py`)
 
 ### P0.3 TS Sidecar (Coordinator)
-- [ ] `[NOT DONE]` Create `packages/coordinator/` — TS project with tsconfig
-- [ ] `[NOT DONE]` Configure pnpm workspace linking to `APP/packages/core-*` as deps
-- [ ] `[NOT DONE]` Implement hello-world IPC responder (stdin/stdout JSON-RPC)
-- [ ] `[NOT DONE]` Bun compile: `bun build --compile ./src/index.ts --outfile coordinator`
-- [ ] `[NOT DONE]` Verify binary boots and responds to echo over stdio
-- [ ] `[NOT DONE]` Measure binary size (target: document actual vs ~60MB expected)
-- [ ] `[NOT DONE]` Sidecar heap safety (J13): `--max-old-space-size=512`; self-restart at 80% heap used; forced rotation at 30min (ProcessSupervisor-driven, from last Hermes checkpoint 20snap/500MB)
+- [x] `[DONE]` Create `packages/coordinator/` — TS project with tsconfig (Bun target, strict, ESM; deps on all 10 `@personal-ai/core-*`)
+- [x] `[DONE]` Configure pnpm workspace linking to `APP/packages/core-*` as deps — `pnpm-workspace.yaml` adds `../APP/packages/*`; verified all 10 core-* symlinked into coordinator; `allowBuilds` map (pnpm 11 syntax) builds better-sqlite3/onnxruntime-native; root `package.json` added for the workspace
+- [x] `[DONE]` Implement hello-world IPC responder (stdin/stdout JSON-RPC) — `src/{frame,message,index}.ts` mirror `everyaios-ipc` exactly: `[u32 LE len][JSON]` framing + ACP-style `initialize` (protocolVersion=1, default-off capabilities) + echo/session/ping/shutdown; **11/11 bun tests green incl. real child-process E2E round-trip; tsc clean**
+- [x] `[DONE]` Bun compile: `bun build --compile ./src/index.ts --outfile dist/coordinator` — **compiled in 4.6s, 3 modules bundled, output at `packages/coordinator/dist/coordinator`**
+- [x] `[DONE]` Verify binary boots and responds to echo over stdio — **tested: framed `echo` request → `{'text': 'hello from binary', 'echoed': True}` response via compiled binary**
+- [x] `[DONE]` Measure binary size (target: document actual vs ~60MB expected) — **actual: 91MB (Bun 1.3.14 runtime overhead; ELF x86-64 dynamically linked). Larger than 60MB estimate due to Bun runtime growth since v1.0. Acceptable for desktop; strip/compression can reduce for distribution.**
+- [ ] `[PARTIAL]` Sidecar heap safety (J13): `--max-old-space-size=512`; self-restart at 80% heap used; forced rotation at 30min (ProcessSupervisor-driven, from last Hermes checkpoint 20snap/500MB) — **`heapUsedMB()` implemented + reported in `session/ping`; restart/rotation logic requires P0.4 ProcessSupervisor (not yet built)**
 
 ### P0.4 ProcessSupervisor (J7)
 - [ ] `[NOT DONE]` Implement spawn logic in everyaios-core: launch coordinator binary as child
@@ -166,7 +166,7 @@
 - [ ] `[NOT DONE]` Implement line-diff between snapshots with `+n/-n` markers
 - [ ] `[NOT DONE]` Implement URL-change short-circuit (navigation → return full new snapshot)
 
-### P2.3 Input Dispatch & 17-Tool Catalog (E2)
+### P2.3 Input Dispatch & 34-Tool Catalog (E2)
 - [ ] `[NOT DONE]` Implement `act` tool: click/type/fill/press/hover/select/scroll/drag/dialog
 - [ ] `[NOT DONE]` Implement `act` returns post-settle diff (no follow-up snapshot needed)
 - [ ] `[NOT DONE]` Implement `navigate` tool (goto URL, back, forward, reload)
@@ -181,7 +181,12 @@
 - [ ] `[NOT DONE]` Implement `tabs` / `tab_groups` / `windows` / `history` management tools
 - [ ] `[NOT DONE]` Implement `download` / `upload` with temp-file routing
 - [ ] `[NOT DONE]` Implement `run` tool (→ everyaios-script, see P2.5)
-- [ ] `[NOT DONE]` Register all 17 tools in everyaios-mcp with annotations (F9: readOnlyHint/openWorldHint, ACP tool-kind taxonomy)
+- [ ] `[NOT DONE]` Register all 34 tools in everyaios-mcp (original 17 + 13 new: bookmarks×6, tab_groups_manage×5, window_manage×5, enhanced_snapshot, file_ops×3) with annotations (F9: readOnlyHint/openWorldHint, ACP tool-kind taxonomy)
+- [ ] `[NOT DONE]` Add bookmark tools (6): get_bookmarks, create_bookmark, remove_bookmark, update_bookmark, move_bookmark, search_bookmarks
+- [ ] `[NOT DONE]` Add tab group management tools (5): list_tab_groups, group_tabs, update_tab_group, ungroup_tabs, close_tab_group
+- [ ] `[NOT DONE]` Add window management tools (5): list_windows, create_window, create_hidden_window, close_window, activate_window
+- [ ] `[NOT DONE]` Add enhanced_snapshot tool (accessibility snapshot with stable refs + paint-order filtering)
+- [ ] `[NOT DONE]` Add file operation tools (3): save_pdf_enhanced, save_screenshot_enhanced, download_file
 
 ### P2.4 Tiered Engine Stack (E10)
 - [ ] `[NOT DONE]` Implement tier-0 static extraction: reqwest + HTML→markdown parser
@@ -383,6 +388,10 @@
 - [ ] `[NOT DONE]` Implement Hermes 3-layer tool-result persistence (preview+path, per-turn 200K, 0.15/0.30)
 - [ ] `[NOT DONE]` Implement OpenCode PRUNE_PROTECT 40K tool-output erasure
 - [ ] `[NOT DONE]` Test: compaction triggers at ratios without breaking loop
+- [ ] `[NOT DONE]` Integrate Graphiti-pattern temporal KG — entities with validity windows, bi-temporal tracking
+- [ ] `[NOT DONE]` Implement Cognee-pattern remember/recall/forget/improve API for memory operations
+- [ ] `[NOT DONE]` Add RTK-style output compression — per-command parsers for shell tool results (60-90% reduction)
+- [ ] `[NOT DONE]` Implement SeekStorm-pattern hybrid search (vector + BM25) as embedded Rust library
 
 ### P5.8 Pass-by-Reference Context (C10)
 - [ ] `[NOT DONE]` Implement ref handles for files/datasets/tool results
@@ -466,7 +475,7 @@
 - [ ] `[NOT DONE]` Wire core-search MCP client from APP (consume external MCP servers)
 - [ ] `[NOT DONE]` Implement tool catalog reconciliation (external MCP tools → unified registry)
 - [ ] `[NOT DONE]` Implement MCP server in everyaios-mcp: stateless Streamable HTTP (2026-07-28 spec)
-- [ ] `[NOT DONE]` Expose all 17 browser tools + connector tools via MCP endpoint
+- [ ] `[NOT DONE]` Expose all 34 browser tools + connector tools via MCP endpoint
 - [ ] `[NOT DONE]` Test: external client (Claude Code) connects to our MCP endpoint, calls snapshot
 
 ### P6.8 Harness-Driving via ACP (F12/J17)
@@ -556,6 +565,12 @@
 - [ ] `[NOT DONE]` Implement symlink-safe boundary enforcement
 - [ ] `[NOT DONE]` Implement `..` escape prevention
 - [ ] `[NOT DONE]` Run path-floor fuzz test (thousands of adversarial paths) → 0 escapes
+- [ ] `[NOT DONE]` Implement profile-gated hooks (minimal/standard/strict) — ECC pattern (doc 46)
+- [ ] `[NOT DONE]` Upgrade everyaios-audit to Merkle hash-chain (OpenFang pattern) — tamper-evident log
+- [ ] `[NOT DONE]` Implement AgentShield config scanning — scan everyaios.toml, blueprints, MCP configs for injection
+- [ ] `[NOT DONE]` Add Ed25519 signed extension manifests (OpenFang pattern)
+- [ ] `[NOT DONE]` Add loop guard — SHA256 circuit breaker to prevent infinite agent loops
+- [ ] `[NOT DONE]` Add session repair (7-phase validation) for corrupt session recovery
 
 **P7 Exit Criterion:** Agent writes skill that survives restart; plugin manifest rejects bad bundles; capability blocks unlisted exec; 100% red-team blocked; path-floor fuzz = 0.
 
@@ -783,7 +798,7 @@
 - [ ] `[NOT DONE]` Measure and optimize Largest Contentful Paint (target <1s)
 - [ ] `[NOT DONE]` Measure and optimize Time to Interactive after cold start (target <2s)
 
-### P11.5 User Research & Feedback Loops
+### P11.6 User Research & Feedback Loops
 - [ ] `[NOT DONE]` Design beta feedback mechanism (in-app bug report + feature request)
 - [ ] `[NOT DONE]` Design NPS/satisfaction prompt (non-intrusive, after 7 days of use)
 - [ ] `[NOT DONE]` Plan user testing sessions: 5 testers × 3 rounds (alpha, beta, RC)
@@ -853,24 +868,107 @@
 
 ---
 
+## P11.5 — UI Implementation (from ARCH/12-UI-SPEC, ~4 wks parallel)
+
+> Source: ARCH/12-UI-SPEC.md (derived from Devin Cloud UI + research doc 46)
+
+### P11.5.1 Layout Shell
+- [ ] [NOT DONE] Implement 3-column layout (sidebar + chat + workspace) with drag-resizable dividers
+- [ ] [NOT DONE] Sidebar: navigation items (New Session, Automations, Guard, Connectors, Memory, Analytics)
+- [ ] [NOT DONE] Sidebar: project/workspace selector dropdown
+- [ ] [NOT DONE] Sidebar: recent sessions list with status badges (orange/yellow/green/red/grey/blue)
+- [ ] [NOT DONE] Sidebar: child session indentation under parent
+- [ ] [NOT DONE] Sidebar: collapse to icon-only mode (48px)
+
+### P11.5.2 Chat Panel
+- [ ] [NOT DONE] Chat message rendering (user/AI/system message types)
+- [ ] [NOT DONE] Artifact cards: rendered file previews with code/copy/download buttons
+- [ ] [NOT DONE] Progress steps: clickable timeline (✓ completed, ● running, ○ pending)
+- [ ] [NOT DONE] MCQ interrupt: "Action required" with Approve/Edit/Reject/Options buttons
+- [ ] [NOT DONE] Input bar: attach (+), text area, mode selector, microphone, send
+- [ ] [NOT DONE] Chat modes: Normal / Plan / Research / Quick / Code
+- [ ] [NOT DONE] Slash commands: /help, /mode, /model, /undo, /clear, /export
+- [ ] [NOT DONE] Knowledge macros (!name) and blueprint @mentions
+
+### P11.5.3 Workspace Panel (Tabbed)
+- [ ] [NOT DONE] Tab bar with dynamic tabs, reorder, close, pin, expand-to-fullscreen
+- [ ] [NOT DONE] Progress tab: unified timeline with timestamp, icons, expandable entries
+- [ ] [NOT DONE] Shell tab: terminal view, command history panel, read-only/writable toggle
+- [ ] [NOT DONE] Code tab: syntax editor, live diffs, line numbers, minimap, file tree
+- [ ] [NOT DONE] Browser tab: live CDP view, interactive mode, address bar, "● Live" indicator
+- [ ] [NOT DONE] Excel tab: spreadsheet grid, real-time cell editing, formula bar, charts, sheet tabs
+- [ ] [NOT DONE] Word tab: WYSIWYG render, live cursor, typewriter effect, page/word count
+- [ ] [NOT DONE] PPT tab: slide preview, element editing, slide strip navigator
+- [ ] [NOT DONE] PDF tab: page rendering, form fields, annotations, zoom, page navigation
+
+### P11.5.4 Takeover/Resume Flow
+- [ ] [NOT DONE] Pause button → switches all panels to editable mode
+- [ ] [NOT DONE] "● Live" / "⏸ Paused" indicator toggle
+- [ ] [NOT DONE] Resume button → mandatory "describe changes" prompt → agent continues
+
+### P11.5.5 Automation Builder
+- [ ] [NOT DONE] Automations list with sparkline activity charts
+- [ ] [NOT DONE] Automation editor: trigger/condition/action/budget/network-policy fields
+- [ ] [NOT DONE] Template gallery (10+ pre-built automations)
+- [ ] [NOT DONE] NL automation creation (describe in text → generates config)
+
+### P11.5.6 Knowledge/Memory Browser
+- [ ] [NOT DONE] Knowledge list with trigger, macro, scope per item
+- [ ] [NOT DONE] Folder organization (nested, drag, bulk enable/disable)
+- [ ] [NOT DONE] Auto-suggestions from AI (accept/dismiss/regenerate)
+- [ ] [NOT DONE] Episodic/Semantic/KG section browsers
+
+### P11.5.7 Guard Panel
+- [ ] [NOT DONE] Trust level indicator (progress bar 0-100)
+- [ ] [NOT DONE] Recent actions log with auto-approved/pending/blocked status
+- [ ] [NOT DONE] Permission chips (workspace read/write, shell, browser, external)
+
+### P11.5.8 Connector Hub Panel
+- [ ] [NOT DONE] Connected services list with tool counts
+- [ ] [NOT DONE] MCP servers list with status (running/not connected)
+- [ ] [NOT DONE] Add/Install buttons for new connectors
+
+### P11.5.9 Aider-Derived Features
+- [ ] [NOT DONE] RepoMap: tree-sitter tag extraction + PageRank ranking + SQLite cache + budget fitting
+- [ ] [NOT DONE] Edit Strategy: SEARCH/REPLACE with fuzzy matching + whitespace flex + ellipsis
+- [ ] [NOT DONE] Architect Mode: two-pass (reasoning model → editor model) agent pattern
+- [ ] [NOT DONE] File Watcher: notify crate watching for `// ai!` markers → auto-submit
+- [ ] [NOT DONE] Lint/Test Reflection: after every edit run lint → on error retry ×3
+- [ ] [NOT DONE] MODEL_ALIASES: config map of short names to full provider/model paths
+
+### P11.5.10 New Agent Patterns (doc 47)
+- [ ] [NOT DONE] Implement Plan/Act dual-mode in agent loop (Cline pattern) — explicit plan phase before tool execution
+- [ ] [NOT DONE] Implement Context Provider plugin system (@Codebase, @Docs, @URL injection points)
+- [ ] [NOT DONE] Add ACP subscription linking — users bring existing Claude/ChatGPT subscriptions directly
+- [ ] [NOT DONE] Add Custom Distribution support — branded EveryAIOS configs with pre-loaded providers/extensions
+- [ ] [NOT DONE] Add Kanban view for parallel sub-agents with git worktree isolation per branch
+- [ ] [NOT DONE] Implement Oracle/reviewer model pattern — secondary heavyweight model for quality review
+- [ ] [NOT DONE] Implement Intent classification before tool dispatch — route prompts to specialized handlers (Agent vs Edit vs Ask vs Terminal) before the tool loop starts (Copilot Chat pattern)
+- [ ] [NOT DONE] Implement Autopilot nudge mechanism — when model stops prematurely, inject continuation prompt to prevent "stopped too early" (Copilot Chat pattern)
+- [ ] [NOT DONE] Add ApplyPatch edit format (*** Add/Delete/Update File) — simpler than unified diff, proven at Copilot scale, fourth edit strategy option
+- [ ] [NOT DONE] Implement Prompt TSX pattern — JSX-like declarative prompt composition with automatic context window budget management, type-safe and composable
+
+---
+
 ## SUMMARY
 
 | Phase | Tasks | Weeks |
 |---|---|---|
 | P0 Workspace & Skeleton | 46 | ~2 |
 | P1 Chat + BYOK | 49 | ~4 |
-| P2 Browser Layer | 67 | ~6 |
+| P2 Browser Layer | 72 | ~6 |
 | P3 Replay + Cockpit | 14 | ~4 |
 | P4 Office Engine | 36 | ~5 |
-| P5 Memory + Token Economy | 55 | ~5 |
+| P5 Memory + Token Economy | 59 | ~5 |
 | P6 Orchestration + Connectors | 67 | ~5 |
-| P7 Forge + Guardrails | 41 | ~4 |
+| P7 Forge + Guardrails | 47 | ~4 |
 | P8 Product Polish | 35 | ~3 |
 | P9+ Post-v1 | 14 | later |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
+| **P11.5 UI Implementation** | **56** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **45** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 20 | parallel |
-| **TOTAL** | **575** | **~45 weeks** |
+| **TOTAL** | **646** | **~45 weeks** |
 
-> **Note:** P11 (UI/UX) and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.
+> **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

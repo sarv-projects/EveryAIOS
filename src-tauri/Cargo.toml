@@ -1,0 +1,32 @@
+[package]
+name = "everyaios-desktop"
+version = "0.1.0"
+description = "EveryAIOS — agentic desktop OS shell (Tauri v2)"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.80"
+
+[lib]
+name = "everyaios_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# EveryAIOS Rust core — path deps into the crates workspace. The core owns
+# config, vault, guard, audit and IPC; the shell just exposes it to the UI.
+everyaios-core = { path = "../crates/everyaios-core" }
+everyaios-ipc = { path = "../crates/everyaios-ipc" }
+everyaios-vault = { path = "../crates/everyaios-vault" }
+everyaios-audit = { path = "../crates/everyaios-audit" }
+everyaios-guard = { path = "../crates/everyaios-guard" }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

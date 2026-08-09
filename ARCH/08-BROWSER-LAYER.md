@@ -1,6 +1,6 @@
 # 08 — Browser Layer (the agent's real browser)
 
-> **The user requirement, verbatim:** *"don't forget browser. agentic OS means to replace everything — from browser to file editor to coding to basically everything. Can we use something lightweight? It must hold all types of search engines, all types of accounts (stored tokens), allow the agent autonomous permission-gated access via stored accounts, and handle captchas of all types."* Design: **one CDP driver, a tiered engine stack (lightweight by default)** + injected recorder for replay + 17-tool catalog + rquickjs `run` sandbox + **Session Vault** (multi-account, permission-gated) + **challenge-handler tier**. Patterns from BrowserOS source deep-dive (doc 33), browser-automation research (doc 06), and fresh mid-2026 verification of Lightpanda / Obscura / Camoufox / CloakBrowser / Steel (see 8.8).
+> **The user requirement, verbatim:** *"don't forget browser. agentic OS means to replace everything — from browser to file editor to coding to basically everything. Can we use something lightweight? It must hold all types of search engines, all types of accounts (stored tokens), allow the agent autonomous permission-gated access via stored accounts, and handle captchas of all types."* Design: **one CDP driver, a tiered engine stack (lightweight by default)** + injected recorder for replay + 34-tool catalog + rquickjs `run` sandbox + **Session Vault** (multi-account, permission-gated) + **challenge-handler tier**. Patterns from BrowserOS source deep-dive (doc 33), browser-automation research (doc 06), and fresh mid-2026 verification of Lightpanda / Obscura / Camoufox / CloakBrowser / Steel (see 8.8).
 
 ## 8.1 The browser subsystem (Rust: everyaios-cdp + everyaios-browser)
 
@@ -9,9 +9,12 @@
 - **Ownership isolation (BrowserOS model):** every tab has an owner: `mine | user | other-agent`. User tabs are never touched unless the user asks; agent tabs grouped per agent; closing an agent session closes its tab group; per-page claims recorded in the audit DB (`tab_claims`).
 - **Lifecycle:** on-demand spawn; idle sweep (session retention 60min default, configurable); explicit kill; browser crash → per-tab recovery hooks (doc 03 resume).
 
-## 8.2 The 17-tool catalog (everyaios-mcp)
+## 8.2 The 34-tool catalog (everyaios-mcp)
 
-`tabs · tab_groups · history · navigate · snapshot · diff · act · download · upload · read · grep · screenshot · pdf · wait · windows · evaluate · run`
+`tabs · tab_groups · history · navigate · snapshot · enhanced_snapshot · diff · act · download · upload · read · grep · screenshot · pdf · wait · windows · evaluate · run · bookmarks · create_bookmark · remove_bookmark · update_bookmark · move_bookmark · search_bookmarks · list_tab_groups · group_tabs · update_tab_group · ungroup_tabs · close_tab_group · list_windows · create_window · close_window · activate_window`
+
+> **Expanded in v1.1 (doc 46, BrowserOS 53-tool analysis):** Original 17 core interaction tools + 6 bookmark tools + 5 tab-group management tools + 5 window management tools + enhanced_snapshot (with paint-order filtering, stable refs). Total: 34 tools covering navigation, interaction, content, export, bookmarks, tab organization, and window management. Further expansion to 40+ tools possible post-v1 (history search, cookie management, extension control).
+
 - **snapshot**: page → indented **accessibility tree** (a11y, via CDP Accessibility domain) with stable `[ref=eN]`, `interactive` (actionables+headings) vs `full` modes, depth caps 1..=100, **iframes stitched inline**.
 - **act**: click/click_at/type/type_at/fill(whole-form-in-one-call)/press/hover/hover_at/focus/check/uncheck/select/scroll/drag/drag_at/dialog_accept/dialog_dismiss; returns **post-settle diff** (no follow-up snapshot needed).
 - **diff**: line-diff of two snapshots with `+n/-n` and **URL-change short-circuit** (navigation → return full new snapshot, don't diff garbage).
@@ -110,3 +113,29 @@ Ordered by cost/effectiveness. Defense-in-depth, not one magic bypass; the user 
    - **LLM visual grounding**: the snapshot→act loop already gives eyes on simple challenges — click-hold, image-select, checkbox — solved via `act` (browser-use pattern, doc 06).
 4. **BYO solver APIs (optional, user's own account/credit)** — CapSolver / CapMonster / 2Captcha as a pluggable `ChallengeSolver`, permission-gated like any F-series connector; returned token injected via CDP. Never a default, never bundled credit.
 5. **Explicitly not in scope**: anything that doesn't route through the user's own authorized accounts + vault.
+
+---
+
+## 8.11 Tool Result Contract (TC-4.1)
+
+Every tool execution MUST return a structured result with:
+
+```
+{
+  "success": boolean,
+  "output": string,        // stdout or primary result (truncated per 05 §5.10 RTK rules)
+  "stderr": string | null, // stderr if any (always preserved, never truncated)
+  "exit_code": number | null, // for shell/script tools
+  "duration_ms": number,   // wall-clock execution time
+  "truncated": boolean,    // true if output was truncated by budget
+  "ref": string | null     // pass-by-reference handle for large outputs
+}
+```
+
+**Rules:**
+1. `stderr` is ALWAYS preserved in full (never subject to RTK compression) — it contains error diagnostics the LLM needs
+2. `exit_code` is ALWAYS preserved — non-zero triggers reflection loop (I4)
+3. `output` is subject to per-command RTK compression (§5.10) before LLM injection
+4. If `output` exceeds 2MB, replace with `ref` handle (pass-by-reference, C10)
+5. `duration_ms` feeds budget tracking (J11) and timeout detection (J10)
+6. Tool results are wrapped in `<tool_result>` delimiters for injection defense (J6)

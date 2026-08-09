@@ -14,7 +14,7 @@
 - **Exit:** two keys under one provider auto-failover under a simulated 429 (unit test + manual UI); streaming chat round-trip with a real BYOK key; ledger rows correct; $ budget kills session (J11).
 
 ## P2 — Browser layer (≈6 wks)
-- everyaios-cdp + everyaios-browser: spawn system Chrome/Edge, CDP discovery, snapshot/diff/refs, input, 17-tool catalog served via everyaios-mcp (stdio first, then HTTP).
+- everyaios-cdp + everyaios-browser: spawn system Chrome/Edge, CDP discovery, snapshot/diff/refs, input, 34-tool catalog served via everyaios-mcp (stdio first, then HTTP).
 - **Tiered engines (E10):** Obscura lightweight CDP tier (default for scrape/RAG) + Lightpanda opt-in; tier 0 static → 1 lightweight → 2 full escalation; spawn-only license discipline.
 - **Session Vault (E11):** SQLCipher-encrypted multi-account sessions (cookies/localStorage), Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit; capture paths 1–3 incl. **live-attach session inheritance (E13)**.
 - **Challenge handler (E12/E14):** PoW local solver + human-in-loop pass-through (default) + behavioral-realism input layer; optional BYO solver API behind a flag.
@@ -74,7 +74,7 @@ Computer-use pixels (E9), WASM fuel sandbox (I3), voice input (H15), remote sess
 - **Exit:** launch plan + assets ready; beta testers onboarded; docs live.
 
 ## Risk register (top items, with mitigation)
-1. **Node sidecar perf** — mitigation: lazy spawn, keep-alive, Rust hot paths already extracted (browser/script/guard/audit).
+1. **Bun-compiled sidecar perf** — mitigation: pre-spawn at boot, keep-alive, Rust hot paths already extracted (browser/script/guard/audit).
 2. **CDP fragility across Chrome versions** — pinned chrome-for-testing for CI + fallback; protocol-version tolerant client (everyaios-cdp).
 3. **Office byte-preservation complexity** — conformance oracle in CI on every save-path change; feature-flag edits until green.
 4. **OAuth ToS volatility** — encrypted store + graceful degrade to BYOK (03 §3.6).

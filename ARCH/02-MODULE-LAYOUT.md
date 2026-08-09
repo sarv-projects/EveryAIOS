@@ -16,7 +16,7 @@ desktop_app/
 │   ├── everyaios-vault/               ← SQLCipher key-ring store (per-provider key pools, OAuth tokens)
 │   └── everyaios-ipc/                 ← JSON-RPC over stdio (sidecar contract) + tauri command glue
 ├── packages/                    ← TS workspace (NEW — reuses @personal-ai/core-* from APP/ as deps)
-│   └── coordinator/             ← the Node sidecar (agent loop, engine stages, hub, memory)
+│   └── coordinator/             ← the Bun-compiled sidecar (agent loop, engine stages, hub, memory)
 └── ui/                          ← React SPA (webview frontend)
 ```
 
@@ -31,7 +31,7 @@ desktop_app/
 | everyaios-script | rquickjs async runtime, `browser` SDK surface, ownership filtering, limits | BrowserOS run tool (doc 33 §6.3) | 64MB heap / 512KB stack / 30s / 2MB return; per-primitive InnerCallHook (authorize + record + on_page_created) |
 | everyaios-guard | compiled RegexSet blocklist, path-boundary floors, diff-card request state, estop | doc 03 §8, doc 33 §4.3 guards | every generated shell string scanned pre-exec; destructive = human click always |
 | everyaios-audit | recording ingest (NDJSON + headers + sticky has_gap), recording index (dedupe, one-tx commit), per-dispatch token estimates, session efficiency projections | BrowserOS recordings/replay/recording_index + session_efficiency_stats (doc 33 §9) | append-only; 7-day replay retention; insert-once projections |
-| everyaios-mcp | official `modelcontextprotocol/rust-sdk` server: one endpoint `http://127.0.0.1:9200/mcp` + stdio; **stateless per MCP 2026-07-28** (no initialize handshake, no Mcp-Session-Id — every request self-contained via `_meta`); 17-tool catalog; tool annotations (readOnly/openWorld); x-mcp-header params | BrowserOS browseros-mcp (doc 33 §6) + MCP 2026-07-28 (doc 34 §2) | stateless streamable HTTP |
+| everyaios-mcp | official `modelcontextprotocol/rust-sdk` server: one endpoint `http://127.0.0.1:9200/mcp` + stdio; **stateless per MCP 2026-07-28** (no initialize handshake, no Mcp-Session-Id — every request self-contained via `_meta`); 34-tool catalog; tool annotations (readOnly/openWorld); **`Mcp-Method`/`Mcp-Name` HTTP headers** (required per SEP-2243) | BrowserOS browseros-mcp (doc 33 §6) + MCP 2026-07-28 (doc 34 §2) | stateless streamable HTTP |
 | everyaios-vault | SQLCipher token store: per-provider key pools, OAuth token rows, TTL/rotation metadata | BrowserOS oauth_tokens schema (doc 33 §7.4) + doc 19 §7 | keys never enter LLM context; per-key usage/cooldown state |
 | everyaios-ipc | stdio JSON-RPC framing, typed messages, streaming | — | versioned contract (01 §1.4) |
 
@@ -50,7 +50,7 @@ desktop_app/
 
 **Division of trust:** the sidecar proposes; the Rust core disposes. **Execution model:** the sidecar runs the reused `core-*` engine in-process (files, connectors, search — that's the asset being reused), but every **mutating** call must present a valid **everyaios-guard authorization ticket**: Rust performs the regex scan + path resolution + permission decision first and issues a short-lived ticket; the sidecar's tool runtime rejects un-ticketed mutations. The sidecar's own *unguarded* OS access is confined to its data dir (its stdio pipe is the only unrestricted handle). Browser control, script-eval, OAuth-token use, and shell outside the granted workspace always execute in Rust regardless of ticket.
 
-## 2.4 The 17-tool browser catalog (everyaios-mcp + everyaios-browser)
+## 2.4 The 34-tool browser catalog (everyaios-mcp + everyaios-browser)
 
 `tabs · tab_groups · history · navigate · snapshot · diff · act · download · upload · read · grep · screenshot · pdf · wait · windows · evaluate · run` — same names/semantics as BrowserOS (doc 33 §6.1) so prompts and skills transfer. Annotations: read-only set on read tools; `run`/`evaluate` are open-world + always permission-checked.
 

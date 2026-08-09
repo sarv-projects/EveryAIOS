@@ -1,0 +1,29 @@
+{
+  "name": "@everyaios/coordinator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "EveryAIOS TS sidecar — the supervised agent-loop engine (P0.3). A sidecar binary, not a library — no `main` entry (build emits a compiled binary via `bun build --compile`).",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build --compile ./src/index.ts --outfile dist/coordinator",
+    "type-check": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@personal-ai/core-agents": "workspace:*",
+    "@personal-ai/core-ai": "workspace:*",
+    "@personal-ai/core-automations": "workspace:*",
+    "@personal-ai/core-connectors": "workspace:*",
+    "@personal-ai/core-engine": "workspace:*",
+    "@personal-ai/core-files": "workspace:*",
+    "@personal-ai/core-memory": "workspace:*",
+    "@personal-ai/core-providers": "workspace:*",
+    "@personal-ai/core-search": "workspace:*",
+    "@personal-ai/core-tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.7.0"
+  }
+}

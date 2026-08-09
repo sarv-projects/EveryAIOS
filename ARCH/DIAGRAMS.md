@@ -1,6 +1,6 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-08-07 · **Spec version:** v3.7
+> **Generated:** 2026-08-08 · **Spec version:** v3.7 · **Diagrams:** 24
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
 
 ---
@@ -9,13 +9,16 @@
 
 ```mermaid
 graph TB
-    subgraph UI["UI LAYER — Tauri 2 Window (React SPA)"]
-        Chat[Chat + KaTeX + Artifacts]
+    subgraph UI["UI LAYER — Tauri 2 Window (React SPA, ARCH/12)"]
+        Sidebar[Sidebar<br/>Nav + Sessions + Status]
+        Chat[Chat + Artifacts + Progress Steps]
         Cockpit[Cockpit / Flight Deck]
-        Office[Office Editors]
-        Reader[Reader / PDF / EPUB]
-        Perms[Permission Cards]
+        Workspace[Workspace Panel<br/>Shell/Code/Browser/Excel/Word/PPT/PDF]
+        Office[Office Editors<br/>docx/xlsx/pptx/pdf]
+        Perms[Permission Cards + Guard UI]
         Analytics[Token/Cost Analytics]
+        AutoBuilder[Automation Builder]
+        KnowledgeUI[Knowledge Browser]
         Tray[Tray Daemon]
     end
 
@@ -695,7 +698,7 @@ sequenceDiagram
     Note over Client,Audit: MCP 2026-07-28: STATELESS<br/>No initialize, no session-id<br/>Every request self-contained via _meta
 
     Client->>MCP: POST /mcp<br/>{method: "tools/list",<br/>_meta: {protocolVersion: "2026-07-28",<br/>capabilities: {...}}}
-    MCP-->>Client: {tools: [...17 tools...<br/>annotations: readOnlyHint/openWorldHint]}
+    MCP-->>Client: {tools: [...34 tools...<br/>annotations: readOnlyHint/openWorldHint]}
 
     Client->>MCP: POST /mcp<br/>{method: "tools/call",<br/>name: "snapshot",<br/>arguments: {tabId: "..."},<br/>_meta: {...}}
     MCP->>Guard: Permission check (readOnly tool)
@@ -853,6 +856,152 @@ flowchart TB
 
 ---
 
+## 21. UI Layout & Workspace Panel (ARCH/12)
+
+```mermaid
+graph LR
+    subgraph App["EveryAIOS Desktop (Tauri 2)"]
+        subgraph Sidebar["Sidebar (240px)"]
+            Nav[New Session<br/>Automations<br/>Guard<br/>Connectors<br/>Memory<br/>Analytics]
+            Sessions[Recent Sessions<br/>• Running ⏳<br/>• Action Required ●<br/>• Completed ✓<br/>└─ Child sessions]
+        end
+
+        subgraph Center["Chat Panel (40%)"]
+            Messages[Messages Stream]
+            Artifacts[Artifact Cards<br/>📄 Rendered Previews]
+            Progress[Progress Steps<br/>✓ Done • Running ○ Pending]
+            MCQ[MCQ Interrupt<br/>Approve / Edit / Reject]
+            Input[Input Bar<br/>+ attach | mode | 🎙 | ▶]
+        end
+
+        subgraph Right["Workspace Panel (60%, tabbed)"]
+            TabBar["[Progress][Shell][Code][Browser][Excel][Word][PPT][PDF][+]"]
+            Shell[Terminal<br/>Read-only ↔ Writable]
+            Code[Editor<br/>Live diffs, 100+ langs]
+            BrowserView[Live Browser<br/>● Live indicator]
+            ExcelView[Spreadsheet<br/>Real-time cells + charts]
+            WordView[Document<br/>Live cursor + typing]
+            PPTView[Slides<br/>Element editing]
+            PDFView[PDF<br/>Forms + annotations]
+        end
+    end
+
+    Nav --> Center
+    Sessions --> Center
+    Center --> Right
+    Progress -.->|click step| Right
+```
+
+---
+
+## 22. Takeover / Resume Flow
+
+```mermaid
+stateDiagram-v2
+    [*] --> AgentRunning: Session starts
+
+    AgentRunning: Agent Working
+    AgentRunning: All panels read-only
+    AgentRunning: ● Live indicator ON
+
+    UserPauses: User Clicks ⏸ Pause
+    UserControl: User Has Control
+    UserControl: Panels editable
+    UserControl: ⏸ Paused indicator
+
+    ResumePrompt: Resume Dialog
+    ResumePrompt: "Describe what you changed"
+    ResumePrompt: [text field required]
+
+    AgentContinues: Agent Resumes
+    AgentContinues: Context includes user changes
+    AgentContinues: ● Live indicator restored
+
+    AgentRunning --> UserPauses: User clicks Pause
+    AgentRunning --> MCQInterrupt: Agent needs input
+    UserPauses --> UserControl: Panels unlock
+    MCQInterrupt --> UserControl: User responds
+    UserControl --> ResumePrompt: User clicks ▶ Resume
+    ResumePrompt --> AgentContinues: Description submitted
+    AgentContinues --> AgentRunning: Loop continues
+    AgentContinues --> [*]: Task complete
+
+    state MCQInterrupt {
+        [*] --> ShowOptions
+        ShowOptions: ● Action Required
+        ShowOptions: [Approve] [Edit] [Reject] [Options]
+    }
+```
+
+---
+
+## 23. RepoMap Context Selection (Aider Pattern, doc 46)
+
+```mermaid
+flowchart TD
+    Start[User sends coding prompt] --> Extract[Extract identifiers<br/>from message text]
+    Extract --> Walk[Walk project files<br/>respect .gitignore]
+    Walk --> Tags[tree-sitter tag extraction<br/>definitions + references<br/>130+ languages]
+    Tags --> Cache{SQLite cache<br/>valid?}
+    Cache -->|hit| Graph
+    Cache -->|miss| Reparse[Parse file → new tags]
+    Reparse --> Store[Store in diskcache<br/>keyed by mtime]
+    Store --> Graph
+
+    Graph[Build NetworkX MultiDiGraph<br/>file nodes + symbol edges]
+    Graph --> Personalize[Personalize PageRank:<br/>• boost files in context<br/>• boost mentioned identifiers]
+    Personalize --> Rank[Rank files by score]
+    Rank --> BinarySearch[Binary search:<br/>render top-N as tree<br/>until fits token_budget]
+    BinarySearch --> Output[Output: hierarchical symbol tree<br/>injected into LLM context]
+
+    style Start fill:#e8f5e9
+    style Output fill:#e8f5e9
+    style Graph fill:#fff3e0
+    style BinarySearch fill:#fff3e0
+```
+
+---
+
+## 24. Computer-Use Agent Loop (OmniParser + UI-TARS, doc 48)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant Agent as EveryAIOS Agent
+    participant Screen as Screen Capture
+    participant Parser as OmniParser<br/>(YOLO + Florence)
+    participant VLM as Vision LLM<br/>(UI-TARS / Claude / GPT-4o)
+    participant Exec as Action Executor<br/>(pyautogui / CDP)
+
+    U->>Agent: "Fill out the expense form"
+    
+    loop Screenshot-Action Loop
+        Agent->>Screen: Capture screenshot
+        Screen-->>Agent: Raw image (1024×768)
+        
+        alt Structured app (has DOM/a11y)
+            Agent->>Agent: Use CDP 34-tool catalog
+        else Native desktop / unknown app
+            Agent->>Parser: Parse screenshot
+            Parser->>Parser: YOLO9 detect interactive regions
+            Parser->>Parser: Florence caption each element
+            Parser-->>Agent: Structured JSON<br/>[{box, label, actionable}...]
+        end
+        
+        Agent->>VLM: Screenshot + parsed elements + task
+        VLM-->>Agent: Thought: "I see the Amount field..."<br/>Action: click(x=450, y=320)
+        
+        Agent->>Exec: Execute action
+        Exec-->>Agent: Action complete
+        
+        Agent->>Agent: Check: task done?
+    end
+    
+    Agent->>U: ✓ Task complete<br/>(with screenshots as proof)
+```
+
+---
+
 ## Notes on Diagram Consistency
 
 After iterating through all flows, the following cross-cutting invariants hold across every diagram:
@@ -867,8 +1016,14 @@ After iterating through all flows, the following cross-cutting invariants hold a
 
 5. **Tombstone eviction** — diagram 16 ensures ghost context from deleted/renamed files never pollutes retrieval in diagram 4.
 
-6. **MCQ interrupt** — diagram 7 shows how circuit breaks in any of the execution diagrams (2, 8, 11, 19) gracefully hand control back to the user.
+6. **MCQ interrupt** — diagram 7 (original) + diagram 22 (expanded UI flow) show how circuit breaks in any execution diagram gracefully hand control back to the user with Approve/Edit/Reject options.
 
 7. **Crystallization** — diagram 14 shows how successful multi-step workflows from diagram 2 eventually compile to zero-token scripts used by diagram 17 (scheduled tasks).
 
 8. **Key affinity** — diagram 3 shows key-ring resolution respects cache economics from diagram 9 (same provider+model+session = same key to preserve prefix cache).
+
+9. **UI as live viewport** — diagram 21 shows the workspace panel as a real-time view into agent execution; diagram 22 shows the takeover/resume state machine that enables human-in-the-loop collaboration.
+
+10. **Intelligent context selection** — diagram 23 (RepoMap) shows how the agent selects relevant codebase context without loading everything, feeding only the most relevant symbols into the LLM within a token budget.
+
+11. **Vision fallback for computer-use** — diagram 24 shows the dual-path: CDP 34-tool catalog for structured apps (DOM available) vs OmniParser+VLM screenshot loop for native desktop apps (no DOM).

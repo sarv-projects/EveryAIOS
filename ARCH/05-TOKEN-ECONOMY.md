@@ -114,3 +114,30 @@ Production implementations we verified in source this pass — these are the *ex
 - **Progressive disclosure (`doc()` pattern):** long tool/type documentation is hidden by default; revealed only when the agent asks (a `doc` tool). Keeps tool-catalog prompts lean.
 - Interaction with 5.4/5.8: pass-by-reference is *stronger* than persist-don't-truncate — Hermes persists big outputs to disk and shows a preview; NOOA never materializes them into the tool result at all. Adopt: tool results that are queryable (files, tables, datasets) return `{ref, preview}`; only non-queryable outputs get the 5.8 persistence path.
 - **Crystallization tie-in:** compiled deterministic steps (algorithm 5) can run entirely on the referenced objects — zero tokens.
+
+## 5.10 Tool-Result Output Compression (RTK Pattern, doc 46)
+
+> Source: rtk-ai/rtk (75K⭐, Apache-2.0, Rust) — 60-90% token reduction on shell output.
+
+Before feeding tool results to the LLM, apply **command-specific parsers** that understand the semantics of each tool's output format:
+
+| Command category | Compression strategy | Typical savings |
+|-----------------|---------------------|----------------|
+| Test runners (cargo test, npm test, pytest) | Extract only failures + summary line | 80-90% |
+| Build tools (cargo build, npm run build) | Extract only errors + warnings | 70-85% |
+| Git operations (git diff, git log, git status) | Structured summary of changes | 60-75% |
+| Package managers (npm install, cargo add) | Final status + any errors | 85-95% |
+| Linters (clippy, eslint, flake8) | Deduplicated warning list only | 70-80% |
+| Docker/container ops | Status + relevant logs | 75-85% |
+| File listings (ls, find, tree) | Filtered to relevant patterns | 60-70% |
+
+**Implementation approach:**
+1. Maintain a registry of command-pattern → parser mappings (TOML-configurable)
+2. Before injecting tool output into LLM context, route through matching parser
+3. Parser extracts semantically relevant lines (failures, changes, errors)
+4. Unrecognized commands: apply generic truncation (first N + last M lines + token count)
+5. Always preserve exit code and timing metadata
+
+**Token savings compound** with prefix-cache stability: compressed output is shorter → less cache-breaking → higher prefix hit rate.
+
+**Relation to existing compaction pipeline (5.2):** RTK compression operates at the *tool-result injection* stage (before content enters the context window), while the 6-stage compaction pipeline operates on *accumulated conversation history*. They are complementary, not competing.

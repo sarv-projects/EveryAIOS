@@ -1,6 +1,6 @@
 # 09 — Capability → Feature → Module Matrix (the complete derivation)
 
-> Every capability from the research corpus (docs 01–34, 142 repos) + the v2.0 matrix + the user's explicit requirements. **No scope cuts.** Status legend: 🟢 = exists (reuse from @personal-ai/core-*) · 🟡 = new (build) · 🔵 = new-in-Rust (everyaios-*) · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
+> Every capability from the research corpus (docs 01–48, 170 repos) + the v2.0 matrix + the user's explicit requirements. **No scope cuts.** Status legend: 🟢 = exists (reuse from @personal-ai/core-*) · 🟡 = new (build) · 🔵 = new-in-Rust (everyaios-*) · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
 
 ## A. Model & BYOK layer
 
@@ -43,6 +43,8 @@
 | C8 | Sync/export/wipe | E2E-encrypted sync (opt-in), export, per-scope wipe | sidecar core-sync | 🟢 | v2.0 §P8 |
 | C9 | **Taste profile** | auto-learned coding-preference profile (style/patterns/frameworks/naming) with confidence scores 0–1; stored as shareable markdown (`~/.everyaios/taste/` + per-repo `.everyaios-taste/`); injected as a stable-prefix symbolic prior at generation; learns from accept/reject/edit via correction-detector + audit (Command Code taste-1 pattern — proprietary, pattern only) | sidecar (core-memory + new taste store) | 🟡 **NEW** | doc 37 |
 | C10 | **Pass-by-reference context** | files/datasets/tool results exposed as **live handles + bounded previews** (head/tail + type metadata); agent queries/slices them via sandboxed script-eval (E4) instead of serializing payloads into context (NOOA pattern — never serialize what you can reference) | sidecar + E4 script-eval | 🟡 **NEW** | doc 39 |
+| C11 | Temporal knowledge graph | Graphiti-pattern bi-temporal entity/fact tracking with validity windows + contradiction resolution | memory-kg (new) | 🔵 New | doc 46 (Graphiti) |
+| C12 | Full-stack memory on Postgres/SQLite | Cognee-pattern: KG + vectors + sessions + ontology on single DB with remember/recall/forget/improve API | memory-store | 🔵 New | doc 46 (Cognee) |
 
 ## D. Office & files (user-critical)
 
@@ -62,7 +64,7 @@
 | # | Capability | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | E1 | CDP child browser | system Chrome/Edge + chrome-for-testing fallback | Rust everyaios-cdp | 🔵 | 33, 34, 08 |
-| E2 | 17-tool catalog | tabs..run (8.2) | Rust everyaios-mcp | 🔵 | 33 §6 |
+| E2 | 34-tool catalog | tabs..run + bookmarks, tab_groups_manage, windows (8.2) | Rust everyaios-mcp | 🔵 | 33 §6, 46 |
 | E3 | A11y snapshot/diff | refs [eN], interactive mode, URL-change short-circuit | Rust everyaios-browser | 🔵 | 33 §5, 08 |
 | E4 | Script-eval (run) | rquickjs sandbox + browser SDK + InnerCallHook | Rust everyaios-script | 🔵 | 33 §6.3, 08 |
 | E5 | Session replay | injected recorder → NDJSON → SQLite; scrubber UI; has_gap | Rust everyaios-audit + UI | 🔵 | 33 §9, 08 |
@@ -127,6 +129,12 @@
 | H16 | Magic-completion | inline context-aware completion (AnythingLLM Magic Tab, optional) | UI | ⚪ | 01 |
 | H17 | Widget cards | inline render: weather, stock (yahoo-finance2), math/calc, lookups (Vane pattern) | UI | 🟡 **NEW** | doc 35 §B |
 | H18 | Remote session handoff | LAN/Tailscale/tunnel view — resume a running desktop session from phone mid-run (opt-in; extends B2 resume + C8 sync) | Rust + sidecar | ⚪ | doc 35 §C |
+| H19 | Progress steps panel | Unified timeline of all agent actions (shell+code+browser+office) with clickable entries, timestamps, expandable details | coordinator + UI | 🔵 New | doc 46 (Devin) |
+| H20 | Workspace tabs (9-tab live view) | Shell/Code/Browser/Excel/Word/PPT/PDF tabs showing live agent work in real-time | UI + everyaios-browser + office-engine | 🔵 New | doc 46 (Devin) + ARCH/12 |
+| H21 | Takeover/resume flow | Pause agent → user edits → resume with change description | UI + IPC + core | 🔵 New | doc 46 (Devin) |
+| H22 | Automation builder (NL + templates) | Event-driven workflow creation with NL input and 10+ pre-built templates | UI + scheduler (B7) | 🔵 New | doc 46 (Devin) |
+| H23 | Knowledge browser (trigger+macro) | Browse/edit knowledge items with trigger-based recall, macros, folders, repo-pinning | UI + memory (C6-C7) | 🔵 New | doc 46 (Devin) |
+| H24 | MCP marketplace | Browse/install/manage MCP servers with status indicators | UI + connector hub (F7-F8) | 🔵 New | doc 46 (Devin) |
 
 ## I. Forge & skills
 
@@ -138,6 +146,10 @@
 | I4 | TDD loop | auto-generate tests, read stderr, rewrite | sidecar | 🟡 | v2.0 §P6 |
 | I5 | ECC guardrails | plan-before-build, session scanning | sidecar | 🟡 | 09 |
 | I6 | **Extension/plugin ABI** | versioned bundles (`abi_version`, cumulative host adapters — Zed WIT `since_v0_0_x` pattern); typed manifest: `contributes` + `capabilities` allow-lists with `*`/`**` arg wildcards (Zed `CapabilityGranter`); fail-closed per-extension trust flags (Hermes `allowed_*`); explicit agent-binding (Cherry Studio); lazy activation (VS Code); host facades `ctx.llm`/`ctx.files`/`ctx.approval()`; dogfood first-party plugins | sidecar + Rust everyaios-guard | 🟡 | 44 §5 |
+| I7 | RepoMap (tree-sitter + PageRank) | Codebase context selection via tag extraction, graph building, personalized PageRank, binary-search budget fitting | everyaios-repomap (new crate) | 🔵 New | doc 46 (Aider) |
+| I8 | Edit strategy pattern (per-model) | Multiple edit formats (SEARCH/REPLACE, udiff, whole, patch) with fuzzy matching, selected per model | coordinator | 🔵 New | doc 46 (Aider) |
+| I9 | Architect mode (two-pass) | Reasoning model → Editor model split for code changes (proven 82.7% benchmark) | coordinator + sub-agents (B3) | 🔵 New | doc 46 (Aider) |
+| I10 | File watcher + AI comments | Watch source files for `// ai!` markers, extract context, auto-submit to agent | everyaios-core (notify) | 🔵 New | doc 46 (Aider) |
 
 ## J. Cross-cutting
 
@@ -160,5 +172,8 @@
 | J15 | Length-prefixed IPC framing | `[u32 LE][payload]`; bounded channels (cap 16) + backpressure; truncation → `ref:` handle | Rust everyaios-ipc | 🔵 | 43 |
 | J16 | Process lifecycle hardening | UNIX socket over TCP (zero port collision); pre-spawn coordinator at boot (~60MB Bun binary — realistic; 25MB is hello-world-only, doc 43 §1.3); warm-pool 5min idle | Rust everyaios-core | 🔵 | 43 |
 | J17 | **ACP harness bridge** | ACP client over stdio JSON-RPC (official Rust crate or `@agentclientprotocol/sdk`) for F12; `initialize` handshake (protocolVersion + optional-by-default capabilities); `session/request_permission` → Trust Ladder + Guard-2; `session/update` → audit NDJSON; `session/cancel` → watchdog/budget kills; v2-draft monitored | Rust + sidecar | 🟡+🔵 | 45 |
+| J18 | Profile-gated hooks | Lifecycle hooks (PreToolUse/PostToolUse/Stop/SessionStart/SessionEnd) gated by minimal/standard/strict profiles | everyaios-guard | 🔵 New | doc 46 (ECC) |
+| J19 | Merkle hash-chain audit | Cryptographic tamper-evident append-only log with hash chain verification | everyaios-audit | 🔵 New | doc 46 (OpenFang) |
+| J20 | AgentShield config scanning | Scan everyaios.toml, blueprints, MCP configs, hooks for injection/secrets/permissions | everyaios-guard | 🔵 New | doc 46 (ECC) |
 
-**Totals:** 109 feature rows · status buckets: 🟢 26 · 🟡 52 · 🔵 40 · ⚪ 5 (multi-status rows like `🟢+🔵` are counted in every bucket they carry). The build plan (10) sequences these so every milestone ships working value.
+**Totals:** 124 feature rows · status buckets: 🟢 26 · 🟡 52 · 🔵 55 · ⚪ 5 (multi-status rows like `🟢+🔵` are counted in every bucket they carry). The build plan (10) sequences these so every milestone ships working value.

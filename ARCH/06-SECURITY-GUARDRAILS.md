@@ -60,3 +60,68 @@ Escalated actions freeze the loop and render a native card (not LLM-generated): 
 ## 6.8 Secrets (see also 03 §3.4)
 
 Vault (SQLCipher) is the only owner of keys/tokens; CES-style executor for high-risk credentialed calls (v2.0 §P8); keys masked everywhere in UI/logs; no key material in crash dumps (crash scrubbing).
+
+---
+
+## 6.9 Profile-Gated Hooks (ECC Pattern, doc 46)
+
+> Source: affaan-m/ECC (238K⭐, MIT) — hook enforcement profiles.
+
+Instead of all-or-nothing security hooks, enforcement is gated by **profile level**:
+
+| Profile | When to use | What runs |
+|---------|-------------|----------|
+| **minimal** | Development/testing, speed-priority tasks | Essential lifecycle hooks only (session start/end, crash handler) |
+| **standard** (default) | Normal operation | Balanced: pre-tool-use scan, post-edit format check, output sanitization |
+| **strict** | Untrusted inputs, production deployments, sensitive operations | All hooks: AgentShield config scan, prompt-injection check, destructive-command gate, output audit |
+
+Controlled via `everyaios.toml`:
+```toml
+[guard]
+hook_profile = "standard"  # minimal | standard | strict
+disabled_hooks = []         # override: skip specific hooks by name
+```
+
+**5-event hook lifecycle** (maps to Guard-1/Guard-2 timing):
+1. `PreToolUse` — before any tool executes (Guard-1 regex + path floor check)
+2. `PostToolUse` — after tool execution (format validation, output sanitization)
+3. `Stop` — after each agent response (session summarization, cost check)
+4. `SessionStart` — context injection, environment prep
+5. `SessionEnd` — cleanup, final audit write, memory crystallization
+
+## 6.10 Merkle Hash-Chain Audit Trail (OpenFang Pattern, doc 46)
+
+> Source: RightNow-AI/openfang (18.1K⭐, MIT) — cryptographic tamper-evident logging.
+
+Upgrade the append-only NDJSON audit (everyaios-audit) to a **Merkle hash-chain**:
+
+```
+Event N: { seq, ts, kind, payload, prev_hash, hash }
+         hash = SHA256(seq || ts || kind || payload || prev_hash)
+```
+
+- Each event includes hash of previous event → any tampering breaks the chain
+- Verification: replay from genesis event, recompute hashes, compare
+- Enables **cryptographic proof** that audit trail hasn't been modified
+- Compatible with existing NDJSON format (hash fields are additional)
+- Minimal performance overhead (~1μs per SHA256 on modern hardware)
+
+## 6.11 AgentShield: Config-as-Attack-Surface Scanning (ECC Pattern, doc 46)
+
+Treat the agent configuration itself as a security surface:
+
+**Scan targets:**
+- `everyaios.toml` — check for injected commands, suspicious URLs, env var overrides
+- `agents/*.md` blueprints — check for prompt injection, data exfiltration instructions
+- MCP server configs — verify server URLs, check for known-malicious endpoints
+- Extension manifests — verify Ed25519 signatures, check permissions requested
+- Hook scripts — static analysis for credential access, network calls
+
+**Scan categories (5):**
+1. Secrets detection (14+ patterns: API keys, tokens, passwords, private keys)
+2. Permission auditing (excessive tool grants, wildcard paths)
+3. Hook injection analysis (untrusted code in hook scripts)
+4. MCP server risk profiling (unknown servers, excessive tool counts)
+5. Agent config review (system prompt override attempts, jailbreak patterns)
+
+**Trigger:** Runs on every config change + periodic background scan + on extension install.

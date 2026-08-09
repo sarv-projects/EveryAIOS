@@ -84,3 +84,77 @@ From `NVIDIA-NeMo/labs-OO-Agents` `nooa-memory` (source-read this pass, Apache 2
 6. **References re-read fresh at recall:** stored entries may point at live files/objects instead of pasted values (pass-by-reference — see 05 §5.9) — token-minimizing by construction.
 
 **Status:** 🟡 new (algorithm #32). Wire into coordinator `memory/fusion.ts`; LadybugDB edges gain `relation_type` column.
+
+---
+
+## 7.8 Temporal Knowledge Graph Layer (Graphiti + Cognee Patterns, doc 46)
+
+> Sources: getzep/graphiti (29.7K⭐, Apache-2.0) — temporal context graphs; topoteretes/cognee (29.9K⭐, Apache-2.0) — full-stack memory on Postgres.
+
+### 7.8.1 Graphiti Temporal Model
+
+Facts have **validity windows**, not just timestamps:
+
+```
+Entity: { id, name, type, properties, created_at }
+Fact/Edge: { id, source, target, relation, valid_from, valid_until, confidence, episode_id }
+Episode: { id, source_type, content_hash, created_at }
+```
+
+**Bi-temporal tracking:**
+- **Transaction time**: when the system learned the fact
+- **Valid time**: when the fact was true in the real world
+- Enables queries like "what did we believe about X on date Y?" vs "what was actually true?"
+
+**Contradiction resolution:**
+- When a new fact contradicts an existing one, the old fact's `valid_until` is set
+- Both facts remain in the graph (history preserved)
+- Queries automatically filter by current validity unless historical view requested
+
+**Incremental construction:**
+- New episodes update the graph incrementally (no batch recomputation)
+- Entity deduplication via semantic similarity + name matching
+- Relationship types can be prescribed (Pydantic schemas) or learned from data
+
+### 7.8.2 Cognee Full-Stack Pattern
+
+Entire memory stack on a single database (Postgres or SQLite):
+
+| Layer | Implementation |
+|-------|---------------|
+| Knowledge graph | Postgres with recursive CTEs (or Kuzu/Neo4j/FalkorDB optional) |
+| Vector embeddings | pgvector extension (or ChromaDB/Qdrant optional) |
+| Session memory | Table with session_id + TTL + fast cache layer |
+| Metadata/ontology | Cognitive-science-grounded auto-generated ontology |
+| Full-text search | FTS5 (SQLite) or pg_trgm (Postgres) |
+
+**API (4 operations):**
+- `remember(content, session_id?)` — ingest and index
+- `recall(query, filters?)` — hybrid retrieval (graph + vector + keyword)
+- `forget(entity_id | session_id | scope)` — targeted deletion
+- `improve(feedback)` — refine ontology, update confidence scores
+
+### 7.8.3 Integration with Existing 5-Tier Model
+
+| Tier | Enhancement from doc 46 |
+|------|------------------------|
+| Sensory (working) | Headroom reversible compression (CCR) for live context |
+| Working (session) | Context-mode FTS5+BM25 event capture (98% tool output reduction) |
+| Episodic | Graphiti episodes with provenance + temporal validity |
+| Semantic (KG) | Cognee auto-ontology + Graphiti temporal facts |
+| Procedural | Mem0 multi-level (user/session/agent) with 92.5 LoCoMo score |
+
+### 7.8.4 Recommended Implementation Stack
+
+**SQLite-first (desktop, single-user):**
+- sqlite-vec for embeddings
+- FTS5 for keyword search
+- Recursive CTEs for graph traversal
+- Custom temporal tables for Graphiti-pattern facts
+- Single file = portable, no server process
+
+**Optional Postgres upgrade (power users, shared):**
+- pgvector for embeddings
+- pg_trgm + FTS for search
+- Postgres graph queries via recursive CTEs or age extension
+- Multi-user with row-level security

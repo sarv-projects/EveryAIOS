@@ -1,0 +1,16 @@
+# EveryAIOS desktop workspace (P0.3 task 19).
+# `packages/*` = desktop-only packages (coordinator, later ui).
+# `../APP/packages/*` = the existing mobile core packages, imported as
+# workspace deps (never copied — the spec's reuse rule).
+packages:
+  - "packages/*"
+  - "../APP/packages/*"
+
+# Native deps pulled in via @personal-ai/core-* — allow their build scripts
+# (better-sqlite3, onnxruntime-node, etc. are required by the engine).
+# pnpm 11 syntax: map of package → true (renamed from onlyBuiltDependencies).
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  onnxruntime-node: true
+  workerd: true

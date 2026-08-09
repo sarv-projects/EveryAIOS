@@ -1,6 +1,7 @@
 # Rust
 crates/target/
 crates/Cargo.lock.orig
+src-tauri/target/
 
 # Node / TS (P0.3+)
 node_modules/
@@ -23,3 +24,7 @@ Thumbs.db
 *.db
 *.db-shm
 *.db-wal
+
+# Uploaded screenshots (not project assets)
+*.png
+!icons/*.png

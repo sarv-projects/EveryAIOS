@@ -1,8 +1,8 @@
 # ARCH — The Desktop Agentic-OS Architecture (Hybrid)
 
 > **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-08) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.7)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
-> **Docs:** 00-INDEX + 01–11 (11 = AI chat copy/convert/reject derivation).
-> **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Node sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest. **No scope compromise**: every capability in the research corpus (docs 01–45, **159 repos**) is derived in `09-FEATURE-MATRIX.md` (109 rows).
+> **Docs:** 00-INDEX + 01–12 (12 = UI/UX specification and layout design).
+> **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest. **No scope compromise**: every capability in the research corpus (docs 01–48, **170 repos**) is derived in `09-FEATURE-MATRIX.md` (124 rows).
 > **Working name:** "EveryAIOS" (from the v2.0 spec's `~/.everyaios/`). Final name TBD.
 
 ## The two specs reconciled
@@ -28,11 +28,12 @@
 5. **05-TOKEN-ECONOMY.md** — input control: prefix-cache, compaction, snip, budgets, crystallization
 6. **06-SECURITY-GUARDRAILS.md** — trust ladder, dual-guard, sandboxes, ownership, audit, injection defense
 7. **07-MEMORY-CONTEXT.md** — 5-tier memory, 7 algorithms, multi-scope, SOTA retrieval
-8. **08-BROWSER-LAYER.md** — CDP, 17 tools, a11y snapshot/refs/diff, script-eval, replay
+8. **08-BROWSER-LAYER.md** — CDP, 34 tools, a11y snapshot/refs/diff, script-eval, replay
 9. **09-FEATURE-MATRIX.md** — the complete capability→feature→module→status derivation
 10. **10-BUILD-PLAN.md** — phases with exit criteria
 11. **11-AI-CHAT-FEATURES.md** — AI chat derivation: copy (from APP engine + Hermes/etc.), convert, reject
+12. **12-UI-SPEC.md** — UI/UX specification: 3-column layout (sidebar/chat/workspace), 9 workspace tabs, takeover/resume flow, automation builder, memory browser, design tokens (derived from Devin Cloud screenshots + research doc 46)
 
 ## Grounding
 
-All decisions trace to `RESEARCH/desktop_app/` docs 01–45 and the 159-repo ledger (doc 27). Key source deep-dives: 19 (BYOK providers), 28/29 (office), 32/31 (token economy), 33 (BrowserOS — browser + audit + compaction), 05/16 (agentic coding: pi/Hermes/Reasonix/opencode), 03 (vision + security + memory), 13 (connector hub), 06/09 (browser/agentic OS). Final-pass SOTA: doc 34.
+All decisions trace to `RESEARCH/desktop_app/` docs 01–48 and the 170-repo ledger (doc 27 + doc 46 additions). Key source deep-dives: 19 (BYOK providers), 28/29 (office), 32/31 (token economy), 33 (BrowserOS — browser + audit + compaction), 05/16 (agentic coding: pi/Hermes/Reasonix/opencode), 03 (vision + security + memory), 13 (connector hub), 06/09 (browser/agentic OS), 46 (Aider + Devin Cloud — UI/UX, RepoMap, edit strategies, automations). Final-pass SOTA: doc 34.

@@ -9,7 +9,7 @@
 > **v3.3 changes:** NOOA deep-dive (doc 39) — **new C10 Pass-by-reference context** (live refs + bounded previews via script-eval; never serialize what you can reference) + **algorithm #32 ACT-R activation & spontaneous recall** (NOOA memory: retention half-life × log1p(strength), importance ≥8 protected, associative semantic+keyword+recency+graph recall, typed supports/contradicts/derived-from edges, pre-turn spontaneous context block) → 07 §7.7, 05 §5.9, 06 §6.6; **F13 now informed by DeerFlow 2.0 channels** (10 IM adapters + run_policy + dedupe_store, doc 39 §B1); microsandbox hypervisor resolved = **libkrun** (doc 39 §B2). Ledger 151 → **152**; matrix 100 → **101** rows.
 > **v3.1 changes (on top of v3.0):** adds **C9 Taste profile** (auto-learned coding-preferences with confidence scores — Command Code `taste-1` pattern, doc 37) + algorithm #31; ledger 147 → **151**; matrix 99 → **100** rows; doc 37 added.
 > **v3.0 changes:** folds in research docs 35–36 (Open WebUI / Vane / Open WebUI Computer / Composio-community batch), the complete ARCH set (12 docs, `desktop_app/ARCH/`), the browser tiered-engine stack + Session Vault + challenge handler (08 §8.8–8.10), multi-key BYOK key-rings (03), surgical office engine (04), token economy (05), dual-guard security (06), memory + the 7 algorithms (07), and the feature matrix grown **62 → 99 rows** (E10–E14 browser, F12 harness-driving, F13 messaging bridges, H17 widgets, H18 remote handoff). **Every shipped algorithm is now marked 🔁 TO BE RETESTED on the desktop target.**
-> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–45, **159 repos**, ledger doc 27) + `desktop_app/ARCH/` (docs 00–11). Everything below traces to those; nothing is invented here.
+> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–48, **170 repos**, ledger docs 27+46+47+48) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
 > **This app is OPEN SOURCE, local-first, BYOK.** Nothing in the architecture requires a founder-run server — not now, not later.
 > **IPC Architecture validated (doc 42):** code-verified against OpenFang `crates/openfang-kernel/src/kernel.rs` (20+ subsystems, RBAC, Merkle audit, DashMap abort handles) + ZeroClaw `crates/zeroclaw-api/src/lib.rs` (kernel ABI traits: ModelProvider/Channel/Tool/Memory/Observer/RuntimeAdapter). The "sidecar proposes, Rust disposes" axiom is production-proven — both systems use the identical kernel-with-syscalls model with capability-based security.
 
@@ -19,7 +19,7 @@
 
 > **Status legend:** 🟢 = exists & tested in `APP/packages/` (port/wire into desktop) · 🟡 = new to build · 🔵 = new-in-Rust (`crates/everyaios-*`) · ⚪ = later/optional · 🔁 = **TO BE RETESTED on desktop** (shipped on mobile, must re-run its test suite in the desktop runtime).
 > **This index is the contract.** New capabilities are added *here first*, then to `ARCH/09`. Nothing is dropped from this list without a written decision in `ARCH/09`.
-> **Totals (mirrors ARCH/09):** 109 rows · 🟢 26 · 🟡 52 · 🔵 40 · ⚪ 5 (multi-status rows counted in every bucket). 32 algorithms: 17 built (🔁 retest) + 15 new. Matrix grew 107→109 with the I6 Extension-ABI row + J17 ACP-harness-bridge row (v3.6).
+> **Totals (mirrors ARCH/09):** 124 rows · 🟢 26 · 🟡 52 · 🔵 55 · ⚪ 5 (multi-status rows counted in every bucket). 32 algorithms: 17 built (🔁 retest) + 15 new. Matrix grew 109→124 with doc 46 additions (H19–H24, I7–I10, J18–J20, C11–C12).
 
 ### A. Model & BYOK layer
 | ID | Capability | Status |
@@ -59,6 +59,8 @@
 | C8 | Sync/export/wipe — E2E-encrypted sync (opt-in), export, per-scope wipe | 🟢 |
 | C9 | **Taste profile** — auto-learned coding-preference profile (style/patterns/frameworks/naming) with confidence scores 0–1; shareable markdown (`~/.everyaios/taste/` + per-repo `.everyaios-taste/`); stable-prefix symbolic prior at generation; learns from accept/reject/edit via correction-detector + audit (Command Code taste-1 pattern — proprietary, pattern only) | 🟡 |
 | C10 | **Pass-by-reference context** — files/datasets/tool results as live handles + bounded previews; agent queries/slices via sandboxed script-eval (E4) instead of loading payloads into context (NOOA pattern, doc 39) | 🟡 |
+| C11 | Temporal knowledge graph — Graphiti-pattern bi-temporal entity/fact tracking with validity windows | 🔵 |
+| C12 | Cognee-pattern full-stack memory — KG + vectors + sessions on single Postgres/SQLite | 🔵 |
 
 ### D. Office & files (user-critical)
 | ID | Capability | Status |
@@ -76,7 +78,7 @@
 | ID | Capability | Status |
 |---|---|---|
 | E1 | CDP child browser — system Chrome/Edge + chrome-for-testing fallback | 🔵 |
-| E2 | 17-tool catalog — tabs..run | 🔵 |
+| E2 | 34-tool catalog — tabs..run + bookmarks, tab_groups_manage, window_manage, enhanced_snapshot, file_ops | 🔵 |
 | E3 | A11y snapshot/diff — refs [eN], interactive mode, URL-change short-circuit | 🔵 |
 | E4 | Script-eval (run) — rquickjs sandbox + browser SDK + InnerCallHook | 🔵 |
 | E5 | Session replay — injected recorder → NDJSON → SQLite; scrubber UI; has_gap | 🔵 |
@@ -138,6 +140,12 @@
 | H16 | Magic-completion — AnythingLLM-style inline completion | ⚪ |
 | H17 | **Widget cards** — weather/stock/math/lookup inline in chat (Vane pattern) | 🟡 |
 | H18 | **Remote session handoff** — LAN/Tailscale/tunnel view; resume from phone mid-run (opt-in) | ⚪ |
+| H19 | **Progress steps panel** — unified timeline of all agent actions (shell+code+browser+office), clickable entries, timestamps | 🔵 |
+| H20 | **Workspace tabs (9-tab live view)** — Shell/Code/Browser/Excel/Word/PPT/PDF tabs showing live agent work in real-time | 🔵 |
+| H21 | **Takeover/resume flow** — pause agent → user edits → resume with mandatory change description | 🔵 |
+| H22 | **Automation builder (NL + templates)** — event-driven workflow creation with NL input + 10+ pre-built templates | 🔵 |
+| H23 | **Knowledge browser (trigger+macro)** — browse/edit knowledge items with trigger recall, macros, folders, repo-pinning | 🔵 |
+| H24 | **MCP marketplace** — browse/install/manage MCP servers with status indicators and categories | 🔵 |
 
 ### I. Forge & skills
 | ID | Capability | Status |
@@ -148,6 +156,10 @@
 | I4 | TDD loop — auto-generate tests, read stderr, rewrite | 🟡 |
 | I5 | ECC guardrails — plan-before-build, session scanning | 🟡 |
 | I6 | **Extension/plugin ABI** — versioned bundles (`abi_version` in manifest, cumulative host adapters like Zed's WIT `since_v0_0_x`), typed manifest with `contributes` (tools/skills/connectors/search-adapter) + `capabilities` allow-lists (**per-command/arg wildcards `*`/`**` — Zed `CapabilityGranter`), per-extension trust flags fail-closed (Hermes `allowed_*`), explicit agent-binding (never global — Cherry Studio), lazy activation (VS Code), host-owned facades (`ctx.llm`/`ctx.files`/`ctx.approval`), dogfood rule (first-party features ship as plugins) (doc 44 §5) | 🟡 |
+| I7 | **RepoMap (tree-sitter + PageRank)** — codebase context selection via tag extraction, graph building, personalized PageRank, binary-search budget fitting | 🔵 |
+| I8 | **Edit strategy pattern (per-model)** — multiple edit formats (SEARCH/REPLACE, udiff, whole, patch) with fuzzy matching, selected per model | 🔵 |
+| I9 | **Architect mode (two-pass)** — reasoning model → editor model split for code changes (proven 82.7% benchmark) | 🔵 |
+| I10 | **File watcher + AI comments** — watch source files for `// ai!` markers, extract context, auto-submit to agent | 🔵 |
 
 ### J. Cross-cutting security
 | ID | Capability | Status |
@@ -169,6 +181,9 @@
 | J15 | **Length-prefixed IPC framing** — `[u32 LE length][bytes payload]`; bounded channels (capacity=16) with backpressure; truncation tag → `ref:` handle (Mitigates TC-2.2 landmine, doc 43) | 🔵 |
 | J16 | **Process lifecycle hardening** — UNIX-domain socket preferred over TCP for sidecar (zero port collision); pre-spawn `coordinator` at Tauri boot (hidden, 200ms perceived cold start, Bun-compiled ~60MB binary); keep sidecar warm 5min idle before kill; **battery-aware scheduling**: suppress heavy background indexing/embedding on battery power (detect via OS power APIs), defer to AC power or >5min idle (Mitigates TC-1.2/1.3/1.4 landmines, doc 43) | 🔵 |
 | J17 | **ACP harness bridge** — ACP client over stdio JSON-RPC (official `agent-client-protocol` Rust crate or `@agentclientprotocol/sdk` in coordinator) for F12; `initialize` handshake (protocolVersion + capability negotiation, optional-by-default = our ABI-versioning model); `session/request_permission` → Trust Ladder + Guard-2 cards; `session/update` (tool calls, file ops) → everyaios-audit NDJSON; `session/cancel` + stop-reasons → watchdog/budget kill points; v2-draft monitored (structured diff + `git_patch` → diff-card renderer) (doc 45 §4–6) | 🟡+🔵 |
+| J18 | Profile-gated hooks — minimal/standard/strict security enforcement profiles | 🔵 |
+| J19 | Merkle hash-chain audit — cryptographic tamper-evident append-only log | 🔵 |
+| J20 | AgentShield config scanning — scan everyaios.toml/blueprints/MCP for injection | 🔵 |
 
 ### ALGORITHM INDEX (all algorithms in the product — status + retest flag)
 
@@ -218,7 +233,7 @@
 
 ## 1. Product One-Liner
 
-**An open-source, local-first Agentic OS desktop app** (Tauri/Rust shell + TS engine as a supervised Node sidecar + a Rust core owning browser/script-eval/security/audit) that replaces the separate tools you use today — AI chat, web research, browser, reader, editor, coding agent, office work, connectors, automations, messaging — with one evolvable workspace where the LLM is the CPU, everything is spec-driven from Markdown files, and safety comes from a deterministic dual-guard, not from artificial limits.
+**An open-source, local-first Agentic OS desktop app** (Tauri/Rust shell + TS engine as a supervised Bun-compiled sidecar + a Rust core owning browser/script-eval/security/audit) that replaces the separate tools you use today — AI chat, web research, browser, reader, editor, coding agent, office work, connectors, automations, messaging — with one evolvable workspace where the LLM is the CPU, everything is spec-driven from Markdown files, and safety comes from a deterministic dual-guard, not from artificial limits.
 
 **Positioning:** AnythingLLM's RAG + Hermes's autonomy + Claude Code's engineering loop + Reasonix's cache-first cost discipline + Zapier's connector breadth + Open WebUI Computer's whole-machine workspace, in a 20–40MB native shell with zero idle RAM bloat, 100% user-side data, and memory algorithms already built and tested in this repo. **No account, no cloud, no server tax — free forever, owned by the user.**
 
@@ -230,7 +245,7 @@
 
 | Layer | Runs where | Founder dependency |
 |---|---|---|
-| App (Tauri shell + Rust core + Node sidecar + all core packages) | User's machine | None |
+| App (Tauri shell + Rust core + Bun-compiled sidecar + all core packages) | User's machine | None |
 | LLM calls | User's BYOK key (direct to OpenAI/Anthropic/DeepSeek/OpenRouter) **or** local Ollama/llamafile **or** OAuth subscriptions (ChatGPT Pro/Copilot) | None |
 | Free web search | Local searxng-first cascade + public instances + optional user-installed searxng | None |
 | RAG / memory / embeddings / KG | Local SQLite + sqlite-vec + FTS5 + LadybugDB (embedded graph, Kuzu fork) + local ONNX models (bundled) | None |
@@ -279,7 +294,7 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 
 ### P5 · Browser, Session Vault & Computer Use — the agent's real browser
 - **Tiered engine stack, one CDP driver (E1/E10):** tier 0 static extraction → tier 1 lightweight engines (**Obscura** default ~30MB RSS; **Lightpanda** opt-in ~16× less memory) → tier 2 system Chrome/Edge (interactive/authenticated/WebGL) → tier 3 optional stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard anti-bot sites. Escalation on failure or explicit need. chrome-for-testing fallback ships day one.
-- **17-tool catalog (E2)** incl. `run` script-eval (rquickjs, 64MB/512KB/30s, InnerCallHook audit, ownership `mine|user|other-agent`). A11y snapshot/diff with stable refs (~90% token cut). Session replay (NDJSON → SQLite, `has_gap` honesty, scrubber UI).
+- **34-tool catalog (E2)** incl. `run` script-eval (rquickjs, 64MB/512KB/30s, InnerCallHook audit, ownership `mine|user|other-agent`). A11y snapshot/diff with stable refs (~90% token cut). Session replay (NDJSON → SQLite, `has_gap` honesty, scrubber UI).
 - **Session Vault (E11):** multi-account per site, encrypted cookies/localStorage in SQLCipher, Trust-Ladder-gated access — agent never sees raw cookies; capture via sign-in-in-browser, **session inheritance** (attach to the user's own Chrome profile via debug port — no re-login), or import; rotation across accounts; usage audit; expiry nudges.
 - **Challenge handler (E12):** prevention (real sessions, behavioral realism, rate discipline) → human-in-loop pass-through (default, universal) → local solvers (PoW captchas, LLM visual grounding) → optional BYO solver APIs (user's own keys).
 - Computer-use (pixels) post-v1, dual-guard gated (E9, ⚪).
@@ -293,6 +308,7 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 ### P7 · Search, Deep Research & Data Analysis
 - Free searxng-first cascade + circuit breaker + BM25 rerank (built). Deep research: breadth×depth tree, learnings-up, gap-check, cited reports with confidence metrics (Vane's classifier→researcher→scrapeURL pipeline validates the shape). Multi-channel search (arXiv/GitHub/EDGAR/Reddit). Autonomous data-analysis REPL (sandboxed pandas/numpy). Repo-wide engineering loops. SeekStorm-class local site search.
 - **Token economy (05):** snip (0.6) → soft (0.5) → force (0.9) compaction with byte-stable prefix (Reasonix, 99.82% cache-hit reality); lossless compaction via dense anchors + frozen-snapshot MEMORY.md; per-model cache/cost accounting; key affinity; target >85% cache hit on long sessions.
+- **RTK output compression (doc 46):** command-specific shell output filtering (60-90% reduction) before LLM ingestion — per-command parsers extract only failures/changes/relevant output.
 - Zero-token crystallization (built). NL scheduling ("every Monday 9AM scrape competitors"). HTML→video reports (later, optional).
 
 ### P8 · The Forge: Sandbox Tool Generation & Evolvability
@@ -376,6 +392,41 @@ plugin-bundle/
 
 ---
 
+## 3.11 UI/UX Layout (Devin-Derived, ARCH/12-UI-SPEC)
+
+> Derived from Devin Cloud UI analysis (research doc 46) + EveryAIOS office engine requirements.
+
+**Layout:** Three-column split — Sidebar (240px, collapsible) | Chat/Progress (40%) | Workspace Panel (60%, tabbed)
+
+**Sidebar navigation:** New Session, Automations, Guard, Connectors, Memory, Analytics + Recent sessions with status badges (running/paused/completed/action-required) + child session indentation.
+
+**Chat panel:** Messages + Artifact cards (rendered file previews with code/copy/download actions) + Progress steps (clickable timeline) + MCQ interrupt (orange "Action required" with Approve/Edit/Reject) + Input bar (attach, mode selector, voice, send, slash commands, !macros, @mentions).
+
+**Chat modes:** Normal (full agent) | Plan (read-only) | Research (deep web) | Quick (retrieval only) | Code (RepoMap context).
+
+**Workspace panel — 9 tabs (dynamic):**
+1. Progress — unified timeline of all actions (shell+code+browser+office)
+2. Shell — terminal with command history, read-only/writable toggle
+3. Code — syntax-highlighted editor with live diffs, 100+ languages
+4. Browser — live browser view, interactive, cookie persistence, "● Live" indicator
+5. Excel — spreadsheet grid with real-time cell editing, charts updating (IronCalc)
+6. Word — WYSIWYG document with live cursor showing AI writing (block-patch engine)
+7. PowerPoint — slide preview with elements being placed/edited
+8. PDF — page rendering with form fill + annotations visible
+9. [+] — dynamic file tabs
+
+**Takeover/Resume flow:** Pause → all panels become editable → user makes changes → Resume with mandatory change description → agent continues with context.
+
+**New steals from Aider (doc 46):** RepoMap (tree-sitter + PageRank context), Edit Strategy Pattern (6 formats per model with fuzzy SEARCH/REPLACE), Architect Mode (reasoning→editing two-pass), File Watcher + AI comments (`// ai!` markers), Lint/Test reflection loop, MODEL_ALIASES.
+
+**New steals from Devin (doc 46):** Knowledge with trigger-based recall + macros + repo-pinning, Progress Steps Panel, Automation Templates (25+ pre-built), NL automation creation, MCP Marketplace UI, ACU/Budget T-shirt indicators, AGENTS.md instruction files, Smart diff grouping, Network policy per sandbox.
+
+**New steals from doc 47 (terminal agents/IDE extensions):** Plan/Act dual-mode loop (Cline), Core-as-binary typed protocol (Continue — validates our Rust+TS IPC), Context Provider plugins (@Codebase/@Docs/@URL), ACP subscription linking (Goose), Custom Distributions (Goose), Kanban+worktrees for parallel agents (Cline), Oracle/reviewer model (Amp), Multi-backend agent switching (OpenHands).
+
+**New steals from VS Code Copilot Chat (MIT, production-proven):** Intent classification before tool dispatch (route to Agent/Edit/Ask/Terminal handlers before the loop starts), Autopilot nudge mechanism (inject continuation prompt when model stops prematurely), ApplyPatch edit format (`*** Add/Delete/Update File` — fourth edit strategy, simpler than udiff), Prompt TSX (JSX-like declarative prompt composition with automatic context window budget management).
+
+---
+
 ## 5. What's ALREADY BUILT (map to `APP/packages/`) — with retest flags
 
 | Area | Shipped | Desktop status |
@@ -394,7 +445,7 @@ plugin-bundle/
 | Sessions/data | `core-sync/` (E2E), `core-projects/`, `core-artifacts/` | port |
 | Agents | `core-agents/` registry (needs spec-file loader on top) | new surface |
 
-**≈60–70% of the capability matrix exists as tested TypeScript. This is a packaging + orchestration + Rust-layer + UI project, not a rewrite.** The 99-row matrix (section 0) is the exact build contract.
+**≈60–70% of the capability matrix exists as tested TypeScript. This is a packaging + orchestration + Rust-layer + UI project, not a rewrite.** The 124-row matrix (section 0) is the exact build contract.
 
 ---
 
@@ -407,7 +458,7 @@ plugin-bundle/
 5. Browser tiers: Obscura integration (default), Lightpanda opt-in, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12); behavioral realism (E14)
 6. Office engine (D1–D8): docx block-patch, IronCalc xlsx sidecar + deterministic planner, pptx part-editor, pdf suite, LibreOffice conformance oracle
 7. Token economy (05): compaction pipeline with Reasonix ratios, snip rules, prefix-stability, cache-cost dashboard
-8. Memory fusion (C3) + Kuzu KG (C6) + Letta paging (C2) — on top of the retested 7 algorithms
+8. Memory fusion (C3) + LadybugDB KG (C6) + Letta paging (C2) — on top of the retested 7 algorithms
 9. Harness-driving (F12) via **ACP client bridge (J17)** + messaging bridges (F13) + harness installer (F8)
 10. **Extension ABI (I6)** — manifest schema + schema validation, plugin registry + lazy activation, capability granter in everyaios-guard, host facades (ctx.llm/ctx.approval), dogfood first-party plugins
 11. Connector hub core (registry, routing, usage metering) + Auth Bridge (F4) + Composio/Zapier/Nango attach (F5)
@@ -424,7 +475,7 @@ plugin-bundle/
 |---|---|---|
 | **P0** (~2wk) | Rust workspace + sidecar + IPC echo + supervisor skeleton | cargo test green; sidecar E2E echo green; vault opens SQLCipher db |
 | **P1** (~4wk) | Chat + BYOK key-rings (A1–A3, A9) | 2 keys auto-failover under simulated 429 (test); streaming chat round-trip; ledger correct |
-| **P2** (~6wk) | Browser layer — tiered engines (E10), Session Vault (E11/E13), challenge handler (E12/E14), 17-tool catalog | navigate→snapshot→act→diff E2E; ownership test; Obscura scrape + escalate test; session-vault round-trip (agent never sees cookies); PoW auto-solved |
+| **P2** (~6wk) | Browser layer — tiered engines (E10), Session Vault (E11/E13), challenge handler (E12/E14), 34-tool catalog | navigate→snapshot→act→diff E2E; ownership test; Obscura scrape + escalate test; session-vault round-trip (agent never sees cookies); PoW auto-solved |
 | **P3** (~4wk) | Script-eval + replay (E4/E5) + cockpit/audit UI | run multi-step audited script; replay with has_gap; Watch/Stop works |
 | **P4** (~5wk) | Office engine (D1–D8) | round-trip byte-stable via LibreOffice oracle; IronCalc recalc golden cases; pptx add/remove; pdf form-fill; snapshotBefore rollback |
 | **P5** (~5wk) | Memory fusion (C3/C6/C2) + token economy (05) | retrieval benchmark beats plain BM25; compaction triggers at ratios; prefix-dirty handled; $/token dashboard |
