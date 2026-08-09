@@ -35,6 +35,18 @@ jobs:
         with:
           workspaces: crates
 
+      # SQLCipher (bundled) requires OpenSSL for encryption.
+      # Linux: libssl-dev is preinstalled on ubuntu-latest runners.
+      # macOS: LibreSSL ships with Xcode CLI tools (already available).
+      # Windows: install via vcpkg and set OPENSSL_DIR.
+      - name: Install OpenSSL (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install openssl:x64-windows-static-md
+          echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $env:GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
 
@@ -43,12 +55,3 @@ jobs:
 
       - name: cargo test
         run: cargo test --all-features
-
-      # SQLCipher bundled build needs a C compiler on Windows:
-      - name: Ensure MSVC build tools (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Visual Studio Build Tools are preinstalled on GitHub runners;
-          # this step guards against missing C compilation for SQLCipher.
-          vswhere.exe -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 | Out-Null
