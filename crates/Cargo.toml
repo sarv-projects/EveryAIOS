@@ -25,3 +25,6 @@ thiserror = "2"
 regex = "1"
 rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
 toml = "0.8"
+ureq = { version = "2", features = ["tls", "json"] }
+zeroize = { version = "1", features = ["derive"] }
+rand = "0.8"

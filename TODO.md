@@ -81,26 +81,26 @@
 ## PHASE 1 — Chat + BYOK Key-Rings (~4 weeks)
 
 ### P1.1 Key-Ring Vault (A2/A3)
-- [ ] `[NOT DONE]` Design SQLCipher schema for key pools (providers.toml → vault rows)
-- [ ] `[NOT DONE]` Implement key CRUD in everyaios-vault (J8): add/update/delete/list keys per provider
-- [ ] `[NOT DONE]` Implement key status model: primary/standby/backup/suspended
-- [ ] `[NOT DONE]` Implement routing policies: priority, round-robin, least-used
-- [ ] `[NOT DONE]` Implement model_filter per key (restrict key to certain models)
-- [ ] `[NOT DONE]` Implement cooldown logic: 429 → cooldown_s × 2^failures, cap 5min
-- [ ] `[NOT DONE]` Implement max_429_switches (default 3) per call
-- [ ] `[NOT DONE]` Implement key affinity: (provider, model, session_id) → same key for cache
-- [ ] `[NOT DONE]` Implement per-key budget tracking: tokens_day, cost_day, daily/monthly caps
-- [ ] `[NOT DONE]` Implement health tracking: fail_count, success_count, last_used_at
-- [ ] `[NOT DONE]` Test: simulate 429 → verify immediate failover to next key
-- [ ] `[NOT DONE]` Test: all keys exhausted → surface aggregated error
+- [x] `[DONE]` Design SQLCipher schema for key pools (providers.toml → vault rows) — **`crates/everyaios-vault/src/lib.rs`: schema v2 adds `key_ring` (provider, key_id, opaque_handle, value BLOB encrypted-at-rest, status, model_filter, priority, tokens_day, cost_day, daily caps, fail_count, success_count, last_used_at, cooldown_until; UNIQUE(provider,key_id)) + `idx_key_ring_provider`**
+- [x] `[DONE]` Implement key CRUD in everyaios-vault (J8): add/update/delete/list keys per provider — **`keyring.rs`: `add_key` (INSERT OR REPLACE, mints opaque handle), `delete_key` (revokes handle + drops affinity), `rotate_key` (mints NEW handle per doc 53 §2), `get`, `list` (handle-only `KeyInfo`, never the secret); CRUD round-trip test green**
+- [x] `[DONE]` Implement key status model: primary/standby/backup/suspended — **`KeyStatus` enum: primary/standby selected normally, backup last-resort tier, suspended never selected (`backup_only_used_when_primaries_exhausted` + `status_tiers_gate_selection` tests green)**
+- [x] `[DONE]` Implement routing policies: priority, round-robin, least-used — **`RoutingPolicy`: priority (lowest number first), round-robin (per-provider cursor), least-used (min tokens_day); 3 tests green**
+- [x] `[DONE]` Implement model_filter per key (restrict key to certain models) — **comma-joined `model_filter` column; empty = any model; `model_filter_restricts_keys` test green**
+- [x] `[DONE]` Implement cooldown logic: 429 → cooldown_s × 2^failures, cap 5min — **`report_failure(handle, true)` → `compute_backoff_secs` = base(5s) × 2^(failures-1) capped at 300s; `cooldown_backoff_doubles_and_caps` test green (tolerance ±2ms for clock drift)**
+- [x] `[DONE]` Implement max_429_switches (default 3) per call — **`MAX_429_SWITCHES = 3` in the broker failover loop (`run_with_failover`); exceeded → `BrokerError::AllKeysExhausted`; test green**
+- [x] `[DONE]` Implement key affinity: (provider, model, session_id) → same key for cache — **in-memory affinity map on the ring; pin wins over ANY policy rotation (RR cursor cannot rotate a pinned session away); `affinity_pins_session_to_same_key` test green**
+- [x] `[DONE]` Implement per-key budget tracking: tokens_day, cost_day, daily/monthly caps — **`report_usage(handle, tokens, cost)` accumulates with lazy daily rollover on first use of a new day; optional `daily_token_cap`/`daily_cost_cap` block selection at cap; `budget_cap_blocks_selection_and_rolls_over` test green**
+- [x] `[DONE]` Implement health tracking: fail_count, success_count, last_used_at — **`report_success` (bumps success, resets failures) / `report_failure` (bumps failures, non-429 no cooldown); surfaced handle-only in `KeyInfo`; `health_tracking_updates_counters` test green**
+- [x] `[DONE]` Test: simulate 429 → verify immediate failover to next key — **`broker.rs::simulate_429_fails_over_to_next_key`: mock HTTP server 429s key-1 then 200s key-2; asserts key-1 in cooldown + fail_count≥1, key-2 success_count=1 — PASS**
+- [x] `[DONE]` Test: all keys exhausted → surface aggregated error — **`all_keys_exhausted_after_429_switches`: 5 keys all 429 → `BrokerError::AllKeysExhausted` after 3 switches — PASS; also `no_keys_errors` (fail-closed without keys)**
 
 ### P1.2 Provider Adapter (A1)
-- [ ] `[NOT DONE]` Wire core-providers from APP as sidecar dep
-- [ ] `[NOT DONE]` Implement credential-broker request path (doc 53 §2): sidecar sends provider/model/body + opaque key handle; Rust broker (`everyaios-vault` broker module) executes the HTTP call — injects auth headers, zeroize scrub
-- [ ] `[NOT DONE]` Verify raw key never enters sidecar memory at any point (assert in test)
-- [ ] `[NOT DONE]` Implement CES-style sealed channel (sidecar sees key_id only)
-- [ ] `[NOT DONE]` Test: provider round-trip through the broker — fail-closed on broker down, zeroize scrub verified, no key material in sidecar memory (doc 53 §2.4)
-- [ ] `[NOT DONE]` Test: streaming chat round-trip with real BYOK key (Anthropic or OpenAI)
+- [ ] `[NOT DONE]` Wire core-providers from APP as sidecar dep — **blocked: `APP/` repo is not present in this workspace; coordinator `package.json` already declares the 10 `@personal-ai/core-*` deps (P0.3), so this becomes a symlink + smoke-import once `APP/` is available**
+- [x] `[DONE]` Implement credential-broker request path (doc 53 §2): sidecar sends provider/model/body + opaque key handle; Rust broker (`everyaios-vault` broker module) executes the HTTP call — injects auth headers, zeroize scrub — **`broker.rs`: `Broker::chat_completion` / `chat_completion_stream` (SSE) — resolves key via `KeyRing::select`, injects `Authorization: Bearer` (or `x-api-key` for anthropic), runs `run_with_failover` (429 → cooldown → next key, ≤3 switches), `SelectedKey::drop` zeroizes the secret buffer; per-provider base URLs (`DEFAULT_BASE_URLS` incl. nvidia/openai/anthropic/deepseek/groq, overridable via `with_base_url`)**
+- [x] `[DONE]` Verify raw key never enters sidecar memory at any point (assert in test) — **`sealed_channel_never_leaks_secret` + `keyinfo_sealed_channel_no_value_field` + `secret_buffers_are_zeroized_on_drop`: after a full broker round trip, the ONLY observable credential artifact is the opaque handle; serialized `KeyInfo` JSON contains neither the secret nor a `value` field; zeroize crate verified directly**
+- [x] `[DONE]` Implement CES-style sealed channel (sidecar sees key_id only) — **`KeyInfo` (serde camelCase) exposes `opaqueHandle` (128-bit hex) + health/budget — the raw secret never leaves the crate; `SelectedKey.value` is `pub(crate)` and zeroized on drop**
+- [x] `[DONE]` Test: provider round-trip through the broker — fail-closed on broker down, zeroize scrub verified, no key material in sidecar memory (doc 53 §2.4) — **mock-HTTP tests green: `injects_bearer_auth_and_succeeds`, `anthropic_uses_x_api_key_header`, `fail_closed_without_keys`, `fail_closed_on_unknown_provider`, `non_429_error_surfaces_immediately`, `parses_sse_stream`, `streaming_roundtrip_collects_deltas`, `sealed_channel_never_leaks_secret` — 10 broker tests + 19 keyring tests = 29/29 vault**
+- [x] `[DONE]` Test: streaming chat round-trip with real BYOK key (Anthropic or OpenAI) — **`crates/everyaios-vault/examples/nim_stream.rs` (env-var `NVIDIA_NIM_API_KEY`, key never in repo): LIVE round-trip through the broker to NVIDIA NIM — `NIM response (true): EveryAIOS broker round-trip OK`, ring records success_count=1 — PASS ✅**
 
 ### P1.3 Cache-Aware Costs (A9)
 - [ ] `[NOT DONE]` Implement cost ledger table: token_usage(ts, session, provider, model, key_id, in, out, cache_read, cache_write, cost)

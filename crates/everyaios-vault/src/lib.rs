@@ -2,17 +2,28 @@
 //!
 //! All secrets (API keys, OAuth tokens, session cookies) live in a
 //! SQLCipher database. The Rust core holds the encryption key; the TS
-//! sidecar only ever sees `key_id` handles (CES sealed channel, doc 19).
+//! sidecar only ever sees `key_id` / opaque handles (CES sealed channel,
+//! doc 19 / doc 53 §2).
 //!
 //! P0.1 scope: open/create an encrypted DB with `PRAGMA key`, versioned
-//! schema, and a smoke-tested round trip. P1.1 adds the key-pool schema,
-//! CRUD, routing/cooldown state, and per-key budgets.
+//! schema, and a smoke-tested round trip. P1.1 adds the key-pool schema
+//! ([`keyring`]), CRUD, routing/cooldown state, per-key budgets, and the
+//! credential broker ([`broker`]) that executes provider HTTP calls.
+
+pub mod broker;
+pub mod keyring;
+
+pub use broker::{usage_tokens, Broker, BrokerError, ChatStreamEvent};
+pub use keyring::{
+    KeyEntry, KeyInfo, KeyRing, KeyRingError, KeySpec, KeyStatus, RoutingPolicy, SelectedKey,
+    COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, MAX_429_SWITCHES,
+};
 
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 const INIT_SQL: &str = r#"
 PRAGMA journal_mode=WAL;
@@ -23,13 +34,38 @@ CREATE TABLE IF NOT EXISTS schema_meta (
     value TEXT NOT NULL
 );
 
--- P0.1 placeholder table; the real key-pool schema lands in P1.1.
+-- P0.1 placeholder table; kept for backward compatibility.
 CREATE TABLE IF NOT EXISTS key_pool (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     provider   TEXT NOT NULL,
     key_id     TEXT NOT NULL UNIQUE,
     created_at INTEGER NOT NULL
 );
+
+-- P1.1: the real key-ring schema (A2/A3, J8). Every row is one key in a
+-- provider's pool: status tier, routing metadata, cooldown/budget/health
+-- counters, and the raw secret (SQLCipher-encrypted at rest). The sidecar
+-- only ever sees `opaque_handle`.
+CREATE TABLE IF NOT EXISTS key_ring (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider        TEXT NOT NULL,
+    key_id          TEXT NOT NULL,
+    opaque_handle   TEXT NOT NULL UNIQUE,
+    value           BLOB NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'primary',
+    model_filter    TEXT NOT NULL DEFAULT '',
+    priority        INTEGER NOT NULL DEFAULT 100,
+    tokens_day      INTEGER NOT NULL DEFAULT 0,
+    cost_day        REAL NOT NULL DEFAULT 0,
+    daily_token_cap INTEGER,
+    daily_cost_cap  REAL,
+    fail_count      INTEGER NOT NULL DEFAULT 0,
+    success_count   INTEGER NOT NULL DEFAULT 0,
+    last_used_at    INTEGER NOT NULL DEFAULT 0,
+    cooldown_until  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(provider, key_id)
+);
+CREATE INDEX IF NOT EXISTS idx_key_ring_provider ON key_ring(provider);
 "#;
 
 /// An open SQLCipher vault handle. Not `Clone` — ownership is the point.
@@ -82,6 +118,12 @@ impl Vault {
             Some(v) => format!("sqlcipher schema v{v}"),
             None => "sqlcipher (uninitialized)".into(),
         }
+    }
+
+    /// Shared (crate-internal) connection accessor — the [`KeyRing`]
+    /// selection engine runs on the same encrypted connection.
+    pub(crate) fn connection(&self) -> &Connection {
+        &self.conn
     }
 
     /// Register a key handle. `key_id` is the opaque reference the sidecar
@@ -145,7 +187,7 @@ mod tests {
 
         {
             let vault = Vault::open(&path, "test-key").expect("open");
-            assert!(vault.status().contains("schema v1"));
+            assert!(vault.status().contains("schema v2"));
             vault.register_key("anthropic", "key-1").unwrap();
             vault.register_key("anthropic", "key-2").unwrap();
             vault.register_key("openai", "key-3").unwrap();
