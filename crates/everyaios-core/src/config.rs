@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::default_data_dir;
+use crate::local::LocalConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Config {
@@ -22,6 +23,9 @@ pub struct Config {
     /// Explicit UNIX socket path (J16); `None` = `<data_dir>/coordinator.sock`.
     #[serde(default)]
     pub socket_path: Option<PathBuf>,
+    /// P1.8 (A5): local model runtimes (ollama / llamafile).
+    #[serde(default)]
+    pub local: LocalConfig,
 }
 
 impl Default for Config {
@@ -33,6 +37,7 @@ impl Default for Config {
             data_dir,
             browser_binary: None,
             socket_path: None,
+            local: LocalConfig::default(),
         }
     }
 }

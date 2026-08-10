@@ -17,6 +17,8 @@ use std::io::{BufRead, BufReader};
 
 use crate::keyring::{KeyRing, KeyRingError, RoutingPolicy, SelectedKey, MAX_429_SWITCHES};
 use crate::ledger::{default_pricing, Pricing, Usage, UsageRow};
+use crate::local::{self, LocalEndpoint};
+use crate::oauth::{is_oauth_provider, OAuthManager};
 use crate::session_budget::SessionBudget;
 use crate::Vault;
 
@@ -28,6 +30,12 @@ pub const DEFAULT_BASE_URLS: &[(&str, &str)] = &[
     ("anthropic", "https://api.anthropic.com/v1"),
     ("deepseek", "https://api.deepseek.com/v1"),
     ("groq", "https://api.groq.com/openai"),
+    // P1.7 (A4): subscription accounts route through the same broker. The
+    // stored OAuth tokens are injected as `Authorization: Bearer` by
+    // `authorization()` (never `x-api-key`).
+    ("chatgpt-pro", "https://chatgpt.com/backend-api/codex/v1"),
+    ("copilot", "https://api.githubcopilot.com"),
+    ("qwen", "https://portal.qwen.ai/v1"),
 ];
 
 /// One SSE event from a streaming chat completion.
@@ -57,6 +65,15 @@ pub struct Broker<'a> {
     pricing: HashMap<String, Pricing>,
     /// Per-session hard $ budget (J11, default $2.00).
     budget: SessionBudget,
+    /// P1.7 (A4): when attached, an HTTP 401 on an oauth provider triggers a
+    /// token refresh + one retry before the error surfaces (doc 33 §7.4
+    /// token lifecycle; failover semantics stay identical to BYOK keys).
+    oauth: Option<OAuthManager<'a>>,
+    /// P1.8 (A5): keyless local endpoints (ollama / llamafile). When a
+    /// provider is registered here the broker routes straight to the local
+    /// runtime — no KeyRing selection, no auth header; usage still lands in
+    /// the ledger + session budget (tokens count, $ is 0).
+    local_endpoints: HashMap<String, LocalEndpoint>,
 }
 
 impl<'a> Broker<'a> {
@@ -78,7 +95,33 @@ impl<'a> Broker<'a> {
             policy: RoutingPolicy::RoundRobin,
             pricing,
             budget: SessionBudget::default_budget(),
+            oauth: None,
+            local_endpoints: HashMap::new(),
         }
+    }
+
+    /// Register a keyless local endpoint (P1.8/A5). Local providers bypass
+    /// the key ring entirely — the machine owns the weights.
+    pub fn with_local(mut self, provider: &str, endpoint: LocalEndpoint) -> Self {
+        self.local_endpoints.insert(provider.to_string(), endpoint);
+        self
+    }
+
+    /// Is `provider` served by a configured local runtime?
+    pub fn is_local(&self, provider: &str) -> bool {
+        self.local_endpoints.contains_key(provider)
+    }
+
+    /// The configured local endpoint for `provider`, if any.
+    pub fn local_endpoint(&self, provider: &str) -> Option<&LocalEndpoint> {
+        self.local_endpoints.get(provider)
+    }
+
+    /// Attach the OAuth manager so subscription accounts get 401→refresh→
+    /// retry semantics (P1.7).
+    pub fn with_oauth(mut self, oauth: OAuthManager<'a>) -> Self {
+        self.oauth = Some(oauth);
+        self
     }
 
     /// Override the per-1M-token pricing for a provider (A9).
@@ -133,6 +176,10 @@ impl<'a> Broker<'a> {
         session_id: &str,
         body: serde_json::Value,
     ) -> Result<serde_json::Value, BrokerError> {
+        // P1.8 (A5): keyless local runtime — no key ring, no auth header.
+        if let Some(ep) = self.local_endpoints.get(provider) {
+            return self.local_chat_completion(ep, provider, model, session_id, body);
+        }
         self.run_with_failover(
             provider,
             model,
@@ -167,6 +214,10 @@ impl<'a> Broker<'a> {
         session_id: &str,
         mut body: serde_json::Value,
     ) -> Result<Vec<ChatStreamEvent>, BrokerError> {
+        // P1.8 (A5): keyless local runtime — no key ring, no auth header.
+        if let Some(ep) = self.local_endpoints.get(provider) {
+            return self.local_chat_completion_stream(ep, provider, model, session_id, body);
+        }
         body["stream"] = serde_json::json!(true);
         body["stream_options"] = serde_json::json!({"include_usage": true});
         self.run_with_failover(
@@ -227,6 +278,9 @@ impl<'a> Broker<'a> {
         }
 
         let mut switches = 0u32;
+        // P1.7: a 401 on an oauth provider refreshes the token exactly once
+        // per call before failover/exhaustion logic takes over.
+        let mut refreshed = false;
         loop {
             let key = match self.ring.select(provider, model, session_id, self.policy) {
                 Ok(k) => k,
@@ -275,7 +329,28 @@ impl<'a> Broker<'a> {
                     }
                 }
                 Err(e) => {
-                    // Non-429: record health, surface immediately.
+                    // P1.7: on 401 for an oauth-backed provider, refresh the
+                    // account's token (ring value updated by the manager) and
+                    // retry once — then fall through to the normal surface.
+                    let refreshable = !refreshed
+                        && is_oauth_provider(provider)
+                        && self.oauth.as_ref().map(|o| o.enabled()).unwrap_or(false);
+                    if refreshable && matches!(e, BrokerError::Http(401, _)) {
+                        self.ring
+                            .report_failure(&key.opaque_handle, false)
+                            .map_err(BrokerError::KeyRing)?;
+                        let ok = self
+                            .oauth
+                            .as_ref()
+                            .unwrap()
+                            .refresh(provider, &key.key_id)
+                            .is_ok();
+                        if ok {
+                            refreshed = true;
+                            continue;
+                        }
+                    }
+                    // Non-429 (or refresh failed): record health, surface.
                     self.ring
                         .report_failure(&key.opaque_handle, false)
                         .map_err(BrokerError::KeyRing)?;
@@ -283,6 +358,100 @@ impl<'a> Broker<'a> {
                 }
             }
         }
+    }
+}
+
+impl<'a> Broker<'a> {
+    /// P1.8 (A5/B5) — keyless local completion. Grammar rides the request
+    /// (GBNF passthrough on ollama's `format` / llamafile's `grammar`); usage
+    /// lands in the ledger + session budget at $0 cost.
+    fn local_chat_completion(
+        &self,
+        ep: &LocalEndpoint,
+        provider: &str,
+        model: &str,
+        session_id: &str,
+        mut body: serde_json::Value,
+    ) -> Result<serde_json::Value, BrokerError> {
+        if !self.budget.can_issue(session_id) {
+            return Err(BrokerError::SessionBudgetExceeded {
+                session: session_id.to_string(),
+                limit: self.budget.limit(),
+                spent: self.budget.spent(session_id),
+            });
+        }
+        body["stream"] = serde_json::json!(false);
+        let (resp, usage) = match ep.runtime {
+            crate::local::LocalRuntime::Ollama => {
+                let req = local::ollama_body(ep, model, &body);
+                local::ollama_chat(&ep.base_url, &req)?
+            }
+            crate::local::LocalRuntime::Llamafile => {
+                let req = local::llamafile_body(ep, model, &body);
+                local::llamafile_chat(&ep.base_url, &req)?
+            }
+        };
+        self.record_local(session_id, provider, model, usage)?;
+        Ok(resp)
+    }
+
+    /// P1.8 (A5/B5) — keyless local stream. Same contract as the cloud path:
+    /// `Vec<ChatStreamEvent>` with deltas + finish + cache-aware usage.
+    fn local_chat_completion_stream(
+        &self,
+        ep: &LocalEndpoint,
+        provider: &str,
+        model: &str,
+        session_id: &str,
+        body: serde_json::Value,
+    ) -> Result<Vec<ChatStreamEvent>, BrokerError> {
+        if !self.budget.can_issue(session_id) {
+            return Err(BrokerError::SessionBudgetExceeded {
+                session: session_id.to_string(),
+                limit: self.budget.limit(),
+                spent: self.budget.spent(session_id),
+            });
+        }
+        let mut body = body;
+        body["stream"] = serde_json::json!(true);
+        let events = match ep.runtime {
+            crate::local::LocalRuntime::Ollama => {
+                let req = local::ollama_body(ep, model, &body);
+                local::ollama_chat_stream(&ep.base_url, &req)?
+            }
+            crate::local::LocalRuntime::Llamafile => {
+                let req = local::llamafile_body(ep, model, &body);
+                local::llamafile_chat_stream(&ep.base_url, &req)?
+            }
+        };
+        let usage = usage_from_stream(events.as_slice());
+        self.record_local(session_id, provider, model, usage)?;
+        Ok(events)
+    }
+
+    /// Shared local recording: one ledger row (key_id = model — there is no
+    /// key) + J11 session settle at $0 cost. Tokens count; local $ is always
+    /// 0. Same error contract as the cloud path: a failed ledger write
+    /// propagates (cost accounting must never fail silently).
+    fn record_local(
+        &self,
+        session_id: &str,
+        provider: &str,
+        model: &str,
+        usage: Usage,
+    ) -> Result<(), BrokerError> {
+        let cost = 0.0;
+        self.vault.record_usage(&UsageRow {
+            session: session_id.to_string(),
+            provider: provider.to_string(),
+            model: model.to_string(),
+            key_id: model.to_string(),
+            usage,
+            cost,
+            tool: None,
+        })?;
+        self.budget.settle(session_id, cost);
+        Ok(())
     }
 }
 
@@ -348,7 +517,9 @@ fn cost_of_usage(pricing: &HashMap<String, Pricing>, provider: &str, usage: Usag
 /// Parse OpenAI-style SSE stream into events. Lines look like:
 /// `data: {"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}`
 /// and the stream ends with `data: [DONE]`.
-fn parse_sse<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
+///
+/// `pub(crate)` — the local llamafile path (P1.8) streams the same shape.
+pub(crate) fn parse_sse<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
     let mut events = Vec::new();
     let mut line = String::new();
     loop {

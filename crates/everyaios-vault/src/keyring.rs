@@ -190,6 +190,16 @@ impl<'a> KeyRing<'a> {
         }
     }
 
+    /// Build a ring over an existing SQLCipher connection (P1.7: the OAuth
+    /// manager upserts subscription tokens into the ring this way).
+    pub(crate) fn new_from_conn(conn: &'a Connection) -> Self {
+        Self {
+            conn,
+            rr_cursor: Mutex::new(HashMap::new()),
+            affinity: Mutex::new(HashMap::new()),
+        }
+    }
+
     // ---- CRUD -----------------------------------------------------------
 
     /// Add a key to the ring. Returns the opaque handle.

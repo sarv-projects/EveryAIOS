@@ -13,6 +13,8 @@
 pub mod broker;
 pub mod keyring;
 pub mod ledger;
+pub mod local;
+pub mod oauth;
 pub mod session_budget;
 
 pub use broker::{usage_tokens, Broker, BrokerError, ChatStreamEvent};
@@ -21,13 +23,15 @@ pub use keyring::{
     COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, MAX_429_SWITCHES,
 };
 pub use ledger::{default_pricing, Pricing, Usage, UsageRow};
+pub use local::{Grammar, LocalEndpoint, LocalRuntime, DEFAULT_NUM_CTX, MIN_WARN_NUM_CTX};
+pub use oauth::{DeviceCodeStart, DevicePoll, OAuthAccountInfo, OAuthError, OAuthManager, PkceStart};
 pub use session_budget::{SessionBudget, DEFAULT_SESSION_BUDGET_USD};
 
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 const INIT_SQL: &str = r#"
 PRAGMA journal_mode=WAL;
@@ -91,6 +95,40 @@ CREATE TABLE IF NOT EXISTS token_usage (
 );
 CREATE INDEX IF NOT EXISTS idx_token_usage_session ON token_usage(session);
 CREATE INDEX IF NOT EXISTS idx_token_usage_ts ON token_usage(ts);
+
+-- P1.7 (A4, doc 33 §7.4): OAuth subscription tokens — encrypted at rest in
+-- the SQLCipher vault, never visible to the sidecar. PK is (provider,
+-- account_id); access_token is what the broker injects (also upserted into
+-- key_ring for identical BYOK failover semantics), refresh_token + expiry
+-- live here for the token lifecycle.
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+    provider      TEXT NOT NULL,
+    account_id    TEXT NOT NULL,
+    access_token  BLOB NOT NULL,
+    refresh_token BLOB,
+    token_type    TEXT NOT NULL DEFAULT 'Bearer',
+    scopes        TEXT NOT NULL DEFAULT '',
+    email         TEXT,
+    expires_at    INTEGER NOT NULL DEFAULT 0,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    PRIMARY KEY (provider, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens(provider);
+
+-- P1.7 (A4): in-flight PKCE / device-code flows. `code_verifier` is kept in
+-- the vault (never in the sidecar); device flows keep the device_code +
+-- user_code until the user approves in their browser.
+CREATE TABLE IF NOT EXISTS oauth_pending (
+    provider          TEXT NOT NULL PRIMARY KEY,
+    state             TEXT,
+    code_verifier     TEXT NOT NULL,
+    device_code       TEXT,
+    user_code         TEXT,
+    verification_uri  TEXT,
+    interval_secs     INTEGER NOT NULL DEFAULT 5,
+    created_at        INTEGER NOT NULL
+);
 "#;
 
 /// An open SQLCipher vault handle. Not `Clone` — ownership is the point.
@@ -263,7 +301,7 @@ mod tests {
 
         {
             let vault = Vault::open(&path, "test-key").expect("open");
-            assert!(vault.status().contains("schema v3"));
+            assert!(vault.status().contains("schema v4"));
             vault.register_key("anthropic", "key-1").unwrap();
             vault.register_key("anthropic", "key-2").unwrap();
             vault.register_key("openai", "key-3").unwrap();
@@ -295,9 +333,9 @@ mod tests {
     }
 
     #[test]
-    fn stale_v1_schema_gets_bumped_to_v3_on_open() {
+    fn stale_v1_schema_gets_bumped_to_v4_on_open() {
         // A P0.1-era DB has schema_version=1 and no key_ring/token_usage.
-        // Opening it with the v3 code must create the new tables AND bump the
+        // Opening it with the v4 code must create the new tables AND bump the
         // recorded version so status() never reports a stale version.
         let dir =
             std::env::temp_dir().join(format!("everyaios-vault-migrate-{}", std::process::id()));
@@ -319,7 +357,7 @@ mod tests {
         // Reopen: version row must be bumped to the current schema.
         {
             let vault = Vault::open(&path, "test-key").expect("reopen");
-            assert!(vault.status().contains("schema v3"));
+            assert!(vault.status().contains("schema v4"));
             assert!(vault.ledger_count().unwrap() == 0);
         }
 

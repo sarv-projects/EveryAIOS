@@ -21,9 +21,15 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
-use everyaios_vault::{Broker, DEFAULT_SESSION_BUDGET_USD, Vault};
+use everyaios_vault::{Broker, LocalEndpoint, DEFAULT_SESSION_BUDGET_USD, Vault};
 
 use crate::sidecar_link::{Inbound, SidecarLink, WriterHandle};
+
+/// P1.8: registered keyless local endpoints (provider → endpoint).
+type LocalEndpointMap = HashMap<String, LocalEndpoint>;
+
+/// UI event sink (pre-existing; alias keeps clippy's type_complexity quiet).
+type EventSink = Box<dyn Fn(ChatWireEvent) + Send>;
 
 /// Wire events forwarded to the UI (Tauri emits a single `chat-event`).
 #[derive(Debug, Clone, serde::Serialize)]
@@ -84,7 +90,11 @@ pub struct ChatRelay<W, R> {
     sessions: Arc<Mutex<HashMap<String, String>>>,
     /// Provider base-url overrides (from config; also used by tests).
     base_urls: Arc<Mutex<HashMap<String, String>>>,
-    on_event: Arc<Mutex<Box<dyn Fn(ChatWireEvent) + Send>>>,
+    /// P1.8 (A5): keyless local endpoints (ollama / llamafile). When the
+    /// sidecar requests one of these providers the broker routes to the
+    /// local runtime — no key ring, GBNF grammar passthrough (B5).
+    local_endpoints: Arc<Mutex<LocalEndpointMap>>,
+    on_event: Arc<Mutex<EventSink>>,
 }
 
 impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
@@ -98,8 +108,20 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             vault,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             base_urls: Arc::new(Mutex::new(HashMap::new())),
+            local_endpoints: Arc::new(Mutex::new(HashMap::new())),
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
         }
+    }
+
+    /// Register a keyless local endpoint (P1.8/A5). The src-tauri shell uses
+    /// [`crate::LocalManager`] for discovery (ollama always, llamafile only
+    /// when a binary exists) before calling this.
+    pub fn with_local(&self, provider: &str, endpoint: LocalEndpoint) -> &Self {
+        self.local_endpoints
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(provider.to_string(), endpoint);
+        self
     }
 
     /// Override a provider base URL (config / tests).
@@ -126,6 +148,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let sessions = Arc::clone(&self.sessions);
         let on_event = Arc::clone(&self.on_event);
         let base_urls = Arc::clone(&self.base_urls);
+        let local_endpoints = Arc::clone(&self.local_endpoints);
 
         std::thread::spawn(move || loop {
             let inbound = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
@@ -141,8 +164,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         let w2 = writer.clone();
                         let vault2 = Arc::clone(&vault);
                         let base2 = Arc::clone(&base_urls);
+                        let local2 = Arc::clone(&local_endpoints);
                         std::thread::spawn(move || {
-                            let _ = stream_provider(vault2, base2, params, w2);
+                            let _ = stream_provider(vault2, base2, local2, params, w2);
                         });
                     }
                     _ => {
@@ -326,7 +350,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                 "model": params.model,
             }),
         )?;
-        if ack.get("accepted").and_then(|a| a.as_bool()).unwrap_or(false) != true {
+        if !ack.get("accepted").and_then(|a| a.as_bool()).unwrap_or(false) {
             return Err(ChatRelayError::SidecarRejected(ack.to_string()));
         }
 
@@ -347,7 +371,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     }
 }
 
-fn emit(on_event: &Arc<Mutex<Box<dyn Fn(ChatWireEvent) + Send>>>, ev: ChatWireEvent) {
+fn emit(on_event: &Arc<Mutex<EventSink>>, ev: ChatWireEvent) {
     on_event.lock().unwrap_or_else(|e| e.into_inner())(ev);
 }
 
@@ -357,6 +381,7 @@ fn emit(on_event: &Arc<Mutex<Box<dyn Fn(ChatWireEvent) + Send>>>, ev: ChatWireEv
 fn stream_provider(
     vault: Arc<Mutex<Vault>>,
     base_urls: Arc<Mutex<HashMap<String, String>>>,
+    local_endpoints: Arc<Mutex<LocalEndpointMap>>,
     params: serde_json::Value,
     writer: WriterHandle<impl Write>,
 ) -> Result<(), crate::sidecar_link::LinkError> {
@@ -390,6 +415,10 @@ fn stream_provider(
     let mut broker = Broker::new(&v);
     for (p, url) in base_urls.lock().unwrap_or_else(|e| e.into_inner()).iter() {
         broker = broker.with_base_url(p, url.clone());
+    }
+    // P1.8 (A5): keyless local endpoints route inside the broker.
+    for (p, ep) in local_endpoints.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        broker = broker.with_local(p, ep.clone());
     }
 
     let body = serde_json::json!({ "model": model, "messages": messages });
@@ -773,10 +802,14 @@ mod tests {
                     });
                     let _ = frame::write_frame(&mut s, &serde_json::to_vec(&req).unwrap());
                     // Drain chunks until ended.
-                    loop {
-                        let Ok(Some(payload)) = frame::decode(&mut s) else { break };
-                        let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
-                        if v.get("params").and_then(|p| p.get("ended")).and_then(|x| x.as_bool()) == Some(true) {
+                    while let Ok(Some(payload)) = frame::decode(&mut s) {
+                        let v: serde_json::Value =
+                            serde_json::from_slice(&payload).unwrap_or_default();
+                        if v.get("params")
+                            .and_then(|p| p.get("ended"))
+                            .and_then(|x| x.as_bool())
+                            == Some(true)
+                        {
                             break;
                         }
                     }

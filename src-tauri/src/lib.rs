@@ -47,6 +47,23 @@ fn connect_chat_relay(
         // Fire-and-forget: never let a UI emit failure break the relay.
         let _ = handle.emit(CHAT_EVENT, ev);
     });
+    // P1.8 (A5): register keyless local endpoints so a sidecar
+    // `provider/stream` for ollama/llamafile routes to the local runtime
+    // (GBNF grammar constraint included — B5). Ollama always registers;
+    // llamafile only when a binary is discoverable (config, env, or
+    // `<data_dir>/bin/*.llamafile`).
+    let cfg = everyaios_core::Config::load().unwrap_or_default();
+    let mgr = everyaios_core::LocalManager::from_config(&cfg);
+    if let Some(ep) = mgr.endpoint_for("ollama") {
+        relay.with_local("ollama", ep);
+    }
+    if mgr.find_llamafile(&cfg.data_dir).is_some()
+        || std::env::var("EVERYAIOS_LLAMAFILE").is_ok()
+    {
+        if let Some(ep) = mgr.endpoint_for("llamafile") {
+            relay.with_local("llamafile", ep);
+        }
+    }
     relay.spawn();
     *state.chat_relay.lock().expect("chat_relay poisoned") = Some(relay);
 }

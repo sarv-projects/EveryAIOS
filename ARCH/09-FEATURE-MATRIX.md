@@ -10,8 +10,8 @@
 | A2 | **Multi-key per provider** | Key rings: add N keys/provider, priority+weight, per-key model filter, budgets, health | Rust everyaios-vault | 🔵 **NEW (user req)** | ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch |
 | A3 | **Auto-failover rotation** | 429/401/5xx → cooldown → immediate next key; max-switches; all-fail backoff | Rust everyaios-vault | 🔵 **NEW (user req)** | ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch |
 | A4 | OAuth subscriptions | chatgpt-pro (PKCE) / copilot·qwen (device-code), encrypted tokens, same fallback semantics | Rust everyaios-vault + sidecar | 🔵 | 33 §7.4, 13 §5.5 |
-| A5 | Local models | Ollama managed + llamafile single-binary; ≥15–20K ctx warning | Rust spawn + sidecar | 🟢+🔵 | 34 §2 |
-| A6 | Model catalog + hints | capabilities (tools/vision/ctx), router picks per task | sidecar core-providers | 🟢 | doc 19 |
+| A5 | Local models | Ollama managed + llamafile single-binary; ≥15–20K ctx warning | Rust spawn + sidecar | 🟢+🔵 | 34 §2 + 33 §7.4 |
+| A6 | Model catalog + hints | capabilities (tools/vision/ctx), router picks per task | sidecar core-providers | 🟢 | doc 19 + core-providers pi.dev catalog (15 prov / 280 models) |
 | A7 | Asymmetric tiering | planner_model / subagent_models / depth=2 / concurrency=6 / writers=3 | sidecar (blueprint) | 🟡 | doc 16/05 |
 | A8 | Local OpenAI-compatible server | expose engine on localhost for VS Code/Cursor reuse | Rust everyaios-mcp (additional endpoint) | 🟡 | v2.0 §P3 |
 | A9 | Cache-aware costs | cache_read/cache_write/$ per call, key-affinity | sidecar + Rust audit | 🔵 | doc 05 + ARCH/05 |

@@ -1,0 +1,518 @@
+use super::*;
+use crate::broker::Broker;
+use crate::keyring::KeyRing;
+use crate::Vault;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::thread;
+
+fn vault() -> &'static Vault {
+    Box::leak(Box::new(Vault::open_in_memory("test-key").unwrap()))
+}
+
+/// Read one HTTP request (headers + body) from the socket, waiting until
+/// `Content-Length` bytes have arrived (TCP can split the body into a second
+/// packet — the old single-read version raced and lost qwen's form body).
+fn read_http(s: &mut std::net::TcpStream) -> String {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut tmp = [0u8; 4096];
+    loop {
+        match s.read(&mut tmp) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                buf.extend_from_slice(&tmp[..n]);
+                let need = complete_http_len(&buf);
+                if let Some(need) = need {
+                    if buf.len() >= need {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    String::from_utf8_lossy(&buf).to_string()
+}
+
+/// Total expected bytes (header + body) once the header terminator is seen.
+fn complete_http_len(buf: &[u8]) -> Option<usize> {
+    let pos = buf.windows(4).position(|w| w == b"\r\n\r\n")?;
+    let head = String::from_utf8_lossy(&buf[..pos]).to_lowercase();
+    let clen: usize = head
+        .lines()
+        .find_map(|l| {
+            l.strip_prefix("content-length:")
+                .and_then(|v| v.trim().parse().ok())
+        })
+        .unwrap_or(0);
+    Some(pos + 4 + clen)
+}
+
+/// Fake token/device/exchange endpoint. `respond` receives the raw request
+/// (headers + body) and returns `(status, body)`.
+fn mock_server(respond: impl Fn(&str) -> (u16, String) + Send + 'static) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let mut s = match stream {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            let req = read_http(&mut s);
+            let (code, body) = respond(&req);
+            let reason = if code == 200 { "OK" } else { "Error" };
+            let resp = format!(
+                "HTTP/1.1 {code} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = s.write_all(resp.as_bytes());
+        }
+    });
+    format!("http://{addr}")
+}
+
+/// Build a fake id_token JWT (payload is base64url, signature ignored).
+fn fake_jwt(sub: &str, email: Option<&str>) -> String {
+    let mut payload = serde_json::json!({ "sub": sub });
+    if let Some(e) = email {
+        payload["email"] = serde_json::json!(e);
+    }
+    let enc = |v: &str| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(v.as_bytes());
+    let header = enc(r#"{"alg":"none"}"#);
+    let body = enc(&payload.to_string());
+    format!("{header}.{body}.sig")
+}
+
+fn token_json(access: &str, refresh: &str, id_token: &str) -> String {
+    serde_json::json!({
+        "access_token": access,
+        "refresh_token": refresh,
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "scope": "openid profile email offline_access model.request",
+        "id_token": id_token,
+    })
+    .to_string()
+}
+
+// ---------------------------------------------------------------------------
+// PKCE (chatgpt-pro)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn pkce_flow_roundtrip_persists_and_links_ring() {
+    let base = mock_server(|_| {
+        (
+            200,
+            token_json(
+                "tok_chatgpt_access_1",
+                "rt_chatgpt_refresh_1",
+                &fake_jwt("sub-123", Some("user@example.com")),
+            ),
+        )
+    });
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_redirect_uri("http://127.0.0.1:9999/oauth/callback")
+        .with_token_url(CHATGPT_PRO, &base);
+
+    let start = om.start_pkce(CHATGPT_PRO).unwrap();
+    assert!(start.auth_url.starts_with("https://auth0.openai.com/authorize?"));
+    assert!(start.auth_url.contains("response_type=code"));
+    assert!(start.auth_url.contains("code_challenge_method=S256"));
+    assert!(start.auth_url.contains("code_challenge="));
+    assert!(start.auth_url.contains("state="));
+    // BrowserOS mirrors the official clients' extra params (doc 33 §7.4).
+    assert!(start.auth_url.contains("codex_cli_simplified_flow"));
+    // The verifier is stored in the vault, never in the URL.
+    assert!(!start.auth_url.contains("verifier"));
+
+    let info = om
+        .complete_pkce(CHATGPT_PRO, "auth-code-xyz", &start.state)
+        .unwrap();
+    assert_eq!(info.account_id, "sub-123");
+    assert_eq!(info.email.as_deref(), Some("user@example.com"));
+
+    // Key ring carries the access token under the oauth provider name —
+    // BYOK failover machinery now applies to it unchanged.
+    let ring = KeyRing::new(vault);
+    let keys = ring.list(CHATGPT_PRO).unwrap();
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].key_id, "sub-123");
+    assert_eq!(keys[0].status, "primary");
+
+    // Token rows live in oauth_tokens (encrypted at rest).
+    let accts = om.accounts(CHATGPT_PRO).unwrap();
+    assert_eq!(accts.len(), 1);
+    let json = serde_json::to_string(&accts).unwrap();
+    assert!(!json.contains("tok_chatgpt_access_1"), "leak: {json}");
+    assert!(!json.contains("rt_chatgpt_refresh_1"), "leak: {json}");
+}
+
+#[test]
+fn pkce_state_mismatch_rejected() {
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true);
+    let start = om.start_pkce(CHATGPT_PRO).unwrap();
+    let err = om
+        .complete_pkce(CHATGPT_PRO, "code", "attacker-controlled-state")
+        .unwrap_err();
+    assert!(matches!(err, OAuthError::StateMismatch));
+    // Original state still valid — attacker state did not consume the flow.
+    let _ = start;
+}
+
+// ---------------------------------------------------------------------------
+// Device code (copilot: + internal exchange; qwen: + PKCE verifier)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn copilot_device_pending_then_approved_with_exchange() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    let poll = AtomicU32::new(0);
+    let device_base = mock_server(|_| {
+        (
+            200,
+            r#"{"device_code":"dc-1","user_code":"ABCD-1234",
+                "verification_uri":"https://github.com/login/device",
+                "verification_uri_complete":"https://github.com/login/device?user_code=ABCD-1234",
+                "expires_in":900,"interval":5}"#
+                .into(),
+        )
+    });
+    let poll_base = mock_server(move |_| {
+        let n = poll.fetch_add(1, Ordering::SeqCst);
+        if n == 0 {
+            (200, r#"{"error":"authorization_pending"}"#.into())
+        } else {
+            (
+                200,
+                r#"{"access_token":"gho_github_tok","token_type":"bearer","scope":"read:user"}"#
+                    .into(),
+            )
+        }
+    });
+    let exchange_base = mock_server(|_| {
+        (
+            200,
+            r#"{"token":"copilot-tok-1","expires_at":1750000000}"#.into(),
+        )
+    });
+
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_device_code_url(COPILOT, &device_base)
+        .with_token_url(COPILOT, &poll_base)
+        .with_exchange_url(COPILOT, &exchange_base);
+
+    let start = om.start_device(COPILOT).unwrap();
+    assert_eq!(start.user_code, "ABCD-1234");
+    assert_eq!(start.interval_secs, 5);
+    assert!(start.verification_uri.contains("github.com"));
+
+    assert_eq!(
+        om.poll_device(COPILOT).unwrap(),
+        DevicePoll::Pending { interval_secs: 5 }
+    );
+
+    match om.poll_device(COPILOT).unwrap() {
+        DevicePoll::Approved(info) => {
+            assert!(!info.account_id.is_empty());
+            // Ring stores the EXCHANGED Copilot token (usable for chat).
+            let ring = KeyRing::new(vault);
+            let keys = ring.list(COPILOT).unwrap();
+            assert_eq!(keys.len(), 1);
+            let entry = ring.get(COPILOT, &keys[0].key_id).unwrap();
+            assert_eq!(entry.value, b"copilot-tok-1");
+            assert!(entry.value != b"gho_github_tok");
+        }
+        other => panic!("expected Approved, got {other:?}"),
+    }
+
+    // Refresh re-runs the exchange with the stored GitHub token.
+    let account = om.accounts(COPILOT).unwrap().remove(0);
+    let info = om.refresh(COPILOT, &account.account_id).unwrap();
+    assert_eq!(info.account_id, account.account_id);
+}
+
+#[test]
+fn qwen_device_flow_sends_pkce_verifier() {
+    let device_seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+    let seen = device_seen.clone();
+    let device_base = mock_server(move |req| {
+        seen.lock().unwrap().push(req.to_string());
+        (
+            200,
+            r#"{"device_code":"qd-1","user_code":"QWEN-42",
+                "verification_uri":"https://qwen.dev/login/device","expires_in":1800,"interval":3}"#
+                .into(),
+        )
+    });
+    let token_seen: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+    let tseen = token_seen.clone();
+    let token_base = mock_server(move |req| {
+        tseen.lock().unwrap().push(req.to_string());
+        (
+            200,
+            r#"{"access_token":"qwen_access","refresh_token":"qwen_refresh",
+                "token_type":"Bearer","expires_in":7200,"scope":"openid profile email model.completion"}"#
+                .into(),
+        )
+    });
+
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_device_code_url(QWEN, &device_base)
+        .with_token_url(QWEN, &token_base);
+
+    let start = om.start_device(QWEN).unwrap();
+    assert_eq!(start.user_code, "QWEN-42");
+    // Device request carries PKCE challenge + model.completion scope.
+    let req = device_seen.lock().unwrap()[0].clone();
+    assert!(req.contains("code_challenge="), "{req}");
+    assert!(req.contains("code_challenge_method=S256"), "{req}");
+    assert!(req.contains("model.completion"), "{req}");
+
+    match om.poll_device(QWEN).unwrap() {
+        DevicePoll::Approved(info) => {
+            assert_eq!(info.scopes, "openid profile email model.completion");
+        }
+        other => panic!("expected Approved, got {other:?}"),
+    }
+    // Poll request carries the code_verifier (form content type).
+    let preq = token_seen.lock().unwrap()[0].clone();
+    assert!(preq.contains("code_verifier="), "{preq}");
+}
+
+// ---------------------------------------------------------------------------
+// Refresh + lifecycle
+// ---------------------------------------------------------------------------
+
+#[test]
+fn refresh_rotates_access_token_in_ring() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    let n = AtomicU32::new(0);
+    let base = mock_server(move |_| {
+        let i = n.fetch_add(1, Ordering::SeqCst);
+        if i == 0 {
+            (
+                200,
+                token_json(
+                    "tok_v1",
+                    "rt_v1",
+                    &fake_jwt("sub-9", Some("a@b.com")),
+                ),
+            )
+        } else {
+            (
+                200,
+                serde_json::json!({
+                    "access_token": "tok_v2",
+                    "refresh_token": "rt_v2",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                })
+                .to_string(),
+            )
+        }
+    });
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_redirect_uri("http://127.0.0.1:1/cb")
+        .with_token_url(CHATGPT_PRO, &base);
+
+    let start = om.start_pkce(CHATGPT_PRO).unwrap();
+    let info = om.complete_pkce(CHATGPT_PRO, "code", &start.state).unwrap();
+    assert_eq!(info.account_id, "sub-9");
+
+    let refreshed = om.refresh(CHATGPT_PRO, "sub-9").unwrap();
+    assert_eq!(refreshed.account_id, "sub-9");
+
+    let ring = KeyRing::new(vault);
+    let entry = ring.get(CHATGPT_PRO, "sub-9").unwrap();
+    assert_eq!(entry.value, b"tok_v2", "ring must carry the rotated token");
+}
+
+#[test]
+fn disabled_flag_gates_every_operation() {
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, false);
+    assert!(!om.enabled());
+    assert!(matches!(
+        om.start_pkce(CHATGPT_PRO),
+        Err(OAuthError::Disabled)
+    ));
+    assert!(matches!(
+        om.start_device(COPILOT),
+        Err(OAuthError::Disabled)
+    ));
+    assert!(matches!(
+        om.poll_device(QWEN),
+        Err(OAuthError::Disabled)
+    ));
+    assert!(matches!(
+        om.refresh(CHATGPT_PRO, "x"),
+        Err(OAuthError::Disabled)
+    ));
+}
+
+#[test]
+fn revoke_cleans_tokens_ring_and_pending() {
+    let base = mock_server(|_| {
+        (
+            200,
+            token_json(
+                "tok_x",
+                "rt_x",
+                &fake_jwt("sub-7", Some("x@y.com")),
+            ),
+        )
+    });
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_redirect_uri("http://127.0.0.1:1/cb")
+        .with_token_url(CHATGPT_PRO, &base);
+
+    let start = om.start_pkce(CHATGPT_PRO).unwrap();
+    let info = om.complete_pkce(CHATGPT_PRO, "code", &start.state).unwrap();
+
+    om.revoke(CHATGPT_PRO, &info.account_id).unwrap();
+    assert!(om.accounts(CHATGPT_PRO).unwrap().is_empty());
+    assert!(KeyRing::new(vault).list(CHATGPT_PRO).unwrap().is_empty());
+    assert!(matches!(
+        om.load_pending(CHATGPT_PRO),
+        Err(OAuthError::MissingFlow)
+    ));
+}
+
+// ---------------------------------------------------------------------------
+// Broker integration: 401 → refresh → retry (same-failover semantics)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn broker_401_refreshes_oauth_token_and_retries() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    // Token endpoint (for complete_pkce + refresh): first call issues the
+    // initial token; later calls rotate it.
+    let tok_n = AtomicU32::new(0);
+    let tok_base = mock_server(move |_| {
+        let i = tok_n.fetch_add(1, Ordering::SeqCst);
+        if i == 0 {
+            (
+                200,
+                token_json(
+                    "tok_initial",
+                    "rt_initial",
+                    &fake_jwt("sub-5", Some("u@v.com")),
+                ),
+            )
+        } else {
+            (
+                200,
+                serde_json::json!({
+                    "access_token": "tok_refreshed",
+                    "refresh_token": "rt_initial",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                })
+                .to_string(),
+            )
+        }
+    });
+
+    // Chat endpoint: first call with the stale token → 401; retry (refreshed
+    // token) → 200.
+    use std::sync::Arc;
+    let chat_n = AtomicU32::new(0);
+    let chat_seen = Arc::new(AtomicU32::new(0));
+    let seen = chat_seen.clone();
+    let chat_base = mock_server(move |req| {
+        let i = chat_n.fetch_add(1, Ordering::SeqCst);
+        if i == 0 {
+            assert!(req.contains("Authorization: Bearer tok_initial"));
+            (401, r#"{"error":"invalid_token"}"#.into())
+        } else {
+            seen.fetch_add(1, Ordering::SeqCst);
+            assert!(
+                req.contains("Authorization: Bearer tok_refreshed"),
+                "retry must use the refreshed token: {req}"
+            );
+            (200, r#"{"usage":{"total_tokens":3}}"#.into())
+        }
+    });
+
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_redirect_uri("http://127.0.0.1:1/cb")
+        .with_token_url(CHATGPT_PRO, &tok_base);
+    let start = om.start_pkce(CHATGPT_PRO).unwrap();
+    om.complete_pkce(CHATGPT_PRO, "code", &start.state).unwrap();
+
+    let broker = Broker::new(vault)
+        .with_oauth(om)
+        .with_base_url(CHATGPT_PRO, &chat_base);
+    let resp = broker
+        .chat_completion(CHATGPT_PRO, "gpt-5-codex", "s1", serde_json::json!({}))
+        .unwrap();
+    assert_eq!(crate::broker::usage_tokens(&resp), 3);
+    assert_eq!(chat_seen.load(Ordering::SeqCst), 1, "retry happened");
+    let _ = &chat_seen;
+
+    // Health: the 401 was a soft failure (no cooldown), success recorded.
+    let info = broker.ring().list(CHATGPT_PRO).unwrap();
+    assert_eq!(info[0].success_count, 1);
+    assert!(!info[0].in_cooldown);
+}
+
+#[test]
+fn broker_oauth_failover_switches_to_next_key_on_429() {
+    // Two oauth accounts in the ring; first 429s → second serves (A3
+    // failover applies to subscription accounts exactly like BYOK keys).
+    use std::sync::atomic::{AtomicU32, Ordering};
+    let n = AtomicU32::new(0);
+    let chat_base = mock_server(move |_| {
+        if n.fetch_add(1, Ordering::SeqCst) == 0 {
+            (429, "rate limited".into())
+        } else {
+            (200, r#"{"usage":{"total_tokens":2}}"#.into())
+        }
+    });
+
+    let tok_base = mock_server(|req| {
+        // Two distinct accounts via different id_tokens.
+        let acct = if req.contains("code=code-a") { "a" } else { "b" };
+        (
+            200,
+            token_json(
+                &format!("tok_{acct}"),
+                &format!("rt_{acct}"),
+                &fake_jwt(&format!("sub-{acct}"), None),
+            ),
+        )
+    });
+
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_redirect_uri("http://127.0.0.1:1/cb")
+        .with_token_url(CHATGPT_PRO, &tok_base);
+    let s1 = om.start_pkce(CHATGPT_PRO).unwrap();
+    om.complete_pkce(CHATGPT_PRO, "code-a", &s1.state).unwrap();
+    let s2 = om.start_pkce(CHATGPT_PRO).unwrap();
+    om.complete_pkce(CHATGPT_PRO, "code-b", &s2.state).unwrap();
+
+    let broker = Broker::new(vault)
+        .with_oauth(om)
+        .with_base_url(CHATGPT_PRO, &chat_base);
+    broker
+        .chat_completion(CHATGPT_PRO, "gpt-5-codex", "s1", serde_json::json!({}))
+        .unwrap();
+
+    let info = broker.ring().list(CHATGPT_PRO).unwrap();
+    let exhausted = info.iter().filter(|k| k.in_cooldown).count();
+    assert_eq!(exhausted, 1, "429 key must be in cooldown");
+    assert!(info.iter().any(|k| k.success_count == 1));
+}

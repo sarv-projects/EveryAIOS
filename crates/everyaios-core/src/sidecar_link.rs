@@ -31,6 +31,9 @@ use everyaios_ipc::message::Request;
 /// Timeout for a [`SidecarLink::request`] awaiting its response.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// In-flight request completions: request id → channel to the awaiting caller.
+type PendingRequests = HashMap<String, Sender<Result<serde_json::Value, String>>>;
+
 /// An inbound frame from the coordinator that is NOT a response to our
 /// requests: either a coordinator→us request awaiting [`SidecarLink::reply`],
 /// or a fire-and-forget notification.
@@ -114,7 +117,7 @@ impl<W: Write> WriterHandle<W> {
 /// not a field — the marker keeps the type parameter meaningful.
 pub struct SidecarLink<W, R> {
     writer: Arc<Mutex<W>>,
-    pending: Arc<Mutex<HashMap<String, Sender<Result<serde_json::Value, String>>>>>,
+    pending: Arc<Mutex<PendingRequests>>,
     inbound: Arc<Mutex<Receiver<Inbound>>>,
     _reader: std::marker::PhantomData<R>,
 }
@@ -124,8 +127,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> SidecarLink<W, R> {
     /// the reader thread.
     pub fn new(stdin: W, stdout: R) -> Self {
         let writer = Arc::new(Mutex::new(stdin));
-        let pending: Arc<Mutex<HashMap<String, Sender<Result<serde_json::Value, String>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let pending: Arc<Mutex<PendingRequests>> = Arc::new(Mutex::new(HashMap::new()));
         let (inbound_tx, inbound) = channel();
 
         let reader_pending = Arc::clone(&pending);
@@ -133,58 +135,55 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> SidecarLink<W, R> {
         let inbound = Arc::new(Mutex::new(inbound));
         std::thread::spawn(move || {
             let mut reader = stdout;
-            loop {
-                match frame::decode(&mut reader) {
-                    Ok(Some(payload)) => {
-                        let Ok(value) = serde_json::from_slice::<serde_json::Value>(&payload)
-                        else {
-                            continue;
-                        };
-                        if value.get("method").is_some() {
-                            // Coordinator → us: request (id) or notification.
-                            let method = value
-                                .get("method")
-                                .and_then(|m| m.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let params = value
-                                .get("params")
-                                .cloned()
-                                .unwrap_or(serde_json::Value::Null);
-                            let item = if value.get("id").is_some() {
-                                Inbound::Request {
-                                    id: value.get("id").cloned().unwrap_or(serde_json::Value::Null),
-                                    method,
-                                    params,
-                                }
-                            } else {
-                                Inbound::Notification { method, params }
-                            };
-                            let _ = reader_inbound.send(item);
-                        } else if let Some(id) = value.get("id").and_then(|i| i.as_str()) {
-                            // A response to one of our requests.
-                            let done = reader_pending.lock().unwrap_or_else(|e| e.into_inner()).remove(id);
-                            if let Some(tx) = done {
-                                let out = if value.get("error").is_some() {
-                                    Err(value
-                                        .get("error")
-                                        .and_then(|e| e.get("message"))
-                                        .and_then(|m| m.as_str())
-                                        .unwrap_or("sidecar error")
-                                        .to_string())
-                                } else {
-                                    Ok(value
-                                        .get("result")
-                                        .cloned()
-                                        .unwrap_or(serde_json::Value::Null))
-                                };
-                                let _ = tx.send(out);
-                            }
+            while let Ok(Some(payload)) = frame::decode(&mut reader) {
+                let Ok(value) = serde_json::from_slice::<serde_json::Value>(&payload) else {
+                    continue;
+                };
+                if value.get("method").is_some() {
+                    // Coordinator → us: request (id) or notification.
+                    let method = value
+                        .get("method")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let params = value
+                        .get("params")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
+                    let item = if value.get("id").is_some() {
+                        Inbound::Request {
+                            id: value.get("id").cloned().unwrap_or(serde_json::Value::Null),
+                            method,
+                            params,
                         }
-                        // Unknown shape → ignored.
+                    } else {
+                        Inbound::Notification { method, params }
+                    };
+                    let _ = reader_inbound.send(item);
+                } else if let Some(id) = value.get("id").and_then(|i| i.as_str()) {
+                    // A response to one of our requests.
+                    let done = reader_pending
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(id);
+                    if let Some(tx) = done {
+                        let out = if value.get("error").is_some() {
+                            Err(value
+                                .get("error")
+                                .and_then(|e| e.get("message"))
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("sidecar error")
+                                .to_string())
+                        } else {
+                            Ok(value
+                                .get("result")
+                                .cloned()
+                                .unwrap_or(serde_json::Value::Null))
+                        };
+                        let _ = tx.send(out);
                     }
-                    Ok(None) | Err(_) => break, // EOF or framing failure
                 }
+                // Unknown shape → ignored.
             }
             // Fail-closed: resolve every pending request with an error.
             let mut p = reader_pending.lock().unwrap_or_else(|e| e.into_inner());

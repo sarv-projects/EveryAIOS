@@ -18,7 +18,41 @@ const PERSONAS: Record<string, string> = {
 
 const DEFAULT_PERSONA = "straight-shooter";
 const CUSTOM_SOUL = "__custom_soul__";
-const CONTEXT_WINDOW = 128_000; // nominal context window for the % gauge
+
+// P1.8 (A5) — context windows. Cloud models: nominal 128K. Local models: the
+// broker forces num_ctx = 16,384 on every call (doc 33 §7.4 floor — Ollama's
+// 4,096 default makes agents loop), so the EFFECTIVE window is min(model max,
+// forced). The real per-model catalog feed arrives with the settings page
+// (P1.9 sidecar catalog is built; UI wiring is the later pass).
+const FORCED_LOCAL_CTX = 16_384;
+const CLOUD_CTX = 128_000;
+const LOCAL_CTX_OVERRIDES: Record<string, number> = {
+  // (model max, forced 16K) — a genuinely sub-15K model trips the loud band.
+  "ollama/qwen3:4b": 16_384,
+  "ollama/llama3.2:1b": 16_384,
+  "ollama/qwen2.5:0.5b": 16_384,
+  "ollama/demo-4k-ctx": 4_096, // demo of the loud warning band (4K model)
+};
+
+/** Effective context window for a (provider, model) pair (P1.8 UI gauge). */
+function ctxWindowFor(provider: string, model: string): number {
+  const override = LOCAL_CTX_OVERRIDES[`${provider}/${model}`];
+  if (override !== undefined) return override;
+  if (provider === "ollama" || provider === "llamafile") return FORCED_LOCAL_CTX;
+  return CLOUD_CTX;
+}
+
+/** P1.9 — desktop model picker (bridge of broker providers → catalog ids). */
+const MODEL_OPTIONS: Array<{ provider: string; model: string; label: string }> = [
+  { provider: "nvidia", model: "meta/llama-3.1-70b-instruct", label: "nvidia · Llama 3.1 70B" },
+  { provider: "openai", model: "gpt-4o", label: "openai · GPT-4o" },
+  { provider: "anthropic", model: "claude-sonnet-4-5", label: "anthropic · Claude Sonnet 4.5" },
+  { provider: "deepseek", model: "deepseek-chat", label: "deepseek · DeepSeek Chat" },
+  { provider: "groq", model: "llama-3.3-70b-versatile", label: "groq · Llama 3.3 70B" },
+  { provider: "copilot", model: "gpt-4o", label: "copilot · GPT-4o (OAuth)" },
+  { provider: "ollama", model: "qwen3:4b", label: "ollama · qwen3:4b (local)" },
+  { provider: "ollama", model: "demo-4k-ctx", label: "ollama · demo-4k-ctx (local, 4K)" },
+];
 
 interface Msg {
   id: number;
@@ -43,6 +77,9 @@ export default function Chat() {
   const [soulMd, setSoulMd] = useState<string>("");
   const [showSoul, setShowSoul] = useState(false);
   const [forkMark, setForkMark] = useState<number | null>(null);
+  // P1.9 — model picker state (provider/model pair → chat_stream args).
+  const [modelKey, setModelKey] = useState("nvidia/meta/llama-3.1-70b-instruct");
+  const [provider, model] = modelKey.split("/", 2) as [string, string];
   // Token streamer state.
   const [tokensSec, setTokensSec] = useState(0);
   const [totalTokens, setTotalTokens] = useState(0);
@@ -150,13 +187,15 @@ export default function Chat() {
     setInput("");
     setMsgs((m) => [...m, { id: msgId++, role: "user", text }]);
     setBusy(true);
-    setActiveKey("nvidia / meta/llama");
+    setActiveKey(`${provider} / ${model}`);
     rateSamples.current = [];
     try {
       if (inTauri()) {
         const sid = await chatStream({
           sessionId: "",
           text,
+          provider,
+          model,
           personaId: persona === CUSTOM_SOUL ? DEFAULT_PERSONA : persona,
           ...(persona === CUSTOM_SOUL && soulMd.trim()
             ? { soulMd: soulMd.trim() }
@@ -201,10 +240,13 @@ export default function Chat() {
     rateSamples.current = [];
   }
 
-  const contextPct = Math.min(
-    100,
-    Math.round((totalTokens / CONTEXT_WINDOW) * 100),
-  );
+  // P1.8 — per-model context window: the gauge denominator AND the warning
+  // threshold source (doc 33 §7.4: below 15K the agent loops; warn 15–20K).
+  const ctxWindow = ctxWindowFor(provider, model);
+  const isLocal = provider === "ollama" || provider === "llamafile";
+  const ctxWarning = isLocal && ctxWindow < 20_000;
+  const ctxLoud = isLocal && ctxWindow < 15_000;
+  const contextPct = Math.min(100, Math.round((totalTokens / ctxWindow) * 100));
 
   return (
     <div className="page chat-page">
@@ -231,11 +273,37 @@ export default function Chat() {
               <option value={CUSTOM_SOUL}>custom SOUL.md…</option>
             </select>
           </label>
+          {/* P1.9 — model picker (A6 catalog feed → broker provider/model). */}
+          <label className="persona-wrap">
+            <span className="pill pill-label">model</span>
+            <select
+              value={modelKey}
+              onChange={(e) => setModelKey(e.target.value)}
+              aria-label="Model"
+            >
+              {MODEL_OPTIONS.map((o) => (
+                <option key={`${o.provider}/${o.model}`} value={`${o.provider}/${o.model}`}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <span className="pill">
             {inTauri() ? "shell connected · streaming" : "preview mode"}
           </span>
         </div>
       </header>
+
+      {/* P1.8 — context-window warning (doc 33 §7.4: below 15K the agent
+          loops trying to recover; warn loudly under 15–20K). */}
+      {ctxWarning && (
+        <div className={ctxLoud ? "ctx-warning loud" : "ctx-warning"} role="status">
+          {ctxLoud ? "⚠" : "ℹ"} local model {model} — context {ctxWindow.toLocaleString()} tokens
+          {ctxLoud
+            ? ". Below 15K the agent loops trying to recover; set 15–20K (Ollama's default 4,096 is too low)."
+            : ". 15–20K is the reliable floor; the broker forces num_ctx=16,384 on every call."}
+        </div>
+      )}
 
       {/* P1.6 — Hermes SOUL.md identity editor (Slot #1, injection-scanned in Rust/sidecar). */}
       {showSoul && (
@@ -292,7 +360,7 @@ export default function Chat() {
           <span className="streamer-label">tokens/s</span>
           <span className="streamer-value">{busy ? tokensSec : 0}</span>
         </span>
-        <span className="streamer-item" title={`${totalTokens} / ${CONTEXT_WINDOW} tokens`}>
+        <span className="streamer-item" title={`${totalTokens} / ${ctxWindow} tokens (${provider} / ${model})`}>
           <span className="streamer-label">context</span>
           <span className="streamer-bar">
             <span

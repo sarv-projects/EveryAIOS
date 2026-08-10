@@ -58,6 +58,8 @@
 | **CherryHQ/cherry-studio** (50K⭐) | Multi-provider desktop UX, MCP integration | P1 UI |
 | **lencx/chatgpt** (54K⭐) | Tauri desktop packaging, auto-updater | P1 packaging |
 | **x1xhlol/system-prompts** (143K⭐) | System prompt reference library | P1 agent design |
+| **ollama/ollama** | `ollama serve` spawn + `GET /api/tags` + `GET /api/show` (model_info.context_length); `/api/chat` `format` accepts `"json"` or a JSON schema — **raw GBNF 500s on 0.21.x** (verified live) | P1.8 local.rs detection/spawn/list + broker `/api/chat` path |
+| **Mozilla-Ocho/llamafile** (25K⭐) | Single-file llama.cpp server (weights + server in one binary); native GBNF `grammar` field on `/v1/chat/completions` — the real GBNF home (B5) | P1.8 local.rs launch (`--ctx-size 16384`) + broker llamafile path |
 
 ---
 

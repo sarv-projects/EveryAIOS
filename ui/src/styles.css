@@ -575,3 +575,21 @@ body {
   font-size: 13px;
   color: var(--muted);
 }
+
+/* P1.8 — context-window warning (doc 33 §7.4: below 15K the agent loops). */
+.ctx-warning {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  background: rgba(255, 193, 7, 0.08);
+  color: #ffd977;
+}
+.ctx-warning.loud {
+  border-color: rgba(214, 69, 69, 0.55);
+  background: rgba(214, 69, 69, 0.12);
+  color: #ff9b9b;
+  font-weight: 600;
+}
