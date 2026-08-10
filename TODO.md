@@ -1,8 +1,8 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (updated 2026-08-10) · **Spec:** v3.12 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (updated 2026-08-10) · **Spec:** v3.13 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
-> **Scope:** Complete product — 138 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5). Docs 49–51 gap pass added: D9–D11/G7 (storage intelligence), A10 (image gen), F14/F15 (email/calendar), H25–H28 (gen-UI/clipboard/resumable/TTS) + H15 ext (offline STT/wake word). Doc 52 adds: D12 (storage health), G8 (tiered search cascade), J21 (escalation rules), Aider in F12, Algorithm #33.
+> **Scope:** Complete product — 138 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
 
 <!-- VERIFICATION POLICY: Every completed task MUST be verified before marking [DONE].
@@ -95,26 +95,26 @@
 - [x] `[DONE]` Test: all keys exhausted → surface aggregated error — **`all_keys_exhausted_after_429_switches`: 5 keys all 429 → `BrokerError::AllKeysExhausted` after 3 switches — PASS; also `no_keys_errors` (fail-closed without keys)**
 
 ### P1.2 Provider Adapter (A1)
-- [ ] `[NOT DONE]` Wire core-providers from APP as sidecar dep — **blocked: `APP/` repo is not present in this workspace; coordinator `package.json` already declares the 10 `@personal-ai/core-*` deps (P0.3), so this becomes a symlink + smoke-import once `APP/` is available**
+- [x] `[DONE]` Wire core-providers from APP as sidecar dep — **`pnpm-workspace.yaml` globs `../APP/packages/*` (P0.3) + coordinator `package.json` declares all 10 `@personal-ai/core-*` deps; workspace links present in `packages/coordinator/node_modules/@personal-ai`; NEW `src/core-providers.smoke.test.ts` imports the package and verifies catalog/selectors/export surface (no network; also pins the 5 broker-targeted providers) — `bun test` 22/22 pass + `tsc --noEmit` clean (re-verified 2026-08-10). ⚠️ Drift found: broker key `nvidia` ↔ catalog id `nvidia-nim` (same base URL `https://integrate.api.nvidia.com/v1`) — alias documented in the test; reconcile when APP is editable**
 - [x] `[DONE]` Implement credential-broker request path (doc 53 §2): sidecar sends provider/model/body + opaque key handle; Rust broker (`everyaios-vault` broker module) executes the HTTP call — injects auth headers, zeroize scrub — **`broker.rs`: `Broker::chat_completion` / `chat_completion_stream` (SSE) — resolves key via `KeyRing::select`, injects `Authorization: Bearer` (or `x-api-key` for anthropic), runs `run_with_failover` (429 → cooldown → next key, ≤3 switches), `SelectedKey::drop` zeroizes the secret buffer; per-provider base URLs (`DEFAULT_BASE_URLS` incl. nvidia/openai/anthropic/deepseek/groq, overridable via `with_base_url`)**
 - [x] `[DONE]` Verify raw key never enters sidecar memory at any point (assert in test) — **`sealed_channel_never_leaks_secret` + `keyinfo_sealed_channel_no_value_field` + `secret_buffers_are_zeroized_on_drop`: after a full broker round trip, the ONLY observable credential artifact is the opaque handle; serialized `KeyInfo` JSON contains neither the secret nor a `value` field; zeroize crate verified directly**
 - [x] `[DONE]` Implement CES-style sealed channel (sidecar sees key_id only) — **`KeyInfo` (serde camelCase) exposes `opaqueHandle` (128-bit hex) + health/budget — the raw secret never leaves the crate; `SelectedKey.value` is `pub(crate)` and zeroized on drop**
-- [x] `[DONE]` Test: provider round-trip through the broker — fail-closed on broker down, zeroize scrub verified, no key material in sidecar memory (doc 53 §2.4) — **mock-HTTP tests green: `injects_bearer_auth_and_succeeds`, `anthropic_uses_x_api_key_header`, `fail_closed_without_keys`, `fail_closed_on_unknown_provider`, `non_429_error_surfaces_immediately`, `parses_sse_stream`, `streaming_roundtrip_collects_deltas`, `sealed_channel_never_leaks_secret` — 10 broker tests + 19 keyring tests = 29/29 vault**
-- [x] `[DONE]` Test: streaming chat round-trip with real BYOK key (Anthropic or OpenAI) — **`crates/everyaios-vault/examples/nim_stream.rs` (env-var `NVIDIA_NIM_API_KEY`, key never in repo): LIVE round-trip through the broker to NVIDIA NIM — `NIM response (true): EveryAIOS broker round-trip OK`, ring records success_count=1 — PASS ✅**
+- [x] `[DONE]` Test: provider round-trip through the broker — fail-closed on broker down, zeroize scrub verified, no key material in sidecar memory (doc 53 §2.4) — **mock-HTTP tests green: `injects_bearer_auth_and_succeeds`, `anthropic_uses_x_api_key_header`, `fail_closed_without_keys`, `fail_closed_on_unknown_provider`, `non_429_error_surfaces_immediately`, `simulate_429_fails_over_to_next_key`, `all_keys_exhausted_after_429_switches`, `parses_sse_stream`, `streaming_roundtrip_collects_deltas_and_usage`, `sealed_channel_never_leaks_secret` — 10 broker + 17 keyring + 4 vault-level (lib.rs) = 31/31 vault (re-verified 2026-08-10)**
+- [x] `[DONE]` Test: streaming chat round-trip with real BYOK key (Anthropic or OpenAI) — **`crates/everyaios-vault/examples/nim_stream.rs` (env-var `NVIDIA_NIM_API_KEY`, key never in repo): LIVE round-trip through the broker to NVIDIA NIM — `NIM response (true): EveryAIOS broker round-trip OK`, ring records success_count=1 — PASS ✅ (re-verified 2026-08-10: example present + compiles clean; live PASS recorded in commit `bce0d59`; re-run needs `NVIDIA_NIM_API_KEY`)**
 
 ### P1.3 Cache-Aware Costs (A9)
-- [ ] `[NOT DONE]` Implement cost ledger table: token_usage(ts, session, provider, model, key_id, in, out, cache_read, cache_write, cost)
-- [ ] `[NOT DONE]` Parse usage from provider response (handle AI SDK v6 cached-input normalization)
-- [ ] `[NOT DONE]` Implement per-session $ budget enforcement (J11): default $2.00, kill on exceed
-- [ ] `[NOT DONE]` Surface "stopped: $X limit" to UI on budget kill
+- [x] `[DONE]` Implement cost ledger table: token_usage(ts, session, provider, model, key_id, in, out, cache_read, cache_write, cost) — vault schema v3 adds `token_usage` (session_id, provider, model, key_id, ts, in_tokens, out_tokens, cache_read_tokens, cache_write_tokens, cost); ledger.rs `record_turn`/`session_totals` + ledger_roundtrip test; 48/48 vault tests green
+- [x] `[DONE]` Parse usage from provider response (handle AI SDK v6 cached-input normalization) — ledger.rs `Usage::from_json` handles OpenAI `prompt_tokens_details.cached_tokens` + Anthropic `cache_creation_input_tokens`/`cache_read_input_tokens`; AI SDK v6 normalization = cached tokens excluded from billed `in` before cost; parses_openai_cached_usage + parses_anthropic_cached_usage tests green
+- [x] `[DONE]` Implement per-session $ budget enforcement (J11): default $2.00, kill on exceed — session_budget.rs `SessionBudget` (default 2.00, configurable), broker pre-flight `Budget::check` → `BrokerError::SessionBudgetExceeded{limit,spent}` before any call; post-turn settle records real cost; budget_kill_on_exceed + budget_isolation tests green. NOTE: enforcement is pre-flight + post-turn-settle (kill blocks the NEXT turn) — mid-stream kill is impossible because providers only report usage in the final chunk (stream_options.include_usage); documented limitation
+- [x] `[DONE]` Surface "stopped: $X limit" to UI on budget kill — broker error surfaces as budgetExceeded chat event with limit+spent (chat.rs post_turn_budget_kill_surfaces_stopped test); Chat.tsx renders `⛔ stopped: $X / $Y limit reached`
 
 ### P1.4 Streaming Chat Loop (B1 base)
-- [ ] `[NOT DONE]` Wire core-engine ConversationEngine from APP into coordinator (B1/H1 base)
-- [ ] `[NOT DONE]` Implement streaming over IPC: token deltas → everyaios-core → Tauri events → UI
-- [ ] `[NOT DONE]` Implement 33ms batch flush (StreamSession pattern from APP)
-- [ ] `[NOT DONE]` Implement TTFT (time-to-first-token) event
-- [ ] `[NOT DONE]` Implement cancellation: abort signal propagation from UI → Rust → sidecar → provider
-- [ ] `[NOT DONE]` Strip mobile-only hooks (creditAware, shouldContinueStreaming → budget-aware)
+- [x] `[DONE]` Wire core-engine ConversationEngine from APP into coordinator (B1/H1 base) — packages/coordinator/src/chat.ts: `generatePrompt` (assembleChatPrompt) / `persistTurn` (storeConversationTurn) / `extractMemory` (memoryUpdate) all call the real `@personal-ai/core-engine` ConversationEngine; no network in unit tests (FakeBridge); tsc clean + 28/28 coordinator tests
+- [x] `[DONE]` Implement streaming over IPC: token deltas → everyaios-core → Tauri events → UI — sidecar_link.rs framed bidirectional link (JSON-lines over stdio) + chat.rs relay; coordinator streams `chat/provider_chunk` requests → Rust runs the broker (keys live in Rust) → `chat-event` emitted via `app.emit` (src-tauri lib.rs chat_stream/chat_cancel); ui/src/lib/tauri.ts + Chat.tsx wired; core 41/41 tests green
+- [x] `[DONE]` Implement 33ms batch flush (StreamSession pattern from APP) — chat.ts StreamSession: 33ms interval batch flush, complete() flushes remainder; chat tests assert batch interleaves + final flush; fullText accumulated for done event
+- [x] `[DONE]` Implement TTFT (time-to-first-token) event — StreamSession `ttft` fires with latencyMs on first delta (appended before first batch); chat.test ttft_seq test
+- [x] `[DONE]` Implement cancellation: abort signal propagation from UI → Rust → sidecar → provider — Tauri `chat_cancel` command → core CancellationToken → chat.rs streaming loop breaks → sidecar sees abort and aborts provider stream; chat tests cancel sequence
+- [x] `[DONE]` Strip mobile-only hooks (creditAware, shouldContinueStreaming → budget-aware) — chat.ts has zero creditAware/shouldContinueStreaming references (strip test asserts absence); budget gating lives in the Rust broker (SessionBudget), not the engine — sidecar-proposes/Rust-disposes holds
 
 ### P1.5 System Prompt Assembly
 - [ ] `[NOT DONE]` Port 12-segment stable-prefix prompt from core-ai
@@ -515,8 +515,11 @@
 - [ ] `[NOT DONE]` Implement `session/cancel` → watchdog/budget kill
 - [ ] `[NOT DONE]` Implement harness installer (F8): plan-before-touch, ownership markers
 - [ ] `[NOT DONE]` Test: two external agent CLIs run side-by-side via ACP (initialize + permission + audit)
-- [ ] `[NOT DONE]` **Aider already in the F12 harness list** (added doc 52) — remaining work: surgical-hierarchy routing (brain → core → surgeon, doc 52 §1); test Aider driven via ACP with SEARCH/REPLACE edits
+- [ ] `[NOT DONE]` **Aider is in the F12 harness list** — remaining work: surgical-hierarchy routing (brain → core → surgeon, doc 52 §1); test Aider driven via ACP with SEARCH/REPLACE edits
 - [ ] `[NOT DONE]` Add **Copilot CLI** to the F12 harness list (doc 56 §4 — closed, custom license → drive via ACP like any harness, never a dependency) + LSP-config diagnostics pattern (`lsp-config.json`; open reference = Warp `lsp` crate, doc 56 W4); ACP adapter reference: cowork-forge `acp/client.rs` + `agents/external_coding_agent.rs` (doc 56 C2)
+- [ ] `[NOT DONE]` Consume the **official ACP agent registry** (agentclientprotocol/registry — CDN `registry.json`, 38 agents incl. `claude-acp` (Anthropic-co-authored wrapper), dist types binary/npx/uvx; doc 57 §2) for **registry-fed harness discovery** in F8/F12 — local cache + version pinning + curated allow-list (trust + ToS gate); never ship a hardcoded catalog as the ceiling
+- [ ] `[NOT DONE]` Add **auth-mode badge** to the harness UI (subscription-backed / API-key-backed / local — doc 57 §3); Claude Agent = **subscription-backed (allowed via the official ACP wrapper, Anthropic co-authored)**
+- [ ] `[NOT DONE]` Write the **subscription-auth boundary** into the agent docs (doc 57 §3 + ARCH/06 §6.16): Claude via the official ACP wrapper = allowed (Anthropic co-authored); token-harvest for other engines = blocked; our broker stays API-key-only
 
 ### P6.9 Messaging Bridges (F13)
 - [ ] `[NOT DONE]` Design adapter interface: message-in → agent loop → reply-out
@@ -1007,7 +1010,7 @@
 ### P11.5.10 New Agent Patterns (doc 47)
 - [ ] [NOT DONE] Implement Plan/Act dual-mode in agent loop (Cline pattern) — explicit plan phase before tool execution
 - [ ] [NOT DONE] Implement Context Provider plugin system (@Codebase, @Docs, @URL injection points)
-- [ ] [NOT DONE] Add ACP subscription linking — users bring existing Claude/ChatGPT subscriptions directly
+- [ ] [NOT DONE] Add ACP subscription linking — reuse the user's existing agent CLI auth (⚠️ **doc 57 boundary:** Claude Pro/Max OAuth is first-party-only — but driving Claude Code/Claude Agent via the official ACP wrapper `@agentclientprotocol/claude-agent-acp` with the user's own login **is allowed** (Anthropic co-authors it); **blocked = harvesting the subscription token to power our own/other engines' direct calls** → never feed it into the broker; BYOK API keys for the broker; auth-mode badge per doc 57 §3)
 - [ ] [NOT DONE] Add Custom Distribution support — branded EveryAIOS configs with pre-loaded providers/extensions
 - [ ] [NOT DONE] Add Kanban view for parallel sub-agents with git worktree isolation per branch
 - [ ] [NOT DONE] Implement Oracle/reviewer model pattern — secondary heavyweight model for quality review
@@ -1036,19 +1039,19 @@
 |---|---|---|
 | P0 Workspace & Skeleton | 46 | ~2 |
 | P1 Chat + BYOK | 50 | ~4 |
-| P2 Browser Layer | 73 | ~6 |
+| P2 Browser Layer | 81 | ~6 |
 | P3 Replay + Cockpit | 14 | ~4 |
 | P4 Office Engine | 45 | ~5 |
 | P5 Memory + Token Economy | 60 | ~5 |
-| P6 Orchestration + Connectors | 75 | ~5 |
-| P7 Forge + Guardrails | 49 | ~4 |
+| P6 Orchestration + Connectors | 80 | ~5 |
+| P7 Forge + Guardrails | 50 | ~4 |
 | P8 Product Polish | 37 | ~3 |
 | P9+ Post-v1 | 22 | later |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
-| **P11.5 UI Implementation** | **64** | **~4 (parallel)** |
+| **P11.5 UI Implementation** | **65** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **45** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 31 | parallel |
-| **TOTAL** | **697** | **~45 weeks** |
+| **TOTAL** | **712** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

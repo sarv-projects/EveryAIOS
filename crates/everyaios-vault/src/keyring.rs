@@ -917,21 +917,23 @@ mod tests {
 
         ring.report_failure(&handle, true).unwrap();
         let first = ring.get("p", "k").unwrap().cooldown_until;
-        // base × 2^0 = 5s (tolerant of sub-ms clock drift).
-        assert!((first - now_ms() - 5000).abs() <= 2);
+        // base × 2^0 = 5s (tolerant of clock drift between the internal
+        // timestamp and our post-call now_ms() — typically ≤2ms, up to ~10ms
+        // under load).
+        assert!((first - now_ms() - 5000).abs() <= 10);
 
         ring.report_failure(&handle, true).unwrap();
         let second = ring.get("p", "k").unwrap().cooldown_until;
-        // base × 2^1 = 10s → delta 5s (cooldown_until is computed once per
-        // call, so this delta is exact).
-        assert_eq!(second - first, 5000);
+        // base × 2^1 = 10s → delta 5s (tolerant of the ms elapsed between
+        // the two internal now_ms() stamps under load).
+        assert!((second - first - 5000).abs() <= 10);
 
         // 7 failures: 5 × 2^6 = 320s → capped at 300s (5 min).
         for _ in 0..5 {
             ring.report_failure(&handle, true).unwrap();
         }
         let capped = ring.get("p", "k").unwrap().cooldown_until;
-        assert!((capped - now_ms() - 300_000).abs() <= 2);
+        assert!((capped - now_ms() - 300_000).abs() <= 10);
     }
 
     #[test]

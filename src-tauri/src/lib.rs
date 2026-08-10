@@ -5,16 +5,50 @@
 //! them to the UI as Tauri commands + events, and owns the system tray.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::process::{ChildStdin, ChildStdout};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use everyaios_guard::Guard;
-use tauri::{Manager, State};
+use everyaios_vault::Vault;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct AppState {
     /// P0.2: the boot report line from `everyaios-core::boot`.
     pub boot_report: Mutex<String>,
     /// P0.2: an initialized Guard-1 scanner (stub blocklist until P7.4).
     pub guard: Guard,
+    /// The encrypted vault (opened at boot; shared with the chat relay).
+    pub vault: Arc<Mutex<Vault>>,
+    /// P1.4: the chat relay over the coordinator link. `None` until the
+    /// supervisor hands the sidecar's stdio pipes to a `SidecarLink` (the
+    /// integration seam — the relay + protocol are fully built + tested).
+    pub chat_relay:
+        Mutex<Option<everyaios_core::ChatRelay<ChildStdin, ChildStdout>>>,
+}
+
+/// Monotonic stream-id source for `chat_stream` calls.
+static STREAM_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// Event name the UI listens to for chat stream updates.
+pub const CHAT_EVENT: &str = "chat-event";
+
+/// Wire a live coordinator link into the chat relay and store it in state.
+/// The relay's consumer loop forwards every `chat/*` notification from the
+/// sidecar to the UI as a `chat-event` (P1.4: token deltas → core → Tauri
+/// events → UI).
+fn connect_chat_relay(
+    app: &AppHandle,
+    state: &AppState,
+    link: everyaios_core::SidecarLink<ChildStdin, ChildStdout>,
+) {
+    let handle = app.clone();
+    let relay = everyaios_core::ChatRelay::new(link, Arc::clone(&state.vault), move |ev| {
+        // Fire-and-forget: never let a UI emit failure break the relay.
+        let _ = handle.emit(CHAT_EVENT, ev);
+    });
+    relay.spawn();
+    *state.chat_relay.lock().expect("chat_relay poisoned") = Some(relay);
 }
 
 #[tauri::command]
@@ -35,6 +69,48 @@ fn core_boot_report(state: State<'_, AppState>) -> Result<String, String> {
 fn scan_text(state: State<'_, AppState>, text: String) -> Result<bool, String> {
     // Guard-1: deterministic pre-exec scan. `true` = blocked.
     Ok(state.guard.is_blocked(&text))
+}
+
+#[tauri::command]
+fn chat_stream(
+    state: State<'_, AppState>,
+    session_id: String,
+    text: String,
+    provider: Option<String>,
+    model: Option<String>,
+    surface: Option<String>,
+) -> Result<String, String> {
+    // P1.4: dispatch one turn through the coordinator's ConversationEngine.
+    // The reply is the streamId; all output arrives as `chat-event` emits
+    // (ttft/batch/done/error/cancelled/budgetExceeded). J11 budget refusals
+    // surface as the error string "stopped: $X limit".
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected — coordinator link not established".to_string())?;
+    let stream_id = format!("st{}", STREAM_COUNTER.fetch_add(1, Ordering::Relaxed));
+    relay
+        .start_stream(everyaios_core::ChatStreamParams {
+            session_id,
+            stream_id: stream_id.clone(),
+            text,
+            surface,
+            agent_id: None,
+            provider: provider.unwrap_or_else(|| "nvidia".into()),
+            model: model.unwrap_or_else(|| "meta/llama".into()),
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(stream_id)
+}
+
+#[tauri::command]
+fn chat_cancel(state: State<'_, AppState>, stream_id: String) -> Result<(), String> {
+    // Abort signal: UI → Rust → sidecar (chat/cancel) → engine/provider.
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected".to_string())?;
+    relay.cancel(&stream_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -136,17 +212,32 @@ pub fn run() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let boot_report = everyaios_core::boot(&args).unwrap_or_else(|e| format!("boot failed: {e}"));
     let guard = Guard::default();
+    let vault = everyaios_vault::Vault::open(
+        &everyaios_core::default_data_dir().join("vault.db"),
+        &everyaios_core::default_vault_key(),
+    )
+    .unwrap_or_else(|e| {
+        // Boot already reported the failure; keep a fresh in-memory vault so
+        // the shell stays responsive (nothing persists).
+        eprintln!("everyaios-desktop: vault open failed (using in-memory): {e}");
+        Vault::open_in_memory(&everyaios_core::default_vault_key()).expect("in-memory vault")
+    });
+    let vault = Arc::new(Mutex::new(vault));
 
     tauri::Builder::default()
         .manage(AppState {
             boot_report: Mutex::new(boot_report),
             guard,
+            vault,
+            chat_relay: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             version,
             core_boot_report,
             scan_text,
-            probe_vault
+            probe_vault,
+            chat_stream,
+            chat_cancel
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray

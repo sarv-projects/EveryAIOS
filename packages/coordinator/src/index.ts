@@ -29,6 +29,14 @@ import {
   type Request,
   type Response,
 } from "./message";
+import {
+  cancelChatStream,
+  FrameProviderBridge,
+  runChatStream,
+  type ChatEvent,
+  type ChatStreamParams,
+  type ProviderChunk,
+} from "./chat";
 
 /** Must stay in lock-step with `everyaios_ipc::PROTOCOL_VERSION` (Rust, = 1). */
 export const PROTOCOL_VERSION = 1;
@@ -41,9 +49,44 @@ export interface Capabilities {
 }
 
 export const DEFAULT_CAPABILITIES: Capabilities = {
-  streamDeltas: false,
+  // P1.4: the sidecar now streams chat token deltas (capability flips on).
+  streamDeltas: true,
   passByReference: true,
 };
+
+/**
+ * The production provider bridge: Rust pushes `chat/provider_chunk`
+ * notifications into our stdin (the broker in Rust holds the keys); the
+ * engine's streamProvider consumes them through this bridge.
+ *
+ * The bridge also asks Rust to run provider calls (`provider/stream` — the
+ * compiled prompt lives here but the keys live there).
+ */
+const frameBridge = new FrameProviderBridge(sendRequest);
+
+/** Outbound request correlation: id → pending promise (sidecar → Rust). */
+const pending = new Map<
+  string,
+  { resolve: (v: unknown) => void; reject: (e: Error) => void }
+>();
+let requestCounter = 0;
+
+/**
+ * Send a request to Rust (the core) and await its response. Responses are
+ * matched by id in `run()`; the sidecar never blocks its frame loop.
+ */
+function sendRequest(method: string, params: unknown): Promise<unknown> {
+  const id = `c${++requestCounter}`;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    process.stdout.write(encodeJson({ jsonrpc: "2.0", method, params, id }));
+  });
+}
+
+/** Forward a chat engine event to the UI as a `chat/<type>` notification. */
+function emitChatEvent(e: ChatEvent): void {
+  notify(`chat/${e.type}`, e);
+}
 
 export const VERSION = "0.1.0";
 
@@ -99,6 +142,50 @@ export function handleRequest(req: Request): Response | null {
 
     case "session/ping": {
       response = ok(id, { pong: true, ts: Date.now(), heapMB: heapUsedMB() });
+      break;
+    }
+
+    case "chat/stream": {
+      // P1.4: run one turn through the reused ConversationEngine (detached).
+      // The reply is immediate ({accepted}); all streaming arrives as
+      // `chat/ttft|batch|done|error|cancelled` notifications.
+      const p = (req.params ?? {}) as Partial<ChatStreamParams>;
+      if (
+        typeof p.sessionId !== "string" ||
+        typeof p.streamId !== "string" ||
+        typeof p.text !== "string" ||
+        p.text.length === 0
+      ) {
+        response = err(
+          id,
+          ERROR_CODES.INVALID_REQUEST,
+          "chat/stream requires sessionId, streamId and non-empty text",
+        );
+        break;
+      }
+      void runChatStream(p as ChatStreamParams, emitChatEvent, frameBridge);
+      response = ok(id, { accepted: true, streamId: p.streamId });
+      break;
+    }
+
+    case "chat/cancel": {
+      // Notification: abort signal UI → Rust relay → here → engine/provider.
+      const p = (req.params ?? {}) as { streamId?: string };
+      if (typeof p.streamId === "string") {
+        cancelChatStream(p.streamId);
+      }
+      response = null; // notifications never get a reply
+      break;
+    }
+
+    case "chat/provider_chunk": {
+      // Notification: Rust pushes broker stream chunks here; the engine's
+      // streamProvider consumes them (P1.4, provider bridge).
+      const p = (req.params ?? {}) as Partial<ProviderChunk>;
+      if (typeof p.streamId === "string") {
+        frameBridge.handleChunk(p as ProviderChunk);
+      }
+      response = null;
       break;
     }
 
@@ -202,6 +289,33 @@ export function run(reader: NodeJS.ReadableStream = process.stdin): void {
         process.stdout.write(
           encodeJson(err(null, ERROR_CODES.PARSE_ERROR, "invalid JSON payload")),
         );
+        continue;
+      }
+
+      // A response to one of our outbound requests (id + result/error, no
+      // method) — resolve the pending promise BEFORE the isRequest guard.
+      const raw = parsed as {
+        jsonrpc?: string;
+        id?: unknown;
+        result?: unknown;
+        error?: { message?: string };
+      };
+      if (
+        raw !== null &&
+        typeof raw === "object" &&
+        raw.jsonrpc === "2.0" &&
+        raw.id !== undefined &&
+        ("result" in raw || "error" in raw)
+      ) {
+        const p = pending.get(String(raw.id));
+        if (p) {
+          pending.delete(String(raw.id));
+          if (raw.error) {
+            p.reject(new Error(raw.error.message ?? "sidecar error"));
+          } else {
+            p.resolve(raw.result);
+          }
+        }
         continue;
       }
 

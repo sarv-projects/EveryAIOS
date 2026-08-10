@@ -14,15 +14,19 @@
 use std::path::PathBuf;
 
 pub mod blueprint;
+pub mod chat;
 pub mod config;
 pub mod orphan;
 pub mod providers;
+pub mod sidecar_link;
 pub mod supervisor;
 pub mod version;
 
 pub use blueprint::{load_all as load_blueprints, load_blueprint, AgentBlueprint, BlueprintError};
+pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent};
 pub use config::{Config, ConfigError};
 pub use providers::{KeyPool, ProviderConfig, ProviderKey, ProvidersError, ProvidersFile};
+pub use sidecar_link::{Inbound, LinkError, SidecarLink, WriterHandle};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};
 
 /// Default data directory: `~/.everyaios` (overridable via `EVERYAIOS_HOME`).

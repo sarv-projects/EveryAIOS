@@ -12,18 +12,22 @@
 
 pub mod broker;
 pub mod keyring;
+pub mod ledger;
+pub mod session_budget;
 
 pub use broker::{usage_tokens, Broker, BrokerError, ChatStreamEvent};
 pub use keyring::{
     KeyEntry, KeyInfo, KeyRing, KeyRingError, KeySpec, KeyStatus, RoutingPolicy, SelectedKey,
     COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, MAX_429_SWITCHES,
 };
+pub use ledger::{default_pricing, Pricing, Usage, UsageRow};
+pub use session_budget::{SessionBudget, DEFAULT_SESSION_BUDGET_USD};
 
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 const INIT_SQL: &str = r#"
 PRAGMA journal_mode=WAL;
@@ -66,6 +70,27 @@ CREATE TABLE IF NOT EXISTS key_ring (
     UNIQUE(provider, key_id)
 );
 CREATE INDEX IF NOT EXISTS idx_key_ring_provider ON key_ring(provider);
+
+-- P1.3 (A9, ARCH/05 §5.6): the ONE append-only cost ledger. Every completed
+-- call records provider/model/key/session + cache-aware token counts + $ cost.
+-- Shared by per-key budgets (ARCH/03), session efficiency projections, and
+-- the UI's live token/cost stream. `tool` is nullable (set for tool calls).
+CREATE TABLE IF NOT EXISTS token_usage (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts           INTEGER NOT NULL,
+    session      TEXT NOT NULL,
+    provider     TEXT NOT NULL,
+    model        TEXT NOT NULL,
+    key_id       TEXT NOT NULL,
+    in_tokens    INTEGER NOT NULL,
+    out_tokens   INTEGER NOT NULL,
+    cache_read   INTEGER NOT NULL,
+    cache_write  INTEGER NOT NULL,
+    cost         REAL NOT NULL,
+    tool         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_token_usage_session ON token_usage(session);
+CREATE INDEX IF NOT EXISTS idx_token_usage_ts ON token_usage(ts);
 "#;
 
 /// An open SQLCipher vault handle. Not `Clone` — ownership is the point.
@@ -94,8 +119,9 @@ impl Vault {
         Ok(Self { conn })
     }
 
-    /// Open an in-memory encrypted vault (tests only).
-    #[cfg(test)]
+    /// Open an in-memory encrypted vault. Tests use this; the desktop shell
+    /// falls back to it when the on-disk vault cannot be opened at boot so
+    /// the app stays responsive (nothing persists).
     pub fn open_in_memory(key: &str) -> Result<Self, VaultError> {
         let conn = Connection::open_in_memory()?;
         conn.pragma_update(None, "key", key)?;
@@ -158,6 +184,55 @@ impl Vault {
             .query_row("SELECT COUNT(*) FROM key_pool", [], |r| r.get(0))?;
         Ok(n >= 0)
     }
+
+    // ---- P1.3 cost ledger (A9) -----------------------------------------
+
+    /// Append one `token_usage` row (single write owner — the vault).
+    pub fn record_usage(&self, row: &UsageRow) -> Result<(), VaultError> {
+        self.conn.execute(
+            "INSERT INTO token_usage
+                (ts, session, provider, model, key_id, in_tokens, out_tokens,
+                 cache_read, cache_write, cost, tool)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params![
+                now_ms(),
+                row.session,
+                row.provider,
+                row.model,
+                row.key_id,
+                row.usage.prompt as i64,
+                row.usage.output as i64,
+                row.usage.cache_read as i64,
+                row.usage.cache_write as i64,
+                row.cost,
+                row.tool,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Total $ spent by a session (SUM over the ledger — the durable side of
+    /// the in-memory [`SessionBudget`]).
+    pub fn session_spend(&self, session: &str) -> Result<f64, VaultError> {
+        let total: f64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(cost), 0.0) FROM token_usage WHERE session = ?1",
+                [session],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(0.0);
+        Ok(total)
+    }
+
+    /// Number of ledger rows (tests/telemetry).
+    pub fn ledger_count(&self) -> Result<u64, VaultError> {
+        let n: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM token_usage", [], |r| r.get(0))?;
+        Ok(n as u64)
+    }
 }
 
 fn now_ms() -> i64 {
@@ -188,7 +263,7 @@ mod tests {
 
         {
             let vault = Vault::open(&path, "test-key").expect("open");
-            assert!(vault.status().contains("schema v2"));
+            assert!(vault.status().contains("schema v3"));
             vault.register_key("anthropic", "key-1").unwrap();
             vault.register_key("anthropic", "key-2").unwrap();
             vault.register_key("openai", "key-3").unwrap();
@@ -220,10 +295,10 @@ mod tests {
     }
 
     #[test]
-    fn stale_v1_schema_gets_bumped_to_v2_on_open() {
-        // A P0.1-era DB has schema_version=1 and no key_ring. Opening it with
-        // the v2 code must create key_ring AND bump the recorded version so
-        // status() never reports a stale "schema v1".
+    fn stale_v1_schema_gets_bumped_to_v3_on_open() {
+        // A P0.1-era DB has schema_version=1 and no key_ring/token_usage.
+        // Opening it with the v3 code must create the new tables AND bump the
+        // recorded version so status() never reports a stale version.
         let dir =
             std::env::temp_dir().join(format!("everyaios-vault-migrate-{}", std::process::id()));
         let path = dir.join("vault.db");
@@ -244,10 +319,61 @@ mod tests {
         // Reopen: version row must be bumped to the current schema.
         {
             let vault = Vault::open(&path, "test-key").expect("reopen");
-            assert!(vault.status().contains("schema v2"));
+            assert!(vault.status().contains("schema v3"));
+            assert!(vault.ledger_count().unwrap() == 0);
         }
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ledger_records_rows_and_session_spend() {
+        let vault = Vault::open_in_memory("mem-key").expect("open");
+        let usage = Usage {
+            prompt: 100,
+            output: 40,
+            cache_read: 60,
+            cache_write: 0,
+        };
+        vault
+            .record_usage(&UsageRow {
+                session: "s-1".into(),
+                provider: "openai".into(),
+                model: "gpt-4o".into(),
+                key_id: "prod-1".into(),
+                usage,
+                cost: 0.0012,
+                tool: None,
+            })
+            .unwrap();
+        vault
+            .record_usage(&UsageRow {
+                session: "s-1".into(),
+                provider: "openai".into(),
+                model: "gpt-4o".into(),
+                key_id: "prod-1".into(),
+                usage: Usage::default(),
+                cost: 0.0008,
+                tool: Some("files.read".into()),
+            })
+            .unwrap();
+        vault
+            .record_usage(&UsageRow {
+                session: "s-2".into(),
+                provider: "deepseek".into(),
+                model: "deepseek-chat".into(),
+                key_id: "dsk-1".into(),
+                usage: Usage::default(),
+                cost: 0.01,
+                tool: None,
+            })
+            .unwrap();
+
+        assert_eq!(vault.ledger_count().unwrap(), 3);
+        // Session spend is per-session (SUM over the ledger).
+        assert!((vault.session_spend("s-1").unwrap() - 0.0020).abs() < 1e-12);
+        assert!((vault.session_spend("s-2").unwrap() - 0.01).abs() < 1e-12);
+        assert_eq!(vault.session_spend("s-none").unwrap(), 0.0);
     }
 
     #[test]

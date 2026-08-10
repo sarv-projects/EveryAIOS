@@ -77,7 +77,7 @@ describe("index.ts — request handling", () => {
       protocolVersion: PROTOCOL_VERSION,
       serverName: "@everyaios/coordinator",
       serverVersion: VERSION,
-      capabilities: { streamDeltas: false, passByReference: true },
+      capabilities: { streamDeltas: true, passByReference: true },
       status: "ready",
     });
   });

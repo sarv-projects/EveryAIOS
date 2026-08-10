@@ -16,6 +16,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 
 use crate::keyring::{KeyRing, KeyRingError, RoutingPolicy, SelectedKey, MAX_429_SWITCHES};
+use crate::ledger::{default_pricing, Pricing, Usage, UsageRow};
+use crate::session_budget::SessionBudget;
+use crate::Vault;
 
 /// Default OpenAI-compatible base URLs per provider (override via
 /// `ProvidersFile.base_url`).
@@ -34,29 +37,75 @@ pub struct ChatStreamEvent {
     pub delta: Option<String>,
     /// `finish_reason` when the stream finishes an answer.
     pub finish: Option<String>,
-    /// Total tokens from the final `usage` chunk (present only when the
-    /// provider echoes `stream_options.include_usage`).
-    pub usage: Option<u64>,
+    /// Cache-aware usage observed on this chunk (P1.3/A9). OpenAI-compatible
+    /// providers echo the full usage object in the final chunk when
+    /// `stream_options.include_usage` was requested; Anthropic splits it
+    /// (input/cache-write in `message_start`, output in `message_delta`).
+    pub usage: Option<Usage>,
 }
 
-/// The credential broker: key resolution + HTTP execution + scrubbing.
+/// The credential broker: key resolution + HTTP execution + scrubbing +
+/// cache-aware cost accounting (A9) + per-session budget (J11).
 pub struct Broker<'a> {
     ring: KeyRing<'a>,
+    /// Vault handle for the append-only `token_usage` ledger.
+    vault: &'a Vault,
     base_urls: HashMap<String, String>,
     policy: RoutingPolicy,
+    /// Per-provider pricing (defaults from [`default_pricing`]; override via
+    /// [`Broker::with_pricing`]).
+    pricing: HashMap<String, Pricing>,
+    /// Per-session hard $ budget (J11, default $2.00).
+    budget: SessionBudget,
 }
 
 impl<'a> Broker<'a> {
-    pub fn new(vault: &'a crate::Vault) -> Self {
+    pub fn new(vault: &'a Vault) -> Self {
         let mut base_urls = HashMap::new();
         for (provider, url) in DEFAULT_BASE_URLS {
             base_urls.insert((*provider).to_string(), (*url).to_string());
         }
+        let mut pricing = HashMap::new();
+        for (provider, _) in DEFAULT_BASE_URLS {
+            if let Some(p) = default_pricing(provider) {
+                pricing.insert((*provider).to_string(), p);
+            }
+        }
         Self {
             ring: KeyRing::new(vault),
+            vault,
             base_urls,
             policy: RoutingPolicy::RoundRobin,
+            pricing,
+            budget: SessionBudget::default_budget(),
         }
+    }
+
+    /// Override the per-1M-token pricing for a provider (A9).
+    pub fn with_pricing(mut self, provider: &str, pricing: Pricing) -> Self {
+        self.pricing.insert(provider.to_string(), pricing);
+        self
+    }
+
+    /// Override the per-session $ budget limit (J11; default $2.00).
+    pub fn with_session_budget_limit(mut self, limit: f64) -> Self {
+        self.budget = SessionBudget::new(limit);
+        self
+    }
+
+    /// Current session budget limit ($).
+    pub fn session_budget_limit(&self) -> f64 {
+        self.budget.limit()
+    }
+
+    /// $ spent so far by a session (in-memory tracker + ledger both record).
+    pub fn session_spent(&self, session: &str) -> f64 {
+        self.budget.spent(session)
+    }
+
+    /// $ remaining in a session's budget before the next call is refused.
+    pub fn session_budget_remaining(&self, session: &str) -> f64 {
+        self.budget.remaining(session)
     }
 
     /// Override the routing policy for key selection.
@@ -98,7 +147,12 @@ impl<'a> Broker<'a> {
                         .send_json(body),
                 )
             },
-            usage_tokens,
+            // Cache-aware usage from the response's `usage` object (A9).
+            |resp: &serde_json::Value| {
+                resp.get("usage")
+                    .and_then(Usage::from_any)
+                    .unwrap_or_default()
+            },
         )
     }
 
@@ -135,13 +189,19 @@ impl<'a> Broker<'a> {
                     Err(ureq::Error::Transport(t)) => Err(BrokerError::Transport(t.to_string())),
                 }
             },
+            // Cache-aware usage merged from the stream's usage chunks (A9).
             |events: &Vec<ChatStreamEvent>| usage_from_stream(events.as_slice()),
         )
     }
 
     /// Shared failover loop: select a key → run → on success record
-    /// health+usage; on 429 put the key into cooldown and switch to the next
-    /// (up to [`MAX_429_SWITCHES`]); on any other error surface immediately.
+    /// health + cache-aware cost + ledger + session budget; on 429 put the
+    /// key into cooldown and switch to the next (up to [`MAX_429_SWITCHES`]);
+    /// on any other error surface immediately.
+    ///
+    /// J11 choke point: the session budget is checked at the TOP of every
+    /// attempt — a session at/over its $ limit is refused before any key is
+    /// selected or any HTTP attempt is made.
     fn run_with_failover<T>(
         &self,
         provider: &str,
@@ -149,7 +209,7 @@ impl<'a> Broker<'a> {
         session_id: &str,
         body: serde_json::Value,
         runner: impl Fn(&str, &SelectedKey, serde_json::Value) -> Result<T, BrokerError>,
-        usage_of: impl Fn(&T) -> u64,
+        usage_of: impl Fn(&T) -> Usage,
     ) -> Result<T, BrokerError> {
         let base = self
             .base_urls
@@ -157,6 +217,14 @@ impl<'a> Broker<'a> {
             .cloned()
             .ok_or_else(|| BrokerError::UnknownProvider(provider.to_string()))?;
         let url = format!("{base}/chat/completions");
+
+        if !self.budget.can_issue(session_id) {
+            return Err(BrokerError::SessionBudgetExceeded {
+                session: session_id.to_string(),
+                limit: self.budget.limit(),
+                spent: self.budget.spent(session_id),
+            });
+        }
 
         let mut switches = 0u32;
         loop {
@@ -170,13 +238,30 @@ impl<'a> Broker<'a> {
 
             match runner(&url, &key, body.clone()) {
                 Ok(result) => {
-                    // Success: health + usage (budgets live in the ring).
+                    // Success: health + cache-aware cost + ledger + budget.
                     self.ring
                         .report_success(&key.opaque_handle)
                         .map_err(BrokerError::KeyRing)?;
+                    let usage = usage_of(&result);
+                    let cost = self.cost_of(provider, usage);
                     self.ring
-                        .report_usage(&key.opaque_handle, usage_of(&result), 0.0)
+                        .report_usage(&key.opaque_handle, usage.total(), cost)
                         .map_err(BrokerError::KeyRing)?;
+                    // One append-only ledger row per call (ARCH/05 §5.6).
+                    self.vault
+                        .record_usage(&UsageRow {
+                            session: session_id.to_string(),
+                            provider: provider.to_string(),
+                            model: model.to_string(),
+                            key_id: key.key_id.clone(),
+                            usage,
+                            cost,
+                            tool: None,
+                        })
+                        .map_err(BrokerError::Vault)?;
+                    // J11: settle the session; the next call is refused once
+                    // spent ≥ limit.
+                    self.budget.settle(session_id, cost);
                     return Ok(result);
                 }
                 Err(BrokerError::RateLimited) => {
@@ -236,11 +321,28 @@ fn read_snippet(resp: ureq::Response) -> String {
         .take(200)
         .collect()
 }
-/// Extract usage from a streaming response: OpenAI-compatible providers put
-/// the final `usage` object in the LAST SSE chunk when
-/// `stream_options.include_usage` was requested.
-fn usage_from_stream(events: &[ChatStreamEvent]) -> u64 {
-    events.iter().rev().find_map(|e| e.usage).unwrap_or(0)
+/// Merge the cache-aware usage observed across a stream (A9). OpenAI-compatible
+/// providers put the full `usage` object in the LAST SSE chunk when
+/// `stream_options.include_usage` was requested; Anthropic splits input/
+/// cache-write (`message_start`) from output (`message_delta`) — merge_max
+/// keeps every field without double counting.
+fn usage_from_stream(events: &[ChatStreamEvent]) -> Usage {
+    let mut acc = Usage::default();
+    for e in events {
+        if let Some(u) = e.usage {
+            acc.merge_max(u);
+        }
+    }
+    acc
+}
+
+/// Per-provider cost for a call (A9): cached input is never double-billed.
+fn cost_of_usage(pricing: &HashMap<String, Pricing>, provider: &str, usage: Usage) -> f64 {
+    pricing
+        .get(provider)
+        .copied()
+        .unwrap_or_default()
+        .cost_of(usage)
 }
 
 /// Parse OpenAI-style SSE stream into events. Lines look like:
@@ -277,15 +379,23 @@ fn parse_sse<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
             .and_then(|c| c.get("delta"))
             .and_then(|d| d.get("content"))
             .and_then(|c| c.as_str())
-            .map(str::to_string);
+            .map(str::to_string)
+            // Anthropic-style SSE (`content_block_delta`): `delta.text`.
+            .or_else(|| {
+                value
+                    .get("delta")
+                    .and_then(|d| d.get("text"))
+                    .and_then(|t| t.as_str())
+                    .map(str::to_string)
+            });
         let finish = choice
             .and_then(|c| c.get("finish_reason"))
             .and_then(|f| f.as_str())
             .map(str::to_string);
         let usage = value
             .get("usage")
-            .and_then(|u| u.get("total_tokens"))
-            .and_then(|t| t.as_u64());
+            .or_else(|| value.get("message").and_then(|m| m.get("usage")))
+            .and_then(Usage::from_any);
         events.push(ChatStreamEvent {
             delta,
             finish,
@@ -318,6 +428,21 @@ pub enum BrokerError {
     Transport(String),
     #[error("all keys for provider '{0}' exhausted after 429 failover")]
     AllKeysExhausted(String),
+    #[error("session '{session}' stopped: ${limit:.2} limit (spent ${spent:.2})")]
+    SessionBudgetExceeded {
+        session: String,
+        limit: f64,
+        spent: f64,
+    },
+    #[error("vault error: {0}")]
+    Vault(#[from] crate::VaultError),
+}
+
+impl<'a> Broker<'a> {
+    /// $ cost of a call under the provider's configured pricing (A9).
+    fn cost_of(&self, provider: &str, usage: Usage) -> f64 {
+        cost_of_usage(&self.pricing, provider, usage)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -562,6 +687,167 @@ mod tests {
         // Usage from the final chunk hit the key's daily budget.
         let info = broker.ring().list("nvidia").unwrap();
         assert!(info[0].tokens_day >= 37);
+    }
+
+    // ---- P1.3: cache-aware costs (A9) + session budget (J11) -----------
+
+    #[test]
+    fn cache_aware_usage_lands_in_ledger_and_key_budget() {
+        // OpenAI-compatible response with cached input: cost must be computed
+        // on BILLABLE input (prompt − cached), and the ledger row + per-key
+        // cost_day must reflect the real $.
+        let base = mock_server(|_| {
+            (
+                200,
+                r#"{"usage":{"prompt_tokens":100,"completion_tokens":50,"prompt_tokens_details":{"cached_tokens":80}}}"#
+                    .into(),
+            )
+        });
+        let vault = vault();
+        let broker = Broker::new(vault).with_base_url("nvidia", base);
+        broker.ring().add_key(spec("nvidia", "nim", "sk")).unwrap();
+        broker
+            .chat_completion("nvidia", "m", "s1", serde_json::json!({}))
+            .unwrap();
+
+        // Ledger row exists with cache_read recorded.
+        assert_eq!(vault.ledger_count().unwrap(), 1);
+        // nvidia pricing: in/out $0.50 per 1M. billable = 100−80 = 20 →
+        // cost = 20×0.5e-6 + 50×0.5e-6 = 35e-6.
+        let spent = vault.session_spend("s1").unwrap();
+        let expected = 35e-6;
+        assert!((spent - expected).abs() < 1e-12, "spent {spent} != {expected}");
+        // Per-key budget carries the same cost.
+        let info = broker.ring().list("nvidia").unwrap();
+        assert!((info[0].cost_day - expected).abs() < 1e-12);
+        assert!(info[0].tokens_day >= 150);
+        // Broker-side tracker agrees.
+        assert!((broker.session_spent("s1") - expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn anthropic_cache_tokens_priced_at_cache_rates() {
+        let base = mock_server(|_| {
+            (
+                200,
+                r#"{"usage":{"input_tokens":200,"output_tokens":30,"cache_creation_input_tokens":150,"cache_read_input_tokens":40}}"#
+                    .into(),
+            )
+        });
+        let vault = vault();
+        let broker = Broker::new(vault).with_base_url("anthropic", base);
+        broker
+            .ring()
+            .add_key(spec("anthropic", "a1", "sk-ant"))
+            .unwrap();
+        broker
+            .chat_completion("anthropic", "claude", "s1", serde_json::json!({}))
+            .unwrap();
+        // Cost = billable(160)×3e-6 + 30×15e-6 + 40×0.3e-6 + 150×3.75e-6.
+        let expected = 160.0 * 3e-6 + 30.0 * 15e-6 + 40.0 * 0.3e-6 + 150.0 * 3.75e-6;
+        let spent = vault.session_spend("s1").unwrap();
+        assert!((spent - expected).abs() < 1e-9, "spent {spent} != {expected}");
+    }
+
+    #[test]
+    fn session_budget_kills_session_and_surfaces_stopped_message() {
+        // J11: a $0.000000001 budget — first call succeeds (spent 35e-6 >
+        // limit), the NEXT call is refused at the pre-flight choke point.
+        let base = mock_server(|_| {
+            (
+                200,
+                r#"{"usage":{"prompt_tokens":100,"completion_tokens":50,"prompt_tokens_details":{"cached_tokens":80}}}"#
+                    .into(),
+            )
+        });
+        let vault = vault();
+        let broker = Broker::new(vault)
+            .with_base_url("nvidia", base)
+            .with_session_budget_limit(1e-9);
+        broker.ring().add_key(spec("nvidia", "nim", "sk")).unwrap();
+
+        broker
+            .chat_completion("nvidia", "m", "s1", serde_json::json!({}))
+            .unwrap();
+        let err = broker
+            .chat_completion("nvidia", "m", "s1", serde_json::json!({}))
+            .unwrap_err();
+        let msg = err.to_string();
+        match err {
+            BrokerError::SessionBudgetExceeded { session, limit, spent } => {
+                assert_eq!(session, "s1");
+                assert!((limit - 1e-9).abs() < 1e-18);
+                assert!(spent > limit);
+                // The UI surface string: "stopped: $X limit ...".
+                assert!(msg.contains("stopped:"), "msg: {msg}");
+                assert!(msg.contains("limit"), "msg: {msg}");
+            }
+            other => panic!("expected SessionBudgetExceeded, got {other:?}"),
+        }
+        // The session is now dead — remaining is $0.
+        assert_eq!(broker.session_budget_remaining("s1"), 0.0);
+        // Other sessions are unaffected.
+        assert!(broker.session_budget_remaining("s2") > 0.0);
+    }
+
+    #[test]
+    fn streaming_usage_merges_anthropic_shapes() {
+        // Anthropic streaming: input/cache-write in message_start, output in
+        // message_delta. The broker must merge them into ONE Usage row.
+        let sse = concat!(
+            "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":100,\"cache_creation_input_tokens\":60}}}\n",
+            "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hi\"}}\n",
+            "data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":25}}\n",
+            "data: [DONE]\n",
+        );
+        let base = mock_server(move |_| (200, sse.into()));
+        let vault = vault();
+        let broker = Broker::new(vault).with_base_url("anthropic", base);
+        broker
+            .ring()
+            .add_key(spec("anthropic", "a1", "sk-ant"))
+            .unwrap();
+        let events = broker
+            .chat_completion_stream("anthropic", "claude", "s1", serde_json::json!({}))
+            .unwrap();
+        // Content delta came through.
+        assert!(events.iter().any(|e| e.delta.as_deref() == Some("hi")));
+        // Ledger merged input+cache_write+output.
+        assert_eq!(vault.ledger_count().unwrap(), 1);
+        let spend = vault.session_spend("s1").unwrap();
+        let expected = 100.0 * 3e-6 + 25.0 * 15e-6 + 60.0 * 3.75e-6;
+        assert!((spend - expected).abs() < 1e-9, "spend {spend} != {expected}");
+    }
+
+    #[test]
+    fn custom_pricing_override_applies() {
+        let base = mock_server(|_| {
+            (
+                200,
+                r#"{"usage":{"prompt_tokens":1000,"completion_tokens":0}}"#.into(),
+            )
+        });
+        let vault = vault();
+        // Override: input is FREE — cost must be 0 despite 1000 tokens.
+        let broker = Broker::new(vault)
+            .with_base_url("nvidia", base)
+            .with_pricing(
+                "nvidia",
+                crate::ledger::Pricing {
+                    input_per_m: 0.0,
+                    output_per_m: 0.0,
+                    cache_read_per_m: 0.0,
+                    cache_write_per_m: 0.0,
+                },
+            );
+        broker.ring().add_key(spec("nvidia", "nim", "sk")).unwrap();
+        broker
+            .chat_completion("nvidia", "m", "s1", serde_json::json!({}))
+            .unwrap();
+        assert_eq!(vault.session_spend("s1").unwrap(), 0.0);
+        // Tokens still land on the key budget.
+        let info = broker.ring().list("nvidia").unwrap();
+        assert!(info[0].tokens_day >= 1000);
     }
 
     #[test]

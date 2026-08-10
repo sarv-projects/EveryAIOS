@@ -1,9 +1,11 @@
 # EveryAIOS desktop workspace (P0.3 task 19).
-# `packages/*` = desktop-only packages (coordinator, later ui).
+# `packages/*` = desktop-only packages (coordinator, ui — P1.4 wires the
+# streaming UI through `ui/*`).
 # `../APP/packages/*` = the existing mobile core packages, imported as
 # workspace deps (never copied — the spec's reuse rule).
 packages:
   - "packages/*"
+  - "ui"
   - "../APP/packages/*"
 
 # Native deps pulled in via @personal-ai/core-* — allow their build scripts
