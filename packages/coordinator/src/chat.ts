@@ -22,7 +22,8 @@
 
 import { ConversationEngine } from "@personal-ai/core-engine";
 import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
-import { StreamSession, assembleChatPrompt } from "@personal-ai/core-ai";
+import { StreamSession } from "@personal-ai/core-ai";
+import { buildDesktopSystemPrompt, type PersonaId } from "./prompt";
 
 /** Minimal B1-base turn parameters (P1.5 owns full system-prompt assembly). */
 export interface ChatStreamParams {
@@ -33,6 +34,16 @@ export interface ChatStreamParams {
   agentId?: string;
   provider?: string;
   model?: string;
+  /** P1.5 — persona tone overlay (core-ai PERSONA_PRESETS). */
+  personaId?: PersonaId;
+  /** P1.5 — Hermes SOUL.md identity block (Slot #1, injection-scanned). */
+  soulMd?: string;
+  /** P1.5 — approved style-memory facts (stable prefix, segment 7). */
+  styleMemoryBlock?: string;
+  /** P1.5 — RAG scope labels (buildRagSystemPrompt scope lock). */
+  sourceLabels?: string[];
+  /** P1.5 — user-attached documents (J6 <user_document> wrapping). */
+  userDocuments?: Array<{ title: string; content: string }>;
 }
 
 /** Events the coordinator forwards to the UI as `chat/<type>` notifications. */
@@ -253,13 +264,20 @@ export async function runChatStream(
   }, { batchIntervalMs });
 
   const engine = new ConversationEngine({
-    // Minimal B1-base prompt assembly; P1.5 owns the full 12-segment
-    // cache-affine pipeline (core-ai system-prompt.ts).
+    // P1.5 — full 12-segment cache-affine pipeline (core-ai system-prompt.ts
+    // + desktop SOUL.md identity slot + J6 <user_document> wrapping). The
+    // stable prefix above CACHE_BOUNDARY is byte-identical across turns.
     generatePrompt: async (input: TurnInput) => {
-      // exactOptionalPropertyTypes: never pass `undefined` explicitly.
-      const opts: NonNullable<Parameters<typeof assembleChatPrompt>[0]> = {};
-      if (input.agentId) opts.agentId = input.agentId;
-      const system = assembleChatPrompt(opts);
+      // exactOptionalPropertyTypes: only set keys that are actually present.
+      const opts: Parameters<typeof buildDesktopSystemPrompt>[0] = {};
+      const agentId = input.agentId ?? params.agentId;
+      if (agentId !== undefined) opts.agentId = agentId;
+      if (params.personaId !== undefined) opts.personaId = params.personaId;
+      if (params.soulMd !== undefined) opts.soulMd = params.soulMd;
+      if (params.styleMemoryBlock !== undefined) opts.styleMemoryBlock = params.styleMemoryBlock;
+      if (params.sourceLabels !== undefined) opts.sourceLabels = params.sourceLabels;
+      if (params.userDocuments !== undefined) opts.userDocuments = params.userDocuments;
+      const system = buildDesktopSystemPrompt(opts);
       return `${system}\n\n<user>\n${input.text}\n</user>`;
     },
     streamProvider: async function* (prompt, signal) {

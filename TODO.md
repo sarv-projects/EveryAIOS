@@ -117,19 +117,19 @@
 - [x] `[DONE]` Strip mobile-only hooks (creditAware, shouldContinueStreaming → budget-aware) — chat.ts has zero creditAware/shouldContinueStreaming references (strip test asserts absence); budget gating lives in the Rust broker (SessionBudget), not the engine — sidecar-proposes/Rust-disposes holds
 
 ### P1.5 System Prompt Assembly
-- [ ] `[NOT DONE]` Port 12-segment stable-prefix prompt from core-ai
-- [ ] `[NOT DONE]` Implement CACHE_BOUNDARY marker (byte-stable prefix above, volatile below)
-- [ ] `[NOT DONE]` Implement `<untrusted>` envelope for RAG/web content
-- [ ] `[NOT DONE]` Implement `<user_document>` wrapping for injection defense (J6)
-- [ ] `[NOT DONE]` Verify: prefix bytes are identical across turns (test cache stability)
+- [x] `[DONE]` Port 12-segment stable-prefix prompt from core-ai — `packages/coordinator/src/prompt.ts` `buildDesktopSystemPrompt` drives the full `assembleChatPrompt` (segments 1–11: policy → output contract → persona → tools → instructions → agent → memory → boundary → vision → retrieved → fresh) + desktop `<identity>` slot; chat.ts generatePrompt uses it (personaId/soulMd/agentId/styleMemoryBlock/sourceLabels/userDocuments wired through ChatStreamParams)
+- [x] `[DONE]` Implement CACHE_BOUNDARY marker (byte-stable prefix above, volatile below) — core-ai `CACHE_BOUNDARY` re-exported; `stablePrefixOf()` splits at the marker; cache-stability test asserts byte-identical prefix across turns with different volatile tails, and that persona/agent changes correctly dirty the prefix
+- [x] `[DONE]` Implement `<untrusted>` envelope for RAG/web content — `wrapUntrusted` (angle-bracket-escaped, forged-tag-neutralizing, single real envelope pair) applied to retrievedSources/freshResults below the boundary; retrieved content asserted OUT of the stable prefix + IN an envelope (C.13)
+- [x] `[DONE]` Implement `<user_document>` wrapping for injection defense (J6) — `wrapUserDocument(title, content)` with escaped title/body so docs cannot forge closing tags; assembled below the boundary; escape + single-closing tests green
+- [x] `[DONE]` Verify: prefix bytes are identical across turns (test cache stability) — prompt.test.ts: same persona/soul/agent/style + different volatile content → `stablePrefixOf(turn1) === stablePrefixOf(turn2)` (byte-identical); persona change → prefix differs (correct invalidation); 39/39 coordinator tests + tsc green
 
 ### P1.6 Chat UI
-- [ ] `[NOT DONE]` Implement chat message list with streaming token display
-- [ ] `[NOT DONE]` Implement message branching (fork from any message)
-- [ ] `[NOT DONE]` Implement token streamer display (tokens/sec, context %, active key)
-- [ ] `[NOT DONE]` Implement KaTeX math rendering (H7)
-- [ ] `[NOT DONE]` Implement syntax-highlighted code blocks with Copy button (H7)
-- [ ] `[NOT DONE]` Implement persona selector (SOUL.md presets)
+- [x] `[DONE]` Implement chat message list with streaming token display — Chat.tsx message list renders assistant bubbles via Markdown (live bubble updates per batch, TTFT creates the bubble, done/error/cancelled/budgetExceeded finalize it); preview-mode echo keeps UI explorable without Tauri
+- [x] `[DONE]` Implement message branching (fork from any message) — every message (i>0) shows a ⑂ fork button on hover → truncates history at that message + `✦ forked — continuing from here` chip; fork disabled while streaming
+- [x] `[DONE]` Implement token streamer display (tokens/sec, context %, active key) — footer bar: tokens/s from a 3s sliding window over batch tokenCounts, context % gauge (totalTokens/128K nominal), active key (provider/model); resets on done/error/cancel
+- [x] `[DONE]` Implement KaTeX math rendering (H7) — ui Markdown component: react-markdown + remark-math + rehype-katex + katex CSS; inline `$...$` and display `$$...$$` render
+- [x] `[DONE]` Implement syntax-highlighted code blocks with Copy button (H7) — rehype-highlight (github-dark theme) + custom CodeBlock with language bar + Copy/Copied ✓ button (navigator.clipboard); inline code styled separately
+- [x] `[DONE]` Implement persona selector (SOUL.md presets) — header dropdown with core-ai PERSONA_PRESETS (straight-shooter/warm/coach/terse) + `custom SOUL.md…` option opening a Hermes-style identity editor (Slot #1, injection-scanned in sidecar prompt.ts B-16); personaId/soulMd passed via chatStream → coordinator assembly
 
 ### P1.7 OAuth Subscriptions (A4) — behind flag
 - [ ] `[NOT DONE]` Implement ChatGPT Pro PKCE flow (encrypted token → vault)

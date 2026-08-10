@@ -171,11 +171,15 @@ body {
 }
 
 .bubble {
+  position: relative;
   max-width: 640px;
   padding: 12px 16px;
   border-radius: 14px;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.bubble .user-text {
   white-space: pre-wrap;
 }
 
@@ -202,6 +206,252 @@ body {
   50% {
     opacity: 0.3;
   }
+}
+
+/* ---- P1.6 chat tools: persona selector + streamer + fork ---- */
+.chat-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.persona-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pill-label {
+  white-space: nowrap;
+}
+
+.persona-wrap select {
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 10px;
+  outline: none;
+  cursor: pointer;
+}
+
+.persona-wrap select:focus {
+  border-color: var(--accent);
+}
+
+.soul-card textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+}
+
+.soul-card textarea:focus {
+  border-color: var(--accent);
+}
+
+.soul-card .hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fork-chip {
+  font-size: 11px;
+  color: var(--accent);
+  padding: 2px 0 6px;
+  letter-spacing: 0.04em;
+}
+
+.fork-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.bubble:hover .fork-btn {
+  opacity: 1;
+}
+
+.fork-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.streamer {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 6px 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.streamer-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.streamer-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+
+.streamer-value {
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  color: var(--text);
+}
+
+.streamer-key {
+  font-size: 11px;
+}
+
+.streamer-bar {
+  width: 90px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.streamer-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.3s ease;
+}
+
+/* ---- P1.6 markdown ---- */
+.markdown {
+  white-space: normal;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p {
+  margin: 0 0 8px;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: 10px 0 6px;
+  font-size: 15px;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--bg);
+}
+
+.markdown a {
+  color: var(--accent-2);
+}
+
+.inline-code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 12.5px;
+}
+
+.codeblock {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+.codeblock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #161b22;
+  border-bottom: 1px solid var(--border);
+}
+
+.codeblock-lang {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.codeblock-copy {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.codeblock-copy:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.codeblock pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+
+.codeblock pre code {
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
 .composer {

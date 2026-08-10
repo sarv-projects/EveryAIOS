@@ -55,6 +55,10 @@ export async function chatStream(args: {
   text: string;
   provider?: string;
   model?: string;
+  /** P1.5 — persona tone overlay (core-ai PERSONA_PRESETS). */
+  personaId?: string;
+  /** P1.5 — Hermes SOUL.md identity block (Slot #1, injection-scanned). */
+  soulMd?: string;
 }): Promise<string> {
   return tauriInvoke<string>("chat_stream", args);
 }
