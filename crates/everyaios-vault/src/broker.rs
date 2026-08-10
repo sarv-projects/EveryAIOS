@@ -34,6 +34,9 @@ pub struct ChatStreamEvent {
     pub delta: Option<String>,
     /// `finish_reason` when the stream finishes an answer.
     pub finish: Option<String>,
+    /// Total tokens from the final `usage` chunk (present only when the
+    /// provider echoes `stream_options.include_usage`).
+    pub usage: Option<u64>,
 }
 
 /// The credential broker: key resolution + HTTP execution + scrubbing.
@@ -99,8 +102,10 @@ impl<'a> Broker<'a> {
         )
     }
 
-    /// Streaming chat completion: forces `stream: true` and returns the
-    /// parsed SSE event list (deltas + finish reasons).
+    /// Streaming chat completion: forces `stream: true` (+ include_usage so
+    /// budgets stay accurate) and returns the parsed SSE event list (deltas +
+    /// finish reasons). Usage is extracted from the final SSE chunk when the
+    /// provider echoes it back (`stream_options.include_usage`).
     pub fn chat_completion_stream(
         &self,
         provider: &str,
@@ -109,6 +114,7 @@ impl<'a> Broker<'a> {
         mut body: serde_json::Value,
     ) -> Result<Vec<ChatStreamEvent>, BrokerError> {
         body["stream"] = serde_json::json!(true);
+        body["stream_options"] = serde_json::json!({"include_usage": true});
         self.run_with_failover(
             provider,
             model,
@@ -129,7 +135,7 @@ impl<'a> Broker<'a> {
                     Err(ureq::Error::Transport(t)) => Err(BrokerError::Transport(t.to_string())),
                 }
             },
-            |_| 0,
+            |events: &Vec<ChatStreamEvent>| usage_from_stream(events.as_slice()),
         )
     }
 
@@ -197,11 +203,16 @@ impl<'a> Broker<'a> {
 
 /// Build the auth header for a provider. Returns `(name, value)`; the value
 /// buffer is dropped right after the request and its bytes are never logged.
-fn authorization(provider: &str, secret: &[u8]) -> (&'static str, String) {
-    let secret_str = String::from_utf8_lossy(secret).into_owned();
+/// The header string is `Zeroizing`-wrapped so the secret bytes are scrubbed
+/// when the header buffer is dropped.
+fn authorization(provider: &str, secret: &[u8]) -> (&'static str, zeroize::Zeroizing<String>) {
+    let secret_str = zeroize::Zeroizing::new(String::from_utf8_lossy(secret).into_owned());
     match provider {
         "anthropic" => ("x-api-key", secret_str),
-        _ => ("Authorization", format!("Bearer {secret_str}")),
+        _ => (
+            "Authorization",
+            zeroize::Zeroizing::new(format!("Bearer {}", secret_str.as_str())),
+        ),
     }
 }
 
@@ -224,6 +235,12 @@ fn read_snippet(resp: ureq::Response) -> String {
         .chars()
         .take(200)
         .collect()
+}
+/// Extract usage from a streaming response: OpenAI-compatible providers put
+/// the final `usage` object in the LAST SSE chunk when
+/// `stream_options.include_usage` was requested.
+fn usage_from_stream(events: &[ChatStreamEvent]) -> u64 {
+    events.iter().rev().find_map(|e| e.usage).unwrap_or(0)
 }
 
 /// Parse OpenAI-style SSE stream into events. Lines look like:
@@ -265,7 +282,15 @@ fn parse_sse<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
             .and_then(|c| c.get("finish_reason"))
             .and_then(|f| f.as_str())
             .map(str::to_string);
-        events.push(ChatStreamEvent { delta, finish });
+        let usage = value
+            .get("usage")
+            .and_then(|u| u.get("total_tokens"))
+            .and_then(|t| t.as_u64());
+        events.push(ChatStreamEvent {
+            delta,
+            finish,
+            usage,
+        });
     }
     events
 }
@@ -291,8 +316,6 @@ pub enum BrokerError {
     RateLimited,
     #[error("transport error: {0}")]
     Transport(String),
-    #[error("json error: {0}")]
-    Json(#[from] serde_json::Error),
     #[error("all keys for provider '{0}' exhausted after 429 failover")]
     AllKeysExhausted(String),
 }
@@ -518,10 +541,13 @@ mod tests {
     }
 
     #[test]
-    fn streaming_roundtrip_collects_deltas() {
+    fn streaming_roundtrip_collects_deltas_and_usage() {
+        // include_usage echo: final chunk carries `usage` (OpenAI-compatible
+        // streaming) — the broker must record it against the key's budget.
         let sse = concat!(
             "data: {\"choices\":[{\"delta\":{\"content\":\"hi \"},\"finish_reason\":null}]}\n",
             "data: {\"choices\":[{\"delta\":{\"content\":\"there\"},\"finish_reason\":null}]}\n",
+            "data: {\"choices\":[],\"usage\":{\"total_tokens\":37}}\n",
             "data: [DONE]\n",
         );
         let base = mock_server(move |_| (200, sse.into()));
@@ -533,6 +559,9 @@ mod tests {
             .unwrap();
         let text: String = events.iter().filter_map(|e| e.delta.clone()).collect();
         assert_eq!(text, "hi there");
+        // Usage from the final chunk hit the key's daily budget.
+        let info = broker.ring().list("nvidia").unwrap();
+        assert!(info[0].tokens_day >= 37);
     }
 
     #[test]

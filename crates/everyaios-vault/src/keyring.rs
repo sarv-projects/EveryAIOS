@@ -192,14 +192,28 @@ impl<'a> KeyRing<'a> {
 
     // ---- CRUD -----------------------------------------------------------
 
-    /// Add a key to the ring. Returns the fresh opaque handle.
+    /// Add a key to the ring. Returns the opaque handle.
+    ///
+    /// A re-add of an existing `(provider, key_id)` UPDATES the mutable
+    /// fields (value, status, filter, priority, caps) but **preserves** the
+    /// existing handle and the budget/health counters — use
+    /// [`rotate_key`](Self::rotate_key) to mint a new handle explicitly.
     pub fn add_key(&self, spec: KeySpec) -> Result<String, KeyRingError> {
+        // Mint a candidate handle; on an existing row it is discarded and the
+        // stored handle is returned (upsert preserves identity + counters).
         let handle = mint_handle();
         self.conn.execute(
-            "INSERT OR REPLACE INTO key_ring
+            "INSERT INTO key_ring
                 (provider, key_id, opaque_handle, value, status, model_filter, priority,
                  daily_token_cap, daily_cost_cap)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(provider, key_id) DO UPDATE SET
+                 value = excluded.value,
+                 status = excluded.status,
+                 model_filter = excluded.model_filter,
+                 priority = excluded.priority,
+                 daily_token_cap = excluded.daily_token_cap,
+                 daily_cost_cap = excluded.daily_cost_cap",
             rusqlite::params![
                 spec.provider,
                 spec.key_id,
@@ -212,7 +226,10 @@ impl<'a> KeyRing<'a> {
                 spec.daily_cost_cap,
             ],
         )?;
-        Ok(handle)
+        // Authoritative handle = what's stored (fresh mint on insert, the
+        // preserved handle on upsert).
+        self.get(&spec.provider, &spec.key_id)
+            .map(|entry| entry.opaque_handle.clone())
     }
 
     /// Remove a key (revokes its handle). Also drops any session affinity
@@ -1030,5 +1047,25 @@ mod tests {
         assert!(!json.contains("hidden"));
         assert!(!json.contains("\"value\""));
         assert!(json.contains("opaqueHandle"));
+    }
+
+    #[test]
+    fn re_add_preserves_handle_and_counters() {
+        let ring = ring();
+        let h1 = ring.add_key(spec("p", "k", "v1")).unwrap();
+        ring.report_usage(&h1, 500, 0.0).unwrap();
+        ring.report_failure(&h1, false).unwrap();
+
+        // Re-add (update value) must NOT mint a new handle or wipe counters.
+        let h2 = ring.add_key(spec("p", "k", "v2")).unwrap();
+        assert_eq!(h1, h2);
+        let entry = ring.get("p", "k").unwrap();
+        assert_eq!(entry.value, b"v2");
+        assert_eq!(entry.tokens_day, 500);
+        assert_eq!(entry.fail_count, 1);
+
+        // rotate_key is the explicit new-handle path.
+        let h3 = ring.rotate_key("p", "k", b"v3").unwrap();
+        assert_ne!(h2, h3);
     }
 }

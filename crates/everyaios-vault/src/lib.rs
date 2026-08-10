@@ -87,7 +87,8 @@ impl Vault {
         conn.pragma_update(None, "cipher_page_size", 4096)?;
         conn.execute_batch(INIT_SQL)?;
         conn.execute(
-            "INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('schema_version', ?1)",
+            "INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [SCHEMA_VERSION.to_string()],
         )?;
         Ok(Self { conn })
@@ -216,6 +217,37 @@ mod tests {
             vault.list_keys("deepseek").unwrap(),
             vec!["dsk-1".to_string()]
         );
+    }
+
+    #[test]
+    fn stale_v1_schema_gets_bumped_to_v2_on_open() {
+        // A P0.1-era DB has schema_version=1 and no key_ring. Opening it with
+        // the v2 code must create key_ring AND bump the recorded version so
+        // status() never reports a stale "schema v1".
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-vault-migrate-{}", std::process::id()));
+        let path = dir.join("vault.db");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Simulate a v1 DB: open, force the version row back to 1.
+        {
+            let vault = Vault::open(&path, "test-key").expect("open");
+            vault
+                .conn
+                .execute(
+                    "UPDATE schema_meta SET value = '1' WHERE key = 'schema_version'",
+                    [],
+                )
+                .unwrap();
+            assert!(vault.status().contains("schema v1"));
+        }
+        // Reopen: version row must be bumped to the current schema.
+        {
+            let vault = Vault::open(&path, "test-key").expect("reopen");
+            assert!(vault.status().contains("schema v2"));
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
