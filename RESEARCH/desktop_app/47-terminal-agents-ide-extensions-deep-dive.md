@@ -24,6 +24,7 @@
 1. **MCP-first extensibility** — build entire plugin system on MCP from day one
 2. **Custom Distros** — allow branded EveryAIOS configurations for orgs/teams
 3. **ACP subscription linking** — users bring existing Claude/ChatGPT subs (no separate API keys)
+> ⚠️ **2026-08-10 correction (doc 57 §3):** "ACP subscription linking" is **precise, not blocked** — driving Claude Code/Claude Agent via the official ACP wrapper `@agentclientprotocol/claude-agent-acp` (co-authored by Anthropic·Zed·JetBrains) with the user's own login is **first-party-supported** (Zed/JetBrains/Hermes precedent); **blocked** = harvesting the subscription OAuth token to power other engines' direct calls (OpenClaw/OpenCode precedent). Our F12 drives Claude via the official wrapper; the broker stays API-key-only (doc 57 §3 → ARCH/06 §6.16).
 4. **Rust core + multiple frontends** — single performant core powers CLI/desktop/API simultaneously
 
 **Classification: STEAL**

@@ -4,6 +4,7 @@
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
 > **Scope:** Complete product — 138 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
+> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–57) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 
 <!-- VERIFICATION POLICY: Every completed task MUST be verified before marking [DONE].
      Verification means: code compiles, tests pass, behavior confirmed (manual or automated).
@@ -14,7 +15,7 @@
 
 ## PHASE 0 — Workspace & Skeleton (~2 weeks)
 
-### P0.1 Rust Workspace Setup
+### P0.1 Rust Workspace Setup (ARCH/02 §2.2 — module layout, doc 41 P0 STEAL rows)
 - [x] `[DONE]` Create `crates/` directory with Cargo workspace manifest
 - [x] `[DONE]` Create `crates/everyaios-core/` — binary crate, boots headless, loads config
 - [x] `[DONE]` Create `crates/everyaios-ipc/` — JSON-RPC stdio framing with length-prefix [u32 LE]
@@ -28,14 +29,14 @@
 - [x] `[DONE]` Wire Cargo workspace: all crates compile, `cargo test` green
 - [x] `[DONE]` CI: GitHub Actions cargo test + clippy + fmt check — **pushed to `sarv-projects/EveryAIOS`, all 3 platforms green ✅ (ubuntu 27s, macOS 18s, Windows 14m32s). OpenSSL installed via vcpkg for SQLCipher on Windows. Run: [#31308757031](https://github.com/sarv-projects/EveryAIOS/actions/runs/31308757031)**
 
-### P0.2 Tauri Shell
+### P0.2 Tauri Shell (ARCH/01, doc 41 P0 — tauri STEAL row)
 - [x] `[DONE]` Init Tauri v2 app in `desktop_app/` root (`src-tauri/` — Cargo.toml, build.rs, tauri.conf.json, capabilities, lib.rs, main.rs)
 - [x] `[DONE]` Configure `tauri.conf.json` — window 1200×800 (main, resizable, centered), bundler targets appimage/msi/dmg, identifier `com.everyaios.desktop`
 - [x] `[DONE]` Wire everyaios-core as Tauri's Rust backend (Tauri commands: version, core_boot_report, scan_text, probe_vault — boot report, Guard-1 scan, vault probe)
 - [x] `[DONE]` Verify `tauri dev` boots and shows empty webview window — **verified headless on Xvfb (never on the user's display)**: 1280×800 window mapped, webview page renders (985K white px + accent-blue boot card), process + WebKitWebProcess/NetworkProcess alive; tray icon present in X tree
 - [x] `[DONE]` Add system tray with basic status icon (Show EveryAIOS / Quit menu, `icons/32x32.png`, generated via `scripts/gen-icons.py`)
 
-### P0.3 TS Sidecar (Coordinator)
+### P0.3 TS Sidecar (Coordinator) (ARCH/02 §2.3 — TS coordinator responsibilities)
 - [x] `[DONE]` Create `packages/coordinator/` — TS project with tsconfig (Bun target, strict, ESM; deps on all 10 `@personal-ai/core-*`)
 - [x] `[DONE]` Configure pnpm workspace linking to `APP/packages/core-*` as deps — `pnpm-workspace.yaml` adds `../APP/packages/*`; verified all 10 core-* symlinked into coordinator; `allowBuilds` map (pnpm 11 syntax) builds better-sqlite3/onnxruntime-native; root `package.json` added for the workspace
 - [x] `[DONE]` Implement hello-world IPC responder (stdin/stdout JSON-RPC) — `src/{frame,message,index}.ts` mirror `everyaios-ipc` exactly: `[u32 LE len][JSON]` framing + ACP-style `initialize` (protocolVersion=1, default-off capabilities) + echo/session/ping/shutdown; **11/11 bun tests green incl. real child-process E2E round-trip; tsc clean**
@@ -44,7 +45,7 @@
 - [x] `[DONE]` Measure binary size (target: document actual vs ~60MB expected) — **actual: 91MB (Bun 1.3.14 runtime overhead; ELF x86-64 dynamically linked). Larger than 60MB estimate due to Bun runtime growth since v1.0. Acceptable for desktop; strip/compression can reduce for distribution.**
 - [x] `[DONE]` Sidecar heap safety (J13): `--max-old-space-size=512`; self-restart at 80% heap used; forced rotation at 30min — **`src/heap.ts` implements `startHeapMonitor()`: 5s poll, 80% → `heap/warning` notification, 95% → `heap/critical` + exit(71), 30min → `heap/rotation` + exit(0). ProcessSupervisor sets `BUN_JSC_heapSize=536870912` at spawn. 17/17 bun tests pass.**
 
-### P0.4 ProcessSupervisor (J7)
+### P0.4 ProcessSupervisor (J7 — ARCH/09 J7: v2.0 §4.3; doc 41 P0 zeroclaw STEAL)
 - [x] `[DONE]` Implement spawn logic in everyaios-core: launch coordinator binary as child — **`src/supervisor.rs`: `ProcessSupervisor::spawn()` uses `Command` with `Stdio::piped()`, sets `BUN_JSC_heapSize`, platform `pre_exec` for orphan prevention**
 - [x] `[DONE]` Implement exponential backoff restart (1s→2s→4s→60s cap) — **`restart_with_backoff()`: delay = `min(2^restart_count, 60)` seconds**
 - [x] `[DONE]` Implement circuit breaker (5 crashes/10min → OPEN state → surface error) — **`check_circuit_breaker()`: prunes entries >10min, trips at ≥5 crashes → `SupervisorState::CircuitOpen`**
@@ -53,7 +54,7 @@
 - [x] `[DONE]` Implement parent-PID polling in sidecar (5s interval, self-exit if orphaned) — **`src/orphan.ts`: `startOrphanWatch()` polls `process.ppid` every 5s, exits if changed or ≤1**
 - [x] `[DONE]` Test: kill everyaios-core → verify sidecar dies within 5s — **integration test PASS: coordinator exits in 0.5s when parent dies (stdin EOF triggers immediate exit via `reader.on('end')`; ppid polling is backup). 19/19 cargo tests pass (incl. 10 new watchdog unit tests).**
 
-### P0.5 IPC Contract (J15)
+### P0.5 IPC Contract (J15/J16 — ARCH/09: doc 43; ARCH/02 §2.2 everyaios-ipc)
 - [x] `[DONE]` Implement length-prefixed framing in everyaios-ipc: `[u32 LE length][JSON payload]` — **`crates/everyaios-ipc/src/frame.rs` (`encode`/`decode`, `MAX_FRAME_LEN` 16MiB, EOF-safe partial-frame handling) + TS mirror `packages/coordinator/src/frame.ts` (incl. resync-on-error `FrameDecoder`); 11 ipc unit tests green, framing also exercised end-to-end by the E2E round-trip below**
 - [x] `[DONE]` Prefer UNIX-domain socket transport over TCP (J16) — zero port collisions; pre-spawn coordinator at Tauri boot (hidden, ~200ms perceived cold start) — **`crates/everyaios-ipc/src/socket.rs`: `UnixFrameServer` (stale-socket rebind, framed `serve_connection`) + `request()` client + `socket_path(data_dir)`; `Config.resolved_socket_path()` (default `<data_dir>/coordinator.sock` — no TCP port ever); `src-tauri` `.setup()` now `pre_spawn_coordinator()` (finds `packages/coordinator/dist/coordinator` / `EVERYAIOS_COORDINATOR_BIN`, runs `ProcessSupervisor::wait_or_restart` on a thread) + `serve_unix_control_channel()` (framed JSON-RPC responder on the socket); 4 socket tests green incl. latency bench below**
 - [x] `[DONE]` Implement bounded channel (capacity=16) with backpressure — **`crates/everyaios-ipc/src/channel.rs`: `BoundedChannel` wraps `mpsc::sync_channel(16)` — `send()` blocks when full (that block IS the backpressure), `try_send()` returns `Full`, atomic length counter, `sender()` clone for thread producers; 6 unit tests green (capacity respected, blocked sender unblocks after drain, recv blocks)**
@@ -61,14 +62,14 @@
 - [x] `[DONE]` E2E test: sidecar echo round-trip with length-prefix framing — **`packages/coordinator/src/index.test.ts` “E2E — real child process over stdin/stdout”: spawns `bun run index.ts`, sends initialize + echo + ping composed in a single write (frames split across the write boundary), asserts `session/ready` notification + 3 length-prefixed responses; 17/17 bun tests green (incl. heartbeat E2E)**
 - [x] `[DONE]` Benchmark: measure IPC latency (target <2ms per crossing) — **`socket.rs` bench `ipc_latency_below_2ms_per_crossing`: 2000 framed round trips through a real OS socketpair (kernel crossing + framing) — measured avg 35 µs/crossing, 57× under the 2ms budget; assert keeps CI honest**
 
-### P0.6 Config System (J9)
+### P0.6 Config System (J9 — ARCH/09: v2.0 §7.6; ARCH/03 §3.2 config-as-files)
 - [x] `[DONE]` Define `everyaios.toml` schema (ports, dirs ~/.everyaios/, retention, vault path, browser binary) — **`crates/everyaios-core/src/config.rs`: `Config {data_dir, vault_path, retention_days, browser_binary}` + TOML round-trip + relative-path normalization; `ports` field intentionally deferred until the P0.5 transport (UNIX socket / MCP HTTP port) exists — no ports are live yet**
 - [x] `[DONE]` Implement config loading in everyaios-core from `~/.everyaios/everyaios.toml` — **`Config::load()` / `Config::load_from()` with `EVERYAIOS_HOME` override; tests `default_config_points_into_everyaios_dir` + `missing_file_gets_created_with_defaults` green (13 core tests pass)**
 - [x] `[DONE]` Create default config on first boot — **`load_from` writes `Config::default()` to disk when the file is absent (test asserts the file exists after load)**
 - [x] `[DONE]` Define `providers.toml` schema (key pools per provider) — **`crates/everyaios-core/src/providers.rs`: `[[providers]] name/base_url + [[providers.keys]] id/value` (ARCH/03 §3.2); `ProvidersFile::load_from` creates the file empty on first boot; `KeyPool::select()` round-robin across the pool, `NoKeys` error on empty; 6 unit tests green**
 - [x] `[DONE]` Define `agents/*.md` blueprint format (name, model, tools, permissions) — **`crates/everyaios-core/src/blueprint.rs`: TOML frontmatter (`---` fences) with `name/model/tools/permissions` + markdown body; `load_blueprint` / `load_all` (non-recursive, sorted, missing dir = empty); 6 unit tests green (parse, defaults, missing-fence error, body extraction)**
 
-### P0.7 UI Shell
+### P0.7 UI Shell (ARCH/12-UI-SPEC, doc 41 P8 — jan/chatbox refs)
 - [x] `[DONE]` Create `ui/` — React SPA (Vite + React 19) — **`ui/` standalone npm project: `package.json` (react 19, react-dom, react-router-dom 6, @tauri-apps/api 2, vite 6, TS strict) + `vite.config.ts` (fixed port 1420 strict, Tauri env prefix, dist output) + `src/` React app (main/App/Chat/Settings/lib); `npm run build` green (38 modules, 222KB JS / 70KB gzip); tsc strict clean; `tauri.conf.json` build now points at `../ui/dist` with `npm --prefix ui` dev/build commands**
 - [x] `[DONE]` Basic routing: Chat, Settings placeholder — **`HashRouter` (file://-safe) with sidebar nav (NavLink active states); `src/pages/Chat.tsx` (message thread + composer, welcome bubble) + `src/pages/Settings.tsx` (core-bridge probe cards + Guard-1 scan demo); dark brand theme in `styles.css`**
 - [x] `[DONE]` Wire Tauri IPC: send command from React → receive in Rust → respond — **`ui/src/lib/tauri.ts` (`inTauri()` + `invoke` via `@tauri-apps/api/core`); Chat sends → `version` command, Settings probes → `version` / `core_boot_report` / `probe_vault` / `scan_text` (Guard-1); graceful browser-preview fallback (local echo / demo data) when not in the Tauri webview**
@@ -80,7 +81,7 @@
 
 ## PHASE 1 — Chat + BYOK Key-Rings (~4 weeks)
 
-### P1.1 Key-Ring Vault (A2/A3)
+### P1.1 Key-Ring Vault (A2/A3 — ARCH/09: doc 03; doc 41 P1 cc-switch STEAL)
 - [x] `[DONE]` Design SQLCipher schema for key pools (providers.toml → vault rows) — **`crates/everyaios-vault/src/lib.rs`: schema v2 adds `key_ring` (provider, key_id, opaque_handle, value BLOB encrypted-at-rest, status, model_filter, priority, tokens_day, cost_day, daily caps, fail_count, success_count, last_used_at, cooldown_until; UNIQUE(provider,key_id)) + `idx_key_ring_provider`**
 - [x] `[DONE]` Implement key CRUD in everyaios-vault (J8): add/update/delete/list keys per provider — **`keyring.rs`: `add_key` (INSERT OR REPLACE, mints opaque handle), `delete_key` (revokes handle + drops affinity), `rotate_key` (mints NEW handle per doc 53 §2), `get`, `list` (handle-only `KeyInfo`, never the secret); CRUD round-trip test green**
 - [x] `[DONE]` Implement key status model: primary/standby/backup/suspended — **`KeyStatus` enum: primary/standby selected normally, backup last-resort tier, suspended never selected (`backup_only_used_when_primaries_exhausted` + `status_tiers_gate_selection` tests green)**
@@ -94,7 +95,7 @@
 - [x] `[DONE]` Test: simulate 429 → verify immediate failover to next key — **`broker.rs::simulate_429_fails_over_to_next_key`: mock HTTP server 429s key-1 then 200s key-2; asserts key-1 in cooldown + fail_count≥1, key-2 success_count=1 — PASS**
 - [x] `[DONE]` Test: all keys exhausted → surface aggregated error — **`all_keys_exhausted_after_429_switches`: 5 keys all 429 → `BrokerError::AllKeysExhausted` after 3 switches — PASS; also `no_keys_errors` (fail-closed without keys)**
 
-### P1.2 Provider Adapter (A1)
+### P1.2 Provider Adapter (A1 — ARCH/09: doc 19; ARCH/03 BYOK + doc 53 §2 broker)
 - [x] `[DONE]` Wire core-providers from APP as sidecar dep — **`pnpm-workspace.yaml` globs `../APP/packages/*` (P0.3) + coordinator `package.json` declares all 10 `@personal-ai/core-*` deps; workspace links present in `packages/coordinator/node_modules/@personal-ai`; NEW `src/core-providers.smoke.test.ts` imports the package and verifies catalog/selectors/export surface (no network; also pins the 5 broker-targeted providers) — `bun test` 22/22 pass + `tsc --noEmit` clean (re-verified 2026-08-10). ⚠️ Drift found: broker key `nvidia` ↔ catalog id `nvidia-nim` (same base URL `https://integrate.api.nvidia.com/v1`) — alias documented in the test; reconcile when APP is editable**
 - [x] `[DONE]` Implement credential-broker request path (doc 53 §2): sidecar sends provider/model/body + opaque key handle; Rust broker (`everyaios-vault` broker module) executes the HTTP call — injects auth headers, zeroize scrub — **`broker.rs`: `Broker::chat_completion` / `chat_completion_stream` (SSE) — resolves key via `KeyRing::select`, injects `Authorization: Bearer` (or `x-api-key` for anthropic), runs `run_with_failover` (429 → cooldown → next key, ≤3 switches), `SelectedKey::drop` zeroizes the secret buffer; per-provider base URLs (`DEFAULT_BASE_URLS` incl. nvidia/openai/anthropic/deepseek/groq, overridable via `with_base_url`)**
 - [x] `[DONE]` Verify raw key never enters sidecar memory at any point (assert in test) — **`sealed_channel_never_leaks_secret` + `keyinfo_sealed_channel_no_value_field` + `secret_buffers_are_zeroized_on_drop`: after a full broker round trip, the ONLY observable credential artifact is the opaque handle; serialized `KeyInfo` JSON contains neither the secret nor a `value` field; zeroize crate verified directly**
@@ -102,13 +103,13 @@
 - [x] `[DONE]` Test: provider round-trip through the broker — fail-closed on broker down, zeroize scrub verified, no key material in sidecar memory (doc 53 §2.4) — **mock-HTTP tests green: `injects_bearer_auth_and_succeeds`, `anthropic_uses_x_api_key_header`, `fail_closed_without_keys`, `fail_closed_on_unknown_provider`, `non_429_error_surfaces_immediately`, `simulate_429_fails_over_to_next_key`, `all_keys_exhausted_after_429_switches`, `parses_sse_stream`, `streaming_roundtrip_collects_deltas_and_usage`, `sealed_channel_never_leaks_secret` — 10 broker + 17 keyring + 4 vault-level (lib.rs) = 31/31 vault (re-verified 2026-08-10)**
 - [x] `[DONE]` Test: streaming chat round-trip with real BYOK key (Anthropic or OpenAI) — **`crates/everyaios-vault/examples/nim_stream.rs` (env-var `NVIDIA_NIM_API_KEY`, key never in repo): LIVE round-trip through the broker to NVIDIA NIM — `NIM response (true): EveryAIOS broker round-trip OK`, ring records success_count=1 — PASS ✅ (re-verified 2026-08-10: example present + compiles clean; live PASS recorded in commit `bce0d59`; re-run needs `NVIDIA_NIM_API_KEY`)**
 
-### P1.3 Cache-Aware Costs (A9)
+### P1.3 Cache-Aware Costs (A9 — ARCH/09: 05, doc 05; ARCH/05 token economy)
 - [x] `[DONE]` Implement cost ledger table: token_usage(ts, session, provider, model, key_id, in, out, cache_read, cache_write, cost) — vault schema v3 adds `token_usage` (session_id, provider, model, key_id, ts, in_tokens, out_tokens, cache_read_tokens, cache_write_tokens, cost); ledger.rs `record_turn`/`session_totals` + ledger_roundtrip test; 48/48 vault tests green
 - [x] `[DONE]` Parse usage from provider response (handle AI SDK v6 cached-input normalization) — ledger.rs `Usage::from_json` handles OpenAI `prompt_tokens_details.cached_tokens` + Anthropic `cache_creation_input_tokens`/`cache_read_input_tokens`; AI SDK v6 normalization = cached tokens excluded from billed `in` before cost; parses_openai_cached_usage + parses_anthropic_cached_usage tests green
 - [x] `[DONE]` Implement per-session $ budget enforcement (J11): default $2.00, kill on exceed — session_budget.rs `SessionBudget` (default 2.00, configurable), broker pre-flight `Budget::check` → `BrokerError::SessionBudgetExceeded{limit,spent}` before any call; post-turn settle records real cost; budget_kill_on_exceed + budget_isolation tests green. NOTE: enforcement is pre-flight + post-turn-settle (kill blocks the NEXT turn) — mid-stream kill is impossible because providers only report usage in the final chunk (stream_options.include_usage); documented limitation
 - [x] `[DONE]` Surface "stopped: $X limit" to UI on budget kill — broker error surfaces as budgetExceeded chat event with limit+spent (chat.rs post_turn_budget_kill_surfaces_stopped test); Chat.tsx renders `⛔ stopped: $X / $Y limit reached`
 
-### P1.4 Streaming Chat Loop (B1 base)
+### P1.4 Streaming Chat Loop (B1 — ARCH/09: doc 05/16; doc 41 P1/ADAPT pi + Hermes rows)
 - [x] `[DONE]` Wire core-engine ConversationEngine from APP into coordinator (B1/H1 base) — packages/coordinator/src/chat.ts: `generatePrompt` (assembleChatPrompt) / `persistTurn` (storeConversationTurn) / `extractMemory` (memoryUpdate) all call the real `@personal-ai/core-engine` ConversationEngine; no network in unit tests (FakeBridge); tsc clean + 28/28 coordinator tests
 - [x] `[DONE]` Implement streaming over IPC: token deltas → everyaios-core → Tauri events → UI — sidecar_link.rs framed bidirectional link (JSON-lines over stdio) + chat.rs relay; coordinator streams `chat/provider_chunk` requests → Rust runs the broker (keys live in Rust) → `chat-event` emitted via `app.emit` (src-tauri lib.rs chat_stream/chat_cancel); ui/src/lib/tauri.ts + Chat.tsx wired; core 41/41 tests green
 - [x] `[DONE]` Implement 33ms batch flush (StreamSession pattern from APP) — chat.ts StreamSession: 33ms interval batch flush, complete() flushes remainder; chat tests assert batch interleaves + final flush; fullText accumulated for done event
@@ -116,14 +117,14 @@
 - [x] `[DONE]` Implement cancellation: abort signal propagation from UI → Rust → sidecar → provider — Tauri `chat_cancel` command → core CancellationToken → chat.rs streaming loop breaks → sidecar sees abort and aborts provider stream; chat tests cancel sequence
 - [x] `[DONE]` Strip mobile-only hooks (creditAware, shouldContinueStreaming → budget-aware) — chat.ts has zero creditAware/shouldContinueStreaming references (strip test asserts absence); budget gating lives in the Rust broker (SessionBudget), not the engine — sidecar-proposes/Rust-disposes holds
 
-### P1.5 System Prompt Assembly
+### P1.5 System Prompt Assembly (J6/ARCH/11 — doc 06/25; core-ai system-prompt.ts)
 - [x] `[DONE]` Port 12-segment stable-prefix prompt from core-ai — `packages/coordinator/src/prompt.ts` `buildDesktopSystemPrompt` drives the full `assembleChatPrompt` (segments 1–11: policy → output contract → persona → tools → instructions → agent → memory → boundary → vision → retrieved → fresh) + desktop `<identity>` slot; chat.ts generatePrompt uses it (personaId/soulMd/agentId/styleMemoryBlock/sourceLabels/userDocuments wired through ChatStreamParams)
 - [x] `[DONE]` Implement CACHE_BOUNDARY marker (byte-stable prefix above, volatile below) — core-ai `CACHE_BOUNDARY` re-exported; `stablePrefixOf()` splits at the marker; cache-stability test asserts byte-identical prefix across turns with different volatile tails, and that persona/agent changes correctly dirty the prefix
 - [x] `[DONE]` Implement `<untrusted>` envelope for RAG/web content — `wrapUntrusted` (angle-bracket-escaped, forged-tag-neutralizing, single real envelope pair) applied to retrievedSources/freshResults below the boundary; retrieved content asserted OUT of the stable prefix + IN an envelope (C.13)
 - [x] `[DONE]` Implement `<user_document>` wrapping for injection defense (J6) — `wrapUserDocument(title, content)` with escaped title/body so docs cannot forge closing tags; assembled below the boundary; escape + single-closing tests green
 - [x] `[DONE]` Verify: prefix bytes are identical across turns (test cache stability) — prompt.test.ts: same persona/soul/agent/style + different volatile content → `stablePrefixOf(turn1) === stablePrefixOf(turn2)` (byte-identical); persona change → prefix differs (correct invalidation); 39/39 coordinator tests + tsc green
 
-### P1.6 Chat UI
+### P1.6 Chat UI (H1/H7 — v2.0 §P1; ARCH/12-UI-SPEC; doc 47)
 - [x] `[DONE]` Implement chat message list with streaming token display — Chat.tsx message list renders assistant bubbles via Markdown (live bubble updates per batch, TTFT creates the bubble, done/error/cancelled/budgetExceeded finalize it); preview-mode echo keeps UI explorable without Tauri
 - [x] `[DONE]` Implement message branching (fork from any message) — every message (i>0) shows a ⑂ fork button on hover → truncates history at that message + `✦ forked — continuing from here` chip; fork disabled while streaming
 - [x] `[DONE]` Implement token streamer display (tokens/sec, context %, active key) — footer bar: tokens/s from a 3s sliding window over batch tokenCounts, context % gauge (totalTokens/128K nominal), active key (provider/model); resets on done/error/cancel
@@ -131,20 +132,20 @@
 - [x] `[DONE]` Implement syntax-highlighted code blocks with Copy button (H7) — rehype-highlight (github-dark theme) + custom CodeBlock with language bar + Copy/Copied ✓ button (navigator.clipboard); inline code styled separately
 - [x] `[DONE]` Implement persona selector (SOUL.md presets) — header dropdown with core-ai PERSONA_PRESETS (straight-shooter/warm/coach/terse) + `custom SOUL.md…` option opening a Hermes-style identity editor (Slot #1, injection-scanned in sidecar prompt.ts B-16); personaId/soulMd passed via chatStream → coordinator assembly
 
-### P1.7 OAuth Subscriptions (A4) — behind flag
-- [ ] `[NOT DONE]` Implement ChatGPT Pro PKCE flow (encrypted token → vault)
-- [ ] `[NOT DONE]` Implement Copilot device-code flow
-- [ ] `[NOT DONE]` Implement Qwen device-code flow
-- [ ] `[NOT DONE]` Same failover semantics as BYOK keys
+### P1.7 OAuth Subscriptions (A4 — ARCH/09 A4: doc 33 §7.4, doc 13 §5.5; doc 41 P1) — behind flag
+- [ ] `[NOT DONE]` Implement ChatGPT Pro PKCE flow (encrypted token → vault) — **doc 33 §7.4** (`oauth/providers.ts` chatgpt-pro PKCE: auth code + code_verifier, scopes openid/profile/email/offline_access; local callback port; SQLite `oauth_tokens` rows) + doc 13 §5.5 (project PKCE client, no secret); register our OWN client ID
+- [ ] `[NOT DONE]` Implement Copilot device-code flow — **doc 33 §7.4** (github-copilot device-code, scope read:user)
+- [ ] `[NOT DONE]` Implement Qwen device-code flow — **doc 33 §7.4** (qwen-code device-code + PKCE, scopes openid/profile/email/model.completion, form content type)
+- [ ] `[NOT DONE]` Same failover semantics as BYOK keys — route through the A3 key-ring/broker failover (429/401/cooldown/max-switches), token rows live in everyaios-vault (BrowserOS `oauth_tokens` schema, doc 33 §7.4)
 
-### P1.8 Local Models (A5)
-- [ ] `[NOT DONE]` Implement Ollama detection + managed spawn from everyaios-core
-- [ ] `[NOT DONE]` Implement llamafile single-binary launch
-- [ ] `[NOT DONE]` Implement context-window warning UI (≤15-20K)
-- [ ] `[NOT DONE]` Implement GBNF grammar constraint passthrough for local models (B5)
-- [ ] `[NOT DONE]` Test: local model tool call with GBNF → verify valid JSON always
+### P1.8 Local Models (A5 — ARCH/09 A5: doc 34 §2; doc 33 §7.4 local-model note; B5 → v2.0 §P3)
+- [ ] `[NOT DONE]` Implement Ollama detection + managed spawn from everyaios-core — **doc 34 §2** (local-model stack: llamafile single-file runtime; Ollama as the managed option) + doc 33 §7.4 (Ollama/LM Studio — ⚠️ default 4,096 ctx too low, set 15–20K); detect via `OLLAMA_HOST`/`/api/tags`, spawn via ProcessSupervisor
+- [ ] `[NOT DONE]` Implement llamafile single-binary launch — **doc 34 §2** (Mozilla-Ocho/llamafile: weights + server in one binary, no install, our "zero-setup local" option alongside Ollama)
+- [ ] `[NOT DONE]` Implement context-window warning UI (≤15-20K) — **doc 33 §7.4** (below 15K the agent loops; loud warning below 15–20K)
+- [ ] `[NOT DONE]` Implement GBNF grammar constraint passthrough for local models (B5) — **SPEC B5** (GBNF at the logit sampling layer — physically impossible to output invalid tool-call JSON) + v2.0 §P3; llama.cpp/Ollama `grammar` param
+- [ ] `[NOT DONE]` Test: local model tool call with GBNF → verify valid JSON always — real tiny model via `ollama pull` (qwen2.5:0.5b-class), grammar-enforced tool call, assert parse
 
-### P1.9 Model Catalog (A6)
+### P1.9 Model Catalog (A6 — ARCH/09: doc 19; core-providers catalog)
 - [ ] `[NOT DONE]` Implement model catalog: per-provider model registry with capability hints (tools, vision, context window)
 - [ ] `[NOT DONE]` Router consumes catalog hints for task-to-model selection (feeds A7 asymmetric tiering)
 
@@ -155,7 +156,7 @@
 
 ## PHASE 2 — Browser Layer (~6 weeks)
 
-### P2.1 CDP Client (everyaios-cdp, E1)
+### P2.1 CDP Client (everyaios-cdp, E1 — doc 33 §5, doc 34, ARCH/08 §8)
 - [ ] `[NOT DONE]` Implement WebSocket CDP client (tokio-tungstenite)
 - [ ] `[NOT DONE]` Implement Chrome/Edge discovery: `--remote-debugging-port=0` → read DevToolsActivePort
 - [ ] `[NOT DONE]` Implement loopback-only host restriction (security)
@@ -163,7 +164,7 @@
 - [ ] `[NOT DONE]` Implement chrome-for-testing download fallback (if no system browser)
 - [ ] `[NOT DONE]` Implement protocol-version tolerant client (handle Chrome version skew)
 
-### P2.2 A11y Snapshot Engine (everyaios-browser, E3)
+### P2.2 A11y Snapshot Engine (everyaios-browser, E3 — doc 33 §5, doc 55 agent-browser snapshot.rs, ARCH/08)
 - [ ] `[NOT DONE]` Reference: agent-browser `snapshot.rs` semantics (doc 55) — role taxonomy (interactive/content/structural), zero-width-char filtering, compact `@eN` refs
 - [ ] `[NOT DONE]` Implement Accessibility domain CDP calls → indented tree render
 - [ ] `[NOT DONE]` Implement stable ref minting `[ref=eN]` scoped to (document_id, url)
@@ -173,7 +174,7 @@
 - [ ] `[NOT DONE]` Implement line-diff between snapshots with `+n/-n` markers
 - [ ] `[NOT DONE]` Implement URL-change short-circuit (navigation → return full new snapshot)
 
-### P2.3 Input Dispatch & 34-Tool Catalog (E2)
+### P2.3 Input Dispatch & 34-Tool Catalog (E2 — doc 33 §6, doc 46, doc 55 agent-browser read.rs; ARCH/08 §8.2 catalog)
 - [ ] `[NOT DONE]` Implement `act` tool: click/type/fill/press/hover/select/scroll/drag/dialog
 - [ ] `[NOT DONE]` Implement `act` returns post-settle diff (no follow-up snapshot needed)
 - [ ] `[NOT DONE]` Implement `navigate` tool (goto URL, back, forward, reload)
@@ -199,7 +200,7 @@
 - [ ] `[NOT DONE]` Add enhanced_snapshot tool (accessibility snapshot with stable refs + paint-order filtering)
 - [ ] `[NOT DONE]` Add file operation tools (3): save_pdf_enhanced, save_screenshot_enhanced, download_file
 
-### P2.4 Tiered Engine Stack (E10)
+### P2.4 Tiered Engine Stack (E10 — doc 08 §8.8, doc 55 Obscura/Lightpanda; ARCH/08 tier table)
 - [ ] `[NOT DONE]` Implement tier-0 static extraction: reqwest + HTML→markdown parser
 - [ ] `[NOT DONE]` Integrate Obscura (doc 55): spawn `obscura serve` binary (loopback default), connect CDP, verify ~30MB RSS; leverage embedded MCP (32 tools) + `LP.getMarkdown` where applicable
 - [ ] `[NOT DONE]` Obscura security flags (doc 55 §2 / 06 §6.15): SSRF defaults (loopback/RFC1918 blocked, `--allow-private-network` opt-in), `file://` blocked by default, bounded `--max-connections`
@@ -208,7 +209,7 @@
 - [ ] `[NOT DONE]` Implement escalation logic (E8): tier 0→1→2 based on failure/JS-need/login-need (authenticated scrape → RAG)
 - [ ] `[NOT DONE]` Test: scrape task runs on Obscura, escalates to Chrome only on JS-render need
 
-### P2.5 Script-Eval Sandbox (everyaios-script, E4)
+### P2.5 Script-Eval Sandbox (everyaios-script, E4 — doc 33 §6.3, doc 55 agent-browser run; ARCH/08)
 - [ ] `[NOT DONE]` Integrate rquickjs crate with async runtime
 - [ ] `[NOT DONE]` Implement limits: 64MB heap, 512KB stack, 30s timeout, 1K log lines, 2MB return
 - [ ] `[NOT DONE]` Implement `browser` SDK surface (pages, observe, input, nav, read, grep, etc.)
@@ -216,13 +217,13 @@
 - [ ] `[NOT DONE]` Implement ownership filtering: pages.list() returns mine/user/other-agent
 - [ ] `[NOT DONE]` Test: run multi-step script → verify every primitive has an audit row
 
-### P2.6 Tab Ownership (E6)
+### P2.6 Tab Ownership (E6 — doc 33, ARCH/08)
 - [ ] `[NOT DONE]` Implement ownership model: mine / user / other-agent per tab
 - [ ] `[NOT DONE]` Implement claims table (tab_claims in audit DB)
 - [ ] `[NOT DONE]` Implement group-per-agent (agent session → tab group)
 - [ ] `[NOT DONE]` Test: agent cannot close a user tab
 
-### P2.7 Session Vault (E11/E7/E13)
+### P2.7 Session Vault (E11/E7/E13 — doc 08 §8.9, doc 55 Steel leveldb + session storage, doc 33 §3.2)
 - [ ] `[NOT DONE]` Design SQLCipher schema: per-site **full storage context** — cookie jars (host-keyed) + localStorage + sessionStorage + IndexedDB + auth headers; Chrome raw-storage decode (`0x00` = UTF-16-LE, `0x01` = ISO-8859-1 — Steel `leveldb` pattern, doc 55)
 - [ ] `[NOT DONE]` Implement `persist`/`restore` flag per session (stateful workflows survive restarts — Steel pattern, doc 55)
 - [ ] `[NOT DONE]` Implement multi-account per site (personal/work/test = separate Session records)
@@ -235,19 +236,19 @@
 - [ ] `[NOT DONE]` Implement usage audit: session_uses rows per account per site
 - [ ] `[NOT DONE]` Test: round-trip (capture → grant → inject → revoke; agent never sees cookies)
 
-### P2.8 Challenge Handler (E12)
+### P2.8 Challenge Handler (E12 — doc 08 §8.10)
 - [ ] `[NOT DONE]` Implement PoW captcha solver (Altcha/Friendly Captcha/Turnstile hidden) in everyaios-core
 - [ ] `[NOT DONE]` Implement human-in-loop pass-through: surface tab in visible webview, user solves
 - [ ] `[NOT DONE]` Implement LLM visual-grounding: snapshot → act for simple visual challenges
 - [ ] `[NOT DONE]` Implement optional BYO solver API hook (CapSolver/2Captcha, user's own key)
 - [ ] `[NOT DONE]` Test: PoW challenge auto-solved locally
 
-### P2.9 Behavioral Realism (E14)
+### P2.9 Behavioral Realism (E14 — doc 08 §8.10 CloakBrowser pattern)
 - [ ] `[NOT DONE]` Implement Bézier mouse curves for click/hover dispatch
 - [ ] `[NOT DONE]` Implement per-key typing cadence with natural variance
 - [ ] `[NOT DONE]` Make per-site configurable (some sites need it, most don't)
 
-### P2.10 Session Replay (E5)
+### P2.10 Session Replay (E5 — doc 33 §9, doc 08; doc 53 §4 durable event log + idempotency classes)
 - [ ] `[NOT DONE]` Implement injected recorder (CDP Page.addScriptToEvaluateOnNewDocument)
 - [ ] `[NOT DONE]` Implement NDJSON batch streaming to everyaios-audit ingest (J5: append-only audit, receipts)
 - [ ] `[NOT DONE]` Implement sticky `has_gap` flag on dropped/malformed lines
@@ -263,21 +264,21 @@
 
 ## PHASE 3 — Script-Eval + Replay + Cockpit (~4 weeks)
 
-### P3.1 Replay & Audit UI (H3)
+### P3.1 Replay & Audit UI (H3 — doc 33 §9.5, ARCH/12 UI)
 - [ ] `[NOT DONE]` Implement scrubber UI: timeline of actions per session
 - [ ] `[NOT DONE]` Implement per-step screenshot display synced to timeline
 - [ ] `[NOT DONE]` Implement searchable sessions list
 - [ ] `[NOT DONE]` Implement Watch mode: live view of agent's current tab
 - [ ] `[NOT DONE]` Implement Stop button: kills agent loop from cockpit
 
-### P3.2 Cockpit / Ambient Flight Deck (H2)
+### P3.2 Cockpit / Ambient Flight Deck (H2 — doc 33 §9.5)
 - [ ] `[NOT DONE]` Implement quiet mode: single-sentence status in tray
 - [ ] `[NOT DONE]` Implement slide-over panel: live action cards + token counters
 - [ ] `[NOT DONE]` Implement STOP / UNDO buttons (single-click kill or revert last action)
 - [ ] `[NOT DONE]` Implement MCQ interrupt cards (on circuit-break): display 4 options
 - [ ] `[NOT DONE]` Implement agent cards: per-agent status, model, tokens used, elapsed
 
-### P3.3 Distributed Tracing (J14)
+### P3.3 Distributed Tracing (J14 — doc 43, doc 52; ARCH/06)
 - [ ] `[NOT DONE]` Integrate opentelemetry-rust in everyaios-core
 - [ ] `[NOT DONE]` Propagate trace_id across Rust→sidecar→provider→sandbox boundaries
 - [ ] `[NOT DONE]` Add trace_id + span_id columns to audit table
@@ -289,7 +290,7 @@
 
 ## PHASE 4 — Office Engine (~5 weeks)
 
-### P4.1 Word Block-Patch Engine (D1)
+### P4.1 Word Block-Patch Engine (D1 — doc 28 GenOffice, doc 04)
 - [ ] `[NOT DONE]` Implement ZIP open + parts index parser
 - [ ] `[NOT DONE]` Implement block tree construction (anchored with docxIndex/addresses)
 - [ ] `[NOT DONE]` Implement plain-text rendering from block tree (for LLM editing)
@@ -298,7 +299,7 @@
 - [ ] `[NOT DONE]` Implement headers/footers/tables/sections as separate blocks
 - [ ] `[NOT DONE]` Test: round-trip (open → edit → save → LibreOffice reopen → assert byte-stable untouched parts)
 
-### P4.2 Excel Engine (D2)
+### P4.2 Excel Engine (D2 — doc 28 GenOffice, doc 04)
 - [ ] `[NOT DONE]` Integrate calamine crate for fast xlsx reading
 - [ ] `[NOT DONE]` Integrate IronCalc (v0.7.x) as recalc sidecar binary
 - [ ] `[NOT DONE]` Implement workbook DSL (cell-address, formula-shift, sort-range, flash-fill, pivot)
@@ -309,12 +310,12 @@
 - [ ] `[NOT DONE]` Test: formula recalc golden cases (SUM, VLOOKUP, IF, COUNTIF, dynamic arrays)
 - [ ] `[NOT DONE]` Implement virtualized 100K+ row table view in UI
 
-### P4.3 PowerPoint Engine (D3)
+### P4.3 PowerPoint Engine (D3 — doc 04)
 - [ ] `[NOT DONE]` Implement surgical part-editing: ppt/slides/slideN.xml text runs, bullets, shapes
 - [ ] `[NOT DONE]` Implement slide add/remove: clone part + rels + Content_Types registration
 - [ ] `[NOT DONE]` Test: pptx add/remove slide round-trip
 
-### P4.4 PDF Engine (D4)
+### P4.4 PDF Engine (D4 — doc 04)
 - [ ] `[NOT DONE]` Implement pdf.js-class renderer in webview
 - [ ] `[NOT DONE]` Implement form-fill + annotation via pdf-lib (AcroForms)
 - [ ] `[NOT DONE]` Implement text-swap via lopdf Rust bridge (exact-match only)
@@ -322,17 +323,17 @@
 - [ ] `[NOT DONE]` Implement re-author path (structural edits → generate new PDF)
 - [ ] `[NOT DONE]` Test: pdf form-fill round-trip
 
-### P4.5 Conformance & Rollback (D6/D7)
+### P4.5 Conformance & Rollback (D6/D7 — doc 29 LibreOffice oracle, doc 28 §2 rollback, doc 04 §4.4)
 - [ ] `[NOT DONE]` Implement snapshotBefore: keep pre-edit ZIP for 1-click undo
 - [ ] `[NOT DONE]` Implement atomic writes: write temp → fsync → rename
 - [ ] `[NOT DONE]` Wire LibreOffice headless in CI: open edited file → assert no repair warnings
 - [ ] `[NOT DONE]` Implement byte-stability assertions (zip-level diff of untouched parts)
 
-### P4.6 Legacy Formats (D8)
+### P4.6 Legacy Formats (D8 — doc 04, doc 29 §3a)
 - [ ] `[NOT DONE]` Implement .doc/.xls/.ppt → convert to modern format on open (headless soffice)
 - [ ] `[NOT DONE]` Surface as read-only with "edit as new .docx" option
 
-### P4.7 Office UI (H5)
+### P4.7 Office UI (H5 — doc 04)
 - [ ] `[NOT DONE]` Implement docx viewer (styled paragraphs, tables, images from block tree)
 - [ ] `[NOT DONE]` Implement xlsx viewer (virtualized grid, formula bar, cell selection)
 - [ ] `[NOT DONE]` Implement pptx viewer (slides as styled divs, notes panel)
@@ -357,7 +358,7 @@
 
 ## PHASE 5 — Memory Fusion + Token Economy (~5 weeks)
 
-### P5.1 Multi-Signal Retrieval Fusion (C1/C3, Algorithm #18)
+### P5.1 Multi-Signal Retrieval Fusion (C1/C3, Algorithm #18 — doc 07, v2.0 §3, doc 46 mem0)
 - [ ] `[NOT DONE]` Wire core-memory + core-files from APP into coordinator
 - [ ] `[NOT DONE]` Implement intent classifier: memory vs fact vs event vs document
 - [ ] `[NOT DONE]` Implement parallel signal execution (C4): FTS5/BM25 vectorless default + optional vector signal
@@ -369,7 +370,7 @@
 - [ ] `[NOT DONE]` Benchmark: multi-hop + temporal queries vs plain BM25 (target: mem0-class gains)
 - [ ] `[NOT DONE]` Implement RAG chunk-min-size merging (Algorithm #29): forward-only merge of under-sized chunks, markdown-aware boundaries (C3/D5)
 
-### P5.2 LadybugDB Graph Backend (C6, Algorithm #30)
+### P5.2 LadybugDB Graph Backend (C6, Algorithm #30 — doc 07, doc 34 §2, doc 46 Graphiti)
 - [ ] `[NOT DONE]` Integrate LadybugDB C++ library (Python/Node bindings or Rust FFI)
 - [ ] `[NOT DONE]` Implement schema: EntityNode, EpisodicNode, typed edges (supports/contradicts/derived-from)
 - [ ] `[NOT DONE]` Implement temporal edge-versioning (graphiti pattern)
@@ -377,33 +378,33 @@
 - [ ] `[NOT DONE]` Implement graph query depth cap (d=2, top-k=15)
 - [ ] `[NOT DONE]` Wire into multi-signal fusion (S3 signal)
 
-### P5.3 Letta-Style Paging (C2, Algorithm #20)
+### P5.3 Letta-Style Paging (C2, Algorithm #20 — doc 07, doc 34 §2 Letta paging)
 - [ ] `[NOT DONE]` Implement 3 memory surfaces: core (≤600 tok) / archival / recall
 - [ ] `[NOT DONE]` Implement agent memory tools: read/write/search/forget
 - [ ] `[NOT DONE]` Implement context planner enforcement of paging budgets (C7: warm-set injection, scope-leakage floors, 0ms TTFT)
 - [ ] `[NOT DONE]` Implement memory writes queued to turn boundaries (protect prefix cache)
 
-### P5.4 Ghost Context Prevention (ARCH/07 §7.5.1)
+### P5.4 Ghost Context Prevention (ARCH/07 §7.5.1 — notify-crate pattern)
 - [ ] `[NOT DONE]` Integrate Rust `notify` crate for filesystem events
 - [ ] `[NOT DONE]` Implement tombstone eviction on file delete: atomic FTS5 + vec + graph removal
 - [ ] `[NOT DONE]` Implement re-path on file rename: update source_path (zero re-embedding)
 - [ ] `[NOT DONE]` Test: rename file → verify retrieval returns new path, not old
 
-### P5.5 ACT-R Activation + Spontaneous Recall (C10, Algorithm #32)
+### P5.5 ACT-R Activation + Spontaneous Recall (C10, Algorithm #32 — doc 39 NOOA forgetting.py)
 - [ ] `[NOT DONE]` Implement retention decay: half_life × log1p(strength)
 - [ ] `[NOT DONE]` Implement importance floor: memories with importance ≥ 8 never auto-forgotten
 - [ ] `[NOT DONE]` Implement associative recall: semantic + keyword + recency + graph in one query
 - [ ] `[NOT DONE]` Implement typed relational edges in LadybugDB (supports/contradicts/derived-from)
 - [ ] `[NOT DONE]` Implement spontaneous recall channel: pre-turn hook → derive queries → inject
 
-### P5.6 Taste Profile (C9, Algorithm #31)
+### P5.6 Taste Profile (C9, Algorithm #31 — doc 37 Command Code taste-1)
 - [ ] `[NOT DONE]` Implement taste store: `~/.everyaios/taste/` (global) + per-repo `.everyaios-taste/`
 - [ ] `[NOT DONE]` Implement learning hooks: detect accept/reject/edit via correction-detector + audit
 - [ ] `[NOT DONE]` Implement confidence-scored rules (0–1 per preference)
 - [ ] `[NOT DONE]` Implement stable-prefix injection (taste rules as symbolic prior at generation)
 - [ ] `[NOT DONE]` Implement shareable markdown export
 
-### P5.7 Compaction Pipeline (Algorithm #21)
+### P5.7 Compaction Pipeline (Algorithm #21 — doc 31 context-compression, doc 33 §6 BrowserOS, doc 05, doc 46 opencode compaction.ts)
 - [ ] `[NOT DONE]` Implement snip stage: tool_result_snip_ratio=0.6 (stale → head/tail anchor)
 - [ ] `[NOT DONE]` Implement soft compact: soft_compact_ratio=0.5 (notice-only)
 - [ ] `[NOT DONE]` Implement summarize: BrowserOS callSummarizer (timeout + abort = fail-open)
@@ -420,19 +421,19 @@
 - [ ] `[NOT DONE]` Add RTK-style output compression — per-command parsers for shell tool results (60-90% reduction)
 - [ ] `[NOT DONE]` Implement SeekStorm-pattern hybrid search (vector + BM25) as embedded Rust library
 
-### P5.8 Pass-by-Reference Context (C10)
+### P5.8 Pass-by-Reference Context (C10 — doc 39 NOOA pass-by-reference)
 - [ ] `[NOT DONE]` Implement ref handles for files/datasets/tool results
 - [ ] `[NOT DONE]` Implement bounded previews (head/tail + type metadata + row/byte counts)
 - [ ] `[NOT DONE]` Agent queries via rquickjs script-eval instead of serializing payloads
 - [ ] `[NOT DONE]` Test: 10MB file queried via ref-preview keeps context ≤2K tokens
 
-### P5.9 Token/Cost Dashboard UI (H9)
+### P5.9 Token/Cost Dashboard UI (H9 — ARCH/05 §5.6)
 - [ ] `[NOT DONE]` Implement per-key cost display (tokens/day, est. cost/day)
 - [ ] `[NOT DONE]` Implement per-session cost breakdown
 - [ ] `[NOT DONE]` Implement cache-hit rate display per provider
 - [ ] `[NOT DONE]` Implement live token streamer in chat (tokens/sec, context %)
 
-### P5.10 Retest Built Algorithms (🔁)
+### P5.10 Retest Built Algorithms (🔁 — v2.0 built set; ARCH/09 🔁 rows)
 - [ ] `[NOT DONE]` Run all 17 built algorithm test suites in desktop sidecar runtime
 - [ ] `[NOT DONE]` Fix any failures from webview IPC / sidecar process model differences
 - [ ] `[NOT DONE]` Benchmark spreading-activation, phantom-thread, temporal-anticipation on desktop
@@ -444,7 +445,7 @@
 
 ## PHASE 6 — Orchestration + Connectors (~5 weeks)
 
-### P6.1 Blueprint Engine (B2)
+### P6.1 Blueprint Engine (B2 — v2.0 §P2, doc 03)
 - [ ] `[NOT DONE]` Implement .md blueprint parser → AgentConfig[] registry
 - [ ] `[NOT DONE]` Implement continuous plan rewrite (agents update their own status blocks)
 - [ ] `[NOT DONE]` Implement dependency resolution between blueprint tasks
@@ -452,7 +453,7 @@
 - [ ] `[NOT DONE]` Implement DAG state machine for multi-step workflows
 - [ ] `[NOT DONE]` Implement checkpoint freeze on circuit-break (B6 MCQ pattern)
 
-### P6.2 Sub-Agents (B3/B4)
+### P6.2 Sub-Agents (B3/B4 — doc 16, doc 03; doc 41 P2 opencode task.ts)
 - [ ] `[NOT DONE]` Implement fresh-context sub-agent spawn (own conversation, own workspace)
 - [ ] `[NOT DONE]` Implement DELEGATE_BLOCKED_TOOLS (delegate/clarify/memory/send_message/cronjob)
 - [ ] `[NOT DONE]` Implement parent sees only summary (not full child context)
@@ -461,7 +462,7 @@
 - [ ] `[NOT DONE]` Implement batch parallel mode (multiple sub-agents concurrently)
 - [ ] `[NOT DONE]` Test: two spec-driven agents with different models run a plan end-to-end
 
-### P6.3 Iteration Budgets (B6)
+### P6.3 Iteration Budgets (B6 — doc 16 Hermes 500/50; doc 39 DeerFlow subagent_limit_middleware)
 - [ ] `[NOT DONE]` Implement parent max_iterations=500, subagent max=50
 - [ ] `[NOT DONE]` Implement subagent_depth=2 (parent → child, no grandchildren)
 - [ ] `[NOT DONE]` Implement subagent timeout: 900s custom / 1800s global
@@ -470,7 +471,7 @@
 - [ ] `[NOT DONE]` Implement loop detector: hash last N tool calls, 3x repeat → interrupt
 - [ ] `[NOT DONE]` Implement MCQ interrupt card on circuit-break (UI integration with H2)
 
-### P6.4 Scheduled Tasks (B7)
+### P6.4 Scheduled Tasks (B7 — doc 33 §7; doc 56 §3 cronflow)
 - [ ] `[NOT DONE]` Reference: cronflow workflow-engine design (doc 56 §3) — HITL pause-with-timeout as a first-class state-machine state, webhook triggers w/ schema validation, retry w/ backoff+jitter+clamp (⚠️ no LICENSE file → pattern-only) for the H22 automation builder
 - [ ] `[NOT DONE]` Implement cron/interval/event/webhook triggers (F11: loopback listeners + webhook ingress)
 - [ ] `[NOT DONE]` Implement nudge sentinels (detect repeating patterns → suggest schedule)
@@ -479,7 +480,7 @@
 - [ ] `[NOT DONE]` Implement scheduled tasks UI: create from chat + settings (H14)
 - [ ] `[NOT DONE]` Test: scheduled task fires headless
 
-### P6.5 Crystallization (B8, Algorithm #5)
+### P6.5 Crystallization (B8, Algorithm #5 — v2.0 §P7)
 - [ ] `[NOT DONE]` Implement multi-step workflow detection (successful N times)
 - [ ] `[NOT DONE]` Implement non-cognitive step classification (waits, triggers, transforms, notifications)
 - [ ] `[NOT DONE]` Implement compilation to deterministic TS/Python script
@@ -487,7 +488,7 @@
 - [ ] `[NOT DONE]` Implement decrystallize fallback (output drift → fall back to LLM)
 - [ ] `[NOT DONE]` Test: crystallized task runs at 0 tokens, produces same output
 
-### P6.6 Connector Hub (F1-F5)
+### P6.6 Connector Hub (F1-F5 — doc 13 connector-hub, doc 12, doc 41 P9 nango)
 - [ ] `[NOT DONE]` Wire core-connectors from APP as coordinator dep (F2: 27+ native adapters)
 - [ ] `[NOT DONE]` Implement hub routing engine: native → Composio → Zapier → Nango → Auth Bridge
 - [ ] `[NOT DONE]` Implement no-double-connect logic (if native adapter exists, skip Composio)
@@ -499,14 +500,14 @@
 - [ ] `[NOT DONE]` Implement usage metering per connector
 - [ ] `[NOT DONE]` Test: Gmail-via-browser-session flow with dev credentials
 
-### P6.7 MCP Client/Server (F6/F7)
+### P6.7 MCP Client/Server (F6/F7 — doc 10, doc 33 §8, doc 34 §2)
 - [ ] `[NOT DONE]` Wire core-search MCP client from APP (consume external MCP servers)
 - [ ] `[NOT DONE]` Implement tool catalog reconciliation (external MCP tools → unified registry)
 - [ ] `[NOT DONE]` Implement MCP server in everyaios-mcp: stateless Streamable HTTP (2026-07-28 spec)
 - [ ] `[NOT DONE]` Expose all 34 browser tools + connector tools via MCP endpoint
 - [ ] `[NOT DONE]` Test: external client (Claude Code) connects to our MCP endpoint, calls snapshot
 
-### P6.8 Harness-Driving via ACP (F12/J17)
+### P6.8 Harness-Driving via ACP (F12/J17 — doc 35 §C, doc 45 ACP, doc 52 surgical hierarchy, doc 56 cowork-forge, doc 57 ACP registry)
 - [ ] `[NOT DONE]` Integrate official ACP Rust SDK (`agent-client-protocol` crate)
 - [ ] `[NOT DONE]` Implement ACP client: `initialize` handshake (protocolVersion + capabilities)
 - [ ] `[NOT DONE]` Implement `session/new` to spawn external agent CLIs as ACP agents
@@ -521,7 +522,7 @@
 - [ ] `[NOT DONE]` Add **auth-mode badge** to the harness UI (subscription-backed / API-key-backed / local — doc 57 §3); Claude Agent = **subscription-backed (allowed via the official ACP wrapper, Anthropic co-authored)**
 - [ ] `[NOT DONE]` Write the **subscription-auth boundary** into the agent docs (doc 57 §3 + ARCH/06 §6.16): Claude via the official ACP wrapper = allowed (Anthropic co-authored); token-harvest for other engines = blocked; our broker stays API-key-only
 
-### P6.9 Messaging Bridges (F13)
+### P6.9 Messaging Bridges (F13 — doc 36 §B Secure OpenClaw; doc 39 §B1 DeerFlow channels-first run_policy/dedupe)
 - [ ] `[NOT DONE]` Design adapter interface: message-in → agent loop → reply-out
 - [ ] `[NOT DONE]` Implement WhatsApp adapter (Secure OpenClaw pattern)
 - [ ] `[NOT DONE]` Implement Telegram adapter
@@ -531,7 +532,7 @@
 - [ ] `[NOT DONE]` Implement memory reuse across messaging sessions
 - [ ] `[NOT DONE]` Test: messaging round-trip via stub adapter
 
-### P6.10 Asymmetric Tiering (A7)
+### P6.10 Asymmetric Tiering (A7 — doc 16/05; doc 53 §5 shortest-path tier routing)
 - [ ] `[NOT DONE]` Implement planner_model config (frontier model for planning)
 - [ ] `[NOT DONE]` Implement subagent_models config (cheap/local for grinding)
 - [ ] `[NOT DONE]` Implement per-agent model override via blueprint .md
@@ -553,7 +554,7 @@
 
 ## PHASE 7 — Forge + Guardrails Hardening (~4 weeks)
 
-### P7.1 Forge Runtime (I1/I4)
+### P7.1 Forge Runtime (I1/I4 — v2.0 §P6; doc 56 W4 LSP diagnostics)
 - [ ] `[NOT DONE]` Implement LSP-backed diagnostics (doc 56 W4): rust-analyzer/typescript-language-server/pyright/clangd/go via Warp `lsp`-crate pattern — precise errors without full-file context (Copilot CLI `lsp-config.json` pattern). **Three-stage diagnostics, no overlap:** LSP = live during editing → lint/test reflection (ships in P11.5.9) = post-edit build-level gate → rtk output rules (ARCH/05 §5.10) = tool-result compression at injection
 - [ ] `[NOT DONE]` Implement write→sandbox→test→iterate loop
 - [ ] `[NOT DONE]` Implement TDD loop: auto-generate tests, read stderr, rewrite until green
@@ -561,7 +562,7 @@
 - [ ] `[NOT DONE]` Implement optional Docker sandbox for heavy/data workflows
 - [ ] `[NOT DONE]` Implement ECC guardrails (I5): plan-before-build, session scanning
 
-### P7.2 Skill Registry (I2)
+### P7.2 Skill Registry (I2 — v2.0 §P6, doc 33 §8, doc 55 skill-data; doc 41 agent0ai skills.py STEAL)
 - [ ] `[NOT DONE]` Implement `~/.everyaios/skills/` directory scanner
 - [ ] `[NOT DONE]` Implement SKILL.md manifest format (name, description, tools, triggers)
 - [ ] `[NOT DONE]` Implement ownership markers (who created, when, version)
@@ -570,7 +571,7 @@
 - [ ] `[NOT DONE]` Implement skill search scoring for relevance matching
 - [ ] `[NOT DONE]` Test: agent writes a skill → survives restart → callable next session
 
-### P7.3 Extension/Plugin ABI (I6)
+### P7.3 Extension/Plugin ABI (I6 — doc 44 §5 modularity, Zed WIT + Hermes allowed_*)
 - [ ] `[NOT DONE]` Define manifest.toml schema: abi_version, contributes, capabilities, trust_flags
 - [ ] `[NOT DONE]` Implement schema validation at load (reject invalid manifests)
 - [ ] `[NOT DONE]` Implement plugin registry: scan ~/.everyaios/plugins/ at boot
@@ -583,7 +584,7 @@
 - [ ] `[NOT DONE]` Implement dogfood rule: first-party office/connector/search ship as plugins
 - [ ] `[NOT DONE]` Test: manifest rejects bad bundles; capability blocks unlisted exec; lazy = registered-not-loaded
 
-### P7.4 Guard-1 Hardening (J2)
+### P7.4 Guard-1 Hardening (J2 — doc 06, doc 03 §8; doc 26 red-team corpus; doc 53 §3 tickets)
 - [ ] `[NOT DONE]` Compile full regex blocklist: rm -rf, mkfs, dd, drop database, format, fork bombs, key exfiltration, .git destruction, home wipes
 - [ ] `[NOT DONE]` Implement pre-exec scan of every generated shell string, filesystem path, URL
 - [ ] `[NOT DONE]` Implement URL floors: `file://` only inside granted roots; scheme guard
@@ -591,21 +592,21 @@
 - [ ] `[NOT DONE]` Test: 100% of red-team pattern list blocked
 - [ ] `[NOT DONE]` Implement authorization ticket contract in everyaios-guard (doc 53 §3): ticket_id/agent_id/session_id/tool_id/operation/args-hash/paths/expiry/single-use/approval-source/risk/audit-seq
 
-### P7.5 Guard-2 UX Polish (J3/H8)
+### P7.5 Guard-2 UX Polish (J3/H8 — doc 06; doc 52 §2 decision packages)
 - [ ] `[NOT DONE]` Implement native OS diff card rendering via Tauri IPC (not webview JS)
 - [ ] `[NOT DONE]` Show: exact file paths, script lines, execution target, env vars, network destinations
 - [ ] `[NOT DONE]` Implement approval/denial audit logging with receipt
 - [ ] `[NOT DONE]` Implement web-action confirm dialogs (checkout, payment, sensitive ops)
 - [ ] `[NOT DONE]` Implement J21 escalation rules: `~/.everyaios/permissions.toml` (delete=always_ask, multi_file_edit=ask_if_gt_5, external_network=ask_if_new_domain, terminal_shell=ask_if_destructive; min_confidence_for_auto) + structured decision-package renderer on Guard-2 cards; approvals/denials → correction-detector + taste profile (doc 52 §2)
 
-### P7.6 Prompt-Injection Defense (J6)
+### P7.6 Prompt-Injection Defense (J6 — doc 06, doc 25 PageIndex hardening)
 - [ ] `[NOT DONE]` Implement context scan: every ingested file/webpage/memory block scanned for injection patterns
 - [ ] `[NOT DONE]` Implement `<user_document>` delimiter wrapping for untrusted content
 - [ ] `[NOT DONE]` Implement tool-result sanitization: outputs as text/JSON, never as instructions
 - [ ] `[NOT DONE]` Implement escape hatches: estop (global stop, tray-accessible)
 - [ ] `[NOT DONE]` Test: injected "ignore previous instructions" in a fetched webpage → does NOT execute
 
-### P7.7 Path Floor Fuzz Testing (J4)
+### P7.7 Path Floor Fuzz Testing (J4 — doc 06; doc 46 ECC profile-gated hooks + OpenFang Merkle/AgentShield)
 - [ ] `[NOT DONE]` Implement canonicalization (resolve symlinks, normalize paths)
 - [ ] `[NOT DONE]` Implement symlink-safe boundary enforcement
 - [ ] `[NOT DONE]` Implement `..` escape prevention
@@ -623,22 +624,22 @@
 
 ## PHASE 8 — Product Polish + Release (~3 weeks)
 
-### P8.1 Reader (H6)
+### P8.1 Reader (H6 — v2.0 §P1; D5 markitdown-class, doc 04)
 - [ ] `[NOT DONE]` Port PDF/EPUB/web/markdown universal reader from APP (D5: markitdown-class extraction → RAG + chat overlay)
 - [ ] `[NOT DONE]` Implement chat overlay on reader content
 
-### P8.2 Widget Cards (H17)
+### P8.2 Widget Cards (H17 — doc 35 §B Vane pattern)
 - [ ] `[NOT DONE]` Implement weather widget (inline in chat)
 - [ ] `[NOT DONE]` Implement stock/finance widget (yahoo-finance2 pattern)
 - [ ] `[NOT DONE]` Implement math/calculator widget
 - [ ] `[NOT DONE]` Implement generic lookup widget
 
-### P8.3 Personality System (H10)
+### P8.3 Personality System (H10 — v2.0 §P1; doc 16 Hermes SOUL.md)
 - [ ] `[NOT DONE]` Implement SOUL.md persona file loading
 - [ ] `[NOT DONE]` Implement user-tunable personality (tone presets + custom override)
 - [ ] `[NOT DONE]` Implement inviolable core rules (never overridden by persona)
 
-### P8.4 Search & Research (G1-G6)
+### P8.4 Search & Research (G1-G6 — v2.0 §P7, doc 07 deep research, doc 52 §4 G8 cascade, doc 32/21 SeekStorm)
 - [ ] `[NOT DONE]` Wire core-search cascade from APP (searxng-first + DDG + public instances)
 - [ ] `[NOT DONE]` Implement deep research (G2): breadth×depth tree + learnings-up + gap-check
 - [ ] `[NOT DONE]` Implement cited report generation with confidence metrics
@@ -649,22 +650,22 @@
 - [ ] `[NOT DONE]` Implement G8 tiered cascade: SQLite result cache (5-min TTL) → optional WebSurfx (Rust) → SearXNG → circuit-breaker fallback; Algorithm #33 routing (doc 52 §4)
 - [ ] `[NOT DONE]` Implement parallel top-N fetch cascade (searxng-mcp 4-tier pattern: Firecrawl → Crawl4AI → raw → Wayback); test: 50-page baseline completes ≈ single-page time
 
-### P8.5 Workspace UI
+### P8.5 Workspace UI (H20 — doc 46 Devin + ARCH/12)
 - [ ] `[NOT DONE]` Implement Blueprint editor with live execution status on .md (H4)
 - [ ] `[NOT DONE]` Implement Settings page (providers, keys, models, trust levels)
 - [ ] `[NOT DONE]` Implement local OpenAI-compatible server UI (H13): expose + manage
 
-### P8.6 WSL/POSIX Bridge (F10)
+### P8.6 WSL/POSIX Bridge (F10 — doc 03 §5, v2.0 §P5)
 - [ ] `[NOT DONE]` Implement wsl.exe runners
 - [ ] `[NOT DONE]` Implement `\\wsl.localhost\` path translation
 - [ ] `[NOT DONE]` Implement loopback IPC between Windows host and WSL
 - [ ] `[NOT DONE]` Implement native Linux exec detection
 
-### P8.7 Telemetry (H12)
+### P8.7 Telemetry (H12 — doc 33 §11)
 - [ ] `[NOT DONE]` Implement opt-in telemetry: enumerated fields only, no content
 - [ ] `[NOT DONE]` Verify: no requests without explicit opt-in (test cold boot)
 
-### P8.8 Packaging & Distribution
+### P8.8 Packaging & Distribution (ARCH/01, doc 41 P8 — lencx/chatgpt + jan refs)
 - [ ] `[NOT DONE]` Build Windows installer (.msi via WiX or .exe via NSIS)
 - [ ] `[NOT DONE]` Build macOS .dmg + .app (code sign + notarize)
 - [ ] `[NOT DONE]` Build Linux .deb + .rpm + .AppImage
@@ -673,7 +674,7 @@
 - [ ] `[NOT DONE]` Verify warm RSS < 80MB (with sidecar, no browser)
 - [ ] `[NOT DONE]` CI: build matrix for all 3 platforms
 
-### P8.9 Sync / Export / Wipe (C8)
+### P8.9 Sync / Export / Wipe (C8 — v2.0 §P8)
 - [ ] `[NOT DONE]` E2E-encrypted memory/message sync (opt-in, LAN/Tailscale/own server)
 - [ ] `[NOT DONE]` Export: messages/memory as markdown/JSON
 - [ ] `[NOT DONE]` Per-scope wipe (chat, memory scope, connector data, all)
@@ -684,28 +685,28 @@
 
 ## PHASE 9+ — Post-v1 (later)
 
-### P9.1 Computer-Use Pixels (E9)
+### P9.1 Computer-Use Pixels (E9 — v2.0 §P8, doc 09, doc 48 computer-use deep-dive, doc 52)
 - [ ] `[NOT DONE]` Implement GUI control via visual grounding (screenshot → click coordinates)
 - [ ] `[NOT DONE]` Dual-guard gated (always requires explicit permission)
 
-### P9.2 WASM Fuel-Metered Sandbox (I3)
+### P9.2 WASM Fuel-Metered Sandbox (I3 — doc 09)
 - [ ] `[NOT DONE]` Implement wasmtime integration with fuel budgets + epoch interruption
 
-### P9.3 Voice Input (H15)
+### P9.3 Voice Input (H15 — doc 33 §10, doc 50)
 - [ ] `[NOT DONE]` Implement VAD (Voice Activity Detection) + speech-to-text
 
-### P9.4 Remote Session Handoff (H18)
+### P9.4 Remote Session Handoff (H18 — doc 35 §C OpenWebUI Computer pattern)
 - [ ] `[NOT DONE]` Implement LAN/Tailscale/tunnel view of running sessions
 - [ ] `[NOT DONE]` Implement resume from phone mid-run (extends session checkpointing + E2E sync)
 
-### P9.5 Local OpenAI-Compatible Server (A8)
+### P9.5 Local OpenAI-Compatible Server (A8 — v2.0 §P3)
 - [ ] `[NOT DONE]` Expose engine on localhost as OpenAI-compatible API
 - [ ] `[NOT DONE]` Allow VS Code/Cursor/other tools to use our engine
 
-### P9.6 HTML→Video Reports
+### P9.6 HTML→Video Reports (doc 46 Devin hyperframes)
 - [ ] `[NOT DONE]` Hyperframes integration for agent-generated video content
 
-### P9.7 Magic Completion (H16)
+### P9.7 Magic Completion (H16 — doc 01 AnythingLLM Magic Tab; doc 13 Nango sync)
 - [ ] `[NOT DONE]` Implement inline context-aware completion (AnythingLLM pattern)
 - [ ] `[NOT DONE]` Nango sync → RAG (self-hosted connector sync pipeline)
 - [ ] `[NOT DONE]` AutomationBench eval harness (long-horizon desktop automation scoring)
@@ -747,6 +748,9 @@
 - [ ] `[NOT DONE]` Study Agent Zero `skills.py` for skill registry patterns (P7.2)
 - [ ] `[NOT DONE]` Study Zed `capability_granter.rs` for wildcard matching (P7.3)
 - [ ] `[NOT DONE]` Study cc-switch `provider.rs` for BYOK hub patterns (P1.1)
+- [ ] `[NOT DONE]` Study BrowserOS `oauth/providers.ts` — PKCE + device-code flows, scopes, SQLite `oauth_tokens` schema, local callback port (P1.7, doc 33 §7.4)
+- [ ] `[NOT DONE]` Study Ollama — `/api/tags` detection, keep-alive/spawn, context window, tool-calling + GBNF grammar param (P1.8, doc 34 §2 / ollama docs)
+- [ ] `[NOT DONE]` Study llamafile single-binary launch + OpenAI-compatible API surface (P1.8, doc 34 §2)
 - [ ] `[NOT DONE]` Study Reasonix prefix-cache stability patterns (P5.7)
 - [ ] `[NOT DONE]` Study rtk per-command output compression rules (P5.7 structural passes)
 - [ ] `[NOT DONE]` Study eDirStat `traversal.rs`/`arena.rs` for work-stealing walker + arena snapshots (P4.8)
@@ -759,13 +763,33 @@
 - [ ] `[NOT DONE]` Study WebSurfx (Rust metasearch, IO-uring) for the G8 fast tier (P8.4)
 - [ ] `[NOT DONE]` Study searxng-mcp 4-tier fetch cascade for parallel page fetching (P8.4)
 - [ ] `[NOT DONE]` Study Agent-S + trycua/cua for post-v1 computer-use patterns (P9.1/E9)
+- [ ] `[NOT DONE]` Study Hermes 3/4 `SOUL.md` identity-slot injection + persona selection (P1.6 persona selector, doc 16/41 — Hermes rows)
 - [ ] `[NOT DONE]` Study agentlens/agentsight for agent-session observability (J14)
+- [ ] `[NOT DONE]` Study Skyvern-AI/rustwright — raw CDP engine (2.55× faster, 70% less RAM), `rustwright-cli` open/snapshot/click/close (P2.1 CDP, doc 41 P5 STEAL)
+- [ ] `[NOT DONE]` Study rohitg00/agentmemory — MCP memory server, 95.2% R@5, confidence scoring + lifecycle + KG + hybrid search, 0 external DBs (P5.1 fusion, doc 41 P3 STEAL)
+- [ ] `[NOT DONE]` Study langchain-ai/deepagents — `create_deep_agent()` sub-agent isolation + summarize/offload-to-disk context management (P6.2 sub-agents, doc 41 P2 STEAL)
+- [ ] `[NOT DONE]` Study InternLM/MindSearch — planner + parallel searchers across 5 engines (P8.4 deep research, doc 41 P1 STEAL)
+- [ ] `[NOT DONE]` Study yamadashy/repomix — repo→single-file packer w/ secretlint redaction, AI-friendly output (P11.5.9 context packaging, doc 41 P7 STEAL)
+- [ ] `[NOT DONE]` Study microsoft/markitdown — universal file→markdown converter + plugin system (P8.1 D5 reader, doc 41 P7 STEAL)
+- [ ] `[NOT DONE]` Study agiresearch/AIOS — `BaseScheduler` ABC + FIFOScheduler batch + LLMAdapter router (P6.1 scheduler, doc 41 P0 STEAL)
+- [ ] `[NOT DONE]` Study BerriAI/litellm — 132-provider gateway + budgets + cooldown patterns (P1.2/ARCH/03, doc 41 P1 STEAL)
+- [ ] `[NOT DONE]` Study affaan-m/ECC — profile-gated hooks (minimal/standard/strict) + AgentShield config scanning (P7.7, doc 41 P6 STEAL)
+- [ ] `[NOT DONE]` Study microsoft/playwright-mcp — accessibility-tree browser approach (no pixels), token-efficient structured a11y (P2.2/E3, doc 41 P5 STEAL)
+- [ ] `[NOT DONE]` Study ItzCrazyKns/Vane — inline widget cards (weather/stock/lookup) (P8.2/H17, doc 41 P9+ STEAL)
+- [ ] `[NOT DONE]` Study google-gemini/gemini-cli — retry backoff (maxAttempts=4, exponential, 1s initial) + `CompressionStatus` + 16 event types (P1.4 retry/events, doc 41 P1 ADAPT)
+- [ ] `[NOT DONE]` Study OpenInterpreter/open-interpreter — `write_provider_catalog.py` provider auto-gen + `/model` TUI switcher (P8.5/A6 model catalog, doc 41 P1 STEAL)
+- [ ] `[NOT DONE]` Study huggingface/smolagents — LocalPythonExecutor guards (10M ops/30s, dunder block) (P2.5 script-eval limits, doc 41 P5 STEAL)
+- [ ] `[NOT DONE]` Study Significant-Gravitas/AutoGPT — Forge component system (19 components: CodeExecutor/Docker, FileManager, GitOps, WebPlaywright, Skills, Watchdog) + 8 prompt strategies (P7.1 forge, doc 41 P2 STEAL)
+- [ ] `[NOT DONE]` Study FoundationAgents/MetaGPT — SOP software-company role templates + `DataInterpreter` (P6.2 role-based sub-agents, doc 41 P2 STEAL)
+- [ ] `[NOT DONE]` Study infiniflow/ragflow — visual chunking + agentic RAG workflow (MinerU+Docling parsing) (P5.1 RAG, doc 41 P3 STEAL)
+- [ ] `[NOT DONE]` Study crewAIInc/crewAI — Crews+Flows role-based collaboration → crystallization analog (P6.5/B8, doc 41 P2 STEAL)
+- [ ] `[NOT DONE]` Study obra/superpowers — 200+ skills catalog + plugin marketplace patterns (P7.2/I2 skills, doc 41 P6 STEAL)
 
 ---
 
-## PHASE 10 — End-to-End Testing & Quality Assurance
+## PHASE 10 — End-to-End Testing & Quality Assurance (cross-cutting — validates P0–P9; doc 26 red-team for P10.2)
 
-### P10.1 Integration Test Suites
+### P10.1 Integration Test Suites (E2E across P0–P9 features; ARCH/09 matrix as test checklist)
 - [ ] `[NOT DONE]` Write E2E test: full user journey — install → first boot → add BYOK key → chat → tool call → response
 - [ ] `[NOT DONE]` Write E2E test: multi-turn session with memory persistence (close app → reopen → recall works)
 - [ ] `[NOT DONE]` Write E2E test: browser automation pipeline (navigate → snapshot → act → diff → assert)
@@ -779,7 +803,7 @@
 - [ ] `[NOT DONE]` Write E2E test: extension loads lazily → executes tool → respects capability boundary
 - [ ] `[NOT DONE]` Write E2E test: MCP server serves external client (Claude Code connects → calls snapshot tool)
 
-### P10.2 Security & Adversarial Testing
+### P10.2 Security & Adversarial Testing (doc 26 red-team corpus, ARCH/06 guards, doc 53 tickets)
 - [ ] `[NOT DONE]` Run full cyber red-team corpus (doc 26: PentAGI/PyRIT/NeuroSploit patterns) against Guard-1
 - [ ] `[NOT DONE]` Run prompt-injection test suite: 50+ adversarial payloads in web pages, PDFs, emails
 - [ ] `[NOT DONE]` Run path-traversal fuzz: 10,000 adversarial paths against everyaios-guard → 0 escapes
@@ -791,7 +815,7 @@
 - [ ] `[NOT DONE]` Test: inject malicious SKILL.md → verify AST audit blocks execution
 - [ ] `[NOT DONE]` Test: plugin manifest with excessive capabilities → verify CapabilityGranter denies
 
-### P10.3 Performance & Stress Testing
+### P10.3 Performance & Stress Testing (ARCH/02 budgets, doc 33 §9 replay scale, ARCH/05 token economy)
 - [ ] `[NOT DONE]` Benchmark cold start: app launch → first usable interaction (target <2s)
 - [ ] `[NOT DONE]` Benchmark idle RSS: Tauri + tray only (target <30MB)
 - [ ] `[NOT DONE]` Benchmark warm RSS: with sidecar active, no browser (target <80MB)
@@ -807,7 +831,7 @@
 - [ ] `[NOT DONE]` Battery drain test: 1hr active use on battery → measure watt-hours consumed
 - [ ] `[NOT DONE]` Long-session stability: 4hr continuous usage → no memory leak, no state corruption
 
-### P10.4 Cross-Platform Testing
+### P10.4 Cross-Platform Testing (ARCH/01 platforms, doc 41 P8 packaging refs)
 - [ ] `[NOT DONE]` Test full flow on Windows 11 (x64) — installer, boot, chat, browser, office
 - [ ] `[NOT DONE]` Test full flow on macOS Sequoia (ARM) — same suite
 - [ ] `[NOT DONE]` Test full flow on Ubuntu 24.04 (x64) — same suite
@@ -817,7 +841,7 @@
 - [ ] `[NOT DONE]` Test Ollama integration on all 3 platforms (spawn, connect, chat)
 - [ ] `[NOT DONE]` Test system Chrome/Edge detection + fallback on all 3 platforms
 
-### P10.5 Regression & CI/CD
+### P10.5 Regression & CI/CD (ARCH/01 CI, doc 29 LibreOffice oracle)
 - [ ] `[NOT DONE]` Set up CI matrix: cargo test + vitest + Tauri build for Win/Mac/Linux
 - [ ] `[NOT DONE]` Set up LibreOffice conformance oracle in CI (every office-engine commit triggers)
 - [ ] `[NOT DONE]` Set up nightly E2E test run (full integration suite)
@@ -827,9 +851,9 @@
 
 ---
 
-## PHASE 11 — UI/UX Design & Optimization
+## PHASE 11 — UI/UX Design & Optimization (ARCH/12-UI-SPEC)
 
-### P11.1 Design System & Visual Language
+### P11.1 Design System & Visual Language (ARCH/12-UI-SPEC)
 - [ ] `[NOT DONE]` Define color palette (dark/light modes, accent colors, semantic colors)
 - [ ] `[NOT DONE]` Define typography scale (font families, sizes, weights, line heights)
 - [ ] `[NOT DONE]` Define spacing system (4px grid, component padding/margin standards)
@@ -838,7 +862,7 @@
 - [ ] `[NOT DONE]` Define iconography: consistent icon set (Lucide/Phosphor/custom)
 - [ ] `[NOT DONE]` Create Figma/design file with all components + layouts
 
-### P11.2 Core UX Flows (user journey mapping)
+### P11.2 Core UX Flows (user journey mapping) (ARCH/12-UI-SPEC; doc 46 Devin flows)
 - [ ] `[NOT DONE]` Design onboarding flow: first launch → add first key → first chat → success moment
 - [ ] `[NOT DONE]` Design empty states: no messages, no keys, no files, no memory
 - [ ] `[NOT DONE]` Design error states: network down, key revoked, provider 5xx, budget exceeded
@@ -850,7 +874,7 @@
 - [ ] `[NOT DONE]` Design cockpit/flight deck: quiet mode ↔ expanded panel transitions
 - [ ] `[NOT DONE]` Design MCQ interrupt card: timing, urgency levels, default selection
 
-### P11.3 Accessibility & Internationalization
+### P11.3 Accessibility & Internationalization (ARCH/12-UI-SPEC)
 - [ ] `[NOT DONE]` Implement WCAG 2.1 AA compliance (contrast, focus indicators, screen reader labels)
 - [ ] `[NOT DONE]` Implement keyboard navigation for all primary flows (no mouse required)
 - [ ] `[NOT DONE]` Implement high-contrast mode
@@ -859,7 +883,7 @@
 - [ ] `[NOT DONE]` Support RTL layouts (Arabic, Hebrew)
 - [ ] `[NOT DONE]` Implement font scaling (respect OS text size preference)
 
-### P11.4 Performance UX
+### P11.4 Performance UX (ARCH/12-UI-SPEC; ARCH/05 token economy)
 - [ ] `[NOT DONE]` Implement skeleton loaders for all async content
 - [ ] `[NOT DONE]` Implement optimistic UI updates (show action before server confirms)
 - [ ] `[NOT DONE]` Implement virtual scrolling for large lists (message history, file lists, agent logs)
@@ -868,7 +892,7 @@
 - [ ] `[NOT DONE]` Measure and optimize Largest Contentful Paint (target <1s)
 - [ ] `[NOT DONE]` Measure and optimize Time to Interactive after cold start (target <2s)
 
-### P11.6 User Research & Feedback Loops
+### P11.6 User Research & Feedback Loops (ARCH/12-UI-SPEC)
 - [ ] `[NOT DONE]` Design beta feedback mechanism (in-app bug report + feature request)
 - [ ] `[NOT DONE]` Design NPS/satisfaction prompt (non-intrusive, after 7 days of use)
 - [ ] `[NOT DONE]` Plan user testing sessions: 5 testers × 3 rounds (alpha, beta, RC)
@@ -877,9 +901,9 @@
 
 ---
 
-## PHASE 12 — Market Research & Go-to-Market
+## PHASE 12 — Market Research & Go-to-Market (live market research — no research doc)
 
-### P12.1 Competitive Analysis (Live)
+### P12.1 Competitive Analysis (Live) (live GTM research — desktop AI landscape, RESEARCH/2026-ai-landscape)
 - [ ] `[NOT DONE]` Install + test AnythingLLM desktop — document UX strengths/weaknesses vs ours
 - [ ] `[NOT DONE]` Install + test Jan desktop — document UX strengths/weaknesses vs ours
 - [ ] `[NOT DONE]` Test Cherry Studio — document multi-provider UX patterns
@@ -890,7 +914,7 @@
 - [ ] `[NOT DONE]` Map feature gap matrix: us vs top 5 competitors (what we have that they don't)
 - [ ] `[NOT DONE]` Identify our unique positioning hooks (crystallization, office engine, 7 memory algos)
 
-### P12.2 Target Audience & Personas
+### P12.2 Target Audience & Personas (live GTM research)
 - [ ] `[NOT DONE]` Define persona 1: Power developer (uses Claude Code/Codex daily, wants more control)
 - [ ] `[NOT DONE]` Define persona 2: Knowledge worker (Excel/Word/PDF daily, wants AI automation)
 - [ ] `[NOT DONE]` Define persona 3: Privacy-conscious researcher (local-first, no cloud, BYOK)
@@ -898,7 +922,7 @@
 - [ ] `[NOT DONE]` Map feature priorities per persona (which capabilities matter most to whom)
 - [ ] `[NOT DONE]` Define value propositions per persona (one sentence each)
 
-### P12.3 Positioning & Messaging
+### P12.3 Positioning & Messaging (live GTM research; ARCH/09 differentiators)
 - [ ] `[NOT DONE]` Write product tagline (one sentence, <15 words)
 - [ ] `[NOT DONE]` Write product description (one paragraph, <100 words)
 - [ ] `[NOT DONE]` Write "Why EveryAIOS?" page (3–5 key differentiators with evidence)
@@ -906,7 +930,7 @@
 - [ ] `[NOT DONE]` Define naming: finalize product name (EveryAIOS? Other?)
 - [ ] `[NOT DONE]` Design brand identity: logo, wordmark, color usage
 
-### P12.4 Launch Strategy
+### P12.4 Launch Strategy (live GTM research)
 - [ ] `[NOT DONE]` Plan open-source launch: GitHub repo, LICENSE (MIT/Apache-2.0), CONTRIBUTING.md
 - [ ] `[NOT DONE]` Write README.md: hero description, screenshot, install instructions, feature list
 - [ ] `[NOT DONE]` Plan Hacker News launch post (title, Show HN format, key hooks)
@@ -917,7 +941,7 @@
 - [ ] `[NOT DONE]` Identify early adopter communities: AI Discord servers, dev Slack groups, HN regulars
 - [ ] `[NOT DONE]` Plan beta program: 50–100 early testers, feedback channel, weekly builds
 
-### P12.5 Documentation & Community
+### P12.5 Documentation & Community (ARCH/00–12 as contributor docs source)
 - [ ] `[NOT DONE]` Write installation guide (Windows, macOS, Linux — with screenshots)
 - [ ] `[NOT DONE]` Write "Getting Started" tutorial (first 5 minutes to value)
 - [ ] `[NOT DONE]` Write provider setup guides (Anthropic, OpenAI, DeepSeek, Ollama)
@@ -929,7 +953,7 @@
 - [ ] `[NOT DONE]` Write SECURITY.md: vulnerability reporting, threat model summary
 - [ ] `[NOT DONE]` Plan docs site (Docusaurus/VitePress, hosted on GitHub Pages)
 
-### P12.6 Monetization Research (future, not v1)
+### P12.6 Monetization Research (future, not v1) (live GTM research)
 - [ ] `[NOT DONE]` Research open-source monetization models: open-core, support, hosting, marketplace
 - [ ] `[NOT DONE]` Evaluate skill/plugin marketplace potential (community-contributed, optional premium)
 - [ ] `[NOT DONE]` Evaluate "EveryAIOS Pro" optional features: cloud sync, team sharing, priority support
@@ -942,7 +966,7 @@
 
 > Source: ARCH/12-UI-SPEC.md (derived from Devin Cloud UI + research doc 46)
 
-### P11.5.1 Layout Shell
+### P11.5.1 Layout Shell (ARCH/12-UI-SPEC)
 - [ ] [NOT DONE] Implement 3-column layout (sidebar + chat + workspace) with drag-resizable dividers
 - [ ] [NOT DONE] Sidebar: navigation items (New Session, Automations, Guard, Connectors, Memory, Analytics)
 - [ ] [NOT DONE] Sidebar: project/workspace selector dropdown
@@ -950,7 +974,7 @@
 - [ ] [NOT DONE] Sidebar: child session indentation under parent
 - [ ] [NOT DONE] Sidebar: collapse to icon-only mode (48px)
 
-### P11.5.2 Chat Panel
+### P11.5.2 Chat Panel (ARCH/12 §chat; doc 46 Devin UI)
 - [ ] [NOT DONE] Chat message rendering (user/AI/system message types)
 - [ ] [NOT DONE] Artifact cards: rendered file previews with code/copy/download buttons
 - [ ] [NOT DONE] Progress steps: clickable timeline (✓ completed, ● running, ○ pending)
@@ -960,7 +984,7 @@
 - [ ] [NOT DONE] Slash commands: /help, /mode, /model, /undo, /clear, /export
 - [ ] [NOT DONE] Knowledge macros (!name) and blueprint @mentions
 
-### P11.5.3 Workspace Panel (Tabbed)
+### P11.5.3 Workspace Panel (Tabbed) (ARCH/12 §workspace; doc 46 Devin 9-tab view, doc 04 office views)
 - [ ] [NOT DONE] Tab bar with dynamic tabs, reorder, close, pin, expand-to-fullscreen
 - [ ] [NOT DONE] Progress tab: unified timeline with timestamp, icons, expandable entries
 - [ ] [NOT DONE] Shell tab: terminal view, command history panel, read-only/writable toggle
@@ -971,34 +995,34 @@
 - [ ] [NOT DONE] PPT tab: slide preview, element editing, slide strip navigator
 - [ ] [NOT DONE] PDF tab: page rendering, form fields, annotations, zoom, page navigation
 
-### P11.5.4 Takeover/Resume Flow
+### P11.5.4 Takeover/Resume Flow (ARCH/12 §takeover; doc 46 Devin H21)
 - [ ] [NOT DONE] Pause button → switches all panels to editable mode
 - [ ] [NOT DONE] "● Live" / "⏸ Paused" indicator toggle
 - [ ] [NOT DONE] Resume button → mandatory "describe changes" prompt → agent continues
 
-### P11.5.5 Automation Builder
+### P11.5.5 Automation Builder (ARCH/12 §automation; doc 46 Devin H22, doc 56 §3 cronflow NL)
 - [ ] [NOT DONE] Automations list with sparkline activity charts
 - [ ] [NOT DONE] Automation editor: trigger/condition/action/budget/network-policy fields
 - [ ] [NOT DONE] Template gallery (10+ pre-built automations)
 - [ ] [NOT DONE] NL automation creation (describe in text → generates config)
 
-### P11.5.6 Knowledge/Memory Browser
+### P11.5.6 Knowledge/Memory Browser (ARCH/12 §memory; doc 46 Devin H23 trigger+macro)
 - [ ] [NOT DONE] Knowledge list with trigger, macro, scope per item
 - [ ] [NOT DONE] Folder organization (nested, drag, bulk enable/disable)
 - [ ] [NOT DONE] Auto-suggestions from AI (accept/dismiss/regenerate)
 - [ ] [NOT DONE] Episodic/Semantic/KG section browsers
 
-### P11.5.7 Guard Panel
+### P11.5.7 Guard Panel (ARCH/12 §guard; doc 06 trust ladder UI)
 - [ ] [NOT DONE] Trust level indicator (progress bar 0-100)
 - [ ] [NOT DONE] Recent actions log with auto-approved/pending/blocked status
 - [ ] [NOT DONE] Permission chips (workspace read/write, shell, browser, external)
 
-### P11.5.8 Connector Hub Panel
+### P11.5.8 Connector Hub Panel (ARCH/12 §connectors; doc 13, doc 46 Devin H24 MCP marketplace)
 - [ ] [NOT DONE] Connected services list with tool counts
 - [ ] [NOT DONE] MCP servers list with status (running/not connected)
 - [ ] [NOT DONE] Add/Install buttons for new connectors
 
-### P11.5.9 Aider-Derived Features
+### P11.5.9 Aider-Derived Features (doc 46 Aider RepoMap/edit strategies, doc 56 W1 Warp semantic index)
 - [ ] [NOT DONE] RepoMap: tree-sitter tag extraction + PageRank ranking + SQLite cache + budget fitting
 - [ ] [NOT DONE] Warp semantic index (doc 56 W1, optional C5 embedding path): tree-sitter semantic chunker + merkle-tree content-hash incremental sync + search shaping + `file_outline` (open Rust DeepWiki pattern)
 - [ ] [NOT DONE] Edit Strategy: SEARCH/REPLACE with fuzzy matching + whitespace flex + ellipsis
@@ -1007,7 +1031,7 @@
 - [ ] [NOT DONE] Lint/Test Reflection: after every edit run lint → on error retry ×3
 - [ ] [NOT DONE] MODEL_ALIASES: config map of short names to full provider/model paths
 
-### P11.5.10 New Agent Patterns (doc 47)
+### P11.5.10 New Agent Patterns (doc 47 + doc 57 §3 subscription-auth boundary)
 - [ ] [NOT DONE] Implement Plan/Act dual-mode in agent loop (Cline pattern) — explicit plan phase before tool execution
 - [ ] [NOT DONE] Implement Context Provider plugin system (@Codebase, @Docs, @URL injection points)
 - [ ] [NOT DONE] Add ACP subscription linking — reuse the user's existing agent CLI auth (⚠️ **doc 57 boundary:** Claude Pro/Max OAuth is first-party-only — but driving Claude Code/Claude Agent via the official ACP wrapper `@agentclientprotocol/claude-agent-acp` with the user's own login **is allowed** (Anthropic co-authors it); **blocked = harvesting the subscription token to power our own/other engines' direct calls** → never feed it into the broker; BYOK API keys for the broker; auth-mode badge per doc 57 §3)
@@ -1051,7 +1075,7 @@
 | **P11 UI/UX Optimization** | **36** | **~3** |
 | **P11.5 UI Implementation** | **65** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **45** | **~4 (parallel)** |
-| Research Tasks (cross-cutting) | 31 | parallel |
-| **TOTAL** | **712** | **~45 weeks** |
+| Research Tasks (cross-cutting) | 54 | parallel |
+| **TOTAL** | **735** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

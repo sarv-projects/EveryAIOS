@@ -203,3 +203,18 @@ Treat the agent configuration itself as a security surface:
 | **Trust-boundary docs** | containment is per-browser-context, not a sandbox — document the trust boundary for deployment (J21 permissions.toml `external_network` rules ride the same policy) | agent-browser |
 
 **Where it hooks in:** Guard-1 (path/regex) → network policy check (this section) → ticket `authorized_paths/domains` (6.10) → browser launch with containment flags → audit (6.7).
+
+## 6.16 Subscription-auth / BYO-agent auth boundary (doc 57)
+
+External agent CLIs bring their **own auth** — OAuth tokens from the user's terminal login (e.g. Claude Pro/Max, GitHub Copilot). EveryAIOS never sees or stores them (extends the doc 53 broker model: the harness holds its own credential; we only carry a manifest + an auth-mode label).
+
+⚠️ **The boundary, precisely (doc 57 §3, live-verified 2026-08-10):** Anthropic (Apr 2026) restricts **Claude Pro/Max OAuth tokens to official first-party surfaces** (`claude.ai` + Claude Code). What is **blocked** = *harvesting the subscription token to power a different engine's direct model calls* (OpenClaw/OpenCode wrappers, custom API conduits — third-party model routing on a consumer subscription; server-side header checks + token invalidations, Boris Cherny announcement 2026-04-03/04, HN #46549823). What is **allowed** = *driving Claude Code/Claude Agent via the official ACP wrapper* `@agentclientprotocol/claude-agent-acp` (npx v0.66.0 — **co-authored by Anthropic · Zed · JetBrains**, runs the Claude Agent SDK with the user's own login). **Test: who makes the model call?** Anthropic's own SDK (inside the wrapper/CLI) → allowed; your code with a subscription token → blocked.
+
+**Rules for harness-driving auth (F12/J17):**
+
+1. ✅ **Claude Code / Claude Agent is a first-class F12 harness** — spawn the official `@agentclientprotocol/claude-agent-acp` wrapper (or the user's own `claude` CLI) with the user's own login; badge = **subscription-backed**. Zed/JetBrains/Hermes precedent; Anthropic co-authors the wrapper.
+2. ✅ **Open agents** with their own auth (OpenCode, Qwen Code, Goose, Gemini CLI — the blocked OpenCode was the Claude-OAuth-piggybacking mode, not its own-keys operation).
+3. ✅ **BYOK API keys** via the broker (§6.9) for **our own engine's** direct provider calls — never subscription tokens.
+4. ❌ **Never harvest the subscription OAuth token** (`CLAUDE_CODE_OAUTH_TOKEN`) to power our own (or any non-Claude) engine's direct calls — ToS violation, takedown risk (OpenClaw/OpenCode precedent); the broker never ingests a subscription token.
+5. 🏷️ **Auth-mode badge** (F12 UI): every harness labeled **subscription-backed / API-key-backed / local**; Claude Agent shows **subscription-backed (allowed via official wrapper)**.
+6. **Enforcement points:** Trust Ladder (§6.2) + ACP `request_permission` → Guard-2 (§6.4) + audit (§6.7); the registry's curated allow-list (doc 57 §2) is the first gate — only reviewed agents ship as defaults.
