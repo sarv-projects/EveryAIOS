@@ -1,6 +1,6 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (updated 2026-08-09) · **Spec:** v3.9 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (updated 2026-08-10) · **Spec:** v3.12 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
 > **Scope:** Complete product — 138 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5). Docs 49–51 gap pass added: D9–D11/G7 (storage intelligence), A10 (image gen), F14/F15 (email/calendar), H25–H28 (gen-UI/clipboard/resumable/TTS) + H15 ext (offline STT/wake word). Doc 52 adds: D12 (storage health), G8 (tiered search cascade), J21 (escalation rules), Aider in F12, Algorithm #33.
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
