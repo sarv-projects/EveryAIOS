@@ -207,9 +207,7 @@ impl ProcessSupervisor {
                 // Job) return ERROR_ACCESS_DENIED here. The Job Object is the
                 // *extra* orphan layer — degrade to a warning rather than
                 // failing the spawn; stdin-EOF + ppid polling still backstop.
-                eprintln!(
-                    "[supervisor] warning: could not assign child {pid} to Job Object: {e}"
-                );
+                eprintln!("[supervisor] warning: could not assign child {pid} to Job Object: {e}");
             }
         }
 
@@ -306,10 +304,10 @@ impl ProcessSupervisor {
                     }
                 }
             }
-            SupervisorState::Running => {
-                if last != 0 && now_ms().saturating_sub(last) > IDLE_TIMEOUT.as_millis() as u64 {
-                    return WatchdogStatus::IdleTimeout;
-                }
+            SupervisorState::Running
+                if last != 0 && now_ms().saturating_sub(last) > IDLE_TIMEOUT.as_millis() as u64 =>
+            {
+                return WatchdogStatus::IdleTimeout;
             }
             _ => {}
         }

@@ -164,6 +164,7 @@
 - [ ] `[NOT DONE]` Implement protocol-version tolerant client (handle Chrome version skew)
 
 ### P2.2 A11y Snapshot Engine (everyaios-browser, E3)
+- [ ] `[NOT DONE]` Reference: agent-browser `snapshot.rs` semantics (doc 55) — role taxonomy (interactive/content/structural), zero-width-char filtering, compact `@eN` refs
 - [ ] `[NOT DONE]` Implement Accessibility domain CDP calls → indented tree render
 - [ ] `[NOT DONE]` Implement stable ref minting `[ref=eN]` scoped to (document_id, url)
 - [ ] `[NOT DONE]` Implement `interactive` mode (actionables + headings only, ~90% token cut)
@@ -179,6 +180,8 @@
 - [ ] `[NOT DONE]` Implement `snapshot` tool (calls everyaios-browser)
 - [ ] `[NOT DONE]` Implement `diff` tool (compare two snapshots)
 - [ ] `[NOT DONE]` Implement `read` tool (page → clean markdown via DOM walker)
+- [ ] `[NOT DONE]` Upgrade `read` (doc 55, agent-browser `read.rs`): markdown negotiation (`Accept: text/markdown`, `.md` retry), nearest-ancestor `llms.txt`/`llms-full.txt` walk, `--filter`/`--outline` modes, no-browser HTTP path
+- [ ] `[NOT DONE]` Implement `find` semantic locators (ARIA role + name/label/placeholder) — **post-v1 candidate (doc 55; NOT in P2 scope)**
 - [ ] `[NOT DONE]` Implement `grep` tool (line matches in page content)
 - [ ] `[NOT DONE]` Implement `screenshot` tool (JPEG capture)
 - [ ] `[NOT DONE]` Implement `pdf` tool (print to PDF)
@@ -188,6 +191,8 @@
 - [ ] `[NOT DONE]` Implement `download` / `upload` with temp-file routing
 - [ ] `[NOT DONE]` Implement `run` tool (→ everyaios-script, see P2.5)
 - [ ] `[NOT DONE]` Register all 34 tools in everyaios-mcp (17 core interaction incl. `run` + `enhanced_snapshot` + bookmarks×6 + tab-groups×5 + window×5 — catalog ARCH/08 §8.2: 17+6+5+5+1 = 34) with annotations (F9: readOnlyHint/openWorldHint, ACP tool-kind taxonomy); + `file_ops`×3 workspace extension (E2) → 37 total
+- [ ] `[NOT DONE]` Implement MCP tool profiles (core/network/state/debug/tabs/react/mobile) + paginated tool discovery + typed args with `extraArgs` parity (agent-browser pattern, doc 55)
+- [ ] `[NOT DONE]` Post-v1 tool candidates (doc 55; **NOT in P2 scope**): `a11y_audit` (embedded axe-core, offline WCAG), annotated screenshots (numbered labels ↔ `@eN` refs), batch JSON command mode
 - [ ] `[NOT DONE]` Add bookmark tools (6): get_bookmarks, create_bookmark, remove_bookmark, update_bookmark, move_bookmark, search_bookmarks
 - [ ] `[NOT DONE]` Add tab group management tools (5): list_tab_groups, group_tabs, update_tab_group, ungroup_tabs, close_tab_group
 - [ ] `[NOT DONE]` Add window management tools (5): list_windows, create_window, create_hidden_window, close_window, activate_window
@@ -196,8 +201,10 @@
 
 ### P2.4 Tiered Engine Stack (E10)
 - [ ] `[NOT DONE]` Implement tier-0 static extraction: reqwest + HTML→markdown parser
-- [ ] `[NOT DONE]` Integrate Obscura: spawn binary, connect CDP, verify ~30MB RSS
-- [ ] `[NOT DONE]` Integrate Lightpanda: Docker/binary spawn, CDP connection (opt-in, AGPL spawn-only)
+- [ ] `[NOT DONE]` Integrate Obscura (doc 55): spawn `obscura serve` binary (loopback default), connect CDP, verify ~30MB RSS; leverage embedded MCP (32 tools) + `LP.getMarkdown` where applicable
+- [ ] `[NOT DONE]` Obscura security flags (doc 55 §2 / 06 §6.15): SSRF defaults (loopback/RFC1918 blocked, `--allow-private-network` opt-in), `file://` blocked by default, bounded `--max-connections`
+- [ ] `[NOT DONE]` Browser network containment (doc 55 §1 / 06 §6.15): `--allowed-domains` → WebRTC (RTCPeerConnection) disable + worker fail-closed guards + content boundaries + max-output
+- [ ] `[NOT DONE]` Integrate Lightpanda: Docker/binary spawn, CDP connection (opt-in, AGPL spawn-only); driver pattern reference: agent-browser `native/cdp/lightpanda.rs` (doc 55)
 - [ ] `[NOT DONE]` Implement escalation logic (E8): tier 0→1→2 based on failure/JS-need/login-need (authenticated scrape → RAG)
 - [ ] `[NOT DONE]` Test: scrape task runs on Obscura, escalates to Chrome only on JS-render need
 
@@ -216,7 +223,8 @@
 - [ ] `[NOT DONE]` Test: agent cannot close a user tab
 
 ### P2.7 Session Vault (E11/E7/E13)
-- [ ] `[NOT DONE]` Design SQLCipher schema: per-site cookie jars (host-keyed), localStorage, auth headers
+- [ ] `[NOT DONE]` Design SQLCipher schema: per-site **full storage context** — cookie jars (host-keyed) + localStorage + sessionStorage + IndexedDB + auth headers; Chrome raw-storage decode (`0x00` = UTF-16-LE, `0x01` = ISO-8859-1 — Steel `leveldb` pattern, doc 55)
+- [ ] `[NOT DONE]` Implement `persist`/`restore` flag per session (stateful workflows survive restarts — Steel pattern, doc 55)
 - [ ] `[NOT DONE]` Implement multi-account per site (personal/work/test = separate Session records)
 - [ ] `[NOT DONE]` Implement capture path 1 (E7): sign-in-in-browser → Page.getCookies → seal to vault
 - [ ] `[NOT DONE]` Implement capture path 2 (E13): session inheritance (attach to user's Chrome profile via debug port)
@@ -463,6 +471,7 @@
 - [ ] `[NOT DONE]` Implement MCQ interrupt card on circuit-break (UI integration with H2)
 
 ### P6.4 Scheduled Tasks (B7)
+- [ ] `[NOT DONE]` Reference: cronflow workflow-engine design (doc 56 §3) — HITL pause-with-timeout as a first-class state-machine state, webhook triggers w/ schema validation, retry w/ backoff+jitter+clamp (⚠️ no LICENSE file → pattern-only) for the H22 automation builder
 - [ ] `[NOT DONE]` Implement cron/interval/event/webhook triggers (F11: loopback listeners + webhook ingress)
 - [ ] `[NOT DONE]` Implement nudge sentinels (detect repeating patterns → suggest schedule)
 - [ ] `[NOT DONE]` Implement battery-aware scheduling (suppress on battery)
@@ -506,7 +515,8 @@
 - [ ] `[NOT DONE]` Implement `session/cancel` → watchdog/budget kill
 - [ ] `[NOT DONE]` Implement harness installer (F8): plan-before-touch, ownership markers
 - [ ] `[NOT DONE]` Test: two external agent CLIs run side-by-side via ACP (initialize + permission + audit)
-- [ ] `[NOT DONE]` Add **Aider** to the F12 harness list + surgical-hierarchy routing (brain → core → surgeon, doc 52 §1); test Aider driven via ACP with SEARCH/REPLACE edits
+- [ ] `[NOT DONE]` **Aider already in the F12 harness list** (added doc 52) — remaining work: surgical-hierarchy routing (brain → core → surgeon, doc 52 §1); test Aider driven via ACP with SEARCH/REPLACE edits
+- [ ] `[NOT DONE]` Add **Copilot CLI** to the F12 harness list (doc 56 §4 — closed, custom license → drive via ACP like any harness, never a dependency) + LSP-config diagnostics pattern (`lsp-config.json`; open reference = Warp `lsp` crate, doc 56 W4); ACP adapter reference: cowork-forge `acp/client.rs` + `agents/external_coding_agent.rs` (doc 56 C2)
 
 ### P6.9 Messaging Bridges (F13)
 - [ ] `[NOT DONE]` Design adapter interface: message-in → agent loop → reply-out
@@ -541,6 +551,7 @@
 ## PHASE 7 — Forge + Guardrails Hardening (~4 weeks)
 
 ### P7.1 Forge Runtime (I1/I4)
+- [ ] `[NOT DONE]` Implement LSP-backed diagnostics (doc 56 W4): rust-analyzer/typescript-language-server/pyright/clangd/go via Warp `lsp`-crate pattern — precise errors without full-file context (Copilot CLI `lsp-config.json` pattern). **Three-stage diagnostics, no overlap:** LSP = live during editing → lint/test reflection (ships in P11.5.9) = post-edit build-level gate → rtk output rules (ARCH/05 §5.10) = tool-result compression at injection
 - [ ] `[NOT DONE]` Implement write→sandbox→test→iterate loop
 - [ ] `[NOT DONE]` Implement TDD loop: auto-generate tests, read stderr, rewrite until green
 - [ ] `[NOT DONE]` Implement code execution in rquickjs sandbox (reuse everyaios-script)
@@ -986,6 +997,7 @@
 
 ### P11.5.9 Aider-Derived Features
 - [ ] [NOT DONE] RepoMap: tree-sitter tag extraction + PageRank ranking + SQLite cache + budget fitting
+- [ ] [NOT DONE] Warp semantic index (doc 56 W1, optional C5 embedding path): tree-sitter semantic chunker + merkle-tree content-hash incremental sync + search shaping + `file_outline` (open Rust DeepWiki pattern)
 - [ ] [NOT DONE] Edit Strategy: SEARCH/REPLACE with fuzzy matching + whitespace flex + ellipsis
 - [ ] [NOT DONE] Architect Mode: two-pass (reasoning model → editor model) agent pattern
 - [ ] [NOT DONE] File Watcher: notify crate watching for `// ai!` markers → auto-submit
@@ -999,7 +1011,7 @@
 - [ ] [NOT DONE] Add Custom Distribution support — branded EveryAIOS configs with pre-loaded providers/extensions
 - [ ] [NOT DONE] Add Kanban view for parallel sub-agents with git worktree isolation per branch
 - [ ] [NOT DONE] Implement Oracle/reviewer model pattern — secondary heavyweight model for quality review
-- [ ] [NOT DONE] Implement Intent classification before tool dispatch — route prompts to specialized handlers (Agent vs Edit vs Ask vs Terminal) before the tool loop starts (Copilot Chat pattern)
+- [ ] [NOT DONE] Implement Intent classification before tool dispatch — route prompts to specialized handlers (Agent vs Edit vs Ask vs Terminal) before the tool loop starts (Copilot Chat pattern); optional ML backend: Warp `input_classifier` ONNX (doc 56 W3) — same dispatch interface, prompt-based routing is the default
 - [ ] [NOT DONE] Implement Autopilot nudge mechanism — when model stops prematurely, inject continuation prompt to prevent "stopped too early" (Copilot Chat pattern)
 - [ ] [NOT DONE] Add ApplyPatch edit format (*** Add/Delete/Update File) — simpler than unified diff, proven at Copilot scale, fourth edit strategy option
 - [ ] [NOT DONE] Implement Prompt TSX pattern — JSX-like declarative prompt composition with automatic context window budget management, type-safe and composable

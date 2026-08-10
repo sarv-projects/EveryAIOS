@@ -81,6 +81,7 @@
 | **FoundationAgents/MetaGPT** (70K⭐) | SOP software company pattern, `DataInterpreter` | `pai-core` role-based agent templates |
 | **microsoft/autogen** (60K⭐) | `AgentTool` for multi-agent orch, MCP via `McpWorkbench`+`StdioServerParams` | `pai-core` agent-as-tool |
 | **crewAIInc/crewAI** (57K⭐) | Crews+Flows pattern, role-based collaboration | `pai-core` agent teams |
+| **sopaco/cowork-forge** (83⭐, MIT) | **ACP external-coding-agent adapter** (`acp/client.rs` + `agents/external_coding_agent.rs` — drives Codex/Claude Code/Gemini over ACP stdio/WebSocket w/ streaming) + config-driven stage/hook/artifact pipeline (StageDefinition/HookConfig/ArtifactConfig/StageRetryConfig/FlowDefinition) + Actor-Critic stage types + goto_stage escalation + role-prompt instruction set (PM/Architect/Engineer) | `pai-core` ACP harness (F12/J17) + role templates (doc 56 C1–C3, C6) |
 
 ---
 
@@ -95,6 +96,7 @@
 | **NVIDIA-NeMo/labs-OO-Agents** (990⭐) | `packages/nooa-memory/src/nooa_memory/forgetting.py`, `manager.py`, `references.py` | **ACT-R activation:** retention `half-life × log1p(strength)`, importance ≥8 never auto-forgotten, associative semantic+keyword+recency+graph recall, typed supports/contradicts/derived-from edges, pre-turn spontaneous-recall context block → algorithm #32 | `pai-memory` cognitive engine |
 | **agent0ai/agent-zero** | `helpers/skills.py` | Active/hidden/visible skill state management, MAX_ACTIVE_SKILLS=20, search scoring system, skill roots priority chain | `pai-skills` crate |
 | **rohitg00/agentmemory** (27K⭐) | MCP memory server pattern | 95.2% R@5 retrieval, confidence scoring + lifecycle + knowledge graphs + hybrid search, 0 external DBs | `pai-memory` design reference |
+| **warpdotdev/warp** (64K⭐, AGPL — pattern-only) | `crates/ai/src/index/full_source_code_embedding/` — **incremental codebase-embedding index**: tree-sitter semantic chunker (MAX_TRAVERSAL_DEPTH=200, coalesce_fragments), **merkle-tree content-hash incremental sync**, search shaping w/ char-boundary-safe reads, `file_outline/native.rs`; + `input_classifier` (ONNX candle+ort), `lsp` crate (rust/ts/pyright/clangd/go) | `pai-memory` codebase index + `pai-repomap` semantic path (doc 56 W1/W2/W4 — the open Rust DeepWiki) |
 
 ### 🟡 ADAPT
 
@@ -251,6 +253,8 @@
 | **ruvnet/ruflo** (67K⭐) | Agent meta-harness, 100+ agents, coordinated swarms |
 | **khoj-ai/khoj** (36K⭐) | Self-hosted second brain, semantic search, Obsidian/Emacs/Desktop/Phone |
 | **CopilotKit/CopilotKit** (37K⭐) | AG-UI Protocol, multi-platform agentic SDK |
+| **github/copilot-cli** (11K⭐, closed — custom license) | Copilot CLI architecture: agentic loop + `/model` switching, Autopilot mode, `/fleet` subagents, **LSP diagnostics via `lsp-config.json`** (open pattern = Warp `lsp` crate, doc 56 W4), agentskills.io SKILL.md skills, GitHub MCP — F12 harness list member (doc 56 §4) |
+| **dali-benothmen/cronflow** (125⭐, ⚠️ no LICENSE) | HITL pause-with-timeout as first-class state-machine state, webhook triggers, retry w/ backoff+jitter — H22/B7 automation-builder reference (doc 56 §3) |
 | **nextlevelbuilder/ui-ux-pro-max-skill** (114K⭐) | UI/UX design automation |
 | **thedaviddias/Front-End-Checklist** (73K⭐) | Pre-launch QA checklist |
 | **coreyhaines31/marketingskills** (43K⭐) | Marketing automation skills |

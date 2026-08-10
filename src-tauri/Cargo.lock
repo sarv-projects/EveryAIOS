@@ -746,10 +746,12 @@ dependencies = [
  "everyaios-guard",
  "everyaios-ipc",
  "everyaios-vault",
+ "libc",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
  "toml 0.8.23",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

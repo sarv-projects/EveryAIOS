@@ -1,8 +1,8 @@
 # ⛔ SUPERSEDED — DO NOT USE AS THE BUILD SPEC
 
 > **This file is an ARCHIVED draft** (final synthesis of docs 01–34, 2026-08-06, 142 repos, all-Rust-leaning).
-> **The live master spec is `desktop_app/DESKTOP-APP-SPEC.md` — v3.10** (2026-08-09 gap passes 1–3 + formalization, docs 01–54, **219 repos**, 138-row matrix, frozen hybrid architecture).
-> Everything in this archived copy is superseded: repo counts (142 vs 218), the all-Rust stack framing (now hybrid), and every v3.x feature/algorithm row. Keep it only as history; never build from it.
+> **The live master spec is `desktop_app/DESKTOP-APP-SPEC.md` — v3.12** (2026-08-10 doc 56 warp/cowork/cronflow/Copilot verification, docs 01–56, **226 repos**, 138-row matrix, frozen hybrid architecture).
+> Everything in this archived copy is superseded: repo counts (142 vs 226), the all-Rust stack framing (now hybrid), and every v3.x feature/algorithm row. Keep it only as history; never build from it.
 
 ---
 

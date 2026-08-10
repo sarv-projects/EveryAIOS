@@ -1,6 +1,6 @@
 # 09 — Capability → Feature → Module Matrix (the complete derivation)
 
-> Every capability from the research corpus (docs 01–54, 219 repos) + the v2.0 matrix + the user's explicit requirements. **No scope cuts.** Status legend: 🟢 = exists (reuse from @personal-ai/core-*) · 🟡 = new (build) · 🔵 = new-in-Rust (everyaios-*) · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
+> Every capability from the research corpus (docs 01–56, 226 repos) + the v2.0 matrix + the user's explicit requirements. **No scope cuts.** Status legend: 🟢 = exists (reuse from @personal-ai/core-*) · 🟡 = new (build) · 🔵 = new-in-Rust (everyaios-*) · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
 
 ## A. Model & BYOK layer
 
@@ -77,8 +77,8 @@
 | E7 | Login import/sessions | capture-in-browser sign-in (vault path 1); optional Chrome profile import (path 3) | Rust everyaios-browser | 🔵 | 33 §3.2, 08 §8.9 |
 | E8 | Authenticated scraping | logged-in sessions → tiered scrape → RAG | Rust+sidecar | 🟡 | 01/06 |
 | E9 | Computer-use (pixels) | GUI control (post-v1, gated; patterns: Atlas, Agent-S GUI grounding, trycua/cua sandboxed desktops, OSWorld harness — docs 48/52) | Rust (later) | ⚪ | v2.0 §P8, 09, 52 |
-| E10 | **Lightweight engine tier** | Lightpanda (Zig, opt-in, AGPL — ~16× less memory) + Obscura (Rust, default — ~30MB RSS) via CDP; tier 0 static→1 lightweight→2 full escalation | Rust everyaios-cdp | 🔵 **NEW** | 08 §8.8 |
-| E11 | **Session Vault** | multi-account per site, encrypted cookies/localStorage in SQLCipher, Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit, expiry nudges | Rust everyaios-vault + everyaios-browser | 🔵 **NEW (user req)** | 08 §8.9 |
+| E10 | **Lightweight engine tier** | Lightpanda (Zig, opt-in, AGPL — ~16× less memory) + **Obscura (Rust, default — 21K★, source-verified doc 55: own CDP server 14 domains + LP.getMarkdown, embedded MCP 32 tools, scrape workers, SSRF/file:// defaults, ~30MB RSS)** via CDP; tier 0 static→1 lightweight→2 full escalation; adapt = spawn `obscura serve` via ProcessSupervisor | Rust everyaios-cdp | 🔵 **NEW** | 08 §8.8, 55 |
+| E11 | **Session Vault** | multi-account per site, encrypted **full storage context** (cookies + localStorage + sessionStorage + IndexedDB, Chrome leveldb decode, persist/restore — doc 55) in SQLCipher, Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit, expiry nudges | Rust everyaios-vault + everyaios-browser | 🔵 **NEW (user req)** | 08 §8.9, 55 |
 | E12 | **Challenge handler** | PoW captchas solved locally + LLM visual-grounding + human-in-loop pass-through (default) + optional BYO solver API (user key) | Rust everyaios-core + sidecar | 🔵+🟡 **NEW** | 08 §8.10 |
 | E13 | Session inheritance | live-attach to user's own Chrome profile via CDP debug port (vault path 2, no re-login) | Rust everyaios-cdp | 🔵 **NEW** | 08 §8.9 |
 | E14 | Behavioral realism | humanized input events (Bézier mouse curves, typing cadence), optional per-site | Rust everyaios-cdp | 🔵 **NEW** | 08 §8.10 (CloakBrowser pattern) |
@@ -94,11 +94,11 @@
 | F5 | Composio/Zapier/Nango | user-key, self-hosted/optional (never required) | sidecar | 🟢 (partial) | 12/13 |
 | F6 | MCP client (consume) | connect external MCP servers, reconcile | sidecar | 🟢 (built client) | 10 |
 | F7 | MCP server (serve) | our tools to Claude Code/Codex/Cursor/... via one endpoint | Rust everyaios-mcp | 🔵 | 33 §8, 34 §2 |
-| F8 | Harness installer | plan-before-touch install into 7 harnesses, ownership markers | Rust (new) | 🔵 | 33 §8 |
+| F8 | Harness installer | plan-before-touch install into the **F12 harness set (9 CLIs — list lives in F12, single source of truth)**, ownership markers (BrowserOS's catalog was 7: Claude Code/Codex/Cursor/OpenCode/Antigravity/VS Code/Zed, doc 33 §8 — superseded by F12's list) | Rust (new) | 🔵 | 33 §8, 45, 52, 56 |
 | F9 | Unified Tool Registry | one normalized ToolDefinition + permission classes; **adopts ACP tool-kind taxonomy** (read/edit/delete/move/search/execute/think/fetch/other, doc 45 §4.3) | sidecar core-tools | 🟢 | 10, 45 |
 | F10 | WSL/POSIX bridge | `wsl.exe` runners, `\\wsl.localhost\` paths, loopback IPC, native script exec in Linux | Rust everyaios-core + sidecar | 🟡 | doc 03 §5, v2.0 §P5 |
-| F11 | Port/network hooks | async loopback listeners, inbound/outbound monitor, webhook ingress — gated behind trust levels | Rust everyaios-core | 🔵 | doc 03 §5 |
-| F12 | Harness-driving | drive the user's existing agent CLIs (Codex/Claude Code/Cursor/Grok/OpenCode/**Aider**/Cline/Pi) side-by-side on the same workspace — own context each, shared files + session state, Trust-Ladder-gated + audited (reverse of F8; OpenWebUI Computer pattern). **External interface = ACP (Agent Client Protocol)**: our app = Client, stdio JSON-RPC, permission requests → Guard-2 cards, tool calls/file ops → audit NDJSON, cancel → watchdog kills (doc 45). Compose as brain → core → surgeon (doc 52 §1) | sidecar + Rust everyaios-core | 🟡 **NEW** | doc 35 §C, 45, 52 |
+| F11 | Port/network hooks | async loopback listeners, inbound/outbound monitor, webhook ingress — gated behind trust levels; **browser network containment** (doc 55/06 §6.15): WebRTC disable + worker fail-closed under allowlist, SSRF-defaults (loopback/RFC1918 blocked), `file://` blocked | Rust everyaios-core | 🔵 | doc 03 §5, 55 |
+| F12 | Harness-driving | drive the user's existing agent CLIs (Codex/Claude Code/Cursor/Grok/OpenCode/**Aider**/Cline/Pi/**Copilot CLI** — doc 56) side-by-side on the same workspace — own context each, shared files + session state, Trust-Ladder-gated + audited (reverse of F8; OpenWebUI Computer pattern). **External interface = ACP (Agent Client Protocol)**: our app = Client, stdio JSON-RPC, permission requests → Guard-2 cards, tool calls/file ops → audit NDJSON, cancel → watchdog kills (doc 45). Compose as brain → core → surgeon (doc 52 §1); **ACP adapter reference: cowork-forge `acp/client.rs` + `agents/external_coding_agent.rs` (doc 56 C2)** | sidecar + Rust everyaios-core | 🟡 **NEW** | doc 35 §C, 45, 52, 56 |
 | F13 | Messaging bridges | WhatsApp/Telegram/Signal/iMessage adapters to the same agent engine — 24×7 assistant on the user's own accounts, scheduled reminders + memory reuse (Secure OpenClaw pattern; DeerFlow 2.0 channels = 10-IM-adapter reference impl w/ run_policy + dedupe, doc 39 §B1) | sidecar | 🟡 **NEW** | doc 36 §B |
 | F14 | Email connector | Gmail API via Auth Bridge OAuth (vault tokens) or IMAP/SMTP (imapflow / async-imap + lettre); read/search/send/reply/triage; browser-session last resort | sidecar + vault | 🟡 **NEW** | doc 50 (openonion/email-agent) |
 | F15 | Calendar connector | Google Calendar API + ICS; event CRUD, availability, nudge integration (B7) | sidecar + vault | 🟡 **NEW** | doc 50 |
@@ -154,14 +154,14 @@
 | # | Capability | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | I1 | Code synthesis loop | write→sandbox→test→iterate | sidecar + sandbox | 🟡 | v2.0 §P6 |
-| I2 | Skill registry | ~/.everyaios/skills/, manifest + ownership markers, auto-inject into planner | sidecar + Rust | 🟡 | v2.0 §P6, 33 §8 |
+| I2 | Skill registry | ~/.everyaios/skills/, manifest + ownership markers, auto-inject into planner; **SKILL.md format alignment** (name/description/allowed-tools frontmatter + references/ — agent-browser `skill-data`, doc 55) so our skills work with the ecosystem | sidecar + Rust | 🟡 | v2.0 §P6, 33 §8, 55 |
 | I3 | WASM fuel-metered sandbox | compute budget + epoch kill | Rust (later) | ⚪ | 09 |
 | I4 | TDD loop | auto-generate tests, read stderr, rewrite | sidecar | 🟡 | v2.0 §P6 |
 | I5 | ECC guardrails | plan-before-build, session scanning | sidecar | 🟡 | 09 |
 | I6 | **Extension/plugin ABI** | versioned bundles (`abi_version`, cumulative host adapters — Zed WIT `since_v0_0_x` pattern); typed manifest: `contributes` + `capabilities` allow-lists with `*`/`**` arg wildcards (Zed `CapabilityGranter`); fail-closed per-extension trust flags (Hermes `allowed_*`); explicit agent-binding (Cherry Studio); lazy activation (VS Code); host facades `ctx.llm`/`ctx.files`/`ctx.approval()`; dogfood first-party plugins | sidecar + Rust everyaios-guard | 🟡 | 44 §5 |
-| I7 | RepoMap (tree-sitter + PageRank) | Codebase context selection via tag extraction, graph building, personalized PageRank, binary-search budget fitting | everyaios-repomap (new crate) | 🔵 New | doc 46 (Aider) |
+| I7 | RepoMap (tree-sitter + PageRank) + **Warp semantic index (doc 56)** | Codebase context selection via tag extraction, graph building, personalized PageRank, binary-search budget fitting (**deterministic default — zero embeddings**); **optional semantic layer (Warp `full_source_code_embedding`: tree-sitter semantic chunker MAX_TRAVERSAL_DEPTH=200 + coalesce_fragments, merkle-tree content-hash incremental sync, search shaping w/ char-boundary-safe reads, `file_outline` — doc 56 W1/W2) gated behind C5** — one crate, two query paths (deterministic context selection vs semantic search/outline), not two indexes | everyaios-repomap (new crate) | 🔵 New | doc 46 (Aider), 56 |
 | I8 | Edit strategy pattern (per-model) | Multiple edit formats (SEARCH/REPLACE, udiff, whole, patch) with fuzzy matching, selected per model | coordinator | 🔵 New | doc 46 (Aider) |
-| I9 | Architect mode (two-pass) | Reasoning model → Editor model split for code changes (aider-reported 82.7% benchmark — doc 51) | coordinator + sub-agents (B3) | 🔵 New | doc 46 (Aider), 51 |
+| I9 | Architect mode (two-pass) | Reasoning model → Editor model split for code changes (aider-reported 82.7% benchmark — doc 51); **composes with F12 surgical hierarchy — the surgeon tier may run the two-pass architect/editor; distinct from the oracle/review pass (TODO P11.5.10: heavyweight post-edit review) — planning then editing ≠ reviewing after** | coordinator + sub-agents (B3) | 🔵 New | doc 46 (Aider), 51, 52 |
 | I10 | File watcher + AI comments | Watch source files for `// ai!` markers, extract context, auto-submit to agent | everyaios-core (notify) | 🔵 New | doc 46 (Aider) |
 
 ## J. Cross-cutting

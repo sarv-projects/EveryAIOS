@@ -186,3 +186,20 @@ Treat the agent configuration itself as a security surface:
 5. Agent config review (system prompt override attempts, jailbreak patterns)
 
 **Trigger:** Runs on every config change + periodic background scan + on extension install.
+
+## 6.15 Browser Network Containment (agent-browser + Obscura patterns, doc 55)
+
+> Sources: `vercel-labs/agent-browser` (40K★, Rust CLI — `--allowed-domains` model, source-read doc 55 §1) + `h4ckf0r0day/obscura` (21K★ — SSRF/file-access defaults, source-read doc 55 §2). When the agent browses or scrapes, the **browser child is a network boundary** — contain it, don't just monitor it.
+
+**Enforced in the browser-child launch config + CDP driver (`everyaios-cdp`):**
+
+| Rule | Mechanism | Source |
+|---|---|---|
+| **Domain allowlist = browser-level containment** | `--allowed-domains` restricts navigations *and* page-initiated traffic (not an OS firewall); when active, **disable `RTCPeerConnection`/WebRTC** so STUN/TURN/DNS cannot bypass the filter | agent-browser |
+| **Workers fail closed** | dedicated/shared worker bootstrap wrapper; if page CSP blocks the wrapper, the worker **does not run unguarded** | agent-browser |
+| **SSRF defaults** | block loopback / RFC1918 / link-local fetches unless `--allow-private-network` explicitly set (env: `OBSCURA_ALLOW_PRIVATE_NETWORK=1`); same policy for our fetch/read path | Obscura |
+| **`file://` blocked** | CDP navigation to `file://` denied by default (opt-in only for local test fixtures on a trusted port) | Obscura |
+| **Content boundaries + output caps** | `--content-boundaries`, `--max-output` clamp what the page can feed back into agent context (injection surface) | agent-browser |
+| **Trust-boundary docs** | containment is per-browser-context, not a sandbox — document the trust boundary for deployment (J21 permissions.toml `external_network` rules ride the same policy) | agent-browser |
+
+**Where it hooks in:** Guard-1 (path/regex) → network policy check (this section) → ticket `authorized_paths/domains` (6.10) → browser launch with containment flags → audit (6.7).

@@ -63,17 +63,13 @@ pub mod macos {
 pub mod windows {
     use std::io;
 
-    use windows_sys::Win32::Foundation::{
-        CloseHandle, INVALID_HANDLE_VALUE, HANDLE,
-    };
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
-        JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
         JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
-    use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
     /// Create a Job Object configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
     ///
