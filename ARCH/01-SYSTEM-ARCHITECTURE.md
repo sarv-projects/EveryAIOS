@@ -72,7 +72,7 @@
    - `tool.*` — permission check (sidecar asks core; core enforces GuardRail + returns allow/ask/deny)
    - `events.*` — audit rows, tool dispatches, token/cost deltas, status
 3. **everyaios-core ⇄ Chromium**: CDP over WebSocket on loopback port (system Chrome `--remote-debugging-port=0` → read the actual port from DevToolsActivePort; token-gated). **Recording**: browser-side injected recorder posts NDJSON batches with `x-recording-tab-id/document-id/batch-id` headers to everyaios-core's ingest endpoint (BrowserOS contract, doc 33 §9).
-4. **coordinator ⇄ providers**: HTTPS to BYOK endpoints via **key-ring manager** (doc 03) — the coordinator never holds raw keys; everyaios-core vault serves one resolved key per call through a sealed channel (v2.0 CES pattern, doc 19 §7).
+4. **coordinator ⇄ providers**: HTTPS to BYOK endpoints via **key-ring manager** (ARCH/03) — the coordinator never holds raw keys; everyaios-core vault serves one resolved key per call through a sealed channel (v2.0 CES pattern, doc 19 §7).
 
 ## 1.5 Data flow — one agent turn
 

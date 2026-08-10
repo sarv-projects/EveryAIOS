@@ -7,14 +7,14 @@
 | # | Capability | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | A1 | Multi-provider BYOK | ProviderAdapter: anthropic/openai/responses/azure/bedrock/gemini/openrouter/deepseek/openai-compat/ollama/llamafile | sidecar (core-providers) + Rust vault | 🟢+🔵 | doc 19 |
-| A2 | **Multi-key per provider** | Key rings: add N keys/provider, priority+weight, per-key model filter, budgets, health | Rust everyaios-vault | 🔵 **NEW (user req)** | 03 |
-| A3 | **Auto-failover rotation** | 429/401/5xx → cooldown → immediate next key; max-switches; all-fail backoff | Rust everyaios-vault | 🔵 **NEW (user req)** | 03 |
+| A2 | **Multi-key per provider** | Key rings: add N keys/provider, priority+weight, per-key model filter, budgets, health | Rust everyaios-vault | 🔵 **NEW (user req)** | ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch |
+| A3 | **Auto-failover rotation** | 429/401/5xx → cooldown → immediate next key; max-switches; all-fail backoff | Rust everyaios-vault | 🔵 **NEW (user req)** | ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch |
 | A4 | OAuth subscriptions | chatgpt-pro (PKCE) / copilot·qwen (device-code), encrypted tokens, same fallback semantics | Rust everyaios-vault + sidecar | 🔵 | 33 §7.4, 13 §5.5 |
 | A5 | Local models | Ollama managed + llamafile single-binary; ≥15–20K ctx warning | Rust spawn + sidecar | 🟢+🔵 | 34 §2 |
 | A6 | Model catalog + hints | capabilities (tools/vision/ctx), router picks per task | sidecar core-providers | 🟢 | doc 19 |
 | A7 | Asymmetric tiering | planner_model / subagent_models / depth=2 / concurrency=6 / writers=3 | sidecar (blueprint) | 🟡 | doc 16/05 |
 | A8 | Local OpenAI-compatible server | expose engine on localhost for VS Code/Cursor reuse | Rust everyaios-mcp (additional endpoint) | 🟡 | v2.0 §P3 |
-| A9 | Cache-aware costs | cache_read/cache_write/$ per call, key-affinity | sidecar + Rust audit | 🔵 | 05, doc 05 |
+| A9 | Cache-aware costs | cache_read/cache_write/$ per call, key-affinity | sidecar + Rust audit | 🔵 | doc 05 + ARCH/05 |
 | A10 | Image generation | text-to-image + image-to-image provider endpoint (GPT-Image-1 / DALL·E 3 / Flux / Stable Diffusion / any MCP image server); key-ring + failover (A2/A3); ref-handle results | sidecar core-providers + vault | ⚪ | doc 50 |
 
 ## B. Agent orchestration
@@ -173,7 +173,7 @@
 | J3 | Guard-2 diff cards | native click-to-approve, non-bypassable | Rust everyaios-guard | 🔵 | 06 |
 | J4 | Path/scope hard-floors | canonicalization, symlink-safe boundaries | Rust everyaios-guard | 🔵 | 06 |
 | J5 | Audit trail | append-only, token estimates, receipts, replay; durable event log + idempotency classes (doc 53 §4: safe-retry/unsafe/same-key/confirm-after-uncertain) | Rust everyaios-audit | 🔵 | 33 §9, 06, 53 |
-| J6 | Prompt-injection defense | <user_document> wrapping, context scan, tool-result sanitization | sidecar+Rust | 🟡 | 06, 25 |
+| J6 | Prompt-injection defense | <user_document> wrapping, context scan, tool-result sanitization | sidecar+Rust | 🟡 | 25, 16 |
 | J7 | ProcessSupervisor | spawn/restart/backoff/circuit-breaker | Rust everyaios-core | 🔵 | v2.0 §4.3 |
 | J8 | Key vault | SQLCipher, CES executor, crash scrubbing | Rust everyaios-vault | 🔵 | 06 §6.8 |
 | J9 | Config-as-files | everyaios.toml + agents/*.md + providers.toml | all | 🟡 | v2.0 §7.6 |
