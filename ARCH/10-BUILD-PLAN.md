@@ -25,9 +25,10 @@
 - everyaios-script (`run`/`evaluate`) with InnerCallHook; injected recorder → NDJSON ingest → replay store; replay + audit UI; cockpit cards (Watch/Stop).
 - **Exit:** `run` executes a multi-step script with audited primitives (test: every primitive has an audit row); recording → replay round-trip with has_gap on forced gap; cockpit shows live + stop kills the loop.
 
-## P4 — Office engine (≈5 wks)  ← user-critical
+## P4 — Office engine + storage intelligence (≈5 wks)  ← user-critical
 - docx block-patch editor; xlsx (IronCalc sidecar + calamine + workbook DSL + deterministic planner); pptx part-editor; pdf (pdf-lib form/annotate + lopdf swap + re-author + redact); renderers in UI; conformance oracle wired.
-- **Exit:** round-trip tests (open → edit → save → LibreOffice-reopen asserts byte-stable untouched parts); formula recalc correctness tests (IronCalc golden cases); pptx slide add/remove round-trip; pdf form fill test; every edit has snapshotBefore rollback.
+- **Storage intelligence (D9–D11, G7 — doc 49):** `everyaios-storage` — parallel work-stealing walker (crossbeam-deque) + immutable arena snapshots (arc_swap, zstd save/load) + squarified treemap; 7-stage hash dedup (size → xxHash3 → BLAKE3, hardlink-aware, optional reflink); large-file finder; **Guard-2-ticketed cleanup**; SQLite FTS5 instant filename search + notify-watcher incremental updates.
+- **Exit:** round-trip tests (open → edit → save → LibreOffice-reopen asserts byte-stable untouched parts); formula recalc correctness tests (IronCalc golden cases); pptx slide add/remove round-trip; pdf form fill test; every edit has snapshotBefore rollback; **scan fixture tree → treemap data + dedup report; zstd snapshot round-trip; FTS5 filename query <50ms (P4.8).**
 
 ## P5 — Memory fusion + token economy (≈5 wks)
 - Multi-signal fusion (C3), LadybugDB graph backend (C6), Letta paging (C2), warm-set wiring (C7); **Taste profile (C9)** — taste store (`~/.everyaios/taste/` + per-repo), accept/reject/edit learning hooks on Guard-2 + audit, confidence-scored rules, stable-prefix injection; **ACT-R activation + spontaneous recall (#32, NOOA doc 39)** — retention/importance math + typed relational edges, pre-turn spontaneous block; **pass-by-reference context (C10)** — live refs + bounded previews via script-eval (E4); **ghost context prevention (7.5.1)** — file-event tombstone eviction via `notify` crate; compaction pipeline with Reasonix/BrowserOS/Janus knobs (05); snip rules; prefix-stability enforcement + cache-break events; per-session efficiency projections.
@@ -46,7 +47,7 @@
 - **Exit:** Windows beta build installs and runs; idle RSS <30MB / warm <80MB targets met; telemetry off-by-default verified (no requests without opt-in); all UIs functional.
 
 ## P9+ — Post-v1 (not in scope order)
-Computer-use pixels (E9), WASM fuel sandbox (I3), voice input (H15), remote session handoff (H18), local OpenAI-compatible server (A8), HTML→video reports, magic completion (H16), Nango sync→RAG, AutomationBench eval harness, community skills marketplace, self-hosted connector-hub server (doc 13 opt-in).
+Computer-use pixels (E9), WASM fuel sandbox (I3), voice input (H15, offline STT/wake-word ext — doc 50), remote session handoff (H18), local OpenAI-compatible server (A8), HTML→video reports, magic completion (H16), Nango sync→RAG, AutomationBench eval harness, community skills marketplace, self-hosted connector-hub server (doc 13 opt-in), **email/calendar connectors (F14/F15, doc 50), image generation (A10), clipboard tool (H26), voice output TTS (H28), generative UI (H25, AG-UI), resumable streams (H27)** — the docs 49–50 gap-pass additions (138-row matrix).
 
 ## P10 — End-to-end testing & QA (≈4 wks, parallel)
 - Integration suites (12 E2E flows: install→BYOK→chat→tool; memory persistence; browser pipeline; office pipeline; sub-agents; crystallization; connector hub; ACP harness; scheduled headless; messaging stub; extension ABI; MCP server).

@@ -158,6 +158,17 @@ Displayed when the agent creates/edits a file. Shows:
 - Buttons: Approve / Edit / Reject / More Options
 - Maps to ARCH/06 Guard-2 diff-card handshake
 
+#### Generative UI Components (H25, AG-UI — doc 50)
+- Agent-emitted live components (React/HTML/Mermaid) render **inline in sandboxed iframes** — strict CSP + process isolation (Anthropic Artifacts pattern), never inline-script in the main window
+- Wire protocol = **AG-UI** (tool calls + UI updates over one JSON channel, ~16 event types) on top of our P0.5 framed IPC
+- Artifact cards upgrade from static previews → "make live" opt-in (token cost: component descriptors preferred over raw source, §1.3 doc 50)
+- Version selector reuses the H1 preview pane
+
+#### Resumable Stream Indicator (H27 — doc 50)
+- On network drop/refresh/suspend: "🔄 Reconnecting…" chip in the message area
+- Coordinator holds in-flight stream state → auto-resume from the **last token/id** (LibreChat pattern); the reply continues in place, never restarts
+- Idempotent retry semantics per ARCH/03 (retry idempotent calls)
+
 ### 3.3 Chat Input Bar
 
 | Element | Function |
@@ -166,6 +177,7 @@ Displayed when the agent creates/edits a file. Shows:
 | Text input | Main prompt area (multiline, auto-expand) |
 | Mode selector | Normal / Plan / Research / Quick / Code |
 | 🎙 Microphone | Voice-to-text recording |
+| 🔊 Speaker | Read-aloud toggle (H28 — offline sherpa-onnx TTS by default; hosts Piper voices, ⚠️ piper archived) |
 | ▶ Send | Submit message (Enter also works) |
 | Slash commands | `/help`, `/mode`, `/model`, `/undo`, `/clear`, `/export` |
 | `!macro` | Knowledge macro expansion (e.g., `!deploy-checklist`) |
@@ -602,7 +614,16 @@ Unified timeline of all agent actions:
 
 ---
 
-## 12. Mobile / Compact Considerations
+## 12. Generative UI, Resumable Streams & Voice Output (docs 49–50)
+
+- **Storage intelligence UI (D9–D12/G7/G8):** Files tab gains a **treemap view** (squarified, stable extension-hashing colors), disk-usage summary, duplicate-group reports, large-file finder list, and a **storage-health card** (drive thresholds, cleanup plans — D12) — all with Guard-2 diff-card cleanup; a **global instant-search palette** (`Cmd+K`-adjacent, FTS5 filename index) matches the Everything/UltraSearch UX (doc 49); the search palette and research flows use the **tiered cascade (G8)** — cached <10ms, 50-page parallel fetch (doc 52 §4)
+- **Generative UI (H25):** sandboxed live components in chat (§3.2); AG-UI wire protocol
+- **Resumable streams (H27):** reconnecting chip + resume-from-last-token (§3.2)
+- **Voice I/O:** input bar mic (H15, offline STT options Vosk/sherpa-onnx/whisper.cpp + optional wake word) + speaker read-aloud toggle (H28, offline TTS default) — all local-first, BYOK for cloud voices only
+- **Image generation (A10):** chat image tool → provider endpoint (GPT-Image-1/DALL·E 3/Flux/SD/MCP), results as ref-handle artifact cards
+- **Clipboard (H26):** guard-ticketed clipboard read/write tools; history panel opt-in
+
+## 13. Mobile / Compact Considerations
 
 Not primary target (desktop app), but for future:
 - Sidebar becomes bottom sheet
@@ -612,7 +633,7 @@ Not primary target (desktop app), but for future:
 
 ---
 
-## 13. Accessibility
+## 14. Accessibility
 
 - All interactive elements focusable via Tab
 - ARIA labels on icons and status indicators

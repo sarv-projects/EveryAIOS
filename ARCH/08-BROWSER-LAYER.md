@@ -11,7 +11,7 @@
 
 ## 8.2 The 34-tool catalog (everyaios-mcp)
 
-`tabs · tab_groups · history · navigate · snapshot · enhanced_snapshot · diff · act · download · upload · read · grep · screenshot · pdf · wait · windows · evaluate · run · bookmarks · create_bookmark · remove_bookmark · update_bookmark · move_bookmark · search_bookmarks · list_tab_groups · group_tabs · update_tab_group · ungroup_tabs · close_tab_group · list_windows · create_window · close_window · activate_window`
+`tabs · tab_groups · history · navigate · snapshot · enhanced_snapshot · diff · act · download · upload · read · grep · screenshot · pdf · wait · windows · evaluate · run · bookmarks · create_bookmark · remove_bookmark · update_bookmark · move_bookmark · search_bookmarks · list_tab_groups · group_tabs · update_tab_group · ungroup_tabs · close_tab_group · list_windows · create_window · close_window · activate_window · focus_window`
 
 > **Expanded in v1.1 (doc 46, BrowserOS 53-tool analysis):** Original 17 core interaction tools + 6 bookmark tools + 5 tab-group management tools + 5 window management tools + enhanced_snapshot (with paint-order filtering, stable refs). Total: 34 tools covering navigation, interaction, content, export, bookmarks, tab organization, and window management. Further expansion to 40+ tools possible post-v1 (history search, cookie management, extension control).
 

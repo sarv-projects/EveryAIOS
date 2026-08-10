@@ -146,10 +146,72 @@ describe("E2E — real child process over stdin/stdout", () => {
 
     const decoder = new FrameDecoder();
     const frames = decoder.push(new Uint8Array(stdout));
-    expect(frames.length).toBe(3);
+    // session/ready (boot notification) + initialize + echo + ping.
+    expect(frames.length).toBe(4);
     const results = frames.map((f) => JSON.parse(new TextDecoder().decode(f)));
-    expect(results[0]!.result).toMatchObject({ protocolVersion: 1, status: "ready" });
-    expect(results[1]!.result).toEqual({ text: "hello-everyaios", echoed: true });
-    expect(results[2]!.result).toMatchObject({ pong: true });
+    // Frame 0 is the boot notification — no id, MUST NOT have a reply-shaped result.
+    expect(results[0]!.method).toBe("session/ready");
+    expect(results[0]!.id).toBeUndefined();
+    expect(results[0]!.params).toMatchObject({ protocolVersion: 1, status: "ready" });
+    expect(results[1]!.result).toMatchObject({ protocolVersion: 1, status: "ready" });
+    expect(results[2]!.result).toEqual({ text: "hello-everyaios", echoed: true });
+    expect(results[3]!.result).toMatchObject({ pong: true });
+  });
+
+  test("sidecar emits session/ready on boot and periodic heartbeats", async () => {
+    const proc = Bun.spawn({
+      cmd: ["bun", "run", import.meta.dir + "/index.ts"],
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      // Short heartbeat for the test; the supervisor's idle watchdog is 30s,
+      // so production uses the 10s default.
+      env: { ...process.env, EVERYAIOS_HEARTBEAT_MS: "200" },
+    });
+
+    const decoder = new FrameDecoder();
+    const frames: unknown[] = [];
+    const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
+    const readLoop = (async () => {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            for (const f of decoder.push(new Uint8Array(value))) {
+              frames.push(JSON.parse(new TextDecoder().decode(f)));
+            }
+          }
+        }
+      } catch {
+        // child may exit mid-read; ignore
+      }
+    })();
+
+    // Give the child time to boot + emit at least one heartbeat, then ALWAYS
+    // close stdin and reap the child — even if an assertion below fails, the
+    // spawned process must not linger (CI orphan prevention).
+    try {
+      await new Promise((r) => setTimeout(r, 700));
+    } finally {
+      try {
+        proc.stdin!.end();
+      } catch {
+        // stdin may already be closed; ignore
+      }
+      await proc.exited;
+      await readLoop;
+    }
+
+    const methods = frames.map((f) => (f as { method?: string }).method);
+    expect(methods).toContain("session/ready");
+    expect(methods).toContain("session/heartbeat");
+    const ready = frames.find((f) => (f as { method?: string }).method === "session/ready") as {
+      id?: unknown;
+      params: { status?: string; protocolVersion?: number };
+    };
+    expect(ready.id).toBeUndefined(); // notification — no reply expected
+    expect(ready.params.status).toBe("ready");
+    expect(ready.params.protocolVersion).toBe(PROTOCOL_VERSION);
   });
 });

@@ -63,7 +63,68 @@ Vault (SQLCipher) is the only owner of keys/tokens; CES-style executor for high-
 
 ---
 
-## 6.9 Profile-Gated Hooks (ECC Pattern, doc 46)
+## 6.9 Credential broker — the request flow (doc 53 §2)
+
+> Formalizes the "keys live only in Rust" promise so it is enforced by construction, not convention.
+
+```
+Coordinator (TS)                     Rust provider broker (everyaios-vault + broker)
+    │  POST provider/request {provider, model, body, opaque_key_handle}
+    ├──────────────────────────────────────────►
+    │                              1. Validate session budget + permission (J21 ticket)
+    │                              2. Resolve opaque_key_handle → raw key (SQLCipher)
+    │                              3. Inject auth headers
+    │                              4. Perform the provider HTTP call (Rust owns the socket)
+    │                              5. Scrub temp secret buffers (zeroize)
+    │  ◄────────────────────────────────────────  normalized event stream (no key material)
+```
+
+- `opaque_key_handle` = random 128-bit id minted by `everyaios-vault` at key-ingest; no recoverable relation to the key; scoped to (provider, key_id); revoked on rotation/removal.
+- Coordinator provider adapters are **request composers**, not key-holders: build `{provider, model, body}` + handle → consume the normalized stream.
+- Budget/permission checks live in the broker (single choke point) — a misbehaving sidecar cannot bypass rate limits by holding its own key.
+- Failure: broker down → fail-closed "vault unavailable" (no raw-key fallback); rotation mid-request → re-resolve under broker mutex, stale handle → 401-equivalent retry.
+
+## 6.10 Authorization ticket contract (doc 53 §3)
+
+> Makes "sidecar proposes, Rust disposes" an enforceable invariant, not a slogan.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `ticket_id` | u64/uuid | unique, single-use |
+| `agent_id` | string | blueprint id (delegation scope) |
+| `session_id` | string | coordinator session |
+| `tool_id` | string | ACP/MCP tool name |
+| `operation` | enum | read \| write \| delete \| execute \| network \| navigate \| … |
+| `args_hash` | [u8;32] | normalized-args SHA-256 (sort keys, canonical JSON) |
+| `authorized_paths/domains` | list | granted roots / egress hosts for this ticket |
+| `expiry` | ts | short TTL (e.g. 30s; one-shot ops immediate) |
+| `single_use` | bool | burn on first use (default for destructive) |
+| `approval_source` | enum | auto_ladder \| guard1_pass \| guard2_human \| policy |
+| `risk_class` | enum | routine \| elevated \| high \| destructive |
+| `audit_seq` | u64 | links to the everyaios-audit row |
+
+**Lifecycle:** request → policy check (permissions.toml + Trust Ladder) → issue (guard mints) → present → consume (guard validates args_hash + expiry + single_use, executes in Rust, burns) → audit (appended to J5/J19 chain).
+
+**Enforced at every privileged Rust entry point:** FS mutation, shell, network egress, browser control, script-eval, OAuth token use.
+
+## 6.11 Durable event model + idempotency (doc 53 §4)
+
+> "Nothing unreconstructable" needs more than snapshots: an append-only event log is the source of truth; J13 checkpoints are the accelerant.
+
+**Event types (single writer):** `UserMessageAdded · PlanCreated · TaskStarted · ToolProposed · PermissionGranted · ToolStarted · ToolCompleted · ArtifactWritten · ModelTurnCompleted · CheckpointCommitted` — each carries `seq, ts, session, agent, tool, args_hash, result_meta`, feeds J5 NDJSON + J19 Merkle chain + J13 snapshots.
+
+**Idempotency classes** (declared per operation in the tool manifest):
+
+| Class | Meaning | Retry policy |
+|---|---|---|
+| `safe_retry` | read-only / deterministic | retry freely |
+| `unsafe_retry` | mutates (write, send, execute) | never auto-retry |
+| `same_key` | retry only with identical idempotency-key | coordinator re-sends same key; broker dedupes |
+| `confirm_after_uncertain` | outcome unknown (network drop mid-mutation) | pause → user confirmation before any retry |
+
+**Recovery:** replay events → rebuild state; any `ToolStarted` without `ToolCompleted` → classify by class (safe → re-run; same_key → re-send; else → confirmation card).
+
+## 6.12 Profile-Gated Hooks (ECC Pattern, doc 46)
 
 > Source: affaan-m/ECC (238K⭐, MIT) — hook enforcement profiles.
 
@@ -89,7 +150,7 @@ disabled_hooks = []         # override: skip specific hooks by name
 4. `SessionStart` — context injection, environment prep
 5. `SessionEnd` — cleanup, final audit write, memory crystallization
 
-## 6.10 Merkle Hash-Chain Audit Trail (OpenFang Pattern, doc 46)
+## 6.13 Merkle Hash-Chain Audit Trail (OpenFang Pattern, doc 46)
 
 > Source: RightNow-AI/openfang (18.1K⭐, MIT) — cryptographic tamper-evident logging.
 
@@ -106,7 +167,7 @@ Event N: { seq, ts, kind, payload, prev_hash, hash }
 - Compatible with existing NDJSON format (hash fields are additional)
 - Minimal performance overhead (~1μs per SHA256 on modern hardware)
 
-## 6.11 AgentShield: Config-as-Attack-Surface Scanning (ECC Pattern, doc 46)
+## 6.14 AgentShield: Config-as-Attack-Surface Scanning (ECC Pattern, doc 46)
 
 Treat the agent configuration itself as a security surface:
 

@@ -15,7 +15,7 @@
  *   Node.js equivalent: `--max-old-space-size=512`.
  */
 
-import { encodeJson } from "./frame";
+import { notify } from "./frame";
 
 /** Default max heap in megabytes (matches --max-old-space-size=512). */
 const DEFAULT_MAX_HEAP_MB = 512;
@@ -45,18 +45,6 @@ export interface HeapMonitorHandle {
 }
 
 /**
- * Emit a JSON-RPC 2.0 notification (no `id` field) to stdout, length-prefixed.
- */
-function emitNotification(method: string, params: Record<string, unknown>): void {
-  const notification = {
-    jsonrpc: "2.0",
-    method,
-    params,
-  };
-  process.stdout.write(encodeJson(notification));
-}
-
-/**
  * Start the heap safety monitor.
  *
  * Returns a handle that can be used to stop the monitor (useful in tests).
@@ -74,7 +62,7 @@ export function startHeapMonitor(opts?: HeapMonitorOpts): HeapMonitorHandle {
     const heapUsed = process.memoryUsage().heapUsed;
 
     if (heapUsed > criticalThreshold) {
-      emitNotification("heap/critical", {
+      notify("heap/critical", {
         heapUsedMB: Math.round(heapUsed / 1024 / 1024),
         maxHeapMB,
         ratio: +(heapUsed / maxHeapBytes).toFixed(3),
@@ -82,7 +70,7 @@ export function startHeapMonitor(opts?: HeapMonitorOpts): HeapMonitorHandle {
       // EX_OSERR (71) — signals ProcessSupervisor to restart immediately.
       process.exit(71);
     } else if (heapUsed > warningThreshold) {
-      emitNotification("heap/warning", {
+      notify("heap/warning", {
         heapUsedMB: Math.round(heapUsed / 1024 / 1024),
         maxHeapMB,
         ratio: +(heapUsed / maxHeapBytes).toFixed(3),
@@ -92,7 +80,7 @@ export function startHeapMonitor(opts?: HeapMonitorOpts): HeapMonitorHandle {
 
   // --- Forced rotation timer ---
   const rotationTimer = setTimeout(() => {
-    emitNotification("heap/rotation", {
+    notify("heap/rotation", {
       uptimeMinutes: rotationMinutes,
       reason: "scheduled rotation",
     });

@@ -12,7 +12,8 @@
 //!
 //! - **Windows**: Job Objects with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. When the
 //!   supervisor handle closes (including on crash), Windows automatically terminates
-//!   all processes in the Job. (Stub — requires `windows-sys` crate.)
+//!   all processes in the Job. The Job is created *before* the child spawns and the
+//!   fresh process is assigned to it by PID (see [`super::supervisor::ProcessSupervisor::spawn`]).
 //!
 //! # Sidecar-side polling
 //!
@@ -51,15 +52,77 @@ pub mod macos {
     }
 }
 
-/// Marker module for Windows orphan prevention (stub).
+/// Windows orphan prevention — Job Objects (J12).
+///
+/// A Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` guarantees that when the
+/// supervisor's last handle to the Job is closed (parent crash, exit, or explicit
+/// close), Windows terminates every process assigned to the Job. Unlike the Unix
+/// `pre_exec` hooks, this is enforced by the OS kernel with no race window, and it
+/// kills the entire process tree of the child, not just the child itself.
 #[cfg(target_os = "windows")]
 pub mod windows {
-    /// TODO: Implement Job Object creation with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
-    /// Requires `windows-sys` crate. When the last handle to the Job is closed
-    /// (parent crash or exit), all child processes in the Job are terminated.
-    pub fn create_job_object() -> Result<(), std::io::Error> {
-        // Stub — to be implemented when Windows support is added.
-        todo!("Windows Job Object support requires windows-sys crate")
+    use std::io;
+
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, INVALID_HANDLE_VALUE, HANDLE,
+    };
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
+        JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    /// Create a Job Object configured with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
+    ///
+    /// Returns the raw Job handle (as `isize`, for storage in the supervisor).
+    /// The caller MUST keep the handle alive for the app's lifetime — closing it
+    /// terminates every assigned child process.
+    pub fn create_job_object() -> io::Result<isize> {
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if job == INVALID_HANDLE_VALUE || job.is_null() {
+                return Err(io::Error::last_os_error());
+            }
+
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+            let ok = SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &info as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION as *const core::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            );
+            if ok == 0 {
+                let err = io::Error::last_os_error();
+                CloseHandle(job);
+                return Err(err);
+            }
+            Ok(job as isize)
+        }
+    }
+
+    /// Assign a running child process (by PID) to the Job.
+    ///
+    /// Called immediately after `spawn()` so the child never runs outside the
+    /// kill-on-close guarantee.
+    pub fn assign_to_job(job: isize, pid: u32) -> io::Result<()> {
+        unsafe {
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if process.is_null() {
+                return Err(io::Error::last_os_error());
+            }
+            let ok = AssignProcessToJobObject(job as HANDLE, process);
+            // The process handle is only needed for the assignment itself.
+            CloseHandle(process);
+            if ok == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        }
     }
 }
 

@@ -34,6 +34,7 @@ desktop_app/
 | everyaios-mcp | official `modelcontextprotocol/rust-sdk` server: one endpoint `http://127.0.0.1:9200/mcp` + stdio; **stateless per MCP 2026-07-28** (no initialize handshake, no Mcp-Session-Id — every request self-contained via `_meta`); 34-tool catalog; tool annotations (readOnly/openWorld); **`Mcp-Method`/`Mcp-Name` HTTP headers** (required per SEP-2243) | BrowserOS browseros-mcp (doc 33 §6) + MCP 2026-07-28 (doc 34 §2) | stateless streamable HTTP |
 | everyaios-vault | SQLCipher token store: per-provider key pools, OAuth token rows, TTL/rotation metadata | BrowserOS oauth_tokens schema (doc 33 §7.4) + doc 19 §7 | keys never enter LLM context; per-key usage/cooldown state |
 | everyaios-ipc | stdio JSON-RPC framing, typed messages, streaming | — | versioned contract (01 §1.4) |
+| everyaios-storage | parallel work-stealing disk walker (crossbeam-deque + `ignore`, cycle/device-boundary-safe), immutable arena snapshots (arc_swap @~100ms, zstd save/load), squarified treemap layout + per-dir aggregation, 7-stage hash dedup (size → xxHash3 [twox-hash — xxhash-rust is BSL-1.0, doc 54 §1.2] → BLAKE3, hardlink-aware, optional reflink), large-file finder, SQLite FTS5 filename index + notify-debouncer incremental updates, optional OS-native search hooks (Everything/MFT, mdfind, Baloo), Guard-2-ticketed cleanup | eDirStat traversal.rs/arena.rs/coordinator.rs + fclones + UltraSearch patterns (doc 49) | cleanup never bypasses dual-guard (ARCH/06); scans/indexing idle + battery-aware (J16); snapshots immutable (zero-copy arena) |
 
 ## 2.3 TS coordinator responsibilities (reuses core-*)
 
@@ -43,7 +44,7 @@ desktop_app/
 | Blueprint/spec loader | `core-agents` (registry) | `.md` parser → AgentConfig[]; continuous re-write of status blocks |
 | Memory + RAG | `core-memory`, `core-files` (7 algos, hybrid search, embeddings) | multi-signal retrieval fusion (mem0 pattern), procedural memory, Letta-style paging hooks |
 | Connector hub | `core-connectors` (orchestrator, 27+ adapters, composio) | routing engine per doc 13; usage meters; Auth Bridge |
-| Search/research | `core-search` (cascade, bm25, research-tiers) | deep-research tree runner (doc 07) |
+| Search/research | `core-search` (cascade, bm25, research-tiers) | deep-research tree runner (doc 07); **tiered cascade + SQLite result cache (G8, Algorithm #33, doc 52)** — cached instant tier → WebSurfx → SearXNG → fallback; parallel top-N fetch cascade |
 | Automations | `core-automations` (workflow engine, crystallization) | scheduler UI, nudge sentinels |
 | Providers/BYOK | `core-providers`, `core-ai` (clients, router, vault) | **key-ring client** (03): multiple keys/provider, fallback rotation |
 | Security | `core-tools` (trust-ladder, permission-gate) | keep; GuardRail enforcement delegated to Rust everyaios-guard |

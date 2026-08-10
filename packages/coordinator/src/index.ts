@@ -17,7 +17,7 @@
  * into this same process.
  */
 
-import { FrameDecoder, encodeJson } from "./frame";
+import { FrameDecoder, encodeJson, notify } from "./frame";
 import { startHeapMonitor } from "./heap";
 import { startOrphanWatch } from "./orphan";
 import {
@@ -46,6 +46,9 @@ export const DEFAULT_CAPABILITIES: Capabilities = {
 };
 
 export const VERSION = "0.1.0";
+
+/** Heartbeat interval in ms (default 10s). Env-overridable for tests. */
+export const DEFAULT_HEARTBEAT_MS = 10_000;
 
 export interface InitializeParams {
   protocolVersion?: number;
@@ -130,6 +133,49 @@ export function heapUsedMB(): number {
   }
 }
 
+/**
+ * Announce readiness on boot. This is the child's first byte on stdout — the
+ * Rust ProcessSupervisor treats it as the connect signal (Starting → Running)
+ * and it arms the idle-watchdog clock.
+ */
+export function announceReady(): void {
+  notify("session/ready", {
+    protocolVersion: PROTOCOL_VERSION,
+    serverName: "@everyaios/coordinator",
+    serverVersion: VERSION,
+    status: "ready",
+  });
+}
+
+/**
+ * Resolve the heartbeat interval from `EVERYAIOS_HEARTBEAT_MS` (tests use a
+ * short interval), falling back to [`DEFAULT_HEARTBEAT_MS`].
+ */
+export function heartbeatIntervalMS(): number {
+  const raw = process.env.EVERYAIOS_HEARTBEAT_MS;
+  const n = raw === undefined ? NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_HEARTBEAT_MS;
+}
+
+/**
+ * Start the periodic `session/heartbeat` notification (default every 10s).
+ *
+ * The supervisor's idle watchdog (30s of silence → kill) must never false-kill
+ * a healthy-but-idle process, so the sidecar emits a heartbeat well inside the
+ * idle window. Returns the timer (unref'd so it never holds the loop open).
+ */
+export function startHeartbeat(
+  intervalMs: number = heartbeatIntervalMS(),
+): NodeJS.Timeout {
+  const timer = setInterval(() => {
+    notify("session/heartbeat", { ts: Date.now() });
+  }, intervalMs);
+  if (typeof timer === "object" && "unref" in timer) {
+    (timer as NodeJS.Timeout).unref();
+  }
+  return timer;
+}
+
 /** The IPC event loop: read frames from `stdin`, write responses to `stdout`. */
 export function run(reader: NodeJS.ReadableStream = process.stdin): void {
   const decoder = new FrameDecoder();
@@ -189,5 +235,10 @@ export function run(reader: NodeJS.ReadableStream = process.stdin): void {
 if (import.meta.main) {
   startOrphanWatch();
   startHeapMonitor();
+  // First byte on stdout → supervisor promotes Starting → Running.
+  announceReady();
+  // Keeps the supervisor's idle watchdog (30s) from false-killing an idle
+  // but healthy process.
+  startHeartbeat();
   run();
 }

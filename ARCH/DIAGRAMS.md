@@ -1,7 +1,8 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-08-08 · **Spec version:** v3.7 · **Diagrams:** 24
+> **Generated:** 2026-08-09 · **Spec version:** v3.10 · **Diagrams:** 24
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
+> **Surgical hierarchy (doc 52 §1):** the harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12) — Aider-class precision editors included in the harness list. Storage-intelligence flows (D9–D12) and the tiered search cascade (G8) are described in docs 49/52.
 
 ---
 
@@ -550,7 +551,7 @@ flowchart TD
 
     subgraph Orphan["Orphan Prevention (J12)"]
         direction LR
-        Linux[Linux:<br/>prctl PR_SET_PDEATHSIG<br/>→ SIGKILL on parent death]
+        Linux[Linux:<br/>prctl PR_SET_PDEATHSIG<br/>→ SIGTERM on parent death]
         Windows[Windows:<br/>Job Object<br/>KILL_ON_JOB_CLOSE]
         MacOS[macOS:<br/>posix_spawn process group<br/>+ 5s PID poll]
     end

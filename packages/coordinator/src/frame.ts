@@ -36,6 +36,16 @@ export function encodeJson(value: unknown): Uint8Array {
 }
 
 /**
+ * Emit a JSON-RPC 2.0 notification (no `id` — MUST NOT be replied to) to
+ * stdout, length-prefixed. Shared by the coordinator loop (`index.ts`) and the
+ * heap monitor (`heap.ts`) so the notification envelope can't drift between
+ * the two emitters.
+ */
+export function notify(method: string, params: Record<string, unknown>): void {
+  process.stdout.write(encodeJson({ jsonrpc: "2.0", method, params }));
+}
+
+/**
  * Streaming decoder: feed raw bytes as they arrive from the pipe, get back
  * complete payloads. Handles partial frames across multiple `push` calls.
  */

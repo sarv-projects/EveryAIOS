@@ -2,12 +2,19 @@
 //!
 //! Spawns the coordinator binary, monitors its exit codes, applies exponential
 //! backoff on crashes, and implements a circuit breaker (5 crashes in 10 min →
-//! open). Designed to run on a dedicated std::thread, NOT the async runtime.
+//! open). A watchdog (J10) kills + restarts on connect/idle timeouts; the idle
+//! clock is re-armed **per byte of stream** by dedicated stdout/stderr reader
+//! threads, and the sidecar sends a periodic `heartbeat` notification so a
+//! healthy-but-idle process is never falsely killed.
+//!
+//! Designed to run on a dedicated std::thread, NOT the async runtime.
 
 use std::collections::VecDeque;
-use std::io;
+use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Supervisor states reflecting the lifecycle of the managed child process.
@@ -32,6 +39,17 @@ impl std::fmt::Display for SupervisorState {
     }
 }
 
+/// Watchdog decision (J10) — the *reason* a child would be considered hung.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchdogStatus {
+    /// Child is healthy — no action.
+    Healthy,
+    /// Child produced no output within [`CONNECT_TIMEOUT`] of spawn.
+    ConnectTimeout,
+    /// No stream activity for longer than [`IDLE_TIMEOUT`] while running.
+    IdleTimeout,
+}
+
 /// Errors produced by the supervisor.
 #[derive(Debug, thiserror::Error)]
 pub enum SupervisorError {
@@ -54,10 +72,14 @@ const CIRCUIT_WINDOW: Duration = Duration::from_secs(10 * 60);
 /// Maximum crashes within the window before tripping the breaker.
 const CIRCUIT_THRESHOLD: usize = 5;
 
-/// Connect timeout: time allowed for child to become responsive after spawn.
+/// Connect timeout: time allowed for the child to emit its first byte after spawn.
+/// The sidecar writes a `session/ready` notification on boot, so this is normally
+/// satisfied within milliseconds.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Idle timeout: maximum time without activity before watchdog kills child.
+/// Idle timeout: maximum silence (no stdout/stderr bytes) before the watchdog
+/// kills + restarts. The sidecar emits a `heartbeat` notification every 10s,
+/// so a healthy-but-idle process never trips this.
 const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Poll interval for try_wait loop.
@@ -82,8 +104,15 @@ pub struct ProcessSupervisor {
     pub restart_count: u32,
     /// When the current child was spawned (for connect watchdog).
     pub started_at: Option<Instant>,
-    /// Last time activity was observed on the child (for idle watchdog).
-    pub last_activity: Option<Instant>,
+    /// UNIX millis of the last byte observed on the child's stdout/stderr.
+    /// Shared with the reader threads; `0` = no activity yet.
+    pub last_activity_ms: Arc<AtomicU64>,
+    /// stdout/stderr reader threads for the current child (exit on pipe EOF).
+    pub readers: Vec<std::thread::JoinHandle<()>>,
+    /// Windows: Job Object handle with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
+    /// Kept open for the app's lifetime so the OS kills the child on parent death.
+    #[cfg(target_os = "windows")]
+    pub job_handle: Option<isize>,
 }
 
 impl ProcessSupervisor {
@@ -96,16 +125,30 @@ impl ProcessSupervisor {
             crash_history: VecDeque::new(),
             restart_count: 0,
             started_at: None,
-            last_activity: None,
+            last_activity_ms: Arc::new(AtomicU64::new(0)),
+            readers: Vec::new(),
+            #[cfg(target_os = "windows")]
+            job_handle: None,
         }
     }
 
     /// Spawn the coordinator binary as a child process.
     ///
-    /// Sets `BUN_JSC_heapSize=536870912` (512 MB) and applies platform-specific
-    /// orphan-prevention in the child via `pre_exec`.
+    /// Sets `BUN_JSC_heapSize` (512 MB), applies platform-specific
+    /// orphan-prevention (`pre_exec` on Linux/macOS; a Job Object on Windows,
+    /// created *before* the process spawns), and starts stdout/stderr reader
+    /// threads that re-arm the watchdog's activity clock on every byte.
     pub fn spawn(&mut self) -> Result<(), SupervisorError> {
         self.state = SupervisorState::Starting;
+        // Join reader threads from any previous child BEFORE resetting the
+        // activity clock below. A stale thread still draining the dying pipe
+        // could otherwise stamp a fresh timestamp and falsely arm the new
+        // child's connect timeout. Safe: every path into `spawn()` has a dead
+        // or absent previous child, so its pipes are EOF'd and the threads
+        // return promptly.
+        for handle in self.readers.drain(..) {
+            let _ = handle.join();
+        }
 
         let mut cmd = Command::new(&self.binary_path);
         cmd.stdin(Stdio::piped())
@@ -143,17 +186,58 @@ impl ProcessSupervisor {
             }
         }
 
+        // Windows: create the Job Object BEFORE the process spawns so there is
+        // no window in which the child runs outside the job.
+        #[cfg(target_os = "windows")]
+        let job = {
+            let job = crate::orphan::windows::create_job_object()?;
+            self.job_handle = Some(job);
+            job
+        };
+
+        let mut child = cmd.spawn().map_err(SupervisorError::SpawnFailed)?;
+
         #[cfg(target_os = "windows")]
         {
-            // TODO: Assign child to a Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
-            // Requires the `windows-sys` crate — deferred to Windows support phase.
+            // Assign the fresh child to the job by PID (belt + suspenders vs
+            // the pre_exec path Unix platforms use).
+            let pid = child.id();
+            if let Err(e) = crate::orphan::windows::assign_to_job(job, pid) {
+                // Nested-job environments (app launched from inside another
+                // Job) return ERROR_ACCESS_DENIED here. The Job Object is the
+                // *extra* orphan layer — degrade to a warning rather than
+                // failing the spawn; stdin-EOF + ppid polling still backstop.
+                eprintln!(
+                    "[supervisor] warning: could not assign child {pid} to Job Object: {e}"
+                );
+            }
         }
 
-        let child = cmd.spawn().map_err(SupervisorError::SpawnFailed)?;
+        // Watchdog activity clock — reset to "no activity yet". The reader
+        // threads set it to `now` on the first byte, which is what promotes
+        // Starting → Running and arms the idle clock. (Setting it to `now`
+        // here would make the connect timeout dead code — `watchdog_status`
+        // treats `0` as "never produced a byte".)
+        self.last_activity_ms.store(0, Ordering::Relaxed);
+
+        // stdout/stderr reader threads: every byte re-arms the idle watchdog.
+        let last_stdout = Arc::clone(&self.last_activity_ms);
+        if let Some(out) = child.stdout.take() {
+            self.readers.push(std::thread::spawn(move || {
+                let _ = pump(out, &last_stdout);
+            }));
+        }
+        let last_stderr = Arc::clone(&self.last_activity_ms);
+        if let Some(err) = child.stderr.take() {
+            self.readers.push(std::thread::spawn(move || {
+                let _ = pump(err, &last_stderr);
+            }));
+        }
+
         self.child = Some(child);
-        self.state = SupervisorState::Running;
+        // State is promoted to `Running` by the watchdog on the first byte
+        // (see `check_watchdog`), which makes the connect timeout meaningful.
         self.started_at = Some(Instant::now());
-        self.last_activity = Some(Instant::now());
 
         Ok(())
     }
@@ -162,7 +246,12 @@ impl ProcessSupervisor {
     pub fn restart_with_backoff(&mut self) -> Result<(), SupervisorError> {
         self.state = SupervisorState::Restarting;
 
-        let delay_secs = std::cmp::min(1u64 << self.restart_count, MAX_BACKOFF_SECS);
+        // `checked_shl` (saturating_shl is unstable): shift overflow → u64::MAX,
+        // which min() with MAX_BACKOFF_SECS clamps to the 60s cap anyway.
+        let delay_secs = std::cmp::min(
+            1u64.checked_shl(self.restart_count).unwrap_or(u64::MAX),
+            MAX_BACKOFF_SECS,
+        );
         eprintln!(
             "[supervisor] restart_with_backoff: sleeping {}s (attempt {})",
             delay_secs, self.restart_count
@@ -170,8 +259,10 @@ impl ProcessSupervisor {
         std::thread::sleep(Duration::from_secs(delay_secs));
 
         self.restart_count += 1;
+        // `spawn()` sets `Starting`; the watchdog promotes to `Running` on the
+        // first byte — do NOT set `Running` here or the connect timeout would
+        // never apply to restarted children.
         self.spawn()?;
-        self.state = SupervisorState::Running;
         Ok(())
     }
 
@@ -200,35 +291,58 @@ impl ProcessSupervisor {
         self.check_circuit_breaker()
     }
 
-    /// Watchdog: check connect timeout and idle timeout.
+    /// The watchdog decision — pure, no side effects (unit-testable).
     ///
-    /// Returns Ok(()) if healthy, or kills + restarts if timeouts exceeded.
+    /// - `Starting` + no byte within [`CONNECT_TIMEOUT`] → `ConnectTimeout`.
+    /// - `Running` + silence longer than [`IDLE_TIMEOUT`] → `IdleTimeout`.
+    /// - Unknown activity (`last_activity_ms == 0`) is never treated as idle.
+    pub fn watchdog_status(&self) -> WatchdogStatus {
+        let last = self.last_activity_ms.load(Ordering::Relaxed);
+        match self.state {
+            SupervisorState::Starting => {
+                if let Some(started) = self.started_at {
+                    if last == 0 && started.elapsed() > CONNECT_TIMEOUT {
+                        return WatchdogStatus::ConnectTimeout;
+                    }
+                }
+            }
+            SupervisorState::Running => {
+                if last != 0 && now_ms().saturating_sub(last) > IDLE_TIMEOUT.as_millis() as u64 {
+                    return WatchdogStatus::IdleTimeout;
+                }
+            }
+            _ => {}
+        }
+        WatchdogStatus::Healthy
+    }
+
+    /// Watchdog (J10): on connect/idle timeout, kill + restart.
+    ///
+    /// Also promotes `Starting → Running` once the first byte arrives. Returns
+    /// `Ok(())` after a violation-triggered restart; `Err` only when the
+    /// restart itself fails (e.g. the binary went missing).
     pub fn check_watchdog(&mut self) -> Result<(), SupervisorError> {
-        // Connect timeout: child must leave Starting within CONNECT_TIMEOUT.
-        if self.state == SupervisorState::Starting {
-            if let Some(started) = self.started_at {
-                if started.elapsed() > CONNECT_TIMEOUT {
-                    eprintln!("[supervisor] watchdog: connect timeout exceeded, killing child");
-                    self.kill();
-                    self.restart_with_backoff()?;
-                    return Ok(());
+        match self.watchdog_status() {
+            WatchdogStatus::Healthy => {
+                // First byte seen while Starting → connected.
+                if self.state == SupervisorState::Starting
+                    && self.last_activity_ms.load(Ordering::Relaxed) != 0
+                {
+                    self.state = SupervisorState::Running;
                 }
+                Ok(())
+            }
+            status => {
+                eprintln!("[supervisor] watchdog: {status:?} — killing child");
+                self.kill();
+                // A hung child is a crash-like condition — count it toward the
+                // circuit breaker so a perpetually-broken binary eventually
+                // opens instead of restart-looping forever (backoff caps at 60s).
+                self.record_crash()?;
+                self.restart_with_backoff()?;
+                Ok(())
             }
         }
-
-        // Idle timeout: no activity for IDLE_TIMEOUT while Running.
-        if self.state == SupervisorState::Running {
-            if let Some(last) = self.last_activity {
-                if last.elapsed() > IDLE_TIMEOUT {
-                    eprintln!("[supervisor] watchdog: idle timeout exceeded, killing child");
-                    self.kill();
-                    self.restart_with_backoff()?;
-                    return Ok(());
-                }
-            }
-        }
-
-        Ok(())
     }
 
     /// Kill the child process (if running).
@@ -242,8 +356,10 @@ impl ProcessSupervisor {
 
     /// Main supervisor loop: spawn, poll, restart on crash.
     ///
-    /// Returns only when the circuit breaker trips or an unrecoverable error occurs.
-    /// This method blocks the calling thread (run it on a dedicated thread).
+    /// The watchdog is checked on every iteration (connect/idle timeouts →
+    /// kill + restart). Returns only when the circuit breaker trips or an
+    /// unrecoverable error occurs. This method blocks the calling thread
+    /// (run it on a dedicated thread).
     pub fn wait_or_restart(&mut self) -> Result<(), SupervisorError> {
         self.spawn()?;
         eprintln!("[supervisor] state: {}", self.state);
@@ -253,6 +369,10 @@ impl ProcessSupervisor {
             if self.state == SupervisorState::CircuitOpen {
                 return Err(SupervisorError::CircuitOpen);
             }
+
+            // Watchdog: kill + restart on connect/idle timeout. Only returns
+            // Err if the restart itself failed.
+            self.check_watchdog()?;
 
             // Poll the child.
             let exited = if let Some(ref mut child) = self.child {
@@ -309,6 +429,30 @@ impl ProcessSupervisor {
     }
 }
 
+/// Read a child pipe until EOF/error, re-arming the watchdog activity clock
+/// on every chunk that contains at least one byte.
+fn pump<R: Read>(mut reader: R, last_activity_ms: &AtomicU64) -> io::Result<()> {
+    let mut buf = [0u8; 4096];
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) => return Ok(()), // EOF — child closed the pipe
+            Ok(_) => {
+                last_activity_ms.store(now_ms(), Ordering::Relaxed);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// UNIX millisecond timestamp.
+fn now_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,6 +464,7 @@ mod tests {
         assert_eq!(s.restart_count, 0);
         assert!(s.child.is_none());
         assert!(s.crash_history.is_empty());
+        assert_eq!(s.last_activity_ms.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -376,5 +521,61 @@ mod tests {
         let mut s = ProcessSupervisor::new(PathBuf::from("/tmp/fake-bin"));
         let _ = s.record_crash();
         assert_eq!(s.crash_history.len(), 1);
+    }
+
+    #[test]
+    fn watchdog_healthy_with_recent_activity() {
+        let mut s = ProcessSupervisor::new(PathBuf::from("/tmp/fake-bin"));
+        s.state = SupervisorState::Running;
+        s.last_activity_ms.store(now_ms(), Ordering::Relaxed);
+        assert_eq!(s.watchdog_status(), WatchdogStatus::Healthy);
+    }
+
+    #[test]
+    fn watchdog_detects_idle_timeout() {
+        let mut s = ProcessSupervisor::new(PathBuf::from("/tmp/fake-bin"));
+        s.state = SupervisorState::Running;
+        s.last_activity_ms
+            .store(now_ms().saturating_sub(60_000), Ordering::Relaxed);
+        assert_eq!(s.watchdog_status(), WatchdogStatus::IdleTimeout);
+    }
+
+    #[test]
+    fn watchdog_detects_connect_timeout() {
+        let mut s = ProcessSupervisor::new(PathBuf::from("/tmp/fake-bin"));
+        s.state = SupervisorState::Starting;
+        s.started_at = Some(Instant::now() - Duration::from_secs(10));
+        // No activity yet (last_activity_ms == 0).
+        assert_eq!(s.watchdog_status(), WatchdogStatus::ConnectTimeout);
+    }
+
+    #[test]
+    fn watchdog_ignores_idle_when_no_activity_recorded() {
+        let mut s = ProcessSupervisor::new(PathBuf::from("/tmp/fake-bin"));
+        s.state = SupervisorState::Running;
+        // `last == 0` means "no data yet" — must not trip the idle watchdog.
+        assert_eq!(s.watchdog_status(), WatchdogStatus::Healthy);
+    }
+
+    #[test]
+    fn watchdog_promotes_to_running_on_first_byte() {
+        let mut s = ProcessSupervisor::new(PathBuf::from("/tmp/fake-bin"));
+        s.state = SupervisorState::Starting;
+        s.started_at = Some(Instant::now());
+        s.last_activity_ms.store(now_ms(), Ordering::Relaxed);
+        let result = s.check_watchdog();
+        assert!(result.is_ok());
+        assert_eq!(s.state, SupervisorState::Running);
+    }
+
+    #[test]
+    fn watchdog_timeout_triggers_kill_and_restart() {
+        let mut s = ProcessSupervisor::new(PathBuf::from("/nonexistent/bin"));
+        s.state = SupervisorState::Running;
+        s.last_activity_ms
+            .store(now_ms().saturating_sub(60_000), Ordering::Relaxed);
+        // Restart attempt fails (missing binary) → check_watchdog surfaces it.
+        let result = s.check_watchdog();
+        assert!(result.is_err());
     }
 }
