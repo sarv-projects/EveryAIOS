@@ -13,12 +13,16 @@
 
 use std::path::PathBuf;
 
+pub mod blueprint;
 pub mod config;
 pub mod orphan;
+pub mod providers;
 pub mod supervisor;
 pub mod version;
 
+pub use blueprint::{load_all as load_blueprints, load_blueprint, AgentBlueprint, BlueprintError};
 pub use config::{Config, ConfigError};
+pub use providers::{KeyPool, ProviderConfig, ProviderKey, ProvidersError, ProvidersFile};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};
 
 /// Default data directory: `~/.everyaios` (overridable via `EVERYAIOS_HOME`).

@@ -18,11 +18,19 @@
 //! negotiation, all unit-tested. P0.5 wires it into the ProcessSupervisor
 //! with backpressure, truncation and latency benchmarks.
 
+pub mod channel;
 pub mod frame;
+pub mod handle;
 pub mod message;
+#[cfg(unix)]
+pub mod socket;
 
+pub use channel::{BoundedChannel, DEFAULT_CAPACITY};
 pub use frame::{encode, FrameError, MAX_FRAME_LEN};
+pub use handle::{HandleRef, HandleStore, WirePayload};
 pub use message::{JsonRpcError, Request, Response};
+#[cfg(unix)]
+pub use socket::{request, socket_path, UnixFrameServer};
 
 /// Protocol version for the `initialize` handshake — mirrors the ACP
 /// integer `protocolVersion` approach (only bumped on breaking changes).

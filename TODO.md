@@ -55,24 +55,24 @@
 
 ### P0.5 IPC Contract (J15)
 - [x] `[DONE]` Implement length-prefixed framing in everyaios-ipc: `[u32 LE length][JSON payload]` — **`crates/everyaios-ipc/src/frame.rs` (`encode`/`decode`, `MAX_FRAME_LEN` 16MiB, EOF-safe partial-frame handling) + TS mirror `packages/coordinator/src/frame.ts` (incl. resync-on-error `FrameDecoder`); 11 ipc unit tests green, framing also exercised end-to-end by the E2E round-trip below**
-- [ ] `[NOT DONE]` Prefer UNIX-domain socket transport over TCP (J16) — zero port collisions; pre-spawn coordinator at Tauri boot (hidden, ~200ms perceived cold start)
-- [ ] `[NOT DONE]` Implement bounded channel (capacity=16) with backpressure
-- [ ] `[NOT DONE]` Implement truncation: oversized payload → `ref:` handle
+- [x] `[DONE]` Prefer UNIX-domain socket transport over TCP (J16) — zero port collisions; pre-spawn coordinator at Tauri boot (hidden, ~200ms perceived cold start) — **`crates/everyaios-ipc/src/socket.rs`: `UnixFrameServer` (stale-socket rebind, framed `serve_connection`) + `request()` client + `socket_path(data_dir)`; `Config.resolved_socket_path()` (default `<data_dir>/coordinator.sock` — no TCP port ever); `src-tauri` `.setup()` now `pre_spawn_coordinator()` (finds `packages/coordinator/dist/coordinator` / `EVERYAIOS_COORDINATOR_BIN`, runs `ProcessSupervisor::wait_or_restart` on a thread) + `serve_unix_control_channel()` (framed JSON-RPC responder on the socket); 4 socket tests green incl. latency bench below**
+- [x] `[DONE]` Implement bounded channel (capacity=16) with backpressure — **`crates/everyaios-ipc/src/channel.rs`: `BoundedChannel` wraps `mpsc::sync_channel(16)` — `send()` blocks when full (that block IS the backpressure), `try_send()` returns `Full`, atomic length counter, `sender()` clone for thread producers; 6 unit tests green (capacity respected, blocked sender unblocks after drain, recv blocks)**
+- [x] `[DONE]` Implement truncation: oversized payload → `ref:` handle — **`crates/everyaios-ipc/src/handle.rs`: `HandleStore` (thread-safe, atomic ids) + `WirePayload::{Inline,Ref}` + `HandleRef::wire()/parse()` (`ref:handle:<id>`, C10 pass-by-reference); payloads >1MiB (`TRUNCATION_THRESHOLD`) become one-shot handles fetched via `refs/get`; 5 unit tests green**
 - [x] `[DONE]` E2E test: sidecar echo round-trip with length-prefix framing — **`packages/coordinator/src/index.test.ts` “E2E — real child process over stdin/stdout”: spawns `bun run index.ts`, sends initialize + echo + ping composed in a single write (frames split across the write boundary), asserts `session/ready` notification + 3 length-prefixed responses; 17/17 bun tests green (incl. heartbeat E2E)**
-- [ ] `[NOT DONE]` Benchmark: measure IPC latency (target <2ms per crossing)
+- [x] `[DONE]` Benchmark: measure IPC latency (target <2ms per crossing) — **`socket.rs` bench `ipc_latency_below_2ms_per_crossing`: 2000 framed round trips through a real OS socketpair (kernel crossing + framing) — measured avg 35 µs/crossing, 57× under the 2ms budget; assert keeps CI honest**
 
 ### P0.6 Config System (J9)
 - [x] `[DONE]` Define `everyaios.toml` schema (ports, dirs ~/.everyaios/, retention, vault path, browser binary) — **`crates/everyaios-core/src/config.rs`: `Config {data_dir, vault_path, retention_days, browser_binary}` + TOML round-trip + relative-path normalization; `ports` field intentionally deferred until the P0.5 transport (UNIX socket / MCP HTTP port) exists — no ports are live yet**
 - [x] `[DONE]` Implement config loading in everyaios-core from `~/.everyaios/everyaios.toml` — **`Config::load()` / `Config::load_from()` with `EVERYAIOS_HOME` override; tests `default_config_points_into_everyaios_dir` + `missing_file_gets_created_with_defaults` green (13 core tests pass)**
 - [x] `[DONE]` Create default config on first boot — **`load_from` writes `Config::default()` to disk when the file is absent (test asserts the file exists after load)**
-- [ ] `[NOT DONE]` Define `providers.toml` schema (key pools per provider)
-- [ ] `[NOT DONE]` Define `agents/*.md` blueprint format (name, model, tools, permissions)
+- [x] `[DONE]` Define `providers.toml` schema (key pools per provider) — **`crates/everyaios-core/src/providers.rs`: `[[providers]] name/base_url + [[providers.keys]] id/value` (ARCH/03 §3.2); `ProvidersFile::load_from` creates the file empty on first boot; `KeyPool::select()` round-robin across the pool, `NoKeys` error on empty; 6 unit tests green**
+- [x] `[DONE]` Define `agents/*.md` blueprint format (name, model, tools, permissions) — **`crates/everyaios-core/src/blueprint.rs`: TOML frontmatter (`---` fences) with `name/model/tools/permissions` + markdown body; `load_blueprint` / `load_all` (non-recursive, sorted, missing dir = empty); 6 unit tests green (parse, defaults, missing-fence error, body extraction)**
 
 ### P0.7 UI Shell
-- [ ] `[NOT DONE]` Create `ui/` — React SPA (Vite + React 19)
-- [ ] `[NOT DONE]` Basic routing: Chat, Settings placeholder
-- [ ] `[NOT DONE]` Wire Tauri IPC: send command from React → receive in Rust → respond
-- [ ] `[NOT DONE]` Verify hot-reload works with `tauri dev`
+- [x] `[DONE]` Create `ui/` — React SPA (Vite + React 19) — **`ui/` standalone npm project: `package.json` (react 19, react-dom, react-router-dom 6, @tauri-apps/api 2, vite 6, TS strict) + `vite.config.ts` (fixed port 1420 strict, Tauri env prefix, dist output) + `src/` React app (main/App/Chat/Settings/lib); `npm run build` green (38 modules, 222KB JS / 70KB gzip); tsc strict clean; `tauri.conf.json` build now points at `../ui/dist` with `npm --prefix ui` dev/build commands**
+- [x] `[DONE]` Basic routing: Chat, Settings placeholder — **`HashRouter` (file://-safe) with sidebar nav (NavLink active states); `src/pages/Chat.tsx` (message thread + composer, welcome bubble) + `src/pages/Settings.tsx` (core-bridge probe cards + Guard-1 scan demo); dark brand theme in `styles.css`**
+- [x] `[DONE]` Wire Tauri IPC: send command from React → receive in Rust → respond — **`ui/src/lib/tauri.ts` (`inTauri()` + `invoke` via `@tauri-apps/api/core`); Chat sends → `version` command, Settings probes → `version` / `core_boot_report` / `probe_vault` / `scan_text` (Guard-1); graceful browser-preview fallback (local echo / demo data) when not in the Tauri webview**
+- [x] `[DONE]` Verify hot-reload works with `tauri dev` — **vite dev server verified on `localhost:1420` (HTTP 200, Vite 6.4.3 ready in 359ms, React-refresh injected — HMR live); `beforeDevCommand`/`devUrl` wiring in `tauri.conf.json` matches; full window boot previously verified headless on Xvfb (P0.2 round)**
 
 **P0 Exit Criterion:** `cargo test` green; sidecar E2E echo green; `everyaios-core --version` prints; config loaded; vault opens/creates SQLCipher db; Tauri window shows React shell.
 

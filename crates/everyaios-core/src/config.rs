@@ -19,6 +19,9 @@ pub struct Config {
     pub retention_days: u32,
     /// Optional explicit browser binary; `None` = auto-detect (P2.1).
     pub browser_binary: Option<PathBuf>,
+    /// Explicit UNIX socket path (J16); `None` = `<data_dir>/coordinator.sock`.
+    #[serde(default)]
+    pub socket_path: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -29,6 +32,7 @@ impl Default for Config {
             retention_days: 7,
             data_dir,
             browser_binary: None,
+            socket_path: None,
         }
     }
 }
@@ -64,6 +68,14 @@ impl Config {
         cfg.data_dir = normalize(base, &cfg.data_dir);
         cfg.vault_path = normalize(base, &cfg.vault_path);
         Ok(cfg)
+    }
+
+    /// The resolved UNIX socket path (J16): explicit config, else the default
+    /// `<data_dir>/coordinator.sock`.
+    pub fn resolved_socket_path(&self) -> PathBuf {
+        self.socket_path
+            .clone()
+            .unwrap_or_else(|| self.data_dir.join("coordinator.sock"))
     }
 
     /// Persist to `path`, creating the parent dir if needed.
@@ -105,6 +117,13 @@ mod tests {
         assert!(cfg.data_dir.ends_with(".everyaios"));
         assert!(cfg.vault_path.ends_with("vault.db"));
         assert_eq!(cfg.retention_days, 7);
+        // J16: default unix socket lives inside the data dir (zero port
+        // collisions — no TCP port is ever used for local IPC).
+        assert_eq!(
+            cfg.resolved_socket_path(),
+            cfg.data_dir.join("coordinator.sock")
+        );
+        assert!(cfg.socket_path.is_none());
     }
 
     #[test]

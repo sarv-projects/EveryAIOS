@@ -4,6 +4,7 @@
 //! `everyaios-*` crates (core, vault, guard, audit, ipc). This crate wires
 //! them to the UI as Tauri commands + events, and owns the system tray.
 
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use everyaios_guard::Guard;
@@ -47,6 +48,88 @@ fn probe_vault() -> Result<String, String> {
     Ok(vault.status())
 }
 
+/// Locate the coordinator sidecar binary. `EVERYAIOS_COORDINATOR_BIN` wins;
+/// otherwise the standard build output path is probed from the workspace.
+fn locate_coordinator_bin() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("EVERYAIOS_COORDINATOR_BIN") {
+        let p = PathBuf::from(p);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let cwd = std::env::current_dir().ok()?;
+    for rel in [
+        "packages/coordinator/dist/coordinator",
+        "../packages/coordinator/dist/coordinator",
+        "packages/coordinator/dist/coordinator.exe",
+        "../packages/coordinator/dist/coordinator.exe",
+    ] {
+        let p = cwd.join(rel);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// J16: pre-spawn the coordinator sidecar at boot (hidden — the app window
+/// and the sidecar warm up in parallel, so the first chat request never waits
+/// on a process spawn: ~200ms perceived cold start). Non-fatal: the app runs
+/// fine without the sidecar; the supervisor just isn't started.
+fn pre_spawn_coordinator() {
+    let Some(bin) = locate_coordinator_bin() else {
+        eprintln!("everyaios-desktop: coordinator binary not found — pre-spawn skipped");
+        return;
+    };
+    std::thread::spawn(move || {
+        match everyaios_core::start_supervisor(bin) {
+            Ok(mut supervisor) => {
+                if let Err(e) = supervisor.wait_or_restart() {
+                    eprintln!("everyaios-desktop: supervisor ended: {e}");
+                }
+            }
+            Err(e) => eprintln!("everyaios-desktop: supervisor create failed: {e}"),
+        }
+    });
+}
+
+/// J16: bind the UNIX-domain socket control channel (zero port collisions —
+/// no TCP port is ever allocated for local IPC). Serves a minimal framed
+/// JSON-RPC responder on a background thread; the full dispatcher arrives with
+/// the coordinator integration.
+#[cfg(unix)]
+fn serve_unix_control_channel() {
+    let cfg = everyaios_core::Config::load().unwrap_or_default();
+    let sock = cfg.resolved_socket_path();
+    let server = match everyaios_ipc::UnixFrameServer::bind(&sock) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("everyaios-desktop: unix socket bind failed (continuing): {e}");
+            return;
+        }
+    };
+    std::thread::spawn(move || loop {
+        match server.accept() {
+            Ok(stream) => {
+                let _ = server.serve_connection(stream, |payload| {
+                    let parsed: serde_json::Value =
+                        serde_json::from_slice(&payload).unwrap_or_default();
+                    let reply = serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": parsed.get("id"),
+                        "result": { "transport": "unix-socket", "ok": true },
+                    });
+                    Some(serde_json::to_vec(&reply).unwrap_or_default())
+                });
+            }
+            Err(e) => {
+                eprintln!("everyaios-desktop: unix socket accept: {e}");
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Build the initial state exactly like the headless binary would.
@@ -71,6 +154,10 @@ pub fn run() {
             if let Err(e) = setup_tray(app.handle()) {
                 eprintln!("everyaios-desktop: tray setup failed (continuing): {e}");
             }
+            // J16: pre-spawn the coordinator + bind the unix control socket.
+            pre_spawn_coordinator();
+            #[cfg(unix)]
+            serve_unix_control_channel();
             Ok(())
         })
         .run(tauri::generate_context!())
