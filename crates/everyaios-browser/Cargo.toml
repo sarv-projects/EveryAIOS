@@ -4,8 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "EveryAIOS browser layer — a11y snapshot/refs/diff engine (P0.1 types; P2.2 engine)"
+description = "EveryAIOS browser layer — a11y snapshot/refs/diff engine (P2.2: Accessibility-domain capture, interactive/full modes, iframe stitching, line-diff + URL short-circuit)"
 
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+similar = { workspace = true }
+everyaios-cdp = { path = "../everyaios-cdp" }

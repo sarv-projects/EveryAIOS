@@ -1,16 +1,28 @@
 //! everyaios-cdp — Chrome DevTools Protocol client (ARCH/08, E1).
 //!
-//! P0.1 scope: the type skeleton (targets, sessions, transport error) so the
-//! shape of the API is fixed before P2.1 wires the WebSocket transport
-//! (tokio-tungstenite), discovery (`--remote-debugging-port=0` +
-//! DevToolsActivePort), and protocol-version tolerance.
+//! P2.1 scope: tokio-tungstenite WebSocket transport (`transport`),
+//! discovery (`--remote-debugging-port=0` + DevToolsActivePort, `discovery`),
+//! system-Chrome/Edge launch + chrome-for-testing fallback (`browser`),
+//! loopback-only host restriction and protocol-version tolerance
+//! (flatten/nested session modes).
+
+pub mod browser;
+pub mod discovery;
+pub mod transport;
+
+pub use browser::{install_chrome_for_testing, locate_system_browser, spawn_browser, BrowserChild, LaunchOptions};
+pub use discovery::{assert_loopback, connect_to_browser, fetch_targets_http, probe_browser, read_devtools_active_port};
+pub use transport::{AttachMode, CdpClient, CdpEvent, DEFAULT_CALL_TIMEOUT};
 
 use serde::{Deserialize, Serialize};
 
 /// A browser target (tab, page, or worker) as reported by
-/// `Target.getTargets`.
+/// `Target.getTargets` / `/json/list`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TargetInfo {
+    /// Wire field differs by surface: `Target.getTargets` uses `targetId`;
+    /// the HTTP `/json/list` endpoint uses `id`. Accept both on read.
+    #[serde(rename = "id", alias = "targetId")]
     pub target_id: String,
     /// CDP wire field is `type` (e.g. `page`, `worker`).
     #[serde(rename = "type")]
@@ -18,9 +30,14 @@ pub struct TargetInfo {
     pub title: String,
     pub url: String,
     /// WebSocket debugger URL for this target — serialized with the exact
-    /// CDP wire name `webSocketDebuggerUrl`.
-    #[serde(rename = "webSocketDebuggerUrl")]
+    /// CDP wire name `webSocketDebuggerUrl`. Absent on some target types
+    /// (workers/background pages); always present on pages.
+    #[serde(rename = "webSocketDebuggerUrl", default)]
     pub ws_url: String,
+    /// Frame id (present on iframe/frame targets) — used by the snapshot
+    /// engine to stitch child frames inline.
+    #[serde(rename = "frameId", default)]
+    pub frame_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -30,6 +47,10 @@ pub enum TargetType {
     Tab,
     Iframe,
     Worker,
+    /// Any unknown target type (service_worker, background_page, …) — real
+    /// Chrome reports more types than the enum models; unknown ones must not
+    /// break target listing (version-skew tolerance).
+    #[serde(other)]
     Other,
 }
 
@@ -40,18 +61,25 @@ pub struct Session {
     pub target_id: String,
 }
 
-/// Transport errors. The WebSocket layer arrives in P2.1; for now the enum
-/// documents the failure surface (including the version-skew case).
+/// Transport errors.
 #[derive(Debug, thiserror::Error)]
 pub enum CdpError {
     #[error("discovery failed: {0}")]
     Discovery(String),
-    #[error("transport not yet wired (P2.1): {0}")]
-    TransportNotWired(String),
+    #[error("transport error: {0}")]
+    Transport(String),
     #[error("protocol error: code {code}: {message}")]
     Protocol { code: i64, message: String },
-    #[error("chrome version skew: {0}")]
-    VersionSkew(String),
+    #[error("timed out: {0}")]
+    Timeout(String),
+    #[error("security: {0}")]
+    Security(String),
+    #[error("browser not found: {0}")]
+    BrowserNotFound(String),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("http error: {0}")]
+    Http(String),
 }
 
 /// Discovery result of a running Chrome/Edge instance.
@@ -75,6 +103,7 @@ mod tests {
             title: "Example".into(),
             url: "https://example.com".into(),
             ws_url: "ws://127.0.0.1:9222/devtools/page/ABC123".into(),
+            frame_id: None,
         };
         let json = serde_json::to_string(&t).unwrap();
         assert!(json.contains("\"type\":\"page\""), "{json}");
@@ -91,8 +120,23 @@ mod tests {
 
     #[test]
     fn error_variants_display() {
-        assert!(CdpError::VersionSkew("unexpected".into())
+        assert!(CdpError::BrowserNotFound("none".into())
             .to_string()
-            .contains("version skew"));
+            .contains("browser not found"));
+        assert!(CdpError::Timeout("x".into()).to_string().contains("timed out"));
+    }
+
+    #[test]
+    fn target_info_accepts_frame_id() {
+        let t = TargetInfo {
+            target_id: "if1".into(),
+            target_type: TargetType::Iframe,
+            title: "frame".into(),
+            url: "https://example.com/f".into(),
+            ws_url: "ws://127.0.0.1:9222/devtools/page/if1".into(),
+            frame_id: Some("FRAME-1".into()),
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(json.contains("\"frameId\":\"FRAME-1\""), "{json}");
     }
 }

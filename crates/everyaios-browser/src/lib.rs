@@ -1,9 +1,22 @@
 //! everyaios-browser — accessibility-tree snapshot engine (ARCH/08, E3).
 //!
-//! P0.1 scope: the data model — snapshot modes, the a11y tree, stable refs
-//! `[ref=eN]` scoped to (document_id, url), and line-diff markers. P2.2
-//! implements the CDP Accessibility-domain capture, interactive-mode
-//! pruning (~90% token cut), iframe stitching and URL-change short-circuit.
+//! P2.2 scope: CDP Accessibility-domain capture (`capture::SnapshotEngine`),
+//! interactive-mode pruning (~90% token cut), stable refs `[ref=eN]` scoped
+//! to (document_id, url) (`tree`), iframe stitching inline and URL-change
+//! short-circuit (`diff`).
+
+pub mod ax;
+pub mod capture;
+pub mod diff;
+pub mod tree;
+
+#[cfg(test)]
+mod live_tests;
+
+pub use ax::{AxNode, INTERACTIVE_ROLES};
+pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
+pub use diff::{diff_snapshots, snapshot_lines};
+pub use tree::{build_tree, RefMinter, TreeOptions};
 
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +40,10 @@ pub struct A11yNode {
     /// True for interactive elements (buttons, links, inputs).
     #[serde(default)]
     pub actionable: bool,
+    /// Present on iframe placeholder nodes — the child frame's id, used by
+    /// the snapshot engine to stitch child-frame trees inline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<A11yNode>,
 }
@@ -38,6 +55,7 @@ impl A11yNode {
             name: name.into(),
             ref_id: None,
             actionable: false,
+            frame_id: None,
             children: Vec::new(),
         }
     }
@@ -49,6 +67,11 @@ impl A11yNode {
 
     pub fn with_actionable(mut self) -> Self {
         self.actionable = true;
+        self
+    }
+
+    pub fn with_frame_id(mut self, frame_id: impl Into<String>) -> Self {
+        self.frame_id = Some(frame_id.into());
         self
     }
 
