@@ -29,6 +29,10 @@ use tokio_tungstenite::WebSocketStream;
 const EVENT_QUEUE_CAP: usize = 256;
 /// Command channel capacity (bounded — `blocking_send` back-pressures).
 const COMMAND_QUEUE_CAP: usize = 256;
+/// Cap on a single websocket write. A half-open TCP socket can stall
+/// `sink.send().await` forever; bounding it guarantees the driver loop (and
+/// therefore `close()`'s `join()`) always terminates.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Default per-call response timeout.
 pub const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long to wait for the WebSocket handshake before failing `connect`.
@@ -207,7 +211,9 @@ impl CdpClient {
         let result = reply_rx.recv_timeout(self.call_timeout);
         if result.is_err() {
             // Unregister the pending entry so a late response doesn't linger.
-            let _ = tx.try_send(DriverCommand::Cancel { call_id });
+            // Blocking (not try_send): a full command queue must not drop the
+            // Cancel, or the pending entry would leak until the next response.
+            let _ = tx.blocking_send(DriverCommand::Cancel { call_id });
         }
         result.map_err(|_| CdpError::Timeout(format!("no response to {method}")))?
     }
@@ -341,7 +347,17 @@ async fn driver_loop<S>(
                             _ => json!({ "id": call_id, "method": method, "params": params }),
                         };
                         pending.lock().unwrap_or_else(|p| p.into_inner()).insert(call_id, reply);
-                        if sink.send(WsMessage::Text(msg.to_string())).await.is_err() {
+                        // Bound the write: a half-open socket would otherwise
+                        // stall the driver forever (close() join() hang).
+                        let write_ok = matches!(
+                            tokio::time::timeout(
+                                WRITE_TIMEOUT,
+                                sink.send(WsMessage::Text(msg.to_string()))
+                            )
+                            .await,
+                            Ok(Ok(()))
+                        );
+                        if !write_ok {
                             pending.lock().unwrap_or_else(|p| p.into_inner()).remove(&call_id);
                             break;
                         }
