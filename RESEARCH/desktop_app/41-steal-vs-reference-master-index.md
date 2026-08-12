@@ -148,9 +148,9 @@
 
 | Repo | Source files | What to steal | Our implementation |
 |---|---|---|---|
-| **browseros-ai/BrowserOS** (13K⭐) | Full Rust+TS tree | a11y snapshot/diff engine, `run` rquickjs script-eval with browser SDK, audit+replay (NDJSON), plan-before-touch harness installer (7 agents), OAuth BYOK | `pai-browser` engine |
-| **Skyvern-AI/rustwright** (832⭐) | Raw CDP engine (2.55x faster, 70% less RAM), `rustwright-cli` (open/snapshot/click/close) | Drop-in Playwright replacement, no Node driver | `pai-browser` CDP driver |
-| **microsoft/playwright-mcp** (36K⭐) | Accessibility tree-based browser (no pixels), `npx @playwright/mcp@latest` | Structured a11y snapshots (not screenshots), token-efficient | `pai-browser` a11y layer |
+| **browseros-ai/BrowserOS** (13K⭐) | Full Rust+TS tree | a11y snapshot/diff engine, `run` rquickjs script-eval with browser SDK, audit+replay (NDJSON), plan-before-touch harness installer (7 agents), OAuth BYOK | `everyaios-browser` a11y engine (P2.2 ✅ — tree/diff/refs/iframe stitching) |
+| **Skyvern-AI/rustwright** (832⭐) | Raw CDP engine (2.55x faster, 70% less RAM), `rustwright-cli` (open/snapshot/click/close) | Drop-in Playwright replacement, no Node driver | `everyaios-cdp` CDP driver (P2.1 ✅ — ws client, discovery, cft fallback) |
+| **microsoft/playwright-mcp** (36K⭐) | Accessibility tree-based browser (no pixels), `npx @playwright/mcp@latest` | Structured a11y snapshots (not screenshots), token-efficient | `everyaios-browser` a11y layer (P2.1/P2.2 ✅ — live-verified vs real Chrome) |
 | **firecrawl/firecrawl** (162K⭐) | Search+scrape+crawl+map+batch, 96% web coverage, P95 3.4s latency, LLM-ready Markdown | Web context API pattern | `pai-browser` scraper |
 | **browser-use/browser-use** (108K⭐) | DOM-based browser agent, form fill+extraction+QA, self-hosted | Browser agent loop | `pai-browser` agent |
 

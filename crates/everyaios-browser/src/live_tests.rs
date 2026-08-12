@@ -14,15 +14,17 @@ fn live_enabled() -> bool {
 
 /// Spawn headless Chrome and return a connected client + the first page
 /// target's session.
-fn spawn_and_connect() -> (
+fn spawn_and_connect(tag: &str) -> (
     everyaios_cdp::BrowserChild,
     everyaios_cdp::CdpClient,
     everyaios_cdp::Session,
 ) {
     let opts = everyaios_cdp::LaunchOptions {
         headless: true,
+        // Unique per (pid, tag) so parallel runs never contend on the same
+        // Chrome profile lock.
         user_data_dir: std::env::temp_dir().join(format!(
-            "everyaios-live-profile-{}",
+            "everyaios-live-profile-{}-{tag}",
             std::process::id()
         )),
         ..Default::default()
@@ -60,7 +62,7 @@ fn live_spawn_connect_attach_snapshot() {
     if !live_enabled() {
         return;
     }
-    let (child, client, session) = spawn_and_connect();
+    let (child, client, session) = spawn_and_connect("snapshot");
 
     // Navigate to a simple page and wait for it to settle.
     client
@@ -97,7 +99,7 @@ fn live_iframe_stitching() {
     if !live_enabled() {
         return;
     }
-    let (child, client, session) = spawn_and_connect();
+    let (child, client, session) = spawn_and_connect("iframe");
 
     // A page with a srcdoc iframe — same-process, no separate target; the
     // engine must stitch it via Accessibility.getFullAXTree({frameId}).

@@ -68,9 +68,9 @@
 
 | # | Capability | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
-| E1 | CDP child browser | system Chrome/Edge + chrome-for-testing fallback | Rust everyaios-cdp | 🔵 | 33, 34, 08 |
+| E1 | CDP child browser | system Chrome/Edge + chrome-for-testing fallback; loopback-only discovery; version-tolerant client (P2.1 ✅) | Rust everyaios-cdp | 🔵 | 33, 34, 08 |
 | E2 | 34-tool catalog | tabs..run + bookmarks, tab_groups_manage, windows (8.2) | Rust everyaios-mcp | 🔵 | 33 §6, 46 |
-| E3 | A11y snapshot/diff | refs [eN], interactive mode, URL-change short-circuit | Rust everyaios-browser | 🔵 | 33 §5, 08 |
+| E3 | A11y snapshot/diff | refs [eN], interactive mode, URL-change short-circuit, iframe stitching (P2.2 ✅) | Rust everyaios-browser | 🔵 | 33 §5, 55, 08 |
 | E4 | Script-eval (run) | rquickjs sandbox + browser SDK + InnerCallHook | Rust everyaios-script | 🔵 | 33 §6.3, 08 |
 | E5 | Session replay | injected recorder → NDJSON → SQLite; scrubber UI; has_gap | Rust everyaios-audit + UI | 🔵 | 33 §9, 08 |
 | E6 | Tab ownership | mine/user/other-agent; claims; group-per-agent | Rust everyaios-browser + audit | 🔵 | 33, 08 |

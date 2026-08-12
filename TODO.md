@@ -157,22 +157,22 @@
 ## PHASE 2 — Browser Layer (~6 weeks)
 
 ### P2.1 CDP Client (everyaios-cdp, E1 — doc 33 §5, doc 34, ARCH/08 §8)
-- [ ] `[NOT DONE]` Implement WebSocket CDP client (tokio-tungstenite)
-- [ ] `[NOT DONE]` Implement Chrome/Edge discovery: `--remote-debugging-port=0` → read DevToolsActivePort
-- [ ] `[NOT DONE]` Implement loopback-only host restriction (security)
-- [ ] `[NOT DONE]` Implement per-target sessions (multiple tabs)
-- [ ] `[NOT DONE]` Implement chrome-for-testing download fallback (if no system browser)
-- [ ] `[NOT DONE]` Implement protocol-version tolerant client (handle Chrome version skew)
+- [x] `[DONE]` Implement WebSocket CDP client (tokio-tungstenite) — **`src/transport.rs`**: sync facade over tokio-tungstenite — dedicated driver thread running a current-thread tokio runtime; `tokio::select!` multiplexes the WS reader (id-routed pending map) vs bounded command channel (backpressure); `DriverCommand::Cancel` drops a timed-out pending entry so no map leak; `close()` drops the command sender to end the loop (no hang on shutdown); sync `call`/`call_session` with `CallError::Timeout`; flatten + nested attach modes (see protocol tolerance)
+- [x] `[DONE]` Implement Chrome/Edge discovery: `--remote-debugging-port=0` → read DevToolsActivePort — **`src/discovery.rs`**: `discover_endpoint` probes `DevToolsActivePort` in the profile dir (with stale-file removal pre-spawn), falls back to `/json/version` + `/json/list` probes on a known port; `endpoint()` exposes the resolved ws URL
+- [x] `[DONE]` Implement loopback-only host restriction (security) — **`src/discovery.rs`**: only `127.0.0.1`/`::1` endpoints are ever accepted as the debug endpoint (rejects remote hosts outright); per-request `ureq` timeout (5s) so dead-but-open ports can't hang discovery
+- [x] `[DONE]` Implement per-target sessions (multiple tabs) — **`src/transport.rs`**: `Target.createTarget` + `list_targets` (id-tolerant: CDP `Target.getTargets` uses `targetId`, HTTP `/json/list` uses `id` — both supported) + `attach` → flat session with id-routed responses; `Session` handles multiplexed calls per tab
+- [x] `[DONE]` Implement chrome-for-testing download fallback (if no system browser) — **`src/browser.rs`**: `spawn_browser` locates system chrome/edge (config → env → PATH); on failure downloads a chrome-for-testing build (manifest.json → platform-matched zip → zip-slip-guarded extraction, raw-byte stream, not lossy String) then spawns it
+- [x] `[DONE]` Implement protocol-version tolerant client (handle Chrome version skew) — **`src/discovery.rs`/`transport.rs`**: AttachMode negotiation from `Protocol-Version` — `flatten` (older/agent-browser-style) vs `nested` (Target.attachToTarget + `sessionId`-routed messages, `receivedMessageFromTarget`); unknown `TargetType`s tolerated via `#[serde(other)]`; optional `webSocketDebuggerUrl`. **29/29 cdp tests green (incl. protocol_error, timeout, nested/flatten round-trips, zip-slip, manifest routing)**
 
 ### P2.2 A11y Snapshot Engine (everyaios-browser, E3 — doc 33 §5, doc 55 agent-browser snapshot.rs, ARCH/08)
-- [ ] `[NOT DONE]` Reference: agent-browser `snapshot.rs` semantics (doc 55) — role taxonomy (interactive/content/structural), zero-width-char filtering, compact `@eN` refs
-- [ ] `[NOT DONE]` Implement Accessibility domain CDP calls → indented tree render
-- [ ] `[NOT DONE]` Implement stable ref minting `[ref=eN]` scoped to (document_id, url)
-- [ ] `[NOT DONE]` Implement `interactive` mode (actionables + headings only, ~90% token cut)
-- [ ] `[NOT DONE]` Implement `full` mode (complete tree, depth caps 1..=100)
-- [ ] `[NOT DONE]` Implement iframe stitching (inline child frames)
-- [ ] `[NOT DONE]` Implement line-diff between snapshots with `+n/-n` markers
-- [ ] `[NOT DONE]` Implement URL-change short-circuit (navigation → return full new snapshot)
+- [x] `[DONE]` Reference: agent-browser `snapshot.rs` semantics (doc 55) — role taxonomy (interactive/content/structural), zero-width-char filtering, compact `@eN` refs — **`src/ax.rs`**: `Role` taxonomy with `INTERACTIVE_ROLES`/`CONTENT_ROLES`/`STRUCTURAL_ROLES` (deduped), `strip_zero_width` filters U+FEFF/200B/200C/200D/2060/00AD, refs rendered compact `[ref=eN]` (agent-browser convention)
+- [x] `[DONE]` Implement Accessibility domain CDP calls → indented tree render — **`src/ax.rs` + `src/tree.rs`**: `Accessibility.getFullAXTree` (per-frame) parsed via `AxNode::parse_many`; `render()` emits the indented tree text (webarea → children with 2-space indent)
+- [x] `[DONE]` Implement stable ref minting `[ref=eN]` scoped to (document_id, url) — **`src/tree.rs`**: per-snapshot counter seeds `ref=eN` under the (document_id, url) scope; `TreeBuilder` carries the scope through every build
+- [x] `[DONE]` Implement `interactive` mode (actionables + headings only, ~90% token cut) — **`src/tree.rs`**: `SnapshotMode::Interactive` prunes to interactive roles + headings (keeps iframe placeholders for stitching); full mode = complete tree
+- [x] `[DONE]` Implement `full` mode (complete tree, depth caps 1..=100) — **`src/tree.rs`**: `SnapshotMode::Full` renders everything, depth clamped to `1..=100`; structural collapse (WebArea/iframe placeholder splice) keeps depth sane
+- [x] `[DONE]` Implement iframe stitching (inline child frames) — **`src/capture.rs`**: `SnapshotEngine` detects same-process iframes (srcdoc/same-origin have no standalone target) → `DOM.describeNode` resolves the owner `frameId` → `Accessibility.getFullAXTree({frameId})` on the parent session → child tree spliced under the placeholder, skipping the child's WebArea root
+- [x] `[DONE]` Implement line-diff between snapshots with `+n/-n` markers — **`src/diff.rs`**: `similar`-based line diff (`from_slices`) → `+n`/`-n` markers on added/removed lines
+- [x] `[DONE]` Implement URL-change short-circuit (navigation → return full new snapshot) — **`src/diff.rs`**: if the compared snapshots have different URLs the diff returns a full-replace marker instead of a noisy line diff. **22/22 browser tests green + LIVE PASS (real Chrome, `EVERYAIOS_LIVE_TEST=1`): spawn → DevToolsActivePort → connect → attach → a11y snapshot `heading Hello / button Go [ref=e1]`; iframe content stitched inline under the placeholder; parallel-safe (per-test unique Chrome profile dir). Workspace: 210 tests pass, clippy 0 warnings (re-verified 2026-08-12)**
 
 ### P2.3 Input Dispatch & 34-Tool Catalog (E2 — doc 33 §6, doc 46, doc 55 agent-browser read.rs; ARCH/08 §8.2 catalog)
 - [ ] `[NOT DONE]` Implement `act` tool: click/type/fill/press/hover/select/scroll/drag/dialog
