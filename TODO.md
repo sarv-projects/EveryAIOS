@@ -175,30 +175,30 @@
 - [x] `[DONE]` Implement URL-change short-circuit (navigation → return full new snapshot) — **`src/diff.rs`**: if the compared snapshots have different URLs the diff returns a full-replace marker instead of a noisy line diff. **22/22 browser tests green + LIVE PASS (real Chrome, `EVERYAIOS_LIVE_TEST=1`): spawn → DevToolsActivePort → connect → attach → a11y snapshot `heading Hello / button Go [ref=e1]`; iframe content stitched inline under the placeholder; parallel-safe (per-test unique Chrome profile dir). Workspace: 210 tests pass, clippy 0 warnings (re-verified 2026-08-12)**
 
 ### P2.3 Input Dispatch & 34-Tool Catalog (E2 — doc 33 §6, doc 46, doc 55 agent-browser read.rs; ARCH/08 §8.2 catalog)
-- [ ] `[NOT DONE]` Implement `act` tool: click/type/fill/press/hover/select/scroll/drag/dialog
-- [ ] `[NOT DONE]` Implement `act` returns post-settle diff (no follow-up snapshot needed)
-- [ ] `[NOT DONE]` Implement `navigate` tool (goto URL, back, forward, reload)
-- [ ] `[NOT DONE]` Implement `snapshot` tool (calls everyaios-browser)
-- [ ] `[NOT DONE]` Implement `diff` tool (compare two snapshots)
-- [ ] `[NOT DONE]` Implement `read` tool (page → clean markdown via DOM walker)
-- [ ] `[NOT DONE]` Upgrade `read` (doc 55, agent-browser `read.rs`): markdown negotiation (`Accept: text/markdown`, `.md` retry), nearest-ancestor `llms.txt`/`llms-full.txt` walk, `--filter`/`--outline` modes, no-browser HTTP path
+- [x] `[DONE]` Implement `act` tool: click/type/fill/press/hover/select/scroll/drag/dialog — **`crates/everyaios-browser/src/actions.rs` `ActKind`** (17 kinds: click/click_at/type/type_at/fill/press/hover/hover_at/focus/check/uncheck/select/scroll/drag/drag_at/dialog_accept/dialog_dismiss); ref→geometry via `backendDOMNodeId` (now threaded through `A11yNode`/tree) → `DOM.getBoxModel` center → `Input.dispatchMouseEvent`/`dispatchKeyEvent`/`insertText`; check/select via `DOM.resolveNode` + `Runtime.callFunctionOn`; dialogs via `Page.handleJavaScriptDialog`; `DOM.enable` gate added (modern Chrome requires it)
+- [x] `[DONE]` Implement `act` returns post-settle diff (no follow-up snapshot needed) — **`act()` captures pre + post (500ms settle) and returns `SnapshotDiff`; verified LIVE on real Chrome (click landed, diff + DOM change confirmed via read)**
+- [x] `[DONE]` Implement `navigate` tool (goto URL, back, forward, reload) — **`NavigateAction`**: `Page.navigate` / `Page.getNavigationHistory` + `navigateToHistoryEntry` (guarded: no-op at history edges) / `Page.reload`; returns post-navigate snapshot
+- [x] `[DONE]` Implement `snapshot` tool (calls everyaios-browser) — **`BrowserActions::snapshot()` wraps `SnapshotEngine::capture`** (P2.2); `find_ref` walks the tree
+- [x] `[DONE]` Implement `diff` tool (compare two snapshots) — **`BrowserActions::diff()` → `diff_snapshots`** (P2.2 line-diff + URL short-circuit)
+- [x] `[DONE]` Implement `read` tool (page → clean markdown via DOM walker) — **`BrowserActions::read(ReadMode)`**: in-process DOM walkers (`Runtime.evaluate`) — full markdown (headings/links/lists/tables/code), `outline` (headings+links), `raw` (innerText)
+- [x] `[DONE]` Upgrade `read` (doc 55, agent-browser `read.rs`): markdown negotiation (`Accept: text/markdown`, `.md` retry), nearest-ancestor `llms.txt`/`llms-full.txt` walk, `--filter`/`--outline` modes, no-browser HTTP path — **`crates/everyaios-browser/src/read.rs`**: `read_http(agent, url, opts)` — Accept: text/markdown → `.md` suffix retry → ancestor llms.txt/llms-full.txt walk (≤8 hops) → plain-HTML fallback; 2MB body cap (`READ_BODY_CAP`); `apply_options` (filter/outline/raw) applied on any path; `maybe_route_to_file` (OutputFileAccess pattern); 9 unit tests green
 - [ ] `[NOT DONE]` Implement `find` semantic locators (ARIA role + name/label/placeholder) — **post-v1 candidate (doc 55; NOT in P2 scope)**
-- [ ] `[NOT DONE]` Implement `grep` tool (line matches in page content)
-- [ ] `[NOT DONE]` Implement `screenshot` tool (JPEG capture)
-- [ ] `[NOT DONE]` Implement `pdf` tool (print to PDF)
-- [ ] `[NOT DONE]` Implement `wait` tool (text/selector/ms)
-- [ ] `[NOT DONE]` Implement `evaluate` tool (CDP Runtime.evaluate)
-- [ ] `[NOT DONE]` Implement `tabs` / `tab_groups` / `windows` / `history` management tools
-- [ ] `[NOT DONE]` Implement `download` / `upload` with temp-file routing
-- [ ] `[NOT DONE]` Implement `run` tool (→ everyaios-script, see P2.5)
-- [ ] `[NOT DONE]` Register all 34 tools in everyaios-mcp (17 core interaction incl. `run` + `enhanced_snapshot` + bookmarks×6 + tab-groups×5 + window×5 — catalog ARCH/08 §8.2: 17+6+5+5+1 = 34) with annotations (F9: readOnlyHint/openWorldHint, ACP tool-kind taxonomy); + `file_ops`×3 workspace extension (E2) → 37 total
-- [ ] `[NOT DONE]` Implement MCP tool profiles (core/network/state/debug/tabs/react/mobile) + paginated tool discovery + typed args with `extraArgs` parity (agent-browser pattern, doc 55)
+- [x] `[DONE]` Implement `grep` tool (line matches in page content) — **`BrowserActions::grep()`**: innerText → regex line matches with line numbers
+- [x] `[DONE]` Implement `screenshot` tool (JPEG capture) — **`screenshot_jpeg(quality)` → `Page.captureScreenshot` (format jpeg)**; base64 returned for routing
+- [x] `[DONE]` Implement `pdf` tool (print to PDF) — **`pdf_base64()` → `Page.printToPDF`**
+- [x] `[DONE]` Implement `wait` tool (text/selector/ms) — **`BrowserActions::wait(WaitFor, timeout)`**: polls innerText / `querySelector` / sleeps; returns Satisfied/TimedOut
+- [x] `[DONE]` Implement `evaluate` tool (CDP Runtime.evaluate) — **`BrowserActions::evaluate(expr)`** with returnByValue + awaitPromise
+- [x] `[DONE]` Implement `tabs` / `tab_groups` / `windows` / `history` management tools — **tabs** (`Target.getTargets`), **history** (`Page.getNavigationHistory`), **windows** (`Target.getTargets` grouped by browserContextId, `create_window` via `Target.createBrowserContext`+`createTarget newWindow:true`, `close_window` via `disposeBrowserContext`). ⚠️ Honest ceiling (doc 33 §3 — BrowserOS ships these in its Chromium fork): **`tab_groups` has NO CDP surface on stock Chrome** — registered in the catalog, runtime requires the fork/extension surface (marked in the catalog)
+- [x] `[DONE]` Implement `download` / `upload` with temp-file routing — **`set_download_path` (`Browser.setDownloadBehavior`) + `upload_files` (`DOM.setFileInputFiles` by backendNodeId)**; temp routing via read.rs `maybe_route_to_file`
+- [ ] `[NOT DONE]` Implement `run` tool (→ everyaios-script, see P2.5) — registered in the catalog (open_world); engine lands with P2.5
+- [x] `[DONE]` Register all 34 tools in everyaios-mcp (17 core interaction incl. `run` + `enhanced_snapshot` + bookmarks×6 + tab-groups×5 + window×5 — catalog ARCH/08 §8.2: 17+6+5+5+1 = 34) with annotations (F9: readOnlyHint/openWorldHint, ACP tool-kind taxonomy); + `file_ops`×3 workspace extension (E2) → 37 total — **`crates/everyaios-mcp/src/lib.rs` `BROWSER_TOOLS` = 37 ToolDefs** (17 original order-preserved + enhanced_snapshot + 6 bookmarks + 5 tab-groups + 5 windows + 3 file_ops) with ToolKind + read_only + open_world; uniqueness + group-total + annotation tests green (11/11)
+- [x] `[DONE]` Implement MCP tool profiles (core/network/state/debug/tabs/react/mobile) + paginated tool discovery + typed args with `extraArgs` parity (agent-browser pattern, doc 55) — **`ToolProfile` enum (core/network/state/debug/tabs/mobile/all) + `tools_for_profile()` + `paginate(page, page_size) → (slice, has_more)` + typed `ArgDef` schemas on every tool + `validate_args()` (required-args check, unknown args forwarded = extraArgs parity)**; profile/pagination/validation tests green
 - [ ] `[NOT DONE]` Post-v1 tool candidates (doc 55; **NOT in P2 scope**): `a11y_audit` (embedded axe-core, offline WCAG), annotated screenshots (numbered labels ↔ `@eN` refs), batch JSON command mode
-- [ ] `[NOT DONE]` Add bookmark tools (6): get_bookmarks, create_bookmark, remove_bookmark, update_bookmark, move_bookmark, search_bookmarks
-- [ ] `[NOT DONE]` Add tab group management tools (5): list_tab_groups, group_tabs, update_tab_group, ungroup_tabs, close_tab_group
-- [ ] `[NOT DONE]` Add window management tools (5): list_windows, create_window, create_hidden_window, close_window, activate_window
-- [ ] `[NOT DONE]` Add enhanced_snapshot tool (accessibility snapshot with stable refs + paint-order filtering)
-- [ ] `[NOT DONE]` Add file operation tools (3): save_pdf_enhanced, save_screenshot_enhanced, download_file
+- [x] `[DONE]` Add bookmark tools (6): get_bookmarks, create_bookmark, remove_bookmark, update_bookmark, move_bookmark, search_bookmarks — **registered with typed args + annotations**. ⚠️ Honest ceiling: **no CDP bookmarks domain on stock Chrome** (BrowserOS implements via Chromium fork) — runtime gated until fork/extension surface exists
+- [x] `[DONE]` Add tab group management tools (5): list_tab_groups, group_tabs, update_tab_group, ungroup_tabs, close_tab_group — **registered with typed args + annotations**. ⚠️ Honest ceiling: no CDP tab-groups domain on stock Chrome (fork/extension required)
+- [x] `[DONE]` Add window management tools (5): list_windows, create_window, create_hidden_window, close_window, activate_window — **engine + registration**: `Target.createBrowserContext`/`createTarget(newWindow)`/`disposeBrowserContext` + context-grouped listing
+- [x] `[DONE]` Add enhanced_snapshot tool (accessibility snapshot with stable refs + paint-order filtering) — **`BrowserActions::enhanced_snapshot()`**: P2.2 snapshot + `document.elementFromPoint` occlusion check per actionable ref → `occluded` list
+- [x] `[DONE]` Add file operation tools (3): save_pdf_enhanced, save_screenshot_enhanced, download_file — **registered**; routing via read.rs `maybe_route_to_file` + `set_download_path`. **Verification: 237 workspace tests + clippy 0 + 3/3 live Chrome tests (incl. new `live_act_loop_navigate_click_read`: navigate → snapshot → click via ref → read confirms DOM change → reload) — re-verified 2026-08-12**
 
 ### P2.4 Tiered Engine Stack (E10 — doc 08 §8.8, doc 55 Obscura/Lightpanda; ARCH/08 tier table)
 - [ ] `[NOT DONE]` Implement tier-0 static extraction: reqwest + HTML→markdown parser

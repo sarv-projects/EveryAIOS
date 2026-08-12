@@ -261,9 +261,11 @@ name = "everyaios-browser"
 version = "0.1.0"
 dependencies = [
  "everyaios-cdp",
+ "regex",
  "serde",
  "serde_json",
  "similar",
+ "ureq",
 ]
 
 [[package]]
@@ -321,6 +323,7 @@ name = "everyaios-mcp"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]

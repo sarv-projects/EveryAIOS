@@ -5,17 +5,24 @@
 //! to (document_id, url) (`tree`), iframe stitching inline and URL-change
 //! short-circuit (`diff`).
 
+pub mod actions;
 pub mod ax;
 pub mod capture;
 pub mod diff;
+pub mod read;
 pub mod tree;
 
 #[cfg(test)]
 mod live_tests;
 
+pub use actions::{
+    find_ref, ActKind, ActResult, BrowserActions, EnhancedSnapshot, FieldValue, NavigateAction,
+    Point, ReadMode, ScrollDirection, TextResult, WaitFor, WaitOutcome,
+};
 pub use ax::{AxNode, INTERACTIVE_ROLES};
 pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
 pub use diff::{diff_snapshots, snapshot_lines};
+pub use read::{read_http, ReadOptions, ReadSource};
 pub use tree::{build_tree, RefMinter, TreeOptions};
 
 use serde::{Deserialize, Serialize};
@@ -44,6 +51,10 @@ pub struct A11yNode {
     /// the snapshot engine to stitch child-frame trees inline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame_id: Option<String>,
+    /// The backing DOM node id (CDP `backendDOMNodeId`). Lets `act` resolve
+    /// a `[ref=eN]` to geometry (`DOM.getBoxModel`) for click/type/hover.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_dom_node_id: Option<i64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<A11yNode>,
 }
@@ -56,6 +67,7 @@ impl A11yNode {
             ref_id: None,
             actionable: false,
             frame_id: None,
+            backend_dom_node_id: None,
             children: Vec::new(),
         }
     }
@@ -72,6 +84,11 @@ impl A11yNode {
 
     pub fn with_frame_id(mut self, frame_id: impl Into<String>) -> Self {
         self.frame_id = Some(frame_id.into());
+        self
+    }
+
+    pub fn with_backend_dom_node_id(mut self, id: i64) -> Self {
+        self.backend_dom_node_id = Some(id);
         self
     }
 

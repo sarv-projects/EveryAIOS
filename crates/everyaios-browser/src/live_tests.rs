@@ -131,3 +131,63 @@ fn live_iframe_stitching() {
 
     drop(child);
 }
+
+// ---------------------------------------------------------------------------
+// P2.3 — action engine live test: navigate → snapshot → act → read
+// ---------------------------------------------------------------------------
+
+#[test]
+#[ignore]
+fn live_act_loop_navigate_click_read() {
+    if !live_enabled() {
+        return;
+    }
+    let (child, client, session) = spawn_and_connect("actions");
+
+    // A page with a button that toggles a paragraph.
+    let html = "<html><body>\
+        <h1>P2.3 Test</h1>\
+        <button id=b onclick=\"document.getElementById('out').textContent='clicked!'\">Go</button>\
+        <p id=out>initial</p>\
+        </body></html>";
+    client
+        .call_session(
+            &session.session_id,
+            "Page.navigate",
+            serde_json::json!({ "url": format!("data:text/html,{html}") }),
+        )
+        .expect("navigate");
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+
+    let actions = crate::BrowserActions::new(&client, Some(&session.session_id));
+
+    // snapshot → find the button ref.
+    let snap = actions.snapshot("live-act").expect("snapshot");
+    let rendered = snap.root.render();
+    assert!(rendered.contains("button Go [ref=e1"), "expected button ref:\n{rendered}");
+    eprintln!("=== LIVE ACT SNAPSHOT ===\n{rendered}\n=== END ===");
+
+    // act: click the button (ref → geometry → Input.dispatchMouseEvent).
+    let res = actions
+        .act(crate::ActKind::Click { ref_id: "e1".into() })
+        .expect("act click");
+    assert_eq!(res.kind, "click");
+    assert!(res.diff.is_some(), "act must return a post-settle diff");
+
+    // verify the click landed via read (DOM walker sees the new text).
+    let read = actions.read(crate::ReadMode::Raw).expect("read");
+    assert!(
+        read.text.contains("clicked!"),
+        "click should have updated the DOM:\n{}",
+        read.text
+    );
+
+    // navigate: back/forward/reload round-trip.
+    actions
+        .navigate(crate::NavigateAction::Reload)
+        .expect("reload");
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+
+    eprintln!("LIVE PASS: act loop (navigate → snapshot → click → read → reload)");
+    drop(child);
+}

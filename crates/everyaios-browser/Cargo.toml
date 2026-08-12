@@ -10,4 +10,6 @@ description = "EveryAIOS browser layer — a11y snapshot/refs/diff engine (P2.2:
 serde = { workspace = true }
 serde_json = { workspace = true }
 similar = { workspace = true }
+regex = { workspace = true }
+ureq = { workspace = true }
 everyaios-cdp = { path = "../everyaios-cdp" }

@@ -148,9 +148,11 @@
 
 | Repo | Source files | What to steal | Our implementation |
 |---|---|---|---|
-| **browseros-ai/BrowserOS** (13K⭐) | Full Rust+TS tree | a11y snapshot/diff engine, `run` rquickjs script-eval with browser SDK, audit+replay (NDJSON), plan-before-touch harness installer (7 agents), OAuth BYOK | `everyaios-browser` a11y engine (P2.2 ✅ — tree/diff/refs/iframe stitching) |
+| **browseros-ai/BrowserOS** (13K⭐) | Full Rust+TS tree | a11y snapshot/diff engine, `run` rquickjs script-eval with browser SDK, audit+replay (NDJSON), plan-before-touch harness installer (7 agents), OAuth BYOK | `everyaios-browser` a11y engine (P2.2 ✅ — tree/diff/refs/iframe stitching) + `act`/`navigate`/`read` engine (P2.3 ✅ — 17-kind ActKind, post-settle diff) |
 | **Skyvern-AI/rustwright** (832⭐) | Raw CDP engine (2.55x faster, 70% less RAM), `rustwright-cli` (open/snapshot/click/close) | Drop-in Playwright replacement, no Node driver | `everyaios-cdp` CDP driver (P2.1 ✅ — ws client, discovery, cft fallback) |
 | **microsoft/playwright-mcp** (36K⭐) | Accessibility tree-based browser (no pixels), `npx @playwright/mcp@latest` | Structured a11y snapshots (not screenshots), token-efficient | `everyaios-browser` a11y layer (P2.1/P2.2 ✅ — live-verified vs real Chrome) |
+| **Alex313031/thorium** (Chromium fork, perf-tuned) | CDP + `--remote-debugging-port=0` + headless + bundled chromedriver; AVX2/SSE4.1 builds, -O3/thinLTO/PGO | **Optional alternative browser binary** — drop-in via our `LaunchOptions.browser_binary` (config override). NOT default: AVX-only builds crash on old CPUs, security-patch lag, ~500MB installers (🟢 REFERENCE, researched 2026-08-12) | `everyaios-cdp` browser.rs `browser_binary` |
+| **microsoft/vscode-livepreview** (VS Code ext) | Node `http` + `ws` reload server, script-injection before `</head>`, EADDRINUSE auto-increment, path-sanitization, dir-index fallback | **Local preview-server pattern** for later phases (office viewers / document preview in webview — P4.7/UI); nothing P2.3 needs (🟢 REFERENCE, researched 2026-08-12) | later (P4.7/P11.5) |
 | **firecrawl/firecrawl** (162K⭐) | Search+scrape+crawl+map+batch, 96% web coverage, P95 3.4s latency, LLM-ready Markdown | Web context API pattern | `pai-browser` scraper |
 | **browser-use/browser-use** (108K⭐) | DOM-based browser agent, form fill+extraction+QA, self-hosted | Browser agent loop | `pai-browser` agent |
 

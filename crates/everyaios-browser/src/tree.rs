@@ -135,6 +135,9 @@ fn build_node(
             out.frame_id = Some(fid.clone());
         }
     }
+    // Carry the backing DOM node id so `act` can resolve a `[ref=eN]` to
+    // click/type geometry (DOM.getBoxModel on the backendNodeId).
+    out.backend_dom_node_id = node.backend_dom_node_id;
     // Full mode: keep everything. Interactive mode: prune to
     // actionables + headings + content, collapsing pure structure.
     // Iframe placeholders are always kept — the capture engine stitches the
