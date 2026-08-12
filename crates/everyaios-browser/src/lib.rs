@@ -10,6 +10,7 @@ pub mod ax;
 pub mod capture;
 pub mod diff;
 pub mod read;
+pub mod tiers;
 pub mod tree;
 
 #[cfg(test)]
@@ -23,6 +24,7 @@ pub use ax::{AxNode, INTERACTIVE_ROLES};
 pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
 pub use diff::{diff_snapshots, snapshot_lines};
 pub use read::{read_http, ReadOptions, ReadSource};
+pub use tiers::{EngineConfig, EngineError, EngineResult, EngineTier, FetchIntent, LightEngine, TieredEngine};
 pub use tree::{build_tree, RefMinter, TreeOptions};
 
 use serde::{Deserialize, Serialize};

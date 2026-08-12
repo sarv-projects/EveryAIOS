@@ -38,6 +38,8 @@ pub enum ReadSource {
     LlmsTxt { found_at: String },
     /// Plain HTTP fallback (no markdown variant offered).
     PlainHtml,
+    /// Rendered through an engine's DOM walker (tier 1/2, P2.4).
+    DomWalked,
     /// Nothing readable was found.
     NotFound,
 }
@@ -110,7 +112,7 @@ fn read_bounded(resp: ureq::Response) -> String {
 }
 
 /// Very cheap HTML sniff — markdown pages don't start with `<!doctype html>`.
-fn looks_like_html(s: &str) -> bool {
+pub(crate) fn looks_like_html(s: &str) -> bool {
     let head = &s[..s.len().min(512)].to_lowercase();
     head.contains("<!doctype html") || head.contains("<html") || head.contains("<head")
 }

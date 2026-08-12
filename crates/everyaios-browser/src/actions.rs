@@ -909,7 +909,7 @@ fn collect_actionable<'n>(node: &'n A11yNode, f: &mut impl FnMut(&'n A11yNode)) 
 // equivalent (ARCH/08 §8.2 read/grep; doc 55 read.rs semantics).
 // ---------------------------------------------------------------------------
 
-const DOM_WALKER_MARKDOWN: &str = r#"
+pub(crate) const DOM_WALKER_MARKDOWN: &str = r#"
 (function () {
   const out = [];
   function esc(t) { return String(t ?? '').replace(/[\\`*_{}\[\]<>#+.!|]/g, '\\$&'); }
@@ -940,7 +940,7 @@ const DOM_WALKER_MARKDOWN: &str = r#"
 })()
 "#;
 
-const DOM_WALKER_OUTLINE: &str = r#"
+pub(crate) const DOM_WALKER_OUTLINE: &str = r#"
 (function () {
   const out = [];
   for (const h of document.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
@@ -954,7 +954,7 @@ const DOM_WALKER_OUTLINE: &str = r#"
 })()
 "#;
 
-const DOM_WALKER_RAW: &str = r#"
+pub(crate) const DOM_WALKER_RAW: &str = r#"
 (function () { return document.body ? document.body.innerText : ''; })()
 "#;
 

@@ -191,3 +191,64 @@ fn live_act_loop_navigate_click_read() {
     eprintln!("LIVE PASS: act loop (navigate → snapshot → click → read → reload)");
     drop(child);
 }
+
+/// P2.4 — tiered engine stack live: static tier handles a plain page, and a
+/// NeedsJs intent escalates to the installed light engine (Lightpanda). With
+/// the light engine pointed at a missing binary, escalation lands on real
+/// headless Chrome (the TODO's "escalates to Chrome" check, adapted: Obscura
+/// isn't installed, so we exercise the gap path with it).
+#[test]
+#[ignore]
+fn live_tiered_stack_escalation() {
+    if !live_enabled() {
+        return;
+    }
+    use crate::tiers::{EngineConfig, EngineTier, FetchIntent, LightEngine, TieredEngine};
+
+    let engine = TieredEngine::new(EngineConfig::default());
+
+    // Static intent: tier 0 handles a plain page with no browser process.
+    let r0 = engine
+        .fetch("https://example.com/", FetchIntent::Static)
+        .expect("static fetch");
+    assert_eq!(r0.tier, EngineTier::Static);
+    assert!(
+        r0.markdown.contains("Example Domain"),
+        "static tier should read example.com:\n{}",
+        r0.markdown
+    );
+
+    // NeedsJs intent: escalates to the light engine (Lightpanda, installed).
+    let r1 = engine
+        .fetch("https://example.com/", FetchIntent::NeedsJs)
+        .expect("light fetch");
+    assert!(
+        matches!(r1.tier, EngineTier::Lightpanda),
+        "expected Lightpanda tier, got {:?}",
+        r1.tier
+    );
+    assert!(
+        r1.markdown.contains("Example Domain"),
+        "light tier should render example.com:\n{}",
+        r1.markdown
+    );
+
+    // Light-engine capability gap (Obscura not installed) → escalates to
+    // real headless Chrome (tier 2).
+    let engine2 = TieredEngine::new(EngineConfig {
+        light_engine: LightEngine::Obscura,
+        obscura_bin: Some("/nonexistent/obscura".into()),
+        ..Default::default()
+    });
+    let r2 = engine2
+        .fetch("https://example.com/", FetchIntent::NeedsJs)
+        .expect("escalate to chrome");
+    assert_eq!(r2.tier, EngineTier::Chrome);
+    assert!(
+        r2.markdown.contains("Example Domain"),
+        "chrome tier should render example.com:\n{}",
+        r2.markdown
+    );
+
+    eprintln!("LIVE PASS: tiered stack — static → light → chrome escalation");
+}
