@@ -1,6 +1,6 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-08-09 · **Spec version:** v3.13 · **Diagrams:** 24
+> **Generated:** 2026-08-09 · **Spec version:** v3.15 · **Diagrams:** 24
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
 > **Surgical hierarchy (doc 52 §1):** the harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12) — Aider-class precision editors included in the harness list. Storage-intelligence flows (D9–D12) and the tiered search cascade (G8) are described in docs 49/52.
 
@@ -48,8 +48,8 @@ graph TB
 
     subgraph Browser["BROWSER CHILDREN (tiered)"]
         Chrome[System Chrome/Edge]
-        Obscura[Obscura ~30MB]
-        Lightpanda[Lightpanda opt-in]
+        Lightpanda[Lightpanda ~16× less mem (default)]
+        Obscura[Obscura ~30MB (opt-in)]
         Stealth[Fortress/Camoufox]
     end
 
@@ -92,9 +92,11 @@ sequenceDiagram
     S->>S: Token budget check (ARCH/05)
     S->>S: Memory retrieval (C3 fusion)
     S->>S: Inject warm set (Phantom Thread)
-    S->>V: Resolve key (provider, model, session)
-    V-->>S: key_id + sealed handle
-    S->>LLM: Stream request (BYOK key injected by vault)
+    S->>V: Request stream (provider, model, session) [JSON-RPC]
+    V->>V: Resolve key (ring lookup, failover, budget)
+    V->>LLM: Stream request (key injected in Rust — sidecar never sees it)
+    LLM-->>V: SSE chunks
+    V-->>S: streamed chunks (length-prefixed IPC)
     
     loop Tool Loop (≤5 rounds + final guard)
         LLM-->>S: Tool call (streaming)
@@ -201,8 +203,8 @@ flowchart TD
     Task[Browser Task Arrives] --> T0{Tier 0: Static OK?<br/>No JS needed?}
     T0 -->|yes| Static[reqwest + markitdown<br/>0 browser overhead]
     T0 -->|no, needs JS| T1{Tier 1: Lightweight?<br/>No login/WebGL needed?}
-    T1 -->|yes| Obscura[Obscura ~30MB RSS<br/>V8 + CDP + stealth-lite]
-    T1 -->|opt-in| LP[Lightpanda ~16× less mem<br/>Zig, AGPL spawn-only]
+    T1 -->|yes (default)| LP[Lightpanda ~16× less mem<br/>Zig, AGPL spawn-only]
+    T1 -->|opt-in| Obscura[Obscura ~30MB RSS<br/>V8 + CDP + stealth-lite]
     T1 -->|no, needs auth/WebGL| T2[Tier 2: System Chrome/Edge<br/>full browser via CDP]
     T2 --> Check{Challenge/block<br/>detected?}
     Check -->|no| Done[Execute task]
@@ -699,7 +701,7 @@ sequenceDiagram
     Note over Client,Audit: MCP 2026-07-28: STATELESS<br/>No initialize, no session-id<br/>Every request self-contained via _meta
 
     Client->>MCP: POST /mcp<br/>{method: "tools/list",<br/>_meta: {protocolVersion: "2026-07-28",<br/>capabilities: {...}}}
-    MCP-->>Client: {tools: [...34 tools...<br/>annotations: readOnlyHint/openWorldHint]}
+    MCP-->>Client: {tools: [...37 tools...<br/>annotations: readOnlyHint/openWorldHint]}
 
     Client->>MCP: POST /mcp<br/>{method: "tools/call",<br/>name: "snapshot",<br/>arguments: {tabId: "..."},<br/>_meta: {...}}
     MCP->>Guard: Permission check (readOnly tool)
@@ -981,7 +983,7 @@ sequenceDiagram
         Screen-->>Agent: Raw image (1024×768)
         
         alt Structured app (has DOM/a11y)
-            Agent->>Agent: Use CDP 34-tool catalog
+            Agent->>Agent: Use CDP 37-tool catalog
         else Native desktop / unknown app
             Agent->>Parser: Parse screenshot
             Parser->>Parser: YOLO9 detect interactive regions
@@ -1027,4 +1029,4 @@ After iterating through all flows, the following cross-cutting invariants hold a
 
 10. **Intelligent context selection** — diagram 23 (RepoMap) shows how the agent selects relevant codebase context without loading everything, feeding only the most relevant symbols into the LLM within a token budget.
 
-11. **Vision fallback for computer-use** — diagram 24 shows the dual-path: CDP 34-tool catalog for structured apps (DOM available) vs OmniParser+VLM screenshot loop for native desktop apps (no DOM).
+11. **Vision fallback for computer-use** — diagram 24 shows the dual-path: CDP 37-tool catalog for structured apps (DOM available) vs OmniParser+VLM screenshot loop for native desktop apps (no DOM).

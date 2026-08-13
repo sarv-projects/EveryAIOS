@@ -16,3 +16,4 @@ ureq = { workspace = true }
 url = { workspace = true }
 html2md = "0.2"
 everyaios-cdp = { path = "../everyaios-cdp" }
+everyaios-audit = { path = "../everyaios-audit" }

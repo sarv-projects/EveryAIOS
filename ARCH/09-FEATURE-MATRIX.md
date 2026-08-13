@@ -1,6 +1,6 @@
 # 09 — Capability → Feature → Module Matrix (the complete derivation)
 
-> Every capability from the research corpus (docs 01–57, 227 repos) + the v2.0 matrix + the user's explicit requirements. **No scope cuts.** Status legend: 🟢 = exists (reuse from @personal-ai/core-*) · 🟡 = new (build) · 🔵 = new-in-Rust (everyaios-*) · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
+> Every capability from the research corpus (docs 01–60, 247 repos) + the v2.0 matrix + the user's explicit requirements. **No scope cuts.** Status legend: 🟢 = exists (reuse from @personal-ai/core-*) · 🟡 = new (build) · 🔵 = new-in-Rust (everyaios-*) · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
 
 ## A. Model & BYOK layer
 
@@ -9,7 +9,7 @@
 | A1 | Multi-provider BYOK | ProviderAdapter: anthropic/openai/responses/azure/bedrock/gemini/openrouter/deepseek/openai-compat/ollama/llamafile | sidecar (core-providers) + Rust vault | 🟢+🔵 | doc 19 |
 | A2 | **Multi-key per provider** | Key rings: add N keys/provider, priority+weight, per-key model filter, budgets, health | Rust everyaios-vault | 🔵 **NEW (user req)** | ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch |
 | A3 | **Auto-failover rotation** | 429/401/5xx → cooldown → immediate next key; max-switches; all-fail backoff | Rust everyaios-vault | 🔵 **NEW (user req)** | ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch |
-| A4 | OAuth subscriptions | chatgpt-pro (PKCE) / copilot·qwen (device-code), encrypted tokens, same fallback semantics | Rust everyaios-vault + sidecar | 🔵 | 33 §7.4, 13 §5.5 |
+| A4 | OAuth subscriptions | chatgpt-pro (PKCE) / copilot·qwen (device-code), encrypted tokens, same fallback semantics | Rust everyaios-vault + sidecar | 🔵 (⚠️ chatgpt-pro calls the unofficial `chatgpt.com/backend-api/codex/v1` — kept user-driven, Hermes/OpenCode pattern; ToS-risk documented, doc 57 §3) | 33 §7.4, 13 §5.5 |
 | A5 | Local models | Ollama managed + llamafile single-binary; ≥15–20K ctx warning | Rust spawn + sidecar | 🟢+🔵 | 34 §2 + 33 §7.4 |
 | A6 | Model catalog + hints | capabilities (tools/vision/ctx), router picks per task | sidecar core-providers | 🟢 | doc 19 + core-providers pi.dev catalog (15 prov / 280 models) |
 | A7 | Asymmetric tiering | planner_model / subagent_models / depth=2 / concurrency=6 / writers=3 | sidecar (blueprint) | 🟡 | doc 16/05 |
@@ -69,15 +69,15 @@
 | # | Capability | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | E1 | CDP child browser | system Chrome/Edge + chrome-for-testing fallback; loopback-only discovery; version-tolerant client (P2.1 ✅) | Rust everyaios-cdp | 🔵 | 33, 34, 08 |
-| E2 | 34-tool catalog | tabs..run + bookmarks, tab_groups_manage, windows (8.2) — engine + 37-tool registry (P2.3 ✅; bookmarks/tab_groups gated: no CDP surface on stock Chrome) | Rust everyaios-browser (actions/read) + everyaios-mcp | 🔵 | 33 §6, 46, 55 |
+| E2 | 37-tool catalog (34 core + 3 file_ops) | tabs..run + bookmarks, tab_groups_manage, windows (8.2) — engine + 37-tool registry (P2.3 ✅; bookmarks/tab_groups gated: no CDP surface on stock Chrome) | Rust everyaios-browser (actions/read) + everyaios-mcp | 🔵 | 33 §6, 46, 55 |
 | E3 | A11y snapshot/diff | refs [eN], interactive mode, URL-change short-circuit, iframe stitching (P2.2 ✅) | Rust everyaios-browser | 🔵 | 33 §5, 55, 08 |
-| E4 | Script-eval (run) | rquickjs sandbox + browser SDK + InnerCallHook | Rust everyaios-script | 🔵 | 33 §6.3, 08 |
+| E4 | Script-eval (run) | rquickjs sandbox + browser SDK + InnerCallHook | Rust everyaios-script | 🔵 (P2.5 ✅: 64MB/512KB/30s/1K/2MB limits, SDK surface, InnerCallHook audit, ownership filtering — 14/14 tests) | 33 §6.3, 08 |
 | E5 | Session replay | injected recorder → NDJSON → SQLite; scrubber UI; has_gap | Rust everyaios-audit + UI | 🔵 | 33 §9, 08 |
-| E6 | Tab ownership | mine/user/other-agent; claims; group-per-agent | Rust everyaios-browser + audit | 🔵 | 33, 08 |
+| E6 | Tab ownership | mine/user/other-agent; claims; group-per-agent | Rust everyaios-browser + audit | 🔵 (P2.6 ✅: TabRegistry + sync/claim/release/can_close + tab_claim audit events + close_agent_group — 11 tests) | 33, 08 |
 | E7 | Login import/sessions | capture-in-browser sign-in (vault path 1); optional Chrome profile import (path 3) | Rust everyaios-browser | 🔵 | 33 §3.2, 08 §8.9 |
 | E8 | Authenticated scraping | logged-in sessions → tiered scrape → RAG | Rust+sidecar | 🟡 | 01/06 |
 | E9 | Computer-use (pixels) | GUI control (post-v1, gated; patterns: Atlas, Agent-S GUI grounding, trycua/cua sandboxed desktops, OSWorld harness — docs 48/52) | Rust (later) | ⚪ | v2.0 §P8, 09, 52 |
-| E10 | **Lightweight engine tier** | Lightpanda (Zig, opt-in, AGPL — ~16× less memory) + **Obscura (Rust, default — 21K★, source-verified doc 55: own CDP server 14 domains + LP.getMarkdown, embedded MCP 32 tools, scrape workers, SSRF/file:// defaults, ~30MB RSS)** via CDP; tier 0 static→1 lightweight→2 full escalation; adapt = spawn `obscura serve` via ProcessSupervisor | Rust everyaios-cdp | 🔵 **NEW** | 08 §8.8, 55 | **✅ P2.4 landed: `everyaios-browser/src/tiers.rs` — `TieredEngine` (tier 0 `read_http`+`html2md` with SSRF/file://domain guards; tier 1 Lightpanda/Obscura `serve` spawn with `--block-private-networks`/`--disable-workers`/bounded connections; tier 2 Chrome `--disable-features=WebRTC`), E8 escalation loop. LIVE-verified: static→Lightpanda→Chrome against example.com; Obscura binary absent → clean BinaryNotFound → escalates. 246 ws tests, 4/4 live, clippy 0.** |
+| E10 | **Lightweight engine tier** | Lightpanda (Zig, **default**, AGPL — ~16× less memory) + **Obscura (Rust, opt-in — 21K★, source-verified doc 55: own CDP server 14 domains + LP.getMarkdown, embedded MCP 32 tools, scrape workers, SSRF/file:// defaults, ~30MB RSS)** via CDP; tier 0 static→1 lightweight→2 full escalation; adapt = spawn `obscura serve` via ProcessSupervisor | Rust everyaios-cdp | 🔵 **NEW** | 08 §8.8, 55 | **✅ P2.4 landed: `everyaios-browser/src/tiers.rs` — `TieredEngine` (tier 0 `read_http`+`html2md` with SSRF/file://domain guards; tier 1 Lightpanda/Obscura `serve` spawn with `--block-private-networks`/`--disable-workers`/bounded connections; tier 2 Chrome `--disable-features=WebRTC`), E8 escalation loop. LIVE-verified: static→Lightpanda→Chrome against example.com; Obscura binary absent → clean BinaryNotFound → escalates. 270 ws tests (246 at P2.4 + 24 P2.5/P2.6), 4/4 live, clippy 0.** |
 | E11 | **Session Vault** | multi-account per site, encrypted **full storage context** (cookies + localStorage + sessionStorage + IndexedDB, Chrome leveldb decode, persist/restore — doc 55) in SQLCipher, Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit, expiry nudges | Rust everyaios-vault + everyaios-browser | 🔵 **NEW (user req)** | 08 §8.9, 55 |
 | E12 | **Challenge handler** | PoW captchas solved locally + LLM visual-grounding + human-in-loop pass-through (default) + optional BYO solver API (user key) | Rust everyaios-core + sidecar | 🔵+🟡 **NEW** | 08 §8.10 |
 | E13 | Session inheritance | live-attach to user's own Chrome profile via CDP debug port (vault path 2, no re-login) | Rust everyaios-cdp | 🔵 **NEW** | 08 §8.9 |

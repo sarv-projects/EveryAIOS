@@ -9,6 +9,7 @@ pub mod actions;
 pub mod ax;
 pub mod capture;
 pub mod diff;
+pub mod ownership;
 pub mod read;
 pub mod tiers;
 pub mod tree;
@@ -23,6 +24,7 @@ pub use actions::{
 pub use ax::{AxNode, INTERACTIVE_ROLES};
 pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
 pub use diff::{diff_snapshots, snapshot_lines};
+pub use ownership::{OwnershipError, TabClaim, TabOwner, TabRecord, TabRegistry};
 pub use read::{read_http, ReadOptions, ReadSource};
 pub use tiers::{
     EngineConfig, EngineError, EngineResult, EngineTier, FetchIntent, LightEngine, TieredEngine,

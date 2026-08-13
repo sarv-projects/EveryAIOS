@@ -1,10 +1,10 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (updated 2026-08-10) · **Spec:** v3.13 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (updated 2026-08-13) · **Spec:** v3.15 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
 > **Scope:** Complete product — 138 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
-> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–57) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
+> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–60) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 
 <!-- VERIFICATION POLICY: Every completed task MUST be verified before marking [DONE].
      Verification means: code compiles, tests pass, behavior confirmed (manual or automated).
@@ -145,9 +145,13 @@
 - [x] `[DONE]` Implement GBNF grammar constraint passthrough for local models (B5) — **SPEC B5** + v2.0 §P3: broker `Grammar` enum (None/Json/JsonSchema/Gbnf); body `grammar` string → GBNF, object `{type: json|json_schema|gbnf, value}` → typed, `tools` present → JSON-mode default; llamafile sends raw GBNF in native `grammar` (llama.cpp), ollama sends `format` = "json" / JSON schema. ⚠️ **Verified live on ollama 0.21.1: raw GBNF in `format` 500s ("invalid format")** — ollama's grammar API is JSON/schema only, so GBNF falls back to `format:"json"` (still logit-layer grammar → output is guaranteed valid JSON); raw GBNF is a llamafile/llama.cpp-native feature (doc 41 REFERENCE rows updated)
 - [x] `[DONE]` Test: local model tool call with GBNF → verify valid JSON always — **LIVE PASS (2026-08-10)**: `ollama pull qwen2.5:0.5b` (397MB) → `EVERYAIOS_LIVE_TEST=1 EVERYAIOS_LIVE_MODEL=qwen2.5:0.5b cargo test ... --ignored` → `LIVE PASS: ollama tool call → valid JSON: {"tool": "WeatherTool"}` (2.4s). `#[ignore]`-gated + env-guarded; mock tests cover both runtimes (format/grammar field assertions, keyless path, usage→ledger at $0, budget pre-flight, fail-closed)
 
+- [ ] `[NOT DONE]` **Hardware-fit picker for local models (doc 58 — llmfit pattern):** detect RAM/CPU/GPU and score candidate local models (fit/speed/quality/context; Q4_K_M ≈ 0.5 B/param) before spawn — `recommend --json`-style; runtimes Ollama/llama.cpp/MLX/Docker Model Runner/LM Studio. Complements the ≤15–20K ctx warning
+
 ### P1.9 Model Catalog (A6 — ARCH/09 A6: doc 19 + core-providers pi.dev catalog, 15 prov / 280 models; feeds A7)
 - [x] `[DONE]` Implement model catalog: per-provider model registry with capability hints (tools, vision, context window) — **`packages/coordinator/src/catalog.ts`**: wraps core-providers capability-registry (pi.dev snapshot — `getModelCatalog`/`getModelsForProvider`/`getModelCapabilities`), broker-id alias map (`nvidia↔nvidia-nim` + OAuth/local providers), `hintsFor()` (ctx/tools-heuristic/vision/reasoning/costScore), `setLocalModels()` merges installed ollama models with effective ctx, `contextWindowFor()` for the UI. 15 catalog tests green
 - [x] `[DONE]` Router consumes catalog hints for task-to-model selection (feeds A7 asymmetric tiering) — **`packages/coordinator/src/router.ts`**: `selectModelForTask()` filters by vision/tools/min-ctx then ranks cheapest (subagent) or most capable (planner); `plannerForTask`/`subagentForTask`; `ASYMMETRIC_TIERS {depth:2, concurrency:6, writers:3}`; explicit model lock wins; local models are candidates once merged; fallback with reason. 7 router tests green — coordinator suite now **56/56 + tsc clean**
+
+- [ ] `[NOT DONE]` **A6 catalog long-tail (doc 58/59):** ingest OmniRoute's MIT `PROVIDER_REFERENCE.md` (339 providers) as reference data — import only API-key + local + keyless allow-list; cookie (34) + OAuth-CLI (25) classes = doc-57 reject list
 
 **P1 Exit Criterion:** Two keys under one provider auto-failover under simulated 429; streaming chat round-trip with real BYOK key; ledger rows correct; $ budget kills session. P1.8/P1.9 done 2026-08-10 (local runtimes + catalog/router live-verified).
 
@@ -174,7 +178,7 @@
 - [x] `[DONE]` Implement line-diff between snapshots with `+n/-n` markers — **`src/diff.rs`**: `similar`-based line diff (`from_slices`) → `+n`/`-n` markers on added/removed lines
 - [x] `[DONE]` Implement URL-change short-circuit (navigation → return full new snapshot) — **`src/diff.rs`**: if the compared snapshots have different URLs the diff returns a full-replace marker instead of a noisy line diff. **22/22 browser tests green + LIVE PASS (real Chrome, `EVERYAIOS_LIVE_TEST=1`): spawn → DevToolsActivePort → connect → attach → a11y snapshot `heading Hello / button Go [ref=e1]`; iframe content stitched inline under the placeholder; parallel-safe (per-test unique Chrome profile dir). Workspace: 210 tests pass, clippy 0 warnings (re-verified 2026-08-12)**
 
-### P2.3 Input Dispatch & 34-Tool Catalog (E2 — doc 33 §6, doc 46, doc 55 agent-browser read.rs; ARCH/08 §8.2 catalog)
+### P2.3 Input Dispatch & 37-Tool Catalog (E2 — doc 33 §6, doc 46, doc 55 agent-browser read.rs; ARCH/08 §8.2 catalog)
 - [x] `[DONE]` Implement `act` tool: click/type/fill/press/hover/select/scroll/drag/dialog — **`crates/everyaios-browser/src/actions.rs` `ActKind`** (17 kinds: click/click_at/type/type_at/fill/press/hover/hover_at/focus/check/uncheck/select/scroll/drag/drag_at/dialog_accept/dialog_dismiss); ref→geometry via `backendDOMNodeId` (now threaded through `A11yNode`/tree) → `DOM.getBoxModel` center → `Input.dispatchMouseEvent`/`dispatchKeyEvent`/`insertText`; check/select via `DOM.resolveNode` + `Runtime.callFunctionOn`; dialogs via `Page.handleJavaScriptDialog`; `DOM.enable` gate added (modern Chrome requires it)
 - [x] `[DONE]` Implement `act` returns post-settle diff (no follow-up snapshot needed) — **`act()` captures pre + post (500ms settle) and returns `SnapshotDiff`; verified LIVE on real Chrome (click landed, diff + DOM change confirmed via read)**
 - [x] `[DONE]` Implement `navigate` tool (goto URL, back, forward, reload) — **`NavigateAction`**: `Page.navigate` / `Page.getNavigationHistory` + `navigateToHistoryEntry` (guarded: no-op at history edges) / `Page.reload`; returns post-navigate snapshot
@@ -205,23 +209,23 @@
 - [x] `[DONE]` Integrate Obscura (doc 55): spawn `obscura serve` binary (loopback default), connect CDP — **`spawn_light()` Obscura branch: `obscura serve --host 127.0.0.1 --port <free-port>` → `/json/version` poll → `connect_to_browser` (our everyaios-cdp client) → reuse page target → `Page.navigate` → `document.readyState` poll → DOM-walker markdown. Binary absent → clean `EngineError::BinaryNotFound` → E8-escalates (LIVE-verified: lands on real headless Chrome). ~30MB RSS + embedded MCP 32 tools + `LP.getMarkdown` claims are source-verified in doc 55 (ARCH/09 E10) — the same Chrome-compatible CDP surface is exercised live via Lightpanda.**
 - [x] `[DONE]` Obscura security flags (doc 55 §2 / 06 §6.15): SSRF defaults (loopback/RFC1918 blocked, `--allow-private-network` opt-in), `file://` blocked by default, bounded `--max-connections` — **flags wired: `--allow-private-network`/`--allow-file-access` only when opted in (Obscura defaults block both); `--max-connections` bounded (128); SSRF/file:// also enforced in-process by `guard_ssrf`/`guard_domain` on EVERY tier (defense in depth)**
 - [x] `[DONE]` Browser network containment (doc 55 §1 / 06 §6.15): `--allowed-domains` → WebRTC (RTCPeerConnection) disable + worker fail-closed guards + content boundaries + max-output — **Lightpanda branch passes `--disable-workers` (fail-closed) + `--cdp-max-connections`; Chrome tier passes `--disable-features=WebRTC`; `allowed_domains` enforced at the orchestration layer (agent-browser `--allowed-domains` semantics, `guard_domain`); full worker-guard parity is native to the light engines — same honest ceiling as P2.3 bookmarks (stock Chrome has no CDP switch for it); `--max-output` = 2MB cap on every tier**
-- [x] `[DONE]` Integrate Lightpanda: binary spawn, CDP connection (opt-in, AGPL spawn-only); driver pattern: agent-browser `native/cdp/lightpanda.rs` (doc 55) — **`spawn_light()` Lightpanda branch: `lightpanda serve --host 127.0.0.1 --port <free> --block-private-networks --disable-workers --cdp-max-connections` → `/json/version` → Chrome-compatible CDP — our existing `everyaios-cdp` client drives it unchanged (LIVE PASS against the installed binary; AGPL respected: spawn-only, never linked)**
+- [x] `[DONE]` Integrate Lightpanda: binary spawn, CDP connection (**default**, AGPL spawn-only); driver pattern: agent-browser `native/cdp/lightpanda.rs` (doc 55) — **`spawn_light()` Lightpanda branch: `lightpanda serve --host 127.0.0.1 --port <free> --block-private-networks --disable-workers --cdp-max-connections` → `/json/version` → Chrome-compatible CDP — our existing `everyaios-cdp` client drives it unchanged (LIVE PASS against the installed binary; AGPL respected: spawn-only, never linked)**
 - [x] `[DONE]` Implement escalation logic (E8): tier 0→1→2 based on failure/JS-need/login-need — **`TieredEngine::fetch(intent)` picks the starting tier (Static / NeedsJs→light / NeedsLogin→chrome), then `escalate_from()` loops static→light→chrome on failure/capability-gap; policy rejections (SSRF/file://domain) never escalate; `escalation_rules` test (7 rules) green**
 - [x] `[DONE]` Test: scrape task runs on light engine, escalates to Chrome only on JS-render need — **`live_tiered_stack_escalation` (LIVE PASS, real binaries): Static intent → tier 0 reads example.com with no browser process; NeedsJs → Lightpanda tier renders it; Obscura-missing gap → real headless Chrome tier renders it (escalates only on need). 52/52 browser unit tests, workspace 246, clippy 0**
 
 ### P2.5 Script-Eval Sandbox (everyaios-script, E4 — doc 33 §6.3, doc 55 agent-browser run; ARCH/08)
-- [ ] `[NOT DONE]` Integrate rquickjs crate with async runtime
-- [ ] `[NOT DONE]` Implement limits: 64MB heap, 512KB stack, 30s timeout, 1K log lines, 2MB return
-- [ ] `[NOT DONE]` Implement `browser` SDK surface (pages, observe, input, nav, read, grep, etc.)
-- [ ] `[NOT DONE]` Implement InnerCallHook: every primitive (a) authorized (b) recorded (c) page-creations claimed
-- [ ] `[NOT DONE]` Implement ownership filtering: pages.list() returns mine/user/other-agent
-- [ ] `[NOT DONE]` Test: run multi-step script → verify every primitive has an audit row
+- [x] `[DONE]` Integrate rquickjs crate with async runtime — **`crates/everyaios-script` (rquickjs 0.12, features `futures`+`parallel`, no rust-alloc so memory limits apply): fresh `AsyncRuntime` per eval on a dedicated thread (runaway script can never poison a shared engine, no JS state leaks between runs); `AsyncContext::full` + `EvalOptions{promise}` → top-level `await` + script completion value; tokio current-thread runtime inside the eval thread (safe from inside any caller runtime); teardown discipline: drop context → `rt.run_gc()` before free (avoids `JS_FreeRuntime` gc_obj_list abort); rquickjs#370 avoided — functions never capture a cloned `Ctx`**
+- [x] `[DONE]` Implement limits: 64MB heap, 512KB stack, 30s timeout, 1K log lines, 2MB return — **`SandboxLimits::default()` enforced: `rt.set_memory_limit(64MB)` + `rt.set_max_stack_size(512KB)` before context creation; 30s interrupt handler (uncatchable exception → `SandboxError::Timeout`) + tokio timeout grace for hung Rust futures; bounded `console` (1K lines → truncated flag); return payload capped at 2MB (`ReturnTooLarge`). Tests: runaway loop → Timeout, never-resolving promise → Timeout, 4MB-heap OOM → Limit, recursion → stack error, 1000-char return under 100B cap → ReturnTooLarge, 100 console lines under cap 10 → truncated**
+- [x] `[DONE]` Implement `browser` SDK surface (pages, observe, input, nav, read, grep, etc.) — **JS prelude mirrors ARCH/08 §8.4 exactly: `pages.newPage/close/list/getInfo`, `observe(pageId).snapshot/diff/resolveRef`, `input(pageId).click/fill/type/press/hover/select/scroll`, `nav(pageId).goto/back/forward/reload`, `read/grep/wait/screenshot/evaluate/pdf/download/upload/tabGroups/windows`, raw `cdp(method, params, sessionId)` escape hatch — every method funnels through ONE Rust channel (`__primitive`) so nothing can bypass the hook; JSON bridging via JSON.stringify/parse (rquickjs 0.12 has no serde_json impl)**
+- [x] `[DONE]` Implement InnerCallHook: every primitive (a) authorized (b) recorded (c) page-creations claimed — **the hook lives in `__primitive` (sandbox.rs `install_sdk`): authorize → exec → record (denied attempts included, `ok:false`) → `pages.newPage` success claims the new page (`on_page_created`). Scripts cannot reach a browser action outside the channel. `BrowserHost` trait = the caller-supplied policy/audit/browser**
+- [x] `[DONE]` Implement ownership filtering: pages.list() returns mine/user/other-agent — **`PageOwnership::Mine|User|OtherAgent` (kebab-case in JSON); `pages.list()` exposes ownership per page; closing/acting on a non-owned page is denied by the host's authorize and surfaces as a JS error to the script (test: foreign-tab close blocked + still audited)**
+- [x] `[DONE]` Test: run multi-step script → verify every primitive has an audit row — **`multi_step_script_every_primitive_has_audit_row`: newPage → nav.goto → read → grep → close writes 5 `script.primitive` rows (every one `ok:true`) + 1 `script.page_created` claim row to the NDJSON audit via everyaios-audit. 14/14 script tests green (workspace 258, clippy 0)**
 
 ### P2.6 Tab Ownership (E6 — doc 33, ARCH/08)
-- [ ] `[NOT DONE]` Implement ownership model: mine / user / other-agent per tab
-- [ ] `[NOT DONE]` Implement claims table (tab_claims in audit DB)
-- [ ] `[NOT DONE]` Implement group-per-agent (agent session → tab group)
-- [ ] `[NOT DONE]` Test: agent cannot close a user tab
+- [x] `[DONE]` Implement ownership model: mine / user / other-agent per tab — **`crates/everyaios-browser/src/ownership.rs` `TabOwner` (kebab-case serde, maps 1:1 to the script sandbox's `PageOwnership`) + `TabRegistry` (thread-safe policy store): `sync_targets(&[TargetInfo])` attributes unknown page/tab targets to **User** (fail-closed: never assume an agent owns a tab it didn't claim), preserves claims across refreshes, drops closed targets; `owner_of()` defaults to User for untracked tabs; `records()` feeds `pages.list()` ownership labels**
+- [x] `[DONE]` Implement claims table (tab_claims in audit DB) — **every claim/denial/release/group-close writes a `browser.tab_claim` NDJSON event (`TabClaim` payload: tab_id, owner, action, agent_session, group_id, reason) via the attached `AuditWriter` — the `tab_claims` table, BrowserOS model (doc 33). Denied attempts are audited too (denied = part of the trail); audit failures never break the browser path**
+- [x] `[DONE]` Implement group-per-agent (agent session → tab group) — **one group per agent session (`agent-<session>`), created on first claim; `close_agent_group(session)` returns exactly that session's tab ids for CDP close + audits `group_closed` per tab; other agents'/user tabs survive. (Stock Chrome has no TabGroups CDP — logical grouping only, per P2.3 gating)**
+- [x] `[DONE]` Test: agent cannot close a user tab — **`agent_cannot_close_a_user_tab` (deny + audit), `agent_cannot_close_another_agents_tab` (WrongSession), `agent_can_close_own_tab`, `release_of_user_tab_fails`, `close_agent_group_returns_only_that_sessions_tabs`, `denied_attempts_are_audited`, sync claim-preservation/drop tests. 11 ownership tests + `close_tab` CDP primitive (`Target.closeTarget`) in actions.rs — 64/64 browser tests, workspace 270, clippy 0**
 
 ### P2.7 Session Vault (E11/E7/E13 — doc 08 §8.9, doc 55 Steel leveldb + session storage, doc 33 §3.2)
 - [ ] `[NOT DONE]` Design SQLCipher schema: per-site **full storage context** — cookie jars (host-keyed) + localStorage + sessionStorage + IndexedDB + auth headers; Chrome raw-storage decode (`0x00` = UTF-16-LE, `0x01` = ISO-8859-1 — Steel `leveldb` pattern, doc 55)
@@ -309,11 +313,13 @@
 - [ ] `[NOT DONE]` Implement planner fallback: when regex DSL can't parse → LLM-direct (audit flagged, permission-gated)
 - [ ] `[NOT DONE]` Test: formula recalc golden cases (SUM, VLOOKUP, IF, COUNTIF, dynamic arrays)
 - [ ] `[NOT DONE]` Implement virtualized 100K+ row table view in UI
+- [ ] `[NOT DONE]` **Univer split (doc 58):** Univer Sheets = the H5 live-grid *view* surface; surgical patch + IronCalc = mutation/truth engine — pick ONE calc engine (Univer Node or IronCalc), don't run both as truth; `univer-mcp` as G4/D2 REPL reference
 
 ### P4.3 PowerPoint Engine (D3 — doc 04)
 - [ ] `[NOT DONE]` Implement surgical part-editing: ppt/slides/slideN.xml text runs, bullets, shapes
 - [ ] `[NOT DONE]` Implement slide add/remove: clone part + rels + Content_Types registration
 - [ ] `[NOT DONE]` Test: pptx add/remove slide round-trip
+- [ ] `[NOT DONE]` **Author-new-deck path (doc 58 — ppt-master pattern):** "make me a deck from this brief" = reason-then-native-shapes (template-clone + chart/table model, transitions/animations, speaker notes) — composes with surgical D3 edit of existing decks
 
 ### P4.4 PDF Engine (D4 — doc 04)
 - [ ] `[NOT DONE]` Implement pdf.js-class renderer in webview
@@ -339,6 +345,7 @@
 - [ ] `[NOT DONE]` Implement pptx viewer (slides as styled divs, notes panel)
 - [ ] `[NOT DONE]` Implement PDF viewer (pdf.js-based)
 - [ ] `[NOT DONE]` Implement chat overlay on any open document (page-scoped questions)
+- [ ] `[NOT DONE]` **Univer embed (doc 58):** evaluate Univer SDK as the office surface (Sheets first → Docs → Slides last; ⚠️ OSS/Pro split — xlsx/pptx import may be Pro); keep our surgical patch as the mutation engine, Univer as view/edit UI
 
 ### P4.8 Storage Intelligence (D9–D11, G7 — doc 49)
 - [ ] `[NOT DONE]` Implement everyaios-storage crate: parallel work-stealing walker (crossbeam-deque + `ignore`, cycle/device-boundary safe)
@@ -504,7 +511,7 @@
 - [ ] `[NOT DONE]` Wire core-search MCP client from APP (consume external MCP servers)
 - [ ] `[NOT DONE]` Implement tool catalog reconciliation (external MCP tools → unified registry)
 - [ ] `[NOT DONE]` Implement MCP server in everyaios-mcp: stateless Streamable HTTP (2026-07-28 spec)
-- [ ] `[NOT DONE]` Expose all 34 browser tools + connector tools via MCP endpoint
+- [ ] `[NOT DONE]` Expose all 37 tools (34 core + 3 file_ops) + connector tools via MCP endpoint
 - [ ] `[NOT DONE]` Test: external client (Claude Code) connects to our MCP endpoint, calls snapshot
 
 ### P6.8 Harness-Driving via ACP (F12/J17 — doc 35 §C, doc 45 ACP, doc 52 surgical hierarchy, doc 56 cowork-forge, doc 57 ACP registry)
@@ -520,22 +527,25 @@
 - [ ] `[NOT DONE]` Add **Copilot CLI** to the F12 harness list (doc 56 §4 — closed, custom license → drive via ACP like any harness, never a dependency) + LSP-config diagnostics pattern (`lsp-config.json`; open reference = Warp `lsp` crate, doc 56 W4); ACP adapter reference: cowork-forge `acp/client.rs` + `agents/external_coding_agent.rs` (doc 56 C2)
 - [ ] `[NOT DONE]` Consume the **official ACP agent registry** (agentclientprotocol/registry — CDN `registry.json`, 38 agents incl. `claude-acp` (Anthropic-co-authored wrapper), dist types binary/npx/uvx; doc 57 §2) for **registry-fed harness discovery** in F8/F12 — local cache + version pinning + curated allow-list (trust + ToS gate); never ship a hardcoded catalog as the ceiling
 - [ ] `[NOT DONE]` Add **auth-mode badge** to the harness UI (subscription-backed / API-key-backed / local — doc 57 §3); Claude Agent = **subscription-backed (allowed via the official ACP wrapper, Anthropic co-authored)**
+- [ ] `[NOT DONE]` Add **CodeWhale** (Hmbown/CodeWhale, 40.7K⭐ Rust MIT — the DeepSeek-TUI project renamed) to the F12 harness candidate set (doc 58 §6)
 - [ ] `[NOT DONE]` Write the **subscription-auth boundary** into the agent docs (doc 57 §3 + ARCH/06 §6.16): Claude via the official ACP wrapper = allowed (Anthropic co-authored); token-harvest for other engines = blocked; our broker stays API-key-only
 
 ### P6.9 Messaging Bridges (F13 — doc 36 §B Secure OpenClaw; doc 39 §B1 DeerFlow channels-first run_policy/dedupe)
-- [ ] `[NOT DONE]` Design adapter interface: message-in → agent loop → reply-out
+> **Desktop-first scope (ARCH/11 R-1):** the agent lives in the open desktop app — messages arrive as in-app cards, no headless 24×7 daemon (we start desktop, not CLI→headless→desktop). Email/Telegram/WhatsApp first; Signal/iMessage + always-on daemon deferred to post-v1.
+- [ ] `[NOT DONE]` Design adapter interface: message-in → agent loop → reply-out (in-app card delivery)
 - [ ] `[NOT DONE]` Implement WhatsApp adapter (Secure OpenClaw pattern)
 - [ ] `[NOT DONE]` Implement Telegram adapter
-- [ ] `[NOT DONE]` Implement Signal adapter
-- [ ] `[NOT DONE]` Implement iMessage adapter (macOS only)
+- [ ] `[NOT DONE]` Implement email adapter (email-in → agent → reply; reuses F14 IMAP/SMTP plumbing)
 - [ ] `[NOT DONE]` Implement scheduled reminders via messaging
 - [ ] `[NOT DONE]` Implement memory reuse across messaging sessions
 - [ ] `[NOT DONE]` Test: messaging round-trip via stub adapter
+- [ ] `[DEFERRED post-v1]` Signal adapter + always-on 24×7 daemon + iMessage (macOS only)
 
 ### P6.10 Asymmetric Tiering (A7 — doc 16/05; doc 53 §5 shortest-path tier routing)
 - [ ] `[NOT DONE]` Implement planner_model config (frontier model for planning)
 - [ ] `[NOT DONE]` Implement subagent_models config (cheap/local for grinding)
 - [ ] `[NOT DONE]` Implement per-agent model override via blueprint .md
+- [ ] `[NOT DONE]` **Routing vocabulary (doc 59):** adopt lkgp (sticky last-good) + reset-aware/headroom (quota-aware key pick) + cache-optimized (prefix-pin to the key holding the cached prompt) + 13-factor scorer / 4 mode packs as the dynamic A7 selection layer
 - [ ] `[NOT DONE]` Implement dynamic model routing based on task classification
 - [ ] `[NOT DONE]` Implement shortest-path tier routing (doc 53 §5): tasks select the minimal tier chain (simple edit → direct; full chain only for broad refactors)
 
@@ -561,6 +571,7 @@
 - [ ] `[NOT DONE]` Implement code execution in rquickjs sandbox (reuse everyaios-script)
 - [ ] `[NOT DONE]` Implement optional Docker sandbox for heavy/data workflows
 - [ ] `[NOT DONE]` Implement ECC guardrails (I5): plan-before-build, session scanning
+- [ ] `[NOT DONE]` **Loop self-audit (doc 58 — better-harness pattern):** post-session 5-dimension report (Task Understanding → Controlled Execution → Change Validation → Reliable Delivery → Learning Capture) from our audit NDJSON; "missing evidence stays explicit"
 
 ### P7.2 Skill Registry (I2 — v2.0 §P6, doc 33 §8, doc 55 skill-data; doc 41 agent0ai skills.py STEAL)
 - [ ] `[NOT DONE]` Implement `~/.everyaios/skills/` directory scanner
@@ -570,6 +581,8 @@
 - [ ] `[NOT DONE]` Implement MAX_ACTIVE_SKILLS=20 cap (Agent Zero pattern)
 - [ ] `[NOT DONE]` Implement skill search scoring for relevance matching
 - [ ] `[NOT DONE]` Test: agent writes a skill → survives restart → callable next session
+- [ ] `[NOT DONE]` **taste-skill as optional first-party design skill (doc 58):** anti-slop frontend SKILL.md (layout/typography/motion/spacing, VARIANCE/MOTION/DENSITY dials) — ⚠️ distinct from C9 (learned coding prefs, algorithm #31); never mark C9 done because a design skill shipped
+- [ ] `[NOT DONE]` **GenericAgent skill-tree growth (doc 58 §3):** every solved task → a versioned Skill with ownership markers (~100-line loop, 9 atomic tools) — adapt the discipline into I2 + B8 crystallization, never the runtime (its `code_run` installs packages / drives WeChat+Alipay = full OS control, which our dual-guard + shortest-path exist to prevent)
 
 ### P7.3 Extension/Plugin ABI (I6 — doc 44 §5 modularity, Zed WIT + Hermes allowed_*)
 - [ ] `[NOT DONE]` Define manifest.toml schema: abi_version, contributes, capabilities, trust_flags
@@ -670,8 +683,8 @@
 - [ ] `[NOT DONE]` Build macOS .dmg + .app (code sign + notarize)
 - [ ] `[NOT DONE]` Build Linux .deb + .rpm + .AppImage
 - [ ] `[NOT DONE]` Implement auto-updater (Tauri built-in)
-- [ ] `[NOT DONE]` Verify idle RSS < 30MB (Tauri + tray, no sidecar)
-- [ ] `[NOT DONE]` Verify warm RSS < 80MB (with sidecar, no browser)
+- [ ] `[NOT DONE]` Measure & publish real idle RSS (**<30MB is a target to verify, not a promise** — Tauri + tray, no sidecar; the Bun-compiled sidecar alone is ~93MB, J16)
+- [ ] `[NOT DONE]` Measure & publish real warm RSS (**<80MB with sidecar is not achievable — sidecar alone is ~93MB**; publish the real number with sidecar active, no browser, J16)
 - [ ] `[NOT DONE]` CI: build matrix for all 3 platforms
 
 ### P8.9 Sync / Export / Wipe (C8 — v2.0 §P8)
@@ -679,7 +692,7 @@
 - [ ] `[NOT DONE]` Export: messages/memory as markdown/JSON
 - [ ] `[NOT DONE]` Per-scope wipe (chat, memory scope, connector data, all)
 
-**P8 Exit Criterion:** Windows beta installs & runs; <30MB idle / <80MB warm; telemetry off-by-default; all UIs functional.
+**P8 Exit Criterion:** Windows beta installs & runs; **idle/warm RSS measured & published with the coordinator running** (<30MB idle / <80MB warm are targets to verify, not promises — the Bun sidecar alone is ~93MB, J16); telemetry off-by-default; all UIs functional.
 
 ---
 
@@ -817,8 +830,8 @@
 
 ### P10.3 Performance & Stress Testing (ARCH/02 budgets, doc 33 §9 replay scale, ARCH/05 token economy)
 - [ ] `[NOT DONE]` Benchmark cold start: app launch → first usable interaction (target <2s)
-- [ ] `[NOT DONE]` Benchmark idle RSS: Tauri + tray only (target <30MB)
-- [ ] `[NOT DONE]` Benchmark warm RSS: with sidecar active, no browser (target <80MB)
+- [ ] `[NOT DONE]` Benchmark idle RSS: Tauri + tray only — **measure & publish the real number** (<30MB target to verify, not a promise)
+- [ ] `[NOT DONE]` Benchmark warm RSS: with sidecar active, no browser — **measure & publish the real number** (sidecar alone is ~93MB, so <80MB is not achievable as-is, J16)
 - [ ] `[NOT DONE]` Benchmark IPC latency: round-trip JSON-RPC call (target <2ms)
 - [ ] `[NOT DONE]` Benchmark browser snapshot: full page a11y tree capture (target <500ms)
 - [ ] `[NOT DONE]` Benchmark memory retrieval: multi-signal fusion over 10K facts (target <100ms)
@@ -906,6 +919,8 @@
 - [ ] `[NOT DONE]` Analyze Open WebUI — document what self-hosters value most
 - [ ] `[NOT DONE]` Map feature gap matrix: us vs top 5 competitors (what we have that they don't)
 - [ ] `[NOT DONE]` Identify our unique positioning hooks (crystallization, office engine, 7 memory algos)
+- [ ] `[NOT DONE]` **holaOS (doc 58 — closest whole-product competitor):** "Computer for You and Your Agent" (Electron, any-agent workspace, HolaApps, marketplace, 50+ OAuth, hosted-model default) — document the positioning contrast (our Tauri + BYOK/local + no-founder-server vs their Electron + hosted-first + modified-Apache); UX reference only
+- [ ] `[NOT DONE]` **UI-only reference pass (doc 58):** AnythingLLM + Cherry Studio workspace chrome / artifact pane / onboarding as a first-run design source — vs the Devin 9-tab layout in ARCH/12
 
 ### P12.2 Target Audience & Personas (live GTM research)
 - [ ] `[NOT DONE]` Define persona 1: Power developer (uses Claude Code/Codex daily, wants more control)
@@ -1023,6 +1038,7 @@
 - [ ] [NOT DONE] File Watcher: notify crate watching for `// ai!` markers → auto-submit
 - [ ] [NOT DONE] Lint/Test Reflection: after every edit run lint → on error retry ×3
 - [ ] [NOT DONE] MODEL_ALIASES: config map of short names to full provider/model paths
+- [ ] [NOT DONE] **Third code-intel path (doc 58):** codebase-memory-mcp symbol-KG (C, 158 langs, spawn-only + Guard-2 on config writes) + crux SCIP (watch) — optional heavy-graph/Cypher backend beside RepoMap (default) and Warp (C5-gated); never "run all and fuse"
 
 ### P11.5.10 New Agent Patterns (doc 47 + doc 57 §3 subscription-auth boundary)
 - [ ] [NOT DONE] Implement Plan/Act dual-mode in agent loop (Cline pattern) — explicit plan phase before tool execution
@@ -1062,20 +1078,20 @@
 | Phase | Tasks | Weeks |
 |---|---|---|
 | P0 Workspace & Skeleton | 46 | ~2 |
-| P1 Chat + BYOK | 50 | ~4 |
+| P1 Chat + BYOK | 52 | ~4 |
 | P2 Browser Layer | 81 | ~6 |
 | P3 Cockpit & Audit UI | 14 | ~4 |
-| P4 Office Engine | 45 | ~5 |
+| P4 Office Engine | 48 | ~5 |
 | P5 Memory + Token Economy | 60 | ~5 |
-| P6 Orchestration + Connectors | 80 | ~5 |
-| P7 Forge + Guardrails | 50 | ~4 |
+| P6 Orchestration + Connectors | 82 | ~5 |
+| P7 Forge + Guardrails | 53 | ~4 |
 | P8 Product Polish | 37 | ~3 |
 | P9+ Post-v1 | 22 | later |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
-| **P11.5 UI Implementation** | **65** | **~4 (parallel)** |
-| **P12 Market Research & GTM** | **45** | **~4 (parallel)** |
+| **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
+| **P12 Market Research & GTM** | **47** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 54 | parallel |
-| **TOTAL** | **735** | **~45 weeks** |
+| **TOTAL** | **748** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

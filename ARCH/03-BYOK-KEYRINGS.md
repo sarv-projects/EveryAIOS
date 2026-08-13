@@ -43,6 +43,7 @@ everyaios-vault (SQLCipher)
 - **Reorder/drag**: drag keys to change priority; toggle a key to standby/suspend.
 - **Auto-pause on budget**: per-key daily/monthly cap → automatically suspended until reset (LiteLLM budgets, adapted locally).
 - **OAuth subscriptions** (chatgpt-pro/copilot/qwen) live in the same list as "subscription keys" — same fallback semantics (BrowserOS pattern, doc 33 §7.4), with encrypted refresh tokens in the vault.
+- **ChatGPT Pro backend note (2026-08-13):** the `chatgpt-pro` provider calls `https://chatgpt.com/backend-api/codex/v1` — the unofficial web-app backend (`broker.rs` `DEFAULT_BASE_URLS`), same ToS class as the Claude-harvest boundary doc 57 blocks. **Kept** (the user's own subscription, driven like Hermes/OpenCode treat it — no extra machinery), flag-gated by `EVERYAIOS_OAUTH`; the risk is documented, not hidden (SPEC A4, ARCH/09 A4, doc 57 §3).
 
 ## 3.3 Multi-account reality (the user's actual ask)
 
@@ -71,3 +72,12 @@ Core at launch: `anthropic · openai · openai-responses · azure · bedrock · 
 | context_length_exceeded | wrong model for payload | compaction (05) + retry once with snip |
 | max switches exhausted | all keys failing | surface aggregated error, offer "retry in Ns" |
 | network down | offline | queue intent, notify, resume on reconnect (doc 03 resume) |
+
+## 3.7 Routing vocabulary + catalog long-tail (doc 58/59 — OmniRoute deep-dive)
+
+OmniRoute (46.9K⭐, MIT) is the production reference for the *dynamic* selection layer our A3/A7 key-ring lacks. **Reimplement in the Rust broker; do not vendor.**
+
+- **Failover upgrades (A3):** `lkgp` (sticky to last-good key — we currently rotate on 429 but don't *prefer* the last-good), `reset-aware`/`headroom` (pick the key whose quota window is most favorable, not just "not rate-limited"), `cache-optimized` (route to the key holding the prompt-cache prefix → A9 cache_read hits). Circuit-breaker health = 3-state CLOSED/HALF_OPEN/OPEN.
+- **Dynamic scorer (A7):** 13-factor `DEFAULT_WEIGHTS` (health 0.20 / quota 0.15 / costInv 0.15 / latencyInv 0.12 / taskFit 0.08 / …) + 4 mode packs (ship-fast / cost-saver / quality-first / offline-friendly) + `auto/category:tier` model-id DSL — the *static* planner/subagent/writers roles gain a dynamic picker.
+- **Per-request budget (J11):** `X-OmniRoute-Budget` + `-Fallback: cheapest|strict→402` = the per-request USD ceiling our session-$-cap lacks.
+- **Catalog long-tail (A6):** ingest the MIT `PROVIDER_REFERENCE.md` (339 providers) as *data* — import API-key + local + keyless allow-list only. The 34 cookie + 25 OAuth-CLI classes are the **doc-57 reject list** (Claude Code/Codex/Copilot drive via F12/ACP, not the vault). New A4 *candidates* (each doc-57-checked): Amazon Q, GitLab Duo, Kiro ⚠️-ToS, Trae, Windsurf, Zed-hosted, Kimi Code.

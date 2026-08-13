@@ -15,7 +15,7 @@
 | **`steel-dev/steel-browser`** | **7,458★** · Apache-2.0 · TypeScript · pushed 2026-08-05 — the steel.dev *API service* (Fastify + puppeteer-core). **⚠️ `steel-dev/steel` (the Rust lib ARCH/08 referenced) is GONE (404)** — absorbed into this + steel.dev cloud. Source-read. |
 | **Medium "Best Agent Browsers 2026"** | 7-player market map (agent-browser / Bright Data / Browser Use / Browserbase / Perplexity Comet / Skyvern / Steel); market $4.5B→$76.8B by 2034. Read via Wayback. |
 | **Ledger impact** | +3 repos → **222** (section 24) |
-| **Verdict** | Obscura stays **default Tier-1** (verified in depth); agent-browser is our **biggest steal source** (snapshot/ref/find/read/batch/a11y/security containment); Steel contributes the **Session-Vault full-storage-context** pattern. All three validate our ref-based snapshot + MCP-annotation designs. |
+| **Verdict** | Obscura confirmed **Tier-1** (verified in depth; `tiers.rs` ships Lightpanda as the default until the Obscura binary lands — ARCH/08 §8.8); agent-browser is our **biggest steal source** (snapshot/ref/find/read/batch/a11y/security containment); Steel contributes the **Session-Vault full-storage-context** pattern. All three validate our ref-based snapshot + MCP-annotation designs. |
 
 ---
 
@@ -103,7 +103,7 @@
 ## 5. vs our current design — confirmed / stale / missing
 
 **Confirmed (our ARCH/08 designs were right):**
-- Obscura as default Tier-1 engine ✅ (source-verified: CDP server, 30MB, `--stealth`, LP.getMarkdown, workers)
+- Obscura as Tier-1 engine ✅ (opt-in escalate path; source-verified: CDP server, 30MB, `--stealth`, LP.getMarkdown, workers; Lightpanda is the shipped `tiers.rs` default)
 - Ref-based a11y snapshots + post-settle diff + URL short-circuit ✅ (agent-browser's snapshot.rs = same model, independently derived)
 - MCP read-only/open-world annotations ✅ (agent-browser ships them in production)
 - chrome-for-testing fallback + tier escalation ✅ (agent-browser's `install.rs`/`doctor/` = same machinery)
@@ -142,7 +142,7 @@
 | # | What | From | Notes |
 |---|---|---|---|
 | A1 | **Obscura as our real Tier-1 engine** | Obscura | don't build our own engine — spawn `obscura serve` via ProcessSupervisor; `everyaios-cdp` stays the single driver; bundle obscura-mcp as a ready-made server |
-| A2 | Lightpanda driver pattern (`native/cdp/lightpanda.rs`) | agent-browser | our Lightpanda opt-in tier |
+| A2 | Lightpanda driver pattern (`native/cdp/lightpanda.rs`) | agent-browser | our Lightpanda (default) tier |
 | A3 | React fiber-tree introspection | agent-browser | web-app debug tool (post-v1) |
 | A4 | Fingerprint injection (fingerprint-generator/injector) | Steel | stealth tier (after Obscura native `--stealth`) |
 | A5 | `obscura scrape` worker fan-out | Obscura | parallel scrape tier-1, shared proxy |

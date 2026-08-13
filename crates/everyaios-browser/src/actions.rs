@@ -802,6 +802,15 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
         Ok(())
     }
 
+    /// `close_tab` — close one tab by CDP target id (`Target.closeTarget`).
+    /// Ownership is the caller's job (TabRegistry::can_close — E6); this is
+    /// the raw CDP primitive behind it.
+    pub fn close_tab(&self, tab_id: &str) -> Result<(), CdpError> {
+        self.client
+            .call("Target.closeTarget", json!({ "targetId": tab_id }))?;
+        Ok(())
+    }
+
     pub fn history(&self) -> Result<(Vec<u64>, u64), CdpError> {
         let out = self
             .client
@@ -1312,6 +1321,17 @@ mod tests {
         assert!(m
             .responded_methods()
             .contains(&"Target.getTargets".to_string()));
+    }
+
+    #[test]
+    fn close_tab_calls_target_close_target() {
+        let m = mock();
+        let a = BrowserActions::new(&m, Some("sess-1"));
+        a.close_tab("tab-42").unwrap();
+        assert!(m
+            .responded_methods()
+            .contains(&"Target.closeTarget".to_string()));
+        assert!(m.calls().iter().any(|(_, mth)| mth == "Target.closeTarget"));
     }
 
     #[test]

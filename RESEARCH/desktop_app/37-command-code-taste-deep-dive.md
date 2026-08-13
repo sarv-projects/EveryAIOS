@@ -1,6 +1,8 @@
 # 37 — Command Code (`CommandCodeAI`) & the `taste-1` preference-learning pattern
 
 > Added 2026-08-06 on user request: *"check the taste part — to add or not? and anything else relevant."* All facts verified this pass: GitHub API (org + repos), repo READMEs, and commandcode.ai docs (docs/taste, blog taste-skills-rules, launch).
+>
+> **C9 vs taste-skill (2026-08-13, doc 58 §5):** C9 = this doc's *learned coding-preference profile* (accept/reject/edit → rules, algorithm #31). **Leonxlnx/taste-skill** (76K⭐) is a *different* thing — a static frontend *design* SKILL.md pack (layout/typography/motion, no learning). Ship taste-skill as an optional I2 skill; do **not** let it substitute for C9.
 
 ---
 

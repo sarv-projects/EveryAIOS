@@ -1,13 +1,13 @@
 # ARCH — The Desktop Agentic-OS Architecture (Hybrid)
 
-> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-09) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.13)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
-> **Docs:** 00-INDEX + 01–12 (12 = UI/UX specification and layout design) + research docs 49–57 (storage intelligence, generative-UI/image/voice/email gaps, aider recheck, gap-pass-2 hierarchy/search-stack, formalization, dep+catalog audit, agent-browser ecosystem, agentic dev-environments + closed-source agents, ACP registry + subscription auth).
-> **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (new `everyaios-storage` crate, doc 49). **No scope compromise**: every capability in the research corpus (docs 01–57, **227 repos**) is derived in `09-FEATURE-MATRIX.md` (138 rows).
+> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-13) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.15)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
+> **Docs:** 00-INDEX + 01–12 (12 = UI/UX specification and layout design) + research docs 49–60 (storage intelligence, generative-UI/image/voice/email gaps, aider recheck, gap-pass-2 hierarchy/search-stack, formalization, dep+catalog audit, agent-browser ecosystem, agentic dev-environments + closed-source agents, ACP registry + subscription auth, repo batch 2 — OmniRoute provider/routing goldmine, OmniRoute deep-dive, TencentDB Agent Memory).
+> **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (new `everyaios-storage` crate, doc 49). **No scope compromise**: every capability in the research corpus (docs 01–60, **247 repos**) is derived in `09-FEATURE-MATRIX.md` (138 rows).
 > **Working name:** "EveryAIOS" (from the v2.0 spec's `~/.everyaios/`). Final name TBD.
 
 ## The two specs reconciled
 
-> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.13 — hybrid**, in sync with this ARCH).
+> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.15 — hybrid**, in sync with this ARCH).
 
 | | Earlier v2.0 spec | All-Rust research spec (`RESEARCH/desktop_app/DESKTOP-APP-SPEC.md` — **superseded** draft) | This architecture |
 |---|---|---|---|
@@ -21,6 +21,8 @@
 
 ## Reading order
 
+> **Product invariants (from SPEC §1 — every ARCH doc must preserve them):** one project = one folder + one session tree · one ticket model (ARCH/06 §6.10) as the only mutation path · one append-only event log (doc 53's 10 event types) · one Progress timeline that tabs/panels disclose rather than duplicate.
+
 1. **01-SYSTEM-ARCHITECTURE.md** — processes, layers, IPC, lifecycle (the map)
 2. **02-MODULE-LAYOUT.md** — Rust crates + TS packages, ownership, what's new vs exists
 3. **03-BYOK-KEYRINGS.md** — multi-key per provider, fallback/rotation, routing, OAuth subscriptions
@@ -28,7 +30,7 @@
 5. **05-TOKEN-ECONOMY.md** — input control: prefix-cache, compaction, snip, budgets, crystallization
 6. **06-SECURITY-GUARDRAILS.md** — trust ladder, dual-guard, sandboxes, ownership, audit, injection defense
 7. **07-MEMORY-CONTEXT.md** — 5-tier memory, 7 algorithms, multi-scope, SOTA retrieval
-8. **08-BROWSER-LAYER.md** — CDP, 34 tools, a11y snapshot/refs/diff, script-eval, replay
+8. **08-BROWSER-LAYER.md** — CDP, 37 tools, a11y snapshot/refs/diff, script-eval, replay
 9. **09-FEATURE-MATRIX.md** — the complete capability→feature→module→status derivation
 10. **10-BUILD-PLAN.md** — phases with exit criteria
 11. **11-AI-CHAT-FEATURES.md** — AI chat derivation: copy (from APP engine + Hermes/etc.), convert, reject
@@ -37,7 +39,13 @@
 14. **research doc 52** — gap pass 2 (Aider-in-F12 + surgical hierarchy, J21 escalation rules & decision packages, D12 storage health, G8 tiered search cascade + Algorithm #33, E9/J14 refs; 26 repos live-verified, 8 hallucinated flagged → ledger 218)
 15. **research doc 53** — formalization of 4 review gaps (credential broker, ticket contract, durable events + idempotency, shortest-path routing) → SPEC v3.10 + ARCH/06 §6.9–6.11
 16. **research doc 54** — third-party dependency + catalog audit (LadybugDB confirmed → ledger 219; xxhash-rust BSL → twox-hash; `focus_window` verified rename-safe)
+17. **research doc 55** — agent-browser ecosystem (Obscura source-verified 21K★, Lightpanda/Steel/CloakBrowser honesty passes) → P2.4/P2.5 refs, 3 repos → ledger
+18. **research doc 56** — agentic dev-environments + closed-source agents (aider/opencode/Copilot CLI patterns) → P11.5.9/P12, 4 repos → ledger
+19. **research doc 57** — ACP registry + subscription-auth boundary (official Claude ACP wrapper allowed; token harvest blocked) → F12/J17, 1 repo → ledger
+20. **research doc 58** — repo batch 2 (OmniRoute provider/routing goldmine, taste-skill (I2≠C9), ppt-master/guizang, univer, codebase-memory-mcp, llmfit, GenericAgent, better-harness, holaOS competitor, worldmonitor, MAF, DeepSeek-TUI→CodeWhale correction) → A1–A7/I2/I5/I7/D3/H5/F12, 19 repos → ledger
+21. **research doc 59** — OmniRoute source-level deep-dive (13-factor scoring + mode packs + budget headers + 19 strategies + provider taxonomy) → steal-spec for A2/A3/A6/A7/A9/P6.10/J11
+22. **research doc 60** — TencentDB Agent Memory deep-dive (4-asset taxonomy + L0→L3 distillation + governance + agent-loadout) → C1/C2/C3/C7/C8/I2/I7 + F12/J17, 1 repo → ledger
 
 ## Grounding
 
-All decisions trace to `RESEARCH/desktop_app/` docs 01–57 and the 227-repo ledger (doc 27 + doc 46 additions + docs 49–50: +22 + doc 52: +26 + doc 54: +1 + doc 55: +3 + doc 56: +4 + doc 57: +1 repos). Key source deep-dives: 19 (BYOK providers), 28/29 (office), 32/31 (token economy), 33 (BrowserOS — browser + audit + compaction), 05/16 (agentic coding: pi/Hermes/Reasonix/opencode), 03 (vision + security + memory), 13 (connector hub), 06/09 (browser/agentic OS), 46 (Aider + Devin Cloud — UI/UX, RepoMap, edit strategies, automations). Final-pass SOTA: doc 34.
+All decisions trace to `RESEARCH/desktop_app/` docs 01–60 and the 247-repo ledger (doc 27 + doc 46 additions + docs 49–50: +22 + doc 52: +26 + doc 54: +1 + doc 55: +3 + doc 56: +4 + doc 57: +1 + doc 58: +19 + doc 60: +1 repos). Key source deep-dives: 19 (BYOK providers), 28/29 (office), 32/31 (token economy), 33 (BrowserOS — browser + audit + compaction), 05/16 (agentic coding: pi/Hermes/Reasonix/opencode), 03 (vision + security + memory), 13 (connector hub), 06/09 (browser/agentic OS), 46 (Aider + Devin Cloud — UI/UX, RepoMap, edit strategies, automations). Final-pass SOTA: doc 34.

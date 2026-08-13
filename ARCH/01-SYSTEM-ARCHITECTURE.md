@@ -14,7 +14,7 @@
 │  ┌──────────────┬───────────────┬───────────────┬────────────────────────┐ │
 │  │ BrowserSvc   │ ScriptEval    │ GuardRail     │ Audit/Replay           │ │
 │  │ (CDP child,  │ (rquickjs     │ (regex        │ (NDJSON ingest,        │ │
-│  │  34 tools,   │  sandbox)     │  interceptors,│  recording index,      │ │
+│  │  37 tools,   │  sandbox)     │  interceptors,│  recording index,      │ │
 │  │  snapshot/   │               │  diff cards)  │  token estimates)      │ │
 │  │  refs/diff)  │               │               │                        │ │
 │  └──────────────┴───────────────┴───────────────┴────────────────────────┘ │
@@ -55,11 +55,11 @@
 | `coordinator` (Bun-compiled sidecar) | everyaios-core | pre-spawned at boot (J16) | crash, idle, explicit stop | Supervisor: exponential backoff (1s→2s→4s→60s cap), circuit breaker after 5 crashes/10min, `reconnecting` state surfaced to UI (doc 03, v2.0 §4.3) |
 | Chromium child | everyaios-core | on first browser use | idle sweep (session retention 60min default), explicit close | one-shot spawn; no auto-restart |
 
-**Browser children are tiered (08 §8.8):** system Chrome/Edge = interactive default; **Obscura** (default) / **Lightpanda** (opt-in) = lightweight CDP tier for scrape/RAG at ~16× less memory; optional user-gated stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard bot defenses. One CDP driver (`everyaios-cdp`), task tier picks the engine. Sessions/accounts live in the encrypted **Session Vault** (08 §8.9) with Trust-Ladder-gated access; challenges go through the handler tier (08 §8.10).
+**Browser children are tiered (08 §8.8):** system Chrome/Edge = interactive default; **Lightpanda** (default) / **Obscura** (opt-in) = lightweight CDP tier for scrape/RAG at ~16× less memory; optional user-gated stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard bot defenses. One CDP driver (`everyaios-cdp`), task tier picks the engine. Sessions/accounts live in the encrypted **Session Vault** (08 §8.9) with Trust-Ladder-gated access; challenges go through the handler tier (08 §8.10).
 | Ollama / llamafile | everyaios-core (optional) | on local-model use | user stop | spawned only when a local model is selected |
 | searxng instance | everyaios-core (optional) | on search use (if user-installed) | user stop | optional; primary path is public-instance cascade (core-search built) |
 
-**Startup order:** everyaios-core boots (config, vault, SQLite) → UI window → sidecar pre-spawned at Tauri boot (hidden, ~200ms perceived cold start per J16) → browser on first browser tool. **Idle RSS target:** <30MB before sidecar, <80MB with sidecar warm (no browser), browser adds only when used. No service is loaded at boot unless needed (spec §6.5).
+**Startup order:** everyaios-core boots (config, vault, SQLite) → UI window → sidecar pre-spawned at Tauri boot (hidden, ~200ms perceived cold start per J16) → browser on first browser tool. **Idle RSS:** measure & publish the real numbers — <30MB idle / <80MB warm are targets to verify, not promises (the Bun-compiled sidecar alone is ~93MB, J16); browser adds only when used. No service is loaded at boot unless needed (spec §6.5).
 
 ## 1.4 IPC contracts
 

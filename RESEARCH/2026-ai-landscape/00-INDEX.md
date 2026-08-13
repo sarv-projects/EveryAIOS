@@ -5,6 +5,8 @@
 > decision, and steal-list from the 2026 research sessions.
 >
 > **Date:** August 2026 · **Status:** Verified via GitHub API unless noted
+>
+> **⚠️ SUPERSEDED — historical archive.** This folder predates the desktop app (mid-2026 research). The live research is `../desktop_app/RESEARCH/` (docs 01–60, 247-repo ledger); several positions here were superseded by the hybrid decision — e.g. "Electron over Tauri" (00-INDEX §Doc Index) is **outdated**: the desktop app is Tauri/Rust shell + supervised Bun-compiled TS sidecar + Rust core (browser/CDP, script-eval, guards, audit, vault). Do not read this archive as current.
 
 ---
 

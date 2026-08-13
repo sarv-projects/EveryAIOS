@@ -197,6 +197,16 @@ Displayed when the agent creates/edits a file. Shows:
 
 ## 4. Right Panel: Workspace (Tabbed)
 
+### 4.0 First-Run Rule (non-negotiable — tasks, not modules)
+
+- **First run shows chat + an empty workspace. No nine tabs, no module wall.**
+- A tab is created **only when that surface is actually in use** (the agent opened the browser, a file, a terminal — not because the feature exists).
+- Guard, Connectors, Memory, Analytics, ACP/MCP, vault, plugins live behind one **"More"** menu until the user needs them.
+- The default interaction is: pick a folder → ask for an outcome → watch the Progress timeline → check/edit the artifact → approve only consequential actions. The system decides whether it needs a browser, office, terminal, or harness.
+- One useful default task completes before advanced settings surface (onboarding item: "add first key → first chat" is chat-app onboarding; the control-plane onboarding is one end-to-end task).
+- Modes (Normal / Plan / Research / Quick / Code) are optional; the default is "do the task".
+- **UI reference sources (doc 58, first-run design):** AnythingLLM + Cherry Studio workspace chrome / artifact pane / onboarding are the *first-run* reference ("tasks not modules") to cross-check against this Devin-derived 9-tab layout; **holaOS** ("Computer for You and Your Agent") is the closest whole-product competitor — read its side-by-side app+agent + marketplace UX as validation, never as a code source (modified-Apache).
+
 ### 4.1 Tab Bar
 
 ```

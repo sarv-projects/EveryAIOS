@@ -1,8 +1,8 @@
 # DESKTOP-APP-SPEC.md — Complete Product Specification
 
-> **Version:** v3.13 · **Date:** 2026-08-10 · **Supersedes:** v3.12
+> **Version:** v3.15 · **Date:** 2026-08-13 · **Supersedes:** v3.14
 > **Version history:** see `SPEC-CHANGELOG.md` (archived 2026-08-10 — this file is a clean build document).
-> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–57, **227 repos**, ledger docs 27+46+47+48+49+50+52+54+55+56+57) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
+> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–60, **247 repos**, ledger docs 27+46+47+48+49+50+52+54+55+56+57+58+60) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
 > **This app is OPEN SOURCE, local-first, BYOK.** Nothing in the architecture requires a founder-run server — not now, not later.
 > **IPC Architecture validated (doc 42):** code-verified against OpenFang `crates/openfang-kernel/src/kernel.rs` (20+ subsystems, RBAC, Merkle audit, DashMap abort handles) + ZeroClaw `crates/zeroclaw-api/src/lib.rs` (kernel ABI traits: ModelProvider/Channel/Tool/Memory/Observer/RuntimeAdapter). The "sidecar proposes, Rust disposes" axiom is production-proven — both systems use the identical kernel-with-syscalls model with capability-based security.
 
@@ -19,11 +19,11 @@
 |---|---|---|
 | A1 | Multi-provider BYOK — anthropic / openai / responses / azure / bedrock / gemini / openrouter / deepseek / openai-compat / ollama / llamafile | 🟢+🔵 |
 | A2 | **Multi-key per provider** — key rings: N keys/provider, priority + weight, per-key model filter, budgets, health | 🔵 |
-| A3 | **Auto-failover rotation** — 429/401/5xx → cooldown → immediate next key; max-switches; all-fail backoff | 🔵 |
-| A4 | OAuth subscriptions — ChatGPT Pro (PKCE) / Copilot·Qwen (device-code), encrypted tokens, same fallback semantics | 🔵 |
-| A5 | Local models — Ollama managed + llamafile single-binary (≥15–20K ctx warning) | 🟢+🔵 |
-| A6 | Model catalog + capability hints (tools/vision/ctx) — router picks per task | 🟢 |
-| A7 | Asymmetric tiering — planner_model / subagent_models / depth=2 / concurrency=6 / writers=3 | 🟡 |
+| A3 | **Auto-failover rotation** — 429/401/5xx → cooldown → immediate next key; max-switches; all-fail backoff (**doc 59 upgrade:** lkgp sticky-to-last-good + reset-aware/headroom quota-aware pick + cache-optimized prefix-pin) | 🔵 |
+| A4 | OAuth subscriptions — ChatGPT Pro (PKCE) / Copilot·Qwen (device-code), encrypted tokens, same fallback semantics | 🔵 (⚠️ ChatGPT Pro calls the unofficial `chatgpt.com/backend-api` endpoint — kept user-driven (Hermes/OpenCode pattern), ToS-risk documented (doc 57 §3), flag-gated) |
+| A5 | Local models — Ollama managed + llamafile single-binary (≥15–20K ctx warning; **doc 58:** llmfit hardware-fit picker before spawn — `recommend --json`) | 🟢+🔵 |
+| A6 | Model catalog + capability hints (tools/vision/ctx) — router picks per task (**doc 58/59:** ingest OmniRoute's API-key/local/keyless catalog as the A6 long tail — MIT `PROVIDER_REFERENCE.md`; cookie/OAuth classes = doc-57 reject list) | 🟢 |
+| A7 | Asymmetric tiering — planner_model / subagent_models / depth=2 / concurrency=6 / writers=3 (**doc 59:** 13-factor weighted scorer + 4 mode packs + `auto/category:tier` DSL as the dynamic selection layer) | 🟡 |
 | A8 | Local OpenAI-compatible server — expose engine for VS Code/Cursor reuse | 🟡 |
 | A9 | Cache-aware costs — cache_read/cache_write/$ per call, key-affinity | 🔵 |
 | A10 | **Image generation** — text-to-image + image-to-image (GPT-Image-1 / DALL·E 3 / Flux / Stable Diffusion / any MCP image server) as a provider endpoint; same key-ring + failover semantics (A2/A3); results as ref-handles, never raw in context (doc 50) | ⚪ |
@@ -60,8 +60,8 @@
 | ID | Capability | Status |
 |---|---|---|
 | D1 | **Word open+edit** — block-patch engine, byte-preserving w:t, headers/tables/sections | 🟡 |
-| D2 | **Excel open+edit** — IronCalc recalc + calamine read + workbook DSL + deterministic planner + flash-fill/pivot | 🟡 |
-| D3 | **PPT open+edit** — surgical OOXML part editing (slides), add/remove slides, text/shape ops | 🟡 |
+| D2 | **Excel open+edit** — IronCalc recalc + calamine read + workbook DSL + deterministic planner + flash-fill/pivot (**doc 58:** Univer = the H5 *view* surface; surgical patch + IronCalc = the mutation engine — one calc engine, not both) | 🟡 |
+| D3 | **PPT open+edit** — surgical OOXML part editing (slides), add/remove slides, text/shape ops (**doc 58:** ppt-master = the "author a new deck" path — template-clone + chart/table model, native shapes not images) | 🟡 |
 | D4 | **PDF open+edit** — render (pdf.js), form-fill/annotate (pdf-lib), text-swap (lopdf), redact, re-author | 🟡 |
 | D5 | Universal read/ingest — markitdown-class extraction → RAG, chat overlay | 🟢 |
 | D6 | Round-trip conformance — LibreOffice oracle in CI, byte-stability asserts | 🟡 |
@@ -76,15 +76,15 @@
 | ID | Capability | Status |
 |---|---|---|
 | E1 | CDP child browser — system Chrome/Edge + chrome-for-testing fallback | 🔵 |
-| E2 | 34-tool catalog (ARCH/08 §8.2) — 17 core (tabs..run) + enhanced_snapshot + bookmarks×6 + tab-groups×5 + window×5; + `file_ops`×3 workspace extension (→ 37 total); **post-v1 candidates (doc 55):** `a11y_audit` (axe-core), annotated screenshots, `find` semantic locators, batch mode | 🔵 |
+| E2 | **37-tool catalog** (34 core + 3 `file_ops`; ARCH/08 §8.2) — 17 core (tabs..run) + enhanced_snapshot + bookmarks×6 + tab-groups×5 + window×5; + `file_ops`×3 workspace extension (→ 37 total); **post-v1 candidates (doc 55):** `a11y_audit` (axe-core), annotated screenshots, `find` semantic locators, batch mode | 🔵 |
 | E3 | A11y snapshot/diff — refs [eN], interactive mode, URL-change short-circuit | 🔵 |
-| E4 | Script-eval (run) — rquickjs sandbox + browser SDK + InnerCallHook | 🔵 |
+| E4 | Script-eval (run) — rquickjs sandbox + browser SDK + InnerCallHook | 🔵 (P2.5 ✅) |
 | E5 | Session replay — injected recorder → NDJSON → SQLite; scrubber UI; has_gap | 🔵 |
-| E6 | Tab ownership — mine/user/other-agent; claims; group-per-agent | 🔵 |
+| E6 | Tab ownership — mine/user/other-agent; claims; group-per-agent | 🔵 (P2.6 ✅) |
 | E7 | Login import/sessions — capture-in-browser (vault path 1); optional Chrome profile import (path 3) | 🔵 |
 | E8 | Authenticated scraping — logged-in sessions → tiered scrape → RAG | 🟡 |
 | E9 | Computer-use (pixels) — GUI control (post-v1, gated; patterns: Atlas, **Agent-S** GUI grounding, **trycua/cua** sandboxed desktops, **OSWorld** harness for continuous eval — docs 48/52; pixel-based stays post-v1 per §8 non-goal) | ⚪ |
-| E10 | **Lightweight engine tier** — Lightpanda (Zig, opt-in, AGPL, ~16× less memory) + **Obscura (Rust, default — 21K★ source-verified doc 55: own CDP server + LP.getMarkdown, embedded MCP, scrape workers, SSRF/file:// defaults, ~30MB RSS; spawn-only child process)** via CDP; tier 0 static → 1 lightweight → 2 full escalation | 🔵 |
+| E10 | **Lightweight engine tier** — Lightpanda (Zig, **default**, AGPL, ~16× less memory) + **Obscura (Rust, opt-in — 21K★ source-verified doc 55: own CDP server + LP.getMarkdown, embedded MCP, scrape workers, SSRF/file:// defaults, ~30MB RSS; spawn-only child process)** via CDP; tier 0 static → 1 lightweight → 2 full escalation | 🔵 |
 | E11 | **Session Vault** — multi-account per site, encrypted **full storage context** (cookies + localStorage + sessionStorage + IndexedDB, Chrome leveldb decode, persist/restore — doc 55) in SQLCipher, Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit, expiry nudges | 🔵 |
 | E12 | **Challenge handler** — PoW captchas solved locally + LLM visual-grounding + human-in-loop pass-through (default) + optional BYO solver API (user key) | 🔵+🟡 |
 | E13 | Session inheritance — live-attach to user's own Chrome profile via CDP debug port (vault path 2, no re-login) | 🔵 |
@@ -104,8 +104,8 @@
 | F9 | Unified Tool Registry — one normalized ToolDefinition + permission classes; **adopts the ACP tool-kind taxonomy** (read/edit/delete/move/search/execute/think/fetch/other, doc 45 §4.3) | 🟢 |
 | F10 | WSL/POSIX bridge — `wsl.exe` runners, `\\wsl.localhost\` paths, loopback IPC, native Linux exec | 🟡 |
 | F11 | Port/network hooks — async loopback listeners, inbound/outbound monitor, webhook ingress — gated; **browser network containment (doc 55/06 §6.15)**: WebRTC disable + worker fail-closed under allowlist, SSRF-defaults (loopback/RFC1918 blocked), `file://` blocked | 🔵 |
-| F12 | **Harness-driving** — drive user's existing agent CLIs (Codex/**Claude Code/Claude Agent via official ACP wrapper**/Cursor/Grok/OpenCode/**Aider**/Cline/Pi/**Copilot CLI** — doc 56/57) side-by-side on the same workspace — own context each, shared files + session state, Trust-Ladder-gated (OpenWebUI Computer pattern). **External interface = ACP (Agent Client Protocol)**: our app is the Client; stdio JSON-RPC; `session/request_permission` → Guard-2 diff-cards; `session/update` → audit NDJSON; `session/cancel` → watchdog/budget kill points (doc 45); **discovery via official ACP agent registry (doc 57 §2)** — any registered agent installs through the same F8→J17 path; **auth-mode badge** (subscription-backed / API-key-backed / local) on every harness (doc 57 §3 — Claude OAuth works only inside the official wrapper/CLI) | 🟡 |
-| F13 | **Messaging bridges** — WhatsApp/Telegram/Signal/iMessage adapters to the same engine (24×7 assistant on user's own accounts, Secure OpenClaw + DeerFlow 2.0 channels patterns, docs 36/39 §B1) | 🟡 |
+| F12 | **Harness-driving** — drive user's existing agent CLIs (Codex/**Claude Code/Claude Agent via official ACP wrapper**/Cursor/Grok/OpenCode/**Aider**/Cline/Pi/**Copilot CLI**/**CodeWhale** — doc 56/57/58) side-by-side on the same workspace — own context each, shared files + session state, Trust-Ladder-gated (OpenWebUI Computer pattern). **External interface = ACP (Agent Client Protocol)**: our app is the Client; stdio JSON-RPC; `session/request_permission` → Guard-2 diff-cards; `session/update` → audit NDJSON; `session/cancel` → watchdog/budget kill points (doc 45); **discovery via official ACP agent registry (doc 57 §2)** — any registered agent installs through the same F8→J17 path; **auth-mode badge** (subscription-backed / API-key-backed / local) on every harness (doc 57 §3 — Claude OAuth works only inside the official wrapper/CLI) | 🟡 |
+| F13 | **Messaging bridges** — **desktop-first** (in-app, not a headless 24×7 daemon): email/Telegram/WhatsApp adapters to the same engine first (Hermes/OpenClaw patterns, docs 36/39 §B1); Signal/iMessage + always-on daemon deferred. Desktop-first = the agent lives in the open app, messages arrive as in-app cards; no CLI→headless→desktop migration path (we start desktop) | 🟡 |
 | F14 | **Email connector** — Gmail API via Auth Bridge OAuth (vault-stored tokens) or IMAP/SMTP (imapflow / async-imap + lettre); read/search/send/reply/triage tools; browser-session as last resort (openonion/email-agent reference, doc 50) | 🟡 |
 | F15 | **Calendar connector** — Google Calendar API + ICS; event CRUD, availability, nudge integration with scheduled tasks (B7) | 🟡 |
 
@@ -128,7 +128,7 @@
 | H2 | Cockpit dashboard — **Ambient Flight Deck pattern**: quiet mode (single-sentence tray status "EveryAIOS: Updating report...") + slide-over panel (live action cards, token counters, STOP/UNDO); **MCQ interrupt cards** on circuit-break (actionable choices: skip/retry/escalate/manual); Watch/Stop per agent | 🟡 |
 | H3 | Audit + replay UI — searchable sessions, per-step screenshots, scrubber | 🟡 |
 | H4 | Blueprint editor — live execution status on .md | 🟡 |
-| H5 | Office editors — docx/xlsx/pptx/pdf views + chat overlay | 🟡 |
+| H5 | Office editors — docx/xlsx/pptx/pdf views + chat overlay (**doc 58:** evaluate Univer SDK as the office surface — Sheets first, Docs next, Slides last; OSS/Pro split) | 🟡 |
 | H6 | Reader — PDF/EPUB/web/markdown universal | 🟢 |
 | H7 | Math + code rendering — KaTeX, syntax highlight + run/compile | 🟢 |
 | H8 | Permission cards — Guard-2 diff cards, trust ladder UI | 🔵+🟡 |
@@ -157,12 +157,12 @@
 | ID | Capability | Status |
 |---|---|---|
 | I1 | Code synthesis loop — write→sandbox→test→iterate | 🟡 |
-| I2 | Skill registry — `~/.everyaios/skills/` (Codex `~/.codex/skills`-style convention), manifest + ownership markers, auto-inject into planner; **SKILL.md format alignment** (name/description/allowed-tools frontmatter + references/ — agent-browser `skill-data`, doc 55) so our skills work with the ecosystem | 🟡 |
+| I2 | Skill registry — `~/.everyaios/skills/` (Codex `~/.codex/skills`-style convention), manifest + ownership markers, auto-inject into planner; **SKILL.md format alignment** (name/description/allowed-tools frontmatter + references/ — agent-browser `skill-data`, doc 55) so our skills work with the ecosystem (**doc 58:** taste-skill = optional first-party *design* skill — ≠ C9, the *learned coding-pref* profile (algorithm #31); GenericAgent = self-growing skill tree — every solved task → a Skill, ~100-line loop/9 atomic tools — adapt the discipline, never the runtime) | 🟡 |
 | I3 | WASM fuel-metered sandbox — compute budget + epoch kill | ⚪ |
 | I4 | TDD loop — auto-generate tests, read stderr, rewrite | 🟡 |
-| I5 | ECC guardrails — plan-before-build, session scanning | 🟡 |
+| I5 | ECC guardrails — plan-before-build, session scanning (**doc 58:** better-harness 5-dimension loop self-audit as the post-session report — evidence-bounded, "missing evidence stays explicit") | 🟡 |
 | I6 | **Extension/plugin ABI** — versioned bundles (`abi_version` in manifest, cumulative host adapters like Zed's WIT `since_v0_0_x`), typed manifest with `contributes` (tools/skills/connectors/search-adapter) + `capabilities` allow-lists (**per-command/arg wildcards `*`/`**` — Zed `CapabilityGranter`), per-extension trust flags fail-closed (Hermes `allowed_*`), explicit agent-binding (never global — Cherry Studio), lazy activation (VS Code), host-owned facades (`ctx.llm`/`ctx.files`/`ctx.approval`), dogfood rule (first-party features ship as plugins — bootstrap caveat: P4–P6 features are built directly into crates and migrated to bundles once the ABI lands in P7) (doc 44 §5) | 🟡 |
-| I7 | **RepoMap (tree-sitter + PageRank) + Warp semantic index (doc 56)** — deterministic context selection (tag extraction, graph building, personalized PageRank, binary-search budget fitting, zero embeddings) + **optional semantic layer** (Warp merkle-tree incremental embedding index — one crate, two query paths) gated behind C5 | 🔵 |
+| I7 | **RepoMap (tree-sitter + PageRank) + Warp semantic index (doc 56)** — deterministic context selection (tag extraction, graph building, personalized PageRank, binary-search budget fitting, zero embeddings) + **optional semantic layer** (Warp merkle-tree incremental embedding index — one crate, two query paths) gated behind C5 (**doc 58:** future *third* path = codebase-memory-mcp symbol-KG + crux SCIP — spawn-only, never "run all and fuse") | 🔵 |
 | I8 | **Edit strategy pattern (per-model)** — multiple edit formats (SEARCH/REPLACE, udiff, whole, patch) with fuzzy matching, selected per model | 🔵 |
 | I9 | **Architect mode (two-pass)** — reasoning model → editor model split for code changes (aider-reported 82.7% benchmark — doc 51); **composes with F12 surgical hierarchy (surgeon tier may run the two-pass); distinct from the oracle/review pass (TODO P11.5.10)** | 🔵 |
 | I10 | **File watcher + AI comments** — watch source files for `// ai!` markers, extract context, auto-submit to agent | 🔵 |
@@ -185,7 +185,7 @@
 | J13 | **Sidecar heap safety** — `--max-old-space-size=512`; self-restart at 80% heap used; controlled by ProcessSupervisor from last Hermes checkpoint (20snap/500MB); 30min session → forced rotation (Mitigates TC-4.2 landmine, doc 43) | 🔵+🟢 |
 | J14 | **Distributed tracing** — OpenTelemetry Rust↔Node with shared `trace_id`; audit table gains `trace_id` + `span_id` columns (Agno-validated pattern, Mitigates TC-2.3 landmine, doc 43); agent-session observability references: agentlens (local coding-agent traces), agentsight (eBPF system-level) (doc 52) | 🟡 |
 | J15 | **Length-prefixed IPC framing** — `[u32 LE length][bytes payload]`; bounded channels (capacity=16) with backpressure; truncation tag → `ref:` handle (Mitigates TC-2.2 landmine, doc 43) | 🔵 |
-| J16 | **Process lifecycle hardening** — UNIX-domain socket preferred over TCP for sidecar (zero port collision); pre-spawn `coordinator` at Tauri boot (hidden, 200ms perceived cold start, Bun-compiled ~60MB binary); keep sidecar warm 5min idle before kill; **battery-aware scheduling**: suppress heavy background indexing/embedding on battery power (detect via OS power APIs), defer to AC power or >5min idle (Mitigates TC-1.2/1.3/1.4 landmines, doc 43) | 🔵 |
+| J16 | **Process lifecycle hardening** — UNIX-domain socket preferred over TCP for sidecar (zero port collision); pre-spawn `coordinator` at Tauri boot (hidden, 200ms perceived cold start, Bun-compiled binary — measured 2026-08-13: `~/.bun/bin/bun` = 92.7MB); keep sidecar warm 5min idle before kill; **battery-aware scheduling**: suppress heavy background indexing/embedding on battery power (detect via OS power APIs), defer to AC power or >5min idle (Mitigates TC-1.2/1.3/1.4 landmines, doc 43) | 🔵 |
 | J17 | **ACP harness bridge** — ACP client over stdio JSON-RPC (official `agent-client-protocol` Rust crate or `@agentclientprotocol/sdk` in coordinator) for F12; `initialize` handshake (protocolVersion + capability negotiation, optional-by-default = our ABI-versioning model); `session/request_permission` → Trust Ladder + Guard-2 cards; `session/update` (tool calls, file ops) → everyaios-audit NDJSON; `session/cancel` + stop-reasons → watchdog/budget kill points; v2-draft monitored (structured diff + `git_patch` → diff-card renderer) (doc 45 §4–6); **generalized-client reference: Hermes issue #5257** (`copilot_acp_client.py` → generic `ACPClient` + `acp_agent_registry.py` — drives Claude Code/Codex/Gemini CLI as ACP agents, doc 57 §2) | 🟡+🔵 |
 | J18 | Profile-gated hooks — minimal/standard/strict security enforcement profiles | 🔵 |
 | J19 | Merkle hash-chain audit — cryptographic tamper-evident append-only log | 🔵 |
@@ -241,9 +241,15 @@
 
 ## 1. Product One-Liner
 
-**An open-source, local-first Agentic OS desktop app** (Tauri/Rust shell + TS engine as a supervised Bun-compiled sidecar + a Rust core owning browser/script-eval/security/audit) that replaces the separate tools you use today — AI chat, web research, browser, reader, editor, coding agent, office work, connectors, automations, messaging — with one evolvable workspace where the LLM is the CPU, everything is spec-driven from Markdown files, and safety comes from a deterministic dual-guard, not from artificial limits.
+**EveryAIOS is the private, AI-native desktop workspace** (Tauri/Rust shell + TS engine as a supervised Bun-compiled sidecar + a Rust core owning browser/script-eval/security/audit) that brings your chat, browser, files, documents, code, automations, agents, and connected accounts into one safe, continuous workflow — one evolvable workspace where the LLM is the CPU, everything is spec-driven from Markdown files, and safety comes from a deterministic dual-guard, not from artificial limits. **Not the only program installed on a computer; the only workspace most people need open to get their work done.**
 
-**Positioning:** AnythingLLM's RAG + Hermes's autonomy + Claude Code's engineering loop + Reasonix's cache-first cost discipline + Zapier's connector breadth + Open WebUI Computer's whole-machine workspace, in a 20–40MB native shell with zero idle RAM bloat, 100% user-side data, and memory algorithms already built and tested in this repo. **No account, no cloud, no server tax — free forever, owned by the user.**
+**Positioning:** the **control plane above the fragmented workflow layer** — it unifies the work people currently scatter among chat applications, browsers, editors, office suites, coding tools, file utilities, automation products, and agent CLIs, rather than reimplementing any of them. It wins by becoming the shared intelligence, automation, safety, and context layer through which the user uses those underlying systems (Chrome, Office, Git, Gmail, Claude Code — not by replacing them). 100% user-side data, and memory algorithms already built and tested in this repo. **No account, no cloud, no server tax — free forever, owned by the user.**
+
+**Product invariants (non-negotiable, apply to every phase):**
+- **One project** = one folder + one session tree (a session is a node in that tree; takeover/resume navigates it).
+- **One ticket model** — the authorization ticket (ARCH/06 §6.10) is the *only* way any real mutation executes; exactly one approval surface.
+- **One event log** — a single append-only audit timeline (doc 53's 10 event types) records every browser action, tool call, file diff, approval, and cost row; every capability attaches to it, not beside it.
+- **One Progress timeline** — the unified right-hand view of a session; tabs and panels are disclosure *on top of* that timeline, never separate states.
 
 ---
 
@@ -257,7 +263,7 @@
 | LLM calls | User's BYOK key (direct to OpenAI/Anthropic/DeepSeek/OpenRouter) **or** local Ollama/llamafile **or** OAuth subscriptions (ChatGPT Pro/Copilot) | None |
 | Free web search | Local searxng-first cascade + public instances + optional user-installed searxng | None |
 | RAG / memory / embeddings / KG | Local SQLite + sqlite-vec + FTS5 + LadybugDB (embedded graph, Kuzu fork) + local ONNX models (bundled) | None |
-| Browser | System Chrome/Edge via CDP → lightweight engines (Obscura/Lightpanda) for scrape/RAG → optional user-gated stealth engines (Camoufox/Fortress; ⚠️ CloakBrowser binary is proprietary — use with caution) | None |
+| Browser | System Chrome/Edge via CDP → lightweight engines (**Lightpanda** default / **Obscura** opt-in) for scrape/RAG → optional user-gated stealth engines (Camoufox/Fortress; ⚠️ CloakBrowser binary is proprietary — use with caution) | None |
 | Automations / workflows / crystallization | Local engine | None |
 | Connectors | User's own Composio / Zapier / Nango accounts (their keys, their OAuth) or native direct adapters or Local Auth Bridge | None |
 | Messaging bridges (F13) | User's own WhatsApp/Telegram/Signal/iMessage accounts | None |
@@ -266,7 +272,7 @@
 | Updates + distribution | GitHub Releases + optional auto-update channel | Signing cert (one-time per release) |
 | Model catalog | Shipped in the binary; updatable via app updates | None |
 
-Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own licenses (Composio SDK MIT, Nango/Zapier ELv2, Camoufox user-gated open-source, ⚠️ CloakBrowser binary is **proprietary/closed-source** (Python wrapper MIT but Chromium binary is a black box — document risk to users), Fortress (stealth Chromium, more transparent), Lightpanda AGPL → spawn-only opt-in, Obscura Apache-2.0). Mobile-app concepts — hosted free-model pool, hosted searxng pool, cloud relay — belong to the mobile product and are explicitly **not** part of this project.
+Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own licenses (Composio SDK MIT, Nango/Zapier ELv2, Camoufox user-gated open-source, ⚠️ CloakBrowser binary is **proprietary/closed-source** (Python wrapper MIT but Chromium binary is a black box — document risk to users), Fortress (stealth Chromium, more transparent), **Lightpanda AGPL → spawn-only (default, never linked)**, Obscura Apache-2.0). Mobile-app concepts — hosted free-model pool, hosted searxng pool, cloud relay — belong to the mobile product and are explicitly **not** part of this project.
 
 ---
 
@@ -307,15 +313,15 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 - **Storage intelligence (D9–D11, G7 — doc 49):** parallel work-stealing disk walker (crossbeam-deque) + immutable arena snapshots (arc_swap, ~100ms cadence, zstd save/load) + squarified treemap + per-dir aggregation; **7-stage hash duplicate detection** (size → xxHash3 → BLAKE3, hardlink-aware, optional reflink); large-file finder; **cleanup actions are Guard-2-ticketed** (never bypass the dual-guard); **SQLite FTS5 instant filename search** with notify-watcher incremental updates + optional OS-native hooks (Everything/MFT, mdfind, Baloo) — new `everyaios-storage` crate.
 
 ### P5 · Browser, Session Vault & Computer Use — the agent's real browser
-- **Tiered engine stack, one CDP driver (E1/E10):** tier 0 static extraction → tier 1 lightweight engines (**Obscura** default ~30MB RSS; **Lightpanda** opt-in ~16× less memory) → tier 2 system Chrome/Edge (interactive/authenticated/WebGL) → tier 3 optional stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard anti-bot sites. Escalation on failure or explicit need. chrome-for-testing fallback ships day one.
-- **34-tool catalog (E2)** incl. `run` script-eval (rquickjs, 64MB/512KB/30s, InnerCallHook audit, ownership `mine|user|other-agent`). A11y snapshot/diff with stable refs (~90% token cut). Session replay (NDJSON → SQLite, `has_gap` honesty, scrubber UI).
+- **Tiered engine stack, one CDP driver (E1/E10):** tier 0 static extraction → tier 1 lightweight engines (**Lightpanda** default ~16× less memory; **Obscura** opt-in ~30MB RSS) → tier 2 system Chrome/Edge (interactive/authenticated/WebGL) → tier 3 optional stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard anti-bot sites. Escalation on failure or explicit need. chrome-for-testing fallback ships day one.
+- **37-tool catalog (E2)** — 34 core + 3 `file_ops` — incl. `run` script-eval (rquickjs, 64MB/512KB/30s, InnerCallHook audit, ownership `mine|user|other-agent`). A11y snapshot/diff with stable refs (~90% token cut). Session replay (NDJSON → SQLite, `has_gap` honesty, scrubber UI).
 - **Session Vault (E11):** multi-account per site, encrypted cookies/localStorage in SQLCipher, Trust-Ladder-gated access — agent never sees raw cookies; capture via sign-in-in-browser, **session inheritance** (attach to the user's own Chrome profile via debug port — no re-login), or import; rotation across accounts; usage audit; expiry nudges.
 - **Challenge handler (E12):** prevention (real sessions, behavioral realism, rate discipline) → human-in-loop pass-through (default, universal) → local solvers (PoW captchas, LLM visual grounding) → optional BYO solver APIs (user's own keys).
 - Computer-use (pixels) post-v1, dual-guard gated (E9, ⚪).
 
 ### P6 · Connector Hub, Messaging & Universal Access
 - One hub, five engines + registry: native adapters (27+), Composio (user key), Zapier (9,000+ apps), Nango (self-hosted OAuth + sync→RAG), **Local Auth Bridge** (zero-registration OAuth). No-double-connect routing; Unified Tool Registry; MCP client + MCP server (our tools to other agents, one endpoint).
-- **Messaging bridges (F13):** WhatsApp/Telegram/Signal/iMessage adapters to the same engine — 24×7 assistant on the user's own accounts, scheduled reminders + memory reuse.
+- **Messaging bridges (F13):** **desktop-first** — email/Telegram/WhatsApp adapters to the same engine first (Hermes/OpenClaw patterns), messages arrive as in-app cards while the desktop app is open; no headless 24×7 daemon (we start desktop, not CLI→headless). Signal/iMessage + always-on daemon deferred to post-v1. Scheduled reminders + memory reuse ride on the same in-app channel.
 - **Email & calendar connectors (F14/F15, doc 50):** Gmail + Google Calendar via Auth Bridge OAuth (tokens in the vault) or provider-agnostic IMAP/SMTP (imapflow / async-imap + lettre) — read/search/send/reply/triage + event CRUD/availability with nudge integration (B7). Local-first, no cloud proxy.
 - Full OS integration: filesystems, clipboard, loopback sockets, env vault; **WSL/POSIX bridge**; async port/network hooks (gated); event-driven triggers (file/port watchers, log parsers, webhooks); tray daemon.
 - Tiered local scraping (static → crawl4ai/Chromium on demand → optional stealth daemon → optional BYOK boost) → RAG. Authenticated scraping via Session Vault.
@@ -472,7 +478,7 @@ plugin-bundle/
 2. **Rust core** — everyaios-cdp (tiered engines + session vault capture), everyaios-browser (snapshot/diff/ownership), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc
 3. Coordinator sidecar (blueprint loader, agent loops, events) + ProcessSupervisor
 4. Key-ring vault (A2/A3) + OAuth subscription flows (A4) + Session Vault (E11) + session inheritance (E13)
-5. Browser tiers: Obscura integration (default — `obscura serve` spawn, SSRF/file:// defaults, doc 55), Lightpanda opt-in, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12); behavioral realism (E14); **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context (doc 55)
+5. Browser tiers: **Lightpanda integration (default — `lightpanda serve` spawn, SSRF/file:// defaults, doc 55), Obscura opt-in (`obscura serve` spawn)**, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12); behavioral realism (E14); **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context (doc 55)
 6. Office engine (D1–D8): docx block-patch, IronCalc xlsx sidecar + deterministic planner, pptx part-editor, pdf suite, LibreOffice conformance oracle
 7. Token economy (05): compaction pipeline with Reasonix ratios, snip rules, prefix-stability, cache-cost dashboard
 8. Memory fusion (C3) + LadybugDB KG (C6) + Letta paging (C2) — on top of the retested 7 algorithms
@@ -495,14 +501,14 @@ plugin-bundle/
 |---|---|---|
 | **P0** (~2wk) | Rust workspace + sidecar + IPC echo + supervisor skeleton | cargo test green; sidecar E2E echo green; vault opens SQLCipher db |
 | **P1** (~4wk) | Chat + BYOK key-rings (A1–A3, A9) | 2 keys auto-failover under simulated 429 (test); streaming chat round-trip; ledger correct |
-| **P2** (~6wk) | Browser layer — tiered engines (E10), Session Vault (E11/E13), challenge handler (E12/E14), script-eval (E4), session replay (E5), 34-tool catalog | navigate→snapshot→act→diff E2E; ownership test; Obscura scrape + escalate test; session-vault round-trip (agent never sees cookies); PoW auto-solved; run audited script; replay with has_gap |
+| **P2** (~6wk) | Browser layer — tiered engines (E10), Session Vault (E11/E13), challenge handler (E12/E14), script-eval (E4), session replay (E5), 37-tool catalog | navigate→snapshot→act→diff E2E; ownership test; Obscura scrape + escalate test; session-vault round-trip (agent never sees cookies); PoW auto-solved; run audited script; replay with has_gap |
 | **P3** (~4wk) | Cockpit + replay/audit UI (H2/H3) | replay & audit UI round-trip; Watch/Stop works; cockpit shows live agent cards |
 | **P4** (~5wk) | Office engine (D1–D8) + **storage intelligence (D9–D12, G7 — docs 49/52)** | round-trip byte-stable via LibreOffice oracle; IronCalc recalc golden cases; pptx add/remove; pdf form-fill; snapshotBefore rollback; **scan fixture tree → treemap data + dedup report; zstd snapshot round-trip; FTS5 filename query <50ms; storage-health threshold test (D12)** |
 | **P5** (~5wk) | Memory fusion (C3/C6/C2) + token economy (05) | retrieval benchmark beats plain BM25; compaction triggers at ratios; prefix-dirty handled; $/token dashboard |
-| **P6** (~5wk) | Orchestration + connectors — blueprints (B2), sub-agents (B3/B4), scheduling (B7), harness installer (F8) + **harness-driving (F12) via ACP bridge (J17)** + **messaging bridges (F13)**, hub (F1/F3/F4/F5/F6) | two spec-driven agents run a plan; scheduled task fires; harness entry managed; **two external agent CLIs driven via ACP side-by-side (test: initialize handshake, session/update → audit, request_permission → diff-card, cancel kills)**; **messaging round-trip via stub (test)**; Gmail-via-browser flow |
+| **P6** (~5wk) | Orchestration + connectors — blueprints (B2), sub-agents (B3/B4), scheduling (B7), harness installer (F8) + **harness-driving (F12) via ACP bridge (J17)** + **messaging bridges (F13)** + **email/calendar connectors (F14/F15)**, hub (F1/F3/F4/F5/F6) | two spec-driven agents run a plan; scheduled task fires; harness entry managed; **two external agent CLIs driven via ACP side-by-side (test: initialize handshake, session/update → audit, request_permission → diff-card, cancel kills)**; **messaging round-trip via stub (test)**; Gmail-via-browser flow; email read→summarize→reply round-trip via stub (F14) |
 | **P7** (~4wk) | Forge (I1/I2/I4/I5) + **Extension ABI (I6)** + guardrails hardening (J2/J3/J6/**J21**) + retest suite | agent-writes-a-skill-survives-restart; **plugin manifest schema rejects bad bundles; capability allow-list blocks unlisted exec (Zed test vectors); lazy activation = registered-but-not-loaded until first use**; 100% red-team list blocked; path-floor fuzz = 0 |
-| **P8** (~3wk) | Product polish — widget cards (H17), workspace UI, tray, telemetry, packaging, idle-RSS perf, **tiered search cascade (G8)** | Windows beta installs; <30MB idle / <80MB warm; telemetry off-by-default; **G8: cached query <10ms, 50-page parallel fetch completes** |
-| **P9+** | Computer-use (E9), WASM sandbox (I3), Nango sync→RAG, HTML→video, remote handoff (H18), local OpenAI server (A8), AutomationBench, CLI, **email/calendar connectors (F14/F15)**, **image generation (A10)**, **clipboard tool (H26)**, **voice output TTS (H28)**, **generative UI (H25)**, **resumable streams (H27)** | — |
+| **P8** (~3wk) | Product polish — widget cards (H17), workspace UI, tray, telemetry, packaging, idle-RSS perf, **tiered search cascade (G8)** | Windows beta installs; **measure & publish real idle/warm RSS with the coordinator running** (<30MB idle / <80MB warm are targets to *verify*, not promises — the Bun-compiled sidecar alone is ~93MB, J16); telemetry off-by-default; **G8: cached query <10ms, 50-page parallel fetch completes** |
+| **P9+** | Computer-use (E9), WASM sandbox (I3), Nango sync→RAG, HTML→video, remote handoff (H18), local OpenAI server (A8), AutomationBench, CLI, **image generation (A10)**, **clipboard tool (H26)**, **voice output TTS (H28)** | — |
 
 **Retest gate:** the Algorithm Index 🔁 items are re-verified (test suite + benchmark) as part of P5 (memory) and P7 (security); a 🔁 item is only "done on desktop" when its tests run green in the sidecar/runtime.
 

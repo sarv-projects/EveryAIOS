@@ -102,7 +102,7 @@ These are proven patterns we implement in the sidecar (or Rust where noted). Eac
 
 | # | Item | Source | Reason |
 |---|---|---|---|
-| R-1 | Hermes **Python gateway + 21 platform adapters** (Telegram/Discord/Slack/WhatsApp/Signal/…) | Hermes (02) | Wrong stack (Python) + our scope is desktop + webhook/email first; adapter registry pattern (02 §1) is the only part we keep (F1/F2) |
+| R-1 | Hermes **Python gateway + 21 platform adapters** (Telegram/Discord/Slack/WhatsApp/Signal/…) | Hermes (02) | Wrong stack (Python) + **our scope is desktop-first: the agent lives in the open desktop app, not a headless 24×7 daemon** — we start desktop, not CLI→headless→desktop. Rejects the Python gateway + daemon architecture; keeps the adapter-registry pattern (02 §1, F1/F2) and the *feature* as desktop-first in-app bridges (F13, P6.9: email/Telegram/WhatsApp first) |
 | R-2 | Nous-hosted **tool gateway** (subscription lock) | Hermes (02) | Open-source promise: no founder-run infra (v2.0 §0.5) |
 | R-3 | **Agent-browser CLI dependency** (Hermes browser tool) | Hermes (02) | We have the CDP browser layer (08) — strictly better on desktop |
 | R-4 | **OpenCode archived Go fork** | opencode (05 §1) | Archived; evaluate anomalyco rewrite only (24 §2.1) |

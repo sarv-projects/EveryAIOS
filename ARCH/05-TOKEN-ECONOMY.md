@@ -141,3 +141,5 @@ Before feeding tool results to the LLM, apply **command-specific parsers** that 
 **Token savings compound** with prefix-cache stability: compressed output is shorter → less cache-breaking → higher prefix hit rate.
 
 **Relation to existing compaction pipeline (5.2):** RTK compression operates at the *tool-result injection* stage (before content enters the context window), while the 6-stage compaction pipeline operates on *accumulated conversation history*. They are complementary, not competing.
+
+> **Production composition (doc 59):** OmniRoute stacks **RTK + Caveman (DarwinCaveman, doc 31)** as 12 pluggable engines and quotes 15–95% / ~89% avg token savings — the first production proof that the two layers compose. Cite as the implementation reference for §5.10 + §5.2; token-% stays vendor until we measure. Its **`cache-optimized` routing** (rendezvous-hash the prompt prefix back to the connection holding the cache) is the missing half of our A9 prefix-cache economics (§5.3) — pin *which key serves* by cache affinity, not just *track* cache_read/cache_write.

@@ -24,25 +24,60 @@ fn mock_host() -> &'static str {
         thread::spawn(move || {
             for stream in l2.incoming() {
                 let Ok(mut s) = stream else { continue };
-                let mut buf = [0u8; 4096];
-                let _ = s.read(&mut buf);
-                let req = String::from_utf8_lossy(&buf[..]).to_string();
-                let body = if req.contains("/api/tags") {
-                    r#"{"models":[
-                        {"name":"qwen3:4b","size":2497293931,"modified_at":"2026-07-07"},
-                        {"name":"llama3.2:1b","size":1337000000,"modified_at":"2026-07-01"}
-                    ]}"#
-                } else if req.contains("/api/show") {
-                    r#"{"model_info":{"general.context_length":32768,"llama.context_length":32768}}"#
-                } else {
-                    r#"{"status":"ok"}"#
-                };
-                let resp = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = s.write_all(resp.as_bytes());
+                // Handle every connection on its own thread so a slow or
+                // partial request can never stall the accept loop (the old
+                // single-threaded + one-read-per-connection mock raced under
+                // full-suite parallel load: a probe that failed all 3 client
+                // retries made list_ollama_models() return empty).
+                thread::spawn(move || {
+                    // Read until the request headers are complete, then drain
+                    // the (tiny) JSON body so POST /api/show is fully consumed.
+                    let mut buf: Vec<u8> = Vec::with_capacity(2048);
+                    let mut chunk = [0u8; 1024];
+                    loop {
+                        match s.read(&mut chunk) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => {
+                                buf.extend_from_slice(&chunk[..n]);
+                                if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                                    // Headers done. Drain any Content-Length body.
+                                    if let Some(rest) =
+                                        String::from_utf8_lossy(&buf).find("Content-Length: ")
+                                    {
+                                        let tail = &String::from_utf8_lossy(&buf)[rest + 16..];
+                                        if let Ok(len) = tail.split(['\r', '\n']).next().unwrap_or("").parse::<usize>() {
+                                            while buf.len() < rest + 16 + len {
+                                                match s.read(&mut chunk) {
+                                                    Ok(0) | Err(_) => break,
+                                                    Ok(m) => buf.extend_from_slice(&chunk[..m]),
+                                                }
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    let req = String::from_utf8_lossy(&buf).to_string();
+                    let body = if req.contains("/api/tags") {
+                        r#"{"models":[
+                            {"name":"qwen3:4b","size":2497293931,"modified_at":"2026-07-07"},
+                            {"name":"llama3.2:1b","size":1337000000,"modified_at":"2026-07-01"}
+                        ]}"#
+                    } else if req.contains("/api/show") {
+                        r#"{"model_info":{"general.context_length":32768,"llama.context_length":32768}}"#
+                    } else {
+                        r#"{"status":"ok"}"#
+                    };
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = s.write_all(resp.as_bytes());
+                    let _ = s.shutdown(std::net::Shutdown::Both);
+                });
             }
         });
         // Leak the Arc so the listener stays bound for the process lifetime.

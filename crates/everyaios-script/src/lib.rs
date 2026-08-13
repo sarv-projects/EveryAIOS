@@ -1,10 +1,17 @@
-//! everyaios-script — the `run`/`evaluate` sandbox (ARCH/08, E4).
+//! everyaios-script — the `run`/`evaluate` sandbox (ARCH/08 §8.4, E4).
 //!
-//! P0.1 scope: the **limits contract** (the numbers the sandbox must
-//! enforce) as a typed struct + a trait that P2.5 implements over rquickjs.
-//! No JS engine dependency is pulled until P2.5 keeps the build lean.
+//! P2.5: rquickjs async runtime with hard limits (64MB heap / 512KB stack /
+//! 30s timeout / 1K log lines / 2MB return), the `browser` SDK surface, and
+//! the **InnerCallHook** audit guarantee: every primitive inside a script is
+//! (a) authorized against ownership + permissions, (b) recorded as a child
+//! audit row, (c) page-creations claimed — scripts cannot bypass the audit
+//! trail or touch foreign tabs.
+
+mod sandbox;
 
 use serde::{Deserialize, Serialize};
+
+pub use sandbox::Sandbox;
 
 /// Hard limits the sandbox enforces (spec E4 / ARCH/08 §8.4):
 /// 64MB heap, 512KB stack, 30s timeout, 1K log lines, 2MB return payload.
@@ -29,12 +36,71 @@ impl Default for SandboxLimits {
     }
 }
 
-/// The sandbox surface. Implemented over rquickjs in P2.5; the trait fixes
-/// the contract so callers (everyaios-mcp `run` tool) don't change later.
+/// One browser primitive invocation from inside a script. Every primitive
+/// funnels through this shape so the InnerCallHook can authorize + record it
+/// uniformly — there is no way for a script to reach a browser action that
+/// does not pass through it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PrimitiveCall {
+    /// Stable dotted name, e.g. `pages.newPage`, `nav.goto`, `read`, `cdp`.
+    pub name: String,
+    /// Target page when the primitive is page-scoped (`args.pageId`).
+    pub page_id: Option<String>,
+    /// Normalized JSON arguments exactly as the script passed them.
+    pub args: serde_json::Value,
+}
+
+/// Page ownership (ARCH/08 §8.4): scripts only act on pages they own.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum PageOwnership {
+    Mine,
+    User,
+    OtherAgent,
+}
+
+/// One page as the host sees it (`browser.pages.list()` / `getInfo`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PageInfo {
+    pub id: String,
+    pub url: String,
+    pub title: String,
+    pub ownership: PageOwnership,
+}
+
+/// The host side of the `browser` SDK. The sandbox routes every primitive
+/// through the InnerCallHook (authorize → exec → record → page-claim); the
+/// host supplies the policy, the audit writer, and the real browser.
+pub trait BrowserHost: Send + Sync {
+    /// (a) Authorization: ownership + permissions check. Returning `Err`
+    /// denies the primitive — it is still recorded (as `ok=false`) and the
+    /// script sees a JS error.
+    fn authorize(&self, call: &PrimitiveCall) -> Result<(), SandboxError>;
+
+    /// (b) Record the primitive as a child audit row. Called for **every**
+    /// attempt, denied ones included, so the trail cannot be bypassed.
+    fn record(&self, call: &PrimitiveCall, ok: bool, error: &str) -> Result<(), SandboxError>;
+
+    /// (c) Claim a page this script created (grouped like `tabs new`).
+    fn on_page_created(
+        &self,
+        page_id: &str,
+        created_from: &PrimitiveCall,
+    ) -> Result<(), SandboxError>;
+
+    /// All known pages with ownership labels (`browser.pages.list()`).
+    fn pages(&self) -> Vec<PageInfo>;
+
+    /// Execute the primitive; the JSON result is handed to the script.
+    fn exec(&self, call: &PrimitiveCall) -> Result<serde_json::Value, SandboxError>;
+}
+
+/// The sandbox surface. `Sandbox` implements it over rquickjs; the trait
+/// fixes the contract so callers (everyaios-mcp `run` tool) don't change.
 pub trait ScriptSandbox {
-    /// Evaluate `code`, returning the serialized result or a sandbox error.
-    /// Every `browser` SDK primitive call must pass through an
-    /// InnerCallHook (authorize → record → page-claim) — P2.5.
+    /// Evaluate `code` (top-level `await` supported) and return a JSON
+    /// string `{"result": <script return>, "logs": [...], "logs_truncated": bool}`.
+    /// Every `browser` SDK primitive passes through the InnerCallHook.
     fn eval(&self, code: &str) -> Result<String, SandboxError>;
 
     /// The limits this sandbox instance enforces.
@@ -45,37 +111,20 @@ pub trait ScriptSandbox {
 /// signal — a truncated/errored script must never look like success).
 #[derive(Debug, thiserror::Error)]
 pub enum SandboxError {
-    #[error("sandbox not yet wired (P2.5): {0}")]
-    NotWired(String),
     #[error("script timeout after {0}s")]
     Timeout(u64),
     #[error("resource limit exceeded: {0}")]
     Limit(String),
     #[error("javascript error: {0}")]
     Js(String),
-    #[error("return payload too large")]
-    ReturnTooLarge,
+    #[error("return payload too large ({0} bytes, max {1})")]
+    ReturnTooLarge(usize, u64),
+    #[error("browser primitive `{0}` failed: {1}")]
+    Primitive(String, String),
+    #[error("sandbox runtime error: {0}")]
+    Runtime(String),
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn default_limits_match_spec() {
-        let l = SandboxLimits::default();
-        assert_eq!(l.max_heap_bytes, 64 * 1024 * 1024);
-        assert_eq!(l.max_stack_bytes, 512 * 1024);
-        assert_eq!(l.timeout_secs, 30);
-        assert_eq!(l.max_log_lines, 1024);
-        assert_eq!(l.max_return_bytes, 2 * 1024 * 1024);
-    }
-
-    #[test]
-    fn error_messages_are_model_friendly() {
-        let e = SandboxError::Timeout(30);
-        assert!(e.to_string().contains("timeout"));
-        let e2 = SandboxError::ReturnTooLarge;
-        assert!(e2.to_string().contains("large"));
-    }
-}
+#[path = "tests.rs"]
+mod tests;
