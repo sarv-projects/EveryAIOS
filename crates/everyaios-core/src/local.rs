@@ -91,7 +91,9 @@ pub enum LocalError {
     OllamaTimeout(u64),
     #[error("llamafile did not become healthy within {0}s")]
     LlamafileTimeout(u64),
-    #[error("no llamafile binary found (set llamafile_bin, EVERYAIOS_LLAMAFILE, or drop one in {0})")]
+    #[error(
+        "no llamafile binary found (set llamafile_bin, EVERYAIOS_LLAMAFILE, or drop one in {0})"
+    )]
     NoLlamafile(String),
 }
 

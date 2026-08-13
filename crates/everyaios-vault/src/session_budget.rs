@@ -41,7 +41,12 @@ impl SessionBudget {
 
     /// Total spent so far for `session`.
     pub fn spent(&self, session: &str) -> f64 {
-        self.spent.lock().expect("session budget poisoned").get(session).copied().unwrap_or(0.0)
+        self.spent
+            .lock()
+            .expect("session budget poisoned")
+            .get(session)
+            .copied()
+            .unwrap_or(0.0)
     }
 
     /// Remaining budget ($) for `session` (0 once at/over the limit).

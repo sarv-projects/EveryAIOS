@@ -256,12 +256,18 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> SidecarLink<W, R> {
 
     /// Block until the next coordinator request/notification.
     pub fn next_inbound(&self) -> Result<Inbound, RecvError> {
-        self.inbound.lock().unwrap_or_else(|e| e.into_inner()).recv()
+        self.inbound
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .recv()
     }
 
     /// Non-blocking inbound peek.
     pub fn try_inbound(&self) -> Result<Inbound, TryRecvError> {
-        self.inbound.lock().unwrap_or_else(|e| e.into_inner()).try_recv()
+        self.inbound
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .try_recv()
     }
 
     fn write_frame(&self, payload: &[u8]) -> Result<(), LinkError> {
@@ -276,7 +282,10 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> SidecarLink<W, R> {
 static REQUEST_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 fn next_request_id() -> String {
-    format!("r{}", REQUEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    format!(
+        "r{}",
+        REQUEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    )
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -308,8 +317,7 @@ mod tests {
             let mut stream = stream;
             let mut seen = Vec::new();
             while let Ok(Some(payload)) = frame::decode(&mut stream) {
-                let value: serde_json::Value =
-                    serde_json::from_slice(&payload).unwrap_or_default();
+                let value: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
                 let method = value
                     .get("method")
                     .and_then(|m| m.as_str())
@@ -322,7 +330,8 @@ mod tests {
                         let resp = serde_json::json!({
                             "jsonrpc": "2.0", "id": id, "result": { "pong": true },
                         });
-                        let _ = frame::write_frame(&mut stream, &serde_json::to_vec(&resp).unwrap());
+                        let _ =
+                            frame::write_frame(&mut stream, &serde_json::to_vec(&resp).unwrap());
                         break;
                     }
                     "chat/stream" => {
@@ -330,7 +339,8 @@ mod tests {
                         let resp = serde_json::json!({
                             "jsonrpc": "2.0", "id": id, "result": { "accepted": true },
                         });
-                        let _ = frame::write_frame(&mut stream, &serde_json::to_vec(&resp).unwrap());
+                        let _ =
+                            frame::write_frame(&mut stream, &serde_json::to_vec(&resp).unwrap());
                         // Then stream a batch + done back to Rust.
                         let n = serde_json::json!({
                             "jsonrpc": "2.0",
@@ -396,7 +406,10 @@ mod tests {
         let reader = a.try_clone().expect("clone");
         let link = SidecarLink::new(a, reader);
         let _ = link
-            .request("chat/stream", serde_json::json!({ "sessionId": "s1", "streamId": "st-1" }))
+            .request(
+                "chat/stream",
+                serde_json::json!({ "sessionId": "s1", "streamId": "st-1" }),
+            )
             .expect("ack");
         // Batch + done notifications arrive on the inbound channel.
         let first = link.next_inbound().expect("batch");
@@ -442,7 +455,8 @@ mod tests {
             Inbound::Request { id, method, params } => {
                 assert_eq!(method, "provider/stream");
                 assert_eq!(params["provider"], serde_json::json!("nvidia"));
-                link.reply(id, serde_json::json!({ "accepted": true })).unwrap();
+                link.reply(id, serde_json::json!({ "accepted": true }))
+                    .unwrap();
             }
             other => panic!("expected request, got {other:?}"),
         }
@@ -474,10 +488,16 @@ mod tests {
         let reader = a.try_clone().expect("clone");
         let link = SidecarLink::new(a, reader);
         let w = link.writer();
-        w.notify("chat/provider_chunk", serde_json::json!({ "streamId": "s", "delta": "x" }))
-            .unwrap();
-        w.notify("chat/provider_chunk", serde_json::json!({ "streamId": "s", "ended": true }))
-            .unwrap();
+        w.notify(
+            "chat/provider_chunk",
+            serde_json::json!({ "streamId": "s", "delta": "x" }),
+        )
+        .unwrap();
+        w.notify(
+            "chat/provider_chunk",
+            serde_json::json!({ "streamId": "s", "ended": true }),
+        )
+        .unwrap();
         drop(link);
         let out = seen.join().unwrap();
         assert_eq!(out, vec!["chat/provider_chunk", "chat/provider_chunk"]);

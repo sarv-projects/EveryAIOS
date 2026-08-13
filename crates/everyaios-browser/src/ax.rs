@@ -11,31 +11,86 @@ use std::collections::HashMap;
 
 /// Roles the agent can act on — these get `[ref=eN]` handles.
 pub const INTERACTIVE_ROLES: &[&str] = &[
-    "button", "link", "textbox", "searchbox", "checkbox", "radio", "combobox",
-    "listbox", "menuitem", "option", "slider", "switch", "tab", "treeitem",
-    "spinbutton", "colorwell", "menuitemcheckbox", "menuitemradio",
+    "button",
+    "link",
+    "textbox",
+    "searchbox",
+    "checkbox",
+    "radio",
+    "combobox",
+    "listbox",
+    "menuitem",
+    "option",
+    "slider",
+    "switch",
+    "tab",
+    "treeitem",
+    "spinbutton",
+    "colorwell",
+    "menuitemcheckbox",
+    "menuitemradio",
 ];
 
 /// Roles that carry content worth showing in interactive mode (headings +
 /// images/tables are the notable ones; doc 33 §5.2 keeps "actionables +
 /// headings only").
 pub const CONTENT_ROLES: &[&str] = &[
-    "heading", "img", "image", "table", "list", "listitem", "paragraph", "link",
-    "math", "meter", "progressbar", "radio", "separator", "alert",
+    "heading",
+    "img",
+    "image",
+    "table",
+    "list",
+    "listitem",
+    "paragraph",
+    "link",
+    "math",
+    "meter",
+    "progressbar",
+    "radio",
+    "separator",
+    "alert",
 ];
 
 /// Structural/container roles — pruned in interactive mode unless they have
 /// kept descendants.
 pub const STRUCTURAL_ROLES: &[&str] = &[
-    "generic", "group", "row", "cell", "columnheader", "rowheader", "statictext",
-    "WebArea", "RootWebArea", "Iframe", "iframe", "document", "application",
-    "article", "main", "navigation", "region", "section", "complementary",
-    "contentinfo", "banner", "form", "toolbar", "menu", "menubar", "tablist",
-    "tree", "grid", "dialog", "window", "text",
+    "generic",
+    "group",
+    "row",
+    "cell",
+    "columnheader",
+    "rowheader",
+    "statictext",
+    "WebArea",
+    "RootWebArea",
+    "Iframe",
+    "iframe",
+    "document",
+    "application",
+    "article",
+    "main",
+    "navigation",
+    "region",
+    "section",
+    "complementary",
+    "contentinfo",
+    "banner",
+    "form",
+    "toolbar",
+    "menu",
+    "menubar",
+    "tablist",
+    "tree",
+    "grid",
+    "dialog",
+    "window",
+    "text",
 ];
 
 /// Zero-width / invisible characters stripped from accessible names.
-const ZERO_WIDTH: &[char] = &['\u{FEFF}', '\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}', '\u{00AD}'];
+const ZERO_WIDTH: &[char] = &[
+    '\u{FEFF}', '\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}', '\u{00AD}',
+];
 
 /// Is this role directly actionable (interactive)?
 pub fn is_interactive(role: &str) -> bool {
@@ -88,7 +143,11 @@ impl AxNode {
     pub fn from_json(v: &Value) -> AxNode {
         let role = role_of(v);
         AxNode {
-            node_id: v.get("nodeId").and_then(Value::as_str).unwrap_or_default().to_string(),
+            node_id: v
+                .get("nodeId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
             role,
             name: strip_zero_width(
                 v.get("name")
@@ -96,7 +155,12 @@ impl AxNode {
                     .and_then(Value::as_str)
                     .unwrap_or_default(),
             ),
-            value: v.get("value").and_then(|n| n.get("value")).and_then(Value::as_str).unwrap_or_default().to_string(),
+            value: v
+                .get("value")
+                .and_then(|n| n.get("value"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
             focusable: bool_property(v, "focusable"),
             ignored: v.get("ignored").and_then(Value::as_bool).unwrap_or(false),
             child_ids: v
@@ -125,7 +189,10 @@ impl AxNode {
 
     /// Index nodes by node_id.
     pub fn index(nodes: &[AxNode]) -> HashMap<String, AxNode> {
-        nodes.iter().map(|n| (n.node_id.clone(), n.clone())).collect()
+        nodes
+            .iter()
+            .map(|n| (n.node_id.clone(), n.clone()))
+            .collect()
     }
 }
 
@@ -141,9 +208,9 @@ fn bool_property(v: &Value, key: &str) -> bool {
     v.get("properties")
         .and_then(Value::as_array)
         .and_then(|props| {
-            props.iter().find(|p| {
-                p.get("name").and_then(Value::as_str) == Some(key)
-            })
+            props
+                .iter()
+                .find(|p| p.get("name").and_then(Value::as_str) == Some(key))
         })
         .and_then(|p| p.pointer("/value/value"))
         .and_then(Value::as_bool)
@@ -204,7 +271,10 @@ mod tests {
         assert_eq!(n.child_ids, vec!["2", "3"]);
         assert_eq!(n.backend_dom_node_id, Some(12));
         assert_eq!(n.frame_id.as_deref(), Some("FRAME-A"));
-        assert_eq!(n.properties.get("pressed").map(String::as_str), Some("false"));
+        assert_eq!(
+            n.properties.get("pressed").map(String::as_str),
+            Some("false")
+        );
     }
 
     #[test]
@@ -218,7 +288,9 @@ mod tests {
 
     #[test]
     fn zero_width_variants_stripped() {
-        for ch in ['\u{FEFF}', '\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}', '\u{00AD}'] {
+        for ch in [
+            '\u{FEFF}', '\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}', '\u{00AD}',
+        ] {
             let name = format!("a{ch}b");
             assert_eq!(strip_zero_width(&name), "ab", "char U+{:04X}", ch as u32);
         }

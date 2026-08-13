@@ -9,12 +9,16 @@ use crate::{SnapshotEngine, SnapshotMode};
 use everyaios_cdp::TargetType;
 
 fn live_enabled() -> bool {
-    std::env::var("EVERYAIOS_LIVE_TEST").map(|v| v == "1").unwrap_or(false)
+    std::env::var("EVERYAIOS_LIVE_TEST")
+        .map(|v| v == "1")
+        .unwrap_or(false)
 }
 
 /// Spawn headless Chrome and return a connected client + the first page
 /// target's session.
-fn spawn_and_connect(tag: &str) -> (
+fn spawn_and_connect(
+    tag: &str,
+) -> (
     everyaios_cdp::BrowserChild,
     everyaios_cdp::CdpClient,
     everyaios_cdp::Session,
@@ -164,12 +168,17 @@ fn live_act_loop_navigate_click_read() {
     // snapshot → find the button ref.
     let snap = actions.snapshot("live-act").expect("snapshot");
     let rendered = snap.root.render();
-    assert!(rendered.contains("button Go [ref=e1"), "expected button ref:\n{rendered}");
+    assert!(
+        rendered.contains("button Go [ref=e1"),
+        "expected button ref:\n{rendered}"
+    );
     eprintln!("=== LIVE ACT SNAPSHOT ===\n{rendered}\n=== END ===");
 
     // act: click the button (ref → geometry → Input.dispatchMouseEvent).
     let res = actions
-        .act(crate::ActKind::Click { ref_id: "e1".into() })
+        .act(crate::ActKind::Click {
+            ref_id: "e1".into(),
+        })
         .expect("act click");
     assert_eq!(res.kind, "click");
     assert!(res.diff.is_some(), "act must return a post-settle diff");

@@ -102,22 +102,20 @@ pub fn grammar_from_body(body: &serde_json::Value) -> Grammar {
         Some(serde_json::Value::String(s)) if !s.is_empty() => {
             return Grammar::Gbnf(s.clone());
         }
-        Some(serde_json::Value::Object(o)) => {
-            match o.get("type").and_then(|t| t.as_str()) {
-                Some("json") => return Grammar::Json,
-                Some("json_schema") => {
-                    if let Some(schema) = o.get("value").cloned() {
-                        return Grammar::JsonSchema(schema);
-                    }
+        Some(serde_json::Value::Object(o)) => match o.get("type").and_then(|t| t.as_str()) {
+            Some("json") => return Grammar::Json,
+            Some("json_schema") => {
+                if let Some(schema) = o.get("value").cloned() {
+                    return Grammar::JsonSchema(schema);
                 }
-                Some("gbnf") => {
-                    if let Some(v) = o.get("value").and_then(|v| v.as_str()) {
-                        return Grammar::Gbnf(v.to_string());
-                    }
-                }
-                _ => {}
             }
-        }
+            Some("gbnf") => {
+                if let Some(v) = o.get("value").and_then(|v| v.as_str()) {
+                    return Grammar::Gbnf(v.to_string());
+                }
+            }
+            _ => {}
+        },
         _ => {}
     }
     if body
@@ -163,7 +161,11 @@ fn read_snippet(resp: ureq::Response) -> String {
 /// forward `tools`: B5's local path extracts tool calls as grammar-enforced
 /// JSON text (ollama native tool mode would emit `tool_calls` instead of
 /// `message.content`, breaking the stream contract).
-pub(crate) fn ollama_body(endpoint: &LocalEndpoint, model: &str, body: &serde_json::Value) -> serde_json::Value {
+pub(crate) fn ollama_body(
+    endpoint: &LocalEndpoint,
+    model: &str,
+    body: &serde_json::Value,
+) -> serde_json::Value {
     let mut req = serde_json::json!({
         "model": body.get("model").and_then(|m| m.as_str()).unwrap_or(model),
         "messages": body.get("messages").cloned().unwrap_or(serde_json::json!([])),
@@ -219,7 +221,11 @@ pub fn ollama_chat_stream(
         let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) else {
             continue;
         };
-        if let Some(msg) = v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_str()) {
+        if let Some(msg) = v
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_str())
+        {
             events.push(ChatStreamEvent {
                 delta: Some(msg.to_string()),
                 finish: None,
@@ -228,7 +234,10 @@ pub fn ollama_chat_stream(
         }
         if v.get("done").and_then(|d| d.as_bool()).unwrap_or(false) {
             let usage = Usage {
-                prompt: v.get("prompt_eval_count").and_then(|c| c.as_u64()).unwrap_or(0),
+                prompt: v
+                    .get("prompt_eval_count")
+                    .and_then(|c| c.as_u64())
+                    .unwrap_or(0),
                 output: v.get("eval_count").and_then(|c| c.as_u64()).unwrap_or(0),
                 cache_read: 0,
                 cache_write: 0,
@@ -257,9 +266,14 @@ pub fn ollama_chat(
         .set("Content-Type", "application/json")
         .send_json(body.clone())
         .map_err(map_err)?;
-    let v: serde_json::Value = resp.into_json().map_err(|e| BrokerError::Transport(e.to_string()))?;
+    let v: serde_json::Value = resp
+        .into_json()
+        .map_err(|e| BrokerError::Transport(e.to_string()))?;
     let usage = Usage {
-        prompt: v.get("prompt_eval_count").and_then(|c| c.as_u64()).unwrap_or(0),
+        prompt: v
+            .get("prompt_eval_count")
+            .and_then(|c| c.as_u64())
+            .unwrap_or(0),
         output: v.get("eval_count").and_then(|c| c.as_u64()).unwrap_or(0),
         cache_read: 0,
         cache_write: 0,
@@ -272,7 +286,11 @@ pub fn ollama_chat(
 /// Build the OpenAI-compatible body for llamafile: same wire shape as cloud
 /// providers plus `grammar`/`response_format` (B5). `num_ctx` is fixed at
 /// spawn time for llamafile (`--ctx-size`), not per request.
-pub(crate) fn llamafile_body(endpoint: &LocalEndpoint, model: &str, body: &serde_json::Value) -> serde_json::Value {
+pub(crate) fn llamafile_body(
+    endpoint: &LocalEndpoint,
+    model: &str,
+    body: &serde_json::Value,
+) -> serde_json::Value {
     let _ = endpoint;
 
     let mut req = serde_json::json!({
@@ -319,11 +337,10 @@ pub fn llamafile_chat(
         .set("Content-Type", "application/json")
         .send_json(body.clone())
         .map_err(map_err)?;
-    let v: serde_json::Value = resp.into_json().map_err(|e| BrokerError::Transport(e.to_string()))?;
-    let usage = v
-        .get("usage")
-        .and_then(Usage::from_any)
-        .unwrap_or_default();
+    let v: serde_json::Value = resp
+        .into_json()
+        .map_err(|e| BrokerError::Transport(e.to_string()))?;
+    let usage = v.get("usage").and_then(Usage::from_any).unwrap_or_default();
     Ok((v, usage))
 }
 

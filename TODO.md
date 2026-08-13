@@ -207,7 +207,7 @@
 - [x] `[DONE]` Browser network containment (doc 55 §1 / 06 §6.15): `--allowed-domains` → WebRTC (RTCPeerConnection) disable + worker fail-closed guards + content boundaries + max-output — **Lightpanda branch passes `--disable-workers` (fail-closed) + `--cdp-max-connections`; Chrome tier passes `--disable-features=WebRTC`; `allowed_domains` enforced at the orchestration layer (agent-browser `--allowed-domains` semantics, `guard_domain`); full worker-guard parity is native to the light engines — same honest ceiling as P2.3 bookmarks (stock Chrome has no CDP switch for it); `--max-output` = 2MB cap on every tier**
 - [x] `[DONE]` Integrate Lightpanda: binary spawn, CDP connection (opt-in, AGPL spawn-only); driver pattern: agent-browser `native/cdp/lightpanda.rs` (doc 55) — **`spawn_light()` Lightpanda branch: `lightpanda serve --host 127.0.0.1 --port <free> --block-private-networks --disable-workers --cdp-max-connections` → `/json/version` → Chrome-compatible CDP — our existing `everyaios-cdp` client drives it unchanged (LIVE PASS against the installed binary; AGPL respected: spawn-only, never linked)**
 - [x] `[DONE]` Implement escalation logic (E8): tier 0→1→2 based on failure/JS-need/login-need — **`TieredEngine::fetch(intent)` picks the starting tier (Static / NeedsJs→light / NeedsLogin→chrome), then `escalate_from()` loops static→light→chrome on failure/capability-gap; policy rejections (SSRF/file://domain) never escalate; `escalation_rules` test (7 rules) green**
-- [x] `[DONE]` Test: scrape task runs on light engine, escalates to Chrome only on JS-render need — **`live_tiered_stack_escalation` (LIVE PASS, real binaries): Static intent → tier 0 reads example.com with no browser process; NeedsJs → Lightpanda tier renders it; Obscura-missing gap → real headless Chrome tier renders it (escalates only on need). 51/51 browser unit tests, workspace 245, clippy 0**
+- [x] `[DONE]` Test: scrape task runs on light engine, escalates to Chrome only on JS-render need — **`live_tiered_stack_escalation` (LIVE PASS, real binaries): Static intent → tier 0 reads example.com with no browser process; NeedsJs → Lightpanda tier renders it; Obscura-missing gap → real headless Chrome tier renders it (escalates only on need). 52/52 browser unit tests, workspace 246, clippy 0**
 
 ### P2.5 Script-Eval Sandbox (everyaios-script, E4 — doc 33 §6.3, doc 55 agent-browser run; ARCH/08)
 - [ ] `[NOT DONE]` Integrate rquickjs crate with async runtime
@@ -257,12 +257,12 @@
 - [ ] `[NOT DONE]` Implement 7-day retention default + configurable wipe
 - [ ] `[NOT DONE]` Implement durable event log + idempotency classes (doc 53 §4): safe-retry / unsafe / same-key / confirm-after-uncertain over the append-only audit
 
-**P2 Exit Criterion:** navigate→snapshot→act→diff E2E; ownership test passes; Obscura scrape + escalate; session-vault round-trip (agent never sees cookies); PoW auto-solved.
+**P2 Exit Criterion:** navigate→snapshot→act→diff E2E; ownership test passes; Obscura scrape + escalate; session-vault round-trip (agent never sees cookies); PoW auto-solved; run audited script; replay with has_gap.
 
 ---
 
 
-## PHASE 3 — Script-Eval + Replay + Cockpit (~4 weeks)
+## PHASE 3 — Cockpit & Audit UI (~4 weeks)
 
 ### P3.1 Replay & Audit UI (H3 — doc 33 §9.5, ARCH/12 UI)
 - [ ] `[NOT DONE]` Implement scrubber UI: timeline of actions per session
@@ -284,7 +284,7 @@
 - [ ] `[NOT DONE]` Add trace_id + span_id columns to audit table
 - [ ] `[NOT DONE]` Console + log-file export (Jaeger/OTLP post-v1)
 
-**P3 Exit Criterion:** Run audited script; replay with has_gap; Watch/Stop works; cockpit shows live agent cards.
+**P3 Exit Criterion:** replay & audit UI round-trip; Watch/Stop works; cockpit shows live agent cards.
 
 ---
 
@@ -892,13 +892,6 @@
 - [ ] `[NOT DONE]` Measure and optimize Largest Contentful Paint (target <1s)
 - [ ] `[NOT DONE]` Measure and optimize Time to Interactive after cold start (target <2s)
 
-### P11.6 User Research & Feedback Loops (ARCH/12-UI-SPEC)
-- [ ] `[NOT DONE]` Design beta feedback mechanism (in-app bug report + feature request)
-- [ ] `[NOT DONE]` Design NPS/satisfaction prompt (non-intrusive, after 7 days of use)
-- [ ] `[NOT DONE]` Plan user testing sessions: 5 testers × 3 rounds (alpha, beta, RC)
-- [ ] `[NOT DONE]` Define key UX metrics to track: task completion rate, time-to-value, error rate
-- [ ] `[NOT DONE]` Implement session recording (opt-in) for UX analysis (not AI content, just clicks/navigation)
-
 ---
 
 ## PHASE 12 — Market Research & Go-to-Market (live market research — no research doc)
@@ -1055,6 +1048,13 @@
 - [ ] [NOT DONE] Reconnect UI: "🔄 Reconnecting…" chip + auto-resume from last token (LibreChat pattern)
 - [ ] [NOT DONE] Idempotent retry wiring per ARCH/03 (retry idempotent calls); test: kill mid-stream → resume byte-continuous
 
+### P11.6 User Research & Feedback Loops (ARCH/12-UI-SPEC)
+- [ ] `[NOT DONE]` Design beta feedback mechanism (in-app bug report + feature request)
+- [ ] `[NOT DONE]` Design NPS/satisfaction prompt (non-intrusive, after 7 days of use)
+- [ ] `[NOT DONE]` Plan user testing sessions: 5 testers × 3 rounds (alpha, beta, RC)
+- [ ] `[NOT DONE]` Define key UX metrics to track: task completion rate, time-to-value, error rate
+- [ ] `[NOT DONE]` Implement session recording (opt-in) for UX analysis (not AI content, just clicks/navigation)
+
 ---
 
 ## SUMMARY
@@ -1064,7 +1064,7 @@
 | P0 Workspace & Skeleton | 46 | ~2 |
 | P1 Chat + BYOK | 50 | ~4 |
 | P2 Browser Layer | 81 | ~6 |
-| P3 Replay + Cockpit | 14 | ~4 |
+| P3 Cockpit & Audit UI | 14 | ~4 |
 | P4 Office Engine | 45 | ~5 |
 | P5 Memory + Token Economy | 60 | ~5 |
 | P6 Orchestration + Connectors | 80 | ~5 |

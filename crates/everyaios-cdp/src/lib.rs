@@ -10,8 +10,13 @@ pub mod browser;
 pub mod discovery;
 pub mod transport;
 
-pub use browser::{install_chrome_for_testing, locate_system_browser, spawn_browser, BrowserChild, LaunchOptions};
-pub use discovery::{assert_loopback, connect_to_browser, fetch_targets_http, probe_browser, read_devtools_active_port};
+pub use browser::{
+    install_chrome_for_testing, locate_system_browser, spawn_browser, BrowserChild, LaunchOptions,
+};
+pub use discovery::{
+    assert_loopback, connect_to_browser, fetch_targets_http, probe_browser,
+    read_devtools_active_port,
+};
 pub use transport::{AttachMode, CdpClient, CdpEvent, DEFAULT_CALL_TIMEOUT};
 
 use serde::{Deserialize, Serialize};
@@ -123,7 +128,9 @@ mod tests {
         assert!(CdpError::BrowserNotFound("none".into())
             .to_string()
             .contains("browser not found"));
-        assert!(CdpError::Timeout("x".into()).to_string().contains("timed out"));
+        assert!(CdpError::Timeout("x".into())
+            .to_string()
+            .contains("timed out"));
     }
 
     #[test]

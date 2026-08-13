@@ -267,10 +267,7 @@ impl<'a> OAuthManager<'a> {
 
     /// Start the PKCE flow: mints a verifier + state (stored in the vault),
     /// returns the authorize URL to open in the system browser.
-    pub fn start_pkce(
-        &self,
-        provider: &str,
-    ) -> Result<PkceStart, OAuthError> {
+    pub fn start_pkce(&self, provider: &str) -> Result<PkceStart, OAuthError> {
         self.check_enabled()?;
         let p = self.provider(provider)?;
         if p.flow != FlowKind::Pkce {
@@ -400,7 +397,10 @@ impl<'a> OAuthManager<'a> {
             .and_then(|v| v.as_u64())
             .unwrap_or(5)
             .max(1);
-        let expires_in = json.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(900);
+        let expires_in = json
+            .get("expires_in")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(900);
 
         self.store_pending(
             provider,
@@ -533,9 +533,8 @@ impl<'a> OAuthManager<'a> {
         // The stored refresh token is encrypted-at-rest bytes; materialize a
         // Zeroizing copy for the grant (scrubbed on drop). `stored` zeroizes
         // its own buffers when it drops at scope end.
-        let refresh_token = zeroize::Zeroizing::new(
-            String::from_utf8_lossy(&refresh_bytes).into_owned(),
-        );
+        let refresh_token =
+            zeroize::Zeroizing::new(String::from_utf8_lossy(&refresh_bytes).into_owned());
 
         let tokens = if provider == COPILOT {
             // Re-exchange the GitHub token for a fresh Copilot token.
@@ -648,10 +647,8 @@ impl<'a> OAuthManager<'a> {
     }
 
     fn clear_pending(&self, provider: &str) -> Result<(), OAuthError> {
-        self.conn.execute(
-            "DELETE FROM oauth_pending WHERE provider = ?1",
-            [provider],
-        )?;
+        self.conn
+            .execute("DELETE FROM oauth_pending WHERE provider = ?1", [provider])?;
         Ok(())
     }
 
@@ -743,10 +740,8 @@ impl<'a> OAuthManager<'a> {
         // keep its pending row until the account is revoked; other providers
         // clear the in-flight flow on success.
         if provider != QWEN {
-            self.conn.execute(
-                "DELETE FROM oauth_pending WHERE provider = ?1",
-                [provider],
-            )?;
+            self.conn
+                .execute("DELETE FROM oauth_pending WHERE provider = ?1", [provider])?;
         }
         // `verifier` is borrowed from the pending row (kept for QWEN, dropped
         // for others); nothing to scrub here — the row is what holds it.
@@ -866,10 +861,7 @@ fn post_form(url: &str, form: &[(&str, &str)]) -> Result<serde_json::Value, OAut
 }
 
 /// GET with `Authorization: token <tok>` (Copilot internal exchange).
-fn get_json_with_auth(
-    url: &str,
-    token: &str,
-) -> Result<serde_json::Value, OAuthError> {
+fn get_json_with_auth(url: &str, token: &str) -> Result<serde_json::Value, OAuthError> {
     // The internal endpoint checks editor headers; mirror copilot clients.
     match ureq::get(url)
         .set("Authorization", &format!("token {token}"))
@@ -919,10 +911,19 @@ fn parse_tokens(json: &serde_json::Value) -> Result<RawTokens, OAuthError> {
             .get("refresh_token")
             .and_then(|v| v.as_str())
             .map(|s| zeroize::Zeroizing::new(s.to_string())),
-        token_type: json.get("token_type").and_then(|v| v.as_str()).map(str::to_string),
-        scopes: json.get("scope").and_then(|v| v.as_str()).map(str::to_string),
+        token_type: json
+            .get("token_type")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        scopes: json
+            .get("scope")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
         expires_at: json.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(0),
-        id_token: json.get("id_token").and_then(|v| v.as_str()).map(str::to_string),
+        id_token: json
+            .get("id_token")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
     })
 }
 
@@ -936,7 +937,10 @@ fn id_from_jwt(jwt: &str) -> Option<(String, Option<String>)> {
         .ok()?;
     let json: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
     let sub = json.get("sub")?.as_str()?.to_string();
-    let email = json.get("email").and_then(|v| v.as_str()).map(str::to_string);
+    let email = json
+        .get("email")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
     Some((sub, email))
 }
 
@@ -953,8 +957,7 @@ fn access_id(access: &str) -> String {
 
 /// RFC 3986 unreserved-safe percent-encoder (query values).
 fn pct_encode(s: &str) -> String {
-    const UNRESERVED: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    const UNRESERVED: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
     let mut out = String::with_capacity(s.len() * 3);
     for &b in s.as_bytes() {
         if UNRESERVED.contains(&b) {
@@ -996,10 +999,7 @@ fn url_b64(bytes: &[u8]) -> String {
 fn random_hex(n_bytes: usize) -> String {
     let mut buf = vec![0u8; n_bytes];
     rand::rngs::OsRng.fill_bytes(&mut buf);
-    let s = buf
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
+    let s = buf.iter().map(|b| format!("{b:02x}")).collect::<String>();
     buf.zeroize();
     s
 }
@@ -1067,7 +1067,10 @@ pub enum OAuthError {
     #[error("no refresh token stored for provider '{0}'")]
     NoRefreshToken(String),
     #[error("account not found: {provider}/{account_id}")]
-    AccountNotFound { provider: String, account_id: String },
+    AccountNotFound {
+        provider: String,
+        account_id: String,
+    },
     #[error("HTTP {0}: {1}")]
     Http(u16, String),
     #[error("transport error: {0}")]

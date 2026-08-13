@@ -413,9 +413,16 @@ fn handle_text(
         q.pop_front();
     }
     q.push_back(CdpEvent {
-        method: v.get("method").and_then(Value::as_str).unwrap_or_default().to_string(),
+        method: v
+            .get("method")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
         params: v.get("params").cloned().unwrap_or(Value::Null),
-        session_id: v.get("sessionId").and_then(Value::as_str).map(str::to_string),
+        session_id: v
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .map(str::to_string),
     });
 }
 
@@ -423,7 +430,11 @@ fn response_result(v: &Value) -> Result<Value, CdpError> {
     if let Some(err) = v.get("error") {
         Err(CdpError::Protocol {
             code: err.get("code").and_then(Value::as_i64).unwrap_or(-1),
-            message: err.get("message").and_then(Value::as_str).unwrap_or("cdp error").to_string(),
+            message: err
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("cdp error")
+                .to_string(),
         })
     } else {
         Ok(v.get("result").cloned().unwrap_or(Value::Null))
@@ -477,33 +488,58 @@ mod tests {
     #[test]
     fn attach_mode_from_protocol_version() {
         assert_eq!(AttachMode::from_protocol_version("1.2"), AttachMode::Nested);
-        assert_eq!(AttachMode::from_protocol_version("1.3"), AttachMode::Flatten);
-        assert_eq!(AttachMode::from_protocol_version("1.4"), AttachMode::Flatten);
-        assert_eq!(AttachMode::from_protocol_version("2.0"), AttachMode::Flatten);
-        assert_eq!(AttachMode::from_protocol_version("garbage"), AttachMode::Nested);
+        assert_eq!(
+            AttachMode::from_protocol_version("1.3"),
+            AttachMode::Flatten
+        );
+        assert_eq!(
+            AttachMode::from_protocol_version("1.4"),
+            AttachMode::Flatten
+        );
+        assert_eq!(
+            AttachMode::from_protocol_version("2.0"),
+            AttachMode::Flatten
+        );
+        assert_eq!(
+            AttachMode::from_protocol_version("garbage"),
+            AttachMode::Nested
+        );
     }
 
     #[test]
     fn call_round_trip_flatten() {
         let url = mock_ws(|req| {
-            assert_eq!(req.get("method").and_then(Value::as_str), Some("Browser.getVersion"));
+            assert_eq!(
+                req.get("method").and_then(Value::as_str),
+                Some("Browser.getVersion")
+            );
             json!({ "protocolVersion": "1.4", "product": "Chrome/120" })
         });
         let client = CdpClient::connect(&url).unwrap();
         let res = client.call("Browser.getVersion", Value::Null).unwrap();
-        assert_eq!(res.get("product").and_then(Value::as_str), Some("Chrome/120"));
+        assert_eq!(
+            res.get("product").and_then(Value::as_str),
+            Some("Chrome/120")
+        );
     }
 
     #[test]
     fn call_session_flatten_adds_session_id() {
         let url = mock_ws(|req| {
             assert_eq!(req.get("sessionId").and_then(Value::as_str), Some("sess-1"));
-            assert_eq!(req.get("method").and_then(Value::as_str), Some("Page.navigate"));
+            assert_eq!(
+                req.get("method").and_then(Value::as_str),
+                Some("Page.navigate")
+            );
             json!({ "frameId": "f1" })
         });
         let client = CdpClient::connect(&url).unwrap();
         let res = client
-            .call_session("sess-1", "Page.navigate", json!({ "url": "https://example.com" }))
+            .call_session(
+                "sess-1",
+                "Page.navigate",
+                json!({ "url": "https://example.com" }),
+            )
             .unwrap();
         assert_eq!(res.get("frameId").and_then(Value::as_str), Some("f1"));
     }
@@ -553,7 +589,9 @@ mod tests {
                         .unwrap();
                         // Then push the nested event with the real response.
                         let message: Value = serde_json::from_str(
-                            req.pointer("/params/message").and_then(Value::as_str).unwrap_or("{}"),
+                            req.pointer("/params/message")
+                                .and_then(Value::as_str)
+                                .unwrap_or("{}"),
                         )
                         .unwrap();
                         let inner_id = message.get("id").cloned().unwrap_or(Value::Null);
@@ -637,11 +675,9 @@ mod tests {
 
     #[test]
     fn events_are_queued_and_drainable() {
-        let url = mock_ws(|req| {
-            match req.get("method").and_then(Value::as_str) {
-                Some("Target.getTargets") => json!({ "targetInfos": [] }),
-                _ => json!({}),
-            }
+        let url = mock_ws(|req| match req.get("method").and_then(Value::as_str) {
+            Some("Target.getTargets") => json!({ "targetInfos": [] }),
+            _ => json!({}),
         });
         let client = CdpClient::connect(&url).unwrap();
         // The mock pushes no events; verify empty drain works, and that a
@@ -673,12 +709,9 @@ mod tests {
         });
         let port = port_rx.recv().unwrap();
         let url = format!("ws://127.0.0.1:{port}/devtools/page/1");
-        let client = CdpClient::connect_with_mode(
-            &url,
-            AttachMode::Flatten,
-            Duration::from_millis(300),
-        )
-        .unwrap();
+        let client =
+            CdpClient::connect_with_mode(&url, AttachMode::Flatten, Duration::from_millis(300))
+                .unwrap();
         let err = match client.call("Page.captureScreenshot", Value::Null) {
             Ok(_) => panic!("expected a timeout"),
             Err(e) => e,
@@ -702,7 +735,10 @@ mod tests {
     #[test]
     fn list_targets_parses() {
         let url = mock_ws(|req| {
-            assert_eq!(req.get("method").and_then(Value::as_str), Some("Target.getTargets"));
+            assert_eq!(
+                req.get("method").and_then(Value::as_str),
+                Some("Target.getTargets")
+            );
             json!({
                 "targetInfos": [{
                     "id": "t1",

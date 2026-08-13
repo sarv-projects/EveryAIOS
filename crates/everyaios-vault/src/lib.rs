@@ -24,7 +24,9 @@ pub use keyring::{
 };
 pub use ledger::{default_pricing, Pricing, Usage, UsageRow};
 pub use local::{Grammar, LocalEndpoint, LocalRuntime, DEFAULT_NUM_CTX, MIN_WARN_NUM_CTX};
-pub use oauth::{DeviceCodeStart, DevicePoll, OAuthAccountInfo, OAuthError, OAuthManager, PkceStart};
+pub use oauth::{
+    DeviceCodeStart, DevicePoll, OAuthAccountInfo, OAuthError, OAuthManager, PkceStart,
+};
 pub use session_budget::{SessionBudget, DEFAULT_SESSION_BUDGET_USD};
 
 use std::path::Path;

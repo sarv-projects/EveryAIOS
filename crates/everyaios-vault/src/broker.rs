@@ -887,7 +887,10 @@ mod tests {
         // cost = 20×0.5e-6 + 50×0.5e-6 = 35e-6.
         let spent = vault.session_spend("s1").unwrap();
         let expected = 35e-6;
-        assert!((spent - expected).abs() < 1e-12, "spent {spent} != {expected}");
+        assert!(
+            (spent - expected).abs() < 1e-12,
+            "spent {spent} != {expected}"
+        );
         // Per-key budget carries the same cost.
         let info = broker.ring().list("nvidia").unwrap();
         assert!((info[0].cost_day - expected).abs() < 1e-12);
@@ -917,7 +920,10 @@ mod tests {
         // Cost = billable(160)×3e-6 + 30×15e-6 + 40×0.3e-6 + 150×3.75e-6.
         let expected = 160.0 * 3e-6 + 30.0 * 15e-6 + 40.0 * 0.3e-6 + 150.0 * 3.75e-6;
         let spent = vault.session_spend("s1").unwrap();
-        assert!((spent - expected).abs() < 1e-9, "spent {spent} != {expected}");
+        assert!(
+            (spent - expected).abs() < 1e-9,
+            "spent {spent} != {expected}"
+        );
     }
 
     #[test]
@@ -945,7 +951,11 @@ mod tests {
             .unwrap_err();
         let msg = err.to_string();
         match err {
-            BrokerError::SessionBudgetExceeded { session, limit, spent } => {
+            BrokerError::SessionBudgetExceeded {
+                session,
+                limit,
+                spent,
+            } => {
                 assert_eq!(session, "s1");
                 assert!((limit - 1e-9).abs() < 1e-18);
                 assert!(spent > limit);
@@ -987,7 +997,10 @@ mod tests {
         assert_eq!(vault.ledger_count().unwrap(), 1);
         let spend = vault.session_spend("s1").unwrap();
         let expected = 100.0 * 3e-6 + 25.0 * 15e-6 + 60.0 * 3.75e-6;
-        assert!((spend - expected).abs() < 1e-9, "spend {spend} != {expected}");
+        assert!(
+            (spend - expected).abs() < 1e-9,
+            "spend {spend} != {expected}"
+        );
     }
 
     #[test]

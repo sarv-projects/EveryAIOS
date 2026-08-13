@@ -65,7 +65,11 @@ mod tests {
     fn tree_with_button(name: &str) -> A11yNode {
         let mut root = A11yNode::new("WebArea", "Page");
         root.push(A11yNode::new("heading", "Welcome"));
-        root.push(A11yNode::new("button", name).with_ref("e1").with_actionable());
+        root.push(
+            A11yNode::new("button", name)
+                .with_ref("e1")
+                .with_actionable(),
+        );
         root
     }
 

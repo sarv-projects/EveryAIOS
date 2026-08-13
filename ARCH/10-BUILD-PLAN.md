@@ -18,12 +18,14 @@
 - **Tiered engines (E10):** Obscura lightweight CDP tier (default for scrape/RAG) + Lightpanda opt-in; tier 0 static → 1 lightweight → 2 full escalation; spawn-only license discipline.
 - **Session Vault (E11):** SQLCipher-encrypted multi-account sessions (cookies/localStorage), Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit; capture paths 1–3 incl. **live-attach session inheritance (E13)**.
 - **Challenge handler (E12/E14):** PoW local solver + human-in-loop pass-through (default) + behavioral-realism input layer; optional BYO solver API behind a flag.
+- **Script-eval (E4):** everyaios-script (`run`/`evaluate`) rquickjs sandbox + `browser` SDK + InnerCallHook (every primitive authorized → recorded → page-claims captured); ownership-filtered `pages.list()`.
+- **Session replay (E5):** injected recorder → NDJSON ingest → replay store; sticky `has_gap`; durable event log + idempotency classes; 7-day retention.
 - Ownership isolation + tab claims + audit rows.
-- **Exit:** scripted browser E2E: navigate → snapshot → act (click/fill) → diff → assert (headed on dev box / headless chrome-for-testing in CI); ownership: agent cannot close a user tab (test); scrape task runs on Obscura tier and escalates to Chrome only on JS-render need (test); session-vault round-trip (capture → grant → inject → revoke; agent never sees cookies — test); challenge surface → human-in-loop handoff works (manual); PoW challenge auto-solved locally (test).
+- **Exit:** scripted browser E2E: navigate → snapshot → act (click/fill) → diff → assert (headed on dev box / headless chrome-for-testing in CI); ownership: agent cannot close a user tab (test); scrape task runs on Obscura tier and escalates to Chrome only on JS-render need (test); session-vault round-trip (capture → grant → inject → revoke; agent never sees cookies — test); challenge surface → human-in-loop handoff works (manual); PoW challenge auto-solved locally (test); `run` executes a multi-step script with audited primitives (every primitive has an audit row); recording → replay round-trip with has_gap on a forced gap.
 
-## P3 — Script-eval + replay (≈4 wks)
-- everyaios-script (`run`/`evaluate`) with InnerCallHook; injected recorder → NDJSON ingest → replay store; replay + audit UI; cockpit cards (Watch/Stop).
-- **Exit:** `run` executes a multi-step script with audited primitives (test: every primitive has an audit row); recording → replay round-trip with has_gap on forced gap; cockpit shows live + stop kills the loop.
+## P3 — Cockpit & audit UI (≈4 wks)
+- Replay & audit UI (scrubber + per-step screenshots + searchable sessions); cockpit cards (Watch/Stop, quiet mode, MCQ interrupts); distributed tracing (J14).
+- **Exit:** replay & audit UI round-trip; cockpit shows live + stop kills the loop.
 
 ## P4 — Office engine + storage intelligence (≈5 wks)  ← user-critical
 - docx block-patch editor; xlsx (IronCalc sidecar + calamine + workbook DSL + deterministic planner); pptx part-editor; pdf (pdf-lib form/annotate + lopdf swap + re-author + redact); renderers in UI; conformance oracle wired.

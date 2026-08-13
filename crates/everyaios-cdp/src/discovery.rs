@@ -20,10 +20,16 @@ pub fn assert_loopback(host: &str) -> Result<(), CdpError> {
     if matches!(lowered.as_str(), "127.0.0.1" | "localhost" | "::1") {
         return Ok(());
     }
-    if lowered.parse::<std::net::IpAddr>().map(|a| a.is_loopback()).unwrap_or(false) {
+    if lowered
+        .parse::<std::net::IpAddr>()
+        .map(|a| a.is_loopback())
+        .unwrap_or(false)
+    {
         return Ok(());
     }
-    Err(CdpError::Security(format!("non-loopback CDP host rejected: {host}")))
+    Err(CdpError::Security(format!(
+        "non-loopback CDP host rejected: {host}"
+    )))
 }
 
 /// Read the `DevToolsActivePort` file written by a Chrome/Edge instance
@@ -32,15 +38,17 @@ pub fn assert_loopback(host: &str) -> Result<(), CdpError> {
 /// File format: line 1 = port, line 2 = browser WS handshake path.
 pub fn read_devtools_active_port(user_data_dir: &Path) -> Result<BrowserEndpoint, CdpError> {
     let file = user_data_dir.join("DevToolsActivePort");
-    let content = std::fs::read_to_string(&file).map_err(|e| {
-        CdpError::Discovery(format!("read {}: {e}", file.display()))
-    })?;
+    let content = std::fs::read_to_string(&file)
+        .map_err(|e| CdpError::Discovery(format!("read {}: {e}", file.display())))?;
     let mut lines = content.lines();
     let port: u16 = lines
         .next()
         .and_then(|l| l.trim().parse().ok())
         .ok_or_else(|| {
-            CdpError::Discovery(format!("DevToolsActivePort: no port line in {}", file.display()))
+            CdpError::Discovery(format!(
+                "DevToolsActivePort: no port line in {}",
+                file.display()
+            ))
         })?;
     let ws_path = lines
         .next()
@@ -65,7 +73,11 @@ pub fn probe_browser(port: u16) -> Result<BrowserEndpoint, CdpError> {
     let body = http_get(&url)?;
     let v: Value = serde_json::from_str(&body)
         .map_err(|e| CdpError::Discovery(format!("{url}: invalid json: {e}")))?;
-    let version = v.get("Browser").and_then(Value::as_str).unwrap_or_default().to_string();
+    let version = v
+        .get("Browser")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
     let ws = v
         .get("webSocketDebuggerUrl")
         .and_then(Value::as_str)
@@ -102,7 +114,9 @@ fn protocol_version_of(endpoint: &BrowserEndpoint) -> Option<String> {
     let port = Url::parse(&endpoint.browser_ws_url).ok()?.port()?;
     let body = http_get(&format!("http://127.0.0.1:{port}/json/version")).ok()?;
     let v: Value = serde_json::from_str(&body).ok()?;
-    v.get("Protocol-Version").and_then(Value::as_str).map(str::to_string)
+    v.get("Protocol-Version")
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 /// Reject any ws URL whose host is not loopback.
@@ -123,7 +137,8 @@ pub(crate) fn http_get(url: &str) -> Result<String, CdpError> {
         .timeout(PROBE_TIMEOUT)
         .call()
         .map_err(|e| CdpError::Http(format!("GET {url}: {e}")))?;
-    resp.into_string().map_err(|e| CdpError::Http(format!("GET {url}: {e}")))
+    resp.into_string()
+        .map_err(|e| CdpError::Http(format!("GET {url}: {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -151,9 +166,16 @@ mod tests {
     #[test]
     fn active_port_file_parses() {
         let dir = tempfile_dir();
-        std::fs::write(dir.join("DevToolsActivePort"), "43210\n/devtools/browser/abc123\n").unwrap();
+        std::fs::write(
+            dir.join("DevToolsActivePort"),
+            "43210\n/devtools/browser/abc123\n",
+        )
+        .unwrap();
         let ep = read_devtools_active_port(&dir).unwrap();
-        assert_eq!(ep.browser_ws_url, "ws://127.0.0.1:43210/devtools/browser/abc123");
+        assert_eq!(
+            ep.browser_ws_url,
+            "ws://127.0.0.1:43210/devtools/browser/abc123"
+        );
     }
 
     #[test]
@@ -176,7 +198,10 @@ mod tests {
         let (port, _keep) = mock_browser_server(Some("1.4"));
         let ep = probe_browser(port).unwrap();
         assert_eq!(ep.version, "Chrome/120");
-        assert_eq!(ep.browser_ws_url, format!("ws://127.0.0.1:{port}/devtools/browser/xyz"));
+        assert_eq!(
+            ep.browser_ws_url,
+            format!("ws://127.0.0.1:{port}/devtools/browser/xyz")
+        );
         let targets = fetch_targets_http(port).unwrap();
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].target_type, crate::TargetType::Page);
@@ -206,7 +231,8 @@ mod tests {
                     }
                 }
                 let _ = header_end;
-                let body = r#"{"Browser":"Chrome/120","webSocketDebuggerUrl":"ws://evil.example:9222/x"}"#;
+                let body =
+                    r#"{"Browser":"Chrome/120","webSocketDebuggerUrl":"ws://evil.example:9222/x"}"#;
                 let resp = format!(
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\n\r\n{body}",
                     body.len()
@@ -257,10 +283,8 @@ mod tests {
     fn tempfile_dir() -> std::path::PathBuf {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "everyaios-cdp-test-{}-{n}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-cdp-test-{}-{n}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         dir
     }

@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
-use everyaios_vault::{Broker, LocalEndpoint, DEFAULT_SESSION_BUDGET_USD, Vault};
+use everyaios_vault::{Broker, LocalEndpoint, Vault, DEFAULT_SESSION_BUDGET_USD};
 
 use crate::sidecar_link::{Inbound, SidecarLink, WriterHandle};
 
@@ -35,22 +35,51 @@ type EventSink = Box<dyn Fn(ChatWireEvent) + Send>;
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ChatWireEvent {
-    Ttft { stream_id: String, latency_ms: u64 },
-    Batch { stream_id: String, text: String, token_count: u64 },
-    Reasoning { stream_id: String, text: String },
-    Stage { stream_id: String, stage: String },
-    ToolCall { stream_id: String, tool_id: String },
-    ToolResult { stream_id: String, tool_id: String },
+    Ttft {
+        stream_id: String,
+        latency_ms: u64,
+    },
+    Batch {
+        stream_id: String,
+        text: String,
+        token_count: u64,
+    },
+    Reasoning {
+        stream_id: String,
+        text: String,
+    },
+    Stage {
+        stream_id: String,
+        stage: String,
+    },
+    ToolCall {
+        stream_id: String,
+        tool_id: String,
+    },
+    ToolResult {
+        stream_id: String,
+        tool_id: String,
+    },
     Done {
         stream_id: String,
         turn_id: String,
         full_text: String,
         total_tokens: u64,
     },
-    Error { stream_id: String, code: String, message: String },
-    Cancelled { stream_id: String },
+    Error {
+        stream_id: String,
+        code: String,
+        message: String,
+    },
+    Cancelled {
+        stream_id: String,
+    },
     /// J11 kill surface: "stopped: $X limit".
-    BudgetExceeded { session_id: String, limit: f64, spent: f64 },
+    BudgetExceeded {
+        session_id: String,
+        limit: f64,
+        spent: f64,
+    },
 }
 
 /// Parameters for one chat turn (mirrors the coordinator's `chat/stream`).
@@ -350,7 +379,11 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                 "model": params.model,
             }),
         )?;
-        if !ack.get("accepted").and_then(|a| a.as_bool()).unwrap_or(false) {
+        if !ack
+            .get("accepted")
+            .and_then(|a| a.as_bool())
+            .unwrap_or(false)
+        {
             return Err(ChatRelayError::SidecarRejected(ack.to_string()));
         }
 
@@ -363,10 +396,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
 
     /// Cancel a running stream (abort UI → Rust → sidecar → provider).
     pub fn cancel(&self, stream_id: &str) -> Result<(), ChatRelayError> {
-        self.link.writer().notify(
-            "chat/cancel",
-            serde_json::json!({ "streamId": stream_id }),
-        )?;
+        self.link
+            .writer()
+            .notify("chat/cancel", serde_json::json!({ "streamId": stream_id }))?;
         Ok(())
     }
 }
@@ -417,7 +449,11 @@ fn stream_provider(
         broker = broker.with_base_url(p, url.clone());
     }
     // P1.8 (A5): keyless local endpoints route inside the broker.
-    for (p, ep) in local_endpoints.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+    for (p, ep) in local_endpoints
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+    {
         broker = broker.with_local(p, ep.clone());
     }
 
@@ -543,11 +579,7 @@ mod tests {
         format!("http://{addr}")
     }
 
-    fn wait_events(
-        events: &Arc<Mutex<Vec<ChatWireEvent>>>,
-        min: usize,
-        timeout: Duration,
-    ) -> bool {
+    fn wait_events(events: &Arc<Mutex<Vec<ChatWireEvent>>>, min: usize, timeout: Duration) -> bool {
         let start = Instant::now();
         loop {
             if events.lock().unwrap_or_else(|e| e.into_inner()).len() >= min {
@@ -593,7 +625,11 @@ mod tests {
             .unwrap_err();
         let msg = err.to_string();
         match err {
-            ChatRelayError::BudgetExceeded { session, limit, spent } => {
+            ChatRelayError::BudgetExceeded {
+                session,
+                limit,
+                spent,
+            } => {
                 assert_eq!(session, "s-over");
                 assert_eq!(limit, DEFAULT_SESSION_BUDGET_USD);
                 assert!(spent >= limit);
@@ -615,8 +651,7 @@ mod tests {
                 let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
                 if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
                     let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                    let reply =
-                        serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
+                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
                     let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
                     let n = serde_json::json!({
                         "jsonrpc": "2.0", "method": "chat/batch",
@@ -662,7 +697,9 @@ mod tests {
         assert!(matches!(evs[0], ChatWireEvent::Batch { ref text, .. } if text == "hi"));
         assert!(matches!(evs[1], ChatWireEvent::Done { ref turn_id, .. } if turn_id == "s1:1"));
         // Spend is 0 → no budget kill.
-        assert!(!evs.iter().any(|e| matches!(e, ChatWireEvent::BudgetExceeded { .. })));
+        assert!(!evs
+            .iter()
+            .any(|e| matches!(e, ChatWireEvent::BudgetExceeded { .. })));
         side.join().unwrap();
     }
 
@@ -723,7 +760,9 @@ mod tests {
                 if let Some(u) = p.get("usage") {
                     usage = Some((
                         u.get("promptTokens").and_then(|x| x.as_u64()).unwrap_or(0),
-                        u.get("completionTokens").and_then(|x| x.as_u64()).unwrap_or(0),
+                        u.get("completionTokens")
+                            .and_then(|x| x.as_u64())
+                            .unwrap_or(0),
                     ));
                 }
                 if p.get("ended").and_then(|x| x.as_bool()) == Some(true) {
@@ -788,8 +827,7 @@ mod tests {
                 let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
                 if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
                     let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                    let reply =
-                        serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
+                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
                     let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
                     // As the coordinator would: ask Rust to run the provider call.
                     let req = serde_json::json!({

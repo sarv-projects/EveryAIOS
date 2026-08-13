@@ -31,22 +31,62 @@ pub struct Point {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ActKind {
-    Click { ref_id: String },
-    ClickAt { x: f64, y: f64 },
-    Type { ref_id: String, text: String },
-    TypeAt { x: f64, y: f64, text: String },
+    Click {
+        ref_id: String,
+    },
+    ClickAt {
+        x: f64,
+        y: f64,
+    },
+    Type {
+        ref_id: String,
+        text: String,
+    },
+    TypeAt {
+        x: f64,
+        y: f64,
+        text: String,
+    },
     /// Fill a whole form in one call — `fields: [{ref_id, value}]`.
-    Fill { fields: Vec<FieldValue> },
-    Press { key: String },
-    Hover { ref_id: String },
-    HoverAt { x: f64, y: f64 },
-    Focus { ref_id: String },
-    Check { ref_id: String },
-    Uncheck { ref_id: String },
-    Select { ref_id: String, value: String },
-    Scroll { direction: ScrollDirection },
-    Drag { from_ref: String, to_ref: String },
-    DragAt { from_x: f64, from_y: f64, to_x: f64, to_y: f64 },
+    Fill {
+        fields: Vec<FieldValue>,
+    },
+    Press {
+        key: String,
+    },
+    Hover {
+        ref_id: String,
+    },
+    HoverAt {
+        x: f64,
+        y: f64,
+    },
+    Focus {
+        ref_id: String,
+    },
+    Check {
+        ref_id: String,
+    },
+    Uncheck {
+        ref_id: String,
+    },
+    Select {
+        ref_id: String,
+        value: String,
+    },
+    Scroll {
+        direction: ScrollDirection,
+    },
+    Drag {
+        from_ref: String,
+        to_ref: String,
+    },
+    DragAt {
+        from_x: f64,
+        from_y: f64,
+        to_x: f64,
+        to_y: f64,
+    },
     DialogAccept,
     DialogDismiss,
 }
@@ -150,8 +190,11 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
                 }
             }
             NavigateAction::Reload => {
-                self.client
-                    .call_session(self.sid()?, "Page.reload", json!({ "ignoreCache": false }))?;
+                self.client.call_session(
+                    self.sid()?,
+                    "Page.reload",
+                    json!({ "ignoreCache": false }),
+                )?;
             }
         }
         self.settle(600);
@@ -281,7 +324,10 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
                 to_x,
                 to_y,
             } => self.drag(
-                &Point { x: *from_x, y: *from_y },
+                &Point {
+                    x: *from_x,
+                    y: *from_y,
+                },
                 &Point { x: *to_x, y: *to_y },
             ),
             ActKind::DialogAccept => self.dialog(true),
@@ -294,12 +340,7 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
         self.mouse("mouseReleased", p, Some("left"))
     }
 
-    fn mouse(
-        &self,
-        typ: &str,
-        p: &Point,
-        button: Option<&str>,
-    ) -> Result<(), CdpError> {
+    fn mouse(&self, typ: &str, p: &Point, button: Option<&str>) -> Result<(), CdpError> {
         let mut params = json!({
             "type": typ,
             "x": p.x,
@@ -349,11 +390,8 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
     }
 
     fn insert_text(&self, text: &str) -> Result<(), CdpError> {
-        self.client.call_session(
-            self.sid()?,
-            "Input.insertText",
-            json!({ "text": text }),
-        )?;
+        self.client
+            .call_session(self.sid()?, "Input.insertText", json!({ "text": text }))?;
         Ok(())
     }
 
@@ -515,7 +553,12 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
             });
         }
         let xs: Vec<f64> = quad.iter().step_by(2).filter_map(Value::as_f64).collect();
-        let ys: Vec<f64> = quad.iter().skip(1).step_by(2).filter_map(Value::as_f64).collect();
+        let ys: Vec<f64> = quad
+            .iter()
+            .skip(1)
+            .step_by(2)
+            .filter_map(Value::as_f64)
+            .collect();
         if xs.is_empty() || ys.is_empty() {
             return Err(CdpError::Protocol {
                 code: -1,
@@ -532,7 +575,8 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
     // ------------------------------------------------------------------
 
     pub fn snapshot(&self, document_id: &str) -> Result<Snapshot, CdpError> {
-        self.snapshot_engine.capture(self.client, self.session_id, document_id)
+        self.snapshot_engine
+            .capture(self.client, self.session_id, document_id)
     }
 
     pub fn diff(&self, base: &Snapshot, current: &Snapshot) -> SnapshotDiff {
@@ -544,7 +588,10 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
     pub fn enhanced_snapshot(&self, document_id: &str) -> Result<EnhancedSnapshot, CdpError> {
         let snap = self.snapshot(document_id)?;
         let occluded = self.paint_order_filter(&snap.root)?;
-        Ok(EnhancedSnapshot { snapshot: snap, occluded })
+        Ok(EnhancedSnapshot {
+            snapshot: snap,
+            occluded,
+        })
     }
 
     fn paint_order_filter(&self, root: &A11yNode) -> Result<Vec<String>, CdpError> {
@@ -560,30 +607,33 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
                     );
                     let sid = self.session_id.unwrap_or("");
                     if !sid.is_empty() {
-                    if let Ok(out) = self.client.call_session(
-                        sid,
-                        "Runtime.evaluate",
-                        json!({ "expression": expr, "returnByValue": true }),
-                    ) {
-                        let hit = out.pointer("/result/value").and_then(Value::as_str);
-                        let own = node.name.as_str();
-                        // If the topmost element's text doesn't match, the node
-                        // is painted over by something else.
-                        // Heuristic: only flag occlusion when the node has a
-                        // distinctive-enough name (>= 3 chars) — short/shared
-                        // names ("Go", "OK") cause false positives.
-                        let covered = match hit {
-                            Some(h) => {
-                                own.len() >= 3 && !h.is_empty() && !own.is_empty() && !h.contains(own)
-                            }
-                            None => false,
-                        };
-                        if covered {
-                            if let Some(r) = &node.ref_id {
-                                occluded.push(r.clone());
+                        if let Ok(out) = self.client.call_session(
+                            sid,
+                            "Runtime.evaluate",
+                            json!({ "expression": expr, "returnByValue": true }),
+                        ) {
+                            let hit = out.pointer("/result/value").and_then(Value::as_str);
+                            let own = node.name.as_str();
+                            // If the topmost element's text doesn't match, the node
+                            // is painted over by something else.
+                            // Heuristic: only flag occlusion when the node has a
+                            // distinctive-enough name (>= 3 chars) — short/shared
+                            // names ("Go", "OK") cause false positives.
+                            let covered = match hit {
+                                Some(h) => {
+                                    own.len() >= 3
+                                        && !h.is_empty()
+                                        && !own.is_empty()
+                                        && !h.contains(own)
+                                }
+                                None => false,
+                            };
+                            if covered {
+                                if let Some(r) = &node.ref_id {
+                                    occluded.push(r.clone());
+                                }
                             }
                         }
-                    }
                     }
                 }
             }
@@ -632,7 +682,11 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
                 out.push_str(&format!("{}: {}\n", i + 1, line.trim()));
             }
         }
-        Ok(TextResult { text: out, truncated: false, saved_to: None })
+        Ok(TextResult {
+            text: out,
+            truncated: false,
+            saved_to: None,
+        })
     }
 
     fn visible_text(&self) -> Result<String, CdpError> {
@@ -749,11 +803,9 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
     }
 
     pub fn history(&self) -> Result<(Vec<u64>, u64), CdpError> {
-        let out = self.client.call_session(
-            self.sid()?,
-            "Page.getNavigationHistory",
-            json!({}),
-        )?;
+        let out = self
+            .client
+            .call_session(self.sid()?, "Page.getNavigationHistory", json!({}))?;
         let idx = out
             .pointer("/result/currentIndex")
             .and_then(Value::as_u64)
@@ -761,7 +813,11 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
         let entries = out
             .pointer("/result/entries")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(|e| e.get("id").and_then(Value::as_u64)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|e| e.get("id").and_then(Value::as_u64))
+                    .collect()
+            })
             .unwrap_or_default();
         Ok((entries, idx))
     }
@@ -1013,7 +1069,10 @@ mod tests {
 
     impl CdpSession for MockSession {
         fn call(&self, method: &str, params: Value) -> Result<Value, CdpError> {
-            self.calls.lock().unwrap().push((None, method.to_string(), params));
+            self.calls
+                .lock()
+                .unwrap()
+                .push((None, method.to_string(), params));
             Ok(self.responses.get(method).cloned().unwrap_or(json!({})))
         }
         fn call_session(
@@ -1022,10 +1081,11 @@ mod tests {
             method: &str,
             params: Value,
         ) -> Result<Value, CdpError> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push((Some(session_id.to_string()), method.to_string(), params.clone()));
+            self.calls.lock().unwrap().push((
+                Some(session_id.to_string()),
+                method.to_string(),
+                params.clone(),
+            ));
             match method {
                 "Accessibility.getFullAXTree" => {
                     let nodes = self.ax.get("nodes").cloned().unwrap_or(self.ax.clone());
@@ -1042,7 +1102,10 @@ mod tests {
             }
         }
         fn attach(&self, _target_id: &str) -> Result<Session, CdpError> {
-            Err(CdpError::Protocol { code: -1, message: "no attach in mock".into() })
+            Err(CdpError::Protocol {
+                code: -1,
+                message: "no attach in mock".into(),
+            })
         }
         fn drain_events(&self) -> Vec<everyaios_cdp::CdpEvent> {
             Vec::new()
@@ -1069,7 +1132,10 @@ mod tests {
     fn navigate_goto_calls_page_navigate() {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
-        a.navigate(NavigateAction::Goto { url: "https://example.com".into() }).unwrap();
+        a.navigate(NavigateAction::Goto {
+            url: "https://example.com".into(),
+        })
+        .unwrap();
         let methods = m.responded_methods();
         assert!(methods.contains(&"Page.navigate".to_string()));
     }
@@ -1090,7 +1156,11 @@ mod tests {
     fn act_click_resolves_ref_and_dispatches_mouse() {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
-        let res = a.act(ActKind::Click { ref_id: "e1".into() }).unwrap();
+        let res = a
+            .act(ActKind::Click {
+                ref_id: "e1".into(),
+            })
+            .unwrap();
         assert_eq!(res.kind, "click");
         let methods = m.responded_methods();
         assert!(methods.contains(&"DOM.getBoxModel".to_string()));
@@ -1104,15 +1174,25 @@ mod tests {
         a.act(ActKind::ClickAt { x: 50.0, y: 25.0 }).unwrap();
         let calls = m.calls();
         let mouse = calls.iter().find(|(_, m)| m == "Input.dispatchMouseEvent");
-        assert!(mouse.is_some(), "expected Input.dispatchMouseEvent, got {:?}", calls);
+        assert!(
+            mouse.is_some(),
+            "expected Input.dispatchMouseEvent, got {:?}",
+            calls
+        );
     }
 
     #[test]
     fn act_type_inserts_text() {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
-        a.act(ActKind::Type { ref_id: "e1".into(), text: "hi".into() }).unwrap();
-        assert!(m.responded_methods().contains(&"Input.insertText".to_string()));
+        a.act(ActKind::Type {
+            ref_id: "e1".into(),
+            text: "hi".into(),
+        })
+        .unwrap();
+        assert!(m
+            .responded_methods()
+            .contains(&"Input.insertText".to_string()));
     }
 
     #[test]
@@ -1134,8 +1214,14 @@ mod tests {
         let a = BrowserActions::new(&m, Some("sess-1"));
         a.act(ActKind::Fill {
             fields: vec![
-                FieldValue { ref_id: "e1".into(), value: "a".into() },
-                FieldValue { ref_id: "e2".into(), value: "b".into() },
+                FieldValue {
+                    ref_id: "e1".into(),
+                    value: "a".into(),
+                },
+                FieldValue {
+                    ref_id: "e2".into(),
+                    value: "b".into(),
+                },
             ],
         })
         .unwrap();
@@ -1151,7 +1237,11 @@ mod tests {
     fn act_returns_post_settle_diff() {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
-        let res = a.act(ActKind::Click { ref_id: "e1".into() }).unwrap();
+        let res = a
+            .act(ActKind::Click {
+                ref_id: "e1".into(),
+            })
+            .unwrap();
         let d = res.diff.expect("act must return a diff");
         assert!(!d.url_changed);
     }
@@ -1162,7 +1252,9 @@ mod tests {
         let a = BrowserActions::new(&m, Some("sess-1"));
         let _ = a.navigate(NavigateAction::Back);
         // History index 0 → no navigation (guarded).
-        assert!(m.responded_methods().contains(&"Page.getNavigationHistory".to_string()));
+        assert!(m
+            .responded_methods()
+            .contains(&"Page.getNavigationHistory".to_string()));
     }
 
     #[test]
@@ -1205,7 +1297,11 @@ mod tests {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
         let es = a.enhanced_snapshot("doc-1").unwrap();
-        assert!(es.occluded.is_empty(), "short names must not be flagged: {:?}", es.occluded);
+        assert!(
+            es.occluded.is_empty(),
+            "short names must not be flagged: {:?}",
+            es.occluded
+        );
     }
 
     #[test]
@@ -1213,7 +1309,9 @@ mod tests {
         let m = mock();
         let a = BrowserActions::new(&m, Some("sess-1"));
         let _ = a.tabs().unwrap();
-        assert!(m.responded_methods().contains(&"Target.getTargets".to_string()));
+        assert!(m
+            .responded_methods()
+            .contains(&"Target.getTargets".to_string()));
     }
 
     #[test]

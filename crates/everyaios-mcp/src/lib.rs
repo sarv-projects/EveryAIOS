@@ -71,7 +71,12 @@ impl ArgDef {
         required: bool,
         description: &'static str,
     ) -> Self {
-        Self { name, kind, required, description }
+        Self {
+            name,
+            kind,
+            required,
+            description,
+        }
     }
 }
 
@@ -103,7 +108,15 @@ impl ToolDef {
         description: &'static str,
         args: &'static [ArgDef],
     ) -> Self {
-        Self { name, kind, read_only, open_world, profile, description, args }
+        Self {
+            name,
+            kind,
+            read_only,
+            open_world,
+            profile,
+            description,
+            args,
+        }
     }
 }
 
@@ -120,25 +133,55 @@ macro_rules! tools {
 }
 
 const STR_URL: ArgDef = ArgDef::new("url", ArgKind::String, true, "Page URL to navigate to");
-const STR_REF: ArgDef = ArgDef::new("ref_id", ArgKind::String, true, "Snapshot ref [ref=eN] to act on");
+const STR_REF: ArgDef = ArgDef::new(
+    "ref_id",
+    ArgKind::String,
+    true,
+    "Snapshot ref [ref=eN] to act on",
+);
 const STR_TEXT: ArgDef = ArgDef::new("text", ArgKind::String, false, "Text to type / wait for");
-const STR_KEY: ArgDef = ArgDef::new("key", ArgKind::String, true, "Keyboard key (Enter, Tab, Escape…)");
+const STR_KEY: ArgDef = ArgDef::new(
+    "key",
+    ArgKind::String,
+    true,
+    "Keyboard key (Enter, Tab, Escape…)",
+);
 const STR_VALUE: ArgDef = ArgDef::new("value", ArgKind::String, false, "Select option value");
 const STR_PATTERN: ArgDef = ArgDef::new("pattern", ArgKind::String, true, "Regex pattern");
 const NUM_X: ArgDef = ArgDef::new("x", ArgKind::Number, true, "Viewport x (CSS px)");
 const NUM_Y: ArgDef = ArgDef::new("y", ArgKind::Number, true, "Viewport y (CSS px)");
 const NUM_MS: ArgDef = ArgDef::new("ms", ArgKind::Number, false, "Milliseconds to wait");
-const NUM_QUALITY: ArgDef = ArgDef::new("quality", ArgKind::Number, false, "JPEG quality 0-100 (default 80)");
+const NUM_QUALITY: ArgDef = ArgDef::new(
+    "quality",
+    ArgKind::Number,
+    false,
+    "JPEG quality 0-100 (default 80)",
+);
 const STR_SELECTOR: ArgDef = ArgDef::new("selector", ArgKind::String, true, "CSS selector");
-const STR_EXPR: ArgDef = ArgDef::new("expression", ArgKind::String, true, "JS expression to evaluate");
+const STR_EXPR: ArgDef = ArgDef::new(
+    "expression",
+    ArgKind::String,
+    true,
+    "JS expression to evaluate",
+);
 const STR_TITLE: ArgDef = ArgDef::new("title", ArgKind::String, true, "Bookmark title");
 const STR_DIR: ArgDef = ArgDef::new("dir", ArgKind::String, false, "Download directory");
-const ARR_FIELDS: ArgDef = ArgDef::new("fields", ArgKind::Object, false, "Form fields [{ref_id, value}]");
+const ARR_FIELDS: ArgDef = ArgDef::new(
+    "fields",
+    ArgKind::Object,
+    false,
+    "Form fields [{ref_id, value}]",
+);
 const ARR_FILES: ArgDef = ArgDef::new("files", ArgKind::StringArray, true, "File paths to upload");
 const STR_NAME: ArgDef = ArgDef::new("name", ArgKind::String, false, "Tab/group/window name");
 const STR_ID: ArgDef = ArgDef::new("id", ArgKind::String, false, "Tab/group/window id");
 const BOOL_HIDDEN: ArgDef = ArgDef::new("hidden", ArgKind::Bool, false, "Create hidden/background");
-const STR_FILTER: ArgDef = ArgDef::new("filter", ArgKind::String, false, "Keep lines matching regex");
+const STR_FILTER: ArgDef = ArgDef::new(
+    "filter",
+    ArgKind::String,
+    false,
+    "Keep lines matching regex",
+);
 const BOOL_OUTLINE: ArgDef = ArgDef::new("outline", ArgKind::Bool, false, "Headings + links only");
 const BOOL_RAW: ArgDef = ArgDef::new("raw", ArgKind::Bool, false, "Raw text, no markdown syntax");
 const STR_REF2: ArgDef = ArgDef::new("to_ref", ArgKind::String, false, "Drag target ref");
@@ -147,48 +190,270 @@ const STR_REF2: ArgDef = ArgDef::new("to_ref", ArgKind::String, false, "Drag tar
 /// original 17 BrowserOS-semantic tools first (prompts/skills transfer),
 /// then enhanced_snapshot, bookmarks×6, tab-groups×5, windows×5, file_ops×3.
 pub const BROWSER_TOOLS: &[ToolDef] = tools!(
-    "tabs", Read, true, false, Tabs, "List open tabs/targets", &[],
-    "tab_groups", Read, true, false, Tabs, "List tab groups (requires fork/extension surface)", &[],
-    "history", Read, true, false, State, "Page navigation history", &[],
-    "navigate", Edit, false, false, Core, "Goto / back / forward / reload", &[STR_URL],
-    "snapshot", Read, true, false, State, "Accessibility snapshot with [ref=eN]", &[],
-    "diff", Read, true, false, State, "Line-diff of two snapshots", &[],
-    "act", Edit, false, false, Core, "Input: click/type/fill/press/hover/select/scroll/drag/dialog", &[STR_REF, STR_TEXT, STR_KEY, STR_VALUE, ARR_FIELDS, NUM_X, NUM_Y, STR_REF2],
-    "download", Edit, false, false, Network, "Set download path / trigger download", &[STR_DIR],
-    "upload", Edit, false, false, Network, "Set file input files by ref", &[STR_REF, ARR_FILES],
-    "read", Read, true, false, Network, "Page → markdown (DOM walker / markdown negotiation)", &[STR_FILTER, BOOL_OUTLINE, BOOL_RAW],
-    "grep", Search, true, false, Core, "Line matches in page text", &[STR_PATTERN],
-    "screenshot", Read, true, false, Core, "JPEG screenshot (base64)", &[NUM_QUALITY],
-    "pdf", Read, true, false, Core, "Print page to PDF (base64)", &[],
-    "wait", Other, false, false, Core, "Wait for text/selector or ms", &[STR_TEXT, STR_SELECTOR, NUM_MS],
-    "windows", Read, true, false, Tabs, "List browser windows", &[],
-    "evaluate", Execute, false, true, Debug, "CDP Runtime.evaluate", &[STR_EXPR],
-    "run", Execute, false, true, Debug, "Think-in-code script (P2.5 everyaios-script)", &[STR_EXPR],
-    "enhanced_snapshot", Read, true, false, State, "Snapshot + paint-order occlusion filter", &[],
+    "tabs",
+    Read,
+    true,
+    false,
+    Tabs,
+    "List open tabs/targets",
+    &[],
+    "tab_groups",
+    Read,
+    true,
+    false,
+    Tabs,
+    "List tab groups (requires fork/extension surface)",
+    &[],
+    "history",
+    Read,
+    true,
+    false,
+    State,
+    "Page navigation history",
+    &[],
+    "navigate",
+    Edit,
+    false,
+    false,
+    Core,
+    "Goto / back / forward / reload",
+    &[STR_URL],
+    "snapshot",
+    Read,
+    true,
+    false,
+    State,
+    "Accessibility snapshot with [ref=eN]",
+    &[],
+    "diff",
+    Read,
+    true,
+    false,
+    State,
+    "Line-diff of two snapshots",
+    &[],
+    "act",
+    Edit,
+    false,
+    false,
+    Core,
+    "Input: click/type/fill/press/hover/select/scroll/drag/dialog",
+    &[STR_REF, STR_TEXT, STR_KEY, STR_VALUE, ARR_FIELDS, NUM_X, NUM_Y, STR_REF2],
+    "download",
+    Edit,
+    false,
+    false,
+    Network,
+    "Set download path / trigger download",
+    &[STR_DIR],
+    "upload",
+    Edit,
+    false,
+    false,
+    Network,
+    "Set file input files by ref",
+    &[STR_REF, ARR_FILES],
+    "read",
+    Read,
+    true,
+    false,
+    Network,
+    "Page → markdown (DOM walker / markdown negotiation)",
+    &[STR_FILTER, BOOL_OUTLINE, BOOL_RAW],
+    "grep",
+    Search,
+    true,
+    false,
+    Core,
+    "Line matches in page text",
+    &[STR_PATTERN],
+    "screenshot",
+    Read,
+    true,
+    false,
+    Core,
+    "JPEG screenshot (base64)",
+    &[NUM_QUALITY],
+    "pdf",
+    Read,
+    true,
+    false,
+    Core,
+    "Print page to PDF (base64)",
+    &[],
+    "wait",
+    Other,
+    false,
+    false,
+    Core,
+    "Wait for text/selector or ms",
+    &[STR_TEXT, STR_SELECTOR, NUM_MS],
+    "windows",
+    Read,
+    true,
+    false,
+    Tabs,
+    "List browser windows",
+    &[],
+    "evaluate",
+    Execute,
+    false,
+    true,
+    Debug,
+    "CDP Runtime.evaluate",
+    &[STR_EXPR],
+    "run",
+    Execute,
+    false,
+    true,
+    Debug,
+    "Think-in-code script (P2.5 everyaios-script)",
+    &[STR_EXPR],
+    "enhanced_snapshot",
+    Read,
+    true,
+    false,
+    State,
+    "Snapshot + paint-order occlusion filter",
+    &[],
     // bookmarks ×6 — Chrome CDP has no bookmarks domain; these need the
     // fork/extension surface (BrowserOS ships them in the Chromium fork).
-    "get_bookmarks", Read, true, false, Core, "List bookmarks", &[],
-    "create_bookmark", Edit, false, false, Core, "Create bookmark", &[STR_TITLE, STR_URL],
-    "remove_bookmark", Delete, false, false, Core, "Remove bookmark", &[STR_ID],
-    "update_bookmark", Edit, false, false, Core, "Update bookmark", &[STR_ID, STR_TITLE, STR_URL],
-    "move_bookmark", Move, false, false, Core, "Move bookmark", &[STR_ID, STR_ID],
-    "search_bookmarks", Search, true, false, Core, "Search bookmarks", &[STR_TEXT],
+    "get_bookmarks",
+    Read,
+    true,
+    false,
+    Core,
+    "List bookmarks",
+    &[],
+    "create_bookmark",
+    Edit,
+    false,
+    false,
+    Core,
+    "Create bookmark",
+    &[STR_TITLE, STR_URL],
+    "remove_bookmark",
+    Delete,
+    false,
+    false,
+    Core,
+    "Remove bookmark",
+    &[STR_ID],
+    "update_bookmark",
+    Edit,
+    false,
+    false,
+    Core,
+    "Update bookmark",
+    &[STR_ID, STR_TITLE, STR_URL],
+    "move_bookmark",
+    Move,
+    false,
+    false,
+    Core,
+    "Move bookmark",
+    &[STR_ID, STR_ID],
+    "search_bookmarks",
+    Search,
+    true,
+    false,
+    Core,
+    "Search bookmarks",
+    &[STR_TEXT],
     // tab-groups ×5 — no CDP surface on stock Chrome (fork/extension needed).
-    "list_tab_groups", Read, true, false, Tabs, "List tab groups", &[],
-    "group_tabs", Edit, false, false, Tabs, "Group tabs", &[STR_ID, STR_NAME],
-    "update_tab_group", Edit, false, false, Tabs, "Update tab group", &[STR_ID, STR_NAME],
-    "ungroup_tabs", Edit, false, false, Tabs, "Ungroup tabs", &[STR_ID],
-    "close_tab_group", Delete, false, false, Tabs, "Close tab group", &[STR_ID],
+    "list_tab_groups",
+    Read,
+    true,
+    false,
+    Tabs,
+    "List tab groups",
+    &[],
+    "group_tabs",
+    Edit,
+    false,
+    false,
+    Tabs,
+    "Group tabs",
+    &[STR_ID, STR_NAME],
+    "update_tab_group",
+    Edit,
+    false,
+    false,
+    Tabs,
+    "Update tab group",
+    &[STR_ID, STR_NAME],
+    "ungroup_tabs",
+    Edit,
+    false,
+    false,
+    Tabs,
+    "Ungroup tabs",
+    &[STR_ID],
+    "close_tab_group",
+    Delete,
+    false,
+    false,
+    Tabs,
+    "Close tab group",
+    &[STR_ID],
     // windows ×5 — CDP Target/Browser domains.
-    "list_windows", Read, true, false, Tabs, "List windows (targets grouped by context)", &[],
-    "create_window", Edit, false, false, Tabs, "Create a new window", &[BOOL_HIDDEN],
-    "create_hidden_window", Edit, false, false, Tabs, "Create a hidden background window", &[],
-    "close_window", Delete, false, false, Tabs, "Close a window by context id", &[STR_ID],
-    "activate_window", Edit, false, false, Tabs, "Activate/focus a window", &[STR_ID],
+    "list_windows",
+    Read,
+    true,
+    false,
+    Tabs,
+    "List windows (targets grouped by context)",
+    &[],
+    "create_window",
+    Edit,
+    false,
+    false,
+    Tabs,
+    "Create a new window",
+    &[BOOL_HIDDEN],
+    "create_hidden_window",
+    Edit,
+    false,
+    false,
+    Tabs,
+    "Create a hidden background window",
+    &[],
+    "close_window",
+    Delete,
+    false,
+    false,
+    Tabs,
+    "Close a window by context id",
+    &[STR_ID],
+    "activate_window",
+    Edit,
+    false,
+    false,
+    Tabs,
+    "Activate/focus a window",
+    &[STR_ID],
     // file_ops ×3 — OutputFileAccess routing (E2 extension).
-    "save_pdf_enhanced", Read, true, false, Core, "Print to PDF and route to file", &[STR_DIR],
-    "save_screenshot_enhanced", Read, true, false, Core, "JPEG screenshot routed to file", &[STR_DIR, NUM_QUALITY],
-    "download_file", Edit, false, false, Network, "Download file to temp dir", &[STR_URL, STR_DIR],
+    "save_pdf_enhanced",
+    Read,
+    true,
+    false,
+    Core,
+    "Print to PDF and route to file",
+    &[STR_DIR],
+    "save_screenshot_enhanced",
+    Read,
+    true,
+    false,
+    Core,
+    "JPEG screenshot routed to file",
+    &[STR_DIR, NUM_QUALITY],
+    "download_file",
+    Edit,
+    false,
+    false,
+    Network,
+    "Download file to temp dir",
+    &[STR_URL, STR_DIR],
 );
 
 /// Look up a tool by name.
@@ -229,7 +494,10 @@ pub fn validate_args(
 ) -> Result<(), String> {
     for a in tool.args {
         if a.required && !args.contains_key(a.name) {
-            return Err(format!("missing required arg '{}' for tool '{}'", a.name, tool.name));
+            return Err(format!(
+                "missing required arg '{}' for tool '{}'",
+                a.name, tool.name
+            ));
         }
     }
     Ok(())
@@ -277,16 +545,31 @@ mod tests {
         let names: Vec<&str> = BROWSER_TOOLS.iter().map(|t| t.name).collect();
         let bookmarks = names.iter().filter(|n| n.contains("bookmark")).count();
         // The 5 tab-group MANAGEMENT tools (excludes the original 17 `tab_groups`).
-        let tab_groups = ["list_tab_groups", "group_tabs", "update_tab_group", "ungroup_tabs", "close_tab_group"]
-            .iter()
-            .filter(|n| names.contains(n))
-            .count();
+        let tab_groups = [
+            "list_tab_groups",
+            "group_tabs",
+            "update_tab_group",
+            "ungroup_tabs",
+            "close_tab_group",
+        ]
+        .iter()
+        .filter(|n| names.contains(n))
+        .count();
         // The 5 window-MANAGEMENT tools (excludes the original 17 `windows`).
-        let windows = ["list_windows", "create_window", "create_hidden_window", "close_window", "activate_window"]
+        let windows = [
+            "list_windows",
+            "create_window",
+            "create_hidden_window",
+            "close_window",
+            "activate_window",
+        ]
+        .iter()
+        .filter(|n| names.contains(n))
+        .count();
+        let file_ops = names
             .iter()
-            .filter(|n| names.contains(n))
+            .filter(|n| n.contains("save_") || n.contains("download_file"))
             .count();
-        let file_ops = names.iter().filter(|n| n.contains("save_") || n.contains("download_file")).count();
         assert_eq!(bookmarks, 6);
         assert_eq!(tab_groups, 5);
         assert_eq!(windows, 5);

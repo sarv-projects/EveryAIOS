@@ -97,12 +97,16 @@ fn grammar_from_body_object_forms() {
         Grammar::Json
     );
     assert_eq!(
-        grammar_from_body(&serde_json::json!({ "grammar": { "type": "gbnf", "value": "x ::= \"a\"" } })),
+        grammar_from_body(
+            &serde_json::json!({ "grammar": { "type": "gbnf", "value": "x ::= \"a\"" } })
+        ),
         Grammar::Gbnf("x ::= \"a\"".to_string())
     );
     let schema = serde_json::json!({ "type": "object" });
     assert_eq!(
-        grammar_from_body(&serde_json::json!({ "grammar": { "type": "json_schema", "value": schema } })),
+        grammar_from_body(
+            &serde_json::json!({ "grammar": { "type": "json_schema", "value": schema } })
+        ),
         Grammar::JsonSchema(schema)
     );
 }
@@ -137,10 +141,21 @@ fn ollama_stream_gbnf_falls_back_to_json_format_and_records_usage_keyless() {
     // rides along, and the call works with NO key in the ring.
     let base = mock_server(|req| {
         assert!(req.contains("/api/chat"), "path: {req}");
-        assert!(!req.contains("Authorization"), "local must be keyless: {req}");
+        assert!(
+            !req.contains("Authorization"),
+            "local must be keyless: {req}"
+        );
         let b = body_of(req);
-        assert_eq!(b["format"].as_str(), Some("json"), "gbnf must fall back to json: {b}");
-        assert_eq!(b["options"]["num_ctx"].as_u64(), Some(16_384), "no num_ctx: {b}");
+        assert_eq!(
+            b["format"].as_str(),
+            Some("json"),
+            "gbnf must fall back to json: {b}"
+        );
+        assert_eq!(
+            b["options"]["num_ctx"].as_u64(),
+            Some(16_384),
+            "no num_ctx: {b}"
+        );
         assert_eq!(b["stream"].as_bool(), Some(true), "{b}");
         assert!(b.get("stream_options").is_none(), "{b}");
         (
@@ -192,7 +207,10 @@ fn ollama_json_schema_passthrough() {
     let schema_for_assert = schema.clone();
     let base = mock_server(move |req| {
         let b = body_of(req);
-        assert_eq!(b["format"], schema_for_assert, "json schema passthrough: {b}");
+        assert_eq!(
+            b["format"], schema_for_assert,
+            "json schema passthrough: {b}"
+        );
         (200, "{\"done\":true}".into())
     });
     let vault = vault();
@@ -214,7 +232,11 @@ fn ollama_json_schema_passthrough() {
 fn ollama_tool_call_without_grammar_gets_json_format() {
     let base = mock_server(|req| {
         let b = body_of(req);
-        assert_eq!(b["format"].as_str(), Some("json"), "expected json format: {b}");
+        assert_eq!(
+            b["format"].as_str(),
+            Some("json"),
+            "expected json format: {b}"
+        );
         (200, "{\"done\":true}".into())
     });
     let vault = vault();
@@ -236,7 +258,11 @@ fn ollama_tool_call_without_grammar_gets_json_format() {
 fn ollama_non_stream_returns_content_and_usage() {
     let base = mock_server(|req| {
         let b = body_of(req);
-        assert_eq!(b["stream"].as_bool(), Some(false), "non-stream must be stream:false: {b}");
+        assert_eq!(
+            b["stream"].as_bool(),
+            Some(false),
+            "non-stream must be stream:false: {b}"
+        );
         (
             200,
             r#"{"message":{"role":"assistant","content":"hello"},"done":true,"prompt_eval_count":5,"eval_count":2}"#
@@ -336,10 +362,9 @@ fn live_ollama_gbnf_tool_call_yields_valid_json() {
         eprintln!("skipped: set EVERYAIOS_LIVE_TEST=1 to run the live ollama test");
         return;
     }
-    let model =
-        std::env::var("EVERYAIOS_LIVE_MODEL").unwrap_or_else(|_| "qwen3:4b".to_string());
-    let host = std::env::var("OLLAMA_HOST")
-        .unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+    let model = std::env::var("EVERYAIOS_LIVE_MODEL").unwrap_or_else(|_| "qwen3:4b".to_string());
+    let host =
+        std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
 
     // Strict JSON-object grammar: {"tool":"…","args":{"city":"…"}}. At the
     // logit-sampling layer the model CANNOT emit anything else (B5).
@@ -352,10 +377,8 @@ fn live_ollama_gbnf_tool_call_yields_valid_json() {
     );
 
     let vault = vault();
-    let broker = Broker::new(vault).with_local(
-        "ollama",
-        LocalEndpoint::ollama(&host).with_num_ctx(16_384),
-    );
+    let broker =
+        Broker::new(vault).with_local("ollama", LocalEndpoint::ollama(&host).with_num_ctx(16_384));
     let events = broker
         .chat_completion_stream(
             "ollama",

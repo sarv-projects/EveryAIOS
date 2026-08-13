@@ -5,10 +5,10 @@
 use crate::ax::AxNode;
 use crate::tree::{build_tree, RefMinter, TreeOptions};
 use crate::{A11yNode, Snapshot, SnapshotMode};
-use std::collections::HashMap;
 use everyaios_cdp::{CdpClient, CdpError, Session, TargetInfo};
 use serde_json::json;
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Max nested-frame depth (doc 33 §5.2 `MAX_FRAME_DEPTH 5`).
 pub const MAX_FRAME_DEPTH: usize = 5;
@@ -117,9 +117,8 @@ impl SnapshotEngine {
         // The AX iframe node often lacks `frameId`; resolve it via
         // DOM.describeNode (the owner-frame id) so stitching can attach.
         resolve_iframe_frame_ids(client, session_id, &mut nodes);
-        let mut tree = build_tree(&nodes, self.options, refs).unwrap_or_else(|| {
-            A11yNode::new("WebArea", "(empty document)")
-        });
+        let mut tree = build_tree(&nodes, self.options, refs)
+            .unwrap_or_else(|| A11yNode::new("WebArea", "(empty document)"));
 
         if depth >= self.max_frame_depth {
             return Ok(tree);
@@ -135,13 +134,7 @@ impl SnapshotEngine {
         // attached session for that frame (OOPIFs / auto-attach).
         let frame_sessions = self.collect_frame_sessions(client, session_id);
         for frame_id in iframe_frame_ids {
-            let primary = self.capture_frame(
-                client,
-                session_id,
-                Some(&frame_id),
-                depth + 1,
-                refs,
-            );
+            let primary = self.capture_frame(client, session_id, Some(&frame_id), depth + 1, refs);
             // Chrome answers an unknown frameId with Ok + empty nodes — treat
             // an empty tree as "no such frame" so the attached-session
             // fallback still runs.
@@ -208,8 +201,7 @@ impl SnapshotEngine {
                     if ev.method != "Target.attachedToTarget" {
                         continue;
                     }
-                    let Some(child_sid) = ev.params.get("sessionId").and_then(Value::as_str)
-                    else {
+                    let Some(child_sid) = ev.params.get("sessionId").and_then(Value::as_str) else {
                         continue;
                     };
                     if let Some(fid) = ev
@@ -323,9 +315,7 @@ fn splice_iframe_children(tree: &mut A11yNode, frame_id: &str, child_tree: &A11y
 }
 
 fn splice_into(node: &mut A11yNode, frame_id: &str, child_tree: &A11yNode) -> bool {
-    if node.role.eq_ignore_ascii_case("iframe")
-        && node.frame_id.as_deref() == Some(frame_id)
-    {
+    if node.role.eq_ignore_ascii_case("iframe") && node.frame_id.as_deref() == Some(frame_id) {
         // Skip only the child frame's document root (WebArea) — its content
         // splices directly under the placeholder. If the interactive-mode
         // collapse already replaced the root with actionable content, keep
@@ -409,9 +399,7 @@ mod tests {
     impl CdpSession for FakeSession {
         fn call(&self, method: &str, _params: Value) -> Result<Value, CdpError> {
             match method {
-                "Target.getTargets" => {
-                    Ok(serde_json::json!({ "targetInfos": self.targets }))
-                }
+                "Target.getTargets" => Ok(serde_json::json!({ "targetInfos": self.targets })),
                 _ => Err(CdpError::Protocol {
                     code: -1,
                     message: format!("unexpected browser call {method}"),
@@ -485,7 +473,9 @@ mod tests {
             }),
         );
         let engine = SnapshotEngine::default();
-        let snap = engine.capture(&session, Some("root-sess"), "doc-1").unwrap();
+        let snap = engine
+            .capture(&session, Some("root-sess"), "doc-1")
+            .unwrap();
         assert_eq!(snap.url, "https://example.com");
         let rendered = snap.root.render();
         assert!(rendered.contains("heading Hello"), "{rendered}");
@@ -525,7 +515,9 @@ mod tests {
         };
 
         let engine = SnapshotEngine::default();
-        let snap = engine.capture(&session, Some("root-sess"), "doc-1").unwrap();
+        let snap = engine
+            .capture(&session, Some("root-sess"), "doc-1")
+            .unwrap();
         let rendered = snap.root.render();
         // The iframe placeholder line remains, with the child's button inline.
         assert!(rendered.contains("Iframe child frame"), "{rendered}");
@@ -545,7 +537,9 @@ mod tests {
             .with_frame("ROOT", "root-sess", root.clone())
             .with_url("https://example.com");
         let engine = SnapshotEngine::default();
-        let snap = engine.capture(&session, Some("root-sess"), "doc-1").unwrap();
+        let snap = engine
+            .capture(&session, Some("root-sess"), "doc-1")
+            .unwrap();
         assert!(snap.root.render().contains("Iframe orphan"));
     }
 
@@ -556,7 +550,9 @@ mod tests {
             ..Default::default()
         };
         let session = FakeSession::default();
-        let snap = engine.capture(&session, Some("root-sess"), "doc-1").unwrap();
+        let snap = engine
+            .capture(&session, Some("root-sess"), "doc-1")
+            .unwrap();
         assert_eq!(snap.root.role, "WebArea");
     }
 

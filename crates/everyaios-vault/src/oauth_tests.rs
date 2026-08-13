@@ -120,7 +120,9 @@ fn pkce_flow_roundtrip_persists_and_links_ring() {
         .with_token_url(CHATGPT_PRO, &base);
 
     let start = om.start_pkce(CHATGPT_PRO).unwrap();
-    assert!(start.auth_url.starts_with("https://auth0.openai.com/authorize?"));
+    assert!(start
+        .auth_url
+        .starts_with("https://auth0.openai.com/authorize?"));
     assert!(start.auth_url.contains("response_type=code"));
     assert!(start.auth_url.contains("code_challenge_method=S256"));
     assert!(start.auth_url.contains("code_challenge="));
@@ -300,11 +302,7 @@ fn refresh_rotates_access_token_in_ring() {
         if i == 0 {
             (
                 200,
-                token_json(
-                    "tok_v1",
-                    "rt_v1",
-                    &fake_jwt("sub-9", Some("a@b.com")),
-                ),
+                token_json("tok_v1", "rt_v1", &fake_jwt("sub-9", Some("a@b.com"))),
             )
         } else {
             (
@@ -349,10 +347,7 @@ fn disabled_flag_gates_every_operation() {
         om.start_device(COPILOT),
         Err(OAuthError::Disabled)
     ));
-    assert!(matches!(
-        om.poll_device(QWEN),
-        Err(OAuthError::Disabled)
-    ));
+    assert!(matches!(om.poll_device(QWEN), Err(OAuthError::Disabled)));
     assert!(matches!(
         om.refresh(CHATGPT_PRO, "x"),
         Err(OAuthError::Disabled)
@@ -364,11 +359,7 @@ fn revoke_cleans_tokens_ring_and_pending() {
     let base = mock_server(|_| {
         (
             200,
-            token_json(
-                "tok_x",
-                "rt_x",
-                &fake_jwt("sub-7", Some("x@y.com")),
-            ),
+            token_json("tok_x", "rt_x", &fake_jwt("sub-7", Some("x@y.com"))),
         )
     });
     let vault = vault();
@@ -484,7 +475,11 @@ fn broker_oauth_failover_switches_to_next_key_on_429() {
 
     let tok_base = mock_server(|req| {
         // Two distinct accounts via different id_tokens.
-        let acct = if req.contains("code=code-a") { "a" } else { "b" };
+        let acct = if req.contains("code=code-a") {
+            "a"
+        } else {
+            "b"
+        };
         (
             200,
             token_json(

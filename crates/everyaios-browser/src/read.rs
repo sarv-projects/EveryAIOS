@@ -98,7 +98,11 @@ pub fn read_http(
     let truncated = markdown.len() > READ_BODY_CAP;
     // Apply --filter / --outline / --raw on any path (doc 55 semantics).
     let markdown = apply_options(&markdown, opts);
-    Ok(HttpReadResult { markdown, source, truncated })
+    Ok(HttpReadResult {
+        markdown,
+        source,
+        truncated,
+    })
 }
 
 fn read_bounded(resp: ureq::Response) -> String {
@@ -151,10 +155,13 @@ fn walk_llms_txt(agent: &ureq::Agent, base_url: &str) -> Option<(String, String)
 
 /// Extract the path portion of a URL (with leading slash).
 fn url_path(url: &str) -> String {
-    url.split("://").nth(1).map(|rest| {
-        let path = rest.find('/').map(|i| &rest[i..]).unwrap_or("/");
-        path.to_string()
-    }).unwrap_or_else(|| "/".into())
+    url.split("://")
+        .nth(1)
+        .map(|rest| {
+            let path = rest.find('/').map(|i| &rest[i..]).unwrap_or("/");
+            path.to_string()
+        })
+        .unwrap_or_else(|| "/".into())
 }
 
 /// `/a/b/page` → `/a/b/`
@@ -163,7 +170,11 @@ fn parent_path(path: &str) -> String {
     match trimmed.rfind('/') {
         Some(i) => {
             let parent = &trimmed[..=i];
-            if parent.is_empty() { "/".into() } else { parent.into() }
+            if parent.is_empty() {
+                "/".into()
+            } else {
+                parent.into()
+            }
         }
         None => "/".into(),
     }
@@ -240,12 +251,7 @@ pub fn apply_options(markdown: &str, opts: &ReadOptions) -> String {
 
 /// Route oversized output to a file when the caller asks (OutputFileAccess
 /// pattern, doc 33 §6.1) — returns the file path if written.
-pub fn maybe_route_to_file(
-    text: &str,
-    dir: &Path,
-    name: &str,
-    cap: usize,
-) -> Option<String> {
+pub fn maybe_route_to_file(text: &str, dir: &Path, name: &str, cap: usize) -> Option<String> {
     if text.len() <= cap {
         return None;
     }
@@ -287,21 +293,36 @@ mod tests {
     #[test]
     fn apply_options_outline_and_filter() {
         let md = "# H1\n\npara line\n\n## H2\n\n- [link](x)\n\n| a | b |\n";
-        let out = apply_options(md, &ReadOptions { outline: true, ..Default::default() });
+        let out = apply_options(
+            md,
+            &ReadOptions {
+                outline: true,
+                ..Default::default()
+            },
+        );
         assert!(out.contains("# H1"));
         assert!(out.contains("## H2"));
         assert!(!out.contains("para line"));
-        let filt = apply_options(md, &ReadOptions {
-            filter: Some("H2".into()),
-            ..Default::default()
-        });
+        let filt = apply_options(
+            md,
+            &ReadOptions {
+                filter: Some("H2".into()),
+                ..Default::default()
+            },
+        );
         assert!(filt.contains("## H2"));
         assert!(!filt.contains("# H1"));
     }
 
     #[test]
     fn raw_mode_strips_markdown_syntax() {
-        let out = apply_options("# T\n- item\n", &ReadOptions { raw: true, ..Default::default() });
+        let out = apply_options(
+            "# T\n- item\n",
+            &ReadOptions {
+                raw: true,
+                ..Default::default()
+            },
+        );
         assert!(!out.contains('#'));
     }
 

@@ -19,7 +19,9 @@
 use crate::actions::DOM_WALKER_MARKDOWN;
 use crate::read::{looks_like_html, read_http, ReadOptions, ReadSource};
 use everyaios_cdp::discovery::connect_to_browser;
-use everyaios_cdp::{spawn_browser, BrowserEndpoint, CdpClient, CdpError, LaunchOptions, TargetType};
+use everyaios_cdp::{
+    spawn_browser, BrowserEndpoint, CdpClient, CdpError, LaunchOptions, TargetType,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::net::{IpAddr, TcpListener, ToSocketAddrs};
@@ -343,9 +345,11 @@ impl TieredEngine {
             .host_str()
             .unwrap_or_default()
             .to_string();
-        let allowed = self.config.allowed_domains.iter().any(|d| {
-            host == *d || host.ends_with(&format!(".{d}"))
-        });
+        let allowed = self
+            .config
+            .allowed_domains
+            .iter()
+            .any(|d| host == *d || host.ends_with(&format!(".{d}")));
         if allowed {
             Ok(())
         } else {
@@ -428,9 +432,7 @@ impl TieredEngine {
                 cmd.arg("--max-connections")
                     .arg(self.config.max_connections.to_string());
                 cmd.stdout(Stdio::null()).stderr(Stdio::null());
-                let child = cmd
-                    .spawn()
-                    .map_err(|e| EngineError::Spawn("obscura", e))?;
+                let child = cmd.spawn().map_err(|e| EngineError::Spawn("obscura", e))?;
                 let ws = wait_for_cdp_endpoint(port, self.config.timeout)?;
                 Ok(SpawnedLight {
                     child,
@@ -519,7 +521,11 @@ impl TieredEngine {
                 client
                     .call("Target.createTarget", json!({ "url": "about:blank" }))
                     .ok()
-                    .and_then(|v| v.get("targetId").and_then(serde_json::Value::as_str).map(str::to_string))
+                    .and_then(|v| {
+                        v.get("targetId")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    })
                     .unwrap_or_default()
             });
         if target_id.is_empty() {
@@ -528,8 +534,10 @@ impl TieredEngine {
                 message: "no page target available".into(),
             }));
         }
-        let attached =
-            client.call("Target.attachToTarget", json!({ "targetId": target_id, "flatten": true }))?;
+        let attached = client.call(
+            "Target.attachToTarget",
+            json!({ "targetId": target_id, "flatten": true }),
+        )?;
         let session_id = attached
             .get("sessionId")
             .and_then(serde_json::Value::as_str)
@@ -791,7 +799,10 @@ mod tests {
             Some(EngineTier::Lightpanda)
         );
         assert_eq!(
-            engine.escalate_from(EngineTier::Static, &EngineError::Timeout(Duration::from_secs(1))),
+            engine.escalate_from(
+                EngineTier::Static,
+                &EngineError::Timeout(Duration::from_secs(1))
+            ),
             Some(EngineTier::Lightpanda)
         );
         assert_eq!(
@@ -816,7 +827,10 @@ mod tests {
         );
         // Light capability gaps escalate to Chrome; policy rejections don't.
         assert_eq!(
-            engine.escalate_from(EngineTier::Lightpanda, &EngineError::BinaryNotFound("lightpanda")),
+            engine.escalate_from(
+                EngineTier::Lightpanda,
+                &EngineError::BinaryNotFound("lightpanda")
+            ),
             Some(EngineTier::Chrome)
         );
         assert_eq!(
@@ -851,13 +865,18 @@ mod tests {
 
     #[test]
     fn tier_from_light_engine_maps() {
-        assert_eq!(EngineTier::from(LightEngine::Lightpanda), EngineTier::Lightpanda);
+        assert_eq!(
+            EngineTier::from(LightEngine::Lightpanda),
+            EngineTier::Lightpanda
+        );
         assert_eq!(EngineTier::from(LightEngine::Obscura), EngineTier::Obscura);
     }
 
     /// Minimal HTTP server serving `body` for any path (enough for the
     /// negotiation probes read_http makes).
-    fn spawn_http_server(body: &'static str) -> (std::net::SocketAddr, std::thread::JoinHandle<()>) {
+    fn spawn_http_server(
+        body: &'static str,
+    ) -> (std::net::SocketAddr, std::thread::JoinHandle<()>) {
         use std::io::Write;
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();

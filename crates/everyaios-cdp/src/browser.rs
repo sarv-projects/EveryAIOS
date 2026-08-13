@@ -93,17 +93,23 @@ fn platform_candidates() -> Vec<PathBuf> {
     let mut out = Vec::new();
     #[cfg(target_os = "linux")]
     {
-        out.extend([
-            "google-chrome",
-            "google-chrome-stable",
-            "chromium",
-            "chromium-browser",
-            "microsoft-edge",
-            "microsoft-edge-stable",
-        ]
-        .iter()
-        .map(PathBuf::from));
-        out.extend(["/usr/bin/google-chrome", "/usr/bin/chromium-browser"].iter().map(PathBuf::from));
+        out.extend(
+            [
+                "google-chrome",
+                "google-chrome-stable",
+                "chromium",
+                "chromium-browser",
+                "microsoft-edge",
+                "microsoft-edge-stable",
+            ]
+            .iter()
+            .map(PathBuf::from),
+        );
+        out.extend(
+            ["/usr/bin/google-chrome", "/usr/bin/chromium-browser"]
+                .iter()
+                .map(PathBuf::from),
+        );
     }
     #[cfg(target_os = "macos")]
     {
@@ -174,7 +180,8 @@ pub fn locate_system_browser(browser_binary: Option<&Path>) -> Result<PathBuf, C
         }
     }
     Err(CdpError::BrowserNotFound(
-        "no system Chrome/Edge found; use install_chrome_for_testing() or set a browser binary".into(),
+        "no system Chrome/Edge found; use install_chrome_for_testing() or set a browser binary"
+            .into(),
     ))
 }
 
@@ -308,7 +315,9 @@ fn cft_binary_rel_path() -> &'static str {
 fn cft_cache_root() -> PathBuf {
     if let Ok(home) = env::var("EVERYAIOS_HOME") {
         if !home.is_empty() {
-            return PathBuf::from(home).join("browser").join("chrome-for-testing");
+            return PathBuf::from(home)
+                .join("browser")
+                .join("chrome-for-testing");
         }
     }
     env::var_os("HOME")
@@ -344,9 +353,8 @@ fn cached_cft_binary() -> Option<PathBuf> {
 pub fn install_chrome_for_testing(json_url: Option<&str>) -> Result<PathBuf, CdpError> {
     let url = json_url.unwrap_or(CFT_KNOWN_GOOD_URL);
     let manifest = crate::discovery::http_get(url)?;
-    let v: serde_json::Value = serde_json::from_str(&manifest).map_err(|e| {
-        CdpError::Discovery(format!("chrome-for-testing manifest: {e}"))
-    })?;
+    let v: serde_json::Value = serde_json::from_str(&manifest)
+        .map_err(|e| CdpError::Discovery(format!("chrome-for-testing manifest: {e}")))?;
     let version = v
         .pointer("/channels/Stable/version")
         .and_then(serde_json::Value::as_str)
@@ -371,7 +379,9 @@ pub fn install_chrome_for_testing(json_url: Option<&str>) -> Result<PathBuf, Cdp
         })?;
 
     let install_dir = cft_cache_root().join(version);
-    let binary_path = install_dir.join(cft_zip_folder()).join(cft_binary_rel_path());
+    let binary_path = install_dir
+        .join(cft_zip_folder())
+        .join(cft_binary_rel_path());
     if binary_path.is_file() {
         return Ok(binary_path); // already installed
     }
@@ -413,14 +423,16 @@ fn download_zip(url: &str) -> Result<Vec<u8>, CdpError> {
 /// target dir).
 fn extract_zip(bytes: &[u8], dest: &Path) -> Result<(), CdpError> {
     let reader = Cursor::new(bytes);
-    let mut archive = zip::ZipArchive::new(reader)
-        .map_err(|e| CdpError::Discovery(format!("cft zip: {e}")))?;
+    let mut archive =
+        zip::ZipArchive::new(reader).map_err(|e| CdpError::Discovery(format!("cft zip: {e}")))?;
     for i in 0..archive.len() {
         let mut file = archive
             .by_index(i)
             .map_err(|e| CdpError::Discovery(format!("cft zip entry {i}: {e}")))?;
         let Some(name) = file.enclosed_name() else {
-            return Err(CdpError::Security("cft zip: entry escapes the extract dir".into()));
+            return Err(CdpError::Security(
+                "cft zip: entry escapes the extract dir".into(),
+            ));
         };
         let out_path = dest.join(name);
         if file.is_dir() {
@@ -447,7 +459,10 @@ mod tests {
     #[test]
     fn default_profile_dir_points_into_everyaios() {
         let dir = default_profile_dir();
-        assert!(dir.to_string_lossy().contains(".everyaios") || dir.to_string_lossy().contains("browser-profile"));
+        assert!(
+            dir.to_string_lossy().contains(".everyaios")
+                || dir.to_string_lossy().contains("browser-profile")
+        );
         assert!(dir.ends_with("browser-profile"));
     }
 
@@ -493,7 +508,10 @@ mod tests {
         extract_zip(&buf.into_inner(), &dir).unwrap();
         let bin = dir.join("chrome-linux64/chrome");
         assert!(bin.is_file());
-        assert_eq!(std::fs::read_to_string(&bin).unwrap(), "#!/bin/sh\necho hi\n");
+        assert_eq!(
+            std::fs::read_to_string(&bin).unwrap(),
+            "#!/bin/sh\necho hi\n"
+        );
     }
 
     #[test]
@@ -570,14 +588,15 @@ mod tests {
         let manifest_url = format!("http://127.0.0.1:{port}/manifest.json");
         let bin = install_chrome_for_testing(Some(&manifest_url)).unwrap();
         assert!(bin.is_file(), "installed binary missing: {}", bin.display());
-        assert_eq!(std::fs::read_to_string(&bin).unwrap(), "#!/bin/sh\necho mock-chrome\n");
+        assert_eq!(
+            std::fs::read_to_string(&bin).unwrap(),
+            "#!/bin/sh\necho mock-chrome\n"
+        );
     }
 
     fn tempfile_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "everyaios-cdp-browser-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-cdp-browser-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         dir
     }
