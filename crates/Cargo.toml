@@ -10,6 +10,7 @@ members = [
     "everyaios-browser",
     "everyaios-script",
     "everyaios-mcp",
+    "everyaios-office",
 ]
 
 [workspace.package]
@@ -38,3 +39,6 @@ futures-util = "0.3"
 url = "2"
 zip = "2"
 similar = "2"
+roxmltree = "0.20"
+flate2 = "1"
+crc32fast = "1"
