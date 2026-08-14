@@ -28,6 +28,7 @@ toml = "0.8"
 ureq = { version = "2", features = ["tls", "json"] }
 zeroize = { version = "1", features = ["derive"] }
 rand = "0.8"
+opentelemetry = "0.27"
 sha2 = "0.10"
 sha1 = "0.10"
 base64 = "0.22"

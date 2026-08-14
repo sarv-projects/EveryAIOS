@@ -27,6 +27,12 @@ pub struct AuditEvent {
     pub kind: String,
     #[serde(default)]
     pub payload: serde_json::Value,
+    /// P3.3 (J14) — distributed-trace linkage: the W3C traceparent ids.
+    /// Empty when the event wasn't recorded inside a trace.
+    #[serde(default)]
+    pub trace_id: String,
+    #[serde(default)]
+    pub span_id: String,
 }
 
 impl AuditEvent {
@@ -36,7 +42,16 @@ impl AuditEvent {
             ts_ms: now_ms(),
             kind: kind.into(),
             payload,
+            trace_id: String::new(),
+            span_id: String::new(),
         }
+    }
+
+    /// Attach the trace context of the execution that produced this event.
+    pub fn with_trace(mut self, trace_id: impl Into<String>, span_id: impl Into<String>) -> Self {
+        self.trace_id = trace_id.into();
+        self.span_id = span_id.into();
+        self
     }
 }
 
@@ -65,12 +80,27 @@ impl AuditWriter {
 
     /// Append one event as a JSON line + `\n`, flushed.
     pub fn write(&mut self, kind: &str, payload: serde_json::Value) -> Result<u64, AuditError> {
+        self.write_traced(kind, payload, "", "")
+    }
+
+    /// P3.3 (J14) — append an event carrying its trace_id/span_id so the
+    /// audit row ties to the span (doc 43: the pipeline is end-to-end
+    /// traceable by a single trace_id).
+    pub fn write_traced(
+        &mut self,
+        kind: &str,
+        payload: serde_json::Value,
+        trace_id: &str,
+        span_id: &str,
+    ) -> Result<u64, AuditError> {
         self.seq += 1;
         let event = AuditEvent {
             seq: self.seq,
             ts_ms: now_ms(),
             kind: kind.to_string(),
             payload,
+            trace_id: trace_id.to_string(),
+            span_id: span_id.to_string(),
         };
         let mut line = serde_json::to_vec(&event)?;
         line.push(b'\n');
@@ -163,6 +193,39 @@ mod tests {
         assert_eq!(ev3.seq, 3);
         assert_eq!(ev3.kind, "vault.rotate");
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn traced_events_roundtrip_and_legacy_lines_parse() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-audit-trace-{}", std::process::id()));
+        let path = dir.join("audit.ndjson");
+        let _ = std::fs::remove_dir_all(&dir);
+        {
+            let mut w = AuditWriter::open(&path).unwrap();
+            // Legacy-shaped line (no trace fields) — must still parse.
+            w.write("guard.blocked", serde_json::json!({"cmd": "rm"}))
+                .unwrap();
+            // P3.3 traced line.
+            w.write_traced(
+                "browser.act",
+                serde_json::json!({"ref": "e3"}),
+                "0123456789abcdef0123456789abcdef",
+                "fedcba9876543210",
+            )
+            .unwrap();
+        }
+        let f = std::fs::File::open(&path).unwrap();
+        let lines: Vec<String> = std::io::BufReader::new(f)
+            .lines()
+            .map(|l| l.unwrap())
+            .collect();
+        let legacy: AuditEvent = serde_json::from_str(&lines[0]).unwrap();
+        assert!(legacy.trace_id.is_empty() && legacy.span_id.is_empty());
+        let traced: AuditEvent = serde_json::from_str(&lines[1]).unwrap();
+        assert_eq!(traced.trace_id, "0123456789abcdef0123456789abcdef");
+        assert_eq!(traced.span_id, "fedcba9876543210");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

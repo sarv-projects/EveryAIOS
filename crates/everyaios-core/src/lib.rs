@@ -22,6 +22,7 @@ pub mod orphan;
 pub mod providers;
 pub mod sidecar_link;
 pub mod supervisor;
+pub mod tracing;
 pub mod version;
 
 pub use blueprint::{load_all as load_blueprints, load_blueprint, AgentBlueprint, BlueprintError};

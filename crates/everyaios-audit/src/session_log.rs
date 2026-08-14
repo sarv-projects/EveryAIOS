@@ -64,6 +64,11 @@ pub struct SessionEvent {
     pub args_hash: String,
     #[serde(default)]
     pub result_meta: serde_json::Value,
+    /// P3.3 (J14) — trace linkage of the execution that produced this event.
+    #[serde(default)]
+    pub trace_id: String,
+    #[serde(default)]
+    pub span_id: String,
     pub event_type: EventType,
 }
 
@@ -76,6 +81,9 @@ pub struct EventInput {
     pub tool: String,
     pub args_hash: String,
     pub result_meta: serde_json::Value,
+    /// P3.3 (J14) — trace linkage (empty when not inside a trace).
+    pub trace_id: String,
+    pub span_id: String,
 }
 
 impl EventInput {
@@ -91,12 +99,21 @@ impl EventInput {
             tool: String::new(),
             args_hash: String::new(),
             result_meta: serde_json::Value::Null,
+            trace_id: String::new(),
+            span_id: String::new(),
         }
     }
 
     pub fn with_tool(mut self, tool: impl Into<String>, args_hash: impl Into<String>) -> Self {
         self.tool = tool.into();
         self.args_hash = args_hash.into();
+        self
+    }
+
+    /// P3.3 (J14) — attach the trace context of this execution.
+    pub fn with_trace(mut self, trace_id: impl Into<String>, span_id: impl Into<String>) -> Self {
+        self.trace_id = trace_id.into();
+        self.span_id = span_id.into();
         self
     }
 }
@@ -144,6 +161,8 @@ impl SessionLog {
             tool: input.tool,
             args_hash: input.args_hash,
             result_meta: input.result_meta,
+            trace_id: input.trace_id,
+            span_id: input.span_id,
             event_type: input.event_type,
         };
         let mut line = serde_json::to_vec(&ev)?;
@@ -398,6 +417,22 @@ mod tests {
                 .unwrap(),
             3
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn session_events_carry_trace_linkage() {
+        let dir = tmp_dir("trace");
+        let mut log = SessionLog::open(&dir, "sess-1").unwrap();
+        log.append(
+            EventInput::new(EventType::ToolStarted, "sess-1", "a")
+                .with_tool("browser.act", "k1")
+                .with_trace("abcdef0123456789abcdef0123456789", "1234567890abcdef"),
+        )
+        .unwrap();
+        let evs = log.events().unwrap();
+        assert_eq!(evs[0].trace_id, "abcdef0123456789abcdef0123456789");
+        assert_eq!(evs[0].span_id, "1234567890abcdef");
         let _ = fs::remove_dir_all(&dir);
     }
 
