@@ -1,0 +1,98 @@
+//! Ghost-context prevention (ARCH/07 §7.5.1 — notify-crate pattern).
+//!
+//! Tracks which memory refs point at each filesystem path so a file delete
+//! triggers an **atomic tombstone** (remove the path + all its refs in one
+//! operation) and a rename triggers a **re-path** (move the refs with zero
+//! re-embedding). The live `notify` wiring lives in the coordinator; this is
+//! the pure, testable index it drives.
+
+use std::collections::{HashMap, HashSet};
+
+#[derive(Debug, Default)]
+pub struct GhostIndex {
+    /// path → set of content ids referencing that path.
+    entries: HashMap<String, HashSet<String>>,
+}
+
+impl GhostIndex {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn index(&mut self, path: &str, id: &str) {
+        self.entries
+            .entry(path.to_string())
+            .or_default()
+            .insert(id.to_string());
+    }
+
+    /// Ids referencing `path` (sorted).
+    pub fn ids_for(&self, path: &str) -> Vec<String> {
+        let mut v: Vec<String> = self
+            .entries
+            .get(path)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default();
+        v.sort();
+        v
+    }
+
+    pub fn path_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Atomic tombstone eviction: remove the path and return its ref ids so
+    /// the caller can evict the matching FTS5/vec/graph rows in the same
+    /// transaction.
+    pub fn tombstone(&mut self, path: &str) -> Vec<String> {
+        let ids = self.ids_for(path);
+        self.entries.remove(path);
+        ids
+    }
+
+    /// Re-path on rename: move every ref from `old` to `new`, returning how
+    /// many ids moved. No content is re-embedded (zero re-embedding).
+    pub fn repath(&mut self, old: &str, new: &str) -> usize {
+        let moved = match self.entries.remove(old) {
+            Some(ids) => ids,
+            None => return 0,
+        };
+        let n = moved.len();
+        let target = self.entries.entry(new.to_string()).or_default();
+        target.extend(moved);
+        n
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tombstone_removes_path_and_returns_ids() {
+        let mut g = GhostIndex::new();
+        g.index("/docs/a.md", "mem:1");
+        g.index("/docs/a.md", "mem:2");
+        g.index("/docs/b.md", "mem:3");
+
+        let ids = g.tombstone("/docs/a.md");
+        assert_eq!(ids, vec!["mem:1".to_string(), "mem:2".to_string()]);
+        assert_eq!(g.ids_for("/docs/a.md"), Vec::<String>::new());
+        assert_eq!(g.ids_for("/docs/b.md"), vec!["mem:3".to_string()]);
+    }
+
+    #[test]
+    fn repath_moves_refs_zero_reembedding() {
+        let mut g = GhostIndex::new();
+        g.index("/old/notes.md", "mem:9");
+        g.index("/old/notes.md", "mem:10");
+
+        let moved = g.repath("/old/notes.md", "/new/notes.md");
+        assert_eq!(moved, 2);
+        assert_eq!(g.ids_for("/old/notes.md"), Vec::<String>::new());
+        assert_eq!(
+            g.ids_for("/new/notes.md"),
+            vec!["mem:10".to_string(), "mem:9".to_string()]
+        );
+    }
+}

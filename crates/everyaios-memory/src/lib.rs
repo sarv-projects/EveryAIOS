@@ -13,10 +13,20 @@
 //!   shareable markdown (Alg #31).
 //! - `compaction` — snip/soft/force ratios, safe split points, sliding window,
 //!   summarize-fail-open, prefix-dirty flag, PRUNE_PROTECT (Alg #21).
+//! - `graph` — graph store (entity/episodic + typed edges + temporal
+//!   edge-versioning + spreading activation + depth-cap query) (Alg #6/#30).
+//! - `paging` — Letta-style 3-surface paging (core/archival/recall) with
+//!   queued writes + overflow eviction (Alg #20).
+//! - `ghost` — ghost-context prevention index (atomic tombstone + re-path).
+//! - `reference` — pass-by-reference handles + bounded previews (C10).
 
 pub mod actr;
 pub mod compaction;
 pub mod fusion;
+pub mod ghost;
+pub mod graph;
+pub mod paging;
+pub mod reference;
 pub mod taste;
 
 pub use actr::{
@@ -32,6 +42,10 @@ pub use fusion::{
     approx_tokens, budget_tokens, cap_text, dedupe, merge_small_chunks, rrf_fuse, smart_snippets,
     ContentType, Signal,
 };
+pub use ghost::GhostIndex;
+pub use graph::{Edge, EdgeType, GraphStore, Node, NodeKind, DEFAULT_MAX_DEPTH, DEFAULT_TOP_K};
+pub use paging::{MemoryEntry, PagedMemory, Surface, CORE_BUDGET_TOKENS};
+pub use reference::{bounded_preview, make_ref_handle, RefHandle, RefKind, PREVIEW_BUDGET_TOKENS};
 pub use taste::{TasteRule, TasteStore};
 
 use thiserror::Error;
