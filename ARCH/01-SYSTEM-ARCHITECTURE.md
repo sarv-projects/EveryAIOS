@@ -2,43 +2,19 @@
 
 ## 1.1 The map
 
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│  UI LAYER — Tauri 2 window (Rust), native webview, React SPA                │
-│  chat · cockpit dashboard · audit+replay · blueprint editor · office docs   │
-│  reader · connector hub · permission cards · token/cost analytics · tray    │
-└───────────────▲────────────────────────────────────────┬───────────────────┘
-                │ IPC: JSON-RPC over stdio + local WS     │ streamed events
-┌───────────────┴────────────────────────────────────────▼───────────────────┐
-│  RUST CORE — `everyaios-core` binary (the orchestrator + safety + browser)        │
-│  ┌──────────────┬───────────────┬───────────────┬────────────────────────┐ │
-│  │ BrowserSvc   │ ScriptEval    │ GuardRail     │ Audit/Replay           │ │
-│  │ (CDP child,  │ (rquickjs     │ (regex        │ (NDJSON ingest,        │ │
-│  │  37 tools,   │  sandbox)     │  interceptors,│  recording index,      │ │
-│  │  snapshot/   │               │  diff cards)  │  token estimates)      │ │
-│  │  refs/diff)  │               │               │                        │ │
-│  └──────────────┴───────────────┴───────────────┴────────────────────────┘ │
-│  · MCP server (official `modelcontextprotocol/rust-sdk`, http://127.0.0.1:9200/mcp)  · Key-ring vault          │
-│  · ProcessSupervisor for the Bun-compiled sidecar (spawn/restart/backoff)          │
-└───────────────▲────────────────────────────────────────┬───────────────────┘
-                │ stdio JSON-RPC (supervised child)       │ events
-┌───────────────┴────────────────────────────────────────▼───────────────────┐
-│  TS SIDECAR — `coordinator` (Bun-compiled, reuses @personal-ai/core-* engine)       │
-│  · Agent loop (pi-style: length-guard, model swap, cost ledger)             │
-│  · Spec/blueprint loader → agent registry (core-agents)                    │
-│  · Memory+RAG (core-memory, core-files: 7 algos, FTS5+vec, KG)             │
-│  · Connector Hub (core-connectors: native/Composio/Zapier/Nango/AuthBridge)│
-│  · Search cascade + research tiers (core-search) · automations (core-auto) │
-│  · Engine stages + risk compass (core-engine) · Trust Ladder (core-tools)  │
-│  · Providers + BYOK clients (core-providers, core-ai)                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-        ▲ CDP (loopback, token-gated)            ▲ files · shell · network
-┌───────┴───────────────┐          ┌─────────────┴───────────────────────────┐
-│  Chromium child       │          │  Local services: searxng (optional),    │
-│  (system Chrome/Edge  │          │  Ollama/llamafile (local models),       │
-│  or chrome-for-       │          │  SQLite (app.db + memory.db + vault),   │
-│  testing fallback)    │          │  LadybugDB (KG), sandbox (subprocess/WASM)   │
-└───────────────────────┘          └─────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    UI["**UI LAYER** — Tauri 2 window (Rust), native webview, React SPA<br/>chat · cockpit dashboard · audit+replay · blueprint editor · office docs<br/>reader · connector hub · permission cards · token/cost analytics · tray"]
+    CORE["**RUST CORE** — everyaios-core binary (orchestrator + safety + browser)<br/>BrowserSvc (CDP child, 37 tools, snapshot/refs/diff) · ScriptEval (rquickjs sandbox)<br/>GuardRail (regex interceptors, diff cards) · Audit/Replay (NDJSON ingest, recording index, token estimates)<br/>MCP server (rust-sdk, 127.0.0.1:9200/mcp) · Key-ring vault · ProcessSupervisor"]
+    SIDE["**TS SIDECAR** — coordinator (Bun-compiled, reuses @personal-ai/core-*)<br/>Agent loop (pi-style) · Spec/blueprint loader · Memory+RAG (7 algos, FTS5+vec, KG)<br/>Connector Hub (native/Composio/Zapier/Nango/AuthBridge) · Search cascade · automations<br/>Engine stages + risk compass · Trust Ladder · Providers + BYOK"]
+    CHROME["**Chromium child** — system Chrome/Edge or chrome-for-testing fallback"]
+    LOCAL["**Local services** — searxng (optional) · Ollama/llamafile · SQLite (app.db + memory.db + vault) · LadybugDB (KG) · sandbox (subprocess/WASM)"]
+    UI -->|"IPC: JSON-RPC over stdio + local WS"| CORE
+    CORE -->|"streamed events"| UI
+    CORE -->|"stdio JSON-RPC (supervised child)"| SIDE
+    SIDE -->|"events"| CORE
+    CHROME -->|"CDP (loopback, token-gated)"| CORE
+    LOCAL -->|"files · shell · network"| SIDE
 ```
 
 ## 1.2 Why this split (evidence)
@@ -101,10 +77,12 @@ All local databases use **WAL (Write-Ahead Logging)** journal mode:
 - Vault (SQLCipher) also uses WAL mode
 
 **Concurrency model:**
-```
-Agent A write ┐
-Agent B write ├→ FIFO merge queue → single SQLite writer → WAL → readers see instantly
-Agent C write ┘
+```mermaid
+flowchart LR
+    A["Agent A write"] --> Q["FIFO merge queue"]
+    B["Agent B write"] --> Q
+    C["Agent C write"] --> Q
+    Q --> W["single SQLite writer"] --> WAL["WAL → readers see instantly"]
 ```
 
 This avoids SQLITE_BUSY errors entirely while maintaining append-only audit guarantees.

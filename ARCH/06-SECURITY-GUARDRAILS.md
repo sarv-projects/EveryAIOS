@@ -67,16 +67,13 @@ Vault (SQLCipher) is the only owner of keys/tokens; CES-style executor for high-
 
 > Formalizes the "keys live only in Rust" promise so it is enforced by construction, not convention.
 
-```
-Coordinator (TS)                     Rust provider broker (everyaios-vault + broker)
-    │  POST provider/request {provider, model, body, opaque_key_handle}
-    ├──────────────────────────────────────────►
-    │                              1. Validate session budget + permission (J21 ticket)
-    │                              2. Resolve opaque_key_handle → raw key (SQLCipher)
-    │                              3. Inject auth headers
-    │                              4. Perform the provider HTTP call (Rust owns the socket)
-    │                              5. Scrub temp secret buffers (zeroize)
-    │  ◄────────────────────────────────────────  normalized event stream (no key material)
+```mermaid
+sequenceDiagram
+    participant C as Coordinator (TS)
+    participant B as Rust provider broker (everyaios-vault + broker)
+    C->>B: POST provider/request {provider, model, body, opaque_key_handle}
+    Note over B: 1. Validate session budget + permission (J21 ticket)<br/>2. Resolve opaque_key_handle → raw key (SQLCipher)<br/>3. Inject auth headers<br/>4. Provider HTTP call (Rust owns the socket)<br/>5. Scrub temp secret buffers (zeroize)
+    B-->>C: normalized event stream (no key material)
 ```
 
 - `opaque_key_handle` = random 128-bit id minted by `everyaios-vault` at key-ingest; no recoverable relation to the key; scoped to (provider, key_id); revoked on rotation/removal.

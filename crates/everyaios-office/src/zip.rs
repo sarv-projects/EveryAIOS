@@ -11,6 +11,7 @@
 //! guarantee the conformance oracle checks (P4.5: zip-level diff of
 //! untouched parts).
 
+use std::collections::HashSet;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
 
@@ -96,19 +97,41 @@ impl OoxmlArchive {
     /// Rewrite the archive: `modified` parts are re-deflated fresh, every
     /// other entry is copied verbatim (raw bytes, original compression).
     pub fn save(&mut self, modified: &[(String, Vec<u8>)]) -> Result<Vec<u8>, ArchiveError> {
+        self.save_changes(modified, &[], &[])
+    }
+
+    /// Rewrite the archive with structural changes (P4.3 slide add/remove):
+    /// - `modified` — existing parts rewritten (re-deflated fresh);
+    /// - `added` — brand-new parts appended (e.g. a cloned slide);
+    /// - `deleted` — existing parts omitted from the output.
+    ///
+    /// Every other entry is copied verbatim (raw bytes, original compression).
+    pub fn save_changes(
+        &mut self,
+        modified: &[(String, Vec<u8>)],
+        added: &[(String, Vec<u8>)],
+        deleted: &[String],
+    ) -> Result<Vec<u8>, ArchiveError> {
         let names = self.parts()?;
         let modified: std::collections::HashMap<&str, &[u8]> = modified
             .iter()
             .map(|(n, b)| (n.as_str(), b.as_slice()))
             .collect();
+        let added: std::collections::HashMap<&str, &[u8]> = added
+            .iter()
+            .map(|(n, b)| (n.as_str(), b.as_slice()))
+            .collect();
+        let deleted: HashSet<&str> = deleted.iter().map(|s| s.as_str()).collect();
 
         let mut out = Vec::new();
         {
             let mut writer = ZipWriter::new(Cursor::new(&mut out));
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
             for name in &names {
+                if deleted.contains(name.as_str()) {
+                    continue;
+                }
                 if let Some(new_bytes) = modified.get(name.as_str()) {
-                    let opts = SimpleFileOptions::default()
-                        .compression_method(CompressionMethod::Deflated);
                     writer.start_file(name.clone(), opts)?;
                     writer.write_all(new_bytes)?;
                 } else {
@@ -116,6 +139,10 @@ impl OoxmlArchive {
                     let handle = self.by_name(name)?;
                     writer.raw_copy_file(handle)?;
                 }
+            }
+            for (name, bytes) in &added {
+                writer.start_file((*name).to_string(), opts)?;
+                writer.write_all(bytes)?;
             }
             writer.finish()?;
         }

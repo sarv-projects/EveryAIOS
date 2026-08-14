@@ -1,6 +1,6 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (updated 2026-08-13) · **Spec:** v3.15 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (updated 2026-08-14) · **Spec:** v3.16 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
 > **Scope:** Complete product — 138 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
@@ -108,6 +108,7 @@
 - [x] `[DONE]` Parse usage from provider response (handle AI SDK v6 cached-input normalization) — ledger.rs `Usage::from_json` handles OpenAI `prompt_tokens_details.cached_tokens` + Anthropic `cache_creation_input_tokens`/`cache_read_input_tokens`; AI SDK v6 normalization = cached tokens excluded from billed `in` before cost; parses_openai_cached_usage + parses_anthropic_cached_usage tests green
 - [x] `[DONE]` Implement per-session $ budget enforcement (J11): default $2.00, kill on exceed — session_budget.rs `SessionBudget` (default 2.00, configurable), broker pre-flight `Budget::check` → `BrokerError::SessionBudgetExceeded{limit,spent}` before any call; post-turn settle records real cost; budget_kill_on_exceed + budget_isolation tests green. NOTE: enforcement is pre-flight + post-turn-settle (kill blocks the NEXT turn) — mid-stream kill is impossible because providers only report usage in the final chunk (stream_options.include_usage); documented limitation
 - [x] `[DONE]` Surface "stopped: $X limit" to UI on budget kill — broker error surfaces as budgetExceeded chat event with limit+spent (chat.rs post_turn_budget_kill_surfaces_stopped test); Chat.tsx renders `⛔ stopped: $X / $Y limit reached`
+- [ ] `[NOT DONE]` Implement the 3-layer cache stack (doc 62): prompt cache (Anthropic `cache_control:ephemeral` / OpenAI ≥1024-token prefix) + semantic cache (local vector, ~0.92 sim, 7d/24h TTL) + result cache (dependency-tagged invalidation, 3d TTL); read-only-intent only — never serves into mutation paths
 
 ### P1.4 Streaming Chat Loop (B1 — ARCH/09: doc 05/16; doc 41 P1/ADAPT pi + Hermes rows)
 - [x] `[DONE]` Wire core-engine ConversationEngine from APP into coordinator (B1/H1 base) — packages/coordinator/src/chat.ts: `generatePrompt` (assembleChatPrompt) / `persistTurn` (storeConversationTurn) / `extractMemory` (memoryUpdate) all call the real `@personal-ai/core-engine` ConversationEngine; no network in unit tests (FakeBridge); tsc clean + 28/28 coordinator tests at P1.4 (suite now 41/41, re-verified 2026-08-10)
@@ -145,7 +146,8 @@
 - [x] `[DONE]` Implement GBNF grammar constraint passthrough for local models (B5) — **SPEC B5** + v2.0 §P3: broker `Grammar` enum (None/Json/JsonSchema/Gbnf); body `grammar` string → GBNF, object `{type: json|json_schema|gbnf, value}` → typed, `tools` present → JSON-mode default; llamafile sends raw GBNF in native `grammar` (llama.cpp), ollama sends `format` = "json" / JSON schema. ⚠️ **Verified live on ollama 0.21.1: raw GBNF in `format` 500s ("invalid format")** — ollama's grammar API is JSON/schema only, so GBNF falls back to `format:"json"` (still logit-layer grammar → output is guaranteed valid JSON); raw GBNF is a llamafile/llama.cpp-native feature (doc 41 REFERENCE rows updated)
 - [x] `[DONE]` Test: local model tool call with GBNF → verify valid JSON always — **LIVE PASS (2026-08-10)**: `ollama pull qwen2.5:0.5b` (397MB) → `EVERYAIOS_LIVE_TEST=1 EVERYAIOS_LIVE_MODEL=qwen2.5:0.5b cargo test ... --ignored` → `LIVE PASS: ollama tool call → valid JSON: {"tool": "WeatherTool"}` (2.4s). `#[ignore]`-gated + env-guarded; mock tests cover both runtimes (format/grammar field assertions, keyless path, usage→ledger at $0, budget pre-flight, fail-closed)
 
-- [ ] `[NOT DONE]` **Hardware-fit picker for local models (doc 58 — llmfit pattern):** detect RAM/CPU/GPU and score candidate local models (fit/speed/quality/context; Q4_K_M ≈ 0.5 B/param) before spawn — `recommend --json`-style; runtimes Ollama/llama.cpp/MLX/Docker Model Runner/LM Studio. Complements the ≤15–20K ctx warning
+- [ ] `[NOT DONE]` **Hardware-fit picker for local models (doc 58 — llmfit pattern):** detect RAM/CPU/GPU and score candidate local models (fit/speed/quality/context; Q4_K_M ≈ 0.5 B/param) before spawn — `recommend --json`-style; runtimes Ollama/llama.cpp/MLX/Docker Model Runner/LM Studio. Complements the ≤15–20K ctx warning — **doc 61: retire the warning for the agent-native class (Muse Glimmer 30B/120K ctx, Nemotron 3.5 Lightning 30B MoE/3B active); add MLX (Rapid-MLX) as the Mac backend**
+- [ ] `[NOT DONE]` Self-healing tool-parse repair (B5, doc 62): fix malformed tool-call JSON (quote/brace/trim) before the 2-parse-failure cloud escalation
 
 ### P1.9 Model Catalog (A6 — ARCH/09 A6: doc 19 + core-providers pi.dev catalog, 15 prov / 280 models; feeds A7)
 - [x] `[DONE]` Implement model catalog: per-provider model registry with capability hints (tools, vision, context window) — **`packages/coordinator/src/catalog.ts`**: wraps core-providers capability-registry (pi.dev snapshot — `getModelCatalog`/`getModelsForProvider`/`getModelCapabilities`), broker-id alias map (`nvidia↔nvidia-nim` + OAuth/local providers), `hintsFor()` (ctx/tools-heuristic/vision/reasoning/costScore), `setLocalModels()` merges installed ollama models with effective ctx, `contextWindowFor()` for the UI. 15 catalog tests green
@@ -317,9 +319,9 @@
 - [x] `[DONE]` **Univer split (doc 58):** Univer Sheets = the H5 live-grid *view* surface; surgical patch + IronCalc = mutation/truth engine — pick ONE calc engine (Univer Node or IronCalc), don't run both as truth; `univer-mcp` as G4/D2 REPL reference — **decision recorded + implemented: IronCalc = the single calc truth engine (math integrity above); the H5 view surface stays Univer embed per doc 58, evaluated in P4.7 (OSS/Pro split — xlsx import may be Pro; our surgical patch is the mutation engine either way); `univer-mcp` = G4/D2 REPL reference only**
 
 ### P4.3 PowerPoint Engine (D3 — doc 04)
-- [ ] `[NOT DONE]` Implement surgical part-editing: ppt/slides/slideN.xml text runs, bullets, shapes
-- [ ] `[NOT DONE]` Implement slide add/remove: clone part + rels + Content_Types registration
-- [ ] `[NOT DONE]` Test: pptx add/remove slide round-trip
+- [x] `[DONE]` Implement surgical part-editing: ppt/slides/slideN.xml text runs, bullets, shapes — **`pptx/text.rs` — `shapes()` extracts addressable `<p:sp>` text shapes (cNvPr id/name, `<p:ph type>` placeholder, byte range) + `patch_shape_text()` minimal `<a:t>` prefix/suffix byte surgery: walks `<p:txBody>` → `<a:p>` → `<a:r>` → `<a:t>` (+ `<a:br>`/`<a:tab>`), bullets (`<a:buChar>`/`<a:buAutoNum>`) render as read-only markers, multi-byte/entity-aware (`char_to_byte` + `split_byte_for_char`); safety fallbacks NoTextAnchor / PatchAcrossMarker (edit across a bullet/br/paragraph boundary refused)**
+- [x] `[DONE]` Implement slide add/remove: clone part + rels + Content_Types registration — **`pptx/mod.rs` `add_slide()` (clones last slide part + its `_rels` part, appends `<p:sldId>` + `<Relationship>` + `<Override>` via byte surgery on presentation.xml / presentation.xml.rels / [Content_Types].xml; fresh rId/sldId/slide-number) + `remove_slide()` (splices out sldId/rel/Override, omits slide part + rels on save); `zip::save_changes(modified, added, deleted)` extended so new parts append and removed parts vanish while untouched parts stay verbatim**
+- [x] `[DONE]` Test: pptx add/remove slide round-trip — **16 new pptx tests (80 office total): slide-order parse, deck render (bullets as markers), shape addresses (name/ph-type), text patch + untouched-slide byte-stability (slide2 raw-entry verbatim after slide1 patch), insert-beside-bullet, paragraph-boundary/bullet-removal refusal, no-text-anchor, add-slide clone + registration (sldId/rId/Override + cloned rels), remove-slide deregistration, add-then-remove round-trip restore — 443 ws tests, clippy 0, fmt clean**
 - [ ] `[NOT DONE]` **Author-new-deck path (doc 58 — ppt-master pattern):** "make me a deck from this brief" = reason-then-native-shapes (template-clone + chart/table model, transitions/animations, speaker notes) — composes with surgical D3 edit of existing decks
 
 ### P4.4 PDF Engine (D4 — doc 04)
@@ -460,6 +462,7 @@
 - [ ] `[NOT DONE]` Implement resume-after-reboot (session checkpointing at turn boundaries)
 - [ ] `[NOT DONE]` Implement DAG state machine for multi-step workflows
 - [ ] `[NOT DONE]` Implement checkpoint freeze on circuit-break (B6 MCQ pattern)
+- [ ] `[NOT DONE]` Implement plan cache (doc 62): extract + index plans by task signature (~0.85 sim, `~/.everyaios/plans.db`), match before fresh planning; version-based invalidation
 
 ### P6.2 Sub-Agents (B3/B4 — doc 16, doc 03; doc 41 P2 opencode task.ts)
 - [ ] `[NOT DONE]` Implement fresh-context sub-agent spawn (own conversation, own workspace)
@@ -487,6 +490,7 @@
 - [ ] `[NOT DONE]` Implement tray daemon headless execution (H11)
 - [ ] `[NOT DONE]` Implement scheduled tasks UI: create from chat + settings (H14)
 - [ ] `[NOT DONE]` Test: scheduled task fires headless
+- [ ] `[NOT DONE]` Implement event-driven triggers (doc 62, Gartner): CI build-fail / test-regression / repo-change (push/PR/issue) / ticket-assign / telemetry-threshold, with scope+frequency policy controls
 
 ### P6.5 Crystallization (B8, Algorithm #5 — v2.0 §P7)
 - [ ] `[NOT DONE]` Implement multi-step workflow detection (successful N times)
@@ -514,6 +518,7 @@
 - [ ] `[NOT DONE]` Implement MCP server in everyaios-mcp: stateless Streamable HTTP (2026-07-28 spec)
 - [ ] `[NOT DONE]` Expose all 37 tools (34 core + 3 file_ops) + connector tools via MCP endpoint
 - [ ] `[NOT DONE]` Test: external client (Claude Code) connects to our MCP endpoint, calls snapshot
+- [ ] `[NOT DONE]` Implement MRTR (multi-round-trip) + cacheable tool lists (`ttlMs`) per the 2026-07-28 stateless spec (doc 61); consume managed live-data MCP (MongoDB/Postgres/SQLite) as read/gated-write tools (doc 62 — F15 already = Calendar, no new row)
 
 ### P6.8 Harness-Driving via ACP (F12/J17 — doc 35 §C, doc 45 ACP, doc 52 surgical hierarchy, doc 56 cowork-forge, doc 57 ACP registry)
 - [ ] `[NOT DONE]` Integrate official ACP Rust SDK (`agent-client-protocol` crate)
@@ -530,6 +535,7 @@
 - [ ] `[NOT DONE]` Add **auth-mode badge** to the harness UI (subscription-backed / API-key-backed / local — doc 57 §3); Claude Agent = **subscription-backed (allowed via the official ACP wrapper, Anthropic co-authored)**
 - [ ] `[NOT DONE]` Add **CodeWhale** (Hmbown/CodeWhale, 40.7K⭐ Rust MIT — the DeepSeek-TUI project renamed) to the F12 harness candidate set (doc 58 §6)
 - [ ] `[NOT DONE]` Write the **subscription-auth boundary** into the agent docs (doc 57 §3 + ARCH/06 §6.16): Claude via the official ACP wrapper = allowed (Anthropic co-authored); token-harvest for other engines = blocked; our broker stays API-key-only
+- [ ] `[NOT DONE]` A2A secondary interface (doc 61): A2A v1.0 + Signed Agent Cards for remote/third-party agent discovery & identity (J21); ACP stays the local-harness primary; AP2 post-v1
 
 ### P6.9 Messaging Bridges (F13 — doc 36 §B Secure OpenClaw; doc 39 §B1 DeerFlow channels-first run_policy/dedupe)
 > **Desktop-first scope (ARCH/11 R-1):** the agent lives in the open desktop app — messages arrive as in-app cards, no headless 24×7 daemon (we start desktop, not CLI→headless→desktop). Email/Telegram/WhatsApp first; Signal/iMessage + always-on daemon deferred to post-v1.
@@ -549,6 +555,7 @@
 - [ ] `[NOT DONE]` **Routing vocabulary (doc 59):** adopt lkgp (sticky last-good) + reset-aware/headroom (quota-aware key pick) + cache-optimized (prefix-pin to the key holding the cached prompt) + 13-factor scorer / 4 mode packs as the dynamic A7 selection layer
 - [ ] `[NOT DONE]` Implement dynamic model routing based on task classification
 - [ ] `[NOT DONE]` Implement shortest-path tier routing (doc 53 §5): tasks select the minimal tier chain (simple edit → direct; full chain only for broad refactors)
+- [ ] `[NOT DONE]` NeMo Switchyard-style routing (doc 62): Nemotron 3.5 Lightning executor-tier + frontier planner, escalate-by-floor (LangChain proof: 74% cheaper / 7% frontier calls / 145 tasks)
 
 ### P6.11 Email/Calendar Connectors (F14/F15 — doc 50)
 - [ ] `[NOT DONE]` Implement Gmail connector via Auth Bridge OAuth (gmail.readonly/send/modify scopes; tokens in everyaios-vault, background refresh)
@@ -586,7 +593,7 @@
 - [ ] `[NOT DONE]` **GenericAgent skill-tree growth (doc 58 §3):** every solved task → a versioned Skill with ownership markers (~100-line loop, 9 atomic tools) — adapt the discipline into I2 + B8 crystallization, never the runtime (its `code_run` installs packages / drives WeChat+Alipay = full OS control, which our dual-guard + shortest-path exist to prevent)
 
 ### P7.3 Extension/Plugin ABI (I6 — doc 44 §5 modularity, Zed WIT + Hermes allowed_*)
-- [ ] `[NOT DONE]` Define manifest.toml schema: abi_version, contributes, capabilities, trust_flags
+- [ ] `[NOT DONE]` Define manifest.toml schema: abi_version, contributes, capabilities, trust_flags; slot taxonomy incl. loop / scheduler / sandbox / session-store (doc 61 — DeepSeek Harness/Cordis validation)
 - [ ] `[NOT DONE]` Implement schema validation at load (reject invalid manifests)
 - [ ] `[NOT DONE]` Implement plugin registry: scan ~/.everyaios/plugins/ at boot
 - [ ] `[NOT DONE]` Implement lazy activation: registered-but-not-loaded until first use
@@ -690,7 +697,7 @@
 
 ### P8.9 Sync / Export / Wipe (C8 — v2.0 §P8)
 - [ ] `[NOT DONE]` E2E-encrypted memory/message sync (opt-in, LAN/Tailscale/own server)
-- [ ] `[NOT DONE]` Export: messages/memory as markdown/JSON
+- [ ] `[NOT DONE]` Export: messages/memory as markdown/JSON; Obsidian-compatible `.md` memory mirror (`[[wiki-link]]`s, doc 61 — OpenHuman validation; view surface, not a second store)
 - [ ] `[NOT DONE]` Per-scope wipe (chat, memory scope, connector data, all)
 
 **P8 Exit Criterion:** Windows beta installs & runs; **idle/warm RSS measured & published with the coordinator running** (<30MB idle / <80MB warm are targets to verify, not promises — the Bun sidecar alone is ~93MB, J16); telemetry off-by-default; all UIs functional.
@@ -1079,12 +1086,12 @@
 | Phase | Tasks | Weeks |
 |---|---|---|
 | P0 Workspace & Skeleton | 46 | ~2 |
-| P1 Chat + BYOK | 52 | ~4 |
+| P1 Chat + BYOK | 54 | ~4 |
 | P2 Browser Layer | 82 | ~6 |
 | P3 Cockpit & Audit UI | 14 | ~4 |
 | P4 Office Engine | 48 | ~5 |
 | P5 Memory + Token Economy | 60 | ~5 |
-| P6 Orchestration + Connectors | 82 | ~5 |
+| P6 Orchestration + Connectors | 87 | ~5 |
 | P7 Forge + Guardrails | 53 | ~4 |
 | P8 Product Polish | 37 | ~3 |
 | P9+ Post-v1 | 22 | later |
@@ -1093,6 +1100,6 @@
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **47** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 54 | parallel |
-| **TOTAL** | **749** | **~45 weeks** |
+| **TOTAL** | **756** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

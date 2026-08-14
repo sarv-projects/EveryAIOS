@@ -1,8 +1,8 @@
 # DESKTOP-APP-SPEC.md — Complete Product Specification
 
-> **Version:** v3.15 · **Date:** 2026-08-13 · **Supersedes:** v3.14
+> **Version:** v3.16 · **Date:** 2026-08-14 · **Supersedes:** v3.15
 > **Version history:** see `SPEC-CHANGELOG.md` (archived 2026-08-10 — this file is a clean build document).
-> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–60, **247 repos**, ledger docs 27+46+47+48+49+50+52+54+55+56+57+58+60) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
+> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–62, **255 repos**, ledger docs 27+46+47+48+49+50+52+54+55+56+57+58+60+61+62) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
 > **This app is OPEN SOURCE, local-first, BYOK.** Nothing in the architecture requires a founder-run server — not now, not later.
 > **IPC Architecture validated (doc 42):** code-verified against OpenFang `crates/openfang-kernel/src/kernel.rs` (20+ subsystems, RBAC, Merkle audit, DashMap abort handles) + ZeroClaw `crates/zeroclaw-api/src/lib.rs` (kernel ABI traits: ModelProvider/Channel/Tool/Memory/Observer/RuntimeAdapter). The "sidecar proposes, Rust disposes" axiom is production-proven — both systems use the identical kernel-with-syscalls model with capability-based security.
 
@@ -21,23 +21,23 @@
 | A2 | **Multi-key per provider** — key rings: N keys/provider, priority + weight, per-key model filter, budgets, health | 🔵 |
 | A3 | **Auto-failover rotation** — 429/401/5xx → cooldown → immediate next key; max-switches; all-fail backoff (**doc 59 upgrade:** lkgp sticky-to-last-good + reset-aware/headroom quota-aware pick + cache-optimized prefix-pin) | 🔵 |
 | A4 | OAuth subscriptions — ChatGPT Pro (PKCE) / Copilot·Qwen (device-code), encrypted tokens, same fallback semantics | 🔵 (⚠️ ChatGPT Pro calls the unofficial `chatgpt.com/backend-api` endpoint — kept user-driven (Hermes/OpenCode pattern), ToS-risk documented (doc 57 §3), flag-gated) |
-| A5 | Local models — Ollama managed + llamafile single-binary (≥15–20K ctx warning; **doc 58:** llmfit hardware-fit picker before spawn — `recommend --json`) | 🟢+🔵 |
+| A5 | Local models — Ollama managed + llamafile single-binary + **MLX (Mac, Rapid-MLX — doc 61)**; **agent-native class (doc 61): Muse Glimmer (30B dense, 120K ctx) + Nemotron 3.5 Lightning (30B MoE/3B active)** → retire the 15–20K ctx warning for this class; **doc 58:** llmfit hardware-fit picker before spawn — `recommend --json` | 🟢+🔵 |
 | A6 | Model catalog + capability hints (tools/vision/ctx) — router picks per task (**doc 58/59:** ingest OmniRoute's API-key/local/keyless catalog as the A6 long tail — MIT `PROVIDER_REFERENCE.md`; cookie/OAuth classes = doc-57 reject list) | 🟢 |
-| A7 | Asymmetric tiering — planner_model / subagent_models / depth=2 / concurrency=6 / writers=3 (**doc 59:** 13-factor weighted scorer + 4 mode packs + `auto/category:tier` DSL as the dynamic selection layer) | 🟡 |
+| A7 | Asymmetric tiering — planner_model / subagent_models / depth=2 / concurrency=6 / writers=3 (**doc 59:** 13-factor weighted scorer + 4 mode packs + `auto/category:tier` DSL as the dynamic selection layer; **doc 62:** LangChain×Switchyard proof — 74% cheaper / 7% frontier calls across 145 tasks (Nemotron Lightning executor + Opus planner, escalate-by-floor not default); ACRouter C-A-F = post-v1 dynamic-learning tail) | 🟡 |
 | A8 | Local OpenAI-compatible server — expose engine for VS Code/Cursor reuse | 🟡 |
-| A9 | Cache-aware costs — cache_read/cache_write/$ per call, key-affinity | 🔵 |
+| A9 | **Cache-aware costs + 3-layer cache stack (doc 62)** — cache_read/cache_write/$ per call, key-affinity; **prompt cache** (provider markers: Anthropic `cache_control:ephemeral`, OpenAI ≥1024-token prefix) + **semantic cache** (local vector, ~0.92 sim, 7d/24h TTL) + **result cache** (dependency-tagged invalidation, 3d TTL); read-only-intent only — never serves into mutation paths | 🔵 |
 | A10 | **Image generation** — text-to-image + image-to-image (GPT-Image-1 / DALL·E 3 / Flux / Stable Diffusion / any MCP image server) as a provider endpoint; same key-ring + failover semantics (A2/A3); results as ref-handles, never raw in context (doc 50) | ⚪ |
 
 ### B. Agent orchestration
 | ID | Capability | Status |
 |---|---|---|
 | B1 | Agent loop (pi-style) — streaming, length-guard (fail truncated tool calls), model-swap hook, cost ledger | 🟡 |
-| B2 | Spec-driven blueprints — .md → agent registry; continuous plan rewrite; dependency resolution; resume-after-reboot | 🟡 |
+| B2 | Spec-driven blueprints — .md → agent registry; continuous plan rewrite; dependency resolution; resume-after-reboot; **plan cache (doc 62):** index plans by task signature (~0.85 sim, `plans.db`, version-based invalidation) before fresh planning inference | 🟡 |
 | B3 | Sub-agents — role isolation, own context+workspace, DELEGATE_BLOCKED_TOOLS | 🟢+🟡 |
 | B4 | Inter-agent messaging — peer-review, cross-check, sub-routines; no recursive spawn | 🟡 |
-| B5 | Grammar-enforced extraction — ```blocks → tool calls (weak models); **local models use GBNF grammar constraints at the logit sampling layer** (llama.cpp/Ollama) — physically impossible to output invalid tool-call JSON; automatic fallback escalation to cloud model after 2 schema parse failures | 🟢 |
+| B5 | Grammar-enforced extraction — ```blocks → tool calls (weak models); **local models use GBNF grammar constraints at the logit sampling layer** (llama.cpp/Ollama) — physically impossible to output invalid tool-call JSON; automatic fallback escalation to cloud model after 2 schema parse failures; **self-healing parse repair (doc 61):** attempt malformed-JSON repair (quote/brace/trim) before escalating | 🟢 |
 | B6 | Iteration/subagent budgets — parent 500 / subagent 50 (Hermes, iteration_budget.py); **subagent_depth=2** (OpenCode); subagent timeout 900s custom / 1800s global (DeerFlow); max_concurrent_subagents=3 / max_total_per_run=6 (DeerFlow); execute_code refunded (Hermes); loop detector: 3x repeated args → interrupt (OpenCode); **on circuit-break: freeze DAG state at task boundary → present MCQ interrupt card (skip / retry with guidance / escalate model / manual override) → resume from frozen point without re-running completed steps** | 🟡 |
-| B7 | Scheduled tasks — cron/interval/event/webhook; nudge sentinels (suggest_schedule) | 🟢+🟡 |
+| B7 | Scheduled tasks — cron/interval/event/webhook; nudge sentinels (suggest_schedule); **event-driven triggers (doc 62, Gartner):** CI build-fail / test-regression / repo-change (push/PR/issue) / ticket-assign / telemetry-threshold, with scope+frequency policy controls | 🟢+🟡 |
 | B8 | Crystallization — multi-step workflows → deterministic loops, **0 tokens** | 🟢 🔁 |
 
 ### C. Memory & context
@@ -50,18 +50,18 @@
 | C5 | Embeddings (optional) — on-device bge-micro/gte-small, int8/vec0 | 🟢 |
 | C6 | Knowledge graph store — LadybugDB embedded graph (Kuzu community fork, C++, ACID, Cypher, vector+FTS built-in), temporal edges | 🟡 |
 | C7 | Memory injection — warm set 0ms TTFT, scope-leakage floors, budgets | 🟢+🟡 |
-| C8 | Sync/export/wipe — E2E-encrypted sync (opt-in), export, per-scope wipe | 🟢 |
+| C8 | Sync/export/wipe — E2E-encrypted sync (opt-in), export, per-scope wipe; **doc 61:** Obsidian-compatible `.md` memory mirror (`[[wiki-link]]`s) + 20-min auto-fetch cadence (OpenHuman pattern — a view/export surface, not a second store) | 🟢 |
 | C9 | **Taste profile** — auto-learned coding-preference profile (style/patterns/frameworks/naming) with confidence scores 0–1; shareable markdown (`~/.everyaios/taste/` + per-repo `.everyaios-taste/`); stable-prefix symbolic prior at generation; learns from accept/reject/edit via correction-detector + audit (Command Code taste-1 pattern — proprietary, pattern only) | 🟡 |
 | C10 | **Pass-by-reference context** — files/datasets/tool results as live handles + bounded previews; agent queries/slices via sandboxed script-eval (E4) instead of loading payloads into context (NOOA pattern, doc 39) | 🟡 |
 | C11 | Temporal knowledge graph — Graphiti-pattern bi-temporal entity/fact tracking with validity windows | 🔵 |
-| C12 | Cognee-pattern full-stack memory — KG + vectors + sessions on single Postgres/SQLite | 🔵 |
+| C12 | Cognee-pattern full-stack memory — KG + vectors + sessions on single Postgres/SQLite; **doc 61:** every memory asset also exports to `~/.everyaios/memory/**/*.md` (readable/git-versioned — OpenHuman validation; preserves doc-60 "one memory model") | 🔵 |
 
 ### D. Office & files (user-critical)
 | ID | Capability | Status |
 |---|---|---|
 | D1 | **Word open+edit** — block-patch engine, byte-preserving w:t, headers/tables/sections | 🟡 (P4.1 ✅) |
 | D2 | **Excel open+edit** — IronCalc recalc + calamine read + workbook DSL + deterministic planner + flash-fill/pivot (**doc 58:** Univer = the H5 *view* surface; surgical patch + IronCalc = the mutation engine — one calc engine, not both) | 🟡 (P4.2 ✅) |
-| D3 | **PPT open+edit** — surgical OOXML part editing (slides), add/remove slides, text/shape ops (**doc 58:** ppt-master = the "author a new deck" path — template-clone + chart/table model, native shapes not images) | 🟡 |
+| D3 | **PPT open+edit** — surgical OOXML part editing (slides), add/remove slides, text/shape ops (**doc 58:** ppt-master = the "author a new deck" path — template-clone + chart/table model, native shapes not images) | 🟡 (P4.3 ✅) |
 | D4 | **PDF open+edit** — render (pdf.js), form-fill/annotate (pdf-lib), text-swap (lopdf), redact, re-author | 🟡 |
 | D5 | Universal read/ingest — markitdown-class extraction → RAG, chat overlay | 🟢 |
 | D6 | Round-trip conformance — LibreOffice oracle in CI, byte-stability asserts | 🟡 |
@@ -98,8 +98,8 @@
 | F3 | Browser-session connectors — drive logged-in web apps via browser layer | 🔵+🟡 |
 | F4 | Local Auth Bridge — project PKCE client, no secret, local token manager | 🔵 |
 | F5 | Composio/Zapier/Nango — user-key, self-hosted/optional (never required) | 🟢 |
-| F6 | MCP client (consume) — connect external MCP servers, reconcile | 🟢 |
-| F7 | MCP server (serve) — our tools to Claude Code/Codex/Cursor/... via one endpoint | 🔵 |
+| F6 | MCP client (consume) — connect external MCP servers, reconcile; **doc 61:** cacheable tool lists (`ttlMs`) + MRTR long-running-ops (2026-07-28 spec); **doc 62:** managed live-data MCP (MongoDB/Postgres/SQLite) = consume-path only — query/inspect/update live operational data (F15 already = Calendar, no new row) | 🟢 |
+| F7 | MCP server (serve) — our tools to Claude Code/Codex/Cursor/... via one endpoint; **doc 61:** cacheable tool lists (`ttlMs`) + MRTR (2026-07-28 spec) | 🔵 |
 | F8 | Harness installer — plan-before-touch install into the **F12 harness set (9 CLIs — list lives in F12)**, ownership markers (doc 33 §8 harness-integrations pattern); **registry-fed discovery from the official ACP agent registry** (doc 57 §2 — CDN catalog + local cache + version pinning + curated allow-list) | 🔵 |
 | F9 | Unified Tool Registry — one normalized ToolDefinition + permission classes; **adopts the ACP tool-kind taxonomy** (read/edit/delete/move/search/execute/think/fetch/other, doc 45 §4.3) | 🟢 |
 | F10 | WSL/POSIX bridge — `wsl.exe` runners, `\\wsl.localhost\` paths, loopback IPC, native Linux exec | 🟡 |
@@ -145,7 +145,7 @@
 | H19 | **Progress steps panel** — unified timeline of all agent actions (shell+code+browser+office), clickable entries, timestamps | 🔵 |
 | H20 | **Workspace tabs (9-tab live view)** — Shell/Code/Browser/Excel/Word/PPT/PDF tabs showing live agent work in real-time | 🔵 |
 | H21 | **Takeover/resume flow** — pause agent → user edits → resume with mandatory change description | 🔵 |
-| H22 | **Automation builder (NL + templates)** — event-driven workflow creation with NL input + 10+ pre-built templates | 🔵 |
+| H22 | **Automation builder (NL + templates)** — event-driven workflow creation with NL input + 10+ pre-built templates; **doc 61:** visual node-graph editor surface (Flock/tinyflows pattern, ReactFlow-class) | 🔵 |
 | H23 | **Knowledge browser (trigger+macro)** — browse/edit knowledge items with trigger recall, macros, folders, repo-pinning | 🔵 |
 | H24 | **MCP marketplace** — browse/install/manage MCP servers with status indicators and categories | 🔵 |
 | H25 | **Generative UI (AG-UI)** — live agent-emitted components in chat (AG-UI wire protocol, ~16 event types, single channel); sandboxed iframe + strict CSP + process isolation (Anthropic Artifacts pattern); artifact cards upgrade from static previews to live components (doc 50) | 🔵 |
@@ -161,7 +161,7 @@
 | I3 | WASM fuel-metered sandbox — compute budget + epoch kill | ⚪ |
 | I4 | TDD loop — auto-generate tests, read stderr, rewrite | 🟡 |
 | I5 | ECC guardrails — plan-before-build, session scanning (**doc 58:** better-harness 5-dimension loop self-audit as the post-session report — evidence-bounded, "missing evidence stays explicit") | 🟡 |
-| I6 | **Extension/plugin ABI** — versioned bundles (`abi_version` in manifest, cumulative host adapters like Zed's WIT `since_v0_0_x`), typed manifest with `contributes` (tools/skills/connectors/search-adapter) + `capabilities` allow-lists (**per-command/arg wildcards `*`/`**` — Zed `CapabilityGranter`), per-extension trust flags fail-closed (Hermes `allowed_*`), explicit agent-binding (never global — Cherry Studio), lazy activation (VS Code), host-owned facades (`ctx.llm`/`ctx.files`/`ctx.approval`), dogfood rule (first-party features ship as plugins — bootstrap caveat: P4–P6 features are built directly into crates and migrated to bundles once the ABI lands in P7) (doc 44 §5) | 🟡 |
+| I6 | **Extension/plugin ABI** — versioned bundles (`abi_version` in manifest, cumulative host adapters like Zed's WIT `since_v0_0_x`), typed manifest with `contributes` (tools/skills/connectors/search-adapter) + `capabilities` allow-lists (**per-command/arg wildcards `*`/`**` — Zed `CapabilityGranter`), per-extension trust flags fail-closed (Hermes `allowed_*`), explicit agent-binding (never global — Cherry Studio), lazy activation (VS Code), host-owned facades (`ctx.llm`/`ctx.files`/`ctx.approval`), dogfood rule (first-party features ship as plugins — bootstrap caveat: P4–P6 features are built directly into crates and migrated to bundles once the ABI lands in P7) (doc 44 §5); **doc 61:** DeepSeek Harness/Cordis (93K⭐ MIT) independently ships this exact model — add **loop / scheduler / sandbox / session-store** to the plugin-slot taxonomy so a future "swap the loop" isn't a core rewrite | 🟡 |
 | I7 | **RepoMap (tree-sitter + PageRank) + Warp semantic index (doc 56)** — deterministic context selection (tag extraction, graph building, personalized PageRank, binary-search budget fitting, zero embeddings) + **optional semantic layer** (Warp merkle-tree incremental embedding index — one crate, two query paths) gated behind C5 (**doc 58:** future *third* path = codebase-memory-mcp symbol-KG + crux SCIP — spawn-only, never "run all and fuse") | 🔵 |
 | I8 | **Edit strategy pattern (per-model)** — multiple edit formats (SEARCH/REPLACE, udiff, whole, patch) with fuzzy matching, selected per model | 🔵 |
 | I9 | **Architect mode (two-pass)** — reasoning model → editor model split for code changes (aider-reported 82.7% benchmark — doc 51); **composes with F12 surgical hierarchy (surgeon tier may run the two-pass); distinct from the oracle/review pass (TODO P11.5.10)** | 🔵 |
@@ -174,19 +174,19 @@
 | J2 | Guard-1 regex interceptors — compiled blocklist, pre-exec scan | 🔵 |
 | J3 | Guard-2 diff cards — native click-to-approve, non-bypassable (web sensitive-action confirm dialogs included) | 🔵 |
 | J4 | Path/scope hard-floors — canonicalization, symlink-safe boundaries | 🔵 |
-| J5 | Audit trail — append-only, token estimates, receipts, replay; **durable event log + idempotency classes (doc 53 §4: safe-retry / unsafe / same-key / confirm-after-uncertain)** | 🔵 |
+| J5 | Audit trail — append-only, token estimates, receipts, replay; **durable event log + idempotency classes (doc 53 §4: safe-retry / unsafe / same-key / confirm-after-uncertain)**; **doc 61:** add "context injection" as a logged event type + inspect-by-source Trajectory view (DeepSeek Harness traceable-stream pattern → P3.1/P3.2) | 🔵 |
 | J6 | Prompt-injection defense — `<user_document>` wrapping, context scan, tool-result sanitization | 🟡 |
 | J7 | ProcessSupervisor — spawn/restart/backoff/circuit-breaker | 🔵 |
-| J8 | Key vault — SQLCipher, CES executor, crash scrubbing | 🔵 |
+| J8 | Key vault — SQLCipher, CES executor, crash scrubbing; **named principle: "keys never reach the agent"** (broker injects auth headers, doc 53 §2; nilbox Zero-Token validation, doc 61) | 🔵 |
 | J9 | Config-as-files — everyaios.toml + agents/*.md + providers.toml | 🟡 |
 | J10 | Watchdog — connect/idle timeouts re-armed per byte | 🔵+🟢 |
-| J11 | **Hard $ budget per session** — default $2.00/agent, configurable; enforce via core-providers `live-pricing` + sqlite counters; kill sidecar on exceed; surface "stopped: $X limit" to UI; reasonix token discipline as upstream brake | 🟡 |
+| J11 | **Hard $ budget per session** — default $2.00/agent, configurable; enforce via core-providers `live-pricing` + sqlite counters; kill sidecar on exceed; surface "stopped: $X limit" to UI; reasonix token discipline as upstream brake; **doc 62:** per-task budgets are mandatory (50–150× cost variance easy→hard); add the `lower_cost` profile (cost_gate/thinking_budget 1K/context_budget 8K/max_iterations 6 — OpenCastor shape) | 🟡 |
 | J12 | **Orphan-prevention on Rust death** — Linux `prctl(PR_SET_PDEATHSIG, SIGTERM)` (code-verified in supervisor.rs); Windows Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`; macOS process group via `posix_spawn`; belt+suspenders parent-PID polling every 5s in sidecar (Mitigates TC-1.1 landmine, doc 43) | 🔵 |
 | J13 | **Sidecar heap safety** — `--max-old-space-size=512`; self-restart at 80% heap used; controlled by ProcessSupervisor from last Hermes checkpoint (20snap/500MB); 30min session → forced rotation (Mitigates TC-4.2 landmine, doc 43) | 🔵+🟢 |
 | J14 | **Distributed tracing** — OpenTelemetry Rust↔Node with shared `trace_id`; audit table gains `trace_id` + `span_id` columns (Agno-validated pattern, Mitigates TC-2.3 landmine, doc 43); agent-session observability references: agentlens (local coding-agent traces), agentsight (eBPF system-level) (doc 52) | 🟡 (P3.3 ✅) |
 | J15 | **Length-prefixed IPC framing** — `[u32 LE length][bytes payload]`; bounded channels (capacity=16) with backpressure; truncation tag → `ref:` handle (Mitigates TC-2.2 landmine, doc 43) | 🔵 |
 | J16 | **Process lifecycle hardening** — UNIX-domain socket preferred over TCP for sidecar (zero port collision); pre-spawn `coordinator` at Tauri boot (hidden, 200ms perceived cold start, Bun-compiled binary — measured 2026-08-13: `~/.bun/bin/bun` = 92.7MB); keep sidecar warm 5min idle before kill; **battery-aware scheduling**: suppress heavy background indexing/embedding on battery power (detect via OS power APIs), defer to AC power or >5min idle (Mitigates TC-1.2/1.3/1.4 landmines, doc 43) | 🔵 |
-| J17 | **ACP harness bridge** — ACP client over stdio JSON-RPC (official `agent-client-protocol` Rust crate or `@agentclientprotocol/sdk` in coordinator) for F12; `initialize` handshake (protocolVersion + capability negotiation, optional-by-default = our ABI-versioning model); `session/request_permission` → Trust Ladder + Guard-2 cards; `session/update` (tool calls, file ops) → everyaios-audit NDJSON; `session/cancel` + stop-reasons → watchdog/budget kill points; v2-draft monitored (structured diff + `git_patch` → diff-card renderer) (doc 45 §4–6); **generalized-client reference: Hermes issue #5257** (`copilot_acp_client.py` → generic `ACPClient` + `acp_agent_registry.py` — drives Claude Code/Codex/Gemini CLI as ACP agents, doc 57 §2) | 🟡+🔵 |
+| J17 | **ACP harness bridge** — ACP client over stdio JSON-RPC (official `agent-client-protocol` Rust crate or `@agentclientprotocol/sdk` in coordinator) for F12; `initialize` handshake (protocolVersion + capability negotiation, optional-by-default = our ABI-versioning model); `session/request_permission` → Trust Ladder + Guard-2 cards; `session/update` (tool calls, file ops) → everyaios-audit NDJSON; `session/cancel` + stop-reasons → watchdog/budget kill points; v2-draft monitored (structured diff + `git_patch` → diff-card renderer) (doc 45 §4–6); **generalized-client reference: Hermes issue #5257** (`copilot_acp_client.py` → generic `ACPClient` + `acp_agent_registry.py` — drives Claude Code/Codex/Gemini CLI as ACP agents, doc 57 §2); **A2A = secondary interface (doc 61):** ACP drives local CLIs (F12); A2A v1.0 + Signed Agent Cards for remote/third-party agent discovery & identity (J21); AP2 noted post-v1 | 🟡+🔵 |
 | J18 | Profile-gated hooks — minimal/standard/strict security enforcement profiles | 🔵 |
 | J19 | Merkle hash-chain audit — cryptographic tamper-evident append-only log | 🔵 |
 | J20 | AgentShield config scanning — scan everyaios.toml/blueprints/MCP for injection | 🔵 |
@@ -347,32 +347,19 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 
 ## 4. Architecture (Frozen — hybrid, from ARCH/01–02/08)
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ TAURI WINDOW (Rust) — lean native webview (RSS target measured at P8)  │
-│ Chat+KaTeX · Reader · Workspace (Editor · Files · Terminal · Git)      │
-│ Office editors · Connector Hub UI · Permission cards                   │
-│ Token/cost analytics · Cockpit/replay · Tray                           │
-└────────────────────────────────────┬───────────────────────────────────┘
-                                     IPC (local WebSocket / JSON-RPC, stdio framing)
-┌────────────────────────────────────▼───────────────────────────────────┐
-│ RUST CORE — everyaios-core (the safety + browser + scripts owner)      │
-│ cdp · browser · script · guard · audit · mcp · vault · ipc             │
-│ · CDP driver + tiered engines (Chrome/Edge → Obscura/Lightpanda)       │
-│ · rquickjs `run` sandbox · Guard1/Guard2 · append-only audit           │
-│ · key-ring vault + Session Vault (SQLCipher) · MCP server              │
-└─────────────────┬──────────────────┬─────────────────┬─────────────────┘
-      │                  │                      │
-┌─────────────────┐  ┌───────────────┐  ┌────────────────────┐
-│ NODE            │  │ BROWSER       │  │ EXECUTION          │
-│ SIDECAR —       │  │ child(s)      │  │ SANDBOX            │
-│ coordinator     │  │ (tiered,      │  │ Docker/WSL/MicroVM │
-│ (reuses core-*) │  │ CDP loopback) │  │ + WSL bridge       │
-└─────────────────┘  └───────────────┘  └────────────────────┘
-      │  core-engine · core-memory · core-files · core-search
-      │  core-connectors · core-automations · core-providers
-      │  core-tools · core-sync · blueprint loader · harness-driving
-      └── SQLite (app.db · memory.db · vault.db) + sqlite-vec + FTS5 + LadybugDB
+```mermaid
+flowchart TD
+    UI["**TAURI WINDOW (Rust)** — lean native webview<br/>Chat · Reader · Workspace (Editor/Files/Terminal/Git) · Office · Connector Hub · Permission cards · Cockpit/Replay · Tray"]
+    CORE["**RUST CORE — everyaios-core** (safety + browser + scripts owner)<br/>cdp · browser · script · guard · audit · mcp · vault · ipc<br/>CDP driver + tiered engines (Chrome/Edge → Obscura/Lightpanda)<br/>rquickjs run sandbox · Guard1/Guard2 · append-only audit<br/>key-ring vault + Session Vault (SQLCipher) · MCP server"]
+    SIDE["**NODE SIDECAR** — coordinator (reuses core-*)"]
+    BROWSER["**BROWSER child(s)** — tiered · CDP loopback"]
+    SANDBOX["**EXECUTION SANDBOX** — Docker/WSL/MicroVM + WSL bridge"]
+    DB[("SQLite — app.db · memory.db · vault.db<br/>sqlite-vec + FTS5 + LadybugDB")]
+    UI -->|"IPC — local WebSocket / JSON-RPC, stdio framing"| CORE
+    CORE --> SIDE
+    CORE --> BROWSER
+    CORE --> SANDBOX
+    SIDE -->|"core-engine · core-memory · core-files · core-search<br/>core-connectors · core-automations · core-providers<br/>core-tools · core-sync · blueprint loader · harness-driving"| DB
 ```
 
 **Division of trust (the core safety axiom): the sidecar proposes, Rust disposes.** Every mutating call from the TS sidecar requires a `everyaios-guard` authorization ticket; browser/script/audit/keys live only in Rust. Key decisions (code-verified in research): Tauri not Electron (lean native webview vs 500MB+ Electron — real RSS measured at P8, see J16/P8); single-window SPA, not multi-tab webviews; supervised child processes with reconnect/resume; Markdown specs not config UIs; cache-first token discipline; dual-guard security; tiered browser engines; zero founder servers.
@@ -395,14 +382,17 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 **OpenFang kernel reference (everyaios-core assembly):** Our `everyaios-core` follows `OpenFangKernel`'s subsystem assembly: registry + capabilities + event_bus + scheduler + supervisor + triggers + workflows + metering + sandbox + audit_log + auth + running_tasks (DashMap<AgentId, AbortHandle>). **ZeroClaw ABI reference (kernel traits):** Our kernel traits follow ZeroClaw's `model_provider / channel / tool / observability_traits / memory_traits / peripherals_traits / runtime_traits / session_keys` pattern.
 
 **Extension ABI (the six layers, doc 44 §5.1):**
-```
-plugin-bundle/
-├── manifest.toml    → abi_version + contributes (tools/skills/connectors/search-adapter)
-│                      + capabilities allow-lists (process:exec {command, args[*,**]}, http {hosts,methods}, files {paths,modes})
-│                      + trust flags (fail-closed allowed_*) + explicit agent-binding
-├── SKILL.md / rules → declarative intelligence, glob-scoped (Cursor-style)
-├── code/            → entrypoint in existing sandbox (rquickjs 64MB/30s, or subprocess)
-└── assets/          → icons, prompts, config templates
+```mermaid
+flowchart TD
+    B["plugin-bundle/"]
+    M["manifest.toml → abi_version + contributes (tools/skills/connectors/search-adapter)<br/>+ capabilities allow-lists (process:exec {command, args[*,**]}, http {hosts,methods}, files {paths,modes})<br/>+ trust flags (fail-closed allowed_*) + explicit agent-binding"]
+    S["SKILL.md / rules → declarative intelligence, glob-scoped"]
+    C["code/ → entrypoint in existing sandbox (rquickjs 64MB/30s, or subprocess)"]
+    A["assets/ → icons, prompts, config templates"]
+    B --> M
+    B --> S
+    B --> C
+    B --> A
 ```
 1. **Manifest schema** — typed, schema-validated at load, `abi_version` mandatory (Zed `schema_version` pattern; cumulative host adapters like WIT `since_v0_0_x`). 2. **Registry + lazy activation** — scan `~/.everyaios/plugins/` at boot → validate → register contribution points → load code only on first use. 3. **Capability granter** — port Zed's `CapabilityGranter` into `everyaios-guard`: double-check (manifest allow-list ∧ host grant) before any exec/FS/network/shell; copy Zed's unit-tested `*`/`**` argument matcher. 4. **Host-owned facades** — `ctx.llm` (Hermes), `ctx.files` (capability-scoped), `ctx.web`, `ctx.approval()` (AnythingLLM requestToolApproval → Guard-2). Plugin never touches vault/browser-session/audit. 5. **Versioned ABI** — `abi_version` + cumulative host adapters; host vN serves plugin v1..vN. 6. **Explicit binding** — capabilities bound to specific agents/workspaces only, never global.
 
@@ -448,6 +438,93 @@ plugin-bundle/
 
 ---
 
+## 4.2 End-to-End System Flows (Mermaid)
+
+> The complete data paths — every flow below traces to §0 rows + ARCH/01–12. The one invariant across all of them: **the sidecar proposes, Rust disposes** (every mutating call passes Guard-1 → optional Guard-2 → authorization ticket → Rust-owned execution → append-only audit).
+
+### 4.2.1 Trust & execution (dual-guard) — the core axiom (J1/J2/J3/J21)
+```mermaid
+flowchart TD
+    AGENT["Agent (sidecar) proposes a mutation"] --> GUARD1{"Guard-1 — deterministic pre-exec scan<br/>regex blocklist · path floors · URL scheme guard"}
+    GUARD1 -->|"deny (blocklist hit)"| AUDIT["Append-only audit event → replay"]
+    GUARD1 -->|"auto-safe (read-only, in-scope)"| TICKET["Authorization ticket<br/>ticket_id · agent_id · session_id · tool_id · args-hash · paths · expiry · single-use · approval-source · risk · audit-seq"]
+    GUARD1 -->|"needs consent"| GUARD2["Guard-2 — native OS approval card<br/>exact paths · script lines · targets · env · network"]
+    GUARD2 -->|"approve"| TICKET
+    GUARD2 -->|"reject"| AUDIT
+    TICKET --> EXEC["Rust-owned execution<br/>browser CDP · rquickjs script · file op · shell"]
+    EXEC --> AUDIT
+```
+
+### 4.2.2 Chat & streaming + credential broker (A1–A4, B1, A9, J8)
+```mermaid
+flowchart LR
+    UI["Chat UI"] -->|"chat_stream"| CORE["Rust core broker"]
+    CORE --> VAULT["everyaios-vault — resolves key (SQLCipher)"]
+    VAULT -->|"inject auth headers, scrub buffers — keys never reach the agent"| PROV["Provider HTTP call<br/>Anthropic / OpenAI / Ollama / …"]
+    PROV -->|"SSE token stream"| CORE
+    CORE -->|"chat-event — 33ms batch, TTFT"| UI
+    CORE --> LEDGER["cost ledger + per-session budget (J11)"]
+```
+
+### 4.2.3 Cost, cache & routing (A9 3-layer stack · A7 · J11)
+```mermaid
+flowchart LR
+    REQ["LLM request"] --> P{"prompt cache hit?<br/>(static prefix)"}
+    P -->|"hit — ~50% cached input"| OUT["serve"]
+    P -->|"miss"| S{"semantic cache hit?<br/>(~0.92 sim, local vector)"}
+    S -->|"hit — no call (20–40%)"| OUT
+    S -->|"miss"| R{"result cache hit?<br/>(dependency-tagged)"}
+    R -->|"hit — no call (10–25%)"| OUT
+    R -->|"miss"| ROUTE["A7 routing — planner vs executor tier<br/>(Nemotron Lightning executor · frontier planner)"]
+    ROUTE --> BUDGET{"J11 budget pre-flight"}
+    BUDGET -->|"over"| KILL["kill — stopped: $X limit"]
+    BUDGET -->|"ok"| CALL["provider call"]
+```
+
+### 4.2.4 Browser loop (E1–E14)
+```mermaid
+flowchart TD
+    NAV["navigate"] --> SNAP["a11y snapshot — interactive pruning, stable ref=eN"]
+    SNAP --> ACT["act — click/type via ref"]
+    ACT --> DIFF["diff — url-change short-circuit"]
+    DIFF --> SNAP
+    SNAP --> CHAL{"challenge? (captcha / 2FA)"}
+    CHAL -->|"yes"| SOLVE["E12 handler — human-in-loop → PoW → LLM visual → BYO solver"]
+    ACT --> VAULT["Session Vault — cookies / localStorage / IDB (SQLCipher)<br/>agent never sees raw cookies"]
+```
+
+### 4.2.5 ACP harness-driving (F12/J17) + A2A secondary (doc 61)
+```mermaid
+flowchart LR
+    WS["Workspace"] -->|"ACP client — stdio JSON-RPC"| ACP["External agent CLI<br/>Claude Code / Codex / OpenCode / …"]
+    ACP -->|"initialize — protocolVersion + capabilities"| WS
+    ACP -->|"session/request_permission"| G2["Guard-2 diff card"]
+    G2 -->|"approve"| ACP
+    ACP -->|"session/update — tool calls, file ops"| AUDIT["everyaios-audit NDJSON"]
+    WS -->|"session/cancel"| ACP
+    WS -.->|"A2A v1.0 + Signed Agent Cards (remote agents, secondary)"| REMOTE["remote / third-party agents"]
+```
+
+### 4.2.6 Memory pipeline (C1–C12)
+```mermaid
+flowchart TD
+    IN["Signals — chat turns · files · browser · connectors"] --> FUSION["Retrieval fusion — BM25 + vector + RRF, item/char/timeout caps"]
+    FUSION --> STORES["7 built algos + LadybugDB KG + Letta paging"]
+    STORES --> DISTILL["L0→L3 distillation (TencentDB pattern, doc 60)"]
+    DISTILL --> MIRROR["~/.everyaios/memory/**/*.md<br/>Obsidian mirror — wiki-links, git-versioned (doc 61)"]
+```
+
+### 4.2.7 Durable event log & replay (J5, P3)
+```mermaid
+flowchart LR
+    EV["Event — 10 types (turn · tool-call · file-op · approval · context-injection · …)"] --> LOG["Append-only NDJSON event log"]
+    LOG --> IDEM["Idempotency class — safe-retry / unsafe / same-key / confirm-after-uncertain"]
+    LOG --> REPLAY["Replay + has_gap detection"]
+    REPLAY --> UI["P3 cockpit / replay scrubber"]
+```
+
+---
+
 ## 5. What's ALREADY BUILT (map to `APP/packages/`) — with retest flags
 
 | Area | Shipped | Desktop status |
@@ -472,7 +549,7 @@ plugin-bundle/
 
 ## 6. What's NEW to build (the gap — complete list)
 
-> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P4.2** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**, **Word block-patch engine (D1)**, **Excel engine (D2 — calamine read + IronCalc truth recalc + workbook DSL + deterministic planner + surgical part-patch + virtualized grid)**). **P3 is complete; P4.1–P4.2 landed.** Next: **P4.3 PowerPoint** (surgical slide part-editing + add/remove slides). See §7 + `TODO.md` for the live phase state.
+> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P4.3** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**, **Word block-patch engine (D1)**, **Excel engine (D2 — calamine read + IronCalc truth recalc + workbook DSL + deterministic planner + surgical part-patch + virtualized grid)**, **PowerPoint part-editor (D3 — slide shapes + minimal `<a:t>` patch + add/remove slide)**). **P3 is complete; P4.1–P4.3 landed.** Next: **P4.4 PDF** (pdf.js render + form-fill/annotate + text-swap/redact/re-author). See §7 + `TODO.md` for the live phase state.
 
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
 2. **Rust core** — everyaios-cdp (tiered engines), everyaios-browser (snapshot/diff/ownership + session-vault cookie glue), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc

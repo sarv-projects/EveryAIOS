@@ -21,10 +21,20 @@
 //! - `xlsx::planner` — deterministic regex NLP → DSL (zero-LLM common ops),
 //!   `NeedsLlm` fallback (audit-flagged, permission-gated)
 //! - `xlsx::patch` — surgical `sheetN.xml`/`sharedStrings.xml` part-patch
+//!
+//! P4.3 ships the PowerPoint part-editor (D3, ARCH/04 §PowerPoint):
+//! - `pptx::parts` — package index (content types + presentation rels +
+//!   `<p:sldIdLst>` slide order)
+//! - `pptx::text` — slide shapes → paragraphs → `<a:t>` runs; render + minimal
+//!   byte-surgery patch (bullets/line-breaks are read-only markers)
+//! - `pptx::PptxEngine` — render/patch + add/remove slides (clone part + rels
+//!   + `[Content_Types].xml` registration) + byte-preserving save
 
 pub mod docx;
+pub mod pptx;
 pub mod xlsx;
 pub mod xml;
 pub mod zip;
 
 pub use docx::{DocxEngine, OfficeError};
+pub use pptx::PptxEngine;
