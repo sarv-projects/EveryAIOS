@@ -719,6 +719,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "everyaios-memory"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "everyaios-office"
 version = "0.1.0"
 dependencies = [

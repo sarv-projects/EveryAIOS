@@ -51,7 +51,7 @@
 | C6 | Knowledge graph store — LadybugDB embedded graph (Kuzu community fork, C++, ACID, Cypher, vector+FTS built-in), temporal edges | 🟡 |
 | C7 | Memory injection — warm set 0ms TTFT, scope-leakage floors, budgets | 🟢+🟡 |
 | C8 | Sync/export/wipe — E2E-encrypted sync (opt-in), export, per-scope wipe; **doc 61:** Obsidian-compatible `.md` memory mirror (`[[wiki-link]]`s) + 20-min auto-fetch cadence (OpenHuman pattern — a view/export surface, not a second store) | 🟢 |
-| C9 | **Taste profile** — auto-learned coding-preference profile (style/patterns/frameworks/naming) with confidence scores 0–1; shareable markdown (`~/.everyaios/taste/` + per-repo `.everyaios-taste/`); stable-prefix symbolic prior at generation; learns from accept/reject/edit via correction-detector + audit (Command Code taste-1 pattern — proprietary, pattern only) | 🟡 |
+| C9 | **Taste profile** — auto-learned coding-preference profile (style/patterns/frameworks/naming) with confidence scores 0–1; shareable markdown (`~/.everyaios/taste/` + per-repo `.everyaios-taste/`); stable-prefix symbolic prior at generation; learns from accept/reject/edit via correction-detector + audit (Command Code taste-1 pattern — proprietary, pattern only) | 🟡 (P5.6 ✅) |
 | C10 | **Pass-by-reference context** — files/datasets/tool results as live handles + bounded previews; agent queries/slices via sandboxed script-eval (E4) instead of loading payloads into context (NOOA pattern, doc 39) | 🟡 |
 | C11 | Temporal knowledge graph — Graphiti-pattern bi-temporal entity/fact tracking with validity windows | 🔵 |
 | C12 | Cognee-pattern full-stack memory — KG + vectors + sessions on single Postgres/SQLite; **doc 61:** every memory asset also exports to `~/.everyaios/memory/**/*.md` (readable/git-versioned — OpenHuman validation; preserves doc-60 "one memory model") | 🔵 |
@@ -220,10 +220,10 @@
 **New algorithms (to build for desktop — no retest flag, marked by pillar):**
 | # | Algorithm | Where | Status |
 |---|---|---|---|
-| 18 | Multi-signal retrieval fusion (mem0 SOTA: semantic + BM25 + entity-graph fused score; +29.6 temporal / +23.1 multi-hop claims) | C3 | 🟡 |
+| 18 | Multi-signal retrieval fusion (mem0 SOTA: semantic + BM25 + entity-graph fused score; +29.6 temporal / +23.1 multi-hop claims) | C3 | 🟡 (P5.1 ✅) |
 | 19 | Cross-encoder hybrid rerank (OpenWebUI chunk-merge + rerank steal) | C3 | 🟡 |
 | 20 | Agent-managed context paging (Letta pattern: core/archival/recall) | C2 | 🟡 |
-| 21 | Compaction pipeline — **base tiered-compaction/context-compressor shipped** (🔁); Reasonix ratio knobs (snip 0.6 → soft 0.5 → force 0.9) + byte-stable prefix = new | 05 / core-ai/context | 🔁 + 🟡 |
+| 21 | Compaction pipeline — **base tiered-compaction/context-compressor shipped** (🔁); Reasonix ratio knobs (snip 0.6 → soft 0.5 → force 0.9) + byte-stable prefix = new | 05 / core-ai/context | 🔁 + 🟡 (P5.7 ✅) |
 | 22 | Lossless prompt compaction — multi-agent logs → dense anchors + frozen-snapshot MEMORY.md | 05 | 🟡 |
 | 23 | Key-ring rotation/failover (cooldown ×2^failures, cap 5min; max 3 switches/call) | A2/A3 | 🔵 |
 | 24 | Session rotation across accounts (429/blocked/expired → next authorized account) | E11 | 🔵 |
@@ -231,10 +231,10 @@
 | 26 | Behavioral-realism input (Bézier mouse curves, typing cadence) | E14 | 🔵 |
 | 27 | Deterministic spreadsheet planner (regex NLP → workbook DSL, zero-LLM common ops) | D2 | 🟡 |
 | 28 | Block-patch document editing (anchored block tree, byte-preserving round-trip) | D1 | 🟡 |
-| 29 | RAG chunk-min-size merging (forward-only, markdown-aware) | C3/D5 | 🟡 |
+| 29 | RAG chunk-min-size merging (forward-only, markdown-aware) | C3/D5 | 🟡 (P5.1 ✅) |
 | 30 | Temporal KG edge-versioning + recency-aware retrieval (graphiti store pattern) | C6 | 🟡 |
-| 31 | Taste preference learning — Generate → Observe → Extract → Learn → Apply; confidence-scored symbolic rules injected as stable-prefix prior (Command Code taste-1 pattern) | C9 | 🟡 |
-| 32 | ACT-R activation + spontaneous recall — retention decay (half-life × log1p(strength)), importance ≥8 never auto-forgotten, associative recall (semantic+keyword+recency+graph), typed relational edges (supports/contradicts/derived-from), pre-turn spontaneous context block (NOOA nooa-memory) | C10/07 | 🟡 |
+| 31 | Taste preference learning — Generate → Observe → Extract → Learn → Apply; confidence-scored symbolic rules injected as stable-prefix prior (Command Code taste-1 pattern) | C9 | 🟡 (P5.6 ✅) |
+| 32 | ACT-R activation + spontaneous recall — retention decay (half-life × log1p(strength)), importance ≥8 never auto-forgotten, associative recall (semantic+keyword+recency+graph), typed relational edges (supports/contradicts/derived-from), pre-turn spontaneous context block (NOOA nooa-memory) | C10/07 | 🟡 (P5.5 ✅ — typed edges = P5.2 LadybugDB) |
 | 33 | Search tier escalation & cache — respond from cache when fresh (5-min TTL) → escalate on miss/failure/slow (WebSurfx → SearXNG → fallback); idempotent parallel fetch (doc 52 §4) | G8 | 🟡 |
 
 ---
@@ -549,7 +549,7 @@ flowchart LR
 
 ## 6. What's NEW to build (the gap — complete list)
 
-> **Progress (2026-08-14):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P4.8** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**, **Word block-patch engine (D1)**, **Excel engine (D2 — calamine read + IronCalc truth recalc + workbook DSL + deterministic planner + surgical part-patch + virtualized grid)**, **PowerPoint part-editor (D3 — slide shapes + minimal `<a:t>` patch + add/remove slide)**, **conformance + rollback (D6/D7 — `parts_diff` + atomic write + `Snapshot` + LibreOffice oracle)**, **legacy formats (D8 — .doc/.xls/.ppt → convert-on-open)**, **PDF engine (D4 — form-fill + text-swap + redact + re-author via lopdf)**, **office UI (P4.7 — docx/pptx/pdf viewers + chat overlay)**, **storage intelligence (P4.8 — `everyaios-storage`: work-stealing walker, zstd snapshots, squarified treemap, 7-stage dedup, large-file finder, Guard-2-ticketed cleanup proposals, FTS5 filename search + debounced watcher, storage health)**). **P3 + P4 are complete.** Next: **P5 memory fusion + token economy**. See §7 + `TODO.md` for the live phase state.
+> **Progress (2026-08-14):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P4.8** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**, **Word block-patch engine (D1)**, **Excel engine (D2 — calamine read + IronCalc truth recalc + workbook DSL + deterministic planner + surgical part-patch + virtualized grid)**, **PowerPoint part-editor (D3 — slide shapes + minimal `<a:t>` patch + add/remove slide)**, **conformance + rollback (D6/D7 — `parts_diff` + atomic write + `Snapshot` + LibreOffice oracle)**, **legacy formats (D8 — .doc/.xls/.ppt → convert-on-open)**, **PDF engine (D4 — form-fill + text-swap + redact + re-author via lopdf)**, **office UI (P4.7 — docx/pptx/pdf viewers + chat overlay)**, **storage intelligence (P4.8 — `everyaios-storage`: work-stealing walker, zstd snapshots, squarified treemap, 7-stage dedup, large-file finder, Guard-2-ticketed cleanup proposals, FTS5 filename search + debounced watcher, storage health)**). **P3 + P4 are complete.** P5 in progress — **algorithm cores landed (`everyaios-memory`: weighted RRF fusion #18/#29, ACT-R #32, taste profile #31, compaction #21)**. Next: **P5.2 LadybugDB graph backend + remaining P5 integration**. See §7 + `TODO.md` for the live phase state.
 
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
 2. **Rust core** — everyaios-cdp (tiered engines), everyaios-browser (snapshot/diff/ownership + session-vault cookie glue), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc

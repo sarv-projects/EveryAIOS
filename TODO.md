@@ -373,12 +373,12 @@
 - [ ] `[NOT DONE]` Implement intent classifier: memory vs fact vs event vs document
 - [ ] `[NOT DONE]` Implement parallel signal execution (C4): FTS5/BM25 vectorless default + optional vector signal
 - [ ] `[NOT DONE]` Implement optional embedding path (C5): on-device bge-micro/gte-small, int8/vec0 — only when user enables
-- [ ] `[NOT DONE]` Implement weighted RRF score fusion (mem0-style single fused score)
+- [x] `[DONE]` Implement weighted RRF score fusion (mem0-style single fused score) — **`fusion::rrf_fuse` (weighted reciprocal-rank fusion, per-signal weights; 25 memory tests across fusion/actr/taste/compaction — 504 ws tests, clippy 0, fmt clean)**
 - [ ] `[NOT DONE]` Implement cross-encoder hybrid rerank (Algorithm #19)
-- [ ] `[NOT DONE]` Implement deduplication + smart snippets (windows around matches)
-- [ ] `[NOT DONE]` Implement per-type budget caps (file 2K, page 1.5K, search 1K, memory 600, tool 1K)
+- [x] `[DONE]` Implement deduplication + smart snippets (windows around matches) — **`fusion::dedupe` (keep-highest per id) + `fusion::smart_snippets` (window ±N chars around each match)**
+- [x] `[DONE]` Implement per-type budget caps (file 2K, page 1.5K, search 1K, memory 600, tool 1K) — **`fusion::budget_tokens` + `cap_text` (+ `approx_tokens` ~4 chars/token)**
 - [ ] `[NOT DONE]` Benchmark: multi-hop + temporal queries vs plain BM25 (target: mem0-class gains)
-- [ ] `[NOT DONE]` Implement RAG chunk-min-size merging (Algorithm #29): forward-only merge of under-sized chunks, markdown-aware boundaries (C3/D5)
+- [x] `[DONE]` Implement RAG chunk-min-size merging (Algorithm #29): forward-only merge of under-sized chunks, markdown-aware boundaries (C3/D5) — **`fusion::merge_small_chunks`**
 
 ### P5.2 LadybugDB Graph Backend (C6, Algorithm #30 — doc 07, doc 34 §2, doc 46 Graphiti)
 - [ ] `[NOT DONE]` Integrate LadybugDB C++ library (Python/Node bindings or Rust FFI)
@@ -401,30 +401,30 @@
 - [ ] `[NOT DONE]` Test: rename file → verify retrieval returns new path, not old
 
 ### P5.5 ACT-R Activation + Spontaneous Recall (C10, Algorithm #32 — doc 39 NOOA forgetting.py)
-- [ ] `[NOT DONE]` Implement retention decay: half_life × log1p(strength)
-- [ ] `[NOT DONE]` Implement importance floor: memories with importance ≥ 8 never auto-forgotten
-- [ ] `[NOT DONE]` Implement associative recall: semantic + keyword + recency + graph in one query
+- [x] `[DONE]` Implement retention decay: half_life × log1p(strength) — **`actr::activation` (effective half-life = half_life × ln(1+strength), exponential decay)**
+- [x] `[DONE]` Implement importance floor: memories with importance ≥ 8 never auto-forgotten — **`actr::is_protected` + `forget_sweep` (protected OR activation ≥ threshold survive)**
+- [x] `[DONE]` Implement associative recall: semantic + keyword + recency + graph in one query — **`actr::recall_score` (weighted) + `keyword_hits` + `recency`**
 - [ ] `[NOT DONE]` Implement typed relational edges in LadybugDB (supports/contradicts/derived-from)
-- [ ] `[NOT DONE]` Implement spontaneous recall channel: pre-turn hook → derive queries → inject
+- [x] `[DONE]` Implement spontaneous recall channel: pre-turn hook → derive queries → inject — **`actr::derive_queries` (frequency-ranked, stopword-filtered); injection = C7 warm-set (integration follow-up)**
 
 ### P5.6 Taste Profile (C9, Algorithm #31 — doc 37 Command Code taste-1)
-- [ ] `[NOT DONE]` Implement taste store: `~/.everyaios/taste/` (global) + per-repo `.everyaios-taste/`
-- [ ] `[NOT DONE]` Implement learning hooks: detect accept/reject/edit via correction-detector + audit
-- [ ] `[NOT DONE]` Implement confidence-scored rules (0–1 per preference)
-- [ ] `[NOT DONE]` Implement stable-prefix injection (taste rules as symbolic prior at generation)
-- [ ] `[NOT DONE]` Implement shareable markdown export
+- [x] `[DONE]` Implement taste store: `~/.everyaios/taste/` (global) + per-repo `.everyaios-taste/` — **`taste::TasteStore` save/load to a directory (`profile.md`)**
+- [x] `[DONE]` Implement learning hooks: detect accept/reject/edit via correction-detector + audit — **`taste::observe_accept/reject/edit` (confidence boost/decay/update + evidence counter)**
+- [x] `[DONE]` Implement confidence-scored rules (0–1 per preference) — **`taste::TasteRule.confidence` clamped 0..1**
+- [x] `[DONE]` Implement stable-prefix injection (taste rules as symbolic prior at generation) — **`taste::inject_stable_prefix` (confidence-ordered)**
+- [x] `[DONE]` Implement shareable markdown export — **`taste::to_markdown`/`from_markdown` (round-trip, confidence-preserving)**
 
 ### P5.7 Compaction Pipeline (Algorithm #21 — doc 31 context-compression, doc 33 §6 BrowserOS, doc 05, doc 46 opencode compaction.ts)
-- [ ] `[NOT DONE]` Implement snip stage: tool_result_snip_ratio=0.6 (stale → head/tail anchor)
-- [ ] `[NOT DONE]` Implement soft compact: soft_compact_ratio=0.5 (notice-only)
-- [ ] `[NOT DONE]` Implement summarize: BrowserOS callSummarizer (timeout + abort = fail-open)
-- [ ] `[NOT DONE]` Implement findSafeSplitPoint (never split mid-turn)
-- [ ] `[NOT DONE]` Implement slidingWindow (keep recent N tokens, summarize rest)
-- [ ] `[NOT DONE]` Implement force compact: compact_force_ratio=0.9
+- [x] `[DONE]` Implement snip stage: tool_result_snip_ratio=0.6 (stale → head/tail anchor) — **`compaction::should_snip` + `snip_anchor`**
+- [x] `[DONE]` Implement soft compact: soft_compact_ratio=0.5 (notice-only) — **`compaction::decide_context_action` (SoftCompact)**
+- [x] `[DONE]` Implement summarize: BrowserOS callSummarizer (timeout + abort = fail-open) — **`compaction::summarize_or_passthrough`**
+- [x] `[DONE]` Implement findSafeSplitPoint (never split mid-turn) — **`compaction::find_safe_split`**
+- [x] `[DONE]` Implement slidingWindow (keep recent N tokens, summarize rest) — **`compaction::sliding_window`**
+- [x] `[DONE]` Implement force compact: compact_force_ratio=0.9 — **`compaction::decide_context_action` (ForceCompact)**
 - [ ] `[NOT DONE]` Implement Janus structural passes: dedup, regex collapse, AST prune
-- [ ] `[NOT DONE]` Implement prefix_dirty flag: track cache-break events (key rotation, provider switch)
-- [ ] `[NOT DONE]` Implement Hermes 3-layer tool-result persistence (preview+path, per-turn 200K, 0.15/0.30)
-- [ ] `[NOT DONE]` Implement OpenCode PRUNE_PROTECT 40K tool-output erasure
+- [x] `[DONE]` Implement prefix_dirty flag: track cache-break events (key rotation, provider switch) — **`compaction::PrefixCache` + `CacheBreak`**
+- [x] `[DONE]` Implement Hermes 3-layer tool-result persistence (preview+path, per-turn 200K, 0.15/0.30) — **`compaction::persist_decision` (inline vs preview+path threshold)**
+- [x] `[DONE]` Implement OpenCode PRUNE_PROTECT 40K tool-output erasure — **`compaction::prune_protect` (budget-capped, newest-first retention)**
 - [ ] `[NOT DONE]` Test: compaction triggers at ratios without breaking loop
 - [ ] `[NOT DONE]` Integrate Graphiti-pattern temporal KG — entities with validity windows, bi-temporal tracking
 - [ ] `[NOT DONE]` Implement Cognee-pattern remember/recall/forget/improve API for memory operations

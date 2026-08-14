@@ -1,0 +1,10 @@
+[package]
+name = "everyaios-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "P5 — memory fusion + token economy (C1–C10): weighted RRF multi-signal fusion + smart snippets + budget caps + chunk-min-size merge (Alg #18/#29), ACT-R activation + spontaneous recall (Alg #32), taste profile (Alg #31), compaction pipeline (Alg #21)."
+
+[dependencies]
+thiserror = { workspace = true }
