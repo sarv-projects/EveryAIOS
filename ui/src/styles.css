@@ -1005,3 +1005,122 @@ body {
   padding-top: 8px;
   word-break: break-all;
 }
+
+/* P4.2 — virtualized spreadsheet grid (D2) */
+.spreadsheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+}
+.spreadsheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.open-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.path-input {
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  padding: 6px 10px;
+  width: 300px;
+}
+.banner {
+  padding: 6px 10px;
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.error-banner {
+  padding: 8px 10px;
+  background: rgba(220, 60, 60, 0.12);
+  border: 1px solid rgba(220, 60, 60, 0.4);
+  border-radius: 6px;
+  color: #ff8f8f;
+}
+.sheet-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sheet-tab {
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sheet-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.grid-viewport {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.grid-spacer {
+  position: relative;
+  min-width: max-content;
+}
+.grid-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.grid-table th,
+.grid-table td {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.grid-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-raise);
+  z-index: 2;
+  font-weight: 600;
+  text-align: left;
+  font-size: 11px;
+}
+.grid-table th.corner {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  min-width: 46px;
+}
+.grid-table td.rownum {
+  position: sticky;
+  left: 0;
+  background: var(--bg-raise);
+  color: var(--muted);
+  text-align: right;
+  min-width: 46px;
+  user-select: none;
+}
+.grid-table tr:nth-child(even) td:not(.rownum) {
+  background: rgba(255, 255, 255, 0.015);
+}
+.grid-table td {
+  height: 26px;
+}
+.grid-stats {
+  font-size: 11px;
+  color: var(--muted);
+}

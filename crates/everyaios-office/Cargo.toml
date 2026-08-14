@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "P4 — surgical OOXML editing: ZIP parts index + byte-preserving rewrite, docx block tree with anchored addresses, plain-text render, minimal w:t patch (GenOffice pattern, doc 28)."
+description = "P4 — surgical OOXML editing: ZIP parts index + byte-preserving rewrite; docx block tree + minimal w:t patch (D1); xlsx calamine read + IronCalc truth recalc + workbook DSL/planner + surgical sheetN.xml/sharedStrings.xml patch (D2, GenOffice pattern doc 28)."
 
 [dependencies]
 serde = { workspace = true }
@@ -12,3 +12,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 zip = { workspace = true }
 roxmltree = { workspace = true }
+calamine = "0.30"
+ironcalc = "0.8"
+regex.workspace = true

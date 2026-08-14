@@ -3,11 +3,13 @@ import Audit from "./pages/Audit";
 import Chat from "./pages/Chat";
 import Cockpit from "./pages/Cockpit";
 import Settings from "./pages/Settings";
+import Spreadsheet from "./pages/Spreadsheet";
 
 const nav = [
   { to: "/", label: "Chat", end: true },
   { to: "/cockpit", label: "Cockpit", end: false },
   { to: "/audit", label: "Audit", end: false },
+  { to: "/sheets", label: "Sheets", end: false },
   { to: "/settings", label: "Settings", end: false },
 ];
 
@@ -41,6 +43,7 @@ export default function App() {
           <Route path="/" element={<Chat />} />
           <Route path="/cockpit" element={<Cockpit />} />
           <Route path="/audit" element={<Audit />} />
+          <Route path="/sheets" element={<Spreadsheet />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

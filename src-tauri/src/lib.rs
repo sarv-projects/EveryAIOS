@@ -14,6 +14,8 @@ mod replay_cmds;
 
 use everyaios_guard::Guard;
 use everyaios_vault::Vault;
+
+pub mod xlsx_cmds;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct AppState {
@@ -277,7 +279,8 @@ pub fn run() {
             cockpit_cmds::cockpit_quiet,
             cockpit_cmds::agent_undo,
             cockpit_cmds::interrupt_respond,
-            cockpit_cmds::cockpit_upsert_agent
+            cockpit_cmds::cockpit_upsert_agent,
+            xlsx_cmds::xlsx_open
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray

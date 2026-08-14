@@ -11,8 +11,19 @@
 //! - plain-text rendering (the LLM's edit surface)
 //! - minimal `w:t` prefix/suffix patch — untouched bytes never re-serialized
 //! - byte-preserving ZIP rewrite (`raw_copy_file` verbatim copy)
+//!
+//! P4.2 ships the Excel engine (D2, doc 28 §4–5):
+//! - `xlsx::read` — calamine windowed reader (virtualized 100K+ row view)
+//! - `xlsx::recalc` — IronCalc truth engine (100% math integrity: numeric
+//!   claims come from IronCalc, never the LLM)
+//! - `xlsx::dsl` — workbook DSL (cell-address, formula-shift, sort-range,
+//!   flash-fill, pivot) with the Excel-accurate reference-rewrite engine
+//! - `xlsx::planner` — deterministic regex NLP → DSL (zero-LLM common ops),
+//!   `NeedsLlm` fallback (audit-flagged, permission-gated)
+//! - `xlsx::patch` — surgical `sheetN.xml`/`sharedStrings.xml` part-patch
 
 pub mod docx;
+pub mod xlsx;
 pub mod xml;
 pub mod zip;
 
