@@ -1,0 +1,20 @@
+[package]
+name = "everyaios-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "P4.8 — storage intelligence (D9–D12, G7): parallel work-stealing disk walker (crossbeam-deque), immutable zstd snapshots (arc-swap), squarified treemap, 7-stage hash dedup (size → xxHash3 → BLAKE3, hardlink-aware), large-file finder, Guard-2-ticketed cleanup proposals, SQLite FTS5 filename index + debounced watcher, storage-health thresholds (doc 49 eDirStat/fclones/UltraSearch)."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+rusqlite = { workspace = true }
+crossbeam-deque = "0.8"
+arc-swap = "1"
+zstd = "0.13"
+blake3 = "1"
+twox-hash = "2"
+notify = "6"
+sysinfo = "0.30"

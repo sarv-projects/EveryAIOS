@@ -14,7 +14,13 @@ const ROW_H = 26; // px per row
 const OVERSCAN = 20;
 const PAGE = 500; // rows fetched per windowed read
 
-function DemoGrid() {
+function DemoGrid({
+  selected,
+  onSelect,
+}: {
+  selected: { r: number; c: number } | null;
+  onSelect: (r: number, c: number) => void;
+}) {
   // Client-side virtualization over a synthetic 100K-row sheet (no shell).
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(600);
@@ -24,7 +30,16 @@ function DemoGrid() {
   const rows: number[] = [];
   for (let r = first; r < last; r++) rows.push(r);
   return (
-    <GridShell totalRows={total} totalCols={6} onScroll={setScrollTop} onView={setViewH} rowAt={demoRow} loaded={rows} />
+    <GridShell
+      totalRows={total}
+      totalCols={6}
+      onScroll={setScrollTop}
+      onView={setViewH}
+      rowAt={demoRow}
+      loaded={rows}
+      selected={selected}
+      onSelect={onSelect}
+    />
   );
 }
 
@@ -35,6 +50,8 @@ function GridShell({
   onView,
   rowAt,
   loaded,
+  selected,
+  onSelect,
 }: {
   totalRows: number;
   totalCols: number;
@@ -42,6 +59,8 @@ function GridShell({
   onView: (h: number) => void;
   rowAt: (row: number) => CellValue[];
   loaded: number[];
+  selected: { r: number; c: number } | null;
+  onSelect: (r: number, c: number) => void;
 }) {
   const scroller = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -72,7 +91,12 @@ function GridShell({
               <tr key={r} className="grid-row" style={{ height: ROW_H }}>
                 <td className="rownum">{r + 1}</td>
                 {rowAt(r).map((v, c) => (
-                  <td key={c} title={cellDisplay(v)}>
+                  <td
+                    key={c}
+                    title={cellDisplay(v)}
+                    className={selected && selected.r === r && selected.c === c ? "cell-selected" : ""}
+                    onClick={() => onSelect(r, c)}
+                  >
                     {cellDisplay(v)}
                   </td>
                 ))}
@@ -94,6 +118,7 @@ export default function Spreadsheet() {
   const [viewH, setViewH] = useState(600);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<{ r: number; c: number } | null>(null);
   const first = useRef(0); // first row index of the last fetched window
   const totalRows = win?.total_rows ?? 0;
   const totalCols = win?.total_cols ?? 0;
@@ -149,6 +174,16 @@ export default function Spreadsheet() {
 
   const tauri = inTauri();
 
+  // Cell value for the selected cell (formula bar).
+  const cellValue = (r: number, c: number): CellValue | undefined => {
+    if (tauri && win) {
+      const rel = r - win.offset;
+      if (rel >= 0 && rel < win.rows.length) return win.rows[rel][c];
+      return { Empty: null };
+    }
+    return demoRow(r)[c];
+  };
+
   return (
     <div className="spreadsheet">
       <header className="spreadsheet-head">
@@ -193,11 +228,29 @@ export default function Spreadsheet() {
         </div>
       )}
 
+      {selected && (
+        <div className="formula-bar mono small">
+          <span className="cell-ref">
+            {colLetter(selected.c + 1)}
+            {selected.r + 1}
+          </span>
+          <span className="cell-val">{cellDisplay(cellValue(selected.r, selected.c))}</span>
+        </div>
+      )}
+
       {(tauri && win) || !tauri ? (
         tauri ? (
-          <WindowedGrid win={win} scrollTop={scrollTop} viewH={viewH} onScroll={onScroll} onView={setViewH} />
+          <WindowedGrid
+            win={win}
+            scrollTop={scrollTop}
+            viewH={viewH}
+            onScroll={onScroll}
+            onView={setViewH}
+            selected={selected}
+            onSelect={(r, c) => setSelected({ r, c })}
+          />
         ) : (
-          <DemoGrid />
+          <DemoGrid selected={selected} onSelect={(r, c) => setSelected({ r, c })} />
         )
       ) : (
         <div className="empty">
@@ -222,12 +275,16 @@ function WindowedGrid({
   viewH,
   onScroll,
   onView,
+  selected,
+  onSelect,
 }: {
   win: SheetWindow | null;
   scrollTop: number;
   viewH: number;
   onScroll: (top: number) => void;
   onView: (h: number) => void;
+  selected: { r: number; c: number } | null;
+  onSelect: (r: number, c: number) => void;
 }) {
   if (!win) return null;
   const total = win.total_rows;
@@ -242,6 +299,8 @@ function WindowedGrid({
       onScroll={onScroll}
       onView={onView}
       loaded={loaded}
+      selected={selected}
+      onSelect={onSelect}
       rowAt={(r) => {
         // `win.rows` is a windowed slice starting at absolute row `win.offset`.
         const rel = r - win.offset;

@@ -15,3 +15,4 @@ roxmltree = { workspace = true }
 calamine = "0.30"
 ironcalc = "0.8"
 regex.workspace = true
+lopdf = "0.36.0"

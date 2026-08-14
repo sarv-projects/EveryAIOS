@@ -11,6 +11,7 @@ members = [
     "everyaios-script",
     "everyaios-mcp",
     "everyaios-office",
+    "everyaios-storage",
 ]
 
 [workspace.package]

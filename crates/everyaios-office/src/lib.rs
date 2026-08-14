@@ -39,11 +39,18 @@
 //! P4.6 ships legacy formats (D8, doc 29 §3a):
 //! - `legacy` — `.doc`/`.xls`/`.ppt` detection + headless conversion to modern
 //!   OOXML, surfaced read-only with an "edit as new" path
+//!
+//! P4.4 ships the PDF engine (D4, ARCH/04 §4.2 PDF):
+//! - `pdf::form` — AcroForm form-fill (`/V`)
+//! - `pdf::replace_text` — exact-match `Tj` text swap
+//! - `pdf::redact` — mark-for-redact `/Redact` annotations
+//! - `pdf::author` — re-author: build a new PDF from text
 
 pub mod atomic;
 pub mod conformance;
 pub mod docx;
 pub mod legacy;
+pub mod pdf;
 pub mod pptx;
 pub mod rollback;
 pub mod xlsx;
@@ -54,5 +61,6 @@ pub use atomic::write_atomic;
 pub use conformance::{parts_diff, LibreOfficeOracle, PartsDiff};
 pub use docx::{DocxEngine, OfficeError};
 pub use legacy::{convert_to_modern, LegacyKind, LegacyOpen};
+pub use pdf::{inspect, replace_text, PdfError, PdfInfo};
 pub use pptx::PptxEngine;
 pub use rollback::Snapshot;

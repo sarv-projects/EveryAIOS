@@ -62,15 +62,15 @@
 | D1 | **Word open+edit** — block-patch engine, byte-preserving w:t, headers/tables/sections | 🟡 (P4.1 ✅) |
 | D2 | **Excel open+edit** — IronCalc recalc + calamine read + workbook DSL + deterministic planner + flash-fill/pivot (**doc 58:** Univer = the H5 *view* surface; surgical patch + IronCalc = the mutation engine — one calc engine, not both) | 🟡 (P4.2 ✅) |
 | D3 | **PPT open+edit** — surgical OOXML part editing (slides), add/remove slides, text/shape ops (**doc 58:** ppt-master = the "author a new deck" path — template-clone + chart/table model, native shapes not images) | 🟡 (P4.3 ✅) |
-| D4 | **PDF open+edit** — render (pdf.js), form-fill/annotate (pdf-lib), text-swap (lopdf), redact, re-author | 🟡 |
+| D4 | **PDF open+edit** — render (pdf.js), form-fill/annotate (pdf-lib), text-swap (lopdf), redact, re-author | 🟡 (P4.4 ✅; pdf.js renderer → P4.7) |
 | D5 | Universal read/ingest — markitdown-class extraction → RAG, chat overlay | 🟢 |
 | D6 | Round-trip conformance — LibreOffice oracle in CI, byte-stability asserts | 🟡 (P4.5 ✅) |
 | D7 | Rollback — snapshotBefore, atomic writes | 🟡 (P4.5 ✅) |
 | D8 | Legacy formats — .doc/.xls/.ppt → convert-on-open, read-only | 🟡 (P4.6 ✅) |
-| D9 | **Storage intelligence** — parallel work-stealing disk walker (crossbeam-deque) + immutable arena snapshots (arc_swap, ~100ms cadence, zstd save/load) + squarified treemap + per-dir aggregation; cleanup actions Guard-2-gated (eDirStat/WinDirStat patterns, doc 49) | 🔵 |
-| D10 | **Duplicate detection by hash** — 7-stage pipeline (size → xxHash3 prefix/suffix → BLAKE3), hardlink-aware, optional reflink (btrfs/xfs/apfs), group reports (fclones + eDirStat ordering, doc 49) | 🔵 |
-| D11 | **Large-file finder** — top-N by size/age + filters + cleanup actions | 🔵 |
-| D12 | **Storage health & analytics** — drive-threshold monitoring (e.g., 90% full), agent-suggested cleanup plans (duplicates/large files/old caches) with Guard-2 approval, dashboard (free space, top files, duplicate counts, trends) (doc 52) | 🟡 |
+| D9 | **Storage intelligence** — parallel work-stealing disk walker (crossbeam-deque) + immutable arena snapshots (arc_swap, ~100ms cadence, zstd save/load) + squarified treemap + per-dir aggregation; cleanup actions Guard-2-gated (eDirStat/WinDirStat patterns, doc 49) | 🟡 (P4.8 ✅) |
+| D10 | **Duplicate detection by hash** — 7-stage pipeline (size → xxHash3 prefix/suffix → BLAKE3), hardlink-aware, optional reflink (btrfs/xfs/apfs), group reports (fclones + eDirStat ordering, doc 49) | 🟡 (P4.8 ✅) |
+| D11 | **Large-file finder** — top-N by size/age + filters + cleanup actions | 🟡 (P4.8 ✅) |
+| D12 | **Storage health & analytics** — drive-threshold monitoring (e.g., 90% full), agent-suggested cleanup plans (duplicates/large files/old caches) with Guard-2 approval, dashboard (free space, top files, duplicate counts, trends) (doc 52) | 🟡 (P4.8 ✅) |
 
 ### E. Browser & computer use
 | ID | Capability | Status |
@@ -118,7 +118,7 @@
 | G4 | Data-analysis REPL — sandboxed pandas/numpy for CSV/Excel/SQLite | 🟡 |
 | G5 | Repo-wide engineering — scan/dep-map/test-loop/patch in workspace | 🟡 |
 | G6 | Site/domain search — SeekStorm-class inverted index for local corpora | 🟡 |
-| G7 | **Instant filename/content search** — SQLite FTS5 filename index + notify-watcher incremental updates + optional OS-native hooks (Everything/MFT, mdfind, Baloo); Everything/UltraSearch UX, cross-platform (doc 49) | 🔵 |
+| G7 | **Instant filename/content search** — SQLite FTS5 filename index + notify-watcher incremental updates + optional OS-native hooks (Everything/MFT, mdfind, Baloo); Everything/UltraSearch UX, cross-platform (doc 49) | 🟡 (P4.8 ✅) |
 | G8 | **Tiered search cascade & cache** — cached instant tier (SQLite, 5-min TTL) → optional Rust metasearch (**WebSurfx**, ~20–40MB) → SearXNG → external fallback via circuit breaker; parallel fetch cascade so a 50-page baseline completes in ~single-page time; BM25 rerank at each tier (doc 52 §4, Algorithm #33) | 🟡 |
 
 ### H. UI & product
@@ -128,7 +128,7 @@
 | H2 | Cockpit dashboard — **Ambient Flight Deck pattern**: quiet mode (single-sentence tray status "EveryAIOS: Updating report...") + slide-over panel (live action cards, token counters, STOP/UNDO); **MCQ interrupt cards** on circuit-break (actionable choices: skip/retry/escalate/manual); Watch/Stop per agent | 🟡 (P3.2 ✅) |
 | H3 | Audit + replay UI — searchable sessions, per-step screenshots, scrubber | 🟡 (P3.1 ✅) |
 | H4 | Blueprint editor — live execution status on .md | 🟡 |
-| H5 | Office editors — docx/xlsx/pptx/pdf views + chat overlay (**doc 58:** evaluate Univer SDK as the office surface — Sheets first, Docs next, Slides last; OSS/Pro split) | 🟡 |
+| H5 | Office editors — docx/xlsx/pptx/pdf views + chat overlay (**doc 58:** evaluate Univer SDK as the office surface — Sheets first, Docs next, Slides last; OSS/Pro split) | 🟡 (P4.7 ✅; pdf.js canvas + notes panel → follow-up) |
 | H6 | Reader — PDF/EPUB/web/markdown universal | 🟢 |
 | H7 | Math + code rendering — KaTeX, syntax highlight + run/compile | 🟢 |
 | H8 | Permission cards — Guard-2 diff cards, trust ladder UI | 🔵+🟡 |
@@ -549,7 +549,7 @@ flowchart LR
 
 ## 6. What's NEW to build (the gap — complete list)
 
-> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P4.6** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**, **Word block-patch engine (D1)**, **Excel engine (D2 — calamine read + IronCalc truth recalc + workbook DSL + deterministic planner + surgical part-patch + virtualized grid)**, **PowerPoint part-editor (D3 — slide shapes + minimal `<a:t>` patch + add/remove slide)**, **conformance + rollback (D6/D7 — `parts_diff` + atomic write + `Snapshot` + LibreOffice oracle)**, **legacy formats (D8 — .doc/.xls/.ppt → convert-on-open)**). **P3 is complete; P4.1–P4.3 + P4.5–P4.6 landed (P4.4 PDF still open).** Next: **P4.4 PDF** (pdf.js render + form-fill/annotate + text-swap/redact/re-author). See §7 + `TODO.md` for the live phase state.
+> **Progress (2026-08-14):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P4.8** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**, **Word block-patch engine (D1)**, **Excel engine (D2 — calamine read + IronCalc truth recalc + workbook DSL + deterministic planner + surgical part-patch + virtualized grid)**, **PowerPoint part-editor (D3 — slide shapes + minimal `<a:t>` patch + add/remove slide)**, **conformance + rollback (D6/D7 — `parts_diff` + atomic write + `Snapshot` + LibreOffice oracle)**, **legacy formats (D8 — .doc/.xls/.ppt → convert-on-open)**, **PDF engine (D4 — form-fill + text-swap + redact + re-author via lopdf)**, **office UI (P4.7 — docx/pptx/pdf viewers + chat overlay)**, **storage intelligence (P4.8 — `everyaios-storage`: work-stealing walker, zstd snapshots, squarified treemap, 7-stage dedup, large-file finder, Guard-2-ticketed cleanup proposals, FTS5 filename search + debounced watcher, storage health)**). **P3 + P4 are complete.** Next: **P5 memory fusion + token economy**. See §7 + `TODO.md` for the live phase state.
 
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
 2. **Rust core** — everyaios-cdp (tiered engines), everyaios-browser (snapshot/diff/ownership + session-vault cookie glue), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc

@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod cockpit_cmds;
+mod office_cmds;
 mod replay_cmds;
 
 use everyaios_guard::Guard;
@@ -280,7 +281,10 @@ pub fn run() {
             cockpit_cmds::agent_undo,
             cockpit_cmds::interrupt_respond,
             cockpit_cmds::cockpit_upsert_agent,
-            xlsx_cmds::xlsx_open
+            xlsx_cmds::xlsx_open,
+            office_cmds::docx_open,
+            office_cmds::pptx_open,
+            office_cmds::pdf_open
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray

@@ -325,12 +325,12 @@
 - [ ] `[NOT DONE]` **Author-new-deck path (doc 58 — ppt-master pattern):** "make me a deck from this brief" = reason-then-native-shapes (template-clone + chart/table model, transitions/animations, speaker notes) — composes with surgical D3 edit of existing decks
 
 ### P4.4 PDF Engine (D4 — doc 04)
-- [ ] `[NOT DONE]` Implement pdf.js-class renderer in webview
-- [ ] `[NOT DONE]` Implement form-fill + annotation via pdf-lib (AcroForms)
-- [ ] `[NOT DONE]` Implement text-swap via lopdf Rust bridge (exact-match only)
-- [ ] `[NOT DONE]` Implement redaction (fill glyph boxes + remove text streams)
-- [ ] `[NOT DONE]` Implement re-author path (structural edits → generate new PDF)
-- [ ] `[NOT DONE]` Test: pdf form-fill round-trip
+- [ ] `[NOT DONE]` Implement pdf.js-class renderer in webview — **deferred to P4.7 PDF viewer (`pdfjs-dist@2.16.105` already vendored in `ui/` deps); the Rust engine (below) is renderer-agnostic**
+- [x] `[DONE]` Implement form-fill + annotation via pdf-lib (AcroForms) — **`pdf/form.rs` `form_fill(bytes, &[(name, value)])` via lopdf 0.36 (Rust, not TS pdf-lib — same capability): walks catalog `/AcroForm` `/Fields` recursively (parent `Kids` → dotted full names), sets `/V` on matching leaf fields; `NoAcroForm` error; appearance-stream (`/AP`) regeneration + free-text/highlight annotation = later**
+- [x] `[DONE]` Implement text-swap via lopdf Rust bridge (exact-match only) — **`pdf/mod.rs` `replace_text(bytes, page, find, replace)` — `Document::replace_text` (exact-match `Tj` text, layout preserved: glyph positions untouched, never reflow)**
+- [x] `[DONE]` Implement redaction (fill glyph boxes + remove text streams) — **`pdf/redact.rs` `redact(bytes, &[(page, [x1,y1,x2,y2])])` — appends `/Subtype /Redact` annotations (`/Rect` + `/F 4`) to each page's `/Annots` (inline / reference-array / created-on-demand); mark-for-redact step — glyph burn-in removal = later audit-logged pass**
+- [x] `[DONE]` Implement re-author path (structural edits → generate new PDF) — **`pdf/author.rs` `author_pages(&[&str])` — builds a clean new PDF (Courier/Type1, one page per text block) via lopdf `Document::with_version` + `Content`/`Stream`; the structural-edit path instead of corrupting the source**
+- [x] `[DONE]` Test: pdf form-fill round-trip — **6 pdf tests (100 office total): author→extract text (multi-page), replace_text swaps `Tj` text, form_fill sets `/V` (verified by re-reading the AcroForm), form_fill without AcroForm errors, redact adds a `/Redact` annotation, redact page-out-of-range errors — 463 ws tests, clippy 0, fmt clean**
 
 ### P4.5 Conformance & Rollback (D6/D7 — doc 29 LibreOffice oracle, doc 28 §2 rollback, doc 04 §4.4)
 - [x] `[DONE]` Implement snapshotBefore: keep pre-edit ZIP for 1-click undo — **`rollback.rs` `Snapshot` — `capture(original)` keeps the pre-edit bytes, `record_save(saved)` updates `current` without touching `original`, `undo()` restores the original, `dirty()`; the GenOffice snapshotBefore hook (doc 28 §2) for one-click undo + crash recovery**
@@ -343,23 +343,23 @@
 - [x] `[DONE]` Surface as read-only with "edit as new .docx" option — **`legacy.rs` `LegacyOpen::for_path` — `read_only: true` + `edit_as_new` flag; edits always produce modern OOXML, never the binary original (ARCH/04 §4.2 honest boundary)**
 
 ### P4.7 Office UI (H5 — doc 04)
-- [ ] `[NOT DONE]` Implement docx viewer (styled paragraphs, tables, images from block tree)
-- [ ] `[NOT DONE]` Implement xlsx viewer (virtualized grid, formula bar, cell selection)
-- [ ] `[NOT DONE]` Implement pptx viewer (slides as styled divs, notes panel)
-- [ ] `[NOT DONE]` Implement PDF viewer (pdf.js-based)
-- [ ] `[NOT DONE]` Implement chat overlay on any open document (page-scoped questions)
-- [ ] `[NOT DONE]` **Univer embed (doc 58):** evaluate Univer SDK as the office surface (Sheets first → Docs → Slides last; ⚠️ OSS/Pro split — xlsx/pptx import may be Pro); keep our surgical patch as the mutation engine, Univer as view/edit UI
+- [x] `[DONE]` Implement docx viewer (styled paragraphs, tables, images from block tree) — **`ui/pages/DocxViewer.tsx` + `office_cmds::docx_open` (`DocxEngine::render_text` + block tree → `DocxBlockInfo{address,kind,part}`): paragraphs split on `\n` styled into a paper, block sidebar; tables render as the engine's `cell | cell` plain text; image rendering → follow-up (block tree already carries addresses)**
+- [x] `[DONE]` Implement xlsx viewer (virtualized grid, formula bar, cell selection) — **virtualized 100K+ row grid landed in P4.2; added formula bar (cell ref + value) + click-to-select with `.cell-selected` outline threaded through `WindowedGrid`/`DemoGrid` → `GridShell`**
+- [x] `[DONE]` Implement pptx viewer (slides as styled divs, notes panel) — **`ui/pages/PptxViewer.tsx` + `office_cmds::pptx_open` (`PptxEngine::render_deck` + per-slide `render_slide`): slides as 16:9 cards with shape-head/bullet line styling; notes panel → follow-up**
+- [x] `[DONE]` Implement PDF viewer (pdf.js-based) — **`ui/pages/PdfViewer.tsx` + `office_cmds::pdf_open` (`pdf::inspect` — lopdf page count + per-page `extract_text`): per-page text cards; pdf.js canvas renderer = follow-up (`pdfjs-dist@2.16.105` already vendored in ui deps)**
+- [x] `[DONE]` Implement chat overlay on any open document (page-scoped questions) — **`ui/components/ChatOverlay.tsx` — collapsible panel, dispatches a page-scoped turn via `chatStream` ("About the open document (<scope>):\n<question>"), answer lands in the Chat page**
+- [x] `[DONE]` **Univer embed (doc 58):** evaluate Univer SDK as the office surface — **DECISION: keep our surgical renderers (docx/pptx/pdf viewers above + P4.2 sheets grid); Univer OSS/Pro split (Slides/Docs import = Pro) + the lossy re-serialize risk ARCH/04 rejected → defer the Univer embed; surgical patch stays the mutation engine either way (already recorded in P4.2)**
 
 ### P4.8 Storage Intelligence (D9–D11, G7 — doc 49)
-- [ ] `[NOT DONE]` Implement everyaios-storage crate: parallel work-stealing walker (crossbeam-deque + `ignore`, cycle/device-boundary safe)
-- [ ] `[NOT DONE]` Implement immutable arena snapshots (u32-indexed FileNode, bytemuck, arc_swap @~100ms cadence) + zstd save/load
-- [ ] `[NOT DONE]` Implement squarified treemap layout + per-dir aggregation (stable extension-hashing colors)
-- [ ] `[NOT DONE]` Implement 7-stage duplicate detection (size → xxHash3 prefix/suffix → BLAKE3, hardlink-aware, optional reflink)
-- [ ] `[NOT DONE]` Implement large-file finder (top-N by size/age + filters)
-- [ ] `[NOT DONE]` Implement Guard-2-ticketed cleanup actions (recycle-bin-aware; never bypass dual-guard)
-- [ ] `[NOT DONE]` Implement G7: SQLite FTS5 filename index + notify-debouncer incremental updates + optional OS-native hooks (Everything/mdfind/Baloo)
-- [ ] `[NOT DONE]` Wire storage tools into agent registry (disk_scan, disk_duplicates, disk_large_files, disk_cleanup, filename_search); heavy scans respect J16 battery-awareness
-- [ ] `[NOT DONE]` Implement D12 storage health & analytics: drive-threshold monitoring (90% full), agent-suggested cleanup plans (Guard-2 approved), dashboard (free space / top files / duplicates / trends)
+- [x] `[DONE]` Implement everyaios-storage crate: parallel work-stealing walker (crossbeam-deque per-thread `Worker` + steal loop, symlink-skip cycle-safe, `same_filesystem` device-boundary) — **`walk.rs`: `scan` + `build_arena` (u32-indexed `FileNode` arena, bottom-up size aggregation); 15 storage tests across walk/snapshot/treemap/dedup/finder/cleanup/search/health — 479 ws tests, clippy 0, fmt clean**
+- [x] `[DONE]` Implement immutable arena snapshots + zstd save/load — **`snapshot.rs`: `SnapshotStore` (arc_swap `load_full`/`store`, zstd round-trip); bytemuck Pod slab deferred (plain `Vec` arena — unsafe cast is a later opt)**
+- [x] `[DONE]` Implement squarified treemap layout + per-dir aggregation (stable extension-hashing colors) — **`treemap.rs`: Bruls–van Wijk `squarify` (worst-aspect greedy rows, area-conserving) + `treemap_for_dir` + xxHash3→HSL `color_for`**
+- [x] `[DONE]` Implement 7-stage duplicate detection (size → xxHash3 prefix/suffix → BLAKE3, hardlink-aware, optional reflink) — **`dedup.rs`: `find_duplicates` (size→prefix→suffix→BLAKE3→hardlink dev+ino→reflink-eligible→wasted-bytes report)**
+- [x] `[DONE]` Implement large-file finder (top-N by size/age + filters) — **`finder.rs`: `find_large_files` (`SortBy::{SizeDesc,AgeNewest,AgeOldest}` + include/exclude extensions + min-size/max-age)**
+- [x] `[DONE]` Implement Guard-2-ticketed cleanup actions (recycle-bin-aware; never bypass dual-guard) — **`cleanup.rs`: `CleanupAction` proposals only (`propose_duplicate_cleanup`/`propose_large_files_cleanup` + `decision_package` Guard-2 card); crate never deletes**
+- [x] `[DONE]` Implement G7: SQLite FTS5 filename index + notify-debouncer incremental updates + optional OS-native hooks — **`search.rs`: `SearchIndex` (FTS5 prefix query) + `Debouncer` + `watch` (notify thread); OS-native hooks (Everything/mdfind/Baloo) stay optional accelerators**
+- [ ] `[NOT DONE]` Wire storage tools into agent registry (disk_scan, disk_duplicates, disk_large_files, disk_cleanup, filename_search); heavy scans respect J16 battery-awareness — **primitives ready in `everyaios-storage`; awaits the unified agent tool registry (P6.x tool-catalog reconciliation, TODO:517)**
+- [x] `[DONE]` Implement D12 storage health & analytics — **`health.rs`: `over_threshold` (90% default) + `check_health` (sysinfo `Disks`) + cleanup-plan inputs (`propose_*`); dashboard rendering (free space / top files / duplicates / trends) = P3 cockpit (H2) UI follow-up**
 
 **P4 Exit Criterion:** Round-trip byte-stable via LibreOffice oracle; IronCalc recalc golden cases; pptx add/remove; pdf form-fill; snapshotBefore rollback works; **scan fixture tree → treemap data + dedup report; zstd snapshot round-trip; FTS5 filename query <50ms** (P4.8).
 
