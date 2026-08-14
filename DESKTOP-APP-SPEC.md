@@ -64,9 +64,9 @@
 | D3 | **PPT open+edit** — surgical OOXML part editing (slides), add/remove slides, text/shape ops (**doc 58:** ppt-master = the "author a new deck" path — template-clone + chart/table model, native shapes not images) | 🟡 (P4.3 ✅) |
 | D4 | **PDF open+edit** — render (pdf.js), form-fill/annotate (pdf-lib), text-swap (lopdf), redact, re-author | 🟡 |
 | D5 | Universal read/ingest — markitdown-class extraction → RAG, chat overlay | 🟢 |
-| D6 | Round-trip conformance — LibreOffice oracle in CI, byte-stability asserts | 🟡 |
-| D7 | Rollback — snapshotBefore, atomic writes | 🟡 |
-| D8 | Legacy formats — .doc/.xls/.ppt → convert-on-open, read-only | 🟡 |
+| D6 | Round-trip conformance — LibreOffice oracle in CI, byte-stability asserts | 🟡 (P4.5 ✅) |
+| D7 | Rollback — snapshotBefore, atomic writes | 🟡 (P4.5 ✅) |
+| D8 | Legacy formats — .doc/.xls/.ppt → convert-on-open, read-only | 🟡 (P4.6 ✅) |
 | D9 | **Storage intelligence** — parallel work-stealing disk walker (crossbeam-deque) + immutable arena snapshots (arc_swap, ~100ms cadence, zstd save/load) + squarified treemap + per-dir aggregation; cleanup actions Guard-2-gated (eDirStat/WinDirStat patterns, doc 49) | 🔵 |
 | D10 | **Duplicate detection by hash** — 7-stage pipeline (size → xxHash3 prefix/suffix → BLAKE3), hardlink-aware, optional reflink (btrfs/xfs/apfs), group reports (fclones + eDirStat ordering, doc 49) | 🔵 |
 | D11 | **Large-file finder** — top-N by size/age + filters + cleanup actions | 🔵 |
@@ -549,7 +549,7 @@ flowchart LR
 
 ## 6. What's NEW to build (the gap — complete list)
 
-> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P4.3** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**, **Word block-patch engine (D1)**, **Excel engine (D2 — calamine read + IronCalc truth recalc + workbook DSL + deterministic planner + surgical part-patch + virtualized grid)**, **PowerPoint part-editor (D3 — slide shapes + minimal `<a:t>` patch + add/remove slide)**). **P3 is complete; P4.1–P4.3 landed.** Next: **P4.4 PDF** (pdf.js render + form-fill/annotate + text-swap/redact/re-author). See §7 + `TODO.md` for the live phase state.
+> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P4.6** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**, **Word block-patch engine (D1)**, **Excel engine (D2 — calamine read + IronCalc truth recalc + workbook DSL + deterministic planner + surgical part-patch + virtualized grid)**, **PowerPoint part-editor (D3 — slide shapes + minimal `<a:t>` patch + add/remove slide)**, **conformance + rollback (D6/D7 — `parts_diff` + atomic write + `Snapshot` + LibreOffice oracle)**, **legacy formats (D8 — .doc/.xls/.ppt → convert-on-open)**). **P3 is complete; P4.1–P4.3 + P4.5–P4.6 landed (P4.4 PDF still open).** Next: **P4.4 PDF** (pdf.js render + form-fill/annotate + text-swap/redact/re-author). See §7 + `TODO.md` for the live phase state.
 
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
 2. **Rust core** — everyaios-cdp (tiered engines), everyaios-browser (snapshot/diff/ownership + session-vault cookie glue), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc

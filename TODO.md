@@ -333,14 +333,14 @@
 - [ ] `[NOT DONE]` Test: pdf form-fill round-trip
 
 ### P4.5 Conformance & Rollback (D6/D7 — doc 29 LibreOffice oracle, doc 28 §2 rollback, doc 04 §4.4)
-- [ ] `[NOT DONE]` Implement snapshotBefore: keep pre-edit ZIP for 1-click undo
-- [ ] `[NOT DONE]` Implement atomic writes: write temp → fsync → rename
-- [ ] `[NOT DONE]` Wire LibreOffice headless in CI: open edited file → assert no repair warnings
-- [ ] `[NOT DONE]` Implement byte-stability assertions (zip-level diff of untouched parts)
+- [x] `[DONE]` Implement snapshotBefore: keep pre-edit ZIP for 1-click undo — **`rollback.rs` `Snapshot` — `capture(original)` keeps the pre-edit bytes, `record_save(saved)` updates `current` without touching `original`, `undo()` restores the original, `dirty()`; the GenOffice snapshotBefore hook (doc 28 §2) for one-click undo + crash recovery**
+- [x] `[DONE]` Implement atomic writes: write temp → fsync → rename — **`atomic.rs` `write_atomic(path, bytes)` — sibling `.tmp-{pid}-{seq}` temp file in the SAME directory, `File::sync_all` then `rename` (atomic on POSIX) + best-effort directory fsync; a crash mid-save never leaves a half-written OOXML file (old or new bytes, never a mix)**
+- [x] `[DONE]` Wire LibreOffice headless in CI: open edited file → assert no repair warnings — **`conformance.rs` `LibreOfficeOracle` — `find_soffice()` (PATH + common install dirs), `check_opens(file)` runs `soffice --headless --convert-to pdf` (full parse+layout) and fails on non-zero exit or `repair`/`damaged` warnings; gated `#[ignore]` live test (`EVERYAIOS_LIVE_TEST=1`, skips cleanly when soffice is absent)**
+- [x] `[DONE]` Implement byte-stability assertions (zip-level diff of untouched parts) — **`conformance.rs` `parts_diff(original, modified)` — `PartsDiff { changed, added, removed }` (decompressed compare); tests assert "only word/document.xml changed" + added/removed detection + identity diff is empty**
 
 ### P4.6 Legacy Formats (D8 — doc 04, doc 29 §3a)
-- [ ] `[NOT DONE]` Implement .doc/.xls/.ppt → convert to modern format on open (headless soffice)
-- [ ] `[NOT DONE]` Surface as read-only with "edit as new .docx" option
+- [x] `[DONE]` Implement .doc/.xls/.ppt → convert to modern format on open (headless soffice) — **`legacy.rs` `convert_to_modern(path)` — `LegacyKind::from_path` (.doc/.xls/.ppt) + `target_format` (.docx/.xlsx/.pptx), `soffice --headless --convert-to <filter> --outdir <tmp>` → returns `(name, bytes)`; clear `NotLegacy`/`NoSoffice`/`ConversionFailed` errors**
+- [x] `[DONE]` Surface as read-only with "edit as new .docx" option — **`legacy.rs` `LegacyOpen::for_path` — `read_only: true` + `edit_as_new` flag; edits always produce modern OOXML, never the binary original (ARCH/04 §4.2 honest boundary)**
 
 ### P4.7 Office UI (H5 — doc 04)
 - [ ] `[NOT DONE]` Implement docx viewer (styled paragraphs, tables, images from block tree)

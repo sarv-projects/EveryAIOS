@@ -29,12 +29,30 @@
 //!   byte-surgery patch (bullets/line-breaks are read-only markers)
 //! - `pptx::PptxEngine` — render/patch + add/remove slides (clone part + rels
 //!   + `[Content_Types].xml` registration) + byte-preserving save
+//!
+//! P4.5 ships conformance + rollback (D6/D7, ARCH/04 §4.4):
+//! - `atomic::write_atomic` — temp → fsync → rename (no half-written files)
+//! - `rollback::Snapshot` — `snapshotBefore` pre-edit bytes, one-click undo
+//! - `conformance::parts_diff` — zip-level diff of changed/added/removed parts
+//! - `conformance::LibreOfficeOracle` — headless soffice "opens clean" check
+//!
+//! P4.6 ships legacy formats (D8, doc 29 §3a):
+//! - `legacy` — `.doc`/`.xls`/`.ppt` detection + headless conversion to modern
+//!   OOXML, surfaced read-only with an "edit as new" path
 
+pub mod atomic;
+pub mod conformance;
 pub mod docx;
+pub mod legacy;
 pub mod pptx;
+pub mod rollback;
 pub mod xlsx;
 pub mod xml;
 pub mod zip;
 
+pub use atomic::write_atomic;
+pub use conformance::{parts_diff, LibreOfficeOracle, PartsDiff};
 pub use docx::{DocxEngine, OfficeError};
+pub use legacy::{convert_to_modern, LegacyKind, LegacyOpen};
 pub use pptx::PptxEngine;
+pub use rollback::Snapshot;
