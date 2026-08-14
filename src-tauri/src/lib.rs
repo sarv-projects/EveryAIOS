@@ -9,6 +9,7 @@ use std::process::{ChildStdin, ChildStdout};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+mod cockpit_cmds;
 mod replay_cmds;
 
 use everyaios_guard::Guard;
@@ -29,6 +30,10 @@ pub struct AppState {
         Mutex<Option<everyaios_core::ChatRelay<ChildStdin, ChildStdout>>>,
     /// P3.1: the replay store base dir (replays/ + screenshots/ + index).
     pub replay_dir: PathBuf,
+    /// P3.2: the cockpit / ambient flight-deck live state (agent cards,
+    /// interrupts, quiet flag) — fed by the coordinator via the feed seams,
+    /// polled by the UI.
+    pub cockpit: Arc<Mutex<everyaios_audit::cockpit::CockpitState>>,
 }
 
 /// Monotonic stream-id source for `chat_stream` calls.
@@ -252,6 +257,7 @@ pub fn run() {
             vault,
             chat_relay: Mutex::new(None),
             replay_dir: everyaios_core::default_data_dir(),
+            cockpit: Arc::new(Mutex::new(Default::default())),
         })
         .invoke_handler(tauri::generate_handler![
             version,
@@ -264,7 +270,14 @@ pub fn run() {
             replay_cmds::replay_timeline,
             replay_cmds::replay_screenshot,
             replay_cmds::watch_events,
-            replay_cmds::agent_stop
+            replay_cmds::agent_stop,
+            cockpit_cmds::cockpit_snapshot,
+            cockpit_cmds::cockpit_activity,
+            cockpit_cmds::cockpit_tokens,
+            cockpit_cmds::cockpit_quiet,
+            cockpit_cmds::agent_undo,
+            cockpit_cmds::interrupt_respond,
+            cockpit_cmds::cockpit_upsert_agent
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray

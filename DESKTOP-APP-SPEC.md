@@ -125,7 +125,7 @@
 | ID | Capability | Status |
 |---|---|---|
 | H1 | Chat — streaming, token streamer, message branching, artifacts (with version-selector preview pane) | 🟢 |
-| H2 | Cockpit dashboard — **Ambient Flight Deck pattern**: quiet mode (single-sentence tray status "EveryAIOS: Updating report...") + slide-over panel (live action cards, token counters, STOP/UNDO); **MCQ interrupt cards** on circuit-break (actionable choices: skip/retry/escalate/manual); Watch/Stop per agent | 🟡 |
+| H2 | Cockpit dashboard — **Ambient Flight Deck pattern**: quiet mode (single-sentence tray status "EveryAIOS: Updating report...") + slide-over panel (live action cards, token counters, STOP/UNDO); **MCQ interrupt cards** on circuit-break (actionable choices: skip/retry/escalate/manual); Watch/Stop per agent | 🟡 (P3.2 ✅) |
 | H3 | Audit + replay UI — searchable sessions, per-step screenshots, scrubber | 🟡 (P3.1 ✅) |
 | H4 | Blueprint editor — live execution status on .md | 🟡 |
 | H5 | Office editors — docx/xlsx/pptx/pdf views + chat overlay (**doc 58:** evaluate Univer SDK as the office surface — Sheets first, Docs next, Slides last; OSS/Pro split) | 🟡 |
@@ -472,7 +472,7 @@ plugin-bundle/
 
 ## 6. What's NEW to build (the gap — complete list)
 
-> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P3.3** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**). Remaining in P3: cockpit/ambient deck (H2). See §7 + `TODO.md` for the live phase state.
+> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P3.2** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog, **replay & audit UI (H3)**, **distributed tracing (J14)**, **cockpit / ambient flight deck (H2)**). **P3 (cockpit & audit UI) is complete.** Next: **P4 Office Engine**. See §7 + `TODO.md` for the live phase state.
 
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
 2. **Rust core** — everyaios-cdp (tiered engines), everyaios-browser (snapshot/diff/ownership + session-vault cookie glue), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc

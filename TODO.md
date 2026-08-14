@@ -277,11 +277,11 @@
 - [x] `[DONE]` Implement Stop button: kills agent loop from cockpit — **Tauri `agent_stop` sends JSON-RPC `agent/stop` over the unix control channel (`everyaios_ipc::socket::request` — the channel `serve_unix_control_channel` already binds; the coordinator consumes the method and kills the loop). UI Stop button per selected session with sent-state. Tested: `events_since` tail + query/timeline/screenshot tests — 355 ws tests (344 + 3 + 8), clippy 0, fmt clean**
 
 ### P3.2 Cockpit / Ambient Flight Deck (H2 — doc 33 §9.5)
-- [ ] `[NOT DONE]` Implement quiet mode: single-sentence status in tray
-- [ ] `[NOT DONE]` Implement slide-over panel: live action cards + token counters
-- [ ] `[NOT DONE]` Implement STOP / UNDO buttons (single-click kill or revert last action)
-- [ ] `[NOT DONE]` Implement MCQ interrupt cards (on circuit-break): display 4 options
-- [ ] `[NOT DONE]` Implement agent cards: per-agent status, model, tokens used, elapsed
+- [x] `[DONE]` Implement quiet mode: single-sentence status in tray — **`CockpitState::quiet_status()` builds the line (`EveryAIOS: Updating report — 2s` / `EveryAIOS: idle` from the newest active agent) + Tauri `cockpit_quiet(quiet, status)` sets the tray tooltip (`app.tray_by_id("main-tray")`) and hides the main window (tray Show restores); UI quiet toggle + quiet-line banner**
+- [x] `[DONE]` Implement slide-over panel: live action cards + token counters — **`ui/src/pages/Cockpit.tsx` right-side drawer: per-agent live action cards + aggregated token counters (`CockpitState::token_totals`), toggled from the header**
+- [x] `[DONE]` Implement STOP / UNDO buttons (single-click kill or revert last action) — **`agent_stop` (JSON-RPC `agent/stop` — already shipped P3.1) + new `agent_undo` (JSON-RPC `agent/undo` over the same unix control channel; `CockpitState::undo` mirrors the request + marks the card Waiting); per-card buttons with disabled-when-idle + sent-state**
+- [x] `[DONE]` Implement MCQ interrupt cards (on circuit-break): display 4 options — **`CockpitState::present_interrupt(agent, prompt, 4 options)` pauses the agent (Waiting); the UI renders the card with 4 option buttons; `interrupt_respond(id, choice)` records the choice, resumes the agent, and forwards `agent/interrupt-response` (JSON-RPC with the chosen text) to the coordinator**
+- [x] `[DONE]` Implement agent cards: per-agent status, model, tokens used, elapsed — **`AgentCard` (status/model/provider/token counters/started+last-action ms + capped 12-action trail); `cockpit_snapshot` polled every 2s renders Running-now cards with LIVE/WAIT chip, ticking elapsed clock, action trail, in/out tokens. `everyaios-audit/src/cockpit.rs` +8 tests (trail cap, first-action card creation, token totals, quiet line, stop/undo, interrupt lifecycle, upsert) — 363 ws tests (355 + 8 cockpit), clippy 0, fmt clean**
 
 ### P3.3 Distributed Tracing (J14 — doc 43, doc 52; ARCH/06)
 - [x] `[DONE]` Integrate opentelemetry-rust in everyaios-core — **`opentelemetry = "0.27"` in everyaios-core + `src/tracing.rs`: `TraceContext` (root/child spans over `opentelemetry::trace::{TraceId, SpanId, TraceFlags}`), `SpanRecord`/`SpanAttrs` (every doc-43 field: trace_id/span_id/parent/service/session/agent/tool/permission/duration/status), `TraceReporter`**

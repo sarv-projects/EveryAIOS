@@ -784,3 +784,224 @@ body {
   height: 100%;
   gap: 8px;
 }
+
+/* ==========================================================================
+   P3.2 — Cockpit / Ambient Flight Deck (H2, doc 33 §9.5)
+   ========================================================================== */
+.cockpit {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cockpit-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.cockpit-head-actions {
+  display: flex;
+  gap: 8px;
+}
+.ghost {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ghost:hover,
+.ghost.active {
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.quiet-line {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  color: var(--accent-2);
+}
+.chip {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  text-transform: uppercase;
+  flex: none;
+}
+.chip.live {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+.chip.wait {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+}
+.interrupts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.interrupt-card {
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.06);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.interrupt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.interrupt-prompt {
+  font-size: 14px;
+}
+.interrupt-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.mcq {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-raise);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.mcq:hover {
+  border-color: var(--accent);
+}
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.agent-card {
+  border: 1px solid var(--border);
+  background: var(--bg-raise);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.agent-card.live {
+  border-color: rgba(34, 197, 94, 0.4);
+}
+.agent-card.waiting {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+.agent-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.agent-name {
+  font-weight: 600;
+}
+.action-trail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.action-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.action-row .tool {
+  color: var(--accent-2);
+  flex: none;
+  min-width: 110px;
+}
+.agent-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.tokens {
+  color: var(--muted);
+}
+.card-actions {
+  display: flex;
+  gap: 6px;
+}
+.card-actions .stop {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.card-actions .ghost {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.slide-over {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.35);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  z-index: 40;
+}
+.slide-over-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.slide-totals {
+  color: var(--accent-2);
+}
+.slide-agent {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-raise);
+}
+.slide-agent-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.sent-log {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  word-break: break-all;
+}
