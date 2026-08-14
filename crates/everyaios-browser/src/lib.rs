@@ -11,6 +11,7 @@ pub mod capture;
 pub mod diff;
 pub mod ownership;
 pub mod read;
+pub mod session;
 pub mod tiers;
 pub mod tree;
 
@@ -26,6 +27,10 @@ pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
 pub use diff::{diff_snapshots, snapshot_lines};
 pub use ownership::{OwnershipError, TabClaim, TabOwner, TabRecord, TabRegistry};
 pub use read::{read_http, ReadOptions, ReadSource};
+pub use session::{
+    cookie_from_cdp, cookie_to_cdp, get_cookies, group_cookies_by_site,
+    inherit_cookies_from_chrome, inject_session, seal_session, set_cookies, SessionBridgeError,
+};
 pub use tiers::{
     EngineConfig, EngineError, EngineResult, EngineTier, FetchIntent, LightEngine, TieredEngine,
 };

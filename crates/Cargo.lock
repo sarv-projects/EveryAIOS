@@ -314,6 +314,7 @@ version = "0.1.0"
 dependencies = [
  "everyaios-audit",
  "everyaios-cdp",
+ "everyaios-vault",
  "html2md",
  "regex",
  "serde",
@@ -352,8 +353,10 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.19",
  "toml",
+ "ureq",
  "windows-sys 0.61.2",
 ]
 

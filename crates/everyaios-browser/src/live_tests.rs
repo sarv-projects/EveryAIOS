@@ -261,3 +261,67 @@ fn live_tiered_stack_escalation() {
 
     eprintln!("LIVE PASS: tiered stack — static → light → chrome escalation");
 }
+
+#[test]
+#[ignore]
+fn live_session_inheritance_pulls_cookies_from_chrome_debug_port() {
+    if !live_enabled() {
+        return;
+    }
+    // E13: the "user's" Chrome already runs with a discoverable debug port.
+    // Spawn it with `--remote-debugging-port=0`, then discover the real port
+    // the way the inheritance path does (DevToolsActivePort → probe).
+    let user_data_dir =
+        std::env::temp_dir().join(format!("everyaios-live-inherit-{}", std::process::id()));
+    let opts = everyaios_cdp::LaunchOptions {
+        headless: true,
+        user_data_dir: user_data_dir.clone(),
+        ..Default::default()
+    };
+    let child = everyaios_cdp::spawn_browser(&opts).expect("spawn Chrome");
+
+    let endpoint =
+        everyaios_cdp::read_devtools_active_port(&user_data_dir).expect("read DevToolsActivePort");
+    let port = url::Url::parse(&endpoint.browser_ws_url)
+        .expect("parse ws url")
+        .port()
+        .expect("ws url has a port");
+
+    // Simulate the user's existing session: set a cookie on connection #1.
+    let client = everyaios_cdp::connect_to_browser(child.endpoint()).expect("connect");
+    let page = client
+        .list_targets()
+        .expect("targets")
+        .into_iter()
+        .find(|t| t.target_type == TargetType::Page)
+        .expect("a page target");
+    let session = client.attach(&page.target_id).expect("attach");
+    client
+        .call_session(
+            &session.session_id,
+            "Network.setCookies",
+            serde_json::json!({ "cookies": [{
+                "name": "inherit-test",
+                "value": "yes",
+                "domain": "example.com",
+                "path": "/",
+                "httpOnly": false,
+                "secure": false,
+                "sameSite": "Lax"
+            }] }),
+        )
+        .expect("set cookie");
+
+    // E13: inherit via the discovered debug port on a fresh connection.
+    let buckets = crate::session::inherit_cookies_from_chrome(port).expect("inherit cookies");
+    let found = buckets.iter().any(|(site, cookies)| {
+        site == "example.com" && cookies.iter().any(|c| c.name == "inherit-test")
+    });
+    assert!(
+        found,
+        "inherited cookies must include the cookie set on the user's session"
+    );
+    eprintln!("LIVE PASS: session inheritance via debug port (E13)");
+
+    drop(child);
+}

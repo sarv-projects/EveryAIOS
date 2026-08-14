@@ -15,6 +15,7 @@ pub mod keyring;
 pub mod ledger;
 pub mod local;
 pub mod oauth;
+pub mod session;
 pub mod session_budget;
 
 pub use broker::{usage_tokens, Broker, BrokerError, ChatStreamEvent};
@@ -27,13 +28,17 @@ pub use local::{Grammar, LocalEndpoint, LocalRuntime, DEFAULT_NUM_CTX, MIN_WARN_
 pub use oauth::{
     DeviceCodeStart, DevicePoll, OAuthAccountInfo, OAuthError, OAuthManager, PkceStart,
 };
+pub use session::{
+    AuthHeader, CaptureInput, Cookie, SessionContext, SessionError, SessionRecord, SessionStatus,
+    SessionUse, SessionVault, StorageItem, StorageKind, TrustLevel,
+};
 pub use session_budget::{SessionBudget, DEFAULT_SESSION_BUDGET_USD};
 
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 const INIT_SQL: &str = r#"
 PRAGMA journal_mode=WAL;
@@ -131,6 +136,70 @@ CREATE TABLE IF NOT EXISTS oauth_pending (
     interval_secs     INTEGER NOT NULL DEFAULT 5,
     created_at        INTEGER NOT NULL
 );
+
+-- P2.7 (E11/E7/E13, ARCH/08 §8.9): Session Vault — per-site full storage
+-- context (cookies + localStorage/sessionStorage/IndexedDB + auth headers),
+-- multi-account, permission-gated, usage-audited. The agent only ever sees
+-- the opaque `id` + metadata (SessionRecord); raw values flow only through
+-- the injection path (SessionContext) behind a Trust-Ladder grant.
+CREATE TABLE IF NOT EXISTS sessions (
+    id           TEXT PRIMARY KEY,
+    site         TEXT NOT NULL,
+    account      TEXT NOT NULL,
+    persist      INTEGER NOT NULL DEFAULT 0,
+    trust_level  TEXT NOT NULL DEFAULT 'read_only',
+    status       TEXT NOT NULL DEFAULT 'active',
+    expires_at   INTEGER,
+    last_used_at INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL,
+    UNIQUE(site, account)
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_site ON sessions(site);
+
+CREATE TABLE IF NOT EXISTS session_cookies (
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    value      BLOB NOT NULL,
+    domain     TEXT NOT NULL DEFAULT '',
+    path       TEXT NOT NULL DEFAULT '/',
+    expires    INTEGER,
+    http_only  INTEGER NOT NULL DEFAULT 0,
+    secure     INTEGER NOT NULL DEFAULT 0,
+    same_site  TEXT NOT NULL DEFAULT 'Lax',
+    PRIMARY KEY (session_id, name, domain, path)
+);
+
+CREATE TABLE IF NOT EXISTS session_storage (
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    kind       TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    value      BLOB NOT NULL,
+    PRIMARY KEY (session_id, kind, key)
+);
+
+CREATE TABLE IF NOT EXISTS session_headers (
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    value      BLOB NOT NULL,
+    PRIMARY KEY (session_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS session_grants (
+    session_id    TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    agent_id      TEXT NOT NULL,
+    granted_level TEXT NOT NULL,
+    granted_at    INTEGER NOT NULL,
+    PRIMARY KEY (session_id, agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS session_uses (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id    TEXT NOT NULL,
+    agent_session TEXT NOT NULL,
+    action        TEXT NOT NULL,
+    ts            INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_uses_session ON session_uses(session_id);
 "#;
 
 /// An open SQLCipher vault handle. Not `Clone` — ownership is the point.
@@ -303,7 +372,7 @@ mod tests {
 
         {
             let vault = Vault::open(&path, "test-key").expect("open");
-            assert!(vault.status().contains("schema v4"));
+            assert!(vault.status().contains("schema v5"));
             vault.register_key("anthropic", "key-1").unwrap();
             vault.register_key("anthropic", "key-2").unwrap();
             vault.register_key("openai", "key-3").unwrap();
@@ -335,9 +404,9 @@ mod tests {
     }
 
     #[test]
-    fn stale_v1_schema_gets_bumped_to_v4_on_open() {
+    fn stale_v1_schema_gets_bumped_to_v5_on_open() {
         // A P0.1-era DB has schema_version=1 and no key_ring/token_usage.
-        // Opening it with the v4 code must create the new tables AND bump the
+        // Opening it with the v5 code must create the new tables AND bump the
         // recorded version so status() never reports a stale version.
         let dir =
             std::env::temp_dir().join(format!("everyaios-vault-migrate-{}", std::process::id()));
@@ -359,7 +428,7 @@ mod tests {
         // Reopen: version row must be bumped to the current schema.
         {
             let vault = Vault::open(&path, "test-key").expect("reopen");
-            assert!(vault.status().contains("schema v4"));
+            assert!(vault.status().contains("schema v5"));
             assert!(vault.ledger_count().unwrap() == 0);
         }
 

@@ -87,7 +87,7 @@ Rules:
 
 - **Stored (encrypted, SQLCipher, everyaios-vault):** per-site **full storage context** — cookie jars (host-keyed) + **localStorage + sessionStorage + IndexedDB** + auth headers — captured from any tier (Steel `steel-browser` pattern, doc 55 §3; Chrome raw-storage decoding: `0x00` = UTF-16-LE, `0x01` = ISO-8859-1). **Persist/restore** flag per session so stateful workflows survive restarts. **Multiple accounts per site** (personal / work / test) = separate `Session` records with name, site, role tag.
 - **Capture paths:**
-  1. **Sign-in-in-browser** (default): user logs into a site in the visible webview → `Page.getCookies` → sealed into the vault. Works with everything incl. MFA/SAML.
+  1. **Sign-in-in-browser** (default): user logs into a site in the visible webview → `Network.getCookies` (CDP) → sealed into the vault. Works with everything incl. MFA/SAML.
   2. **Session inheritance** (no re-login): attach to the user's own daily Chrome profile via `--remote-debugging-port` on a *copy* of their profile dir → inherit live sessions; store only what's needed (BrowserOS chrome-importer pattern, doc 33 §3.2 — ours is read-on-attach, zero magic).
   3. **Import** (optional, user-initiated): Chrome passwords / autofill / `Local State`.
 - **Permission-gated access (the trust model):**
@@ -110,7 +110,7 @@ Ordered by cost/effectiveness. Defense-in-depth, not one magic bypass; the user 
    - **Proxy consistency** (optional, user-provided): residential/geo-matched proxies; location ↔ timezone ↔ language coherence.
 2. **Human-in-the-loop pass-through (the universal answer, default)** — any challenge surfaces the tab in the visible webview; the user solves it once (seconds); cookies captured to the vault → future runs of that site flow free until expiry. Works for reCAPTCHA v2/v3, Turnstile/Managed, hCaptcha, MFA — everything. Cost ≈ 0, fully local.
 3. **Local solvers (free, on-device):**
-   - **Proof-of-Work captchas** (Altcha, Friendly Captcha, Turnstile hidden mode): pure crypto puzzles — solved in everyaios-core, no external calls (verified: PoW is the self-hostable class).
+   - **Proof-of-Work captchas** (Altcha, Friendly Captcha): pure SHA-256 leading-zero puzzles — solved in everyaios-core, no external calls (verified: PoW is the self-hostable class). **Turnstile (including its "hidden"/non-interactive mode) is Cloudflare-*managed*, not a PoW puzzle** — it routes to human-in-loop (2) or BYO (4), never claimed locally solvable.
    - **LLM visual grounding**: the snapshot→act loop already gives eyes on simple challenges — click-hold, image-select, checkbox — solved via `act` (browser-use pattern, doc 06).
 4. **BYO solver APIs (optional, user's own account/credit)** — CapSolver / CapMonster / 2Captcha as a pluggable `ChallengeSolver`, permission-gated like any F-series connector; returned token injected via CDP. Never a default, never bundled credit.
 5. **Explicitly not in scope**: anything that doesn't route through the user's own authorized accounts + vault.

@@ -14,6 +14,7 @@
 use std::path::PathBuf;
 
 pub mod blueprint;
+pub mod challenge;
 pub mod chat;
 pub mod config;
 pub mod local;
@@ -24,6 +25,11 @@ pub mod supervisor;
 pub mod version;
 
 pub use blueprint::{load_all as load_blueprints, load_blueprint, AgentBlueprint, BlueprintError};
+pub use challenge::{
+    create_task, parse_grounding_choice, poll_task, solve_captcha, ByoProvider, ByoSolverError,
+    ChallengeHandler, ChallengeKind, ChallengeResolution, GroundingChoice, GroundingOption,
+    HumanChallenge, SolverHttp, UreqHttp, VisualGroundingRequest,
+};
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent};
 pub use config::{Config, ConfigError};
 pub use local::{LocalConfig, LocalError, LocalManager, LocalModelInfo};

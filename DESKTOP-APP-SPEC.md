@@ -85,9 +85,9 @@
 | E8 | Authenticated scraping — logged-in sessions → tiered scrape → RAG | 🟡 |
 | E9 | Computer-use (pixels) — GUI control (post-v1, gated; patterns: Atlas, **Agent-S** GUI grounding, **trycua/cua** sandboxed desktops, **OSWorld** harness for continuous eval — docs 48/52; pixel-based stays post-v1 per §8 non-goal) | ⚪ |
 | E10 | **Lightweight engine tier** — Lightpanda (Zig, **default**, AGPL, ~16× less memory) + **Obscura (Rust, opt-in — 21K★ source-verified doc 55: own CDP server + LP.getMarkdown, embedded MCP, scrape workers, SSRF/file:// defaults, ~30MB RSS; spawn-only child process)** via CDP; tier 0 static → 1 lightweight → 2 full escalation | 🔵 |
-| E11 | **Session Vault** — multi-account per site, encrypted **full storage context** (cookies + localStorage + sessionStorage + IndexedDB, Chrome leveldb decode, persist/restore — doc 55) in SQLCipher, Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit, expiry nudges | 🔵 |
-| E12 | **Challenge handler** — PoW captchas solved locally + LLM visual-grounding + human-in-loop pass-through (default) + optional BYO solver API (user key) | 🔵+🟡 |
-| E13 | Session inheritance — live-attach to user's own Chrome profile via CDP debug port (vault path 2, no re-login) | 🔵 |
+| E11 | **Session Vault** — multi-account per site, encrypted **full storage context** (cookies + localStorage + sessionStorage + IndexedDB, Chrome leveldb decode, persist/restore — doc 55) in SQLCipher, Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit, expiry nudges | 🔵 (P2.7 ✅) |
+| E12 | **Challenge handler** — PoW captchas solved locally + LLM visual-grounding + human-in-loop pass-through (default) + optional BYO solver API (user key) | 🔵+🟡 (P2.8 ✅) |
+| E13 | Session inheritance — live-attach to user's own Chrome profile via CDP debug port (vault path 2, no re-login) | 🔵 (P2.7 ✅) |
 | E14 | Behavioral realism — humanized input events (Bézier mouse curves, typing cadence), optional per-site | 🔵 |
 
 ### F. Connector hub
@@ -227,7 +227,7 @@
 | 22 | Lossless prompt compaction — multi-agent logs → dense anchors + frozen-snapshot MEMORY.md | 05 | 🟡 |
 | 23 | Key-ring rotation/failover (cooldown ×2^failures, cap 5min; max 3 switches/call) | A2/A3 | 🔵 |
 | 24 | Session rotation across accounts (429/blocked/expired → next authorized account) | E11 | 🔵 |
-| 25 | PoW captcha solver (Altcha/Friendly Captcha/Turnstile hidden) | E12 | 🔵 |
+| 25 | PoW captcha solver (Altcha/Friendly Captcha — SHA-256 leading-zero puzzle; Turnstile is Cloudflare-managed, never locally solvable) | E12 | 🔵 |
 | 26 | Behavioral-realism input (Bézier mouse curves, typing cadence) | E14 | 🔵 |
 | 27 | Deterministic spreadsheet planner (regex NLP → workbook DSL, zero-LLM common ops) | D2 | 🟡 |
 | 28 | Block-patch document editing (anchored block tree, byte-preserving round-trip) | D1 | 🟡 |
@@ -348,36 +348,34 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 ## 4. Architecture (Frozen — hybrid, from ARCH/01–02/08)
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  TAURI WINDOW (Rust) — 20–40MB idle, native webview               │
-│  Chat+KaTeX · Reader · Workspace (Editor·Files·Terminal·Git) ·    │
-│  Office editors · Connector Hub UI · Permission cards ·           │
-│  Token/cost analytics · Cockpit/replay · Tray                     │
-└──────────────────────────┬───────────────────────────────────────┘
-                    IPC (local WebSocket/JSON-RPC, stdio framing)
-┌──────────────────────────▼───────────────────────────────────────┐
-│  RUST CORE — `everyaios-core` (the safety + browser + scripts owner)    │
-│  everyaios-cdp  everyaios-browser  everyaios-script  everyaios-guard  everyaios-audit           │
-│  everyaios-mcp  everyaios-vault  everyaios-ipc  everyaios-core                            │
-│  · CDP driver + tiered engines (Chrome/Edge → Obscura/Lightpanda) │
-│  · rquickjs `run` sandbox · Guard1/Guard2 · append-only audit     │
-│  · key-ring vault + Session Vault (SQLCipher) · MCP server        │
-└───┬───────────────┬──────────────────────┬────────────────────────┘
-    │               │                      │
-┌───▼────────┐ ┌────▼─────────┐  ┌─────────▼──────────┐
-│ NODE       │ │ BROWSER      │  │ EXECUTION          │
-│ SIDECAR —  │ │ child(s)     │  │ SANDBOX            │
-│ coordinator│ │ (tiered,     │  │ Docker/WSL/MicroVM │
-│ (reuses    │ │ CDP loopback)│  │ + WSL bridge       │
-│ core-*)    │ │              │  │                    │
-└───┬────────┘ └──────────────┘  └────────────────────┘
-    │  core-engine · core-memory · core-files · core-search
-    │  core-connectors · core-automations · core-providers
-    │  core-tools · core-sync · blueprint loader · harness-driving
-    └── SQLite (app.db · memory.db · vault.db) + sqlite-vec + FTS5 + LadybugDB
+┌────────────────────────────────────────────────────────────────────────┐
+│ TAURI WINDOW (Rust) — lean native webview (RSS target measured at P8)  │
+│ Chat+KaTeX · Reader · Workspace (Editor · Files · Terminal · Git)      │
+│ Office editors · Connector Hub UI · Permission cards                   │
+│ Token/cost analytics · Cockpit/replay · Tray                           │
+└────────────────────────────────────┬───────────────────────────────────┘
+                                     IPC (local WebSocket / JSON-RPC, stdio framing)
+┌────────────────────────────────────▼───────────────────────────────────┐
+│ RUST CORE — everyaios-core (the safety + browser + scripts owner)      │
+│ cdp · browser · script · guard · audit · mcp · vault · ipc             │
+│ · CDP driver + tiered engines (Chrome/Edge → Obscura/Lightpanda)       │
+│ · rquickjs `run` sandbox · Guard1/Guard2 · append-only audit           │
+│ · key-ring vault + Session Vault (SQLCipher) · MCP server              │
+└─────────────────┬──────────────────┬─────────────────┬─────────────────┘
+      │                  │                      │
+┌─────────────────┐  ┌───────────────┐  ┌────────────────────┐
+│ NODE            │  │ BROWSER       │  │ EXECUTION          │
+│ SIDECAR —       │  │ child(s)      │  │ SANDBOX            │
+│ coordinator     │  │ (tiered,      │  │ Docker/WSL/MicroVM │
+│ (reuses core-*) │  │ CDP loopback) │  │ + WSL bridge       │
+└─────────────────┘  └───────────────┘  └────────────────────┘
+      │  core-engine · core-memory · core-files · core-search
+      │  core-connectors · core-automations · core-providers
+      │  core-tools · core-sync · blueprint loader · harness-driving
+      └── SQLite (app.db · memory.db · vault.db) + sqlite-vec + FTS5 + LadybugDB
 ```
 
-**Division of trust (the core safety axiom): the sidecar proposes, Rust disposes.** Every mutating call from the TS sidecar requires a `everyaios-guard` authorization ticket; browser/script/audit/keys live only in Rust. Key decisions (code-verified in research): Tauri not Electron (20–40MB vs 500MB+); single-window SPA, not multi-tab webviews; supervised child processes with reconnect/resume; Markdown specs not config UIs; cache-first token discipline; dual-guard security; tiered browser engines; zero founder servers.
+**Division of trust (the core safety axiom): the sidecar proposes, Rust disposes.** Every mutating call from the TS sidecar requires a `everyaios-guard` authorization ticket; browser/script/audit/keys live only in Rust. Key decisions (code-verified in research): Tauri not Electron (lean native webview vs 500MB+ Electron — real RSS measured at P8, see J16/P8); single-window SPA, not multi-tab webviews; supervised child processes with reconnect/resume; Markdown specs not config UIs; cache-first token discipline; dual-guard security; tiered browser engines; zero founder servers.
 
 **Design axiom — no unreconstructable sidecar state:** The sidecar must never hold mutable state that isn't also in a checkpoint. Every agent turn boundary is a checkpoint write. On crash recovery (ProcessSupervisor: exponential backoff 1s→2s→4s→60s cap, circuit breaker after 5 crashes/10min), the sidecar cold-starts in 50–150ms and resumes from the last checkpoint. This is the Hermes 20-snapshot/500MB pattern (doc 38).
 
@@ -474,11 +472,13 @@ plugin-bundle/
 
 ## 6. What's NEW to build (the gap — complete list)
 
+> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: P0–P2.8 (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, 37-tool catalog). Remaining in P2: behavioral realism (E14) + session replay (E5). See §7 + `TODO.md` for the live phase state.
+
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
-2. **Rust core** — everyaios-cdp (tiered engines + session vault capture), everyaios-browser (snapshot/diff/ownership), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc
+2. **Rust core** — everyaios-cdp (tiered engines), everyaios-browser (snapshot/diff/ownership + session-vault cookie glue), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc
 3. Coordinator sidecar (blueprint loader, agent loops, events) + ProcessSupervisor
-4. Key-ring vault (A2/A3) + OAuth subscription flows (A4) + Session Vault (E11) + session inheritance (E13)
-5. Browser tiers: **Lightpanda integration (default — `lightpanda serve` spawn, SSRF/file:// defaults, doc 55), Obscura opt-in (`obscura serve` spawn)**, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12); behavioral realism (E14); **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context (doc 55)
+4. Key-ring vault (A2/A3) + OAuth subscription flows (A4) + Session Vault (E11) + session inheritance (E13) — **✅ landed (P1.1–P1.7, P2.7)**
+5. Browser tiers: **Lightpanda integration (default — `lightpanda serve` spawn, SSRF/file:// defaults, doc 55), Obscura opt-in (`obscura serve` spawn)**, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12) — **✅ landed (P2.8)**; behavioral realism (E14); **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context (doc 55) — **✅ landed (P2.7)**
 6. Office engine (D1–D8): docx block-patch, IronCalc xlsx sidecar + deterministic planner, pptx part-editor, pdf suite, LibreOffice conformance oracle
 7. Token economy (05): compaction pipeline with Reasonix ratios, snip rules, prefix-stability, cache-cost dashboard
 8. Memory fusion (C3) + LadybugDB KG (C6) + Letta paging (C2) — on top of the retested 7 algorithms
