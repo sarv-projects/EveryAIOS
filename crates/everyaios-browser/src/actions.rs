@@ -11,17 +11,19 @@
 //! for the content quad, and dispatches `Input.*` events at the center.
 
 use crate::capture::CdpSession;
+use crate::humanize::{mouse_path, typing_delays, BehaviorProfile, XorShift};
 use crate::{diff_snapshots, A11yNode, Snapshot, SnapshotDiff, SnapshotEngine, SnapshotMode};
 use everyaios_cdp::CdpError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Settle wait after an `act` before capturing the post-action diff.
 pub const ACT_SETTLE_MS: u64 = 500;
 
 /// A resolved click/type target: geometry (CSS viewport px) + backend node id.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
@@ -141,19 +143,51 @@ pub struct BrowserActions<'a, C: CdpSession> {
     pub client: &'a C,
     pub session_id: Option<&'a str>,
     pub snapshot_engine: SnapshotEngine,
+    /// P2.9 — per-site behavioral realism (Bézier mouse, typing cadence).
+    /// Off by default; `act` humanizes only when the profile says the site
+    /// is enabled (ARCH/08 §8.10).
+    behavior: BehaviorProfile,
+    /// Deterministic when the profile carries a seed (tests), else time-seeded.
+    rng: std::sync::Mutex<XorShift>,
+    /// Last known cursor position — the start of the next Bézier path.
+    mouse_pos: std::sync::Mutex<Point>,
 }
 
 impl<'a, C: CdpSession> BrowserActions<'a, C> {
     pub fn new(client: &'a C, session_id: Option<&'a str>) -> Self {
+        let behavior = BehaviorProfile::default();
         Self {
             client,
             session_id,
             snapshot_engine: SnapshotEngine::default(),
+            rng: std::sync::Mutex::new(Self::make_rng(&behavior)),
+            mouse_pos: std::sync::Mutex::new(Point { x: 0.0, y: 0.0 }),
+            behavior,
+        }
+    }
+
+    fn make_rng(behavior: &BehaviorProfile) -> XorShift {
+        match behavior.seed {
+            Some(s) => XorShift::new(s),
+            None => {
+                let t = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_nanos() as u64)
+                    .unwrap_or(0x1234_5678_9ABC_DEF0);
+                XorShift::new(t)
+            }
         }
     }
 
     pub fn with_mode(mut self, mode: SnapshotMode) -> Self {
         self.snapshot_engine = self.snapshot_engine.with_mode(mode);
+        self
+    }
+
+    /// P2.9 — enable per-site behavioral realism on this engine.
+    pub fn with_behavior(mut self, behavior: BehaviorProfile) -> Self {
+        self.rng = std::sync::Mutex::new(Self::make_rng(&behavior));
+        self.behavior = behavior;
         self
     }
 
@@ -263,51 +297,56 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
     pub fn act(&self, act: ActKind) -> Result<ActResult, CdpError> {
         let pre = self.snapshot("pre-act")?;
         let kind = act_kind_name(&act);
-        self.dispatch(&act)?;
+        // P2.9 — per-site behavioral realism: humanize only when the profile
+        // says the current page's host is enabled.
+        let humanized = self.behavior.site_enabled(&pre.url);
+        self.dispatch(&act, humanized)?;
         self.settle(ACT_SETTLE_MS);
         let post = self.snapshot("post-act")?;
         let diff = diff_snapshots(&pre, &post);
         Ok(ActResult {
             kind: kind.to_string(),
             diff: Some(diff),
-            note: None,
+            note: humanized.then(|| "humanized (P2.9)".to_string()),
         })
     }
 
-    fn dispatch(&self, act: &ActKind) -> Result<(), CdpError> {
+    fn dispatch(&self, act: &ActKind, humanized: bool) -> Result<(), CdpError> {
         match act {
             ActKind::Click { ref_id } => {
                 let p = self.ref_point(ref_id)?;
-                self.click_at(&p)
+                self.click_at(&p, humanized)
             }
-            ActKind::ClickAt { x, y } => self.click_at(&Point { x: *x, y: *y }),
+            ActKind::ClickAt { x, y } => self.click_at(&Point { x: *x, y: *y }, humanized),
             ActKind::Type { ref_id, text } => {
                 let p = self.ref_point(ref_id)?;
-                self.focus_at(&p)?;
-                self.insert_text(text)
+                self.focus_at(&p, humanized)?;
+                self.insert_text(text, humanized)
             }
             ActKind::TypeAt { x, y, text } => {
                 let p = Point { x: *x, y: *y };
-                self.focus_at(&p)?;
-                self.insert_text(text)
+                self.focus_at(&p, humanized)?;
+                self.insert_text(text, humanized)
             }
             ActKind::Fill { fields } => {
                 for f in fields {
                     let p = self.ref_point(&f.ref_id)?;
-                    self.focus_at(&p)?;
-                    self.insert_text(&f.value)?;
+                    self.focus_at(&p, humanized)?;
+                    self.insert_text(&f.value, humanized)?;
                 }
                 Ok(())
             }
             ActKind::Press { key } => self.press_key(key),
             ActKind::Hover { ref_id } => {
                 let p = self.ref_point(ref_id)?;
-                self.mouse("mouseMoved", &p, None)
+                self.mouse_move_to(&p, humanized, true)
             }
-            ActKind::HoverAt { x, y } => self.mouse("mouseMoved", &Point { x: *x, y: *y }, None),
+            ActKind::HoverAt { x, y } => {
+                self.mouse_move_to(&Point { x: *x, y: *y }, humanized, true)
+            }
             ActKind::Focus { ref_id } => {
                 let p = self.ref_point(ref_id)?;
-                self.focus_at(&p)
+                self.focus_at(&p, humanized)
             }
             ActKind::Check { ref_id } => self.set_checked(ref_id, true),
             ActKind::Uncheck { ref_id } => self.set_checked(ref_id, false),
@@ -316,7 +355,7 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
             ActKind::Drag { from_ref, to_ref } => {
                 let from = self.ref_point(from_ref)?;
                 let to = self.ref_point(to_ref)?;
-                self.drag(&from, &to)
+                self.drag(&from, &to, humanized)
             }
             ActKind::DragAt {
                 from_x,
@@ -329,15 +368,59 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
                     y: *from_y,
                 },
                 &Point { x: *to_x, y: *to_y },
+                humanized,
             ),
             ActKind::DialogAccept => self.dialog(true),
             ActKind::DialogDismiss => self.dialog(false),
         }
     }
 
-    fn click_at(&self, p: &Point) -> Result<(), CdpError> {
-        self.mouse("mousePressed", p, Some("left"))?;
-        self.mouse("mouseReleased", p, Some("left"))
+    fn click_at(&self, p: &Point, humanized: bool) -> Result<(), CdpError> {
+        if humanized {
+            // Move along a Bézier curve to a jittered natural target, then
+            // press/release there (the cursor never teleports).
+            self.mouse_move_to(p, true, false)?;
+            let target = *self.mouse_pos.lock().unwrap();
+            self.mouse("mousePressed", &target, Some("left"))?;
+            self.mouse("mouseReleased", &target, Some("left"))
+        } else {
+            self.mouse("mousePressed", p, Some("left"))?;
+            self.mouse("mouseReleased", p, Some("left"))
+        }
+    }
+
+    /// Move the cursor to `p` — as one `mouseMoved` when not humanized, or
+    /// along a Bézier `mouse_path` (with per-step cadence) when humanized.
+    /// `exact_end`: hover targets land precisely (jitter is an interior
+    /// path property); click targets keep the jittered natural endpoint.
+    /// Updates the tracked cursor position either way.
+    fn mouse_move_to(&self, p: &Point, humanized: bool, exact_end: bool) -> Result<(), CdpError> {
+        let from = *self.mouse_pos.lock().unwrap();
+        if humanized {
+            let path = {
+                let mut rng = self.rng.lock().unwrap();
+                mouse_path(&mut rng, &self.behavior.mouse, &from, p)
+            };
+            let (lo, hi) = self.behavior.mouse.move_delay_ms;
+            for step in &path {
+                self.mouse("mouseMoved", step, None)?;
+                *self.mouse_pos.lock().unwrap() = *step;
+                let delay = {
+                    let mut rng = self.rng.lock().unwrap();
+                    rng.range(lo as f64, hi as f64) as u64
+                };
+                thread::sleep(Duration::from_millis(delay));
+            }
+            if exact_end && path.last().map(|l| l != p).unwrap_or(true) {
+                self.mouse("mouseMoved", p, None)?;
+                *self.mouse_pos.lock().unwrap() = *p;
+            }
+            Ok(())
+        } else {
+            self.mouse("mouseMoved", p, None)?;
+            *self.mouse_pos.lock().unwrap() = *p;
+            Ok(())
+        }
     }
 
     fn mouse(&self, typ: &str, p: &Point, button: Option<&str>) -> Result<(), CdpError> {
@@ -356,10 +439,10 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
         Ok(())
     }
 
-    fn focus_at(&self, p: &Point) -> Result<(), CdpError> {
+    fn focus_at(&self, p: &Point, humanized: bool) -> Result<(), CdpError> {
         // Click to focus the element under the point, then Ctrl+A so a
         // subsequent insertText replaces (not appends to) existing content.
-        self.click_at(p)?;
+        self.click_at(p, humanized)?;
         self.press_raw("Control", "ControlLeft", 17)?;
         self.client.call_session(
             self.sid()?,
@@ -389,9 +472,64 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
         Ok(())
     }
 
-    fn insert_text(&self, text: &str) -> Result<(), CdpError> {
+    fn insert_text(&self, text: &str, humanized: bool) -> Result<(), CdpError> {
+        if !humanized {
+            self.client
+                .call_session(self.sid()?, "Input.insertText", json!({ "text": text }))?;
+            return Ok(());
+        }
+        // P2.9 — per-key typing cadence: one keyDown/keyUp per char with
+        // natural per-char delays and word-boundary pauses.
+        let delays = {
+            let mut rng = self.rng.lock().unwrap();
+            typing_delays(&mut rng, &self.behavior.typing, text)
+        };
+        for (i, ch) in text.chars().enumerate() {
+            self.dispatch_char(ch)?;
+            if let Some(d) = delays.get(i) {
+                thread::sleep(*d);
+            }
+        }
+        Ok(())
+    }
+
+    /// One printable character as keyDown/keyUp (with `text`), CDP-style.
+    fn dispatch_char(&self, ch: char) -> Result<(), CdpError> {
+        let (key, code, vk): (String, String, i32) = match ch {
+            '\t' => ("Tab".into(), "Tab".into(), 9),
+            '\n' => ("Enter".into(), "Enter".into(), 13),
+            ' ' => (" ".into(), "Space".into(), 32),
+            c if c.is_ascii_alphabetic() => {
+                let u = c.to_ascii_uppercase();
+                (c.to_string(), format!("Key{u}"), u as i32)
+            }
+            c if c.is_ascii_digit() => (c.to_string(), format!("Digit{c}"), c as i32),
+            c if c.is_ascii() => (c.to_string(), String::new(), c as i32),
+            c => (c.to_string(), String::new(), 0),
+        };
+        let mut down = json!({
+            "type": "keyDown",
+            "key": key,
+            "code": code,
+            "windowsVirtualKeyCode": vk,
+            "nativeVirtualKeyCode": vk,
+        });
+        if ch != '\t' && ch != '\n' {
+            down["text"] = json!(ch.to_string());
+        }
         self.client
-            .call_session(self.sid()?, "Input.insertText", json!({ "text": text }))?;
+            .call_session(self.sid()?, "Input.dispatchKeyEvent", down)?;
+        self.client.call_session(
+            self.sid()?,
+            "Input.dispatchKeyEvent",
+            json!({
+                "type": "keyUp",
+                "key": key,
+                "code": code,
+                "windowsVirtualKeyCode": vk,
+                "nativeVirtualKeyCode": vk,
+            }),
+        )?;
         Ok(())
     }
 
@@ -468,18 +606,28 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
         Ok(())
     }
 
-    fn drag(&self, from: &Point, to: &Point) -> Result<(), CdpError> {
+    fn drag(&self, from: &Point, to: &Point, humanized: bool) -> Result<(), CdpError> {
         self.mouse("mousePressed", from, Some("left"))?;
-        // A few intermediate moves to make the drag register.
-        let steps = 8;
-        for i in 1..=steps {
-            let t = i as f64 / steps as f64;
-            let p = Point {
-                x: from.x + (to.x - from.x) * t,
-                y: from.y + (to.y - from.y) * t,
-            };
-            self.mouse("mouseMoved", &p, None)?;
+        // Intermediate moves: linear when plain, Bézier when humanized. The
+        // release target stays exact either way (a drop must land precisely).
+        let path: Vec<Point> = if humanized {
+            let mut rng = self.rng.lock().unwrap();
+            mouse_path(&mut rng, &self.behavior.mouse, from, to)
+        } else {
+            (1..=8)
+                .map(|i| {
+                    let t = i as f64 / 8.0;
+                    Point {
+                        x: from.x + (to.x - from.x) * t,
+                        y: from.y + (to.y - from.y) * t,
+                    }
+                })
+                .collect()
+        };
+        for p in &path {
+            self.mouse("mouseMoved", p, None)?;
         }
+        *self.mouse_pos.lock().unwrap() = *to;
         self.mouse("mouseReleased", to, Some("left"))
     }
 
@@ -1040,11 +1188,16 @@ mod tests {
         calls: std::sync::Mutex<Vec<(Option<String>, String, Value)>>,
         responses: HashMap<&'static str, Value>,
         ax: Value,
+        url: String,
     }
 
     impl MockSession {
         fn with_ax(mut self, ax: Value) -> Self {
             self.ax = ax;
+            self
+        }
+        fn with_url(mut self, url: &str) -> Self {
+            self.url = url.into();
             self
         }
         fn calls(&self) -> Vec<(Option<String>, String)> {
@@ -1096,6 +1249,9 @@ mod tests {
                 params.clone(),
             ));
             match method {
+                "Page.getFrameTree" => Ok(json!({
+                    "frameTree": { "frame": { "url": self.url } }
+                })),
                 "Accessibility.getFullAXTree" => {
                     let nodes = self.ax.get("nodes").cloned().unwrap_or(self.ax.clone());
                     Ok(json!({ "nodes": nodes }))
@@ -1357,5 +1513,131 @@ mod tests {
         let a = BrowserActions::new(&m, Some("sess-1"));
         let out = a.wait(WaitFor::Selector("#btn".into()), 50).unwrap();
         assert_eq!(out, WaitOutcome::TimedOut);
+    }
+
+    // -------------------------------------------------------------------
+    // P2.9 — behavioral realism (Bézier mouse + typing cadence, per-site)
+    // -------------------------------------------------------------------
+
+    /// Fast, deterministic, humanized profile restricted to example.com.
+    fn human_profile() -> crate::humanize::BehaviorProfile {
+        let mut b = crate::humanize::BehaviorProfile::human()
+            .for_sites(&["example.com"])
+            .seeded(42);
+        b.typing.cpm = 6000.0; // ~10ms/char — keeps tests quick
+        b.typing.word_pause_ms = 0;
+        b.mouse.move_delay_ms = (0, 1);
+        b
+    }
+
+    fn mouse_event_types(m: &MockSession) -> Vec<String> {
+        m.calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, mth, _)| mth == "Input.dispatchMouseEvent")
+            .filter_map(|(_, _, p)| p.get("type").and_then(|t| t.as_str()).map(String::from))
+            .collect()
+    }
+
+    #[test]
+    fn humanized_click_dispatches_bezier_moves() {
+        let m = mock().with_url("https://example.com/");
+        let a = BrowserActions::new(&m, Some("sess-1")).with_behavior(human_profile());
+        let res = a
+            .act(ActKind::Click {
+                ref_id: "e1".into(),
+            })
+            .unwrap();
+        assert!(res.note.as_deref() == Some("humanized (P2.9)"));
+        let types = mouse_event_types(&m);
+        // Bézier path: several mouseMoved steps, then press + release.
+        let moves = types.iter().filter(|t| t.as_str() == "mouseMoved").count();
+        assert!(
+            moves >= 2,
+            "expected a Bézier path, got {moves} moves: {types:?}"
+        );
+        assert!(types.ends_with(&["mousePressed".into(), "mouseReleased".into()]));
+    }
+
+    #[test]
+    fn plain_click_has_no_mouse_moves() {
+        let m = mock().with_url("https://example.com/");
+        let a = BrowserActions::new(&m, Some("sess-1")); // behavior off by default
+        a.act(ActKind::Click {
+            ref_id: "e1".into(),
+        })
+        .unwrap();
+        assert!(
+            mouse_event_types(&m).iter().all(|t| t != "mouseMoved"),
+            "plain click must not emit mouseMoved"
+        );
+    }
+
+    #[test]
+    fn humanized_typing_dispatches_per_key_events() {
+        let m = mock().with_url("https://example.com/");
+        let a = BrowserActions::new(&m, Some("sess-1")).with_behavior(human_profile());
+        a.act(ActKind::Type {
+            ref_id: "e1".into(),
+            text: "hi".into(),
+        })
+        .unwrap();
+        let calls = m.calls.lock().unwrap();
+        let texts: Vec<String> = calls
+            .iter()
+            .filter(|(_, mth, _)| mth == "Input.dispatchKeyEvent")
+            .filter_map(|(_, _, p)| p.get("text").and_then(|t| t.as_str()).map(String::from))
+            .collect();
+        assert_eq!(texts, vec!["h".to_string(), "i".to_string()]);
+        assert!(
+            !calls.iter().any(|(_, mth, _)| mth == "Input.insertText"),
+            "humanized typing must not use one-shot insertText"
+        );
+    }
+
+    #[test]
+    fn behavior_is_site_gated() {
+        // Profile restricted to other.com → example.com stays plain.
+        let m = mock().with_url("https://example.com/");
+        let mut b = human_profile().for_sites(&["other.com"]);
+        b.mouse.click_jitter_px = 0.0;
+        let a = BrowserActions::new(&m, Some("sess-1")).with_behavior(b);
+        let res = a
+            .act(ActKind::Click {
+                ref_id: "e1".into(),
+            })
+            .unwrap();
+        assert!(
+            res.note.is_none(),
+            "site must gate humanization: {:?}",
+            res.note
+        );
+        assert!(
+            mouse_event_types(&m).iter().all(|t| t != "mouseMoved"),
+            "other.com profile must not humanize example.com"
+        );
+    }
+
+    #[test]
+    fn humanized_drag_releases_at_exact_target() {
+        let m = mock().with_url("https://example.com/");
+        let a = BrowserActions::new(&m, Some("sess-1")).with_behavior(human_profile());
+        a.act(ActKind::DragAt {
+            from_x: 0.0,
+            from_y: 0.0,
+            to_x: 200.0,
+            to_y: 120.0,
+        })
+        .unwrap();
+        let calls = m.calls.lock().unwrap();
+        let released = calls
+            .iter()
+            .filter(|(_, mth, _)| mth == "Input.dispatchMouseEvent")
+            .find(|(_, _, p)| p.get("type").and_then(|t| t.as_str()) == Some("mouseReleased"))
+            .map(|(_, _, p)| p.clone())
+            .unwrap();
+        assert_eq!(released["x"], json!(200.0));
+        assert_eq!(released["y"], json!(120.0));
     }
 }

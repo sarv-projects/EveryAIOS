@@ -9,6 +9,7 @@ pub mod actions;
 pub mod ax;
 pub mod capture;
 pub mod diff;
+pub mod humanize;
 pub mod ownership;
 pub mod read;
 pub mod session;

@@ -88,7 +88,7 @@
 | E11 | **Session Vault** — multi-account per site, encrypted **full storage context** (cookies + localStorage + sessionStorage + IndexedDB, Chrome leveldb decode, persist/restore — doc 55) in SQLCipher, Trust-Ladder-gated access (agent never sees raw cookies), rotation, usage audit, expiry nudges | 🔵 (P2.7 ✅) |
 | E12 | **Challenge handler** — PoW captchas solved locally + LLM visual-grounding + human-in-loop pass-through (default) + optional BYO solver API (user key) | 🔵+🟡 (P2.8 ✅) |
 | E13 | Session inheritance — live-attach to user's own Chrome profile via CDP debug port (vault path 2, no re-login) | 🔵 (P2.7 ✅) |
-| E14 | Behavioral realism — humanized input events (Bézier mouse curves, typing cadence), optional per-site | 🔵 |
+| E14 | Behavioral realism — humanized input events (Bézier mouse curves, typing cadence), optional per-site | 🔵 (P2.9 ✅) |
 
 ### F. Connector hub
 | ID | Capability | Status |
@@ -472,13 +472,13 @@ plugin-bundle/
 
 ## 6. What's NEW to build (the gap — complete list)
 
-> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: P0–P2.8 (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, 37-tool catalog). Remaining in P2: behavioral realism (E14) + session replay (E5). See §7 + `TODO.md` for the live phase state.
+> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: P0–P2.9 (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, 37-tool catalog). Remaining in P2: session replay (E5). See §7 + `TODO.md` for the live phase state.
 
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
 2. **Rust core** — everyaios-cdp (tiered engines), everyaios-browser (snapshot/diff/ownership + session-vault cookie glue), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc
 3. Coordinator sidecar (blueprint loader, agent loops, events) + ProcessSupervisor
 4. Key-ring vault (A2/A3) + OAuth subscription flows (A4) + Session Vault (E11) + session inheritance (E13) — **✅ landed (P1.1–P1.7, P2.7)**
-5. Browser tiers: **Lightpanda integration (default — `lightpanda serve` spawn, SSRF/file:// defaults, doc 55), Obscura opt-in (`obscura serve` spawn)**, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12) — **✅ landed (P2.8)**; behavioral realism (E14); **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context (doc 55) — **✅ landed (P2.7)**
+5. Browser tiers: **Lightpanda integration (default — `lightpanda serve` spawn, SSRF/file:// defaults, doc 55), Obscura opt-in (`obscura serve` spawn)**, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12) — **✅ landed (P2.8)**; behavioral realism (E14) — **✅ landed (P2.9)**; **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context (doc 55) — **✅ landed (P2.7)**
 6. Office engine (D1–D8): docx block-patch, IronCalc xlsx sidecar + deterministic planner, pptx part-editor, pdf suite, LibreOffice conformance oracle
 7. Token economy (05): compaction pipeline with Reasonix ratios, snip rules, prefix-stability, cache-cost dashboard
 8. Memory fusion (C3) + LadybugDB KG (C6) + Letta paging (C2) — on top of the retested 7 algorithms
