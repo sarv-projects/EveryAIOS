@@ -87,6 +87,15 @@ pub struct Segment {
     pub created_ms: u64,
 }
 
+/// One document's replay timeline for the scrubber UI (P3.1).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Timeline {
+    pub segment: Option<Segment>,
+    pub events: Vec<ReplayEvent>,
+    /// Steps (1-based) that have a persisted screenshot JPEG.
+    pub screenshot_steps: Vec<u64>,
+}
+
 /// Result of a retention sweep.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct SweepStats {
@@ -307,6 +316,101 @@ impl ReplayStore {
             }
         }
         Ok(stats)
+    }
+
+    /// Searchable sessions list (P3.1) — segments filtered by document_id /
+    /// tab_id substring (case-insensitive), newest first; empty = all.
+    pub fn search_sessions(&self, query: &str) -> Result<Vec<Segment>, ReplayError> {
+        let conn = self.open_index()?;
+        let q = query.trim().to_lowercase();
+        let mut stmt = conn.prepare(
+            "SELECT document_id, tab_id, first_ts_ms, last_ts_ms, event_count,
+                    size_bytes, has_gap, created_ms
+             FROM replay_segments ORDER BY created_ms DESC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(Segment {
+                document_id: r.get(0)?,
+                tab_id: r.get(1)?,
+                first_ts_ms: r.get(2)?,
+                last_ts_ms: r.get(3)?,
+                event_count: r.get(4)?,
+                size_bytes: r.get(5)?,
+                has_gap: r.get::<_, i64>(6)? != 0,
+                created_ms: r.get(7)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let seg = row?;
+            if q.is_empty()
+                || seg.document_id.to_lowercase().contains(&q)
+                || seg.tab_id.to_lowercase().contains(&q)
+            {
+                out.push(seg);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Full timeline for one document (P3.1): segment + events + screenshot
+    /// steps — everything the scrubber renders.
+    pub fn timeline(&self, document_id: &str) -> Result<Timeline, ReplayError> {
+        let segment = self
+            .search_sessions(document_id)?
+            .into_iter()
+            .find(|s| s.document_id == document_id);
+        Ok(Timeline {
+            segment,
+            events: self.read_document(document_id)?,
+            screenshot_steps: self.screenshot_steps(document_id)?,
+        })
+    }
+
+    /// Steps (1-based) that have a persisted screenshot JPEG.
+    pub fn screenshot_steps(&self, document_id: &str) -> Result<Vec<u64>, ReplayError> {
+        let prefix = format!("{document_id}-");
+        let mut steps = Vec::new();
+        if !self.screenshot_dir().exists() {
+            return Ok(steps);
+        }
+        for entry in fs::read_dir(self.screenshot_dir())? {
+            let p = entry?.path();
+            let name = match p.file_name().map(|n| n.to_string_lossy().to_string()) {
+                Some(n) => n,
+                None => continue,
+            };
+            if !name.starts_with(&prefix) || !name.ends_with(".jpg") {
+                continue;
+            }
+            let mid = &name[prefix.len()..name.len() - 4];
+            if let Ok(step) = mid.parse::<u64>() {
+                steps.push(step);
+            }
+        }
+        steps.sort_unstable();
+        Ok(steps)
+    }
+
+    /// Absolute path of a step screenshot, if it exists.
+    pub fn screenshot_path(&self, document_id: &str, step: u64) -> Option<PathBuf> {
+        let p = self
+            .screenshot_dir()
+            .join(format!("{document_id}-{step:06}.jpg"));
+        p.exists().then_some(p)
+    }
+
+    /// Events after `since_seq` (P3.1 Watch — live tail of a document).
+    pub fn events_since(
+        &self,
+        document_id: &str,
+        since_seq: u64,
+    ) -> Result<Vec<ReplayEvent>, ReplayError> {
+        Ok(self
+            .read_document(document_id)?
+            .into_iter()
+            .filter(|e| e.seq > since_seq)
+            .collect())
     }
 
     fn screenshot_files(&self, document_id: &str) -> Result<Vec<PathBuf>, ReplayError> {
@@ -753,6 +857,87 @@ mod tests {
         assert!(!p.exists());
         assert!(!p2.exists());
         assert!(store.segments().unwrap().is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn search_sessions_filters_and_timeline_assembles() {
+        let dir = tmp_dir("query");
+        let ingest = ReplayIngest::new(&dir);
+        ingest
+            .ingest_batch(ReplayBatch {
+                batch_id: "b1".into(),
+                tab_id: "tab-alpha".into(),
+                document_id: "docAlpha1".into(),
+                gap: false,
+                events: vec![ev("click", 1000), ev("scroll", 1100)],
+            })
+            .unwrap();
+        ingest
+            .ingest_batch(ReplayBatch {
+                batch_id: "b2".into(),
+                tab_id: "tab-beta".into(),
+                document_id: "docBeta1".into(),
+                gap: false,
+                events: vec![ev("input", 2000)],
+            })
+            .unwrap();
+        let store = ingest.store();
+        // Search by document id substring.
+        let hits = store.search_sessions("alpha").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].document_id, "docAlpha1");
+        // Search by tab id substring.
+        let hits = store.search_sessions("BETA").unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].tab_id, "tab-beta");
+        // Empty query returns all, newest first.
+        let all = store.search_sessions("").unwrap();
+        assert_eq!(all.len(), 2);
+        // Timeline: segment + events + (no) screenshot steps.
+        let tl = store.timeline("docAlpha1").unwrap();
+        assert_eq!(tl.segment.as_ref().unwrap().event_count, 2);
+        assert_eq!(tl.events.len(), 2);
+        assert!(tl.screenshot_steps.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn screenshot_steps_and_path_resolve() {
+        let dir = tmp_dir("shots2");
+        let store = ReplayStore::new(&dir);
+        store.write_screenshot("docA", 1, b"jpeg1").unwrap();
+        store.write_screenshot("docA", 3, b"jpeg3").unwrap();
+        store.write_screenshot("docB", 2, b"jpeg2").unwrap();
+        let steps = store.screenshot_steps("docA").unwrap();
+        assert_eq!(steps, vec![1, 3]);
+        assert!(store.screenshot_path("docA", 3).unwrap().exists());
+        assert!(store.screenshot_path("docA", 2).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn events_since_returns_live_tail() {
+        let dir = tmp_dir("tail");
+        let ingest = ReplayIngest::new(&dir);
+        ingest
+            .ingest_batch(ReplayBatch {
+                batch_id: "b1".into(),
+                tab_id: "t".into(),
+                document_id: "docTail1".into(),
+                gap: false,
+                events: vec![ev("click", 1), ev("scroll", 2), ev("input", 3)],
+            })
+            .unwrap();
+        let tail = ingest.store().events_since("docTail1", 1).unwrap();
+        assert_eq!(tail.len(), 2);
+        assert_eq!(tail[0].seq, 2);
+        assert_eq!(tail[1].seq, 3);
+        assert!(ingest
+            .store()
+            .events_since("docTail1", 99)
+            .unwrap()
+            .is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 

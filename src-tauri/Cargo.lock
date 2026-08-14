@@ -734,6 +734,7 @@ dependencies = [
 name = "everyaios-audit"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -749,8 +750,10 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.20",
  "toml 0.8.23",
+ "ureq",
  "windows-sys 0.61.2",
 ]
 
@@ -758,6 +761,7 @@ dependencies = [
 name = "everyaios-desktop"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "everyaios-audit",
  "everyaios-core",
  "everyaios-guard",

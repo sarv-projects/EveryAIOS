@@ -1,9 +1,11 @@
 import { NavLink, Route, Routes } from "react-router-dom";
+import Audit from "./pages/Audit";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
 
 const nav = [
   { to: "/", label: "Chat", end: true },
+  { to: "/audit", label: "Audit", end: false },
   { to: "/settings", label: "Settings", end: false },
 ];
 
@@ -35,6 +37,7 @@ export default function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<Chat />} />
+          <Route path="/audit" element={<Audit />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

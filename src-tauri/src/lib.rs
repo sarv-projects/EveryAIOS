@@ -9,6 +9,8 @@ use std::process::{ChildStdin, ChildStdout};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+mod replay_cmds;
+
 use everyaios_guard::Guard;
 use everyaios_vault::Vault;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -25,6 +27,8 @@ pub struct AppState {
     /// integration seam — the relay + protocol are fully built + tested).
     pub chat_relay:
         Mutex<Option<everyaios_core::ChatRelay<ChildStdin, ChildStdout>>>,
+    /// P3.1: the replay store base dir (replays/ + screenshots/ + index).
+    pub replay_dir: PathBuf,
 }
 
 /// Monotonic stream-id source for `chat_stream` calls.
@@ -247,6 +251,7 @@ pub fn run() {
             guard,
             vault,
             chat_relay: Mutex::new(None),
+            replay_dir: everyaios_core::default_data_dir(),
         })
         .invoke_handler(tauri::generate_handler![
             version,
@@ -254,7 +259,12 @@ pub fn run() {
             scan_text,
             probe_vault,
             chat_stream,
-            chat_cancel
+            chat_cancel,
+            replay_cmds::replay_sessions,
+            replay_cmds::replay_timeline,
+            replay_cmds::replay_screenshot,
+            replay_cmds::watch_events,
+            replay_cmds::agent_stop
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray
