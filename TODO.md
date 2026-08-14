@@ -1080,7 +1080,7 @@
 |---|---|---|
 | P0 Workspace & Skeleton | 46 | ~2 |
 | P1 Chat + BYOK | 52 | ~4 |
-| P2 Browser Layer | 81 | ~6 |
+| P2 Browser Layer | 82 | ~6 |
 | P3 Cockpit & Audit UI | 14 | ~4 |
 | P4 Office Engine | 48 | ~5 |
 | P5 Memory + Token Economy | 60 | ~5 |
@@ -1093,6 +1093,6 @@
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **47** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 54 | parallel |
-| **TOTAL** | **748** | **~45 weeks** |
+| **TOTAL** | **749** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.
