@@ -303,6 +303,7 @@ dependencies = [
 name = "everyaios-audit"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
  "serde",
  "serde_json",
  "thiserror 2.0.19",

@@ -10,3 +10,4 @@ description = "EveryAIOS audit — NDJSON append-only event log (P0.1 stub; full
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+rusqlite = { workspace = true }

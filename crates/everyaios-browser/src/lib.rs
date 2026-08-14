@@ -12,6 +12,7 @@ pub mod diff;
 pub mod humanize;
 pub mod ownership;
 pub mod read;
+pub mod replay;
 pub mod session;
 pub mod tiers;
 pub mod tree;

@@ -13,6 +13,9 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+pub mod replay;
+pub mod session_log;
+
 /// One audit event. `kind` is a stable dotted name (e.g. `browser.act`,
 /// `guard.blocked`, `vault.rotate`); `payload` is schema-per-kind.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

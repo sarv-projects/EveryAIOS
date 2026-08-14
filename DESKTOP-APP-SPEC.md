@@ -79,7 +79,7 @@
 | E2 | **37-tool catalog** (34 core + 3 `file_ops`; ARCH/08 §8.2) — 17 core (tabs..run) + enhanced_snapshot + bookmarks×6 + tab-groups×5 + window×5; + `file_ops`×3 workspace extension (→ 37 total); **post-v1 candidates (doc 55):** `a11y_audit` (axe-core), annotated screenshots, `find` semantic locators, batch mode | 🔵 |
 | E3 | A11y snapshot/diff — refs [eN], interactive mode, URL-change short-circuit | 🔵 |
 | E4 | Script-eval (run) — rquickjs sandbox + browser SDK + InnerCallHook | 🔵 (P2.5 ✅) |
-| E5 | Session replay — injected recorder → NDJSON → SQLite; scrubber UI; has_gap | 🔵 |
+| E5 | Session replay — injected recorder → NDJSON → SQLite; scrubber UI; has_gap | 🔵 (P2.10 ✅) |
 | E6 | Tab ownership — mine/user/other-agent; claims; group-per-agent | 🔵 (P2.6 ✅) |
 | E7 | Login import/sessions — capture-in-browser (vault path 1); optional Chrome profile import (path 3) | 🔵 |
 | E8 | Authenticated scraping — logged-in sessions → tiered scrape → RAG | 🟡 |
@@ -472,7 +472,7 @@ plugin-bundle/
 
 ## 6. What's NEW to build (the gap — complete list)
 
-> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: P0–P2.9 (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, 37-tool catalog). Remaining in P2: session replay (E5). See §7 + `TODO.md` for the live phase state.
+> **Progress (2026-08-13):** this list is the *total* build gap vs the pre-existing TypeScript engine — it is **not** all outstanding. Landed so far: **P0–P2.10 — P2 (browser layer) is complete** (Rust workspace + sidecar, key-rings/OAuth, browser snapshot/act/diff + tiers + ownership, script-eval, **Session Vault + inheritance + cookie glue (E11/E13)**, **challenge handler (E12)**, **behavioral realism (E14)**, **session replay (E5)**, 37-tool catalog). Next: P3 cockpit + replay/audit UI. See §7 + `TODO.md` for the live phase state.
 
 1. Tauri v2 shell + workspace UI (Editor·Files·Terminal·Git tabs, chat, reader, office, blueprint editor, permission cards, analytics, tray)
 2. **Rust core** — everyaios-cdp (tiered engines), everyaios-browser (snapshot/diff/ownership + session-vault cookie glue), everyaios-script (run/evaluate + InnerCallHook), everyaios-guard (Guard1+Guard2), everyaios-audit (replay), everyaios-mcp (server), everyaios-vault (key-rings + sessions), everyaios-ipc
