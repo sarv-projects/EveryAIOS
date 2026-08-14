@@ -404,7 +404,7 @@
 - [x] `[DONE]` Implement retention decay: half_life × log1p(strength) — **`actr::activation` (effective half-life = half_life × ln(1+strength), exponential decay)**
 - [x] `[DONE]` Implement importance floor: memories with importance ≥ 8 never auto-forgotten — **`actr::is_protected` + `forget_sweep` (protected OR activation ≥ threshold survive)**
 - [x] `[DONE]` Implement associative recall: semantic + keyword + recency + graph in one query — **`actr::recall_score` (weighted) + `keyword_hits` + `recency`**
-- [ ] `[NOT DONE]` Implement typed relational edges in LadybugDB (supports/contradicts/derived-from)
+- [ ] `[NOT DONE]` Implement typed relational edges in LadybugDB (supports/contradicts/derived-from) — **typed edges landed in `graph::EdgeType` (Rust store, P5.2); the LadybugDB-native binding is the deferred FFI follow-up**
 - [x] `[DONE]` Implement spontaneous recall channel: pre-turn hook → derive queries → inject — **`actr::derive_queries` (frequency-ranked, stopword-filtered); injection = C7 warm-set (integration follow-up)**
 
 ### P5.6 Taste Profile (C9, Algorithm #31 — doc 37 Command Code taste-1)

@@ -557,8 +557,8 @@ flowchart LR
 4. Key-ring vault (A2/A3) + OAuth subscription flows (A4) + Session Vault (E11) + session inheritance (E13) — **✅ landed (P1.1–P1.7, P2.7)**
 5. Browser tiers: **Lightpanda integration (default — `lightpanda serve` spawn, SSRF/file:// defaults, doc 55), Obscura opt-in (`obscura serve` spawn)**, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12) — **✅ landed (P2.8)**; behavioral realism (E14) — **✅ landed (P2.9)**; **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context (doc 55) — **✅ landed (P2.7)**
 6. Office engine (D1–D8): docx block-patch, IronCalc xlsx sidecar + deterministic planner, pptx part-editor, pdf suite, LibreOffice conformance oracle
-7. Token economy (05): compaction pipeline with Reasonix ratios, snip rules, prefix-stability, cache-cost dashboard
-8. Memory fusion (C3) + LadybugDB KG (C6) + Letta paging (C2) — on top of the retested 7 algorithms
+7. Token economy (05): compaction pipeline with Reasonix ratios, snip rules, prefix-stability, cache-cost dashboard — **`everyaios-memory::compaction` ✅ (P5.7)**
+8. Memory fusion (C3) + LadybugDB KG (C6) + Letta paging (C2) — on top of the retested 7 algorithms — **`everyaios-memory` ✅ (P5.1–P5.8: fusion/actr/taste/compaction/graph/paging/ghost/reference)**
 9. Harness-driving (F12) via **ACP client bridge (J17)** + messaging bridges (F13) + harness installer (F8)
 10. **Extension ABI (I6)** — manifest schema + schema validation, plugin registry + lazy activation, capability granter in everyaios-guard, host facades (ctx.llm/ctx.approval), dogfood first-party plugins
 11. Connector hub core (registry, routing, usage metering) + Auth Bridge (F4) + Composio/Zapier/Nango attach (F5)
