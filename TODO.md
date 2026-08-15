@@ -4,7 +4,7 @@
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
 > **Scope:** Complete product — 143 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
-> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–63) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
+> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–63) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 
 <!-- VERIFICATION POLICY: Every completed task MUST be verified before marking [DONE].
      Verification means: code compiles, tests pass, behavior confirmed (manual or automated).
@@ -1138,6 +1138,23 @@
 
 ---
 
+## P13 — Batch-3 Steal Queue (doc 65, 2026-08-15 — 19 new repos, 8 steals → 11 tasks; all extend existing rows, none re-specified)
+> These are **spec-level steals** mapped onto rows we already own — no scope expansion. Implement behind the currently-open wiring items (coordinator loop, skill registry, A9 dashboard, G8/G9 browser tools).
+
+- [ ] `[NOT DONE]` **A9 usage-parser registry (doc 65 §1 — codeburn):** `UsageParser` trait + registry keyed by provider id normalizing into canonical `Usage {input, output, cache_read, cache_write, tool_calls}` (mirrors the existing adapter split); `TurnClass` enum (test/git/build/install/debug/feature/refactor/brainstorm/research) attached to every turn for routing + eval segmentation — `everyaios-eval::usage`
+- [ ] `[NOT DONE]` **J11 efficiency metrics (doc 65 §1 — codeburn):** `EfficiencyMetrics { one_shot_rate, retries_per_edit, cost_per_edit }` computed over an eval run — cost-vs-quality axis for the budget gate — `everyaios-eval`
+- [ ] `[NOT DONE]` **G8 selector resolver (doc 65 §2 — Scrapling):** `SelectorResolver` returning `Css | XPath` from a semantic target + DOM snapshot (survives minor DOM drift) — `everyaios-browser`
+- [ ] `[NOT DONE]` **E14 fingerprint profile (doc 65 §2 — Scrapling Camoufox):** `FingerprintProfile { ua, platform, webgl_vendor, canvas_noise, … }` + rotation set for behavioral realism — `everyaios-cdp`
+- [ ] `[NOT DONE]` **G9 resource-drop policy (doc 65 §2 — Scrapling):** `ResourceDropPolicy { block_ads: Vec<Domain>, drop_media, drop_fonts }` feeding `Network.setBlockedURLs` (complements the G9 adblock-crate read-cleaner) — `everyaios-browser`
+- [ ] `[NOT DONE]` **I2 SKILL.md anatomy (doc 65 §4 — awesome-claude-skills):** skill manifest schema with `when_to_use`, `scripts[]`, `references[]` (lazy — fetched on demand, never preloaded), `assets[]` — skill registry
+- [ ] `[NOT DONE]` **F8 skills_index.json manifest (doc 65 §6 — agentic-awesome-skills):** machine-readable discovery index + `compose_stack` read-only validation emitting `selection_evidence` (no side effects) — skill registry + blueprint engine
+- [ ] `[NOT DONE]` **I7 persistent symbol graph (doc 65 §7 — code-review-graph):** SQLite-backed symbol graph with git-diff incremental rebuild + per-query `context_savings` counter — `everyaios-codeintel::graph`
+- [ ] `[NOT DONE]` **I11 symbol-editing semantics (doc 65 §8 — serena):** `safe_delete` (refuse when references exist — deterministic gate before destructive edit), `replace_body` (parse-verify before write), packaged LSP server catalog (id/command/version/capabilities — language support as data) — `everyaios-codeintel`
+- [ ] `[NOT DONE]` **P6 loop-pattern registry (doc 65 §9 — loop-engineering):** `LoopPatternRegistry` of named patterns (budget-guard, run-log, early-exit) each with `triggers`/`guards`/`exit_conditions`, loaded by the coordinator loop and enforced by J11/B6 budgets — `everyaios-blueprint`
+- [ ] `[NOT DONE]` **P5 saved-vs-discovered metric (doc 65 §10 — claude-mem):** per-observation `token_cost` on memory records + `saved_vs_discovered` in the context builder (memory injection measured, not assumed) — `everyaios-memory`
+
+---
+
 ## SUMMARY
 
 | Phase | Tasks | Weeks |
@@ -1152,11 +1169,12 @@
 | P7 Forge + Guardrails | 53 | ~4 |
 | P8 Product Polish | 37 | ~3 |
 | P9+ Post-v1 | 22 | later |
+| P13 Batch-3 Steal Queue (doc 65) | 11 | post-v1 |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **47** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 54 | parallel |
-| **TOTAL** | **756** | **~45 weeks** |
+| **TOTAL** | **767** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

@@ -1,6 +1,6 @@
 # 27 — MASTER REPO LEDGER (all repos ever added, live-verified 2026-08-06; sections 20–28 added 2026-08-09/10/13)
 
-> **Every repo ever added across docs 01–62**, deduplicated, **live-verified** (HTTP + `stargazerCount` scraped from github.com). **255 unique repos** (170 through section 19 + 22 in sections 20–21 + 26 in section 22 + 1 in section 23 — LadybugDB, doc 54, 2026-08-09 + 3 in section 24 — agent-browser/obscura/steel-browser, doc 55, 2026-08-10 + 4 in section 25 — warp/cowork-forge/cronflow/copilot-cli, doc 56, 2026-08-10 + 1 in section 26 — agentclientprotocol/registry, doc 57, 2026-08-10 + 19 in section 27 — OmniRoute/taste-skill/ppt-master/univer/codebase-memory-mcp/llmfit/GenericAgent/holaOS/better-harness/CodeWhale/etc., doc 58, 2026-08-13 + 1 in section 28 — TencentDB-Agent-Memory, doc 60, 2026-08-13 + 8 in section 29 — deepseek-harness/openhuman/A2A/Rapid-MLX/openocta/flock/RepoMapper/nilbox, doc 61, 2026-08-14). ⚠️ **ncdu has no GitHub mirror** — canonical host is `dev.yorhel.nl/ncdu` (listed with ⭐ n/a). (context-mode re-verified at 19,654⭐ — doc 32; final-pass §13; workspace/multi-agent §14; composio-community §15; command-code §16; NOOA §17; ACP ecosystem + extension-ABI references §18–19; dependency audit §23; ACP registry + subscription auth §26).
+> **Every repo ever added across docs 01–65**, deduplicated, **live-verified** (HTTP + `stargazerCount` scraped from github.com). **274 unique repos** (170 through section 19 + 22 in sections 20–21 + 26 in section 22 + 1 in section 23 — LadybugDB, doc 54, 2026-08-09 + 3 in section 24 — agent-browser/obscura/steel-browser, doc 55, 2026-08-10 + 4 in section 25 — warp/cowork-forge/cronflow/copilot-cli, doc 56, 2026-08-10 + 1 in section 26 — agentclientprotocol/registry, doc 57, 2026-08-10 + 19 in section 27 — OmniRoute/taste-skill/ppt-master/univer/codebase-memory-mcp/llmfit/GenericAgent/holaOS/better-harness/CodeWhale/etc., doc 58, 2026-08-13 + 1 in section 28 — TencentDB-Agent-Memory, doc 60, 2026-08-13 + 8 in section 29 — deepseek-harness/openhuman/A2A/Rapid-MLX/openocta/flock/RepoMapper/nilbox, doc 61, 2026-08-14 + 19 in section 31 — codeburn/Scrapling/xerj/awesome-claude-skills/career-ops/agentic-awesome-skills/code-review-graph/serena/loop-engineering/mirrord/system_prompts_leaks/prompts.chat/langflow/NextChat/lobehub/Prompt-Engineering-Guide/Pake/claude-mem/Qdrant-Edge, doc 65, 2026-08-15). ⚠️ **ncdu has no GitHub mirror** — canonical host is `dev.yorhel.nl/ncdu` (listed with ⭐ n/a). (context-mode re-verified at 19,654⭐ — doc 32; final-pass §13; workspace/multi-agent §14; composio-community §15; command-code §16; NOOA §17; ACP ecosystem + extension-ABI references §18–19; dependency audit §23; ACP registry + subscription auth §26).
 >
 > 🔗 **URL convention:** every repo is `https://github.com/{owner}/{repo}` using the `owner/repo` shorthand in the table below — e.g., `openclaw/openclaw` → https://github.com/openclaw/openclaw. No need to search.
 > **Depth tags:** ⬛ CODE = source-read (docs 16/17/25/28/29/33/35/55/56) · 🟦 STRUCT = structure-verified (doc 26) · 🟩 MAP = feature map (doc 18) · ⚪ ONE = one-line ledger (docs 14/15).
@@ -400,8 +400,35 @@
 
 ---
 
+## 31. Batch-3 — agent infra / scraping / search / UI (2026-08-15, live-verified; doc 65 — 19 new repos)
+| Repo | ⭐ | License | Verdict | Maps to |
+|---|---|---|---|---|
+| getagentseal/codeburn | — | — | **STEAL** | A9, J11, P6 |
+| D4Vinci/Scrapling | — | — | **STEAL** | G8, E14, F11 |
+| xerj-org/xerj | — | — | REF | I7, C5 |
+| ComposioHQ/awesome-claude-skills | — | — | **STEAL** | I2 |
+| santifer/career-ops | — | — | REF | EV1, A6/A7 |
+| sickn33/agentic-awesome-skills | — | — | **STEAL** | I2, F8 |
+| tirth8205/code-review-graph | — | — | **STEAL** | I7, C5 |
+| oraios/serena | — | — | **STEAL** | I11 |
+| cobusgreyling/loop-engineering | — | — | **STEAL** | P6, J11, B6 |
+| metalbear-co/mirrord | — | — | REF | P7, P11 |
+| asgeirtj/system_prompts_leaks | — | — | REF | prompts |
+| f/prompts.chat | — | — | SKIP | — |
+| langflow-ai/langflow | — | — | REF | P6, F-series |
+| ChatGPTNextWeb/NextChat | — | — | SKIP | — |
+| lobehub/lobehub | — | — | REF | P6, I2 |
+| dair-ai/Prompt-Engineering-Guide | — | — | SKIP | — |
+| tw93/Pake | — | — | REF | Tauri shell |
+| thedotmack/claude-mem | — | — | **STEAL** | P5, C-series |
+| Qdrant Edge | — | — | REF | P5.8 |
+
+> 11 source-read (codeburn, Scrapling, xerj, awesome-claude-skills, career-ops, agentic-awesome-skills, code-review-graph, serena, loop-engineering, claude-mem, Pake) · rest web-level. 18 already-tracked from this list (Agent-Reach, browser-use, maxun, qdrant, SeekStorm, open-webui, n8n, AutoGPT, void, kilocode, openclaw, superpowers, hermes-agent, ruflo, superset, Reasonix, ui-ux-pro-max-skill, + Agent-Reach/docs duplicate) → verdict unchanged. All steals **extend existing rows** (A9/J11/G8/E14/I2/F8/I7/I11/P6/P5) — no scope expansion.
+
+---
+
 ## Summary
-- **255 repos** tracked (227 through section 26 + **19 new in section 27** + **1 new in section 28** + **8 new in section 29**) · **254 live** · **1 transferred** (`LearningCircuit/ai-data-science-team` → `business-science/ai-data-science-team`, 5,369⭐)
+- **274 repos** tracked (227 through section 26 + **19 new in section 27** + **1 new in section 28** + **8 new in section 29** + **19 new in section 31**) · **273 live** · **1 transferred** (`LearningCircuit/ai-data-science-team` → `business-science/ai-data-science-team`, 5,369⭐)
 - Depth: **⬛ = source code read (key files), 🟪 = README/architecture verified, 🟩 = feature map, ⚪ = one-line**
 - **~44 repos source-read** (actual code files: mem0 main.py, graphiti graphiti.py, Agent Zero skills.py/security.py/context.py, DeerFlow agent.py/task_tool.py, NOOA forgetting.py/manager.py, cc-switch provider.rs/speedtest.rs, opencode task.ts/compaction.ts, agent-browser snapshot.rs/read.rs, obscura server.rs/lp.rs, warp chunker/merkle_tree, cowork-forge stage_executor.rs/acp/client.rs, etc.) · **~160 🟪 README-verified** (incl. sections 20–25 additions) · **19 🟩 map** · **3 ⚪ one-line**
 - **New repos (doc 40):** agent-zero (19K), andrewyng/openworker (13K), lencx/chatgpt (54K), OpenCoworkAI/open-cowork (2K), open-webui/desktop (2.5K), open-webui/computer (401) — macOS/Windows deployment notes documented
@@ -415,4 +442,5 @@
 - **New repos (doc 58):** 18 more (OmniRoute 46.9K · taste-skill 76.1K · worldmonitor 81.4K AGPL · huginn 49.8K · ppt-master 46.3K · codebase-memory-mcp 38.8K · QwenPaw 33.7K · llmfit 31.4K · guizang-ppt-skill 23.9K AGPL · deepwiki-open 17.6K · univer 14.1K · GenericAgent 13.8K · MAF 12.8K · holaOS 6.1K ⚠️-modified-Apache · better-harness 1.8K · crux 2 · DeepSeek-TUI 4 (stale fork) · unsloth 70.8K · coolify 60.5K · google-ai-mode-mcp 147) → **added as section 27** (live-verified 2026-08-13) → **246 total** (incl. **Hmbown/CodeWhale 40.7K** — the DeepSeek-TUI project renamed); ⚠️ holaOS = modified Apache-2.0 (commercial gate), worldmonitor = AGPL-3.0 (GitHub mislabels NOASSERTION)
 - **New repo (doc 60):** TencentCloud/TencentDB-Agent-Memory (21,002⭐, **MIT** — GitHub reports NOASSERTION only because of the Tencent copyright header; terms are MIT) → **added as section 28** (live-verified 2026-08-13) → **247 total**; **steal the 4-asset taxonomy + L0→L3 distillation + unified governance + agent-loadout for our "one memory model" (C1/C2/C3/C7/C8/I2/I7 + F12/J17 + P12.1)**
 - **New repos (doc 61):** 8 more (deepseek-harness 93,087⭐ MIT · openhuman 36,281⭐ GPL-3.0 · A2A 25,344⭐ Apache-2.0 · Rapid-MLX 3,461⭐ Apache-2.0 · openocta 3,062⭐ Apache-2.0 · flock 1,098⭐ Apache-2.0 · RepoMapper 195⭐ MIT · nilbox 14⭐ GPL-3.0) → **added as section 29** (live-verified 2026-08-14) → **255 total**; **deepseek-harness ("everything is a plugin" + traceable event stream) validates I6+J5/P3; openhuman (markdown memory mirror) validates C8/C12; A2A = J17 secondary interface; ⚠️ 6 unverifiable flags (RavenClaws/ReflexionOS/Keelson/Iroh-desktop/Distri/M1K3 — never cite)**; models Muse Glimmer + Nemotron 3.5 Lightning + Rapid-MLX → A5 catalog
+- **New repos (doc 65):** 19 more (codeburn, Scrapling, xerj, awesome-claude-skills, career-ops, agentic-awesome-skills, code-review-graph, serena, loop-engineering, mirrord, system_prompts_leaks, prompts.chat, langflow, NextChat, lobehub, Prompt-Engineering-Guide, Pake, claude-mem, Qdrant Edge) → **added as section 31** (live-verified 2026-08-15) → **274 total**; 8 steals all extend existing rows (codeburn→A9/J11 usage-parser registry + efficiency metrics, Scrapling→G8/E14 auto-selector + fingerprints, claude-mem→P5 saved-vs-discovered, serena→I11 symbol-editing, code-review-graph→I7 persistent graph, loop-engineering→P6 pattern registry, awesome-claude-skills→I2 SKILL.md anatomy, agentic-awesome-skills→F8 skills_index.json, xerj/career-ops/lobehub/langflow/Pake/mirrord→REF); 18 from this list already tracked — verdict unchanged
 - **Biggest live repos:** openclaw 385K, superpowers 268K, ECC 238K, hermes 226K, anomalyco/opencode 194K, n8n 199.5K, AutoGPT 186K, markitdown 172K, anthropics/skills 167K, firecrawl 162K
