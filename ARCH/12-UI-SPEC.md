@@ -1,34 +1,44 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-> **Version:** 1.0 (2026-08-08)  
-> **Reference:** Devin Cloud UI (Screenshots analysed), Windsurf/Cursor patterns  
-> **Principle:** User watches AI work on everything — code, browser, Excel, Word, PPT, PDF — in real-time  
-> **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H18), ARCH/DIAGRAMS #7 (MCQ interrupt)
+> **Version:** 2.0 (2026-08-15)  
+> **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
+> **Principle:** ONE project, ONE session, ONE ticket, ONE timeline. Chat + live progress in the center; a thin **right activity rail** switches *what you are watching* — one surface at a time. Never 9 peer tabs, never a Chat/Cowork/Code product split.  
+> **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H25 — H20 redefined doc 67), ARCH/DIAGRAMS #7 (MCQ interrupt), doc 67 §6 (finalization record)
 
 ---
 
-## 1. Core Layout: Three-Column Split
+## 1. Core Layout: Left Sessions · Center Chat · Right Rail + Viewport
 
 ```
-┌───────────┬─────────────────────────────┬───────────────────────────────────┐
-│  SIDEBAR  │      CHAT / PROGRESS        │      WORKSPACE PANEL (tabbed)     │
-│  (240px)  │      (flexible)             │      (flexible, min 400px)        │
-│           │                             │                                     │
-│           │                             │                                     │
-│           │                             │                                     │
-│           │                             │                                     │
-│           │                             │                                     │
-│           │                             │                                     │
-│           │                             │                                     │
-└───────────┴─────────────────────────────┴───────────────────────────────────┘
+┌───────────────┬─────────────────────────────┬──┬───────────────────────────────┐
+│  LEFT         │      CENTER                 │R │ RIGHT VIEWPORT (collapsible)   │
+│  sessions     │  chat · now-doing · tickets │A │ one surface at a time          │
+│  automations  │  approve cards              │I │ (0px collapsed ~ 50-60% open)  │
+│  memory/guard │                             │L │                                │
+│  (240 / 48px) │                             │  │                                │
+└───────────────┴─────────────────────────────┴──┴───────────────────────────────┘
+                                                 ▲
+                                                 │ 48px icon rail
+                                                 │ click active icon → collapse; center goes wide
 ```
 
 **Responsive behavior:**
-- Default split: Sidebar 240px | Chat 40% | Workspace 60%
-- Sidebar collapsible to icon-only (48px)
-- Workspace panel collapsible (chat goes full-width)
-- Workspace expandable to fullscreen (⤢ button)
-- Drag-resizable divider between Chat and Workspace
+- Left sidebar 240px, collapsible to icon-only (48px); width persists
+- **Right rail 48px**, always visible; viewport 0px (collapsed) ↔ ~50–60%
+- Viewport collapse → center chat goes full-width (**never unmount** — the agent's now-doing strip stays visible)
+- Viewport expandable to fullscreen (⤢ button); drag-resizable divider
+- **Per-session layout persistence:** `activeViewId`, `railCollapsed`, `splitRatio`, `browseMode`, `composerMode` saved per sessionId (the Cursor layout-reset bug we do not copy)
+
+### 1.1 Window chrome (every screen)
+
+| Piece | Always | Notes |
+|-------|--------|-------|
+| Title bar | Project · session title · Guard chip · $spent/$cap | native Tauri |
+| Left | 240px or 48px icon-only | persist width |
+| Center | chat + 2-line now-doing under composer | never unmount on rail collapse |
+| Right rail | 48px icons | click active icon = collapse viewport |
+| Right viewport | 0px or ~50–60% | Cmd+\ toggles |
+| Tray | quiet sentence or idle | independent of window (H2 cockpit quiet) |
 
 ---
 
@@ -150,7 +160,7 @@ Displayed when the agent creates/edits a file. Shows:
 - ✓ = completed (green)
 - ● = in progress (pulsing blue)
 - ○ = pending (grey)
-- Click any step → Workspace jumps to relevant tab/context
+- Click any step → right viewport jumps to the relevant view + position (Excel cell, browser screenshot, shell line, file)
 
 #### MCQ Interrupt (Action Required)
 - Orange dot + "Action required: [description]"
@@ -195,35 +205,69 @@ Displayed when the agent creates/edits a file. Shows:
 
 ---
 
-## 4. Right Panel: Workspace (Tabbed)
+## 4. Right Panel: Activity Rail + One-Surface Views (v2.0 — replaces the 9-tab strip)
 
 ### 4.0 First-Run Rule (non-negotiable — tasks, not modules)
 
-- **First run shows chat + an empty workspace. No nine tabs, no module wall.**
-- A tab is created **only when that surface is actually in use** (the agent opened the browser, a file, a terminal — not because the feature exists).
-- Guard, Connectors, Memory, Analytics, ACP/MCP, vault, plugins live behind one **"More"** menu until the user needs them.
+- **First run shows chat + an empty viewport. No nine tabs, no module wall.**
+- A view opens **only when that surface is actually in use** (agent opened a browser, a file, a terminal — not because the feature exists).
+- Guard, Connectors, Memory, Analytics, ACP/MCP, vault, plugins live behind the left sidebar + **"+" Add view** until the user needs them.
 - The default interaction is: pick a folder → ask for an outcome → watch the Progress timeline → check/edit the artifact → approve only consequential actions. The system decides whether it needs a browser, office, terminal, or harness.
 - One useful default task completes before advanced settings surface (onboarding item: "add first key → first chat" is chat-app onboarding; the control-plane onboarding is one end-to-end task).
 - Modes (Normal / Plan / Research / Quick / Code) are optional; the default is "do the task".
-- **UI reference sources (doc 58, first-run design):** AnythingLLM + Cherry Studio workspace chrome / artifact pane / onboarding are the *first-run* reference ("tasks not modules") to cross-check against this Devin-derived 9-tab layout; **holaOS** ("Computer for You and Your Agent") is the closest whole-product competitor — read its side-by-side app+agent + marketplace UX as validation, never as a code source (modified-Apache).
+- **UI reference sources (doc 67 §6, finalization):** Claude Desktop **Views**, Cursor **activity bar**, ChatGPT **Work vs Codex**, Devin Desktop **command center** — all converged on rail + one-open-surface; Office is grouped (ChatGPT Work keeps docs/slides/sheets in "Work", not next to the terminal). AnythingLLM + Cherry Studio are the *first-run* reference ("tasks not modules"); **holaOS** is the closest whole-product competitor (side-by-side app+agent + marketplace UX) — validation only (modified-Apache).
 
-### 4.1 Tab Bar
+### 4.1 The 48px Activity Rail
 
 ```
-┌───────────────────────────────────────────────────────────────────────┐
-│ [📋Progress] [💻Shell] [📝Code] [🌐Browser] [📊Excel] [📄Word] [📑PPT] [📄PDF] [+] ⤢ │
-└───────────────────────────────────────────────────────────────────────┘
+┌────┐
+│ 📁 │  Folder      Cmd+Shift+E   ← files / project tree
+│ >_ │  Shell       Ctrl+`        ← same cwd as session folder
+│ 🌐 │  Browse      Cmd+Shift+B   ← clean profile vs My Chrome toggle
+│ </>│  Code        Cmd+Shift+C   ← one file (+split 2), LSP, diff strip
+│ ── │
+│ W  │  Office      Cmd+Shift+O   ← ONE button → flyout (never 4 icons)
+│ ── │
+│ ▢  │  Progress    Cmd+Shift+P   ← full timeline (2-line strip stays in center)
+│ +  │  Add view                  ← Diff, Audit/Replay, Storage, Memory, plugin views
+└────┘
 ```
 
-- Tabs appear dynamically as agent opens tools
-- Active tab is bold/underlined
-- `+` adds a new tab (file picker or tool selector)
-- `⤢` expands workspace to fullscreen
-- Tabs are drag-reorderable
-- Right-click tab → Close / Close Others / Pin
-- File tabs show filename + modified indicator (●)
+- **4 core verbs:** Folder · Shell · Browse · Code. Everything else opens from an icon, not another tab.
+- **Office = one button (W).** Word/Excel/PPT/PDF are a flyout, not four rail icons. Opening `Q3-Budget.xlsx` auto-selects W → Excel (the agent's file opens the matching view; the user never hunts a tab).
+- **Session views** (Progress full-timeline, Diff, Audit/Replay, Storage) under ▢ / +; a 2-line "now doing" strip stays under chat so collapsing the rail never hides the agent.
+- Click **active icon → collapse** viewport (center 100%). Click another icon → switch lens; session keeps running. Hover = tooltip + live/idle/gap badge.
+- `+` = **Add view** — first-party office/session views and third-party plugins register through the same slot (the I6 dogfood rule: no 10th header tab).
 
-### 4.2 Progress Tab
+**Office flyout**
+```
+┌─────────────────────────────┐
+│ Sheets    Q3-Budget.xlsx  ● │   ● = agent touching it now
+│ Word      Exec-Summary.docx │
+│ Slides    Pitch.pptx        │
+│ PDF       Invoice-8402.pdf  │
+│ ──                          │
+│ Open another…               │
+└─────────────────────────────┘
+```
+
+### 4.2 Views Contract (how "+" stays one product)
+
+```ts
+interface ViewDefinition {
+  id: string;                 // view.browser | view.office.xlsx
+  icon: string;               // SVG / icon identifier
+  label: string;
+  group: "core" | "office" | "session" | "plugin";
+  when?: (session: SessionState) => boolean;  // contextual availability
+  open: "replace" | "split"; // v1 = replace only
+}
+```
+
+- Core four + Office + Progress are first-party views using this contract; plugins use the same `+` slot
+- **Per-session persistence** (Cursor bug fix): activeViewId, officeDocId, railCollapsed, splitRatio, browseMode (clean | my-chrome), composerMode (agent | plan | research | quick | code) saved per sessionId — switching sessions restores exactly what you left; new session starts rail-collapsed until a tool needs a view
+
+### 4.3 Progress View (view.progress)
 
 Unified timeline of all agent actions:
 ```
@@ -246,7 +290,7 @@ Unified timeline of all agent actions:
 - Expandable entries (click to see details/output)
 - Filterable by type (shell/code/browser/office/file)
 
-### 4.3 Shell Tab
+### 4.4 Shell View (view.shell)
 
 ```
 ┌───────────────────────────────────────┐
@@ -271,7 +315,7 @@ Unified timeline of all agent actions:
 - Copy button per command + output
 - Time-travel: click past commands to jump in history
 
-### 4.4 Code Tab (Editor)
+### 4.5 Code View (view.code)
 
 ```
 ┌───────────────────────────────────────┐
@@ -297,7 +341,7 @@ Unified timeline of all agent actions:
 - Read-only by default, toggle to editable for takeover
 - File tree panel (togglable) for multi-file navigation
 
-### 4.5 Browser Tab
+### 4.6 Browse View (view.browser)
 
 ```
 ┌───────────────────────────────────────┐
@@ -323,7 +367,7 @@ Unified timeline of all agent actions:
 - Back/Forward navigation
 - Cookie persistence across session
 
-### 4.6 Excel Tab (📊 UNIQUE TO EVERYAIOS)
+### 4.7 Office — Excel View (view.office.xlsx) (📊 UNIQUE TO EVERYAIOS)
 
 ```
 ┌───────────────────────────────────────┐
@@ -350,7 +394,7 @@ Unified timeline of all agent actions:
 - Sheet tabs for multi-sheet navigation
 - Powered by IronCalc (Rust) + calamine
 
-### 4.7 Word Tab (📝 UNIQUE TO EVERYAIOS)
+### 4.8 Office — Word View (view.office.docx) (📝 UNIQUE TO EVERYAIOS)
 
 ```
 ┌───────────────────────────────────────┐
@@ -381,7 +425,7 @@ Unified timeline of all agent actions:
 - Page indicator, word count
 - Powered by block-patch engine (GenOffice pattern)
 
-### 4.8 PowerPoint Tab (📑 UNIQUE TO EVERYAIOS)
+### 4.9 Office — Slides View (view.office.pptx) (📑 UNIQUE TO EVERYAIOS)
 
 ```
 ┌───────────────────────────────────────┐
@@ -408,7 +452,7 @@ Unified timeline of all agent actions:
 - Elements flash when being modified
 - **Presenter mode (P4.7b — doc 63 §3, guizang SPEAKER_NOTES contract):** speaker-notes panel keyed by stable slide IDs (never page numbers — reorder-safe), rehearsal view with per-slide timing, auto-advance, notes↔slides sync validated by a port of guizang's `validate-presenter-mode.mjs`
 
-### 4.9 PDF Tab (📄)
+### 4.10 Office — PDF View (view.office.pdf) (📄)
 
 ```
 ┌───────────────────────────────────────┐
@@ -435,7 +479,7 @@ Unified timeline of all agent actions:
 ## 5. Takeover / Resume Flow
 
 ### 5.1 Normal State (Agent Working)
-- Workspace tabs show "● Live" indicator
+- Right viewport shows "● Live" indicator (and rail icon badge)
 - All panels are read-only
 - User can watch in real-time
 
@@ -616,12 +660,16 @@ Unified timeline of all agent actions:
 | Cmd+K | Global search / command palette |
 | Cmd+N | New session |
 | Cmd+Enter | Send message |
-| Cmd+Shift+P | Pause/Resume agent |
-| Cmd+1-9 | Switch workspace tabs |
-| Cmd+B | Toggle sidebar |
-| Cmd+\\ | Toggle workspace panel |
-| Cmd+Shift+F | Fullscreen workspace |
-| Escape | Close modal / cancel |
+| Cmd+Shift+P | Progress view / Pause-Resume agent |
+| Cmd+Shift+E | Folder view |
+| Ctrl+` | Shell view |
+| Cmd+Shift+B | Browse view |
+| Cmd+Shift+C | Code view |
+| Cmd+Shift+O | Office flyout |
+| Cmd+Shift+D | Diff view |
+| Cmd+\\ | Collapse / expand right viewport (full-width chat) |
+| Cmd+Shift+F | Fullscreen viewport |
+| Escape | Stop agent / close modal / cancel |
 
 ---
 

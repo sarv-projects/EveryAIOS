@@ -1,10 +1,10 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (updated 2026-08-15) · **Spec:** v3.16 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (updated 2026-08-15) · **Spec:** v3.20 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
-> **Scope:** Complete product — 143 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
+> **Scope:** Complete product — 148 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
-> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–63) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
+> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–67) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals; **doc 66** (anomalyco org, 2026-08-15) for the A6/A9/A7 models.dev catalog steal (TODO P14); **doc 67** (capability deltas + UI/UX finalization, 2026-08-15) for H29 dashboard artifacts (bolt.diy), B7 heartbeat automations (Hatchet lease pattern), and the H20 views-rail redesign (ARCH/12 v2.0); **doc 68** (final all-rounder market research, 2026-08-15) for H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, and the two-channel capability injection (F12/J17/F7). If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 
 <!-- VERIFICATION POLICY: Every completed task MUST be verified before marking [DONE].
      Verification means: code compiles, tests pass, behavior confirmed (manual or automated).
@@ -523,6 +523,8 @@
 - [ ] `[NOT DONE]` Implement scheduled tasks UI: create from chat + settings (H14)
 - [ ] `[NOT DONE]` Test: scheduled task fires headless
 - [ ] `[NOT DONE]` Implement event-driven triggers (doc 62, Gartner): CI build-fail / test-regression / repo-change (push/PR/issue) / ticket-assign / telemetry-threshold, with scope+frequency policy controls
+- [ ] `[NOT DONE]` **Heartbeat automations (doc 67 §2 — Hatchet lease pattern):** a scheduled run reawakens the **same conversation with its context intact**; worker heartbeat + missed-heartbeat → task reassignment / resume from the last audit-event checkpoint; port the durable-execution principles (lease, event log, non-determinism guard) from `hatchet-dev/durable-execution-the-hard-way` lessons (07-durable-tasks) into `everyaios-core` — no Hatchet dependency, principles only
+- [ ] `[NOT DONE]` **Session-open proactivity hook (doc 67 §3):** at session open, run the intent classifier over recent memory (C9 taste / episodic) + connector state (F14/F15) → surface 1–3 pre-authored task suggestions in the composer (reuse the H14 nudge-card pattern) — wiring only, all pieces already tracked
 - [x] `[DONE]` **Automation tool shapes (doc 63 §4.12 — khoj pattern):** `run_code` (sandboxed exec via everyaios-script) + `online_search` (G8 cascade) as first-class automation steps, plus email/calendar triggers where connectors exist (F14/F15) — **`everyaios-blueprint::automation` (`Automation`/`AutomationStep`/`Trigger` + `privileged_steps()` for the approval gate)**
 
 ### P6.5 Crystallization (B8, Algorithm #5 — v2.0 §P7)
@@ -1057,16 +1059,21 @@
 - [ ] [NOT DONE] Slash commands: /help, /mode, /model, /undo, /clear, /export
 - [ ] [NOT DONE] Knowledge macros (!name) and blueprint @mentions
 
-### P11.5.3 Workspace Panel (Tabbed) (ARCH/12 §workspace; doc 46 Devin 9-tab view, doc 04 office views)
-- [ ] [NOT DONE] Tab bar with dynamic tabs, reorder, close, pin, expand-to-fullscreen
-- [ ] [NOT DONE] Progress tab: unified timeline with timestamp, icons, expandable entries
-- [ ] [NOT DONE] Shell tab: terminal view, command history panel, read-only/writable toggle
-- [ ] [NOT DONE] Code tab: syntax editor, live diffs, line numbers, minimap, file tree
-- [ ] [NOT DONE] Browser tab: live CDP view, interactive mode, address bar, "● Live" indicator
-- [ ] [NOT DONE] Excel tab: spreadsheet grid, real-time cell editing, formula bar, charts, sheet tabs
-- [ ] [NOT DONE] Word tab: WYSIWYG render, live cursor, typewriter effect, page/word count
-- [ ] [NOT DONE] PPT tab: slide preview, element editing, slide strip navigator
-- [ ] [NOT DONE] PDF tab: page rendering, form fields, annotations, zoom, page navigation
+### P11.5.3 Right Rail + One-Surface Views (H20 v2.0 — ARCH/12 §4; doc 67 §6 finalization: Claude Views / Cursor activity bar / ChatGPT Work / Devin Desktop pattern)
+> **v2.0 replaces the 9-tab strip** — 48px activity rail, one open surface, Office grouped under one button, views contract, per-session layout persistence. Never 9 peer tabs; never a Chat/Cowork/Code product split.
+- [ ] [NOT DONE] 48px activity rail: 📁 Folder · >_ Shell · 🌐 Browse · </> Code · W Office · ▢ Progress · + Add view (icons + tooltips + live/idle/gap badges; click active icon = collapse viewport → full-width chat)
+- [ ] [NOT DONE] Views contract: `ViewDefinition { id, icon, label, group: core|office|session|plugin, when?, open: replace|split }` — first-party + plugin views register identically (I6 dogfood, no 10th header tab)
+- [ ] [NOT DONE] Office = ONE button → flyout (Sheets/Word/Slides/PDF + "Open another…" + ● agent-active dot); `.xlsx` opened → auto-select W → Excel; agent opens any office file → matching view auto-opens
+- [ ] [NOT DONE] Folder view: project tree, file filter, click→opens right family (xlsx→Office, ts→Code), drag onto composer = attach, context menu (Reveal/Don't-let-agent-write)
+- [ ] [NOT DONE] Shell view: terminal, same cwd as session folder, Guard-1 pre-scan on user commands too (or clearly-labeled user shell), agent commands tagged in gutter, Stop kills process not session
+- [ ] [NOT DONE] Browse view: clean-profile vs My-Chrome toggle (E10/E13), live CDP page, [ref=eN] overlay, takeover (user drives, agent waits)
+- [ ] [NOT DONE] Code view: one file (+split 2) syntax editor, live diffs, LSP (hover/refs/diagnostics/rename-preview — I11), diff strip for pending patch, "Open in Cursor" deep-IDE escape
+- [ ] [NOT DONE] Progress view: full timeline (H19) — click row opens matching view at that artifact (Excel cell / browser screenshot / shell line); the 2-line now-doing strip stays under chat
+- [ ] [NOT DONE] Diff view: multi-file/multi-part, comment-on-hunk → back to chat as instruction; approve here or on center ticket — same ticket id (H8)
+- [ ] [NOT DONE] Audit/Replay view: scrubber + screenshots + has_gap badge (H3); Storage view: treemap/dupes/large-files (D9-D11); Memory view: peek at the one store (C-series)
+- [ ] [NOT DONE] **Per-session layout persistence:** activeViewId / officeDocId / railCollapsed / splitRatio / browseMode / composerMode saved per sessionId; switch session → restore; new session → rail collapsed until a tool needs a view (the Cursor reset bug we do not copy)
+- [ ] [NOT DONE] First-run: welcome (Open folder / Open last project / add model) — no module picker, no enable-Browser/Office; skip-key still opens cockpit, send disabled until a model exists
+- [ ] [NOT DONE] In-place highlight-edit (Cowork "Edit with Claude" pattern, doc 67 §4): select text in a view → prompt → patch applied in place via existing edit crates (P4.7 ChatOverlay / code view)
 
 ### P11.5.4 Takeover/Resume Flow (ARCH/12 §takeover; doc 46 Devin H21)
 - [ ] [NOT DONE] Pause button → switches all panels to editable mode
@@ -1155,6 +1162,17 @@
 
 ---
 
+## P15 — Capability-Delta Queue (doc 67, 2026-08-15 — bolt.diy / Hatchet / durable-execution-the-hard-way)
+> Doc-67 steals: H29 local dashboard artifacts (bolt.diy action-stream pattern), B7 heartbeat automations (Hatchet lease pattern — B7 task added under P6.4 above), session-open proactivity hook (P6.4), and the H20 views-rail redesign (P11.5.3).
+
+- [ ] `[NOT DONE]` **H29 local dashboard artifacts (doc 67 §1 — bolt.diy):** agent generates a mini web-app into a guarded workspace folder; `everyaios-script` sandbox serves it on `127.0.0.1:<port>`; previewed in the views rail with device frames; Guard-2-ticketed serve/stop; artifact keeps updating as the agent iterates — steal the **typed agent→runtime action stream** (`BoltAction` parse → `ActionRunner` state machine: pending/running/complete/aborted/failed + abort signals + formatted-output errors) as the artifact-generation contract between the coordinator and `everyaios-script` — `everyaios-script` + UI
+- [ ] `[NOT DONE]` **H29 preview surface:** device frames (iPhone SE→large laptop), port dropdown, screenshot selector (bolt.diy `Preview.tsx` + `PortDropdown` pattern) in the views rail artifact view
+- [ ] `[NOT DONE]` **Inline artifact action checklist:** auto-expanding per-action status list in chat artifact cards (bolt.diy `Artifact.tsx` pattern) with diff view per action — upgrade to H1 artifact cards
+- [ ] `[NOT DONE]` **B7 heartbeat automations (doc 67 §2 — Hatchet):** scheduled run reawakens the same conversation with context intact; heartbeat + missed-heartbeat → reassignment/resume from last audit-event checkpoint — see P6.4 task above (principles ported into `everyaios-core`, no Hatchet dependency)
+- [ ] `[NOT DONE]` **Session-open proactivity hook (doc 67 §3):** see P6.4 task above — intent classifier over memory + connectors → 1–3 composer suggestions (H14 nudge-card reuse)
+
+---
+
 ## P14 — Model Catalog: models.dev Steal (doc 66, 2026-08-15 — anomalyco/models.dev, MIT)
 > **The single biggest catalog win since doc 19:** a vendorable, MIT-licensed open database of model capabilities/pricing/limits — 186 providers / 364 compiled entries with cache-read/write pricing and a two-tier lab-vs-provider schema that is exactly our model-family vs transport-provider adapter split. Implementation target: new `everyaios-catalog` crate.
 
@@ -1163,6 +1181,20 @@
 - [ ] `[NOT DONE]` **A9 pricing integration (doc 66 §1.3):** `input_cache_read`/`input_cache_write` per model feed the cache-aware cost engine + J11 budget gate (real pricing data, not vendor claims)
 - [ ] `[NOT DONE]` **A7 routing filter matrix (doc 66 §1.3):** `supported_parameters` (tools/structured_outputs/reasoning/response_format/tool_choice) + `architecture` modalities + `context_length`/`max_completion_tokens` = the hard-requirement filters for route selection
 - [ ] `[NOT DONE]` **Sync automation (doc 66 §1.4 — deferred, maintenance loop):** per-provider sync modules + `bun validate`-style gate; the vendored baseline ships static; the sync loop is a post-v1 refresh path (30-provider pattern documented for when we need it)
+
+---
+
+## P16 — Final Market-Research Deltas (doc 68, 2026-08-15 — Microsoft Copilot Cowork / Gemini Notebook / agent picker / two-channel injection)
+> Doc-68 deltas: H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, two-channel capability injection (F12/J17/F7), H18 mobile-companion note, and the M365/Gemini competitive positioning. **0 new repos** — every item extends rows we already own.
+
+- [ ] `[NOT DONE]` **H30 voice-memo → structured report (doc 68 §3):** STT (H15) → transcribe → agent synthesizes into a polished document (Word block-patch D1 / markdown / email F14) — the end-to-end "reports from messy inputs" workflow Cowork advertises; I/O rides H15/H28 (STT/TTS, both deferred) — this is the job that composes them
+- [ ] `[NOT DONE]` **H31 corpus-first research surface + audio digest (doc 68 §2.2):** pick sources (files/folders/URLs/emails) → grounded, cited answers + mind-map/report artifacts (Gemini-Notebook-class); reuse C-series RAG + G2 deep research + EV1 citation fidelity; **audio-digest output** (podcast-style Audio Overview) rides H28 TTS — post-v1
+- [ ] `[NOT DONE]` **H32 agent picker + agent-native command surface (doc 68 §4):** agent picker (F12/J17 ACP registry) → `initialize` capability card → composer renders the agent's live `available_commands` + `@` + mode indicator (one consistent UI, per-agent vocabulary)
+- [ ] `[NOT DONE]` **H32 agent-scoped model surface (doc 68 §4):** hosted agents expose their own models via `available_commands`/config — the full models.dev catalog (A6) lives only in the native-engine picker (intent-first Fast/Quality/Private/Cheap + power-user drawer); never a global 364-model grid
+- [ ] `[NOT DONE]` **Two-channel injection — Channel A (doc 68 §4):** ACP mediates I/O — `fs/read` → slim/bounded previews + pass-by-reference (C10), `terminal/output` → RTK compression, `terminal/create` → Guard-1 + audit, `fs/write` → Guard-2 ticket + diff card (token-minimizing + surgical + guards at the protocol boundary for any hosted agent)
+- [ ] `[NOT DONE]` **Two-channel injection — Channel B (doc 68 §4):** `everyaios-mcp` (F7) serves Office surgical editor + IronCalc, browser 37-tool catalog + Session Vault, search cascade (G8), memory retrieval (C-series), storage intelligence as MCP tools — any MCP-consuming agent gets our full capability set
+- [ ] `[NOT DONE]` **H18 mobile-companion note (doc 68 §3):** record the distinction (remote-control handoff vs mobile monitor/steer surface) — a mobile companion app is a distinct post-v1 item, not covered by H18 today
+- [ ] `[NOT DONE]` **M365 Copilot Cowork / Gemini Notebook positioning (doc 68 §2):** fold the competitive verdicts (in-app M365 agent · corpus-first research surface · Gemini-in-Workspace) into the P12.1 GTM competitive analysis
 
 ---
 
@@ -1182,11 +1214,13 @@
 | P9+ Post-v1 | 22 | later |
 | P13 Batch-3 Steal Queue (doc 65) | 11 | post-v1 |
 | P14 Model Catalog — models.dev (doc 66) | 5 | ~1 (parallel) |
+| P15 Capability-Delta Queue (doc 67) | 5 | post-v1 |
+| P16 Final Market-Research Deltas (doc 68) | 8 | post-v1 |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **47** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 54 | parallel |
-| **TOTAL** | **772** | **~45 weeks** |
+| **TOTAL** | **780** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.
