@@ -1,8 +1,8 @@
 # DESKTOP-APP-SPEC.md — Complete Product Specification
 
-> **Version:** v3.17 · **Date:** 2026-08-15 · **Supersedes:** v3.16
+> **Version:** v3.18 · **Date:** 2026-08-15 · **Supersedes:** v3.17
 > **Version history:** see `SPEC-CHANGELOG.md` (archived 2026-08-10 — this file is a clean build document).
-> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–65, **274 repos**, ledger docs 27+46+47+48+49+50+52+54+55+56+57+58+60+61+62+63+64+65) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
+> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–66, **278 repos**, ledger docs 27+46+47+48+49+50+52+54+55+56+57+58+60+61+62+63+64+65+66) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
 > **This app is OPEN SOURCE, local-first, BYOK.** Nothing in the architecture requires a founder-run server — not now, not later.
 > **IPC Architecture validated (doc 42):** code-verified against OpenFang `crates/openfang-kernel/src/kernel.rs` (20+ subsystems, RBAC, Merkle audit, DashMap abort handles) + ZeroClaw `crates/zeroclaw-api/src/lib.rs` (kernel ABI traits: ModelProvider/Channel/Tool/Memory/Observer/RuntimeAdapter). The "sidecar proposes, Rust disposes" axiom is production-proven — both systems use the identical kernel-with-syscalls model with capability-based security.
 

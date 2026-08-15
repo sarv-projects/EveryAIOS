@@ -1155,6 +1155,17 @@
 
 ---
 
+## P14 — Model Catalog: models.dev Steal (doc 66, 2026-08-15 — anomalyco/models.dev, MIT)
+> **The single biggest catalog win since doc 19:** a vendorable, MIT-licensed open database of model capabilities/pricing/limits — 186 providers / 364 compiled entries with cache-read/write pricing and a two-tier lab-vs-provider schema that is exactly our model-family vs transport-provider adapter split. Implementation target: new `everyaios-catalog` crate.
+
+- [ ] `[NOT DONE]` **A6 catalog ingest (doc 66 §1.3):** vendor `models.json` (432KB) as the baseline catalog; `ModelEntry` struct mirroring the compiled shape (`id`, `canonical_slug`, `context_length`, `architecture` modalities/tokenizer, `pricing{prompt,completion,web_search,input_cache_read,input_cache_write}`, `supported_parameters` capability proxy, `default_parameters`, `top_provider.max_completion_tokens`) — new `everyaios-catalog` crate; parsed once at startup into an in-memory index
+- [ ] `[NOT DONE]` **Two-tier lab/provider schema (doc 66 §1.1):** `base_model` override-only inheritance — canonical lab model + per-host cost/limits overrides; BYOK providers (and any future provider) added as override entries, never duplicate the canonical facts (this *is* the model-family vs transport-provider adapter separation)
+- [ ] `[NOT DONE]` **A9 pricing integration (doc 66 §1.3):** `input_cache_read`/`input_cache_write` per model feed the cache-aware cost engine + J11 budget gate (real pricing data, not vendor claims)
+- [ ] `[NOT DONE]` **A7 routing filter matrix (doc 66 §1.3):** `supported_parameters` (tools/structured_outputs/reasoning/response_format/tool_choice) + `architecture` modalities + `context_length`/`max_completion_tokens` = the hard-requirement filters for route selection
+- [ ] `[NOT DONE]` **Sync automation (doc 66 §1.4 — deferred, maintenance loop):** per-provider sync modules + `bun validate`-style gate; the vendored baseline ships static; the sync loop is a post-v1 refresh path (30-provider pattern documented for when we need it)
+
+---
+
 ## SUMMARY
 
 | Phase | Tasks | Weeks |
@@ -1170,11 +1181,12 @@
 | P8 Product Polish | 37 | ~3 |
 | P9+ Post-v1 | 22 | later |
 | P13 Batch-3 Steal Queue (doc 65) | 11 | post-v1 |
+| P14 Model Catalog — models.dev (doc 66) | 5 | ~1 (parallel) |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **47** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 54 | parallel |
-| **TOTAL** | **767** | **~45 weeks** |
+| **TOTAL** | **772** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.
