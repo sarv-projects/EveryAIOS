@@ -1,6 +1,6 @@
 # DESKTOP-APP-SPEC.md — Version History (archived)
 
-> Archived 2026-08-10. **The live spec is now v3.16 (2026-08-14, extended 2026-08-15 with doc 63).** Entries below run v3.0 → v3.13; **v3.14 → v3.16 changes are recorded in the research ledger docs (58/59/60/61/62/63) and the live SPEC §0/§6 text, not here** — this file was archived at v3.13 and no new changelog entries were appended after archiving. If a future pass re-opens the changelog, migrate the doc-58→63 deltas (OmniRoute ingest, deep-dives, ledger 227→255, cost-optimization + event-driven triggers + eval, 37-repo steal ledger → C13/E15–E17/I11/EV1) into entries here.
+> Archived 2026-08-10. **The live spec is now v3.16 (2026-08-14, extended 2026-08-15 with docs 63–64).** Entries below run v3.0 → v3.13; **v3.14 → v3.16 changes are recorded in the research ledger docs (58/59/60/61/62/63/64) and the live SPEC §0/§6 text, not here** — this file was archived at v3.13 and no new changelog entries were appended after archiving. If a future pass re-opens the changelog, migrate the doc-58→64 deltas (OmniRoute ingest, deep-dives, ledger 227→255, cost-optimization + event-driven triggers + eval, 37-repo steal ledger → C13/E15–E17/I11/EV1, giants code-level deep-dive → G9 read-cleaner + P7.8 sandbox profiles/FS broker + P7.9 warm pool) into entries here.
 
 ## Changelog (v3.0 → v3.13)
 

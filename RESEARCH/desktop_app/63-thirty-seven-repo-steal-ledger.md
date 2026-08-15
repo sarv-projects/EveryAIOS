@@ -92,17 +92,17 @@
 
 ## 3. Office "no scope reduction" verdict
 
-LibreOffice as truth-oracle is **not** a shortcut — it is the byte-stable conformance tier (doc 28 pattern). The honest "not perfect yet" list, verified against univer's feature surface:
+LibreOffice as truth-oracle is **not** a shortcut — it is the byte-stable conformance tier (doc 28 pattern). The honest "not perfect yet" list. ⚠️ **Correction (re-verified 2026-08-15):** univer's OSS clone (v1.0.0-beta.0) has **comments only** — charts / PPT animations / PDF are **Pro/roadmap features, absent from the OSS packages** (confirmed by clone grep + univer README: "charts, pivot tables, sparklines… chart and table model/UI plugins" listed under Pro/enterprise; slides OSS "under active development"; no PDF package at all). Doc 58's OSS/Pro split note was right; this table originally over-claimed ✓. The actual steal-sources for these gaps: **ppt-master** (native page transitions + per-element object animations + data-backed native charts, per its docs/animations.md + getting-started.md) and **LibreOffice core** (annotations/oracle).
 
-| D-row | Capability | univer has | our office crate | status |
-|---|---|---|---|---|
-| D1 | docx block-patch | ✓ | ✓ | shipped |
-| D2 | track-changes + comments | ✓ (comments) | ❌ | **gap** |
-| D4 | charts | ✓ | ❌ | **gap** |
-| D7 | PPT animations/transitions | ✓ | ❌ | **gap** |
-| D8 | PDF annotations (sticky notes, highlights) | ✓ | ❌ | **gap** (P4.7 viewer + notes panel open) |
-| — | presenter mode / speaker notes contract | — | ❌ | steal from guizang |
-| — | CSL citation insertion | — | ❌ | steal from obsidian-zotero-integration |
+| D-row | Capability | univer OSS has | our office crate | status | steal-source |
+|---|---|---|---|---|---|
+| D1 | docx block-patch | ✓ | ✓ | shipped | — |
+| D2 | track-changes + comments | ✓ (comments only; no track-changes) | ❌ | **gap** | univer thread-comment + LibreOffice w:ins/w:del |
+| D4 | charts | ❌ (Pro) | ❌ | **gap** | ppt-master native charts (OOXML c:chart) + LibreOffice |
+| D7 | PPT animations/transitions | ❌ (Pro) | ❌ | **gap** | ppt-master (p:transition / p:anim) |
+| D8 | PDF annotations (sticky notes, highlights) | ❌ (no PDF pkg) | ❌ | **gap** (P4.7 viewer + notes panel open) | LibreOffice (annotations) |
+| — | presenter mode / speaker notes contract | — | ❌ | steal from guizang | guizang presenter-mode.md |
+| — | CSL citation insertion | — | ❌ | steal from obsidian-zotero-integration | obsidian-zotero CSL |
 
 Each gap is a D-series TODO item, not a spec cut.
 
