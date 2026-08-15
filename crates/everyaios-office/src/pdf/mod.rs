@@ -13,6 +13,7 @@
 //!
 //! Rendering is the webview's job (pdf.js, P4.7 PDF viewer).
 
+pub mod annot;
 pub mod author;
 pub mod form;
 pub mod redact;

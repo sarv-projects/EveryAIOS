@@ -1,10 +1,10 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (updated 2026-08-14) · **Spec:** v3.16 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (updated 2026-08-15) · **Spec:** v3.16 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
-> **Scope:** Complete product — 138 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
+> **Scope:** Complete product — 143 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
-> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–60) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
+> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–63) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 
 <!-- VERIFICATION POLICY: Every completed task MUST be verified before marking [DONE].
      Verification means: code compiles, tests pass, behavior confirmed (manual or automated).
@@ -19,8 +19,8 @@
 - [x] `[DONE]` Create `crates/` directory with Cargo workspace manifest
 - [x] `[DONE]` Create `crates/everyaios-core/` — binary crate, boots headless, loads config
 - [x] `[DONE]` Create `crates/everyaios-ipc/` — JSON-RPC stdio framing with length-prefix [u32 LE]
-- [x] `[DONE]` Create `crates/everyaios-guard/` — stub (compiled RegexSet placeholder)
-- [x] `[DONE]` Create `crates/everyaios-audit/` — stub (NDJSON append writer)
+- [x] `[DONE]` Create `crates/everyaios-guard/` — created as a compiled-RegexSet stub; **since grown to the full P7 surface (blocklist/prescan/urlfloor/ticket/redteam/injection/pathfloor/profiles/loopguard/configscan/manifest — see P7.4/6/7)**
+- [x] `[DONE]` Create `crates/everyaios-audit/` — created as an NDJSON append writer; **since grown to session-log/cockpit/replay + P7.7 Merkle chain + session repair**
 - [x] `[DONE]` Create `crates/everyaios-vault/` — SQLCipher init, open/create encrypted db
 - [x] `[DONE]` Create `crates/everyaios-cdp/` — stub (CDP WebSocket client skeleton)
 - [x] `[DONE]` Create `crates/everyaios-browser/` — stub (snapshot types)
@@ -197,7 +197,7 @@
 - [x] `[DONE]` Implement `tabs` / `tab_groups` / `windows` / `history` management tools — **tabs** (`Target.getTargets`), **history** (`Page.getNavigationHistory`), **windows** (`Target.getTargets` grouped by browserContextId, `create_window` via `Target.createBrowserContext`+`createTarget newWindow:true`, `close_window` via `disposeBrowserContext`). ⚠️ Honest ceiling (doc 33 §3 — BrowserOS ships these in its Chromium fork): **`tab_groups` has NO CDP surface on stock Chrome** — registered in the catalog, runtime requires the fork/extension surface (marked in the catalog)
 - [x] `[DONE]` Implement `download` / `upload` with temp-file routing — **`set_download_path` (`Browser.setDownloadBehavior`) + `upload_files` (`DOM.setFileInputFiles` by backendNodeId)**; temp routing via read.rs `maybe_route_to_file`
 - [x] `[DONE]` Implement `run` tool (→ everyaios-script, see P2.5) — **registered in the catalog (open_world) + engine landed with P2.5 (rquickjs sandbox 64MB/512KB/30s, browser SDK, InnerCallHook authorize+record+claim, ownership filtering; 14/14 script tests)**
-- [x] `[DONE]` Register all 34 tools in everyaios-mcp (17 core interaction incl. `run` + `enhanced_snapshot` + bookmarks×6 + tab-groups×5 + window×5 — catalog ARCH/08 §8.2: 17+6+5+5+1 = 34) with annotations (F9: readOnlyHint/openWorldHint, ACP tool-kind taxonomy); + `file_ops`×3 workspace extension (E2) → 37 total — **`crates/everyaios-mcp/src/lib.rs` `BROWSER_TOOLS` = 37 ToolDefs** (17 original order-preserved + enhanced_snapshot + 6 bookmarks + 5 tab-groups + 5 windows + 3 file_ops) with ToolKind + read_only + open_world; uniqueness + group-total + annotation tests green (11/11)
+- [x] `[DONE]` Register all 34 tools in everyaios-mcp (17 core interaction `tabs..run` + enhanced_snapshot + bookmarks×6 + tab-groups×5 + window×5 — catalog ARCH/08 §8.2: 17+1+6+5+5 = 34) with annotations (F9: readOnlyHint/openWorldHint, ACP tool-kind taxonomy); + `file_ops`×3 workspace extension (E2) → 37 total — **`crates/everyaios-mcp/src/lib.rs` `BROWSER_TOOLS` = 37 ToolDefs** (17 original order-preserved + enhanced_snapshot + 6 bookmarks + 5 tab-groups + 5 windows + 3 file_ops) with ToolKind + read_only + open_world; uniqueness + group-total + annotation tests green (11/11)
 - [x] `[DONE]` Implement MCP tool profiles (core/network/state/debug/tabs/react/mobile) + paginated tool discovery + typed args with `extraArgs` parity (agent-browser pattern, doc 55) — **`ToolProfile` enum (core/network/state/debug/tabs/mobile/all) + `tools_for_profile()` + `paginate(page, page_size) → (slice, has_more)` + typed `ArgDef` schemas on every tool + `validate_args()` (required-args check, unknown args forwarded = extraArgs parity)**; profile/pagination/validation tests green
 - [ ] `[NOT DONE]` Post-v1 tool candidates (doc 55; **NOT in P2 scope**): `a11y_audit` (embedded axe-core, offline WCAG), annotated screenshots (numbered labels ↔ `@eN` refs), batch JSON command mode
 - [x] `[DONE]` Add bookmark tools (6): get_bookmarks, create_bookmark, remove_bookmark, update_bookmark, move_bookmark, search_bookmarks — **registered with typed args + annotations**. ⚠️ Honest ceiling: **no CDP bookmarks domain on stock Chrome** (BrowserOS implements via Chromium fork) — runtime gated until fork/extension surface exists
@@ -263,6 +263,13 @@
 - [x] `[DONE]` Implement 7-day retention default + configurable wipe — **`retention_sweep(max_age)` deletes expired segments + their replay/screenshot files (stats returned); `wipe()` clears all files + index rows**
 - [x] `[DONE]` Implement durable event log + idempotency classes (doc 53 §4): safe-retry / unsafe / same-key / confirm-after-uncertain over the append-only audit — **`everyaios-audit/src/session_log.rs`: `SessionLog` (the 10 §4.2 event types, per-session NDJSON, seq resumes on reopen) + `IdempotencyClass` (safe_retry/unsafe_retry/same_key/confirm_after_uncertain + `classify_tool` manifest) + `IdempotencyRegistry` (same_key broker dedupe) + `recovery_plan` (ToolStarted w/o ToolCompleted → Rerun / ResendWithKey / ConfirmCard)**
 - [x] `[DONE]` Test: ingest/dedupe/gap/retention round-trip + recovery classification + recorder contract — **13 audit tests (batch ingest + segment accumulation, dedupe receipt-stable no double-append, malformed-line sticky gap, recorder-declared gap, doc-id validation incl. traversal, screenshots+wipe, retention removes only expired, session-log resume/incomplete-detect/classify/recovery-plan) + 5 browser recorder tests (embedding, header contract, injection-escape, remove, capture set) — 355 ws tests (326 + 18 P2.10 + 3 P3.1 + 8 P3.3), clippy 0, fmt clean**
+
+### P2.11 Browser Extension Tools (E15–E17 — doc 63 §4.1–4.3)
+- [x] `[DONE]` **E15 Electron-app CDP automation:** attach to any Electron app's debug port (VS Code/Slack/Discord/Spotify/Notion): `electron_attach(port)` → a11y snapshot → click/fill/read/screenshot via the existing CDP stack — zero new deps (agent-browser pattern, doc 63 §4.1) — **`everyaios-cdp::discovery` (`probe_electron`/`discover_electron_apps`/`electron_from_json`/`is_electron_version`) + `everyaios-browser::electron` `ElectronHandle::attach` (probe → connect → attach first page target → `snapshot`/`click`/`fill`/`read`/`screenshot` over the CDP stack)**
+- [x] `[DONE]` **E16 slim snapshots:** `snapshot(slim: true)` — drop non-actionable nodes, collapse long text, depth cap (chrome-devtools-mcp `SlimMcpResponse` pattern, doc 63 §4.2); token-economy lever on every browser turn — **`everyaios-browser` `SnapshotMode::Slim` + `tree.rs::collapse_text`/`SLIM_DEPTH_CAP`/`SLIM_NAME_MAX_CHARS`; test asserts slim ≤40% of full-snapshot tokens**
+- [x] `[DONE]` **E16 WebMCP support:** web-native MCP handshake so browser sessions can serve/consume MCP over HTTP (chrome-devtools-mcp `webmcp.ts` pattern, doc 63 §4.2) — **`everyaios-browser::webmcp` (`WebMcpTool`/`WebMcpResult`/`WebMcpRegistry`/`WebMcpExecutor` + `list`/`execute` handshake, JSON-schema tool metadata, `{status, output, errorText}` result shape) + `everyaios-browser::webmcp_http` (`McpHttpServer`/`handle_mcp_request`/`parse_http_request`: GET `/mcp` manifest, POST JSON-RPC `tools/list`/`tools/call`, std-only `TcpListener` transport)**
+- [x] `[DONE]` **E17 multi-protocol action parsing:** per-provider action-protocol adapters (native / CUA / Anthropic / UI-TARS) behind the router — any BYOK provider's action format drives the same browser layer (skyvern `parse_actions.py` pattern, doc 63 §4.3) — **`everyaios-browser::protocol` (`parse_action` → `ParsedAction` for Native/AnthropicCua/OpenAiCua/UiTars + `to_act_kind` lowering)**
+- [ ] `[NOT DONE]` Test: Electron app snapshot→click→read E2E (VS Code or Slack); slim snapshot ≤40% of full-snapshot tokens; CUA action parse → same browser op
 
 **P2 Exit Criterion:** navigate→snapshot→act→diff E2E; ownership test passes; Obscura scrape + escalate; session-vault round-trip (agent never sees cookies); PoW auto-solved; run audited script; replay with has_gap.
 
@@ -350,6 +357,14 @@
 - [x] `[DONE]` Implement chat overlay on any open document (page-scoped questions) — **`ui/components/ChatOverlay.tsx` — collapsible panel, dispatches a page-scoped turn via `chatStream` ("About the open document (<scope>):\n<question>"), answer lands in the Chat page**
 - [x] `[DONE]` **Univer embed (doc 58):** evaluate Univer SDK as the office surface — **DECISION: keep our surgical renderers (docx/pptx/pdf viewers above + P4.2 sheets grid); Univer OSS/Pro split (Slides/Docs import = Pro) + the lossy re-serialize risk ARCH/04 rejected → defer the Univer embed; surgical patch stays the mutation engine either way (already recorded in P4.2)**
 
+### P4.7b Office Perfectness Gaps (doc 63 §3 — the honest "not perfect yet" list; no scope cuts)
+- [x] `[DONE]` **D4-gap: charts** — read chart series/model from the chart part (`xl/charts/chartN.xml`) — **`everyaios-office::xlsx::chart` (`extract_chart_series` → `ChartSeries` name/category-range/value-range) + authoring (`build_chart_part` for Bar/Line/Pie with series + title, `chart_rel_fragment`, `chart_content_type_override` for rels + Content_Types registration; authored parts round-trip through the reader)**
+- [x] `[DONE]` **D2-gap: track-changes + comments** — read `w:ins`/`w:del`/`w:comment` parts in docx (comment author/date + resolved-state), write comments patch-aware (collision-free `w:id`), **and author tracked changes**: `emit_tracked_change(old, new, author)` emits `<w:del><w:delText>` + `<w:ins><w:t>` runs with `w:author`/`w:date` (round-trips through `extract_tracked_changes`) — **`everyaios-office::docx::track` (`extract_tracked_changes`/`extract_comments`/`add_comment`/`emit_tracked_change`/`render_ins_run`/`render_del_run`/`TrackAuthor`)**; *viewer surfacing remains UI work*
+- [x] `[DONE]` **D7-gap: PPT transitions/animations** — read/write `p:transition` (fade/wipe timing, existing ones preserved verbatim; insert replaces in schema order before `p:cSld`) **and author per-shape animations** — **`everyaios-office::pptx::transition` (`extract_transition`/`set_transition`) + `everyaios-office::pptx::anim` (`build_timing_xml` → `p:timing` with `p:anim effect="fade|zoom"` or `p:set` visibility-appear, `p:spTgt spid` targeting, schema-valid main sequence)**
+- [x] `[DONE — sticky notes + highlights]` **D8-gap: PDF annotations** — free-text/highlight annotations: sticky notes (`/Text`/`/FreeText`) + highlight (`/Highlight`) with `/AP` appearance — **`everyaios-office::pdf::annot` (`add_text_annotation`/`add_highlight_annotation`)**; *audit-log wiring is the caller's responsibility*
+- [x] `[DONE]` **Presenter mode + SPEAKER_NOTES contract (doc 63 §4.9 — guizang presenter-mode.md pattern):** stable `data-slide-id`-keyed speaker notes (`SPEAKER_NOTES` array: id/title/section/minutes/purpose/talk/timing/transitions) — **`everyaios-office::pptx::notes` (`extract_notes_text`/`build_speaker_notes` → `SpeakerNotesEntry` + `validate_slides_notes_sync` sync-check + `plan_rehearsal` wpm-based per-slide/total timing for the auto-advance clock)**; *the presenter-mode UI view (rehearsal rendering) remains ARCH/12 UI work*
+- [x] `[DONE]` **CSL citation insertion (doc 63 §4.16 — obsidian-zotero-integration pattern):** cite-while-writing — CSL-style citation + bibliography rendering (APA/IEEE/Chicago: in-text citation, full entry, surname/initials formatting) — **`everyaios-office::docx::citation` (`render_citation`/`render_reference`/`render_bibliography`, `ReferenceKind`/`CslStyle` + `ReferenceLibrary` search/insert + `insert_citation_into_docx` appends the rendered citation as a paragraph before `w:sectPr`, byte-preserving zip rewrite)**
+
 ### P4.8 Storage Intelligence (D9–D11, G7 — doc 49)
 - [x] `[DONE]` Implement everyaios-storage crate: parallel work-stealing walker (crossbeam-deque per-thread `Worker` + steal loop, symlink-skip cycle-safe, `same_filesystem` device-boundary) — **`walk.rs`: `scan` + `build_arena` (u32-indexed `FileNode` arena, bottom-up size aggregation); 15 storage tests across walk/snapshot/treemap/dedup/finder/cleanup/search/health — 479 ws tests, clippy 0, fmt clean**
 - [x] `[DONE]` Implement immutable arena snapshots + zstd save/load — **`snapshot.rs`: `SnapshotStore` (arc_swap `load_full`/`store`, zstd round-trip); bytemuck Pod slab deferred (plain `Vec` arena — unsafe cast is a later opt)**
@@ -370,9 +385,10 @@
 
 ### P5.1 Multi-Signal Retrieval Fusion (C1/C3, Algorithm #18 — doc 07, v2.0 §3, doc 46 mem0)
 - [ ] `[NOT DONE]` Wire core-memory + core-files from APP into coordinator
-- [ ] `[NOT DONE]` Implement intent classifier: memory vs fact vs event vs document
+- [x] `[DONE]` Implement intent classifier: memory vs fact vs event vs document — **upgrade (doc 63 §4.14 — Vane pattern): classifier returns (needs_research, needs_tools, needs_widgets, rewrite-query); research + tool signals run in parallel; final answer cites its sources (citation cards in UI)** — **`everyaios-memory::classify` (`Intent`/`IntentKind` + `classify()` deterministic keyword core + `plan_execution`/`parallel_groups` producing the parallel research+tool batches and the post-answer widget group)**; *citation-card UI remains UI work*
 - [ ] `[NOT DONE]` Implement parallel signal execution (C4): FTS5/BM25 vectorless default + optional vector signal
 - [ ] `[NOT DONE]` Implement optional embedding path (C5): on-device bge-micro/gte-small, int8/vec0 — only when user enables
+- [x] `[DONE]` **Hierarchical repo summarization (doc 63 §4.15 — deepwiki-open pattern):** summarize-file → summarize-directory → index summaries → answer over summaries; the no-embedding long-context retrieval path (composes with I7 repo-map; raw-vs-compressed-vs-retrieved delta measured per the P8.0 eval corpus) — **`everyaios-memory::summary` (`summarize_file`/`summarize_directory`/`index_summaries`/`answer_over_summaries`)**
 - [x] `[DONE]` Implement weighted RRF score fusion (mem0-style single fused score) — **`fusion::rrf_fuse` (weighted reciprocal-rank fusion, per-signal weights; 25 memory tests across fusion/actr/taste/compaction — 504 ws tests, clippy 0, fmt clean)**
 - [ ] `[NOT DONE]` Implement cross-encoder hybrid rerank (Algorithm #19)
 - [x] `[DONE]` Implement deduplication + smart snippets (windows around matches) — **`fusion::dedupe` (keep-highest per id) + `fusion::smart_snippets` (window ±N chars around each match)**
@@ -426,10 +442,18 @@
 - [x] `[DONE]` Implement Hermes 3-layer tool-result persistence (preview+path, per-turn 200K, 0.15/0.30) — **`compaction::persist_decision` (inline vs preview+path threshold)**
 - [x] `[DONE]` Implement OpenCode PRUNE_PROTECT 40K tool-output erasure — **`compaction::prune_protect` (budget-capped, newest-first retention)**
 - [ ] `[NOT DONE]` Test: compaction triggers at ratios without breaking loop
+- [x] `[DONE]` **Compaction-as-lifecycle (doc 63 §4.5 — codex `compact_token_budget.rs` + `hook_runtime.rs` pattern):** model every compact as a lifecycle — `PreCompactHook` (notify/capture) → compact → `PostCompactHook` (emit `ContextCompaction` turn item); token-budget manual compact installs a fresh window through the SAME lifecycle — **`compaction.rs::run_compaction_lifecycle` + `CompactionEvent` (PreCompact/Compacted/PostCompact) + `CompactionCoordinator` (P5.8 turn-loop wiring: per-turn `push_turn` → context action, `maybe_compact` drives the lifecycle and emits the events as turn items, resets the accumulation)**
+- [x] `[DONE]` **Compaction model-fallback chain (codex `compact_model_fallback.rs` pattern):** summarizer fails → fallback model chain → last-resort truncate-with-marker; never leave the loop stuck on a dead summarizer — **`compaction.rs::compact_with_fallback` + `truncate_with_marker` + `FallbackStep`**
 - [ ] `[NOT DONE]` Integrate Graphiti-pattern temporal KG — entities with validity windows, bi-temporal tracking
 - [ ] `[NOT DONE]` Implement Cognee-pattern remember/recall/forget/improve API for memory operations
 - [ ] `[NOT DONE]` Add RTK-style output compression — per-command parsers for shell tool results (60-90% reduction)
 - [ ] `[NOT DONE]` Implement SeekStorm-pattern hybrid search (vector + BM25) as embedded Rust library
+
+### P5.11 Spaced-Repetition Reinforcement (C13 — doc 63 §2.2, anki `rslib/src/scheduler/fsrs`)
+- [x] `[DONE]` Port anki's FSRS scheduler into `everyaios-memory::fsrs` — retention-target scheduling (desired-retention input → interval/state output), memory-state structs, review-reschedule — **faithful fsrs-rs port (`fsrs.rs`): `Fsrs`, `MemoryState`, `Rating`, `NextStates`, `current_retrievability`, `next_interval`, `next_states`, 0/17/19/21-param construction**
+- [x] `[DONE]` Implement simulator (FSRS `simulator.rs` — schedule simulation for eval) + retention metrics — **`fsrs.rs::simulate` + `SimulationReport` (reviews/day, mean retrievability at review)**
+- [x] `[DONE]` Implement "reinforce what I learned" flow: post-session candidate extraction → FSRS queue → review prompts at optimal intervals (uses the landed FSRS core) — **`everyaios-memory::reinforce` (`ReviewQueue::ingest`/`due`/`review` on the FSRS core + `extract_candidates`/`split_sentences` deterministic extraction: fact-pattern sentences → candidates with stable content-hash ids and keyword-derived importance)**
+- [x] `[DONE]` Test: FSRS intervals respect retention target; simulator matches published curves — **9 tests incl. fsrs-rs published forgetting-curve + first-review oracle values**
 
 ### P5.8 Pass-by-Reference Context (C10 — doc 39 NOOA pass-by-reference)
 - [x] `[DONE]` Implement ref handles for files/datasets/tool results — **`reference::{RefHandle, RefKind}`**
@@ -438,10 +462,11 @@
 - [x] `[DONE]` Test: 10MB file queried via ref-preview keeps context ≤2K tokens — **reference test: 10MB+ payload → `preview_tokens() <= 2000` (head+tail+marker ≤ budget)**
 
 ### P5.9 Token/Cost Dashboard UI (H9 — ARCH/05 §5.6)
+- [x] `[DONE — via P1.6]` Live token streamer in chat (tokens/sec, context %, active key) — **already shipped in the P1.6 footer bar** (`ui/src/pages/Chat.tsx`: 3s sliding window over batch tokenCounts, context % gauge vs 128K nominal, active key badge; resets on done/error/cancel). Not a P5.9 gap — see P1.6.
 - [ ] `[NOT DONE]` Implement per-key cost display (tokens/day, est. cost/day)
 - [ ] `[NOT DONE]` Implement per-session cost breakdown
 - [ ] `[NOT DONE]` Implement cache-hit rate display per provider
-- [ ] `[NOT DONE]` Implement live token streamer in chat (tokens/sec, context %)
+- [ ] `[NOT DONE]` Implement inspect-by-source Trajectory view (J5 — doc 61: DeepSeek Harness traceable-stream pattern): per-turn context-injection events logged as a dedicated audit event type, filterable by source (persona / user doc / memory / tool results / blueprint)
 
 ### P5.10 Retest Built Algorithms (🔁 — v2.0 built set; ARCH/09 🔁 rows)
 - [ ] `[NOT DONE]` Run all 17 built algorithm test suites in desktop sidecar runtime
@@ -463,6 +488,9 @@
 - [ ] `[NOT DONE]` Implement DAG state machine for multi-step workflows
 - [ ] `[NOT DONE]` Implement checkpoint freeze on circuit-break (B6 MCQ pattern)
 - [ ] `[NOT DONE]` Implement plan cache (doc 62): extract + index plans by task signature (~0.85 sim, `~/.everyaios/plans.db`), match before fresh planning; version-based invalidation
+- [x] `[DONE]` **Spec-per-task files (doc 63 §4.18 — codger/openspec pattern):** main agent writes one `spec.md` per task (goal + acceptance checks + context); sub-agent receives the spec as its starting context, returns a written status block — specs are the persistent memory, main agent never holds the full history — **`everyaios-blueprint::spec` (`TaskSpec` ↔ `to_markdown`/`from_markdown`)**
+- [x] `[DONE]` **Verify-gated tasks (openspec pattern → EV1):** each blueprint task carries a `verify` block — deterministic checks that must pass before the task is marked done (files exist, tests pass, state matches); never accept the agent's own "finished" claim (doc 63 §2.3) — **`everyaios-blueprint::blueprint` (`BlueprintTask`/`VerifyBlock`/`Blueprint` with `verify_against()` → eval `verify`, ready set + cycle detection)**
+- [x] `[DONE]` **Agent-frontmatter schema (doc 63 §4.4 — qwen-code `agent-frontmatter-schema.ts` pattern, CC 2.1.168 parity):** blueprint parser accepts Claude-Code-compatible `permissionMode/color/hooks/mcpServers/maxTurns` frontmatter → AgentConfig (permissionMode→approvalMode bridge: default/plan/acceptEdits/auto/bypassPermissions/dontAsk→default mapping) so users can drop in CC/Qwen agent files — **`everyaios-blueprint::frontmatter` (`parse_frontmatter` → `AgentConfig` + `PermissionMode→ApprovalMode` bridge)**
 
 ### P6.2 Sub-Agents (B3/B4 — doc 16, doc 03; doc 41 P2 opencode task.ts)
 - [ ] `[NOT DONE]` Implement fresh-context sub-agent spawn (own conversation, own workspace)
@@ -472,6 +500,7 @@
 - [ ] `[NOT DONE]` Implement no-recursive-spawn guard
 - [ ] `[NOT DONE]` Implement batch parallel mode (multiple sub-agents concurrently)
 - [ ] `[NOT DONE]` Test: two spec-driven agents with different models run a plan end-to-end
+- [x] `[DONE]` **Multi-agent topologies (doc 63 §4.13 — agent-framework orchestration vocab):** group-chat (shared turn loop, roles) + handoff (agent passes control + context via message) as the two topologies on top of P6.2; sequential/concurrent compose from batch mode; evaluate per-dollar/per-minute vs single agent before shipping (user directive: multi-agent only where eval proves it) — **`everyaios-blueprint::topology` (`MultiAgentPlan`/`AgentRole`/`Topology` + least-privilege `privileged_workers()` + `validate()`)**
 
 ### P6.3 Iteration Budgets (B6 — doc 16 Hermes 500/50; doc 39 DeerFlow subagent_limit_middleware)
 - [ ] `[NOT DONE]` Implement parent max_iterations=500, subagent max=50
@@ -491,6 +520,7 @@
 - [ ] `[NOT DONE]` Implement scheduled tasks UI: create from chat + settings (H14)
 - [ ] `[NOT DONE]` Test: scheduled task fires headless
 - [ ] `[NOT DONE]` Implement event-driven triggers (doc 62, Gartner): CI build-fail / test-regression / repo-change (push/PR/issue) / ticket-assign / telemetry-threshold, with scope+frequency policy controls
+- [x] `[DONE]` **Automation tool shapes (doc 63 §4.12 — khoj pattern):** `run_code` (sandboxed exec via everyaios-script) + `online_search` (G8 cascade) as first-class automation steps, plus email/calendar triggers where connectors exist (F14/F15) — **`everyaios-blueprint::automation` (`Automation`/`AutomationStep`/`Trigger` + `privileged_steps()` for the approval gate)**
 
 ### P6.5 Crystallization (B8, Algorithm #5 — v2.0 §P7)
 - [ ] `[NOT DONE]` Implement multi-step workflow detection (successful N times)
@@ -572,8 +602,11 @@
 
 ## PHASE 7 — Forge + Guardrails Hardening (~4 weeks)
 
-### P7.1 Forge Runtime (I1/I4 — v2.0 §P6; doc 56 W4 LSP diagnostics)
+### P7.1 Forge Runtime + Code-Intel (I1/I4/I11 — v2.0 §P6; doc 56 W4 LSP; doc 63 §2.1)
 - [ ] `[NOT DONE]` Implement LSP-backed diagnostics (doc 56 W4): rust-analyzer/typescript-language-server/pyright/clangd/go via Warp `lsp`-crate pattern — precise errors without full-file context (Copilot CLI `lsp-config.json` pattern). **Three-stage diagnostics, no overlap:** LSP = live during editing → lint/test reflection (ships in P11.5.9) = post-edit build-level gate → rtk output rules (ARCH/05 §5.10) = tool-result compression at injection
+- [x] `[DONE]` **I11 LSP code-intel cluster (doc 63 §2.1 — neovim `runtime/lua/vim/lsp/*` reference):** one LSP client (`everyaios-codeintel`) — JSON-RPC framing (`encode_message`/`decode_messages`, Content-Length, partial-buffer handling) + the full core type set (hover/docs, location, text-edit/rename, diagnostic, code-action, inlay-hint, workspace-edit) — **`everyaios-codeintel::lsp` + `everyaios-codeintel::session` (`LspTransport` trait, `ProcessTransport::spawn` stdio spawn + `is_alive` keep-alive probe + `shutdown`, `LspSession` initialize→initialized→request/notify→shutdown lifecycle with id matching + server-error surfacing)**; *the ticket contract (doc 53 §3) is `everyaios-guard::ticket`; the executor call-site that mints/validates a ticket before a code-intel mutation is harness wiring (same seam as every other tool executor)*
+- [x] `[DONE]` **SCIP symbol queries (doc 63 §4.6 — crux pattern, 66%→96% accuracy / 24% fewer tokens):** `symbol_where / symbol_callers / unused_exports` over a symbol index (JSON-typed `SemanticIndex`: symbol/kind/occurrences/relationships) — grouped refs, sorted+deduped callers, dead-code candidates — **`everyaios-codeintel::semantic` + `everyaios-codeintel::scip` (`parse_document`/`to_semantic_index`: dependency-free protobuf wire reader for SCIP `Document` — language/relative_path/symbols/occurrences, packed ranges, unknown-kind tolerance — feeding the index queries)**
+- [x] `[DONE]` **Repo-map context (doc 63 §4.8 — aider `repomap.py` pattern):** repo map as the cheap code-context assembler for I7 — tag extraction, symbol graph, personalized PageRank ranking, binary-search budget fitting (`fit_budget`), query-match boosting — **`everyaios-codeintel::repomap` (`extract_tags`/`page_rank`/`rank_tags`/`build_repo_map`/`fit_budget` + `TagSource` trait with `LexicalTagSource` default and `CompositeTagSource` union/dedupe; `extract_tags_with`/`build_repo_map_with` — tree-sitter plugs in as another `TagSource`, deterministic sorted edges)**
 - [ ] `[NOT DONE]` Implement write→sandbox→test→iterate loop
 - [ ] `[NOT DONE]` Implement TDD loop: auto-generate tests, read stderr, rewrite until green
 - [ ] `[NOT DONE]` Implement code execution in rquickjs sandbox (reuse everyaios-script)
@@ -606,12 +639,12 @@
 - [ ] `[NOT DONE]` Test: manifest rejects bad bundles; capability blocks unlisted exec; lazy = registered-not-loaded
 
 ### P7.4 Guard-1 Hardening (J2 — doc 06, doc 03 §8; doc 26 red-team corpus; doc 53 §3 tickets)
-- [ ] `[NOT DONE]` Compile full regex blocklist: rm -rf, mkfs, dd, drop database, format, fork bombs, key exfiltration, .git destruction, home wipes
-- [ ] `[NOT DONE]` Implement pre-exec scan of every generated shell string, filesystem path, URL
-- [ ] `[NOT DONE]` Implement URL floors: `file://` only inside granted roots; scheme guard
-- [ ] `[NOT DONE]` Load cyber red-team corpus (doc 26) as adversarial test suite
-- [ ] `[NOT DONE]` Test: 100% of red-team pattern list blocked
-- [ ] `[NOT DONE]` Implement authorization ticket contract in everyaios-guard (doc 53 §3): ticket_id/agent_id/session_id/tool_id/operation/args-hash/paths/expiry/single-use/approval-source/risk/audit-seq
+- [x] `[DONE]` Compile full regex blocklist: rm -rf, mkfs, dd, drop database, format, fork bombs, key exfiltration, .git destruction, home wipes — **`everyaios-guard::blocklist` — 40+ patterns across 8 `BlocklistCategory`s (`DestructiveDelete`/`RawDeviceWrite`/`DatabaseDestruction`/`ForkBomb`/`KeyExfiltration`/`GitDestruction`/`HomeWipe`/`PermissionLoosening`)**
+- [x] `[DONE]` Implement pre-exec scan of every generated shell string, filesystem path, URL — **`everyaios-guard::prescan` (`Guard`/`scan_shell`/`scan_path`/`scan_url`) + `everyaios-guard::scan_all` (one call covers all three targets); `guard_extra` compiles arbitrary corpora (injection patterns)**
+- [x] `[DONE]` Implement URL floors: `file://` only inside granted roots; scheme guard — **`everyaios-guard::urlfloor::check_url` — `file://` decoded + floor-checked via `pathfloor::canonicalize_no_follow`, http/https auto-allowed, javascript/data/smb/etc refused, malformed refused**
+- [x] `[DONE]` Load cyber red-team corpus (doc 26) as adversarial test suite — **`everyaios-guard::redteam::RED_TEAM_CORPUS` — 35 probes (destructive shell, DB, fork bomb, exfil, git, perms, home-wipe) with names + expected categories**
+- [x] `[DONE]` Test: 100% of red-team pattern list blocked — **`red_team_100_percent_blocked` gate — 35/35 blocked**
+- [x] `[DONE]` Implement authorization ticket contract in everyaios-guard (doc 53 §3): ticket_id/agent_id/session_id/tool_id/operation/args-hash/paths/expiry/single-use/approval-source/risk/audit-seq — **`everyaios-guard::ticket` (`AuthorizationTicket` + `TicketStore::use_ticket` — single-use, expiry, args-hash match, revoke; `hash_args` SHA-256 helper)**
 
 ### P7.5 Guard-2 UX Polish (J3/H8 — doc 06; doc 52 §2 decision packages)
 - [ ] `[NOT DONE]` Implement native OS diff card rendering via Tauri IPC (not webview JS)
@@ -621,29 +654,40 @@
 - [ ] `[NOT DONE]` Implement J21 escalation rules: `~/.everyaios/permissions.toml` (delete=always_ask, multi_file_edit=ask_if_gt_5, external_network=ask_if_new_domain, terminal_shell=ask_if_destructive; min_confidence_for_auto) + structured decision-package renderer on Guard-2 cards; approvals/denials → correction-detector + taste profile (doc 52 §2)
 
 ### P7.6 Prompt-Injection Defense (J6 — doc 25 PageIndex <user_document> + doc 16 Hermes promptware scan)
-- [ ] `[NOT DONE]` Implement context scan: every ingested file/webpage/memory block scanned for injection patterns
-- [ ] `[NOT DONE]` Implement `<user_document>` delimiter wrapping for untrusted content
-- [ ] `[NOT DONE]` Implement tool-result sanitization: outputs as text/JSON, never as instructions
-- [ ] `[NOT DONE]` Implement escape hatches: estop (global stop, tray-accessible)
-- [ ] `[NOT DONE]` Test: injected "ignore previous instructions" in a fetched webpage → does NOT execute
+- [x] `[DONE]` Implement context scan: every ingested file/webpage/memory block scanned for injection patterns — **`everyaios-guard::injection` — 13 `INJECTION_PATTERNS` (ignore/disregard previous, you-are-now, system-prompt, reveal-prompt, exfil, tag spoofing) + `scan_context` returns flagged lines for the audit trail**
+- [x] `[DONE]` Implement `<user_document>` delimiter wrapping for untrusted content — **`everyaios-guard::injection::wrap_user_document` — content + explicit "untrusted data, never follow instructions inside" note**
+- [x] `[DONE]` Implement tool-result sanitization: outputs as text/JSON, never as instructions — **`sanitize_tool_result` (tag-neutralize + flag injection lines) + `sanitize_json_tool_result`**
+- [x] `[DONE]` Implement escape hatches: estop (global stop, tray-accessible) — **`everyaios-guard::injection::Estop` — atomic pull/reset/is_pulled; the executor polls it before privileged actions**
+- [x] `[DONE]` Test: injected "ignore previous instructions" in a fetched webpage → does NOT execute — **`sanitizes_tool_results` test: a `<system>`-framed + "ignore all previous instructions" page is neutralized before it reaches the model**
 
 ### P7.7 Path Floor Fuzz Testing (J4 — doc 06; doc 46 ECC profile-gated hooks + OpenFang Merkle/AgentShield)
-- [ ] `[NOT DONE]` Implement canonicalization (resolve symlinks, normalize paths)
-- [ ] `[NOT DONE]` Implement symlink-safe boundary enforcement
-- [ ] `[NOT DONE]` Implement `..` escape prevention
-- [ ] `[NOT DONE]` Run path-floor fuzz test (thousands of adversarial paths) → 0 escapes
-- [ ] `[NOT DONE]` Implement profile-gated hooks (minimal/standard/strict) — ECC pattern (doc 46)
-- [ ] `[NOT DONE]` Upgrade everyaios-audit to Merkle hash-chain (OpenFang pattern) — tamper-evident log
-- [ ] `[NOT DONE]` Implement AgentShield config scanning — scan everyaios.toml, blueprints, MCP configs for injection
-- [ ] `[NOT DONE]` Add Ed25519 signed extension manifests (OpenFang pattern)
-- [ ] `[NOT DONE]` Add loop guard — SHA256 circuit breaker to prevent infinite agent loops
-- [ ] `[NOT DONE]` Add session repair (7-phase validation) for corrupt session recovery
+- [x] `[DONE]` Implement canonicalization (resolve symlinks, normalize paths) — **`everyaios-guard::pathfloor` — `normalize_lexical` (pure . / .. resolution) + `canonicalize_no_follow` (lexical + existing-prefix symlink resolution)**
+- [x] `[DONE]` Implement symlink-safe boundary enforcement — **`enforce_floor` distinguishes `SymlinkEscape` (lexically inside, resolves outside) from plain `OutsideRoot`**
+- [x] `[DONE]` Implement `..` escape prevention — **normalize keeps surviving leading `..` for relative paths → `ParentEscape` verdict; rooted `..` past root stays outside**
+- [x] `[DONE]` Run path-floor fuzz test (thousands of adversarial paths) → 0 escapes — **`adversarial_paths()` (dot-dot chains, absolute, encoded, unicode, symlink-ish) + `fuzz_gate_allowed_implies_inside` — invariant: Allowed ⟹ inside**
+- [x] `[DONE]` Implement profile-gated hooks (minimal/standard/strict) — ECC pattern (doc 46) — **`everyaios-guard::profiles` — `Profile` (thresholds: Strict<Standard<Minimal for human approval) + `gate(profile, hook)` → Allow/Ask/Block over 7 hooks**
+- [x] `[DONE]` Upgrade everyaios-audit to Merkle hash-chain (OpenFang pattern) — tamper-evident log — **`everyaios-audit::merkle` — `MerkleChain` (SHA-256 chained rows), `verify` → first-bad-row, `verify_against_head` catches truncation; tamper + reorder + truncation tests**
+- [x] `[DONE]` Implement AgentShield config scanning — scan everyaios.toml, blueprints, MCP configs for injection — **`everyaios-guard::configscan` — guard-disable keys, destructive commands wired into config, network callbacks, injection markers, malformed-TOML finding**
+- [x] `[DONE]` Add Ed25519 signed extension manifests (OpenFang pattern) — **`everyaios-guard::manifest` — `sign_manifest`/`verify_manifest` (ed25519-dalek), tamper + wrong-key + `check_capabilities` allowlist rejection tests**
+- [x] `[DONE]` Add loop guard — SHA256 circuit breaker to prevent infinite agent loops — **`everyaios-guard::loopguard` — `step_hash(tool, args)` + rolling-window `LoopGuard` tripping on repeat; progress never trips, window expiry + reset tested**
+- [x] `[DONE]` Add session repair (7-phase validation) for corrupt session recovery — **`everyaios-audit::repair` — `validate_session` over Parse/Sequence/ToolPairing/Ordering/Identity/TimeMonotonic/Termination → `RepairReport` with `RecoveryAction` (Resume/ReplayIdempotent/RestoreCheckpoint/AskUser); 7 failure tests**
 
 **P7 Exit Criterion:** Agent writes skill that survives restart; plugin manifest rejects bad bundles; capability blocks unlisted exec; 100% red-team blocked; path-floor fuzz = 0.
 
 ---
 
 ## PHASE 8 — Product Polish + Release (~3 weeks)
+
+### P8.0 Verified-Completion Eval Subsystem (EV1 — doc 63 §2.3; better-harness evidence-first + skyvern verification loop + codex attestation + openspec verify-gate)
+> **Why here:** the user directive is explicit — eval must prove work is *actually done*, not merely claimed; and multi-agent ships only where eval data proves it improves verified completion. This subsystem is the gate for trusting P6/P7 output.
+- [x] `[DONE]` Implement task manifest format: goal + required-outcome checks + forbidden-side-effect checks + budgets (cost/wall-time/destructive-action cap) — YAML or TOML, stored per task — **new `crates/everyaios-eval` (`manifest.rs`): `TaskManifest`, `OutcomeCheck` (exists/hash/contains), `Constraint`, `Budgets`, `EvidenceRequirement` (serde-serializable)**
+- [x] `[DONE]` Implement deterministic verifier SDK: filesystem assertions (exists/hash/content), test-run checks, artifact parsers, permission-trace checks — never trusts the agent's final text ("finished" = unverified claim) — **`everyaios-eval::verifier` `run_outcome_check`/`verify`/`verify_with_policy`**
+- [x] `[DONE]` Implement evidence bundle: artifact hashes + validator reports + screenshots + approval events, stored with each completed task (evidence *requirements* are typed) — **`everyaios-eval::evidence` (`EvidenceBundle`/`ArtifactHash`/`ApprovalEvent` + `missing()`/`is_complete_for()`) + `everyaios-eval::store` (`EvidenceStore`: JSON-on-disk persistence keyed by task id, save/load/list/delete, path-escape-safe task ids)**
+- [x] `[DONE]` Implement status taxonomy: verified-complete / partially-complete (missing requirements explicit) / blocked-correctly / failed-safely / failed-unsafely / unverifiable — score + status, never one blended number — **`everyaios-eval::status` `CompletionStatus` + weighted `Score`**
+- [x] `[DONE]` Implement evidence-first loop report (better-harness pattern): post-session findings carry impact / expected-output / scoped-repair / acceptance-checks; **missing evidence stays explicit** — the I5 loop self-audit (P7.1) feeds this — **`everyaios-eval::report` (`LoopReport`/`Finding` + `is_evidence_complete`/`findings_with_missing_evidence`)**
+- [x] `[DONE]` Implement adversarial-task suite: 30 internal desktop tasks (files, browser, spreadsheets, docs, email drafts, coding, system settings) with required-outcome checks + forbidden-side-effect checks + fault injection (file renamed mid-task, modal obscuring target, stale tool data, permission dialog) — **`everyaios-eval::suite` (`builtin_suite()` = 30 tasks, 7 `TaskCategory`, 7 `FaultKind`) + `everyaios-eval::runner` (`SandboxRunner::run`: provision fixture → hash snapshot → inject fault → run agent → verify → evidence bundle → reset; `Agent` trait is the harness seam; hard-fail policy gate + anti-"sounds finished" proven end-to-end) + `everyaios-eval::batch` (`run_suite`: runs the whole suite under one agent, aggregates per-status distribution + completion rate, resets each workspace)**
+- [x] `[DONE]` Implement retrieval-eval corpus (user directive: high-retrieval correctness): private corpus with permissions, stale duplicates, prompt-injection traps; evidence-recall / evidence-precision / citation-span fidelity / multi-hop completeness / permission compliance / injection resistance scored separately — **`everyaios-eval::retrieval` (`score_retrieval` → 7 `RetrievalScores`) + `everyaios-eval::corpus` (corpus/questions/cases: policy v3 vs stale draft, expense report, injection trap, unauthorized payroll; `builtin_fixtures` seeds one deterministic fixture per task) + `everyaios-eval::batch` (`run_retrieval_batch`: drives cases through an answering function, scores each, aggregates the 7-metric means + per-case distribution)**
+- [x] `[DONE]` Test: eval rejects a plausible-but-unsupported completion (agent claims done, verifier finds missing artifact) — the anti-"sounds finished" regression — **`everyaios-eval` `verify_rejects_plausible_but_unsupported_completion` + `policy_violation_is_hard_fail_even_when_complete`**
 
 ### P8.1 Reader (H6 — v2.0 §P1; D5 markitdown-class, doc 04)
 - [ ] `[NOT DONE]` Port PDF/EPUB/web/markdown universal reader from APP (D5: markitdown-class extraction → RAG + chat overlay)

@@ -5,8 +5,10 @@
 //! byte-preserving ZIP rewrite.
 
 pub mod blocktree;
+pub mod citation;
 pub mod parts;
 pub mod patch;
+pub mod track;
 
 use std::collections::HashMap;
 

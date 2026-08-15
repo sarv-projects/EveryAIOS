@@ -6,8 +6,11 @@
 //! registration) → byte-preserving ZIP rewrite. Untouched slide parts are
 //! copied verbatim; only the targeted part(s) change.
 
+pub mod anim;
+pub mod notes;
 pub mod parts;
 pub mod text;
+pub mod transition;
 
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;

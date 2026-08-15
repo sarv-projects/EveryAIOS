@@ -406,6 +406,7 @@ Unified timeline of all agent actions:
 - Slide strip at bottom for navigation
 - Current slide highlighted
 - Elements flash when being modified
+- **Presenter mode (P4.7b — doc 63 §3, guizang SPEAKER_NOTES contract):** speaker-notes panel keyed by stable slide IDs (never page numbers — reorder-safe), rehearsal view with per-slide timing, auto-advance, notes↔slides sync validated by a port of guizang's `validate-presenter-mode.mjs`
 
 ### 4.9 PDF Tab (📄)
 

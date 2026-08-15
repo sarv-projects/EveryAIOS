@@ -7,6 +7,7 @@
 //! traffic is loopback-only (doc 33 §5.1 hard loopback guard).
 
 use crate::{AttachMode, BrowserEndpoint, CdpClient, CdpError, TargetInfo};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 use std::time::Duration;
@@ -142,6 +143,75 @@ pub(crate) fn http_get(url: &str) -> Result<String, CdpError> {
 }
 
 // ---------------------------------------------------------------------------
+// Electron app discovery (E15 — doc 63 §4.1, agent-browser pattern)
+// ---------------------------------------------------------------------------
+
+/// A running Electron app reachable over CDP (VS Code / Slack / Discord /
+/// Spotify / Notion …). Electron apps launch with `--remote-debugging-port`;
+/// they answer `/json/version` with a `Browser` field starting `Electron/`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ElectronApp {
+    pub port: u16,
+    /// The `Browser` string, e.g. `Electron/31.0.0`.
+    pub version: String,
+    pub browser_ws_url: String,
+    pub targets: Vec<TargetInfo>,
+}
+
+/// Is a `/json/version` `Browser` string an Electron app (vs Chrome/Edge)?
+/// Electron reports `Electron/x.y.z`; the Chromium forks report `Chrome/x`.
+pub fn is_electron_version(browser: &str) -> bool {
+    browser.starts_with("Electron")
+}
+
+/// Parse an Electron app from `/json/version` + `/json/list` bodies (pure —
+/// testable without a live port). Fails on a non-Electron `Browser` field.
+pub fn electron_from_json(
+    port: u16,
+    version_body: &str,
+    targets_body: &str,
+) -> Result<ElectronApp, CdpError> {
+    let v: Value = serde_json::from_str(version_body)
+        .map_err(|e| CdpError::Discovery(format!("/json/version: invalid json: {e}")))?;
+    let browser = v
+        .get("Browser")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if !is_electron_version(&browser) {
+        return Err(CdpError::Discovery(format!(
+            "port {port}: not an Electron app (Browser={browser:?})"
+        )));
+    }
+    let ws = v
+        .get("webSocketDebuggerUrl")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CdpError::Discovery(format!("port {port}: no webSocketDebuggerUrl")))?;
+    check_loopback_url(ws)?;
+    let targets: Vec<TargetInfo> = serde_json::from_str(targets_body)
+        .map_err(|e| CdpError::Discovery(format!("/json/list: invalid json: {e}")))?;
+    Ok(ElectronApp {
+        port,
+        version: browser,
+        browser_ws_url: ws.to_string(),
+        targets,
+    })
+}
+
+/// Probe one local port for a running Electron app.
+pub fn probe_electron(port: u16) -> Result<ElectronApp, CdpError> {
+    let version_body = http_get(&format!("http://127.0.0.1:{port}/json/version"))?;
+    let targets_body = http_get(&format!("http://127.0.0.1:{port}/json/list"))?;
+    electron_from_json(port, &version_body, &targets_body)
+}
+
+/// Scan a list of candidate ports for Electron apps (best-effort — dead or
+/// non-Electron ports are skipped).
+pub fn discover_electron_apps(ports: &[u16]) -> Vec<ElectronApp> {
+    ports.iter().filter_map(|&p| probe_electron(p).ok()).collect()
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -151,6 +221,37 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
+
+    #[test]
+    fn electron_version_detection() {
+        assert!(is_electron_version("Electron/31.0.0"));
+        assert!(!is_electron_version("Chrome/120"));
+        assert!(!is_electron_version("Edge/120"));
+        assert!(!is_electron_version(""));
+    }
+
+    #[test]
+    fn electron_from_json_parses_and_rejects_non_electron() {
+        let version = r#"{"Browser":"Electron/31.0.0","webSocketDebuggerUrl":"ws://127.0.0.1:9229/devtools/browser/x"}"#;
+        let list = r#"[{"id":"t1","type":"page","title":"VS Code","url":"vscode://main","webSocketDebuggerUrl":"ws://127.0.0.1:9229/devtools/page/t1"}]"#;
+        let app = electron_from_json(9229, version, list).unwrap();
+        assert_eq!(app.version, "Electron/31.0.0");
+        assert_eq!(app.port, 9229);
+        assert_eq!(app.targets.len(), 1);
+        assert_eq!(app.targets[0].target_type, crate::TargetType::Page);
+
+        // A Chrome version string must be rejected as not-Electron.
+        let chrome = r#"{"Browser":"Chrome/120","webSocketDebuggerUrl":"ws://127.0.0.1:9229/x"}"#;
+        let err = electron_from_json(9229, chrome, list).unwrap_err();
+        assert!(matches!(err, CdpError::Discovery(_)), "{err:?}");
+    }
+
+    #[test]
+    fn electron_from_json_rejects_remote_ws_url() {
+        let version = r#"{"Browser":"Electron/31.0.0","webSocketDebuggerUrl":"ws://evil.example:9229/x"}"#;
+        let err = electron_from_json(9229, version, "[]").unwrap_err();
+        assert!(matches!(err, CdpError::Security(_)), "{err:?}");
+    }
 
     #[test]
     fn loopback_guard_accepts_localhost_only() {

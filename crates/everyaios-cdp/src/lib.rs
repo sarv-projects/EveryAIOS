@@ -5,6 +5,12 @@
 //! system-Chrome/Edge launch + chrome-for-testing fallback (`browser`),
 //! loopback-only host restriction and protocol-version tolerance
 //! (flatten/nested session modes).
+//!
+//! E15 (doc 63 §2.1 — agent-browser pattern): `discovery` also carries the
+//! Electron discovery loop — `probe_electron(port)`/`discover_electron_apps`
+//! (probe localhost debug ports for `Browser: Electron/…` version strings,
+//! loopback-guarded), `electron_from_json`/`is_electron_version` pure
+//! helpers — so the browser layer can attach to VS Code/Slack/Spotify/etc.
 
 pub mod browser;
 pub mod discovery;
@@ -14,8 +20,9 @@ pub use browser::{
     install_chrome_for_testing, locate_system_browser, spawn_browser, BrowserChild, LaunchOptions,
 };
 pub use discovery::{
-    assert_loopback, connect_to_browser, fetch_targets_http, probe_browser,
-    read_devtools_active_port,
+    assert_loopback, connect_to_browser, discover_electron_apps, electron_from_json,
+    fetch_targets_http, is_electron_version, probe_browser, probe_electron,
+    read_devtools_active_port, ElectronApp,
 };
 pub use transport::{AttachMode, CdpClient, CdpEvent, DEFAULT_CALL_TIMEOUT};
 

@@ -26,7 +26,7 @@ open ZIP → parse structure (parts index, content types, rels)
 - **.doc (legacy binary):** read-only via conversion (headless soffice or textract) + "edit as new .docx" (documented limitation; edits always produce modern OOXML).
 
 ### Excel (.xlsx, .xlsm, .csv)
-- **Engine:** **IronCalc** (Rust, 300+ functions, dynamic arrays, LET/LAMBDA, full recalc — the one pure-Rust calc engine, web-verified) as a **sidecar binary**; **calamine** for fast read; surgical part-patch for writes (`xl/worksheets/sheetN.xml`, `xl/sharedStrings.xml`). ⚠️ **IronCalc is pre-1.0** (v0.7.x; targeting 1.0 mid-2026 — v3.10 verification): pin exact versions and keep the calamine-read + surgical-write path engine-agnostic so the calc engine stays swappable.
+- **Engine:** **IronCalc** (Rust, 300+ functions, dynamic arrays, LET/LAMBDA, full recalc — the one pure-Rust calc engine, web-verified) as a **Rust library (ironcalc 0.8.3 — `crates/everyaios-office`, P4.2)**; **calamine 0.30** for fast read; surgical part-patch for writes (`xl/worksheets/sheetN.xml`, `xl/sharedStrings.xml`). ⚠️ **IronCalc is pre-1.0** (targeting 1.0 mid-2026): pin exact versions and keep the calamine-read + surgical-write path engine-agnostic so the calc engine stays swappable (the sidecar-binary spawn wrapper is retained behind the same API — engine swappable per ARCH/04, §4.5).
 - **Deterministic planner** (GenOffice doc 28 §5 — the star): regex NLP → **workbook DSL** (`workbook-dsl.ts`: cell-address, formula-shift, sort-range, flash-fill, pivot-engine, chart-visual) → **zero-LLM execution** for common ops (sort, fill, shift, sum/avg, pivot). Formulas are **recalculated by IronCalc**, never by the model. This is Crystallization in the spreadsheet domain (05).
 - **Render:** virtualized 100K+ row tables (calamine-backed), formula bar, cell selection → chat overlay.
 - **100% math integrity rule:** any numeric claim goes through IronCalc; the LLM only reads/writes values + formulas.
@@ -39,10 +39,10 @@ open ZIP → parse structure (parts index, content types, rels)
 ### PDF
 - **Read/render:** pdf.js-class renderer in webview (built pattern in mobile renderers) + `core-files` pdf-text extraction + OCR cascade (built).
 - **Edit modes (by operation):**
-  1. **Form fill + annotation** — **pdf-lib** (TS, industry-standard, AcroForms/XFA) — the safe, high-fidelity path.
-  2. **Text replacement** — **lopdf** (`replace_text`) via a small Rust bridge, only for exact-match single-token swaps (layout is preserved because glyph positions are untouched; never reflow).
-  3. **Re-author** — for structural edits, generate a new PDF from the extracted content (pdf-writer/pdf-lib) rather than corrupting the source.
-  4. **Redaction** — fill glyph boxes + remove text streams (pdf-lib + lopdf combo), audit-logged (06).
+  1. **Form fill + annotation** — **lopdf 0.36** (Rust, in `crates/everyaios-office` — AcroForms, walks `/AcroForm` `/Fields` recursively, sets `/V` on leaves) — the safe, high-fidelity path. Appearance-stream regeneration + free-text/highlight annotations = P4.7b D8-gap.
+  2. **Text replacement** — **lopdf** `replace_text` (in-crate, exact-match `Tj` swaps; layout preserved because glyph positions are untouched; never reflow).
+  3. **Re-author** — for structural edits, generate a new PDF from the extracted content (in-crate `author_pages`) rather than corrupting the source.
+  4. **Redaction** — fill glyph boxes + remove text streams (lopdf `/Redact` annotations, in-crate), audit-logged (06).
 - **Never:** pretend arbitrary body-text edits are safe. UI always offers the right mode (doc: "edit this PDF" → detect → form/annotate/redact/re-author choice).
 
 ## 4.3 Read + RAG integration
@@ -58,13 +58,15 @@ Everything opened becomes **ingestible in one click** → `core-files` pipeline 
 
 ## 4.5 Module assignment
 
+> **Shipped reality (P4):** the office engine is one Rust crate, `crates/everyaios-office` — no TS office modules, no IronCalc sidecar binary (IronCalc 0.8.3 is linked as a **library**). ARCH/09 D-rows + SPEC §6 track this location.
+
 | Piece | Where | New/Exists |
 |---|---|---|
-| Block-patch engine (docx) | `packages/coordinator/office/docx-engine/` | New (port GenOffice concept; our own code) |
-| Workbook DSL + planner | `packages/coordinator/office/sheets/` | New (GenOffice concept) |
-| IronCalc sidecar | Rust binary in `crates/everyaios-core` extras or standalone | New (dependency: IronCalc) |
-| calamine reader | Rust (in the sidecar) | New (dependency) |
-| PPTX part-editor | `packages/coordinator/office/pptx/` | New (own, thin) |
-| pdf-lib + lopdf bridge | TS + small Rust bridge | New |
+| Block-patch engine (docx) | `crates/everyaios-office` (anchored block tree, byte-preserving ZIP part-patch) | New (port GenOffice concept; our own code) |
+| Workbook DSL + planner | `crates/everyaios-office` (deterministic planner, zero-LLM for common ops) | New (GenOffice concept) |
+| IronCalc calc engine | `crates/everyaios-office` — **ironcalc 0.8.3 as a Rust library** (300+ functions, dynamic arrays, LET/LAMBDA, full recalc); calamine for fast read | New (dependency) |
+| PPTX part-editor | `crates/everyaios-office` (text runs / bullet text / add-remove slides via part clone + rels + Content_Types) | New (own, thin) |
+| PDF suite | `crates/everyaios-office` — form-fill + redaction via **lopdf**; text-replace (exact-match, glyph-preserving); re-author via extracted-content regeneration | New |
+| LibreOffice oracle | harness in `crates/everyaios-office` tests (headless soffice round-trip conformance) | New (dependency: LibreOffice, dev/test only) |
 | Renderers | `ui/` (webview) | New (patterns from app-mobile renderers) |
 | Extract/ingest | `@personal-ai/core-files` | Exists |

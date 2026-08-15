@@ -7,6 +7,7 @@
 //! IronCalc truth engine (100% math integrity).
 
 pub mod address;
+pub mod chart;
 pub mod dsl;
 pub mod patch;
 pub mod planner;

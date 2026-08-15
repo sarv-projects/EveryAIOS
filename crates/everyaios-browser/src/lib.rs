@@ -1,21 +1,36 @@
-//! everyaios-browser — accessibility-tree snapshot engine (ARCH/08, E3).
+//! everyaios-browser — accessibility-tree snapshot engine + action layer
+//! (ARCH/08, E3; doc 63 §2.1 E15–E17).
 //!
-//! P2.2 scope: CDP Accessibility-domain capture (`capture::SnapshotEngine`),
-//! interactive-mode pruning (~90% token cut), stable refs `[ref=eN]` scoped
-//! to (document_id, url) (`tree`), iframe stitching inline and URL-change
-//! short-circuit (`diff`).
+//! - P2.2: CDP Accessibility-domain capture (`capture::SnapshotEngine`),
+//!   interactive-mode pruning (~90% token cut, E16 slim), stable refs
+//!   `[ref=eN]` scoped to (document_id, url) (`tree`), iframe stitching
+//!   inline and URL-change short-circuit (`diff`).
+//! - P2.3: the action engine (`actions`) — click/fill/read/hover/etc over the
+//!   CDP stack; `protocol` lowers provider action protocols (native / Anthropic
+//!   CUA / OpenAI CUA / UI-TARS) to canonical parsed actions (E17).
+//! - E15: `electron` — attach to a running Electron app (VS Code/Slack/…)
+//!   by debug port, connect to its first page target, snapshot/click/fill/read/
+//!   screenshot (agent-browser pattern).
+//! - WebMCP (E16): `webmcp` handshake + `webmcp_http` — an HTTP transport
+//!   (std `TcpListener`) serving `tools/list` + `tools/call` over JSON-RPC.
+//! - Session/vault/replay glue: `session`, `ownership` (tab ownership),
+//!   `replay` (injected recorder), `read` (page text), `humanize`, `tiers`.
 
 pub mod actions;
 pub mod ax;
 pub mod capture;
 pub mod diff;
+pub mod electron;
 pub mod humanize;
 pub mod ownership;
+pub mod protocol;
 pub mod read;
 pub mod replay;
 pub mod session;
 pub mod tiers;
 pub mod tree;
+pub mod webmcp;
+pub mod webmcp_http;
 
 #[cfg(test)]
 mod live_tests;
@@ -28,6 +43,7 @@ pub use ax::{AxNode, INTERACTIVE_ROLES};
 pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
 pub use diff::{diff_snapshots, snapshot_lines};
 pub use ownership::{OwnershipError, TabClaim, TabOwner, TabRecord, TabRegistry};
+pub use protocol::{parse_action, ActionParseError, ActionProtocol, ParsedAction};
 pub use read::{read_http, ReadOptions, ReadSource};
 pub use session::{
     cookie_from_cdp, cookie_to_cdp, get_cookies, group_cookies_by_site,
@@ -37,16 +53,25 @@ pub use tiers::{
     EngineConfig, EngineError, EngineResult, EngineTier, FetchIntent, LightEngine, TieredEngine,
 };
 pub use tree::{build_tree, RefMinter, TreeOptions};
+pub use electron::ElectronHandle;
+pub use webmcp::{WebMcpError, WebMcpExecutor, WebMcpRegistry, WebMcpResult, WebMcpTool};
+pub use webmcp_http::{
+    handle_mcp_request, parse_http_request, McpHttpServer, MCP_PATH,
+};
 
 use serde::{Deserialize, Serialize};
 
 /// Snapshot verbosity (E3): `interactive` = actionables + headings only
-/// (token-lean); `full` = complete tree with depth caps 1..=100.
+/// (token-lean); `full` = complete tree with depth caps 1..=100;
+/// `slim` (E16, doc 63 §4.2 — chrome-devtools-mcp `SlimMcpResponse`) =
+/// interactive pruning + long-text collapse + a shallower depth cap, for the
+/// tightest token budget on every browser turn.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum SnapshotMode {
     Interactive,
     Full,
+    Slim,
 }
 
 /// One node of the accessibility tree.

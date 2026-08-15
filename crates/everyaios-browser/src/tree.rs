@@ -12,6 +12,11 @@ use std::collections::HashMap;
 
 /// Default max depth for the tree render.
 pub const DEFAULT_DEPTH_CAP: usize = 100;
+/// Slim-mode depth cap (E16 — shallower than interactive's 100).
+pub const SLIM_DEPTH_CAP: usize = 12;
+/// Slim-mode max accessible-name length before collapsing to an ellipsis
+/// (E16 — chrome-devtools-mcp `SlimMcpResponse` long-text collapse).
+pub const SLIM_NAME_MAX_CHARS: usize = 80;
 /// Clamp bounds per ARCH/08 §8.3 (1..=100).
 const MIN_DEPTH_CAP: usize = 1;
 const MAX_DEPTH_CAP: usize = 100;
@@ -59,6 +64,27 @@ impl TreeOptions {
         self.depth_cap = cap.clamp(MIN_DEPTH_CAP, MAX_DEPTH_CAP);
         self
     }
+
+    /// Set the mode and apply that mode's defaults (Slim lowers the depth
+    /// cap).
+    pub fn apply_mode(mut self, mode: crate::SnapshotMode) -> Self {
+        self.mode = mode;
+        if mode == crate::SnapshotMode::Slim {
+            self.depth_cap = SLIM_DEPTH_CAP;
+        }
+        self
+    }
+}
+
+/// Collapse a long accessible name to `max_chars` + ellipsis (E16 slim).
+pub fn collapse_text(text: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max_chars {
+        return text.to_string();
+    }
+    let mut out: String = chars[..max_chars.saturating_sub(1)].iter().collect();
+    out.push('…');
+    out
 }
 
 /// Build the domain `A11yNode` tree from flat AX nodes.
@@ -98,6 +124,15 @@ fn find_roots(nodes: &[AxNode]) -> Vec<String> {
         .collect()
 }
 
+/// The node's rendered name: collapsed to `SLIM_NAME_MAX_CHARS` in Slim mode.
+fn name_of(node: &AxNode, options: TreeOptions) -> String {
+    if options.mode == crate::SnapshotMode::Slim {
+        collapse_text(&node.name, SLIM_NAME_MAX_CHARS)
+    } else {
+        node.name.clone()
+    }
+}
+
 fn subtree_size(id: &str, index: &HashMap<String, AxNode>) -> usize {
     let Some(node) = index.get(id) else {
         return 0;
@@ -127,7 +162,7 @@ fn build_node(
         return None;
     }
 
-    let mut out = A11yNode::new(&node.role, &node.name);
+    let mut out = A11yNode::new(&node.role, name_of(node, options));
     // Carry the child-frame id on iframe placeholder nodes so the capture
     // engine can stitch child frames inline.
     if node.role == "Iframe" || node.role == "iframe" {
@@ -145,7 +180,7 @@ fn build_node(
     let is_iframe = node.role == "Iframe" || node.role == "iframe";
     let keep_self = match options.mode {
         crate::SnapshotMode::Full => true,
-        crate::SnapshotMode::Interactive => {
+        crate::SnapshotMode::Interactive | crate::SnapshotMode::Slim => {
             is_iframe || is_interactive(&node.role) || is_heading(&node.role)
         }
     };
@@ -163,8 +198,10 @@ fn build_node(
     // Collapse pure-structure chains: if a structural node has exactly one
     // kept child and no name of its own, fold the child up (agent-browser's
     // compact style) — but never fold an actionable or named element.
-    if options.mode == crate::SnapshotMode::Interactive
-        && !keep_self
+    if matches!(
+        options.mode,
+        crate::SnapshotMode::Interactive | crate::SnapshotMode::Slim
+    ) && !keep_self
         && !is_iframe
         && node.name.is_empty()
         && kept_children.len() == 1
@@ -275,5 +312,68 @@ mod tests {
     fn empty_input_returns_none() {
         let mut refs = RefMinter::new();
         assert!(build_tree(&[], TreeOptions::default(), &mut refs).is_none());
+    }
+
+    #[test]
+    fn slim_mode_collapses_long_text_and_prunes_like_interactive() {
+        let long_name = "x".repeat(200);
+        let nodes = vec![
+            node("1", "WebArea", "", &["2", "3"]),
+            node("2", "paragraph", &long_name, &[]),
+            node("3", "button", "Go", &[]),
+        ];
+        let opts = TreeOptions::default().apply_mode(SnapshotMode::Slim);
+        assert_eq!(opts.depth_cap, SLIM_DEPTH_CAP);
+        let mut refs = RefMinter::new();
+        let tree = build_tree(&nodes, opts, &mut refs).unwrap();
+        let rendered = tree.render();
+        // paragraph pruned (like interactive), button kept with a ref.
+        assert!(rendered.contains("button Go [ref=e1]"), "{rendered}");
+        assert!(!rendered.contains("paragraph"), "{rendered}");
+    }
+
+    #[test]
+    fn collapse_text_truncates_with_ellipsis() {
+        assert_eq!(collapse_text("short", 10), "short");
+        let s = collapse_text(&"a".repeat(100), 10);
+        assert_eq!(s.chars().count(), 10);
+        assert!(s.ends_with('…'));
+    }
+
+    #[test]
+    fn slim_is_at_most_40_percent_of_full_tokens() {
+        // A bushy document: many structural + content nodes, some with long
+        // names. Slim must cut ≥60% of the full render (the E16 gate).
+        let mut nodes = vec![node("0", "WebArea", "Page", &["1"])];
+        nodes.push(node("1", "generic", "", &["2", "3", "4", "5"]));
+        nodes.push(node(
+            "2",
+            "paragraph",
+            &"z".repeat(300),
+            &[],
+        ));
+        nodes.push(node("3", "paragraph", &"y".repeat(300), &[]));
+        nodes.push(node("4", "paragraph", &"w".repeat(300), &[]));
+        nodes.push(node("5", "button", "Submit", &[]));
+
+        let full_opts = TreeOptions {
+            mode: SnapshotMode::Full,
+            ..Default::default()
+        };
+        let mut refs = RefMinter::new();
+        let full = build_tree(&nodes, full_opts, &mut refs).unwrap().render();
+
+        let slim_opts = TreeOptions::default().apply_mode(SnapshotMode::Slim);
+        let mut refs = RefMinter::new();
+        let slim = build_tree(&nodes, slim_opts, &mut refs).unwrap().render();
+
+        assert!(!full.is_empty());
+        let ratio = slim.len() as f64 / full.len() as f64;
+        assert!(
+            ratio <= 0.40,
+            "slim {slim_len} / full {full_len} = {ratio:.2} (>0.40)",
+            slim_len = slim.len(),
+            full_len = full.len()
+        );
     }
 }

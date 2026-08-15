@@ -4,8 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "EveryAIOS Guard-1 — compiled regex blocklist scanning (P0.1 stub; full hardening in P7.4)"
+description = "EveryAIOS Guard — deterministic pre-exec scanning, path floors, injection defense, authorization tickets (P7)"
 
 [dependencies]
 regex = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+base64 = { workspace = true }
+url = { workspace = true }
+toml = { workspace = true }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = { workspace = true }

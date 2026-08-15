@@ -45,6 +45,19 @@
 //! - `pdf::replace_text` — exact-match `Tj` text swap
 //! - `pdf::redact` — mark-for-redact `/Redact` annotations
 //! - `pdf::author` — re-author: build a new PDF from text
+//!
+//! P4.7b ships the office "perfectness" D-gaps (doc 63 §3):
+//! - `docx::track` — track-changes + comments: extract `w:ins`/`w:del`/
+//!   `w:comment`, emit a tracked change for a patch, add comments
+//! - `docx::citation` — CSL citations (APA/IEEE/Chicago): render citation +
+//!   reference + bibliography, `ReferenceLibrary` search, insert into a docx
+//! - `xlsx::chart` — chart parts: extract series (name/category/value ranges),
+//!   author a Bar/Line/Pie chart part (+ rels + content-type override)
+//! - `pptx::transition` — slide transitions: extract + set `p:transition`
+//! - `pptx::anim` — `p:timing` animations (Fade/Zoom/Appear) targeting `p:spTgt`
+//! - `pptx::notes` — speaker notes: extract text, build notes, validate
+//!   notes↔slides sync, plan rehearsal timing
+//! - `pdf::annot` — PDF annotations: sticky-note text + highlight rects
 
 pub mod atomic;
 pub mod conformance;
@@ -64,3 +77,27 @@ pub use legacy::{convert_to_modern, LegacyKind, LegacyOpen};
 pub use pdf::{inspect, replace_text, PdfError, PdfInfo};
 pub use pptx::PptxEngine;
 pub use rollback::Snapshot;
+
+// D-gaps (doc 63 §3) — the "perfectness" additions.
+pub use docx::citation::{
+    insert_citation_into_docx, render_bibliography, render_citation, render_reference, CslStyle,
+    Reference, ReferenceKind, ReferenceLibrary,
+};
+pub use docx::track::{
+    add_comment, emit_tracked_change, extract_comments, extract_tracked_changes,
+    render_comment_reference, render_del_run, render_ins_run, Comment, TrackAuthor, TrackError,
+    TrackedChange, TrackedChangeKind,
+};
+pub use pdf::annot::{add_highlight_annotation, add_text_annotation};
+pub use pptx::anim::{build_timing_xml, AnimError, AnimationEffect};
+pub use pptx::notes::{
+    build_speaker_notes, extract_notes_text, plan_rehearsal, validate_slides_notes_sync,
+    NotesError, RehearsalTiming, SpeakerNotesEntry,
+};
+pub use pptx::transition::{
+    extract_transition, set_transition, Transition, TransitionError, TransitionKind,
+};
+pub use xlsx::chart::{
+    build_chart_part, chart_content_type_override, chart_rel_fragment, extract_chart_series,
+    ChartError, ChartKind, ChartSeries, ChartSeriesSpec,
+};

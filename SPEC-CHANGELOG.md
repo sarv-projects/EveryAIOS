@@ -1,6 +1,6 @@
 # DESKTOP-APP-SPEC.md — Version History (archived)
 
-> Archived 2026-08-10. The live spec (v3.13) is a clean build document; this archive preserves the changelog that previously sat in its head. Nothing here is build content.
+> Archived 2026-08-10. **The live spec is now v3.16 (2026-08-14, extended 2026-08-15 with doc 63).** Entries below run v3.0 → v3.13; **v3.14 → v3.16 changes are recorded in the research ledger docs (58/59/60/61/62/63) and the live SPEC §0/§6 text, not here** — this file was archived at v3.13 and no new changelog entries were appended after archiving. If a future pass re-opens the changelog, migrate the doc-58→63 deltas (OmniRoute ingest, deep-dives, ledger 227→255, cost-optimization + event-driven triggers + eval, 37-repo steal ledger → C13/E15–E17/I11/EV1) into entries here.
 
 ## Changelog (v3.0 → v3.13)
 

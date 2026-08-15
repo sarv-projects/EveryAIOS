@@ -14,6 +14,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 pub mod cockpit;
+pub mod merkle;
+pub mod repair;
 pub mod replay;
 pub mod session_log;
 

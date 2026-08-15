@@ -13,6 +13,9 @@ members = [
     "everyaios-office",
     "everyaios-storage",
     "everyaios-memory",
+    "everyaios-eval",
+    "everyaios-blueprint",
+    "everyaios-codeintel",
 ]
 
 [workspace.package]

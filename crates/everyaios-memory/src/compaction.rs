@@ -173,6 +173,201 @@ pub fn prune_protect(outputs: &[(String, usize)], budget: usize) -> Vec<String> 
     kept
 }
 
+// ---------------------------------------------------------------------------
+// Turn-loop coordinator wiring (P5.8 — the coordinator's hook into the
+// compaction lifecycle)
+// ---------------------------------------------------------------------------
+
+/// The coordinator-side compaction state: observes per-turn token counts,
+/// decides the context action, and drives [`run_compaction_lifecycle`] when a
+/// compact is due — emitting the `PreCompact/Compacted/PostCompact` events
+/// the turn loop turns into `ContextCompaction` turn items.
+#[derive(Debug, Clone)]
+pub struct CompactionCoordinator {
+    pub config: CompactionConfig,
+    /// The context window budget the loop is operating under.
+    pub max_tokens: usize,
+    /// Token count of each completed turn (the accumulation is what triggers).
+    turn_tokens: Vec<usize>,
+    /// Sum of all turn tokens since the last compact.
+    total_tokens: usize,
+    /// Lifecycle events emitted since the last drain (turn items).
+    events: Vec<CompactionEvent>,
+}
+
+impl CompactionCoordinator {
+    pub fn new(config: CompactionConfig, max_tokens: usize) -> Self {
+        Self {
+            config,
+            max_tokens,
+            turn_tokens: Vec::new(),
+            total_tokens: 0,
+            events: Vec::new(),
+        }
+    }
+
+    /// Record one completed turn's token count and return the context action
+    /// the loop should take now (soft notice vs force compact).
+    pub fn push_turn(&mut self, tokens: usize) -> ContextAction {
+        self.turn_tokens.push(tokens);
+        self.total_tokens += tokens;
+        decide_context_action(self.total_tokens, self.max_tokens, &self.config)
+    }
+
+    /// Tokens accumulated since the last compact.
+    pub fn total_tokens(&self) -> usize {
+        self.total_tokens
+    }
+
+    /// Drive the compact through its lifecycle when the loop decides one is
+    /// due. Runs [`run_compaction_lifecycle`], records its events as turn
+    /// items, and resets the accumulation. Returns `None` when no compact is
+    /// due (the loop keeps the context untouched).
+    pub fn maybe_compact(
+        &mut self,
+        text: &str,
+        summarizers: &[&Summarizer],
+    ) -> Option<(String, FallbackStep)> {
+        let action = decide_context_action(self.total_tokens, self.max_tokens, &self.config);
+        if !matches!(action, ContextAction::SoftCompact | ContextAction::ForceCompact) {
+            return None;
+        }
+        let from_tokens = self.total_tokens;
+        let (out, step) = run_compaction_lifecycle(
+            text,
+            from_tokens,
+            self.max_tokens,
+            summarizers,
+            |e| self.events.push(e),
+        );
+        let to_tokens = out.chars().count() / 4;
+        self.total_tokens = to_tokens;
+        self.turn_tokens.clear();
+        Some((out, step))
+    }
+
+    /// A soft-compact notice is warranted (crossed `soft_ratio`, not yet
+    /// `force_ratio`) — the loop emits a user-visible "context is getting
+    /// long" hint.
+    pub fn should_notice(&self) -> bool {
+        matches!(
+            decide_context_action(self.total_tokens, self.max_tokens, &self.config),
+            ContextAction::SoftCompact
+        )
+    }
+
+    /// Drain the lifecycle events recorded since the last call (the turn
+    /// items the loop persists/emits).
+    pub fn drain_events(&mut self) -> Vec<CompactionEvent> {
+        std::mem::take(&mut self.events)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Compaction-as-lifecycle (doc 63 §4.5 — codex `hook_runtime.rs` pattern)
+// ---------------------------------------------------------------------------
+
+/// A summarizer callback: returns `None` on timeout/abort (fail-open).
+pub type Summarizer = dyn Fn(&str) -> Option<String>;
+
+/// Which step of the fallback chain produced the compacted text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FallbackStep {
+    /// The primary summarizer succeeded.
+    PrimarySummarizer,
+    /// The `n`-th fallback model (0-based index into the chain) succeeded.
+    FallbackModel(usize),
+    /// Every summarizer failed — last-resort truncation with a marker.
+    TruncateWithMarker,
+}
+
+/// Events emitted across a compaction lifecycle (codex PreCompactHook →
+/// compact → PostCompactHook; the `Compacted` event is what becomes the
+/// `ContextCompaction` turn item in the coordinator loop).
+#[derive(Debug, Clone, PartialEq)]
+pub enum CompactionEvent {
+    /// PreCompactHook ran — notify/capture (memory, metrics, cache) before
+    /// the compact. Carries the pre-compact token count.
+    PreCompact { from_tokens: usize },
+    /// The compact completed.
+    Compacted {
+        from_tokens: usize,
+        to_tokens: usize,
+        step: FallbackStep,
+    },
+    /// PostCompactHook ran.
+    PostCompact { to_tokens: usize },
+}
+
+/// Last-resort truncation: keep the head and tail, mark the cut so the
+/// model (and the user) can see context was dropped — never silent loss.
+pub fn truncate_with_marker(text: &str, max_tokens: usize) -> String {
+    let approx = text.chars().count() / 4; // ~4 chars/token heuristic
+    if approx <= max_tokens {
+        return text.to_string();
+    }
+    let head_chars = max_tokens * 3; // ~3/4 head, 1/4 tail
+    let tail_chars = max_tokens;
+    let chars: Vec<char> = text.chars().collect();
+    let head: String = chars.iter().take(head_chars).collect();
+    let tail: String = chars.iter().rev().take(tail_chars).collect::<Vec<_>>()
+        .into_iter().rev().collect();
+    format!(
+        "{head}\n\n…[context truncated: {max_tokens} token budget — earlier turns summarized away]…\n\n{tail}"
+    )
+}
+
+/// Compact `text` to fit `max_tokens` using a fallback chain. `summarizers`
+/// is tried in order (primary first); each returns `None` on timeout/abort.
+/// If every summarizer fails, the text is truncated with a marker. Returns
+/// the compacted text + which step produced it.
+pub fn compact_with_fallback(
+    text: &str,
+    max_tokens: usize,
+    summarizers: &[&Summarizer],
+) -> (String, FallbackStep) {
+    let approx = text.chars().count() / 4;
+    if approx <= max_tokens {
+        return (text.to_string(), FallbackStep::PrimarySummarizer);
+    }
+    for (i, summarize) in summarizers.iter().enumerate() {
+        if let Some(out) = summarize(text) {
+            let step = if i == 0 {
+                FallbackStep::PrimarySummarizer
+            } else {
+                FallbackStep::FallbackModel(i - 1)
+            };
+            return (out, step);
+        }
+    }
+    (truncate_with_marker(text, max_tokens), FallbackStep::TruncateWithMarker)
+}
+
+/// Drive a compaction through its lifecycle, emitting an event at each phase
+/// (`on_event` is the coordinator's hook — it can persist turn items, update
+/// metrics, etc.). Returns the compacted text + fallback step.
+pub fn run_compaction_lifecycle<F>(
+    text: &str,
+    from_tokens: usize,
+    max_tokens: usize,
+    summarizers: &[&Summarizer],
+    mut on_event: F,
+) -> (String, FallbackStep)
+where
+    F: FnMut(CompactionEvent),
+{
+    on_event(CompactionEvent::PreCompact { from_tokens });
+    let (out, step) = compact_with_fallback(text, max_tokens, summarizers);
+    let to_tokens = out.chars().count() / 4;
+    on_event(CompactionEvent::Compacted {
+        from_tokens,
+        to_tokens,
+        step,
+    });
+    on_event(CompactionEvent::PostCompact { to_tokens });
+    (out, step)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,5 +453,97 @@ mod tests {
         // 35k keeps c (15k) + b (20k) = 35k, then a (+10k = 45k) > 35k → erased.
         let kept2 = prune_protect(&outputs, 35_000);
         assert_eq!(kept2, vec!["b".to_string(), "c".to_string()]);
+    }
+
+    #[test]
+    fn fallback_chain_uses_first_success() {
+        let primary: &dyn Fn(&str) -> Option<String> = &|_| None; // fails
+        let fb: &dyn Fn(&str) -> Option<String> = &|_| Some("summary".into());
+        let (out, step) =
+            compact_with_fallback(&"x".repeat(10_000), 100, &[primary, fb]);
+        assert_eq!(out, "summary");
+        assert_eq!(step, FallbackStep::FallbackModel(0));
+    }
+
+    #[test]
+    fn fallback_chain_truncates_when_all_fail() {
+        let fail: &dyn Fn(&str) -> Option<String> = &|_| None;
+        let (out, step) = compact_with_fallback(&"y".repeat(10_000), 50, &[fail, fail]);
+        assert_eq!(step, FallbackStep::TruncateWithMarker);
+        assert!(out.contains("context truncated"), "{out}");
+    }
+
+    #[test]
+    fn small_text_bypasses_compaction() {
+        let fail: &dyn Fn(&str) -> Option<String> = &|_| None;
+        let (out, step) = compact_with_fallback("short", 100, &[fail]);
+        assert_eq!(out, "short");
+        assert_eq!(step, FallbackStep::PrimarySummarizer);
+    }
+
+    #[test]
+    fn lifecycle_emits_pre_compact_post() {
+        let ok: &dyn Fn(&str) -> Option<String> = &|_| Some("compacted".into());
+        let mut events = Vec::new();
+        let (out, step) =
+            run_compaction_lifecycle(&"z".repeat(10_000), 2500, 100, &[ok], |e| events.push(e));
+        assert_eq!(out, "compacted");
+        assert_eq!(step, FallbackStep::PrimarySummarizer);
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], CompactionEvent::PreCompact { from_tokens: 2500 }));
+        assert!(matches!(
+            events[1],
+            CompactionEvent::Compacted { step: FallbackStep::PrimarySummarizer, .. }
+        ));
+        assert!(matches!(events[2], CompactionEvent::PostCompact { .. }));
+    }
+
+    #[test]
+    fn coordinator_accumulates_and_soft_notices() {
+        let cfg = CompactionConfig::default(); // soft 0.5, force 0.9
+        let mut c = CompactionCoordinator::new(cfg, 100);
+        assert_eq!(c.push_turn(40), ContextAction::None); // 40/100
+        assert_eq!(c.push_turn(10), ContextAction::SoftCompact); // 50/100
+        assert!(c.should_notice());
+        assert_eq!(c.total_tokens(), 50);
+    }
+
+    #[test]
+    fn coordinator_force_compacts_and_resets() {
+        let ok: &dyn Fn(&str) -> Option<String> = &|_| Some("compacted".into());
+        let mut c = CompactionCoordinator::new(CompactionConfig::default(), 100);
+        c.push_turn(40);
+        c.push_turn(40);
+        assert_eq!(c.push_turn(15), ContextAction::ForceCompact); // 95/100
+        let (out, step) = c.maybe_compact(&"x".repeat(10_000), &[ok]).unwrap();
+        assert_eq!(out, "compacted");
+        assert_eq!(step, FallbackStep::PrimarySummarizer);
+        // Lifecycle events became turn items.
+        let events = c.drain_events();
+        assert_eq!(events.len(), 3);
+        assert!(matches!(events[0], CompactionEvent::PreCompact { from_tokens: 95 }));
+        // Accumulation reset; total now reflects the compacted size.
+        assert!(c.total_tokens() < 95);
+        assert!(!c.should_notice());
+    }
+
+    #[test]
+    fn coordinator_no_compact_when_not_due() {
+        let fail: &dyn Fn(&str) -> Option<String> = &|_| None;
+        let mut c = CompactionCoordinator::new(CompactionConfig::default(), 100);
+        c.push_turn(10);
+        assert!(c.maybe_compact("short", &[fail]).is_none());
+        assert!(c.drain_events().is_empty());
+    }
+
+    #[test]
+    fn coordinator_compaction_reuses_the_fallback_chain() {
+        let fail: &dyn Fn(&str) -> Option<String> = &|_| None;
+        let mut c = CompactionCoordinator::new(CompactionConfig::default(), 100);
+        c.push_turn(60);
+        c.push_turn(40); // 100 ≥ 90 → force
+        let (out, step) = c.maybe_compact(&"y".repeat(10_000), &[fail]).unwrap();
+        assert_eq!(step, FallbackStep::TruncateWithMarker);
+        assert!(out.contains("context truncated"));
     }
 }

@@ -91,6 +91,7 @@ enum DriverCommand {
 ///
 /// Thread-safe: `call`/`call_session` may be invoked from any thread; the
 /// driver processes commands sequentially and routes responses by id.
+#[derive(Debug)]
 pub struct CdpClient {
     /// `None` once `close()` has been called — the driver's `recv()` then
     /// returns `None` and the loop exits (no blocking send needed).

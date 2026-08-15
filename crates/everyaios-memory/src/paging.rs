@@ -119,6 +119,16 @@ impl PagedMemory {
         out
     }
 
+    /// Every entry across all surfaces (recall surface first, then archival,
+    /// then core — the debug/consolidation view).
+    pub fn all_entries(&self) -> Vec<&MemoryEntry> {
+        self.recall
+            .iter()
+            .chain(&self.archival)
+            .chain(&self.core)
+            .collect()
+    }
+
     /// Surface of an entry (for inspection/tests).
     pub fn surface_of(&self, id: &str) -> Option<Surface> {
         if self.core.iter().any(|e| e.id == id) {
@@ -213,6 +223,17 @@ mod tests {
         m.flush_writes();
         assert_eq!(m.surface_of("a"), None);
         assert_eq!(m.surface_of("b"), Some(Surface::Core));
+    }
+
+    #[test]
+    fn all_entries_spans_surfaces() {
+        let mut m = PagedMemory::new();
+        m.write(entry("a", "one", 5));
+        m.write(entry("b", "two", 5));
+        m.flush_writes();
+        assert_eq!(m.all_entries().len(), 2);
+        let ids: Vec<&str> = m.all_entries().iter().map(|e| e.id.as_str()).collect();
+        assert!(ids.contains(&"a") && ids.contains(&"b"));
     }
 
     #[test]

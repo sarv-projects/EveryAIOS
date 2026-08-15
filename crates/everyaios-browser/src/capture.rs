@@ -69,7 +69,7 @@ impl Default for SnapshotEngine {
 
 impl SnapshotEngine {
     pub fn with_mode(mut self, mode: SnapshotMode) -> Self {
-        self.options.mode = mode;
+        self.options = self.options.apply_mode(mode);
         self
     }
 

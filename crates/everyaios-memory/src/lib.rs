@@ -19,24 +19,63 @@
 //!   queued writes + overflow eviction (Alg #20).
 //! - `ghost` — ghost-context prevention index (atomic tombstone + re-path).
 //! - `reference` — pass-by-reference handles + bounded previews (C10).
+//! - `fsrs` — FSRS-6 spaced-repetition scheduler (C13): memory-state
+//!   prediction, next-interval/next-states, and a workload simulator for the
+//!   "reinforce what I learned" review queue.
+//! - `classify` — intent classifier (Vane pattern): memory/fact/event/
+//!   document class + (needs_research, needs_tools, needs_widgets,
+//!   rewrite_query) routing signals.
+//! - `summary` — hierarchical repo summarization (deepwiki-open pattern):
+//!   summarize-file → directory → index → answer over summaries (no
+//!   embeddings).
+//! - `reinforce` — FSRS-backed review queue: ingest post-session candidates
+//!   and surface due review prompts at retention-target intervals.
+//! - `bm25` — BM25 keyword retrieval signal (P5/C7): pure Okapi BM25 over
+//!   in-memory docs, used as one of the fused retrieval signals.
+//! - `planner` — context planner (C7): decides what goes in the prompt from
+//!   the retrieved signals (memory, search, tools, widgets) with token
+//!   budget + precedence.
+//! - `janus` — Janus structural passes (doc 63 §2.1): dedup (exact +
+//!   near-dup), regex collapse, and AST prune — the context-reduction
+//!   pipeline before injection.
+//! - `cognee` — Cognee-style entity/knowledge-graph API (memory ontology
+//!   CRUD + query surface, doc 63 §2.1) — graph as a first-class memory
+//!   shape alongside snippets.
+//! - `rtk` — RTK-style per-command tool-output compression (P5.7): ls/ps/
+//!   git/du parsers that keep only action-relevant fields, measured
+//!   60–90% reduction.
+//! - `usage` — usage accounting (P8): per-key/per-session token + cache
+//!   hit/miss ledger with cost at configured prices (the per-key cost
+//!   display + cache-hit-rate queries).
 
 pub mod actr;
+pub mod bm25;
+pub mod classify;
+pub mod cognee;
 pub mod compaction;
+pub mod fsrs;
 pub mod fusion;
 pub mod ghost;
 pub mod graph;
+pub mod janus;
 pub mod paging;
+pub mod planner;
 pub mod reference;
+pub mod reinforce;
+pub mod rtk;
+pub mod summary;
 pub mod taste;
+pub mod usage;
 
 pub use actr::{
     activation, derive_queries, forget_sweep, is_protected, keyword_hits, recall_score, recency,
     Memory, RecallWeights, DEFAULT_IMPORTANCE_FLOOR,
 };
 pub use compaction::{
-    decide_context_action, find_safe_split, persist_decision, prune_protect, should_snip,
-    sliding_window, snip_anchor, summarize_or_passthrough, CacheBreak, CompactionConfig,
-    ContextAction, PersistDecision, PrefixCache,
+    compact_with_fallback, decide_context_action, find_safe_split, persist_decision, prune_protect,
+    run_compaction_lifecycle, should_snip, sliding_window, snip_anchor, summarize_or_passthrough,
+    truncate_with_marker, CacheBreak, CompactionConfig, CompactionCoordinator, CompactionEvent,
+    ContextAction, FallbackStep, PersistDecision, PrefixCache, Summarizer,
 };
 pub use fusion::{
     approx_tokens, budget_tokens, cap_text, dedupe, merge_small_chunks, rrf_fuse, smart_snippets,
@@ -45,7 +84,29 @@ pub use fusion::{
 pub use ghost::GhostIndex;
 pub use graph::{Edge, EdgeType, GraphStore, Node, NodeKind, DEFAULT_MAX_DEPTH, DEFAULT_TOP_K};
 pub use paging::{MemoryEntry, PagedMemory, Surface, CORE_BUDGET_TOKENS};
+pub use classify::{classify, plan_execution, parallel_groups, ExecutionPlan, Intent, IntentKind};
+pub use fsrs::{
+    simulate, Fsrs, FsrsError, ItemState, MemoryState, NextStates, Rating, SimulationConfig,
+    SimulationReport, DEFAULT_PARAMETERS, FSRS5_DEFAULT_DECAY, FSRS6_DEFAULT_DECAY,
+};
 pub use reference::{bounded_preview, make_ref_handle, RefHandle, RefKind, PREVIEW_BUDGET_TOKENS};
+pub use reinforce::{
+    extract_candidates, split_sentences, ReviewCandidate, ReviewCard, ReviewQueue,
+};
+pub use bm25::{
+    fuse_signals, run_signals_parallel, tokenize, Bm25Doc, Bm25Index, Hit, SignalKind,
+    SignalRank, SignalSource,
+};
+pub use cognee::{CogneeMemory, RecallResult};
+pub use janus::{ast_prune, dedup, regex_collapse, run_janus, PassResult};
+pub use planner::{
+    BudgetResult, ContextPlanner, PlannerConfig, PlannerDecision,
+};
+pub use rtk::{compress, kind_for, CommandKind, CompressedOutput};
+pub use usage::{UsageLedger, UsageRecord};
+pub use summary::{
+    answer_over_summaries, index_summaries, summarize_directory, summarize_file, FileSummary,
+};
 pub use taste::{TasteRule, TasteStore};
 
 use thiserror::Error;

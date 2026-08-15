@@ -1,0 +1,13 @@
+[package]
+name = "everyaios-blueprint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "P6 — orchestration core: spec-per-task files, verify-gated blueprint tasks, agent-frontmatter schema, multi-agent topologies, and automation tool shapes."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+everyaios-eval = { path = "../everyaios-eval" }
