@@ -9,6 +9,7 @@ use std::process::{ChildStdin, ChildStdout};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+mod acp_cmds;
 mod cockpit_cmds;
 mod guard_cmds;
 mod office_cmds;
@@ -44,6 +45,9 @@ pub struct AppState {
     /// estop + profile) — minted by the coordinator over `guard/*`, rendered
     /// + approved/rejected by the cards here, consumed by the executor.
     pub guard_service: Arc<Mutex<GuardService>>,
+    /// F12/J17 (ACP harness bridge): live ACP agent sessions keyed by handle
+    /// id — spawned via `acp_launch`, driven via `acp_prompt`/`acp_cancel`.
+    pub(crate) acp_sessions: Mutex<std::collections::HashMap<String, acp_cmds::AcpHandle>>,
 }
 
 /// Monotonic stream-id source for `chat_stream` calls.
@@ -124,6 +128,7 @@ fn chat_stream(
     provider: Option<String>,
     model: Option<String>,
     surface: Option<String>,
+    agent_id: Option<String>,
 ) -> Result<String, String> {
     // P1.4: dispatch one turn through the coordinator's ConversationEngine.
     // The reply is the streamId; all output arrives as `chat-event` emits
@@ -140,7 +145,10 @@ fn chat_stream(
             stream_id: stream_id.clone(),
             text,
             surface,
-            agent_id: None,
+            // F12/J17: `None` ⇒ the inbuilt engine (default). A non-None id
+            // tags the turn with the selected agent for per-agent model
+            // surface + prompt persona (coordinator threads it into opts).
+            agent_id,
             provider: provider.unwrap_or_else(|| "nvidia".into()),
             model: model.unwrap_or_else(|| "meta/llama".into()),
         })
@@ -292,6 +300,7 @@ pub fn run() {
             replay_dir: everyaios_core::default_data_dir(),
             cockpit: Arc::new(Mutex::new(Default::default())),
             guard_service: Arc::new(Mutex::new(GuardService::new())),
+            acp_sessions: Mutex::new(std::collections::HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             version,
@@ -324,7 +333,21 @@ pub fn run() {
             office_cmds::docx_open,
             office_cmds::pptx_open,
             office_cmds::pdf_open,
-            office_cmds::pdf_bytes
+            office_cmds::pdf_bytes,
+            acp_cmds::acp_agents,
+            acp_cmds::acp_launch,
+            acp_cmds::acp_prompt,
+            acp_cmds::acp_cancel,
+            acp_cmds::acp_shutdown,
+            acp_cmds::acp_sessions,
+            acp_cmds::acp_registry_refresh,
+            acp_cmds::acp_registry_status,
+            acp_cmds::acp_registry_install_plan,
+            acp_cmds::acp_install_status,
+            acp_cmds::acp_install_request,
+            acp_cmds::acp_install_commit,
+            acp_cmds::acp_install,
+            acp_cmds::acp_authenticate
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray

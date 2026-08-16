@@ -27,6 +27,7 @@ everyaios-vault = { path = "../crates/everyaios-vault" }
 everyaios-audit = { path = "../crates/everyaios-audit" }
 everyaios-guard = { path = "../crates/everyaios-guard" }
 everyaios-office = { path = "../crates/everyaios-office" }
+everyaios-acp = { path = "../crates/everyaios-acp" }
 
 [profile.release]
 strip = true

@@ -59,6 +59,8 @@ export async function chatStream(args: {
   personaId?: string;
   /** P1.5 — Hermes SOUL.md identity block (Slot #1, injection-scanned). */
   soulMd?: string;
+  /** F12/J17 — selected agent id (None = inbuilt engine). */
+  agentId?: string;
 }): Promise<string> {
   return tauriInvoke<string>("chat_stream", args);
 }

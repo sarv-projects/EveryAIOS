@@ -1,0 +1,17 @@
+[package]
+name = "everyaios-acp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "P6.8 / F12 / J17 — ACP (Agent Client Protocol) harness bridge: newline-delimited JSON-RPC framing, v1 message types, an AcpSession client lifecycle, and the agent launch registry (Ollama-launch pattern)."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+ureq = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+zip = { workspace = true }
+tar = { workspace = true }

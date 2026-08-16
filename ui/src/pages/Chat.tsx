@@ -6,6 +6,23 @@ import {
   onChatEvent,
   type ChatWireEvent,
 } from "../lib/tauri";
+import {
+  acpAgents,
+  acpAuthenticate,
+  acpInstallCommit,
+  acpInstallRequest,
+  acpInstallStatus,
+  acpLaunch,
+  acpPrompt,
+  type AuthMethod,
+  type HarnessManifest,
+  type InstallState,
+} from "../lib/acp";
+import {
+  guardRespond,
+  guardTickets,
+  type GuardTicket,
+} from "../lib/guard";
 import Markdown from "../components/Markdown";
 
 /** Persona presets — mirror of core-ai PERSONA_PRESETS (P1.5 A-7). */
@@ -68,6 +85,16 @@ const WELCOME: Msg = {
   text: "EveryAIOS coordinator is standing by. Chat streams through the Rust core → coordinator engine → broker with a byte-stable prompt prefix, J11 budget cap, and cancellable 33ms-batched streaming (P1.3–P1.6).",
 };
 
+// F12/J17 — inbuilt fallback manifest (preview mode / before acp_agents lands).
+const INBUILT: HarnessManifest = {
+  id: "everyaios",
+  name: "EveryAIOS",
+  description: "Inbuilt agent — office, browser, memory, guard, eval, all models.",
+  authMode: "local",
+  protocol: "inbuilt",
+  isDefault: true,
+};
+
 export default function Chat() {
   const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState("");
@@ -80,6 +107,25 @@ export default function Chat() {
   // P1.9 — model picker state (provider/model pair → chat_stream args).
   const [modelKey, setModelKey] = useState("nvidia/meta/llama-3.1-70b-instruct");
   const [provider, model] = modelKey.split("/", 2) as [string, string];
+  // F12/J17 — agent picker: same chat bar, agent differs. Default = the
+  // inbuilt engine (all first-party capabilities); others are ACP CLIs.
+  const [agents, setAgents] = useState<HarnessManifest[]>([]);
+  const [agentId, setAgentId] = useState("everyaios");
+  const [agentHandle, setAgentHandle] = useState<Record<string, string>>({});
+  // F8 — per-agent install state (flip Install ↔ Launch in the picker).
+  const [installState, setInstallState] = useState<Record<string, InstallState>>({});
+  const [installing, setInstalling] = useState<Record<string, boolean>>({});
+  // The pending Guard-2 install ticket (approved here → install executes).
+  const [installTicket, setInstallTicket] = useState<GuardTicket | null>(null);
+  // The pending sign-in surface for an ACP agent (authMethods from launch).
+  const [authSurface, setAuthSurface] = useState<{
+    agentId: string;
+    handle: string;
+    methods: AuthMethod[];
+    url?: string;
+  } | null>(null);
+  const selectedAgent = agents.find((a) => a.id === agentId);
+  const isInbuilt = !selectedAgent || selectedAgent.protocol === "inbuilt";
   // Token streamer state.
   const [tokensSec, setTokensSec] = useState(0);
   const [totalTokens, setTotalTokens] = useState(0);
@@ -138,6 +184,32 @@ export default function Chat() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, busy]);
 
+  // F12/J17 — load the agent launch registry (the picker) once on mount.
+  useEffect(() => {
+    if (!inTauri()) return;
+    void acpAgents()
+      .then((list) => setAgents(list.length ? list : [INBUILT]))
+      .catch(() => setAgents([INBUILT]));
+    // F8 — install state per agent (flip Install ↔ Launch).
+    void acpInstallStatus()
+      .then(setInstallState)
+      .catch(() => {});
+  }, []);
+
+  // F8 — the Guard-2 install ticket resolves as it's approved/rejected in the
+  // shared ticket store (the Cockpit card and this inline card are the same
+  // ticket — one source of truth).
+  useEffect(() => {
+    if (!installTicket) return;
+    const t = window.setInterval(() => {
+      void guardTickets().then((list) => {
+        const still = list.find((x) => x.ticketId === installTicket.ticketId);
+        if (!still) setInstallTicket(null); // resolved elsewhere (Cockpit)
+      }).catch(() => {});
+    }, 2000);
+    return () => window.clearInterval(t);
+  }, [installTicket]);
+
   // P1.4/P1.6: subscribe once to Rust chat events.
   useEffect(() => {
     if (!inTauri()) return;
@@ -181,27 +253,161 @@ export default function Chat() {
     return () => unsub?.();
   }, []);
 
+  /** F8 — one-click install: request (mint ticket or auto-allow) → show the
+   *  Guard-2 card when asked → commit on approve. */
+  async function installAgent(id: string) {
+    setInstalling((s) => ({ ...s, [id]: true }));
+    try {
+      const req = await acpInstallRequest(id);
+      if (req.action === "allow") {
+        // Policy auto-allowed (user set write=allow): commit directly.
+        const out = await acpInstallCommit(id);
+        setInstallState((s) => ({
+          ...s,
+          [id]: { installed: true, version: out.version, kind: out.kind, binaryPath: out.binaryPath },
+        }));
+        setMsgs((m) => [
+          ...m,
+          { id: msgId++, role: "assistant" as const, text: `**${id}** v${out.version} installed (${out.kind}).` },
+        ]);
+        return;
+      }
+      // ask → the ticket is live in the shared store; render the same card
+      // inline (Cockpit shows it too — one ticket, two UIs).
+      const list = await guardTickets();
+      const t = list.find((x) => x.ticketId === req.ticketId);
+      if (t) setInstallTicket(t);
+    } catch (err) {
+      setMsgs((m) => [
+        ...m,
+        { id: msgId++, role: "assistant" as const, text: `install error: ${String(err)}` },
+      ]);
+    } finally {
+      setInstalling((s) => ({ ...s, [id]: false }));
+    }
+  }
+
+  /** F8 — approve the install ticket inline (same ticket as the Cockpit
+   *  card), then commit: consume the ticket + download/verify/extract. */
+  async function approveInstall(action: "approve" | "reject") {
+    if (!installTicket) return;
+    const id = installTicket.agentId;
+    const ticketId = installTicket.ticketId;
+    setInstallTicket(null);
+    try {
+      await guardRespond(ticketId, action);
+      if (action === "reject") return;
+      setInstalling((s) => ({ ...s, [id]: true }));
+      const out = await acpInstallCommit(id, ticketId);
+      setInstallState((s) => ({
+        ...s,
+        [id]: { installed: true, version: out.version, kind: out.kind, binaryPath: out.binaryPath },
+      }));
+      setMsgs((m) => [
+        ...m,
+        { id: msgId++, role: "assistant" as const, text: `**${id}** v${out.version} installed (${out.kind}). Pick it and send a message to launch.` },
+      ]);
+    } catch (err) {
+      setMsgs((m) => [
+        ...m,
+        { id: msgId++, role: "assistant" as const, text: `install error: ${String(err)}` },
+      ]);
+    } finally {
+      setInstalling((s) => ({ ...s, [id]: false }));
+    }
+  }
+
+  /** F12/J17 — drive the ACP `authenticate` flow: agent-type completes
+   *  immediately; url-type opens the browser and re-calls after login. */
+  async function signIn(methodId: string) {
+    if (!authSurface) return;
+    try {
+      const res = await acpAuthenticate(authSurface.handle, methodId);
+      if (res.pending && res.url) {
+        window.open(res.url, "_blank", "noopener");
+        setAuthSurface({ ...authSurface, url: res.url });
+        return;
+      }
+      if (res.ok) {
+        setAuthSurface(null);
+        setMsgs((m) => [
+          ...m,
+          { id: msgId++, role: "assistant" as const, text: `**${authSurface.agentId}** signed in — send a message to start working.` },
+        ]);
+      }
+    } catch (err) {
+      setMsgs((m) => [
+        ...m,
+        { id: msgId++, role: "assistant" as const, text: `sign-in error: ${String(err)}` },
+      ]);
+    }
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
     setMsgs((m) => [...m, { id: msgId++, role: "user", text }]);
     setBusy(true);
-    setActiveKey(`${provider} / ${model}`);
+    setActiveKey(
+      isInbuilt ? `${provider} / ${model}` : `${agentId} · ${selectedAgent?.authMode ?? "acp"}`,
+    );
     rateSamples.current = [];
     try {
-      if (inTauri()) {
+      if (inTauri() && isInbuilt) {
         const sid = await chatStream({
           sessionId: "",
           text,
           provider,
           model,
+          agentId,
           personaId: persona === CUSTOM_SOUL ? DEFAULT_PERSONA : persona,
           ...(persona === CUSTOM_SOUL && soulMd.trim()
             ? { soulMd: soulMd.trim() }
             : {}),
         });
         setStreamId(sid);
+      } else if (inTauri() && !isInbuilt) {
+        // F8 — the agent must be installed before it can be launched.
+        if (!installState[agentId]?.installed) {
+          setMsgs((m) => [
+            ...m,
+            { id: msgId++, role: "assistant" as const, text: `**${agentId}** is not installed yet — click **Install** in the picker above (the download is Guard-2 gated), then send again.` },
+          ]);
+          setBusy(false);
+          return;
+        }
+        // F12/J17 — ACP harness: launch once, then drive a synchronous turn.
+        let handle = agentHandle[agentId];
+        if (!handle) {
+          const info = await acpLaunch(agentId, "");
+          handle = info.handle;
+          setAgentHandle((h) => ({ ...h, [agentId]: handle as string }));
+          // The agent needs sign-in before it accepts a session — surface
+          // its authMethods instead of prompting.
+          if (info.authRequired) {
+            setAuthSurface({ agentId, handle, methods: info.authMethods });
+            setMsgs((m) => [
+              ...m,
+              { id: msgId++, role: "assistant" as const, text: `**${agentId}** needs sign-in before it can start a session.` },
+            ]);
+            setBusy(false);
+            return;
+          }
+        }
+        const res = await acpPrompt(handle, text);
+        const tickets = res.pendingTickets.length
+          ? `\n\n⛔ Guard-2: ${res.pendingTickets.length} ticket(s) pending approval — ${res.pendingTickets.join(", ")}`
+          : "";
+        setMsgs((m) => [
+          ...m,
+          {
+            id: msgId++,
+            role: "assistant",
+            text: `**${agentId}** (${res.stopReason}) — ${res.updateCount} update(s), ${res.permissionCount} permission request(s).${tickets}`,
+          },
+        ]);
+        setBusy(false);
       } else {
         setMsgs((m) => [
           ...m,
@@ -253,6 +459,44 @@ export default function Chat() {
       <header className="page-head">
         <h1>Chat</h1>
         <div className="chat-tools">
+          {/* F12/J17 — agent picker: same chat bar, agent differs. Default =
+              inbuilt engine (all capabilities); others are ACP CLIs. */}
+          <label className="persona-wrap">
+            <span className="pill pill-label">agent</span>
+            <select
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+              aria-label="Agent"
+            >
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.isDefault ? " · default" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!isInbuilt && selectedAgent && (
+            <span className="pill" title={selectedAgent.description}>
+              {selectedAgent.authMode}
+            </span>
+          )}
+          {/* F8 — Install / installed badge (one-click, Guard-2-gated). */}
+          {!isInbuilt && selectedAgent && installState[agentId]?.installed && (
+            <span className="pill installed" title={`v${installState[agentId].version ?? ""}`}>
+              ✓ installed
+            </span>
+          )}
+          {!isInbuilt && selectedAgent && !installState[agentId]?.installed && (
+            <button
+              className="install-btn"
+              disabled={!!installing[agentId]}
+              onClick={() => void installAgent(agentId)}
+              title="Install from the official ACP registry (download is Guard-2 gated)"
+            >
+              {installing[agentId] ? "installing…" : "Install"}
+            </button>
+          )}
           {/* P1.6 — persona selector (A-7 presets + Hermes SOUL.md, B-2). */}
           <label className="persona-wrap">
             <span className="pill pill-label">persona</span>
@@ -273,26 +517,115 @@ export default function Chat() {
               <option value={CUSTOM_SOUL}>custom SOUL.md…</option>
             </select>
           </label>
-          {/* P1.9 — model picker (A6 catalog feed → broker provider/model). */}
-          <label className="persona-wrap">
-            <span className="pill pill-label">model</span>
-            <select
-              value={modelKey}
-              onChange={(e) => setModelKey(e.target.value)}
-              aria-label="Model"
-            >
-              {MODEL_OPTIONS.map((o) => (
-                <option key={`${o.provider}/${o.model}`} value={`${o.provider}/${o.model}`}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* P1.9 — model picker (A6 catalog feed → broker provider/model).
+              Shown only for the inbuilt engine: an ACP agent drives its own
+              backend via its auth mode (per-agent model surface). */}
+          {isInbuilt && (
+            <label className="persona-wrap">
+              <span className="pill pill-label">model</span>
+              <select
+                value={modelKey}
+                onChange={(e) => setModelKey(e.target.value)}
+                aria-label="Model"
+              >
+                {MODEL_OPTIONS.map((o) => (
+                  <option key={`${o.provider}/${o.model}`} value={`${o.provider}/${o.model}`}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <span className="pill">
             {inTauri() ? "shell connected · streaming" : "preview mode"}
           </span>
         </div>
       </header>
+
+      {/* F8 — inline Guard-2 install card (same ticket as the Cockpit card).
+          Approving here consumes the ticket and runs the download. */}
+      {installTicket && (
+        <div className={`ticket-card install-card${installTicket.decision?.webAction ? " web-confirm" : ""}`}>
+          <div className="interrupt-head">
+            <span className="chip wait">INSTALL</span>
+            <span className="mono small muted">{installTicket.ticketId}</span>
+            <span className={`risk-chip risk-${installTicket.risk}`}>{installTicket.risk}</span>
+          </div>
+          <p className="interrupt-prompt">
+            Install <strong>{installTicket.agentId}</strong>
+            {installTicket.decision?.goal && (
+              <span className="muted"> — {installTicket.decision.goal}</span>
+            )}
+          </p>
+          <div className="ticket-paths mono small">
+            {installTicket.paths.map((p) => (
+              <div key={p}>{p}</div>
+            ))}
+          </div>
+          {installTicket.decision && (
+            <div className="ticket-details">
+              {installTicket.decision.scriptLines.length > 0 && (
+                <div className="ticket-script">
+                  <div className="ticket-detail-label">Script</div>
+                  <pre className="mono small">{installTicket.decision.scriptLines.join("\n")}</pre>
+                </div>
+              )}
+              {installTicket.decision.networkDestinations.length > 0 && (
+                <div className="ticket-script">
+                  <div className="ticket-detail-label">Network destinations</div>
+                  <pre className="mono small">{installTicket.decision.networkDestinations.join("\n")}</pre>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="interrupt-options">
+            <button className="approve" disabled={!!installing[installTicket.agentId]} onClick={() => void approveInstall("approve")}>
+              {installing[installTicket.agentId] ? "installing…" : "Approve & install"}
+            </button>
+            <button className="reject" disabled={!!installing[installTicket.agentId]} onClick={() => void approveInstall("reject")}>
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* F12/J17 — ACP sign-in surface (authMethods from `initialize`).
+          agent-type methods complete in the agent's own flow; url-type opens
+          the browser and re-calls `acp_authenticate` after login. */}
+      {authSurface && (
+        <div className="ticket-card auth-card">
+          <div className="interrupt-head">
+            <span className="chip warn">SIGN IN</span>
+            <span className="small muted">{authSurface.agentId}</span>
+          </div>
+          <p className="interrupt-prompt">
+            <strong>{authSurface.agentId}</strong> needs you to authenticate before it
+            will start a session.
+          </p>
+          {authSurface.url ? (
+            <div className="interrupt-options">
+              <span className="muted small">Browser opened — complete login, then:</span>
+              <button className="approve" onClick={() => void signIn(authSurface.methods[0]?.id ?? "")}>
+                I've signed in
+              </button>
+            </div>
+          ) : (
+            <div className="interrupt-options">
+              {authSurface.methods.length === 0 && (
+                <span className="muted small">No auth methods advertised — the agent may print a login URL in its own output.</span>
+              )}
+              {authSurface.methods.map((m) => (
+                <button key={m.id} className="approve" onClick={() => void signIn(m.id)}>
+                  Sign in with {m.name}
+                </button>
+              ))}
+              <button className="reject" onClick={() => setAuthSurface(null)}>
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* P1.8 — context-window warning (doc 33 §7.4: below 15K the agent
           loops trying to recover; warn loudly under 15–20K). */}

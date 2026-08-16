@@ -16,6 +16,7 @@ members = [
     "everyaios-eval",
     "everyaios-blueprint",
     "everyaios-codeintel",
+    "everyaios-acp",
 ]
 
 [workspace.package]
@@ -47,3 +48,4 @@ similar = "2"
 roxmltree = "0.20"
 flate2 = "1"
 crc32fast = "1"
+tar = "0.4"

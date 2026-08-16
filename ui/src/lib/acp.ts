@@ -1,0 +1,141 @@
+// F12 / J17 — ACP harness bridge client (doc 45 §1, doc 57 §2). The agent
+// picker: one manifest per agent (the `ollama launch` pattern), same chat bar,
+// agent differs. The default (`everyaios`) is the inbuilt engine with all
+// first-party capabilities; every other entry drives an external agent CLI
+// over ACP stdio and obeys the same Guard-2 ticket card.
+
+import { invoke } from "./tauri";
+
+/** Auth-mode badge (F12 — subscription / api_key / local). */
+export type AuthMode = "subscription" | "api_key" | "local";
+
+/** How the agent is distributed / driven. */
+export type HarnessProtocol = "inbuilt" | "acp" | "model_backend";
+
+/** The agent's advertised ACP auth method (`authMethods` in initialize). */
+export interface AuthMethod {
+  id: string;
+  name: string;
+  description?: string;
+  /** `agent` (default) | `url` | `terminal` — how login completes. */
+  type?: "agent" | "url" | "terminal";
+}
+
+export interface HarnessManifest {
+  id: string;
+  name: string;
+  description: string;
+  authMode: AuthMode;
+  protocol: HarnessProtocol;
+  isDefault: boolean;
+}
+
+export interface AcpHandleInfo {
+  handle: string;
+  agentId: string;
+  agentName: string;
+  sessionId: string;
+  protocol: string;
+  /** True when the agent needs sign-in before it accepts a session. */
+  authRequired: boolean;
+  authMethods: AuthMethod[];
+}
+
+export interface AcpPromptResult {
+  handle: string;
+  stopReason: string;
+  updateCount: number;
+  permissionCount: number;
+  pendingTickets: string[];
+}
+
+/** One agent's install state (F8 — flip Install ↔ Launch in the picker). */
+export interface InstallState {
+  installed: boolean;
+  version?: string;
+  kind?: string;
+  binaryPath?: string | null;
+}
+
+/** The install-request verdict (Guard-2 ticket minted, or auto-allowed). */
+export interface InstallRequest {
+  action: "allow" | "ask";
+  agentId: string;
+  version: string;
+  ticketId?: string;
+}
+
+/** The result of `acp_authenticate` (url-type pending vs completed). */
+export interface AuthenticateResult {
+  ok: boolean;
+  sessionId?: string;
+  url?: string;
+  pending?: boolean;
+}
+
+/** The launch registry (the picker). Default = inbuilt EveryAIOS. */
+export async function acpAgents(): Promise<HarnessManifest[]> {
+  return invoke<HarnessManifest[]>("acp_agents");
+}
+
+/** F8 — per-agent install state (installed? version? kind?). */
+export async function acpInstallStatus(): Promise<Record<string, InstallState>> {
+  return invoke<Record<string, InstallState>>("acp_install_status");
+}
+
+/** F8 — plan-before-touch: resolve the plan + mint a Guard-2 ticket (or
+ * auto-allow). Nothing is downloaded until `acpInstallCommit`. */
+export async function acpInstallRequest(agentId: string): Promise<InstallRequest> {
+  return invoke<InstallRequest>("acp_install_request", { agentId });
+}
+
+/** F8 — the executor half: consume the approved ticket (when one was minted)
+ * and install. Auto-allowed requests commit with no ticket. */
+export async function acpInstallCommit(
+  agentId: string,
+  ticketId?: string,
+): Promise<{ agentId: string; version: string; kind: string; binaryPath?: string }> {
+  return invoke("acp_install_commit", { agentId, ticketId });
+}
+
+/** Launch an agent: spawn + ACP handshake → a live handle. May report
+ * `authRequired` (the agent needs sign-in before it accepts a session). */
+export async function acpLaunch(
+  agentId: string,
+  cwd: string,
+): Promise<AcpHandleInfo> {
+  return invoke<AcpHandleInfo>("acp_launch", { agentId, cwd });
+}
+
+/** Drive the ACP `authenticate` flow on a live handle. Agent-type methods
+ * complete immediately; url-type returns `{pending: true, url}` — open the
+ * URL in the system browser, then call `acpAuthenticate` again. */
+export async function acpAuthenticate(
+  handle: string,
+  methodId: string,
+): Promise<AuthenticateResult> {
+  return invoke<AuthenticateResult>("acp_authenticate", { handle, methodId });
+}
+
+/** Drive one ACP turn. Returns the stop reason + any minted Guard-2 tickets. */
+export async function acpPrompt(
+  handle: string,
+  text: string,
+): Promise<AcpPromptResult> {
+  return invoke<AcpPromptResult>("acp_prompt", { handle, text });
+}
+
+/** Interrupt the ongoing ACP turn. */
+export async function acpCancel(handle: string): Promise<void> {
+  return invoke("acp_cancel", { handle });
+}
+
+/** Tear an ACP session down (kill + reap). */
+export async function acpShutdown(handle: string): Promise<boolean> {
+  return invoke<boolean>("acp_shutdown", { handle });
+}
+
+/** Live ACP handles. */
+export async function acpSessions(): Promise<AcpHandleInfo[]> {
+  return invoke<AcpHandleInfo[]>("acp_sessions");
+}
