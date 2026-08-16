@@ -1,0 +1,165 @@
+'use client'
+
+import { useState } from 'react'
+import { Presentation, ChevronLeft, ChevronRight, StickyNote } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+
+const SLIDES = [
+  { title: 'Q3 2026 Results', active: false },
+  { title: 'Agenda', active: false },
+  { title: 'Q3 2026 Results', active: true, current: true },
+  { title: 'Pipeline', active: false },
+  { title: 'Q4 Outlook', active: false },
+]
+
+export default function OfficePptxView() {
+  const [current, setCurrent] = useState(2)
+
+  return (
+    <div className="flex h-full w-full flex-col bg-zinc-900">
+      <header className="flex items-center justify-between border-b border-border px-3 py-2">
+        <div className="flex items-center gap-2">
+          <Presentation className="h-4 w-4 text-orange-400" />
+          <span className="font-mono text-xs font-medium text-foreground">
+            quarterly-deck.pptx
+          </span>
+          <Badge
+            variant="outline"
+            className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+          >
+            <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+            Live
+          </Badge>
+        </div>
+        <span className="font-mono text-[10px] text-muted-foreground">Slide 3 / 12</span>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col bg-zinc-950/40 p-4">
+          <div className="relative mx-auto aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-border bg-gradient-to-br from-[#1d1f23] to-[#141518] shadow-lg">
+            <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />
+            <div className="flex h-full flex-col p-8">
+              <Badge
+                variant="secondary"
+                className="mb-3 w-fit bg-orange-500/15 text-[9px] text-orange-300"
+              >
+                Q3 FY26 · Board Review
+              </Badge>
+              <h2 className="mb-2 text-3xl font-bold tracking-tight text-foreground">
+                Q3 2026 Results
+              </h2>
+              <p className="mb-4 font-mono text-sm text-orange-300">
+                Revenue: $1.8M <span className="text-emerald-400">(+20% QoQ)</span>
+              </p>
+
+              <div className="mt-auto grid grid-cols-4 gap-2">
+                {[60, 67, 80, 90].map((h, i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col items-center gap-1 rounded border border-border bg-zinc-900/60 p-2"
+                  >
+                    <div className="flex h-16 w-full items-end justify-center">
+                      <div
+                        className="w-3 rounded-t bg-gradient-to-t from-orange-600 to-orange-400"
+                        style={{ height: `${h}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-[8px] text-muted-foreground">
+                      Q{i + 1}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="absolute right-4 top-4 flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
+                <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+                Agent editing
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            <button
+              onClick={() => setCurrent(Math.max(0, current - 1))}
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              Editing text box · "Revenue: $1.8M (+20%)"
+            </span>
+            <button
+              onClick={() => setCurrent(Math.min(SLIDES.length - 1, current + 1))}
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <aside className="hidden w-56 shrink-0 border-l border-border bg-card lg:block">
+          <div className="flex items-center gap-1.5 border-b border-border px-3 py-2 text-xs font-medium">
+            <StickyNote className="h-3.5 w-3.5 text-orange-400" />
+            Speaker notes
+          </div>
+          <div className="p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+            <div className="mb-1 text-[9px] uppercase tracking-wide text-orange-300">
+              P4.7b · guizang SPEAKER_NOTES
+            </div>
+            <p className="text-foreground/80">
+              Open by acknowledging the team&apos;s execution. Land the headline: $1.8M revenue,
+              up 20% QoQ. Anchor on enterprise expansion as the primary driver.
+            </p>
+            <p className="mt-2 text-foreground/70">
+              Note: margin improvement (61→66%) reflects vendor renegotiation and tiered
+              pricing. Mention 35% YoY enterprise deal growth.
+            </p>
+          </div>
+        </aside>
+      </div>
+
+      <div className="border-t border-border bg-zinc-900/60 px-3 py-2">
+        <div className="flex gap-2 overflow-x-auto scroll-thin">
+          {SLIDES.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrent(i)}
+              className={cn(
+                'shrink-0 rounded border p-1 transition-colors',
+                i === current
+                  ? 'border-orange-500 bg-orange-500/10'
+                  : 'border-border bg-zinc-950/40 hover:border-muted-foreground'
+              )}
+            >
+              <div className="flex aspect-video w-16 flex-col justify-center gap-0.5 rounded bg-gradient-to-br from-zinc-800 to-zinc-900 px-1 py-0.5">
+                <div className="h-0.5 w-3/4 rounded bg-orange-400/60" />
+                <div className="h-0.5 w-1/2 rounded bg-emerald-400/40" />
+                <div className="mt-1 flex gap-0.5">
+                  {[0, 1, 2, 3].map((b) => (
+                    <div
+                      key={b}
+                      className="h-2 w-1 rounded-sm bg-zinc-600"
+                      style={{ opacity: 1 - b * 0.15 }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div
+                className={cn(
+                  'mt-1 font-mono text-[9px]',
+                  i === current ? 'text-orange-300' : 'text-muted-foreground'
+                )}
+              >
+                {i + 1}
+              </div>
+            </button>
+          ))}
+          <button className="flex shrink-0 items-center justify-center rounded border border-dashed border-border px-3 text-orange-300 hover:bg-accent">
+            +
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,510 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ============================================================================
+   EveryAIOS design system — warm cream light-first (UI-DESIGN-PROMPT.md)
+   Palette: canvas #F7F7F4 · surface #FFFFFF/#F0EFEB · ink #26251E
+   Brand: #F54E00 orange (sole accent) · semantic green/blue/amber/red
+   Dark mode: secondary (user toggle), same orange accent.
+   ==========================================================================*/
+:root {
+  --font-geist-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-geist-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  --radius: 0.5rem;
+
+  /* Brand accent — orange #F54E00 (UI-DESIGN-PROMPT: primary CTA color) */
+  --brand: 19 100% 48%;
+  --brand-foreground: 0 0% 100%;
+  --brand-hover: 17 100% 42%;
+  --brand-soft: 19 100% 48% / 0.08;
+
+  /* Semantic (meaning only, never decoration) */
+  --success: 142 76% 36%;
+  --warning: 41 96% 40%;
+  --danger: 0 72% 51%;
+  --info: 221 83% 53%;
+
+  /* Surface layers — warm cream, NOT sterile white */
+  --surface-0: 60 13% 96%;            /* #F7F7F4 canvas */
+  --surface-1: 0 0% 100%;             /* #FFFFFF panels */
+  --surface-2: 0 0% 100%;             /* #FFFFFF cards + 1px #E8E5E0 border */
+  --surface-3: 48 14% 93%;            /* #F0EFEB hover */
+
+  --background: 60 13% 96%;
+  --foreground: 48 12% 13%;           /* #26251E warm near-black */
+  --card: 0 0% 100%;
+  --card-foreground: 48 12% 13%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 48 12% 13%;
+  --primary: 19 100% 48%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 48 14% 93%;
+  --secondary-foreground: 48 12% 13%;
+  --muted: 48 14% 93%;
+  --muted-foreground: 44 5% 40%;      /* #6B6860 warm grey */
+  --accent: 48 14% 93%;
+  --accent-foreground: 48 12% 13%;
+  --destructive: 0 72% 51%;
+  --border: 38 17% 89%;               /* #E8E5E0 warm hairline */
+  --input: 38 10% 82%;                /* #D4D1CC */
+  --ring: 19 100% 48%;
+  --chart-1: 19 100% 48%;
+  --chart-2: 221 83% 53%;
+  --chart-3: 142 76% 36%;
+  --chart-4: 41 96% 40%;
+  --chart-5: 262 83% 58%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 48 12% 13%;
+  --sidebar-primary: 19 100% 48%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 48 14% 93%;
+  --sidebar-accent-foreground: 48 12% 13%;
+  --sidebar-border: 38 17% 89%;
+  --sidebar-ring: 19 100% 48%;
+}
+
+.dark {
+  --surface-0: 60 3% 10%;             /* #1A1917 */
+  --surface-1: 60 3% 13%;             /* #232220 */
+  --surface-2: 60 4% 17%;             /* #2D2C29 */
+  --surface-3: 60 4% 20%;             /* #353330 */
+  --background: 60 3% 10%;
+  --foreground: 48 14% 93%;           /* #F0EFEB */
+  --card: 60 3% 13%;
+  --card-foreground: 48 14% 93%;
+  --popover: 60 3% 13%;
+  --popover-foreground: 48 14% 93%;
+  --primary: 19 100% 48%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 60 4% 17%;
+  --secondary-foreground: 48 14% 93%;
+  --muted: 60 4% 17%;
+  --muted-foreground: 44 5% 72%;
+  --accent: 60 4% 20%;
+  --accent-foreground: 48 14% 93%;
+  --destructive: 0 72% 60%;
+  --border: 60 4% 20%;
+  --input: 60 4% 20%;
+  --ring: 19 100% 48%;
+  --chart-1: 19 100% 48%;
+  --chart-2: 221 83% 60%;
+  --chart-3: 142 76% 45%;
+  --chart-4: 41 96% 50%;
+  --chart-5: 262 83% 66%;
+  --sidebar: 60 3% 13%;
+  --sidebar-foreground: 48 14% 93%;
+  --sidebar-primary: 19 100% 48%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 60 4% 17%;
+  --sidebar-accent-foreground: 48 14% 93%;
+  --sidebar-border: 60 4% 20%;
+  --sidebar-ring: 19 100% 48%;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html, body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: hsl(var(--brand) / 0.18);
+    color: var(--foreground);
+  }
+}
+
+/* ============================================================================
+   Utility classes — desktop app (Devin/Cursor aesthetic + design doc)
+   ==========================================================================*/
+
+/* Subtle dotted-grid background for empty workspaces */
+.bg-dot-grid {
+  background-image: radial-gradient(circle, hsl(var(--muted-foreground) / 0.18) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Subtle hairline border */
+.hairline {
+  border: 1px solid hsl(var(--border) / 0.6);
+}
+
+/* Soft inset shadow for read-only panels (Devin terminal) */
+.shadow-inset-soft {
+  box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.04), inset 0 0 0 1px hsl(0 0% 0% / 0.15);
+}
+
+/* Live-pulse indicator (the "● Live" dot) — 1s cycle per design doc */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+.live-dot {
+  animation: live-pulse 1s ease-in-out infinite;
+}
+
+/* Typewriter caret — 500ms/500ms per design doc */
+@keyframes caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.caret-blink {
+  animation: caret-blink 500ms steps(1) infinite;
+}
+
+/* Slow shimmer for skeletons */
+@keyframes shimmer {
+  0% { background-position: -800px 0; }
+  100% { background-position: 800px 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg,
+    hsl(var(--muted) / 0.4) 0%,
+    hsl(var(--muted) / 0.7) 50%,
+    hsl(var(--muted) / 0.4) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s infinite linear;
+}
+
+/* Typewriter for AI writing in office views */
+@keyframes type-in {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* Subtle scan-line for terminal */
+.scanline::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    hsl(0 0% 0% / 0) 0px,
+    hsl(0 0% 0% / 0) 2px,
+    hsl(0 0% 0% / 0.06) 2px,
+    hsl(0 0% 0% / 0.06) 3px
+  );
+}
+
+/* Custom scrollbars — warm, thin, unobtrusive */
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.25);
+  border-radius: 4px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.45);
+}
+
+/* Disable text selection on UI chrome */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Drag region for title bar (Tauri-style look) */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Fade-up entrance for chat messages */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+  animation: fade-up 0.32s ease-out both;
+}
+
+/* Marquee scroll for sparkline bars */
+@keyframes spark-flow {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Gradient border effect for active/highlighted cards */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, hsl(19 100% 48% / 0.5), hsl(19 100% 48% / 0.1), hsl(221 83% 53% / 0.2));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Subtle pulse glow for active agent indicators */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 4px hsl(19 100% 48% / 0.2); }
+  50% { box-shadow: 0 0 8px hsl(19 100% 48% / 0.35); }
+}
+.glow-pulse {
+  animation: glow-pulse 2.5s ease-in-out infinite;
+}
+
+/* Slide-in from right for panel transitions */
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.slide-in-right {
+  animation: slide-in-right 0.22s ease-out both;
+}
+
+/* === Glassmorphism & visual polish === */
+
+/* Frosted-glass panel overlay for modal-like surfaces */
+.glass-panel {
+  background: hsl(var(--card) / 0.7);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid hsl(var(--border) / 0.5);
+}
+
+/* Softer frosted glass for side panels */
+.glass-soft {
+  background: hsl(var(--sidebar) / 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Hover-lift effect for interactive cards */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px hsl(0 0% 0% / 0.15), 0 0 0 1px hsl(19 100% 48% / 0.1);
+}
+
+/* Subtle border glow on focus/hover for agent cards */
+.border-glow:hover {
+  box-shadow: 0 0 0 1px hsl(19 100% 48% / 0.3), 0 0 8px hsl(19 100% 48% / 0.08);
+}
+
+/* Subtle radial gradient background for empty states */
+.bg-radial-fade {
+  background: radial-gradient(ellipse at center, hsl(19 100% 48% / 0.03) 0%, transparent 70%);
+}
+
+/* Top-edge gradient accent (orange → transparent) for highlighted panels */
+.accent-top-gradient {
+  position: relative;
+}
+.accent-top-gradient::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(19 100% 48% / 0.6), hsl(19 100% 48% / 0.1), transparent);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Smooth scale-in animation for popovers and modals — 120ms per design doc */
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+.scale-in {
+  animation: scale-in 0.12s ease-out both;
+}
+
+/* Breathe animation for loading/processing states */
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.breathe {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+/* ============================================================================
+   Design-doc micro-animation utilities (UI-DESIGN-PROMPT motion table)
+   ==========================================================================*/
+
+/* Live badge pulse — opacity 50→100%, 1s cycle */
+@utility live-pulse {
+  animation: live-pulse 1s ease-in-out infinite;
+}
+
+/* Approval card entrance — slide up 250ms spring, per design doc */
+@utility enter-approval {
+  animation: enter-approval 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes enter-approval {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Progress step entrance — slide left 100ms, per design doc */
+@utility enter-step {
+  animation: enter-step 100ms ease-out;
+}
+@keyframes enter-step {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Surface crossfade — 150ms, per design doc (no horizontal slides) */
+@utility enter-surface {
+  animation: enter-surface 150ms ease-out;
+}
+@keyframes enter-surface {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Cell edit flash — 200ms warm highlight then settle */
+@utility cell-flash {
+  animation: cell-flash 200ms ease-out;
+}
+@keyframes cell-flash {
+  from { background-color: hsl(var(--warning) / 0.35); }
+  to { background-color: transparent; }
+}
+
+/* Command palette open — scale 97→100% + fade, 120ms */
+@utility scale-in-palette {
+  animation: scale-in-palette 120ms ease-out;
+}
+@keyframes scale-in-palette {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Failed step shake — 150ms, 3px once */
+@utility step-shake {
+  animation: step-shake 150ms ease-in-out;
+}
+@keyframes step-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+/* Chart regeneration crossfade — 400ms */
+@utility chart-crossfade {
+  animation: chart-crossfade 400ms ease-out;
+}
+@keyframes chart-crossfade {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+
+/* Toast slide from top-right — 200ms with 5px drop */
+@utility toast-enter {
+  animation: toast-enter 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Treemap drill morph — 300ms */
+@utility treemap-morph {
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Sparkline draw left→right on mount — 300ms */
+@utility spark-draw {
+  transform-origin: left;
+  animation: spark-draw 300ms ease-out;
+}
+@keyframes spark-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Trust ladder roll — smooth score roll */
+@utility score-roll {
+  transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Agent switch pulse — orange pulse on avatar */
+@utility agent-switch-pulse {
+  animation: agent-switch-pulse 200ms ease-out;
+}
+@keyframes agent-switch-pulse {
+  0% { box-shadow: 0 0 0 0 hsl(19 100% 48% / 0.5); }
+  100% { box-shadow: 0 0 0 8px hsl(19 100% 48% / 0); }
+}
+
+/* Reduced motion — design doc §Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .caret-blink { display: none; }
+}

@@ -1,0 +1,252 @@
+'use client'
+
+import { useMemo } from 'react'
+import {
+  ArrowUp,
+  AtSign,
+  Boxes,
+  Brain,
+  CheckSquare,
+  CircleDollarSign,
+  FileText,
+  FlaskConical,
+  Hash,
+  Mic,
+  Package,
+  Plus,
+  RotateCcw,
+  ScrollText,
+  Sparkles,
+  Wrench,
+  Zap,
+  Volume2,
+  VolumeX,
+  type LucideIcon,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { useAppStore, type ChatMode } from '@/lib/store'
+import { cn } from '@/lib/utils'
+import AgentModelPicker from './agent-model-picker'
+import { sendUserMessage } from '@/lib/bridge'
+
+const MODES: { id: ChatMode; label: string; hint: string; icon: LucideIcon }[] = [
+  { id: 'normal', label: 'Normal', hint: 'Balanced agent mode — default', icon: Sparkles },
+  { id: 'plan', label: 'Plan', hint: 'Plan first, do later — only produces a plan', icon: CheckSquare },
+  { id: 'research', label: 'Research', hint: 'Read-only — no writes, only read + cite', icon: FlaskConical },
+  { id: 'quick', label: 'Quick', hint: 'Fast single-turn — no agent loop', icon: Zap },
+  { id: 'code', label: 'Code', hint: 'Coder agent — diff-first, no chit-chat', icon: Wrench },
+]
+
+const SLASH_COMMANDS = [
+  { cmd: '/help', desc: 'Show all commands' },
+  { cmd: '/mode', desc: 'Switch composer mode' },
+  { cmd: '/model', desc: 'Switch underlying model' },
+  { cmd: '/undo', desc: 'Roll back last turn' },
+  { cmd: '/clear', desc: 'Clear session messages' },
+  { cmd: '/export', desc: 'Export session transcript' },
+]
+
+const MACROS = [
+  { cmd: '!deploy', desc: 'Run prod deploy checklist' },
+  { cmd: '!pnpm', desc: 'Use pnpm instead of npm' },
+  { cmd: '!lintcommit', desc: 'Lint then commit' },
+  { cmd: '!deploy-checklist', desc: 'Open deploy checklist' },
+]
+
+const MENTIONS: { cmd: string; desc: string; icon: LucideIcon }[] = [
+  { cmd: '@blueprints', desc: 'Reusable agent blueprints', icon: Boxes },
+  { cmd: '@skills', desc: 'Installed agent skills', icon: Brain },
+  { cmd: '@files', desc: 'Workspace files', icon: FileText },
+  { cmd: '@packages', desc: 'Installed npm packages', icon: Package },
+]
+
+function HintPopover({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="absolute bottom-full left-2 z-30 mb-1.5 w-64 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+      <div className="border-b border-border bg-zinc-900/60 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+        {title}
+      </div>
+      <div className="scroll-thin max-h-56 overflow-y-auto py-0.5">{children}</div>
+    </div>
+  )
+}
+
+interface HintItem { cmd: string; desc: string; icon?: LucideIcon; color?: string }
+
+function HintRow({ item }: { item: HintItem }) {
+  const Icon = item.icon
+  return (
+    <button type="button" className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-accent/60">
+      {Icon && <Icon className="h-3 w-3 text-muted-foreground" />}
+      <span className={cn('font-mono text-[11px]', item.color ?? 'text-orange-300')}>{item.cmd}</span>
+      <span className="ml-auto truncate text-[10px] text-muted-foreground">{item.desc}</span>
+    </button>
+  )
+}
+
+function IconBtn({ icon: Icon, label, onClick, hidden }: { icon: LucideIcon; label: string; onClick: () => void; hidden?: boolean }) {
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      className={cn(
+        'h-7 w-7 text-muted-foreground hover:text-foreground',
+        hidden && 'hidden sm:inline-flex'
+      )}
+      onClick={onClick}
+      title={label}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </Button>
+  )
+}
+
+interface Props {
+  budget?: { spent: number; cap: number; tokens: number }
+}
+
+export default function ChatComposer({ budget }: Props) {
+  const composerValue = useAppStore((s) => s.composerValue)
+  const setComposerValue = useAppStore((s) => s.setComposerValue)
+  const composerMode = useAppStore((s) => s.composerMode)
+  const setComposerMode = useAppStore((s) => s.setComposerMode)
+  const notify = useAppStore((s) => s.notify)
+  const activeSession = useAppStore((s) =>
+    s.sessions.find((x) => x.id === s.activeSessionId)
+  )
+
+  const spent = budget?.spent ?? activeSession?.spent ?? 0
+  const cap = budget?.cap ?? 5
+  const tokens = budget?.tokens ?? activeSession?.tokens ?? 0
+
+  const hint = useMemo(() => {
+    const v = composerValue.trimStart()
+    if (!v) return null
+    if (v.startsWith('/')) return { kind: 'slash' as const, q: v.slice(1) }
+    if (v.startsWith('!')) return { kind: 'macro' as const, q: v.slice(1) }
+    if (v.startsWith('@')) return { kind: 'mention' as const, q: v.slice(1) }
+    return null
+  }, [composerValue])
+
+  const filterBy = (q: string) => <T extends { cmd: string }>(arr: T[]) =>
+    arr.filter((c) => c.cmd.includes(q))
+
+  const hintList: { title: string; items: HintItem[] } | null = (() => {
+    if (!hint) return null
+    const f = filterBy(hint.q)
+    if (hint.kind === 'slash')
+      return { title: 'Slash commands', items: f(SLASH_COMMANDS).map((c) => ({ ...c, color: 'text-orange-300' })) }
+    if (hint.kind === 'macro')
+      return { title: 'Macros', items: f(MACROS).map((c) => ({ ...c, color: 'text-orange-300' })) }
+    return {
+      title: 'Mention',
+      items: f(MENTIONS).map((c) => ({ ...c, color: 'text-sky-300' })),
+    }
+  })()
+
+  const canSend = composerValue.trim().length > 0
+
+  const send = () => {
+    if (!canSend) return
+    const text = composerValue
+    void sendUserMessage(text)
+  }
+
+  return (
+    <div className="relative border-t border-border bg-card/40 px-2 py-2">
+      {hintList && hintList.items.length > 0 && (
+        <HintPopover title={hintList.title}>
+          {hintList.items.map((c) => <HintRow key={c.cmd} item={c} />)}
+        </HintPopover>
+      )}
+
+      {/* mode + agent + budget row */}
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <ToggleGroup
+          type="single"
+          value={composerMode}
+          onValueChange={(v) => v && setComposerMode(v as ChatMode)}
+          variant="outline"
+          size="sm"
+          className="h-6 shrink-0 overflow-hidden rounded-md border-border bg-background/40"
+        >
+          {MODES.map((m) => (
+            <Tooltip key={m.id}>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem
+                  value={m.id}
+                  className="h-6 gap-1 px-1.5 text-[10px] data-[state=on]:border-orange-500/60 data-[state=on]:bg-orange-500/10 data-[state=on]:text-orange-300"
+                >
+                  <m.icon className="h-3 w-3" />
+                  <span className="hidden sm:inline">{m.label}</span>
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent side="top">{m.hint}</TooltipContent>
+            </Tooltip>
+          ))}
+        </ToggleGroup>
+
+        <AgentModelPicker />
+
+        <div className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5">
+            <CircleDollarSign className="h-3 w-3 text-emerald-400" />
+            <span className="text-foreground">${spent.toFixed(2)}</span>
+            <span className="hidden text-muted-foreground/60 md:inline">/ ${cap.toFixed(2)} cap</span>
+          </span>
+          <span className="hidden items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 lg:flex">
+            <Zap className="h-3 w-3 text-orange-400" />
+            <span className="text-foreground">{(tokens / 1000).toFixed(0)}K</span>
+            <span className="text-muted-foreground/60">tok</span>
+          </span>
+        </div>
+      </div>
+
+      {/* input row */}
+      <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background/40 px-1.5 py-1 focus-within:border-orange-500/40 focus-within:ring-1 focus-within:ring-orange-500/30">
+        <IconBtn icon={Plus} label="Attach file" onClick={() => notify('Attach file')} />
+        <Textarea
+          value={composerValue}
+          onChange={(e) => setComposerValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              send()
+            }
+          }}
+          placeholder="Message the agent — use / for commands, ! for macros, @ to mention"
+          className="max-h-36 min-h-[28px] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-[12px] leading-relaxed shadow-none focus-visible:ring-0"
+          rows={1}
+        />
+        <div className="flex shrink-0 items-center gap-0.5">
+          <IconBtn icon={Mic} label="Voice input" onClick={() => notify('Voice input — coming soon')} />
+          <IconBtn icon={Volume2} label="TTS toggle" onClick={() => notify('TTS toggled')} />
+          <IconBtn icon={VolumeX} label="Mute" hidden onClick={() => notify('Speaker off')} />
+          <Button
+            size="icon"
+            className="h-7 w-7 shrink-0 rounded-md bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-40"
+            disabled={!canSend}
+            onClick={send}
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-1 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
+        <Hash className="h-2.5 w-2.5" />
+        <span>Enter to send · Shift+Enter newline · Esc clear</span>
+        <span className="ml-auto flex items-center gap-1"><AtSign className="h-2.5 w-2.5" /> mention</span>
+        <span className="ml-1 flex items-center gap-1"><ScrollText className="h-2.5 w-2.5" /> slash</span>
+        <span className="ml-1 flex items-center gap-1"><RotateCcw className="h-2.5 w-2.5" /> !macro</span>
+      </div>
+    </div>
+  )
+}
