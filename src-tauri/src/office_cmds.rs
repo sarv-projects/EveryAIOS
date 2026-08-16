@@ -98,3 +98,20 @@ pub fn pdf_open(path: String) -> Result<PdfPayload, String> {
         texts: info.texts,
     })
 }
+
+/// P4.4 — the raw PDF bytes as a base64 `data:application/pdf;base64,` URL,
+/// so the webview's pdf.js canvas renderer can draw real pages (the text-only
+/// `pdf_open` stays as the accessibility / extraction layer).
+#[tauri::command]
+pub fn pdf_bytes(path: String) -> Result<String, String> {
+    let bytes = read_bytes(&path)?;
+    Ok(format!(
+        "data:application/pdf;base64,{}",
+        base64_encode(&bytes)
+    ))
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}

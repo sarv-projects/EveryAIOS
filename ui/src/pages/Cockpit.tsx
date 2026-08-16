@@ -9,6 +9,16 @@ import {
   type CockpitState,
   type InterruptCard,
 } from "../lib/cockpit";
+import {
+  guardEstop,
+  guardPolicy,
+  guardReceipts,
+  guardRespond,
+  guardTickets,
+  type GuardPolicy,
+  type GuardReceipt,
+  type GuardTicket,
+} from "../lib/guard";
 
 const STATUS_LABEL: Record<string, string> = {
   running: "LIVE",
@@ -81,6 +91,98 @@ function AgentCardView({
   );
 }
 
+function DecisionDetails({ d }: { d: GuardTicket["decision"] }) {
+  if (!d) return null;
+  const hasScript = d.scriptLines.length > 0 || d.executionTarget !== "";
+  const hasNet = d.networkDestinations.length > 0;
+  const hasEnv = d.envVars.length > 0;
+  if (!hasScript && !hasNet && !hasEnv && !d.proposedDiff) return null;
+  return (
+    <div className="ticket-details">
+      {d.proposedDiff && (
+        <div className="ticket-diff">
+          <div className="ticket-detail-label">Proposed diff</div>
+          <pre className="mono small">{d.proposedDiff}</pre>
+        </div>
+      )}
+      {hasScript && (
+        <div className="ticket-script">
+          <div className="ticket-detail-label">Script</div>
+          {d.executionTarget && <div className="mono small muted">target: {d.executionTarget}</div>}
+          <pre className="mono small">{d.scriptLines.join("\n")}</pre>
+        </div>
+      )}
+      {hasEnv && (
+        <div className="ticket-script">
+          <div className="ticket-detail-label">Env vars</div>
+          <pre className="mono small">{d.envVars.join("\n")}</pre>
+        </div>
+      )}
+      {hasNet && (
+        <div className="ticket-script">
+          <div className="ticket-detail-label">Network destinations</div>
+          <pre className="mono small">{d.networkDestinations.join("\n")}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TicketCardView({
+  ticket,
+  onRespond,
+  responded,
+}: {
+  ticket: GuardTicket;
+  onRespond: (id: string, action: "approve" | "reject") => void;
+  responded?: string;
+}) {
+  const d = ticket.decision;
+  const web = d?.webAction;
+  return (
+    <div className={`ticket-card${web ? " web-confirm" : ""}`}>
+      <div className="interrupt-head">
+        {web ? <span className="chip warn">WEB ACTION</span> : <span className="chip wait">APPROVE</span>}
+        <span className="mono small muted">{ticket.ticketId}</span>
+        <span className={`risk-chip risk-${ticket.risk}`}>{ticket.risk}</span>
+      </div>
+      <p className="interrupt-prompt">
+        {ticket.agentId} wants to <strong>{ticket.operation}</strong> via{" "}
+        <span className="mono">{ticket.toolId}</span>
+        {d?.goal && <span className="muted"> — {d.goal}</span>}
+      </p>
+      {web && (
+        <div className="web-confirm-banner">
+          ⚠ Sensitive web action: <strong>{web}</strong> (checkout / payment / account change).
+          This needs your explicit confirmation.
+        </div>
+      )}
+      <div className="ticket-paths mono small">
+        {ticket.paths.length === 0
+          ? "(no path scope)"
+          : ticket.paths.map((p) => <div key={p}>{p}</div>)}
+      </div>
+      <DecisionDetails d={d} />
+      <div className="interrupt-options">
+        <button
+          className="approve"
+          disabled={responded !== undefined}
+          onClick={() => onRespond(ticket.ticketId, "approve")}
+        >
+          {responded === "approve" ? "Approved ✓" : web ? "Confirm & run" : "Approve & run"}
+        </button>
+        <button
+          className="reject"
+          disabled={responded !== undefined}
+          onClick={() => onRespond(ticket.ticketId, "reject")}
+        >
+          {responded === "reject" ? "Rejected" : "Reject"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function InterruptCardView({
   card,
   onAnswer,
@@ -108,6 +210,10 @@ function InterruptCardView({
 
 export default function Cockpit() {
   const [state, setState] = useState<CockpitState>({ agents: [], interrupts: [], quiet: false });
+  const [tickets, setTickets] = useState<GuardTicket[]>([]);
+  const [ticketResponses, setTicketResponses] = useState<Record<string, string>>({});
+  const [policy, setPolicy] = useState<GuardPolicy | null>(null);
+  const [receipts, setReceipts] = useState<GuardReceipt[]>([]);
   const [slideOpen, setSlideOpen] = useState(false);
   const [nowTick, setNowTick] = useState(Date.now());
   const [sent, setSent] = useState<Record<string, string>>({});
@@ -127,6 +233,35 @@ export default function Cockpit() {
     return () => {
       if (timer.current !== null) window.clearInterval(timer.current);
     };
+  }, []);
+
+  // Poll the Guard-2 ticket queue (same 2s cadence).
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        setTickets(await guardTickets());
+      } catch {
+        /* transient — keep polling */
+      }
+    };
+    poll();
+    const t = window.setInterval(poll, 2000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  // Poll the Guard-2 policy + receipts (lower cadence — they change rarely).
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        setPolicy(await guardPolicy());
+        setReceipts(await guardReceipts());
+      } catch {
+        /* transient — keep polling */
+      }
+    };
+    poll();
+    const t = window.setInterval(poll, 5000);
+    return () => window.clearInterval(t);
   }, []);
 
   // Tick the elapsed clocks every second.
@@ -188,6 +323,25 @@ export default function Cockpit() {
     }
   }, []);
 
+  const onTicket = useCallback(async (id: string, action: "approve" | "reject") => {
+    setTicketResponses((r) => ({ ...r, [id]: action }));
+    try {
+      await guardRespond(id, action);
+    } catch {
+      /* control channel may be absent — the card still flips */
+    }
+    setTickets((ts) => ts.filter((t) => t.ticketId !== id));
+  }, []);
+
+  const onEstop = useCallback(async (pulled: boolean) => {
+    try {
+      const v = await guardEstop(pulled);
+      setPolicy((p) => (p ? { ...p, estopPulled: v } : p));
+    } catch {
+      /* non-Tauri preview ignores */
+    }
+  }, []);
+
   const totals = state.agents.reduce(
     (acc, a) => ({
       in: acc.in + a.tokens.tokens_in,
@@ -224,6 +378,50 @@ export default function Cockpit() {
       {state.quiet && (
         <div className="quiet-line mono small">
           {quietLine} · tokens in {fmtTokens(totals.in)} / out {fmtTokens(totals.out)}
+        </div>
+      )}
+
+      {/* Guard-2 policy + estop strip (J21). */}
+      {policy && (
+        <div className={`guard-strip${policy.estopPulled ? " estopped" : ""}`}>
+          <span className="mono small">profile: {policy.profile}</span>
+          <span className="mono small">min confidence: {policy.minConfidenceForAuto}</span>
+          <span className="mono small">feedback learning: {policy.userFeedbackLearning ? "on" : "off"}</span>
+          <button
+            className={policy.estopPulled ? "estop active" : "estop"}
+            onClick={() => onEstop(!policy.estopPulled)}
+          >
+            {policy.estopPulled ? "⛔ ESTOPPED — click to reset" : "ESTOP"}
+          </button>
+        </div>
+      )}
+
+      {/* Guard-2 approval cards (authorization tickets) — blocking. */}
+      {tickets.length > 0 && (
+        <div className="interrupts">
+          {tickets.map((t) => (
+            <TicketCardView
+              key={t.ticketId}
+              ticket={t}
+              onRespond={onTicket}
+              responded={ticketResponses[t.ticketId]}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Approval/denial audit receipts (P7.5). */}
+      {receipts.length > 0 && (
+        <div className="receipts">
+          <div className="panel-subtitle muted small">Audit receipts ({receipts.length})</div>
+          {receipts.slice(-5).map((r) => (
+            <div key={r.receiptId} className="receipt-row mono small">
+              <span className={`chip ${r.action === "approve" ? "live" : ""}`}>{r.action}</span>
+              <span>{r.operation}</span>
+              <span className="muted">{r.ticketId}</span>
+              <span className="muted">{r.hash.slice(0, 10)}…</span>
+            </div>
+          ))}
         </div>
       )}
 

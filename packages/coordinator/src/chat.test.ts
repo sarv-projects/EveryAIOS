@@ -12,13 +12,16 @@ import {
   activeStreamCount,
   cancelChatStream,
   extractFacts,
+  fileToFacts,
   FrameProviderBridge,
+  injectBelowBoundary,
   runChatStream,
   type ChatEvent,
   type ChatStreamParams,
   type ProviderBridge,
   type ProviderChunk,
 } from "./chat";
+import { CACHE_BOUNDARY } from "./prompt";
 
 /** Collect emitted events for assertions. */
 function collector() {
@@ -135,13 +138,16 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
 
     await runChatStream(PARAMS, emit, bridge, 10, async (method, params) => {
       requests.push({ method, params: params as Record<string, unknown> });
-      return { written: 1 };
+      return method === "memory/write" ? { written: 1 } : { coreFacts: [] };
     });
 
-    expect(requests).toHaveLength(1);
-    expect(requests[0]!.method).toBe("memory/write");
-    expect(requests[0]!.params).toMatchObject({ sessionId: "s1" });
-    expect((requests[0]!.params.facts as string[])[0]).toContain("Q3 budget");
+    // Two dispatches: the P5.3 warm-set fetch (memory/plan) + the P5.1 fact
+    // persistence (memory/write).
+    expect(requests.map((r) => r.method)).toContain("memory/plan");
+    const writes = requests.filter((r) => r.method === "memory/write");
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.params).toMatchObject({ sessionId: "s1" });
+    expect((writes[0]!.params.facts as string[])[0]).toContain("Q3 budget");
   });
 
   test("cancellation aborts the provider bridge and emits cancelled", async () => {
@@ -251,6 +257,61 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     expect(error?.code).toBe("budget_exceeded");
     expect(error?.message).toContain("stopped: $2.00 limit");
     expect(activeStreamCount()).toBe(0);
+  });
+
+  test("injectBelowBoundary keeps the stable prefix unchanged", () => {
+    const prompt = `# System\nstable segment one\n${CACHE_BOUNDARY}\nvolatile segment`;
+    const out = injectBelowBoundary(prompt, "<memory_warm_set>fact</memory_warm_set>");
+    // The stable prefix (everything before the boundary) is byte-identical.
+    expect(out.indexOf("stable segment one")).toBe(prompt.indexOf("stable segment one"));
+    // The warm set lands BELOW the boundary marker.
+    expect(out.indexOf(CACHE_BOUNDARY)).toBeLessThan(out.indexOf("<memory_warm_set>"));
+    expect(out).toContain("<memory_warm_set>fact</memory_warm_set>");
+    // No boundary marker → append at the end.
+    expect(injectBelowBoundary("no marker", "B")).toBe("no marker\n\nB");
+  });
+
+  test("fileToFacts uses core-files chunking and stays within budget", () => {
+    const text =
+      "The Q3 budget was finalized at twelve thousand dollars. " +
+      "The marketing team approved the new slide deck. ";
+    const facts = fileToFacts(text, "text/markdown", 1000);
+    expect(facts.length).toBeGreaterThan(0);
+    expect(facts.join(" ")).toContain("Q3 budget");
+    // A tiny budget yields no facts (never floods memory).
+    expect(fileToFacts(text, "text/markdown", 1)).toEqual([]);
+  });
+
+  test("P5.3: memory/plan warm set is injected below the cache boundary", async () => {
+    const { events, emit } = collector();
+    let systemPrompt = "";
+    const bridge: ProviderBridge = {
+      async *streamChat(req) {
+        systemPrompt = req.messages[0]!.content;
+        yield { type: "text", text: "ok" };
+        yield { type: "done", usage: { promptTokens: 1, completionTokens: 1 } };
+      },
+    };
+    const request = async (method: string, _params: unknown) => {
+      if (method === "memory/plan") {
+        return {
+          warmSetTokens: 12,
+          remainingTokens: 32000,
+          scopeLeakageFloor: 0,
+          coreFacts: ["The Q3 budget was finalized at $12,400."],
+        };
+      }
+      return {};
+    };
+
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+
+    expect(systemPrompt).toContain("<memory_warm_set>");
+    expect(systemPrompt).toContain("The Q3 budget was finalized at $12,400.");
+    expect(systemPrompt.indexOf(CACHE_BOUNDARY)).toBeLessThan(
+      systemPrompt.indexOf("<memory_warm_set>"),
+    );
+    expect(events.some((e) => e.type === "error")).toBe(false);
   });
 
   test("mobile credit hooks are stripped from the desktop loop", async () => {

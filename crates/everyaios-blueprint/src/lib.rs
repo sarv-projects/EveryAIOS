@@ -23,6 +23,7 @@ pub mod automation;
 pub mod blueprint;
 pub mod checkpoint;
 pub mod frontmatter;
+pub mod iteration;
 pub mod md;
 pub mod plan_cache;
 pub mod spec;
@@ -38,6 +39,11 @@ pub use checkpoint::{
 };
 pub use frontmatter::{
     parse_frontmatter, AgentConfig, ApprovalMode, FrontmatterError, PermissionMode,
+};
+pub use iteration::{
+    BudgetError, CircuitBreak, CircuitBreaker, InterruptReason, IterationBudget, LoopDetector,
+    LoopVerdict, McqOption, Scope, StepKind, TimeoutPolicy, PARENT_MAX_ITERATIONS,
+    SUBAGENT_MAX_ITERATIONS, SUBAGENT_TIMEOUT_CUSTOM_SECS, SUBAGENT_TIMEOUT_GLOBAL_SECS,
 };
 pub use md::{BlueprintDoc, MdError};
 pub use plan_cache::{signature, PlanCache, PlanCacheError, PlanEntry, DEFAULT_SIMILARITY};

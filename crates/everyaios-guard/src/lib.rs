@@ -29,10 +29,12 @@
 
 pub mod blocklist;
 pub mod configscan;
+pub mod decision;
 pub mod injection;
 pub mod loopguard;
 pub mod manifest;
 pub mod pathfloor;
+pub mod permissions;
 pub mod prescan;
 pub mod profiles;
 pub mod redteam;
@@ -40,8 +42,15 @@ pub mod ticket;
 pub mod urlfloor;
 
 pub use blocklist::{BLOCKLIST, BlocklistCategory, blocklist_for};
+pub use decision::{DecisionPackage, WebActionKind};
+pub use injection::Estop;
+pub use permissions::{Operation, PermissionsPolicy, PolicyAction, Rule};
 pub use prescan::{PreExecScan, ScanTarget, scan_path, scan_shell, scan_url};
-pub use ticket::{ApprovalSource, AuthorizationTicket, RiskLevel, TicketState, TicketStore};
+pub use profiles::{GateAction, Hook, Profile};
+pub use ticket::{
+    ApprovalSource, AuthorizationTicket, GuardReceipt, ReceiptAction, RiskLevel, TicketState,
+    TicketStore,
+};
 
 /// Scan everything pre-exec: shell string, filesystem paths, URLs.
 /// Returns every blocklist pattern that matched any target.

@@ -10,11 +10,28 @@
 //! the schema here is exactly what that layer will hydrate on boot.
 
 use serde_json::{json, Value};
+use std::path::Path;
 
 use everyaios_memory::{
     Bm25Doc, Bm25Index, ContextPlanner, EdgeType, FsEvent, GhostIndex, GraphStore, MemoryEntry,
     NodeKind, PagedMemory, PlannerConfig, UsageLedger,
 };
+
+/// Persistence / parse failures for the memory service (on-disk durability).
+#[derive(Debug, thiserror::Error)]
+pub enum MemoryServiceError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("json error: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
+/// The durable slice of the store (what survives a reboot).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PersistedMemory {
+    counter: u64,
+    facts: Vec<StoredFact>,
+}
 
 /// One stored fact (the `memory/read` result shape).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -67,6 +84,35 @@ impl MemoryService {
         format!("mem:{}", self.counter)
     }
 
+    /// Ingest one fact into every surface (paged + ghost + graph + BM25 +
+    /// the durable `facts` list). Shared by `write` and `load_from`.
+    fn ingest(&mut self, id: String, session: &str, text: String) {
+        self.paged.write(MemoryEntry {
+            id: id.clone(),
+            content: text.clone(),
+            importance: 8,
+        });
+        self.ghost.index(&format!("memory://{session}"), &id);
+        self.graph.add_node(&id, NodeKind::Episodic, session);
+        self.graph.add_edge(
+            &format!("session:{session}"),
+            &id,
+            EdgeType::DerivedFrom,
+            1.0,
+            self.counter,
+        );
+        self.docs.push(Bm25Doc {
+            id: id.clone(),
+            text: text.clone(),
+        });
+        self.facts.push(StoredFact {
+            id,
+            session_id: session.to_string(),
+            text,
+            importance: 8,
+        });
+    }
+
     /// P5.1 `memory/write`: store declarative fact candidates for a session.
     /// Each fact lands in paged memory + the BM25 index + the ghost index
     /// (keyed by `memory://<session>`) + an episodic graph node. Returns how
@@ -74,35 +120,12 @@ impl MemoryService {
     pub fn write(&mut self, session: &str, facts: &[String]) -> usize {
         let mut n = 0usize;
         for raw in facts {
-            let text = raw.trim();
+            let text = raw.trim().to_string();
             if text.is_empty() {
                 continue;
             }
             let id = self.next_id();
-            self.paged.write(MemoryEntry {
-                id: id.clone(),
-                content: text.to_string(),
-                importance: 8,
-            });
-            self.ghost.index(&format!("memory://{session}"), &id);
-            self.graph.add_node(&id, NodeKind::Episodic, session);
-            self.graph.add_edge(
-                &format!("session:{session}"),
-                &id,
-                EdgeType::DerivedFrom,
-                1.0,
-                self.counter,
-            );
-            self.docs.push(Bm25Doc {
-                id: id.clone(),
-                text: text.to_string(),
-            });
-            self.facts.push(StoredFact {
-                id,
-                session_id: session.to_string(),
-                text: text.to_string(),
-                importance: 8,
-            });
+            self.ingest(id, session, text);
             n += 1;
         }
         self.paged.flush_writes();
@@ -110,6 +133,42 @@ impl MemoryService {
             self.bm25.build(self.docs.clone());
         }
         n
+    }
+
+    /// P5.1 on-disk durability: persist the durable slice (facts + counter)
+    /// to `path` atomically. Indexes (paged/ghost/graph/BM25) are rebuilt on
+    /// load, so only the source facts need writing.
+    pub fn save_to(&self, path: &Path) -> Result<(), MemoryServiceError> {
+        let persisted = PersistedMemory {
+            counter: self.counter,
+            facts: self.facts.clone(),
+        };
+        let bytes = serde_json::to_vec_pretty(&persisted)?;
+        atomic_write(path, &bytes)?;
+        Ok(())
+    }
+
+    /// P5.1 on-disk durability: hydrate a store from `path`, rebuilding every
+    /// derived index from the persisted facts.
+    pub fn load_from(path: &Path) -> Result<Self, MemoryServiceError> {
+        let bytes = std::fs::read(path)?;
+        let persisted: PersistedMemory = serde_json::from_slice(&bytes)?;
+        let mut m = Self::new();
+        m.counter = persisted.counter;
+        for f in &persisted.facts {
+            m.ingest(f.id.clone(), &f.session_id, f.text.clone());
+        }
+        m.paged.flush_writes();
+        if !m.docs.is_empty() {
+            m.bm25.build(m.docs.clone());
+        }
+        Ok(m)
+    }
+
+    /// P5.3: the core warm set (durable facts) the coordinator injects below
+    /// the cache boundary on each turn.
+    pub fn core_facts(&self) -> Vec<String> {
+        self.facts.iter().map(|f| f.text.clone()).collect()
     }
 
     /// P5.1 `memory/read`: BM25-ranked fact ids for a query (the vectorless
@@ -127,6 +186,7 @@ impl MemoryService {
             "warmSetTokens": warm,
             "remainingTokens": self.planner.remaining(),
             "scopeLeakageFloor": self.planner.config.scope_leakage_floor,
+            "coreFacts": self.core_facts(),
         })
     }
 
@@ -245,10 +305,50 @@ impl MemoryService {
                 let event = parse_fs_event(params)?;
                 Ok(json!({ "affected": self.ghost_event(&event) }))
             }
+            // P5.4: apply a debounced batch of storage watcher events in one
+            // call (each `{kind, path}` / `{kind, from, to}`).
+            "memory/ghost_batch" => {
+                let events = params
+                    .get("events")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| "memory/ghost_batch requires events[]".to_string())?;
+                let mut affected = 0usize;
+                for e in events {
+                    let event = parse_fs_event(e)?;
+                    affected += self.ghost_event(&event);
+                }
+                Ok(json!({ "affected": affected, "events": events.len() }))
+            }
+            "memory/core" => Ok(json!({ "facts": self.core_facts() })),
+            "memory/save" => {
+                let path = params
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "memory/save requires path".to_string())?;
+                self.save_to(Path::new(path)).map_err(|e| e.to_string())?;
+                Ok(json!({ "saved": self.facts.len() }))
+            }
+            "memory/load" => {
+                let path = params
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "memory/load requires path".to_string())?;
+                *self = Self::load_from(Path::new(path)).map_err(|e| e.to_string())?;
+                Ok(json!({ "loaded": self.facts.len() }))
+            }
             "usage/snapshot" => Ok(self.usage_snapshot()),
             _ => Err(format!("method not found: {method}")),
         }
     }
+}
+
+/// Write bytes atomically: temp file + rename (never a half-written store).
+fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut tmp = path.as_os_str().to_os_string();
+    tmp.push(".tmp");
+    let tmp = Path::new(&tmp);
+    std::fs::write(tmp, bytes)?;
+    std::fs::rename(tmp, path)
 }
 
 /// Parse a `memory/ghost` params object into an [`FsEvent`].
@@ -351,5 +451,85 @@ mod tests {
 
         assert!(m.handle("bogus/method", &json!({})).is_err());
         assert!(m.handle("memory/ghost", &json!({ "kind": "removed" })).is_err());
+    }
+
+    #[test]
+    fn ghost_batch_applies_storage_events() {
+        let mut m = MemoryService::new();
+        m.write("s1", &["Fact alpha about the budget sheet.".into()]);
+        // A storage watcher batch: one tombstone + one rename (the latter is
+        // a no-op against a `memory://` path — both must parse + apply).
+        let out = m
+            .handle(
+                "memory/ghost_batch",
+                &json!({
+                    "events": [
+                        { "kind": "removed", "path": "memory://s1" },
+                        { "kind": "renamed", "from": "/a", "to": "/b" },
+                    ]
+                }),
+            )
+            .unwrap();
+        assert_eq!(out["events"], 2);
+        assert_eq!(out["affected"], 1);
+        assert!(m.ghost.ids_for("memory://s1").is_empty());
+    }
+
+    #[test]
+    fn save_then_load_rebuilds_derived_indexes() {
+        let dir = std::env::temp_dir().join(format!("everyaios-memory-persist-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("memory.db");
+
+        let mut m = MemoryService::new();
+        m.write("s1", &["The Q3 budget was twelve thousand dollars.".into()]);
+        m.save_to(&path).unwrap();
+
+        // Load into a fresh store — derived BM25 index must be rebuilt so
+        // `read` still surfaces the fact.
+        let loaded = MemoryService::load_from(&path).unwrap();
+        assert_eq!(loaded.facts.len(), 1);
+        let hits = loaded.read("budget", 5);
+        assert_eq!(hits[0], "mem:1", "BM25 rebuilt on load: {hits:?}");
+
+        // Counter resumes after load (no id collision).
+        let mut loaded = loaded;
+        assert_eq!(loaded.write("s2", &["A second fact about the marketing deck.".into()]), 1);
+        assert_eq!(loaded.facts[1].id, "mem:2");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn core_facts_and_memory_core_dispatch() {
+        let mut m = MemoryService::new();
+        m.write("s1", &["Alpha fact about the budget.".into()]);
+        let plan = m.plan(200);
+        let facts = plan["coreFacts"].as_array().unwrap();
+        assert_eq!(facts.len(), 1);
+        assert!(facts[0].as_str().unwrap().contains("budget"));
+
+        let out = m.handle("memory/core", &json!({})).unwrap();
+        assert_eq!(out["facts"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn save_and_load_via_dispatch() {
+        let dir = std::env::temp_dir().join(format!("everyaios-memory-dispatch-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("memory.db");
+        let path_s = path.to_string_lossy().to_string();
+
+        let mut m = MemoryService::new();
+        m.write("s1", &["A durable declarative fact.".into()]);
+        let saved = m.handle("memory/save", &json!({ "path": path_s })).unwrap();
+        assert_eq!(saved["saved"], 1);
+
+        let mut m2 = MemoryService::new();
+        let loaded = m2.handle("memory/load", &json!({ "path": path_s })).unwrap();
+        assert_eq!(loaded["loaded"], 1);
+        assert_eq!(m2.core_facts().len(), 1);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

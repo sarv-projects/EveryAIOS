@@ -23,7 +23,8 @@
 import { ConversationEngine } from "@personal-ai/core-engine";
 import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
 import { StreamSession } from "@personal-ai/core-ai";
-import { buildDesktopSystemPrompt, type PersonaId } from "./prompt";
+import { chunkText, estimateTokens } from "@personal-ai/core-files";
+import { buildDesktopSystemPrompt, CACHE_BOUNDARY, type PersonaId } from "./prompt";
 
 /** Minimal B1-base turn parameters (P1.5 owns full system-prompt assembly). */
 export interface ChatStreamParams {
@@ -290,7 +291,26 @@ export async function runChatStream(
       if (params.styleMemoryBlock !== undefined) opts.styleMemoryBlock = params.styleMemoryBlock;
       if (params.sourceLabels !== undefined) opts.sourceLabels = params.sourceLabels;
       if (params.userDocuments !== undefined) opts.userDocuments = params.userDocuments;
-      const system = buildDesktopSystemPrompt(opts);
+      let system = buildDesktopSystemPrompt(opts);
+      // P5.3 per-turn planner injection: fetch the core warm set from Rust
+      // and inject it BELOW the cache boundary so the stable prefix stays
+      // byte-identical across turns (C7 warm-set injection).
+      if (request) {
+        try {
+          const plan = (await request("memory/plan", { personaTokens: 0 })) as {
+            coreFacts?: string[];
+          };
+          const facts = plan?.coreFacts ?? [];
+          if (facts.length > 0) {
+            system = injectBelowBoundary(
+              system,
+              `<memory_warm_set>\n${facts.join("\n")}\n</memory_warm_set>`,
+            );
+          }
+        } catch {
+          /* memory/plan is best-effort — a missing handler never blocks the turn */
+        }
+      }
       return `${system}\n\n<user>\n${input.text}\n</user>`;
     },
     streamProvider: async function* (prompt, signal) {
@@ -436,4 +456,35 @@ export function extractFacts(text: string, maxFacts = 8): string[] {
     .map((s) => s.trim().replace(/^["'\-\u2013\u2014\u2022*]+|["'\-\u2013\u2014\u2022*]+$/g, ""))
     .filter((s) => s.length >= 12 && s.length <= 280 && !s.endsWith("?"))
     .slice(0, maxFacts);
+}
+
+/**
+ * P5.3 — inject a block directly BELOW the cache boundary marker, so
+ * `stablePrefixOf()` is unchanged (the warm set varies per turn and must
+ * never dirty the cached prefix). Falls back to appending when the prompt
+ * has no boundary marker.
+ */
+export function injectBelowBoundary(prompt: string, block: string): string {
+  const idx = prompt.indexOf(CACHE_BOUNDARY);
+  if (idx === -1) return `${prompt}\n\n${block}`;
+  const end = idx + CACHE_BOUNDARY.length;
+  return `${prompt.slice(0, end)}\n${block}\n${prompt.slice(end)}`;
+}
+
+/**
+ * P5.1 core-files import — turn a file's text into declarative fact
+ * candidates using the core-files chunker + token estimator, capped so an
+ * oversized file never floods the memory store.
+ */
+export function fileToFacts(text: string, mime: string, maxTokens = 600): string[] {
+  const chunks = chunkText(text, mime);
+  const facts: string[] = [];
+  let budget = maxTokens;
+  for (const chunk of chunks) {
+    const cost = estimateTokens(chunk);
+    if (budget - cost < 0) break;
+    facts.push(...extractFacts(chunk));
+    budget -= cost;
+  }
+  return facts.slice(0, 16);
 }

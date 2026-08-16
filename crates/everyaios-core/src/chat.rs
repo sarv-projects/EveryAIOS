@@ -23,6 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use everyaios_vault::{Broker, LocalEndpoint, Vault, DEFAULT_SESSION_BUDGET_USD};
 
+use crate::guard_service::GuardService;
 use crate::memory_service::MemoryService;
 use crate::sidecar_link::{Inbound, SidecarLink, WriterHandle};
 
@@ -127,6 +128,9 @@ pub struct ChatRelay<W, R> {
     /// P5.1/P5.3/P5.4/P5.9: the in-process memory dispatch (facts, planner,
     /// ghost index, usage ledger) the sidecar calls via `memory/*` methods.
     memory: Arc<Mutex<MemoryService>>,
+    /// P7.5/J21: the Guard-2 pre-flight (tickets/policy/estop/profile) the
+    /// coordinator drives via `guard/*` methods; shared with the Tauri cards.
+    guard: Arc<Mutex<GuardService>>,
     on_event: Arc<Mutex<EventSink>>,
 }
 
@@ -136,6 +140,23 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         vault: Arc<Mutex<Vault>>,
         on_event: impl Fn(ChatWireEvent) + Send + 'static,
     ) -> Self {
+        Self::new_with_guard(
+            link,
+            vault,
+            Arc::new(Mutex::new(GuardService::new())),
+            on_event,
+        )
+    }
+
+    /// Construct with a **shared** [`GuardService`] (the Tauri shell owns it,
+    /// so approval cards and the coordinator's `guard/*` dispatch read/write
+    /// one ticket store — single source of truth).
+    pub fn new_with_guard(
+        link: SidecarLink<W, R>,
+        vault: Arc<Mutex<Vault>>,
+        guard: Arc<Mutex<GuardService>>,
+        on_event: impl Fn(ChatWireEvent) + Send + 'static,
+    ) -> Self {
         Self {
             link,
             vault,
@@ -143,6 +164,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             base_urls: Arc::new(Mutex::new(HashMap::new())),
             local_endpoints: Arc::new(Mutex::new(HashMap::new())),
             memory: Arc::new(Mutex::new(MemoryService::new())),
+            guard,
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
         }
     }
@@ -151,6 +173,22 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// read from it; the sidecar writes through `memory/*` requests).
     pub fn memory(&self) -> Arc<Mutex<MemoryService>> {
         Arc::clone(&self.memory)
+    }
+
+    /// The Guard-2 service handle (the Tauri approval cards read from it; the
+    /// coordinator drives `guard/*` requests against it).
+    pub fn guard(&self) -> Arc<Mutex<GuardService>> {
+        Arc::clone(&self.guard)
+    }
+
+    /// Load the J21 policy file into the Guard-2 service (builder pattern —
+    /// the shell calls this at boot with `~/.everyaios/permissions.toml`).
+    pub fn with_policy(&self, path: &std::path::Path) -> &Self {
+        self.guard
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .load_policy_from(path);
+        self
     }
 
     /// Register a keyless local endpoint (P1.8/A5). The src-tauri shell uses
@@ -190,6 +228,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let base_urls = Arc::clone(&self.base_urls);
         let local_endpoints = Arc::clone(&self.local_endpoints);
         let memory = Arc::clone(&self.memory);
+        let guard = Arc::clone(&self.guard);
 
         std::thread::spawn(move || loop {
             let inbound = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
@@ -215,6 +254,18 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // reply is synchronous and the sidecar can await it.
                     method if method.starts_with("memory/") || method == "usage/snapshot" => {
                         let mut svc = memory.lock().unwrap_or_else(|e| e.into_inner());
+                        match svc.handle(method, &params) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
+                    }
+                    // P7.5/J21: Guard-2 pre-flight + executor call-sites.
+                    method if method.starts_with("guard/") => {
+                        let mut svc = guard.lock().unwrap_or_else(|e| e.into_inner());
                         match svc.handle(method, &params) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);

@@ -183,6 +183,15 @@ impl WatchHandle {
             let _ = h.join();
         }
     }
+
+    /// Construct a handle from an already-running watcher thread (used by
+    /// `events::watch_events`, which shares this crate's stop/join contract).
+    pub(crate) fn from_parts(stop: Arc<AtomicBool>, join: std::thread::JoinHandle<()>) -> Self {
+        Self {
+            stop,
+            join: Some(join),
+        }
+    }
 }
 
 impl Drop for WatchHandle {

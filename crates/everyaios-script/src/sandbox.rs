@@ -19,19 +19,39 @@ use rquickjs::context::EvalOptions;
 use rquickjs::function::Async;
 use rquickjs::{AsyncContext, AsyncRuntime, Ctx, Function, Object, Promise, Value};
 
-use crate::{BrowserHost, PrimitiveCall, SandboxError, SandboxLimits, ScriptSandbox};
+use crate::{BrowserHost, DataHost, PrimitiveCall, SandboxError, SandboxLimits, ScriptSandbox};
 
 /// The sandbox implementation. `host` is shared so the real browser
 /// (everyaios-browser via everyaios-mcp) can back the SDK later; the mock
-/// in tests exercises the full contract.
+/// in tests exercises the full contract. `data_host` (optional) backs the
+/// `data.query` ref-handle surface (P5.8).
 pub struct Sandbox {
     limits: SandboxLimits,
     host: Arc<dyn BrowserHost>,
+    data_host: Option<Arc<dyn DataHost>>,
 }
 
 impl Sandbox {
     pub fn new(limits: SandboxLimits, host: Arc<dyn BrowserHost>) -> Self {
-        Self { limits, host }
+        Self {
+            limits,
+            host,
+            data_host: None,
+        }
+    }
+
+    /// Construct with a `data` SDK host (P5.8): scripts can call
+    /// `data.query(handle, term)` to pull matching lines from a ref handle.
+    pub fn with_data(
+        limits: SandboxLimits,
+        host: Arc<dyn BrowserHost>,
+        data_host: Arc<dyn DataHost>,
+    ) -> Self {
+        Self {
+            limits,
+            host,
+            data_host: Some(data_host),
+        }
     }
 }
 
@@ -39,6 +59,7 @@ impl ScriptSandbox for Sandbox {
     fn eval(&self, code: &str) -> Result<String, SandboxError> {
         let limits = self.limits;
         let host = Arc::clone(&self.host);
+        let data_host = self.data_host.clone();
         let code = code.to_string();
         std::thread::Builder::new()
             .name("everyaios-script".into())
@@ -47,7 +68,7 @@ impl ScriptSandbox for Sandbox {
                     .enable_all()
                     .build()
                     .map_err(|e| SandboxError::Runtime(e.to_string()))?;
-                rt.block_on(run_script(host, limits, &code))
+                rt.block_on(run_script(host, data_host, limits, &code))
             })
             .map_err(|e| SandboxError::Runtime(e.to_string()))?
             .join()
@@ -61,6 +82,7 @@ impl ScriptSandbox for Sandbox {
 
 async fn run_script(
     host: Arc<dyn BrowserHost>,
+    data_host: Option<Arc<dyn DataHost>>,
     limits: SandboxLimits,
     code: &str,
 ) -> Result<String, SandboxError> {
@@ -93,13 +115,16 @@ async fn run_script(
         .map_err(|e| SandboxError::Runtime(e.to_string()))?;
 
     let result = run_in_ctx(
-        &ctx,
-        &host,
+        EvalCtx {
+            ctx: &ctx,
+            host: &host,
+            data_host: data_host.as_ref(),
+            logs: &logs,
+            logs_truncated: &logs_truncated,
+            timed_out: &timed_out,
+        },
         limits,
         code,
-        &logs,
-        &logs_truncated,
-        &timed_out,
     )
     .await;
 
@@ -113,25 +138,33 @@ async fn run_script(
     result
 }
 
+/// The borrowed runtime pieces shared across one eval (bundled so the
+/// function stays under the argument-count lint).
+struct EvalCtx<'a> {
+    ctx: &'a AsyncContext,
+    host: &'a Arc<dyn BrowserHost>,
+    data_host: Option<&'a Arc<dyn DataHost>>,
+    logs: &'a Arc<Mutex<Vec<String>>>,
+    logs_truncated: &'a Arc<AtomicBool>,
+    timed_out: &'a Arc<AtomicBool>,
+}
+
 /// The actual eval, plus teardown that always runs GC first.
 async fn run_in_ctx(
-    ctx: &AsyncContext,
-    host: &Arc<dyn BrowserHost>,
+    ec: EvalCtx<'_>,
     limits: SandboxLimits,
     code: &str,
-    logs: &Arc<Mutex<Vec<String>>>,
-    logs_truncated: &Arc<AtomicBool>,
-    timed_out: &Arc<AtomicBool>,
 ) -> Result<String, SandboxError> {
     // Belt + suspenders: the interrupt handler catches JS-side loops; the
     // tokio timeout catches a script awaiting a Rust future that hangs.
     let grace = Duration::from_secs(limits.timeout_secs.saturating_add(5));
-    let run = ctx.async_with(async |ctx| {
+    let run = ec.ctx.async_with(async |ctx| {
         install_sdk(
             ctx.clone(),
-            host,
-            logs,
-            logs_truncated,
+            ec.host,
+            ec.data_host,
+            ec.logs,
+            ec.logs_truncated,
             limits.max_log_lines,
         )?;
         let promise: Promise = match ctx.eval_with_options(code, {
@@ -182,11 +215,11 @@ async fn run_in_ctx(
             ));
         }
 
-        let logs_out = logs.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let logs_out = ec.logs.lock().unwrap_or_else(|p| p.into_inner()).clone();
         let final_json = serde_json::json!({
             "result": json,
             "logs": logs_out,
-            "logs_truncated": logs_truncated.load(Ordering::SeqCst),
+            "logs_truncated": ec.logs_truncated.load(Ordering::SeqCst),
         });
         let final_out =
             serde_json::to_string(&final_json).map_err(|e| SandboxError::Runtime(e.to_string()))?;
@@ -196,7 +229,7 @@ async fn run_in_ctx(
     match tokio::time::timeout(grace, run).await {
         Err(_) => Err(SandboxError::Timeout(limits.timeout_secs)),
         Ok(Err(e)) => {
-            if timed_out.load(Ordering::SeqCst) {
+            if ec.timed_out.load(Ordering::SeqCst) {
                 Err(SandboxError::Timeout(limits.timeout_secs))
             } else {
                 Err(e)
@@ -215,6 +248,7 @@ async fn run_in_ctx(
 fn install_sdk<'js>(
     ctx: Ctx<'js>,
     host: &Arc<dyn BrowserHost>,
+    data_host: Option<&Arc<dyn DataHost>>,
     logs: &Arc<Mutex<Vec<String>>>,
     logs_truncated: &Arc<AtomicBool>,
     max_log_lines: u64,
@@ -292,8 +326,34 @@ fn install_sdk<'js>(
         .set("__console_log", log_fn)
         .map_err(|e| SandboxError::Runtime(e.to_string()))?;
 
+    // P5.8 `data.query` — a second channel backed by the DataHost (optional).
+    // `max_hits` is clamped so a script cannot request an unbounded dump.
+    if let Some(dh) = data_host {
+        let d = Arc::clone(dh);
+        let data_primitive = Function::new(
+            ctx.clone(),
+            Async(move |handle: String, term: String, max_hits: u32| {
+                let d = Arc::clone(&d);
+                async move {
+                    let hits = max_hits.clamp(1, 1000) as usize;
+                    match d.query(&handle, &term, hits) {
+                        Ok(v) => serde_json::to_string(&v).map_err(|e| PrimErr(e.to_string())),
+                        Err(e) => Err(PrimErr(format!("{e}"))),
+                    }
+                }
+            }),
+        );
+        ctx.globals()
+            .set("__data_primitive", data_primitive)
+            .map_err(|e| SandboxError::Runtime(e.to_string()))?;
+    }
+
     ctx.eval::<(), _>(SDK_PRELUDE)
         .map_err(|e| SandboxError::Js(format!("sdk install failed: {e}")))?;
+    if data_host.is_some() {
+        ctx.eval::<(), _>(DATA_PRELUDE)
+            .map_err(|e| SandboxError::Js(format!("data sdk install failed: {e}")))?;
+    }
     Ok(())
 }
 
@@ -340,6 +400,20 @@ fn map_eval_error(e: rquickjs::Error, ctx: &Ctx<'_>) -> SandboxError {
 /// The `browser` SDK prelude — mirrors ARCH/08 §8.4 exactly. Every method
 /// funnels through `__primitive` (the InnerCallHook channel) and returns a
 /// Promise of the parsed JSON result.
+/// The `data` SDK prelude (P5.8) — installed only when a [`DataHost`] is
+/// present. `data.query(handle, term)` pulls matching lines from a ref handle
+/// without ever serializing the full payload into the sandbox.
+const DATA_PRELUDE: &str = r#"
+(function () {
+  "use strict";
+  globalThis.data = {
+    query: function (handle, term, maxHits) {
+      return __data_primitive(handle, term, maxHits || 20).then(JSON.parse);
+    }
+  };
+})();
+"#;
+
 const SDK_PRELUDE: &str = r#"
 (function () {
   "use strict";

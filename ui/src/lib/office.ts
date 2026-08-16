@@ -45,6 +45,11 @@ export async function pdfOpen(path: string): Promise<PdfPayload> {
   return invoke<PdfPayload>("pdf_open", { path });
 }
 
+/** P4.4 — the raw PDF as a `data:application/pdf;base64,` URL for pdf.js. */
+export async function pdfBytes(path: string): Promise<string> {
+  return invoke<string>("pdf_bytes", { path });
+}
+
 // ---------------------------------------------------------------------------
 // demo fallbacks (plain-browser preview)
 // ---------------------------------------------------------------------------

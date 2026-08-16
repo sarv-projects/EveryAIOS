@@ -22,8 +22,10 @@ pub enum ApprovalSource {
 }
 
 /// Risk tier of the operation (drives who must approve).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum RiskLevel {
+    #[default]
     Low,
     Medium,
     High,
@@ -107,11 +109,28 @@ impl AuthorizationTicket {
 #[derive(Debug, Default)]
 pub struct TicketStore {
     tickets: std::collections::HashMap<String, AuthorizationTicket>,
+    /// Append-only approve/reject receipts (P7.5 audit trail).
+    receipts: Vec<GuardReceipt>,
 }
 
 impl TicketStore {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The append-only approval/denial audit receipts.
+    pub fn receipts(&self) -> &[GuardReceipt] {
+        &self.receipts
+    }
+
+    fn record(&mut self, id: &str, action: ReceiptAction) -> bool {
+        let Some(t) = self.tickets.get(id) else {
+            return false;
+        };
+        let seq = self.receipts.len();
+        let receipt = GuardReceipt::new(format!("rcpt:{seq}"), t, action, now_ms());
+        self.receipts.push(receipt);
+        true
     }
 
     pub fn mint(&mut self, ticket: AuthorizationTicket) -> String {
@@ -151,6 +170,50 @@ impl TicketStore {
         }
     }
 
+    /// P7.5 (Guard-2) — the open tickets the approval card renders: every
+    /// `Pending` ticket that has not yet been consumed/rejected/revoked.
+    pub fn pending(&self) -> Vec<&AuthorizationTicket> {
+        self.tickets
+            .values()
+            .filter(|t| t.state == TicketState::Pending)
+            .collect()
+    }
+
+    /// P7.5 (Guard-2) — record a human approve on a pending ticket (sets
+    /// `approval_source = Human` + appends an audit receipt). Returns false
+    /// when the ticket is missing or no longer pending. Consumption still
+    /// happens later via `use_ticket`, which enforces the arg hash +
+    /// single-use rules.
+    pub fn approve(&mut self, id: &str) -> bool {
+        let ok = match self.tickets.get_mut(id) {
+            Some(t) if t.state == TicketState::Pending => {
+                t.approval_source = ApprovalSource::Human;
+                true
+            }
+            _ => false,
+        };
+        if ok {
+            self.record(id, ReceiptAction::Approve);
+        }
+        ok
+    }
+
+    /// P7.5 (Guard-2) — record a human reject on a pending ticket (revokes it
+    /// + appends an audit receipt). Returns false when missing/non-pending.
+    pub fn reject(&mut self, id: &str) -> bool {
+        let ok = match self.tickets.get_mut(id) {
+            Some(t) if t.state == TicketState::Pending => {
+                t.state = TicketState::Revoked;
+                true
+            }
+            _ => false,
+        };
+        if ok {
+            self.record(id, ReceiptAction::Reject);
+        }
+        ok
+    }
+
     pub fn get(&self, id: &str) -> Option<&AuthorizationTicket> {
         self.tickets.get(id)
     }
@@ -176,6 +239,62 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// A human approve/reject decision, recorded as an append-only audit receipt
+/// (P7.5 — "approval/denial audit logging with receipt"). The hash covers
+/// every field, so a receipt is tamper-evident.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardReceipt {
+    pub receipt_id: String,
+    pub ticket_id: String,
+    pub session_id: String,
+    pub tool_id: String,
+    pub operation: String,
+    pub action: ReceiptAction,
+    pub ts_ms: u64,
+    /// SHA-256 over the serialized receipt fields (self-hash, keyed on the
+    /// fields above in order).
+    pub hash: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReceiptAction {
+    Approve,
+    Reject,
+}
+
+impl GuardReceipt {
+    /// Build + self-hash a receipt.
+    pub fn new(
+        receipt_id: String,
+        ticket: &AuthorizationTicket,
+        action: ReceiptAction,
+        ts_ms: u64,
+    ) -> Self {
+        let hash = hash_args(&[
+            &receipt_id,
+            &ticket.ticket_id,
+            &ticket.session_id,
+            &ticket.tool_id,
+            &ticket.operation,
+            match action {
+                ReceiptAction::Approve => "approve",
+                ReceiptAction::Reject => "reject",
+            },
+            &ts_ms.to_string(),
+        ]);
+        Self {
+            receipt_id,
+            ticket_id: ticket.ticket_id.clone(),
+            session_id: ticket.session_id.clone(),
+            tool_id: ticket.tool_id.clone(),
+            operation: ticket.operation.clone(),
+            action,
+            ts_ms,
+            hash,
+        }
+    }
 }
 
 /// Stable helper: hash the args for a ticket (deterministic, keyed by
@@ -272,5 +391,48 @@ mod tests {
     fn hash_is_deterministic_and_order_sensitive() {
         assert_eq!(hash_args(&["a", "b"]), hash_args(&["a", "b"]));
         assert_ne!(hash_args(&["a", "b"]), hash_args(&["b", "a"]));
+    }
+
+    #[test]
+    fn pending_lists_open_tickets_and_approve_records_human() {
+        let mut store = TicketStore::new();
+        let a = store.mint(ticket("ta"));
+        let b = store.mint(ticket("tb"));
+        store.revoke(&b);
+        // Only the still-pending ticket is listed.
+        assert_eq!(store.pending().len(), 1);
+        assert_eq!(store.pending()[0].ticket_id, "ta");
+        // Human approve records the source; consumption still enforces args.
+        assert!(store.approve(&a));
+        assert_eq!(store.get(&a).unwrap().approval_source, ApprovalSource::Human);
+        assert!(store.use_ticket(&a, "h1").is_ok());
+        // Approve on a non-pending/unknown ticket is a no-op.
+        assert!(!store.approve(&a));
+        assert!(!store.approve("ghost"));
+    }
+
+    #[test]
+    fn approve_and_reject_record_audit_receipts() {
+        let mut store = TicketStore::new();
+        let a = store.mint(ticket("ta"));
+        let b = store.mint(ticket("tb"));
+
+        assert!(store.approve(&a));
+        assert!(store.reject(&b));
+
+        let receipts = store.receipts();
+        assert_eq!(receipts.len(), 2);
+        assert_eq!(receipts[0].action, ReceiptAction::Approve);
+        assert_eq!(receipts[0].ticket_id, "ta");
+        assert_eq!(receipts[1].action, ReceiptAction::Reject);
+        assert_eq!(receipts[1].ticket_id, "tb");
+        // Reject revoked the ticket.
+        assert_eq!(store.get(&b).unwrap().state, TicketState::Revoked);
+        // The receipt hash is deterministic over its fields.
+        assert_eq!(receipts[0].hash.len(), 64);
+        assert_ne!(receipts[0].hash, receipts[1].hash);
+        // Reject on a non-pending ticket records nothing.
+        assert!(!store.reject(&b));
+        assert_eq!(store.receipts().len(), 2);
     }
 }

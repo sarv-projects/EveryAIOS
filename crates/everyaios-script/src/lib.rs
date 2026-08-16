@@ -95,6 +95,22 @@ pub trait BrowserHost: Send + Sync {
     fn exec(&self, call: &PrimitiveCall) -> Result<serde_json::Value, SandboxError>;
 }
 
+/// The host side of the `data` SDK (P5.8 — E4 `data.query` over a ref
+/// handle). The script asks for matching lines from a large payload by
+/// handle; the host resolves the handle and returns only the hits — the
+/// payload itself is never serialized into the sandbox. The real binding is
+/// `everyaios_memory::reference::query_ref`; this trait is the sandbox seam.
+pub trait DataHost: Send + Sync {
+    /// Return the matching lines (capped) for `term` in the payload named by
+    /// `handle`. The result is a JSON-serializable value handed to the script.
+    fn query(
+        &self,
+        handle: &str,
+        term: &str,
+        max_hits: usize,
+    ) -> Result<serde_json::Value, SandboxError>;
+}
+
 /// The sandbox surface. `Sandbox` implements it over rquickjs; the trait
 /// fixes the contract so callers (everyaios-mcp `run` tool) don't change.
 pub trait ScriptSandbox {

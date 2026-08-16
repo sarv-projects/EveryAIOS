@@ -19,6 +19,7 @@
 
 pub mod cleanup;
 pub mod dedup;
+pub mod events;
 pub mod finder;
 pub mod health;
 pub mod search;
@@ -34,6 +35,7 @@ pub use finder::{find_large_files, FinderOptions, SortBy};
 pub use health::{
     check_health, drive_stats, health_from_stats, over_threshold, DriveStats, HealthStatus,
 };
+pub use events::{watch_events, FileEvent};
 pub use search::{watch, Debouncer, SearchHit, SearchIndex, WatchHandle};
 pub use snapshot::{Snapshot, SnapshotStore};
 pub use treemap::{color_for, squarify, treemap_for_dir, TreemapRect};

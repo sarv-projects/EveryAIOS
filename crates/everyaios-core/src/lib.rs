@@ -17,6 +17,7 @@ pub mod blueprint;
 pub mod challenge;
 pub mod chat;
 pub mod config;
+pub mod guard_service;
 pub mod hwfit;
 pub mod local;
 pub mod memory_service;
@@ -41,6 +42,7 @@ pub use hwfit::{
     LocalModelCandidate, ModelFit,
 };
 pub use local::{LocalConfig, LocalError, LocalManager, LocalModelInfo};
+pub use guard_service::{GuardDecision, GuardService, PendingGuardCard};
 pub use memory_service::{MemoryService, StoredFact};
 pub use provider_ref::{
     classify_category, ingest_provider_reference, parse_provider_reference, AuthClass,

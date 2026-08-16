@@ -10,6 +10,7 @@
 //! and gets a rerun / resend-with-key / confirmation-card decision.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -17,7 +18,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// The ten durable event types (doc 53 §4.2, stable names).
+/// The durable event types (doc 53 §4.2, stable names) + P5.9/J5 the
+/// per-turn context-injection event the Trajectory view filters by source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventType {
     UserMessageAdded,
@@ -30,6 +32,9 @@ pub enum EventType {
     ArtifactWritten,
     ModelTurnCompleted,
     CheckpointCommitted,
+    /// P5.9/J5 — a context block (persona / user doc / memory / tool result /
+    /// blueprint) was injected into the prompt this turn.
+    ContextInjection,
 }
 
 impl EventType {
@@ -45,8 +50,37 @@ impl EventType {
             EventType::ArtifactWritten => "ArtifactWritten",
             EventType::ModelTurnCompleted => "ModelTurnCompleted",
             EventType::CheckpointCommitted => "CheckpointCommitted",
+            EventType::ContextInjection => "ContextInjection",
         }
     }
+}
+
+/// The canonical context-injection sources the Trajectory (J5) view filters by.
+pub const CONTEXT_SOURCES: [&str; 5] =
+    ["persona", "user_document", "memory", "tool_result", "blueprint"];
+
+/// Is `source` one of the canonical injection sources (J5)?
+pub fn is_context_source(source: &str) -> bool {
+    CONTEXT_SOURCES.contains(&source)
+}
+
+/// P5.9/J5 — one context-injection record the Trajectory view renders:
+/// which context block (source) was injected into the prompt on a turn, and
+/// how much of it. Parsed from a [`EventType::ContextInjection`] event's
+/// `result_meta` (`{ source, tokens?, refId? }`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ContextInjectionRecord {
+    pub seq: u64,
+    pub ts_ms: u64,
+    pub session: String,
+    pub agent: String,
+    pub source: String,
+    /// Injected token estimate (best-effort from `result_meta.tokens`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens: Option<u64>,
+    /// The injected block's identity (doc path / memory id / tool name).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ref_id: String,
 }
 
 /// One durable session event (one NDJSON line).
@@ -124,6 +158,32 @@ pub struct SessionLog {
     seq: u64,
 }
 
+/// P5.9/J5 — enumerate the session ids that have a log file under
+/// `<base>/sessions/` (newest-created first).
+pub fn list_session_ids(base_dir: &Path) -> Result<Vec<String>, SessionLogError> {
+    let dir = base_dir.join("sessions");
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().map(|e| e == "ndjson").unwrap_or(false) {
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                let created = entry
+                    .metadata()
+                    .map(|m| m.created().ok().or(m.modified().ok()))
+                    .ok()
+                    .flatten();
+                entries.push((stem.to_string(), created));
+            }
+        }
+    }
+    entries.sort_by_key(|(_, created)| std::cmp::Reverse(*created));
+    Ok(entries.into_iter().map(|(id, _)| id).collect())
+}
+
 impl SessionLog {
     pub fn open(base_dir: &Path, session_id: &str) -> Result<Self, SessionLogError> {
         if session_id.trim().is_empty() || session_id.contains('/') || session_id.contains("..") {
@@ -196,6 +256,47 @@ impl SessionLog {
             }
         }
         Ok(out)
+    }
+
+    /// P5.9/J5 — the context-injection records for this session (the data the
+    /// Trajectory view filters by source). Empty when no injections were
+    /// recorded; unknown/missing sources are preserved as-is (the view groups
+    /// them under an `other` bucket).
+    pub fn context_injections(
+        &self,
+    ) -> Result<Vec<ContextInjectionRecord>, SessionLogError> {
+        let events = self.events()?;
+        Ok(events
+            .into_iter()
+            .filter(|e| e.event_type == EventType::ContextInjection)
+            .map(|e| {
+                let source = e
+                    .result_meta
+                    .get("source")
+                    .and_then(Value::as_str)
+                    .unwrap_or("other")
+                    .to_string();
+                let tokens = e
+                    .result_meta
+                    .get("tokens")
+                    .and_then(Value::as_u64);
+                let ref_id = e
+                    .result_meta
+                    .get("refId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                ContextInjectionRecord {
+                    seq: e.seq,
+                    ts_ms: e.ts_ms,
+                    session: e.session,
+                    agent: e.agent,
+                    source,
+                    tokens,
+                    ref_id,
+                }
+            })
+            .collect())
     }
 
     /// §4.4: `ToolStarted` events with no matching `ToolCompleted` (by tool +
@@ -530,5 +631,54 @@ mod tests {
         assert_eq!(r.lookup("k"), Some(serde_json::json!({"ok": true})));
         r.clear();
         assert!(r.lookup("k").is_none());
+    }
+
+    #[test]
+    fn context_injections_parse_source_tokens_and_ref() {
+        let dir = tmp_dir("trajectory");
+        let mut log = SessionLog::open(&dir, "sess-1").unwrap();
+        let mut inj = EventInput::new(EventType::ContextInjection, "sess-1", "agent-a");
+        inj.result_meta = serde_json::json!({
+            "source": "memory",
+            "tokens": 412,
+            "refId": "mem:3"
+        });
+        log.append(inj).unwrap();
+        // An unrelated non-injection event must be ignored.
+        log.append(EventInput::new(EventType::TaskStarted, "sess-1", "agent-a"))
+            .unwrap();
+        // A second injection with a missing/unknown source → "other".
+        let mut inj2 = EventInput::new(EventType::ContextInjection, "sess-1", "agent-b");
+        inj2.result_meta = serde_json::json!({ "source": "weird_source" });
+        log.append(inj2).unwrap();
+
+        let recs = log.context_injections().unwrap();
+        assert_eq!(recs.len(), 2);
+        assert_eq!(recs[0].source, "memory");
+        assert_eq!(recs[0].tokens, Some(412));
+        assert_eq!(recs[0].ref_id, "mem:3");
+        assert_eq!(recs[1].source, "weird_source");
+        assert_eq!(recs[1].tokens, None);
+        assert!(is_context_source("memory"));
+        assert!(!is_context_source("weird_source"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_session_ids_finds_log_files() {
+        let dir = tmp_dir("listsess");
+        {
+            let mut a = SessionLog::open(&dir, "sess-a").unwrap();
+            a.append(EventInput::new(EventType::TaskStarted, "sess-a", "x"))
+                .unwrap();
+            let mut b = SessionLog::open(&dir, "sess-b").unwrap();
+            b.append(EventInput::new(EventType::TaskStarted, "sess-b", "x"))
+                .unwrap();
+        }
+        let ids = list_session_ids(&dir).unwrap();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"sess-a".to_string()));
+        assert!(ids.contains(&"sess-b".to_string()));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

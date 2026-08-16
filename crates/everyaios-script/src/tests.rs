@@ -441,3 +441,64 @@ fn multi_step_script_every_primitive_has_audit_row() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---------------------------------------------------------------------------
+// P5.8 `data.query` — ref-handle querying over the DataHost seam.
+// ---------------------------------------------------------------------------
+
+struct MockData {
+    lines: Mutex<Vec<String>>,
+}
+
+impl DataHost for MockData {
+    fn query(
+        &self,
+        _handle: &str,
+        term: &str,
+        max_hits: usize,
+    ) -> Result<serde_json::Value, SandboxError> {
+        let hits: Vec<String> = self
+            .lines
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|l| l.contains(term))
+            .take(max_hits)
+            .cloned()
+            .collect();
+        Ok(serde_json::json!({ "hits": hits, "total": hits.len() }))
+    }
+}
+
+#[test]
+fn data_query_returns_matching_lines_only() {
+    let host = Arc::new(MockBrowser::new());
+    let data = Arc::new(MockData {
+        lines: Mutex::new(vec![
+            "alpha budget line".into(),
+            "beta marketing line".into(),
+            "gamma budget line".into(),
+        ]),
+    });
+    let sb = Sandbox::with_data(
+        SandboxLimits::default(),
+        Arc::clone(&host) as Arc<dyn BrowserHost>,
+        data,
+    );
+    let out = eval_json(
+        &sb,
+        r#"const r = await data.query("ref1", "budget", 10); r.hits;"#,
+    );
+    let hits = out["result"].as_array().unwrap();
+    assert_eq!(hits.len(), 2);
+    assert!(hits.iter().all(|h| h.as_str().unwrap().contains("budget")));
+}
+
+#[test]
+fn data_sdk_absent_when_no_host() {
+    // Without a DataHost, `data` is undefined → a clean Js error, never a
+    // crash or a silent success.
+    let (sb, _) = default_sandbox();
+    let e = sb.eval("data.query('x','y')").unwrap_err();
+    assert!(matches!(e, SandboxError::Js(_)), "got: {e:?}");
+}

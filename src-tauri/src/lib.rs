@@ -10,9 +10,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod cockpit_cmds;
+mod guard_cmds;
 mod office_cmds;
 mod replay_cmds;
+mod trajectory_cmds;
 
+use everyaios_core::GuardService;
 use everyaios_guard::prescan::{guard as compiled_guard, Guard};
 use everyaios_vault::Vault;
 
@@ -37,6 +40,10 @@ pub struct AppState {
     /// interrupts, quiet flag) — fed by the coordinator via the feed seams,
     /// polled by the UI.
     pub cockpit: Arc<Mutex<everyaios_audit::cockpit::CockpitState>>,
+    /// P7.5/J21 (Guard-2): the shared pre-flight service (tickets + policy +
+    /// estop + profile) — minted by the coordinator over `guard/*`, rendered
+    /// + approved/rejected by the cards here, consumed by the executor.
+    pub guard_service: Arc<Mutex<GuardService>>,
 }
 
 /// Monotonic stream-id source for `chat_stream` calls.
@@ -55,10 +62,19 @@ fn connect_chat_relay(
     link: everyaios_core::SidecarLink<ChildStdin, ChildStdout>,
 ) {
     let handle = app.clone();
-    let relay = everyaios_core::ChatRelay::new(link, Arc::clone(&state.vault), move |ev| {
-        // Fire-and-forget: never let a UI emit failure break the relay.
-        let _ = handle.emit(CHAT_EVENT, ev);
-    });
+    // J21: the relay shares the app's Guard-2 service, and loads the user's
+    // `permissions.toml` escalation policy at boot.
+    let relay = everyaios_core::ChatRelay::new_with_guard(
+        link,
+        Arc::clone(&state.vault),
+        Arc::clone(&state.guard_service),
+        move |ev| {
+            // Fire-and-forget: never let a UI emit failure break the relay.
+            let _ = handle.emit(CHAT_EVENT, ev);
+        },
+    );
+    let policy_path = everyaios_core::default_data_dir().join("permissions.toml");
+    relay.with_policy(&policy_path);
     // P1.8 (A5): register keyless local endpoints so a sidecar
     // `provider/stream` for ollama/llamafile routes to the local runtime
     // (GBNF grammar constraint included — B5). Ollama always registers;
@@ -275,6 +291,7 @@ pub fn run() {
             chat_relay: Mutex::new(None),
             replay_dir: everyaios_core::default_data_dir(),
             cockpit: Arc::new(Mutex::new(Default::default())),
+            guard_service: Arc::new(Mutex::new(GuardService::new())),
         })
         .invoke_handler(tauri::generate_handler![
             version,
@@ -289,6 +306,13 @@ pub fn run() {
             replay_cmds::replay_screenshot,
             replay_cmds::watch_events,
             replay_cmds::agent_stop,
+            trajectory_cmds::trajectory_sessions,
+            trajectory_cmds::trajectory_snapshot,
+            guard_cmds::guard_tickets,
+            guard_cmds::guard_respond,
+            guard_cmds::guard_receipts,
+            guard_cmds::guard_policy,
+            guard_cmds::guard_estop,
             cockpit_cmds::cockpit_snapshot,
             cockpit_cmds::cockpit_activity,
             cockpit_cmds::cockpit_tokens,
@@ -299,7 +323,8 @@ pub fn run() {
             xlsx_cmds::xlsx_open,
             office_cmds::docx_open,
             office_cmds::pptx_open,
-            office_cmds::pdf_open
+            office_cmds::pdf_open,
+            office_cmds::pdf_bytes
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray
