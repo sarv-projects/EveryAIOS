@@ -217,7 +217,7 @@ export function StatusBar() {
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/70">audit · append</span>
         <span className="text-muted-foreground/40">·</span>
-        <span className="text-muted-foreground/50">EveryAIOS v3.20</span>
+        <span className="text-muted-foreground/50">EveryAIOS v3.21</span>
       </div>
     </footer>
   )

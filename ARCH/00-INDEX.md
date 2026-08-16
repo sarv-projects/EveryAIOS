@@ -1,13 +1,13 @@
 # ARCH — The Desktop Agentic-OS Architecture (Hybrid)
 
-> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-15) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.20)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
+> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-15) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.21)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
 > **Docs:** 00-INDEX + 01–12 (12 = UI/UX specification and layout design — **v2.0, 2026-08-15: activity-rail work cockpit**, doc 67 §6) + research docs 49–68 (storage intelligence, generative-UI/image/voice/email gaps, aider recheck, gap-pass-2 hierarchy/search-stack, formalization, dep+catalog audit, agent-browser ecosystem, agentic dev-environments + closed-source agents, ACP registry + subscription auth, repo batch 2 — OmniRoute provider/routing goldmine, OmniRoute deep-dive, TencentDB Agent Memory, capability deltas — Sites/heartbeat + UI finalization, final all-rounder market research — H30/H31/H32 + two-channel injection).
 > **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (new `everyaios-storage` crate, doc 49). **No scope compromise**: every capability in the research corpus (docs 01–68, **281 repos**) is derived in `09-FEATURE-MATRIX.md` (148 rows).
 > **Working name:** "EveryAIOS" (from the v2.0 spec's `~/.everyaios/`). Final name TBD.
 
 ## The two specs reconciled
 
-> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.20 — hybrid**, in sync with this ARCH).
+> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.21 — hybrid**, in sync with this ARCH).
 
 | | Earlier v2.0 spec | All-Rust research spec (`RESEARCH/desktop_app/DESKTOP-APP-SPEC.md` — **superseded** draft) | This architecture |
 |---|---|---|---|
