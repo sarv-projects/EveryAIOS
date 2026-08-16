@@ -1288,6 +1288,6 @@
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
 | **P12 Market Research & GTM** | **47** | **~4 (parallel)** |
 | Research Tasks (cross-cutting) | 54 | parallel |
-| **TOTAL** | **780** | **~45 weeks** |
+| **TOTAL** | **807** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.
