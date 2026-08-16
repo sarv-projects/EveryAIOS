@@ -1234,6 +1234,16 @@
 
 ---
 
+## P19 — Batch-4 Coding Agents / Skills / Harnesses Queue (doc 71, 2026-08-16)
+> **Verdict recorded:** 13/21 repos already covered (docs 02/05/14/21/22/65). The 4 new tasks are the only work; void is deprecated (SKIP), RuView is out of scope (SKIP).
+
+- [ ] `[NOT DONE]` **Kilo "Gateway" routing seam (doc 71 §1 — Kilo Code 🟡 ADAPT):** the 500-model BYOK zero-markup gateway → `everyaios-catalog` cache-optimized routing (extends P14; A6/A7/H32).
+- [ ] `[NOT DONE]` **ruflo swarm + federation deltas (doc 71 §1 — 🟡 ADAPT/REF):** fold swarm orchestration (N-agents-one-prompt) into the P17 Kanban-of-agents task + cross-machine federation into H18.
+- [ ] `[NOT DONE]` **System-prompt structure reference (doc 71 §1 — system_prompts_leaks 🟢 REF):** document the observed prompt *anatomy* (role/tools/permissions/memory/output/stop) into the P6.22 agent-frontmatter schema — **structure only, never copy leaked text**.
+- [ ] `[NOT DONE]` **ui-ux-pro-max design-intelligence skill (doc 71 §1 — 🟡 ADAPT):** bundle the 161-rule / 67-style / 97-palette design knowledge pack as an inbuilt I2 skill for the default agent (H29 dashboard artifacts + UI v2 design system). Zero deps.
+
+---
+
 ## SUMMARY
 
 | Phase | Tasks | Weeks |
@@ -1254,6 +1264,7 @@
 | P16 Final Market-Research Deltas (doc 68) | 8 | post-v1 |
 | P17 ACP Agent Ecosystem Steal Queue (doc 69) | 10 | post-v1 |
 | P18 MCP Directory Inbuilt Queue (doc 70) | 4 | ~1 (parallel) |
+| P19 Batch-4 Coding Agents/Skills Queue (doc 71) | 4 | ~1 (parallel) |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
