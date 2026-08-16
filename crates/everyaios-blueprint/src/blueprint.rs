@@ -42,6 +42,51 @@ pub enum TaskStatus {
     Blocked,
 }
 
+impl TaskStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TaskStatus::Pending => "pending",
+            TaskStatus::InProgress => "in_progress",
+            TaskStatus::Done => "done",
+            TaskStatus::Failed => "failed",
+            TaskStatus::Blocked => "blocked",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "pending" => Some(TaskStatus::Pending),
+            "in_progress" | "in-progress" | "running" => Some(TaskStatus::InProgress),
+            "done" | "complete" | "completed" => Some(TaskStatus::Done),
+            "failed" => Some(TaskStatus::Failed),
+            "blocked" => Some(TaskStatus::Blocked),
+            _ => None,
+        }
+    }
+
+    /// The DAG state machine — the only legal transitions. The verifier
+    /// moves a task `InProgress → Done/Failed`; a blocked task can be
+    /// unblocked (`Blocked → InProgress`) or abandoned (`Blocked → Failed`);
+    /// a failed task can be retried (`Failed → InProgress`). `Done` and
+    /// `Failed` are terminal (retry starts a new task).
+    pub fn transition(self, to: TaskStatus) -> Result<TaskStatus, String> {
+        use TaskStatus::*;
+        let legal = match (self, to) {
+            (a, b) if a == b => true,
+            (Pending, InProgress) => true,
+            (InProgress, Done) | (InProgress, Failed) | (InProgress, Blocked) => true,
+            (Blocked, InProgress) | (Blocked, Failed) => true,
+            (Failed, InProgress) => true,
+            _ => false,
+        };
+        if legal {
+            Ok(to)
+        } else {
+            Err(format!("illegal transition {self:?} -> {to:?}"))
+        }
+    }
+}
+
 /// One task in a blueprint: a spec + its verify gate + dependencies.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlueprintTask {
@@ -150,6 +195,54 @@ impl Blueprint {
         Ok(())
     }
 
+    /// A deterministic execution order (Kahn's algorithm) — every task is
+    /// listed after its dependencies. Errors on unknown deps or a cycle.
+    pub fn topological_order(&self) -> Result<Vec<String>, BlueprintError> {
+        self.validate()?;
+        let mut indegree: Vec<usize> = self.tasks.iter().map(|t| t.depends_on.len()).collect();
+        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); self.tasks.len()];
+        for (i, t) in self.tasks.iter().enumerate() {
+            for d in &t.depends_on {
+                if let Some(j) = self.tasks.iter().position(|x| x.spec.id == *d) {
+                    dependents[j].push(i);
+                }
+            }
+        }
+        let mut queue: std::collections::VecDeque<usize> = (0..self.tasks.len())
+            .filter(|&i| indegree[i] == 0)
+            .collect();
+        let mut order = Vec::with_capacity(self.tasks.len());
+        while let Some(i) = queue.pop_front() {
+            order.push(self.tasks[i].spec.id.clone());
+            for &dep in &dependents[i] {
+                indegree[dep] -= 1;
+                if indegree[dep] == 0 {
+                    queue.push_back(dep);
+                }
+            }
+        }
+        if order.len() != self.tasks.len() {
+            return Err(BlueprintError::Cycle(self.id.clone()));
+        }
+        Ok(order)
+    }
+
+    /// Apply a status transition by task id (the DAG state machine).
+    pub fn set_status(&mut self, id: &str, to: TaskStatus) -> Result<(), String> {
+        let t = self
+            .tasks
+            .iter_mut()
+            .find(|t| t.spec.id == id)
+            .ok_or_else(|| format!("unknown task {id:?}"))?;
+        t.status = t.status.transition(to)?;
+        Ok(())
+    }
+
+    /// `true` when every task is `Done` (the plan is complete).
+    pub fn is_complete(&self) -> bool {
+        !self.tasks.is_empty() && self.tasks.iter().all(|t| t.status == TaskStatus::Done)
+    }
+
     fn detect_cycle(
         &self,
         id: &str,
@@ -244,5 +337,83 @@ mod tests {
         bp2.push(a);
         bp2.push(b);
         assert!(matches!(bp2.validate(), Err(BlueprintError::Cycle(..))));
+    }
+
+    #[test]
+    fn status_machine_enforces_legal_transitions() {
+        assert_eq!(
+            TaskStatus::Pending.transition(TaskStatus::InProgress).unwrap(),
+            TaskStatus::InProgress
+        );
+        assert_eq!(
+            TaskStatus::InProgress.transition(TaskStatus::Done).unwrap(),
+            TaskStatus::Done
+        );
+        assert_eq!(
+            TaskStatus::Blocked.transition(TaskStatus::InProgress).unwrap(),
+            TaskStatus::InProgress
+        );
+        assert_eq!(
+            TaskStatus::Failed.transition(TaskStatus::InProgress).unwrap(),
+            TaskStatus::InProgress
+        );
+        // Done is terminal.
+        assert!(TaskStatus::Done.transition(TaskStatus::InProgress).is_err());
+        // Pending cannot jump straight to Done without running.
+        assert!(TaskStatus::Pending.transition(TaskStatus::Done).is_err());
+    }
+
+    #[test]
+    fn status_parse_roundtrips() {
+        for s in [
+            TaskStatus::Pending,
+            TaskStatus::InProgress,
+            TaskStatus::Done,
+            TaskStatus::Failed,
+            TaskStatus::Blocked,
+        ] {
+            assert_eq!(TaskStatus::parse(s.as_str()), Some(s));
+        }
+        assert_eq!(TaskStatus::parse("completed"), Some(TaskStatus::Done));
+        assert_eq!(TaskStatus::parse("bogus"), None);
+    }
+
+    #[test]
+    fn topological_order_respects_dependencies() {
+        let mut bp = Blueprint::new("bp", "g");
+        let a = BlueprintTask::new(spec("a"), VerifyBlock::new(vec![]));
+        let mut b = BlueprintTask::new(spec("b"), VerifyBlock::new(vec![]));
+        b.depends_on.push("a".into());
+        let mut c = BlueprintTask::new(spec("c"), VerifyBlock::new(vec![]));
+        c.depends_on.push("b".into());
+        bp.push(c); // pushed out of order on purpose
+        bp.push(b);
+        bp.push(a);
+
+        let order = bp.topological_order().unwrap();
+        assert_eq!(order, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn topological_order_rejects_cycles() {
+        let mut bp = Blueprint::new("bp", "g");
+        let mut a = BlueprintTask::new(spec("a"), VerifyBlock::new(vec![]));
+        a.depends_on.push("b".into());
+        let mut b = BlueprintTask::new(spec("b"), VerifyBlock::new(vec![]));
+        b.depends_on.push("a".into());
+        bp.push(a);
+        bp.push(b);
+        assert!(matches!(bp.topological_order(), Err(BlueprintError::Cycle(_))));
+    }
+
+    #[test]
+    fn set_status_and_is_complete() {
+        let mut bp = Blueprint::new("bp", "g");
+        bp.push(BlueprintTask::new(spec("a"), VerifyBlock::new(vec![])));
+        assert!(!bp.is_complete());
+        bp.set_status("a", TaskStatus::InProgress).unwrap();
+        bp.set_status("a", TaskStatus::Done).unwrap();
+        assert!(bp.is_complete());
+        assert!(bp.set_status("ghost", TaskStatus::Done).is_err());
     }
 }

@@ -485,25 +485,25 @@
 ## PHASE 6 — Orchestration + Connectors (~5 weeks)
 
 ### P6.1 Blueprint Engine (B2 — v2.0 §P2, doc 03)
-- [ ] `[NOT DONE]` Implement .md blueprint parser → AgentConfig[] registry
-- [ ] `[NOT DONE]` Implement continuous plan rewrite (agents update their own status blocks)
-- [ ] `[NOT DONE]` Implement dependency resolution between blueprint tasks
-- [ ] `[NOT DONE]` Implement resume-after-reboot (session checkpointing at turn boundaries)
-- [ ] `[NOT DONE]` Implement DAG state machine for multi-step workflows
-- [ ] `[NOT DONE]` Implement checkpoint freeze on circuit-break (B6 MCQ pattern)
-- [ ] `[NOT DONE]` Implement plan cache (doc 62): extract + index plans by task signature (~0.85 sim, `~/.everyaios/plans.db`), match before fresh planning; version-based invalidation
+- [x] `[DONE]` **.md blueprint parser → registry (doc 03):** whole `Blueprint` round-trips one `.md` file (`# Blueprint:` + `**Goal:**` + `### task` + `**Depends on:**`/`**Status:**`/`## Context`/`## Acceptance`/`## Verify`/`## Policy`) with optional leading agent-frontmatter block; `BlueprintRegistry::load_dir` indexes `*.md` blueprints and exposes `agent_configs()` — **`everyaios-blueprint::md` (`BlueprintDoc`/`Blueprint::to_markdown`/`from_markdown`) + `everyaios-blueprint::checkpoint::BlueprintRegistry`**
+- [x] `[DONE]` **Continuous plan rewrite (agents update their own status blocks):** status is first-class in the markdown (`**Status:** pending|in_progress|done|failed|blocked`) and round-trips; `Blueprint::set_status` applies the DAG state machine so an agent's status edit is validated, not free-text — **`everyaios-blueprint::md` + `Blueprint::set_status`/`TaskStatus::transition`**
+- [x] `[DONE]` **Dependency resolution between blueprint tasks:** `ready()` (dependency-aware ready set, already landed) + `topological_order()` (Kahn's algorithm, deterministic execution order; errors on unknown deps/cycles) — **`everyaios-blueprint::blueprint`**
+- [x] `[DONE]` **Resume-after-reboot (checkpoint at turn boundaries):** `Blueprint::checkpoint_to(path, frozen_reason, version)` writes an atomic JSON snapshot (temp-file + rename); `Blueprint::resume_from(path)` restores it — **`everyaios-blueprint::checkpoint` (`Checkpoint`/`CheckpointError`)**
+- [x] `[DONE]` **DAG state machine for multi-step workflows:** `TaskStatus::transition` enforces the only legal moves (Pending→InProgress→Done/Failed/Blocked; Blocked/Failed→InProgress retry; Done terminal) + `Blueprint::topological_order`/`is_complete` — **`everyaios-blueprint::blueprint`**
+- [x] `[DONE]` **Checkpoint freeze on circuit-break (B6 MCQ):** `checkpoint_to` carries a `frozen_reason` (non-empty ⇒ `Checkpoint::is_frozen()`) so the resume path asks "resume or retry?" instead of silently continuing — **`everyaios-blueprint::checkpoint`**
+- [x] `[DONE]` **Plan cache (doc 62):** `PlanCache::store`/`lookup` keyed by a normalized task signature (word unigram+bigram shingles, cosine sim, default 0.85) + `invalidate`/`invalidate_below(min_version)`/`bump_version` version-based invalidation + `save`/`load` to `~/.everyaios/plans.db` (JSON, honors `EVERYAIOS_HOME`) — **`everyaios-blueprint::plan_cache` (`PlanCache`/`PlanEntry`/`DEFAULT_SIMILARITY`)**
 - [x] `[DONE]` **Spec-per-task files (doc 63 §0 verdict — codger/openspec pattern):** main agent writes one `spec.md` per task (goal + acceptance checks + context); sub-agent receives the spec as its starting context, returns a written status block — specs are the persistent memory, main agent never holds the full history — **`everyaios-blueprint::spec` (`TaskSpec` ↔ `to_markdown`/`from_markdown`)**
 - [x] `[DONE]` **Verify-gated tasks (openspec pattern → EV1):** each blueprint task carries a `verify` block — deterministic checks that must pass before the task is marked done (files exist, tests pass, state matches); never accept the agent's own "finished" claim (doc 63 §2.3) — **`everyaios-blueprint::blueprint` (`BlueprintTask`/`VerifyBlock`/`Blueprint` with `verify_against()` → eval `verify`, ready set + cycle detection)**
 - [x] `[DONE]` **Agent-frontmatter schema (doc 63 §4.4 — qwen-code `agent-frontmatter-schema.ts` pattern, CC 2.1.168 parity):** blueprint parser accepts Claude-Code-compatible `permissionMode/color/hooks/mcpServers/maxTurns` frontmatter → AgentConfig (permissionMode→approvalMode bridge: default/plan/acceptEdits/auto/bypassPermissions/dontAsk→default mapping) so users can drop in CC/Qwen agent files — **`everyaios-blueprint::frontmatter` (`parse_frontmatter` → `AgentConfig` + `PermissionMode→ApprovalMode` bridge)**
 
 ### P6.2 Sub-Agents (B3/B4 — doc 16, doc 03; doc 41 P2 opencode task.ts)
-- [ ] `[NOT DONE]` Implement fresh-context sub-agent spawn (own conversation, own workspace)
-- [ ] `[NOT DONE]` Implement DELEGATE_BLOCKED_TOOLS (delegate/clarify/memory/send_message/cronjob)
-- [ ] `[NOT DONE]` Implement parent sees only summary (not full child context)
-- [ ] `[NOT DONE]` Implement inter-agent messaging: peer-review, cross-check, request sub-routines
-- [ ] `[NOT DONE]` Implement no-recursive-spawn guard
-- [ ] `[NOT DONE]` Implement batch parallel mode (multiple sub-agents concurrently)
-- [ ] `[NOT DONE]` Test: two spec-driven agents with different models run a plan end-to-end
+- [x] `[DONE]` **Fresh-context sub-agent spawn (own conversation, own workspace):** `SubAgentSpec` carries a scoped `TaskSpec` + per-agent `model` + own `workspace`; `starting_prompt()` renders the spec only — the parent's transcript is never handed down — **`everyaios-blueprint::subagent`**
+- [x] `[DONE]` **DELEGATE_BLOCKED_TOOLS (delegate/clarify/memory/send_message/cronjob):** `DELEGATE_BLOCKED_TOOLS` const + `SubAgentSpec::effective_tools()` = parent grants minus explicit denies minus the canonical blocked set (sub-agents inherit denies, never escalated grants) — **`everyaios-blueprint::subagent`**
+- [x] `[DONE]` **Parent sees only summary (not full child context):** `SubAgentResult` is structurally summary-only (summary + status + artifacts, no transcript field) + `SubAgentRuntime::parent_sees_summary()` — **`everyaios-blueprint::subagent`**
+- [x] `[DONE]` **Inter-agent messaging (peer-review, cross-check, request sub-routines):** `AgentMessage`/`AgentMessageKind::{PeerReview,CrossCheck,RequestSubRoutine,Handoff}` + `SubAgentRuntime::route_message()` endpoint validation (from/to must be known agents or root) — **`everyaios-blueprint::subagent`**
+- [x] `[DONE]` **No-recursive-spawn guard:** `SubAgentRuntime::spawn` rejects `DepthExceeded` beyond `max_depth` (default 2) + `delegate` is in `DELEGATE_BLOCKED_TOOLS` (a child without the tool can't even attempt recursion) — **`everyaios-blueprint::subagent`**
+- [x] `[DONE]` **Batch parallel mode (multiple sub-agents concurrently):** `SubAgentRuntime::spawn_batch()` fan-out under `max_concurrent` (default 3) / `max_total` (default 6) limits — **`everyaios-blueprint::subagent`**
+- [x] `[DONE]` **Test: two spec-driven agents with different models run a plan end-to-end (deterministic simulation):** `subagent::tests::two_spec_driven_agents_different_models_run_a_plan` — planner (claude-sonnet) spawns coder (gpt-5-codex) on a verify-gated plan; depths correct, `delegate` stripped, parent receives summary-only; **live coordinator spawn (real LLM execution) = P6.2 exit-criterion wiring, still open**
 - [x] `[DONE]` **Multi-agent topologies (doc 63 §0 verdict — agent-framework orchestration vocab):** group-chat (shared turn loop, roles) + handoff (agent passes control + context via message) as the two topologies on top of P6.2; sequential/concurrent compose from batch mode; evaluate per-dollar/per-minute vs single agent before shipping (user directive: multi-agent only where eval proves it) — **`everyaios-blueprint::topology` (`MultiAgentPlan`/`AgentRole`/`Topology` + least-privilege `privileged_workers()` + `validate()`)**
 
 ### P6.3 Iteration Budgets (B6 — doc 16 Hermes 500/50; doc 39 DeerFlow subagent_limit_middleware)
@@ -815,7 +815,7 @@
 - [ ] `[NOT DONE]` Study Hermes `tool_result_storage.py` for 3-layer persistence (P5.7)
 - [ ] `[NOT DONE]` Study Hermes `context_compressor.py` for compaction stages (P5.7)
 - [ ] `[NOT DONE]` Study opencode `compaction.ts` for PRUNE_PROTECT pattern (P5.7)
-- [ ] `[NOT DONE]` Study opencode `task.ts` for subagent spawner design (P6.2)
+- [x] `[DONE]` Study opencode `task.ts` for subagent spawner design (P6.2) — **ported into `everyaios-blueprint::subagent` (depth limit, per-agent model, inherited denies via `DELEGATE_BLOCKED_TOOLS`, task_id, summary-only result)**
 - [ ] `[NOT DONE]` Study DeerFlow `subagent_limit_middleware.py` for budget enforcement (P6.3)
 - [ ] `[NOT DONE]` Study DeerFlow `task_tool.py` for poll-loop pattern (P6.3)
 - [ ] `[NOT DONE]` Study BrowserOS `browseros-core` for a11y snapshot/diff (P2.2)
