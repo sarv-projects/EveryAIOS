@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { FileSpreadsheet, Loader2, RefreshCw, Sigma } from 'lucide-react'
+import { Check, FileSpreadsheet, Loader2, RefreshCw, ShieldAlert, Sigma, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -10,11 +10,14 @@ import { OfficeOpenBar } from './office-open-bar'
 import {
   cellDisplay,
   colLetter,
+  xlsxEditCommit,
+  xlsxEditRequest,
   xlsxOpen,
   xlsxRecalc,
   type RecalcResult,
   type XlsxWindowPayload,
 } from '@/lib/spreadsheet'
+import { guardRespond } from '@/lib/guard'
 
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F']
 const ROWS = 15
@@ -76,6 +79,13 @@ export default function OfficeXlsxView() {
   const [selected, setSelected] = useState<{ r: number; c: number } | null>(null)
   const [recalc, setRecalc] = useState<RecalcResult | null>(null)
   const [recalcing, setRecalcing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [proposal, setProposal] = useState<{
+    address: string
+    value: string
+    ticketId: string | null
+  } | null>(null)
+  const [committing, setCommitting] = useState(false)
 
   const open = async (path: string) => {
     try {
@@ -97,6 +107,54 @@ export default function OfficeXlsxView() {
       setError(err instanceof Error ? err.message : 'Recalc failed')
     } finally {
       setRecalcing(false)
+    }
+  }
+
+  // Seed the draft with the displayed value when a cell is selected.
+  const selectCell = (r: number, c: number) => {
+    setSelected({ r, c })
+    const v =
+      computed(r, c) ??
+      (payload
+        ? cellDisplay(payload.rows[r - payload.offset - 1]?.[c - 1])
+        : GRID[`${colLetter(c)}${r}`]?.v ?? '')
+    setDraft(v)
+  }
+
+  // P4.7 — propose an edit: Guard-2 plan-before-touch (allow → commit; ask →
+  // render the approval card).
+  const propose = async () => {
+    if (!payload || !selected) return
+    const address = `${colLetter(selected.c)}${selected.r}`
+    try {
+      const req = await xlsxEditRequest(payload.path, payload.sheet, address, draft)
+      if (req.action === 'allow') {
+        await commitEdit(address, draft, null)
+      } else {
+        setProposal({ address, value: draft, ticketId: req.ticketId ?? null })
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Edit failed')
+    }
+  }
+
+  const commitEdit = async (address: string, value: string, ticketId: string | null) => {
+    if (!payload || committing) return
+    setCommitting(true)
+    try {
+      // Record the human approval on the ticket (audit receipt), then consume
+      // it (single-use + args-hash match) in the executor.
+      if (ticketId) await guardRespond(ticketId, 'approve')
+      await xlsxEditCommit(payload.path, payload.sheet, address, value, ticketId ?? undefined)
+      setProposal(null)
+      setDraft(value)
+      // Re-read + re-verify: the changed cell flashes via the recalc diff.
+      await open(payload.path)
+      setRecalc(await xlsxRecalc(payload.path))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Commit failed')
+    } finally {
+      setCommitting(false)
     }
   }
 
@@ -165,7 +223,14 @@ export default function OfficeXlsxView() {
         </div>
         <div className="flex flex-1 items-center gap-1.5 rounded border border-orange-500/40 bg-zinc-950 px-2 py-0.5 font-mono text-xs">
           <Sigma className="h-3 w-3 shrink-0 text-orange-400" />
-          <span className="min-w-0 flex-1 truncate text-foreground">{selValue}</span>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void propose()}
+            placeholder="select a cell to edit…"
+            disabled={!payload}
+            className="min-w-0 flex-1 bg-transparent text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+          />
           {recalc && selected && computed(selected.r, selected.c) != null && (
             <span className="shrink-0 text-[9px] text-emerald-400">✓ engine</span>
           )}
@@ -189,7 +254,52 @@ export default function OfficeXlsxView() {
             {recalc.formula_cells} formula cells · verified
           </Badge>
         )}
+        <Button
+          size="sm"
+          disabled={!payload || !selected || draft === selValue || committing}
+          className="h-6 gap-1 px-2 text-[10px]"
+          onClick={() => void propose()}
+        >
+          {committing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+          Save
+        </Button>
       </div>
+
+      {/* Guard-2 approval card for an "ask" verdict (same ticket as Cockpit) */}
+      {proposal && (
+        <div className="flex items-center gap-2 border-b border-orange-500/40 bg-orange-500/5 px-3 py-1.5">
+          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
+            Set <span className="text-orange-300">{proposal.address}</span> to{' '}
+            <span className="text-orange-300">{proposal.value}</span>
+            {proposal.ticketId
+              ? ` — approval ${proposal.ticketId.slice(0, 8)}`
+              : ''}
+          </span>
+          <Button
+            size="sm"
+            disabled={committing}
+            className="h-6 gap-1 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
+            onClick={() => commitEdit(proposal.address, proposal.value, proposal.ticketId)}
+          >
+            <Check className="h-3 w-3" />
+            Approve &amp; run
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={committing}
+            className="h-6 gap-1 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
+            onClick={() => {
+              if (proposal.ticketId) void guardRespond(proposal.ticketId, 'reject')
+              setProposal(null)
+            }}
+          >
+            <X className="h-3 w-3" />
+            Reject
+          </Button>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto scroll-thin">
         <table className="border-collapse font-mono text-[11px]">
@@ -223,7 +333,7 @@ export default function OfficeXlsxView() {
                       return (
                         <td
                           key={c}
-                          onClick={() => setSelected({ r, c: ci + 1 })}
+                          onClick={() => selectCell(r, ci + 1)}
                           className={cn(
                             'min-w-[88px] cursor-cell border px-2 py-0.5 text-foreground transition-colors hover:bg-orange-500/5',
                             isSel && 'ring-1 ring-inset ring-orange-500',
@@ -250,7 +360,7 @@ export default function OfficeXlsxView() {
                     return (
                       <td
                         key={c}
-                        onClick={() => setSelected({ r, c: COLS.indexOf(c) + 1 })}
+                        onClick={() => selectCell(r, COLS.indexOf(c) + 1)}
                         className={cn(
                           'min-w-[88px] cursor-cell border px-2 py-0.5',
                           cell?.header

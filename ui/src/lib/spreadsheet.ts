@@ -53,6 +53,33 @@ export async function xlsxRecalc(path: string): Promise<RecalcResult> {
   return invoke<RecalcResult>("xlsx_recalc", { path });
 }
 
+/** P4.7 — Guard-2 cell-edit split (plan-before-touch). */
+export interface XlsxEditRequest {
+  action: "allow" | "ask";
+  address: string;
+  value: string;
+  ticketId?: string;
+}
+
+export async function xlsxEditRequest(
+  path: string,
+  sheet: string,
+  address: string,
+  value: string,
+): Promise<XlsxEditRequest> {
+  return invoke<XlsxEditRequest>("xlsx_edit_request", { path, sheet, address, value });
+}
+
+export async function xlsxEditCommit(
+  path: string,
+  sheet: string,
+  address: string,
+  value: string,
+  ticketId?: string,
+): Promise<{ address: string; sheet: string; changedParts: string[] }> {
+  return invoke("xlsx_edit_commit", { path, sheet, address, value, ticketId });
+}
+
 /** Read one windowed slice of a sheet from a workbook path. */
 export async function xlsxOpen(
   path: string,
