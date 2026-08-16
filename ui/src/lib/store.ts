@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { inTauri } from './tauri'
 import {
   AGENT_MAP,
   DEFAULT_ROUTING,
@@ -501,6 +502,10 @@ interface AppState {
   streamAppend: (text: string, done: boolean) => void
   streamFail: (msg: string) => void
   streamStep: (label: string) => void
+
+  // Guard-2 tickets (bridge) — live approval cards in the transcript
+  pushMcq: (mcq: MCQInterrupt, sessionId?: string) => void
+  respondMcq: (id: string, choice: string) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -660,5 +665,68 @@ export const useAppStore = create<AppState>((set, get) => ({
         }),
       }
     })
+  },
+  pushMcq: (mcq, sessionId) => {
+    const targetId = sessionId ?? get().activeSessionId
+    set((s) => {
+      const target = s.sessions.find((x) => x.id === targetId)
+      if (!target) return {}
+      // Skip if this card is already attached to any message
+      const already = target.messages.some((m) => m.mcq?.id === mcq.id)
+      if (already) return {}
+      const last = target.messages[target.messages.length - 1]
+      if (last && last.role === 'assistant' && !last.mcq) {
+        return {
+          sessions: s.sessions.map((x) =>
+            x.id === targetId
+              ? {
+                  ...x,
+                  status: 'action-required',
+                  messages: x.messages.map((m, i) =>
+                    i === x.messages.length - 1 ? { ...m, mcq } : m,
+                  ),
+                }
+              : x,
+          ),
+        }
+      }
+      const standalone: ChatMessage = {
+        id: `mcq-${mcq.id}`,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date().toISOString(),
+        mcq,
+      }
+      return {
+        sessions: s.sessions.map((x) =>
+          x.id === targetId
+            ? { ...x, status: 'action-required', messages: [...x.messages, standalone] }
+            : x,
+        ),
+      }
+    })
+  },
+  respondMcq: (id, choice) => {
+    void (async () => {
+      // Real shell: record the decision on the ticket; preview: just dismiss.
+      if (inTauri()) {
+        try {
+          const { guardRespond } = await import('./guard')
+          await guardRespond(id, choice === 'approve' ? 'approve' : 'reject')
+        } catch {
+          /* keep card state */
+        }
+      }
+    })()
+    set((s) => ({
+      sessions: s.sessions.map((x) => ({
+        ...x,
+        status: x.status === 'action-required' ? 'running' : x.status,
+        messages: x.messages
+          .map((m) => (m.mcq?.id === id ? { ...m, mcq: undefined } : m))
+          .filter((m) => m.content !== '' || m.mcq !== undefined || m.role !== 'assistant'),
+      })),
+    }))
+    get().notify(`Guard-2: ${choice === 'approve' ? 'approved' : 'rejected'} #${id.slice(0, 8)}`)
   },
 }))

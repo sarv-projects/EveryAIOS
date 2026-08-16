@@ -1,11 +1,20 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
-  AlertTriangle, Check, KeyRound, ShieldCheck, Vault, X,
+  AlertTriangle, Check, KeyRound, OctagonX, ShieldCheck, Vault, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  guardEstop,
+  guardPolicy,
+  guardRespond,
+  guardTickets,
+  type GuardPolicy,
+  type GuardTicket,
+} from '@/lib/guard'
 
 const TRUST_LEVELS = ['Read', 'Write', 'Execute', 'Autonomous']
 const TRUST_SCORE = 75
@@ -63,6 +72,39 @@ const ACTION_TONE = {
 } as const
 
 export default function GuardPanel() {
+  const [tickets, setTickets] = useState<GuardTicket[]>([])
+  const [policy, setPolicy] = useState<GuardPolicy | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  // Live bridge (P7.5/J21): poll pending tickets + policy while in the shell;
+  // in preview the bridge returns demo data so the card stays explorable.
+  useEffect(() => {
+    let alive = true
+    const refresh = async () => {
+      try {
+        const [t, p] = await Promise.all([guardTickets(), guardPolicy()])
+        if (!alive) return
+        setTickets(t)
+        setPolicy(p)
+      } catch {
+        /* shell not ready */
+      }
+    }
+    void refresh()
+    const timer = setInterval(refresh, 3000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  const respond = async (ticketId: string, action: 'approve' | 'reject') => {
+    setBusy(ticketId)
+    await guardRespond(ticketId, action)
+    setTickets((ts) => ts.filter((t) => t.ticketId !== ticketId))
+    setBusy(null)
+  }
+
   return (
     <div className="flex h-full w-full flex-col">
       <header className="border-b border-border px-4 py-3">
@@ -82,6 +124,105 @@ export default function GuardPanel() {
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-4 p-4">
+          {/* Live pending approvals (Guard-2) */}
+          {tickets.length > 0 && (
+            <section className="rounded-lg border border-orange-500/40 bg-orange-500/5 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-foreground">
+                  Pending approvals
+                </span>
+                <Badge className="bg-orange-500/20 px-1.5 text-[9px] text-orange-300">
+                  {tickets.length} live
+                </Badge>
+              </div>
+              <ul className="space-y-2">
+                {tickets.map((t) => (
+                  <li
+                    key={t.ticketId}
+                    className="rounded-md border border-border bg-background/40 p-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-[10px] font-medium text-foreground">
+                            {t.operation}
+                          </span>
+                          <span className="rounded border border-red-500/30 bg-red-500/10 px-1 text-[8px] uppercase text-red-400">
+                            {t.risk}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                          {t.paths.join(' · ')}
+                        </div>
+                        {t.decision?.goal && (
+                          <div className="mt-1 text-[10px] text-muted-foreground/80">
+                            {t.decision.goal}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          size="sm"
+                          disabled={busy === t.ticketId}
+                          className="h-6 gap-1 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
+                          onClick={() => respond(t.ticketId, 'approve')}
+                        >
+                          <Check className="h-3 w-3" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy === t.ticketId}
+                          className="h-6 gap-1 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
+                          onClick={() => respond(t.ticketId, 'reject')}
+                        >
+                          <X className="h-3 w-3" />
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Estop + profile strip */}
+          {policy && (
+            <section className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  profile
+                </span>
+                <Badge className="bg-background/60 text-[9px] text-muted-foreground">
+                  {policy.profile}
+                </Badge>
+                <span className="font-mono text-[10px] text-muted-foreground/60">
+                  auto ≥ {Math.round(policy.minConfidenceForAuto * 100)}%
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant={policy.estopPulled ? 'destructive' : 'outline'}
+                className={cn(
+                  'h-6 gap-1 px-2 text-[10px]',
+                  policy.estopPulled
+                    ? 'bg-red-600 text-white hover:bg-red-500'
+                    : 'border-red-500/40 text-red-400 hover:bg-red-500/10',
+                )}
+                onClick={() => {
+                  void guardEstop(!policy.estopPulled).then(() =>
+                    setPolicy((p) => (p ? { ...p, estopPulled: !p.estopPulled } : p)),
+                  )
+                }}
+              >
+                <OctagonX className="h-3 w-3" />
+                {policy.estopPulled ? 'Estop is pulled — reset' : 'Pull estop'}
+              </Button>
+            </section>
+          )}
+
           {/* Trust meter */}
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="mb-2 flex items-center justify-between">

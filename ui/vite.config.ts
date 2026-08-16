@@ -29,5 +29,24 @@ export default defineConfig({
     target: "es2021",
     sourcemap: false,
     chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Heavy vendors split out of the app chunk (Tauri caches them).
+          charts: ["recharts"],
+          motion: ["framer-motion"],
+          radix: [
+            "@radix-ui/react-accordion",
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-popover",
+            "@radix-ui/react-select",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-tooltip",
+          ],
+          markdown: ["react-markdown"],
+        },
+      },
+    },
   },
 });

@@ -132,6 +132,42 @@ export async function initBridge(): Promise<void> {
   } catch {
     /* demo */
   }
+
+  // 4. Guard-2 tickets — poll pending approvals into the transcript as
+  //    permission cards (same ticket id the Cockpit card shows).
+  try {
+    const { guardTickets } = await import("./guard");
+    const seen = new Set<string>();
+    setInterval(async () => {
+      try {
+        const tickets = await guardTickets();
+        for (const t of tickets) {
+          if (seen.has(t.ticketId)) continue;
+          seen.add(t.ticketId);
+          const st = useAppStore.getState();
+          st.pushMcq(
+            {
+              id: t.ticketId,
+              title: `${t.operation} · ${t.paths.join(", ")}`,
+              description:
+                t.decision?.goal ??
+                `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk`,
+              kind: "permission",
+              options: [
+                { label: "Approve & run", value: "approve" },
+                { label: "Reject", value: "reject" },
+              ],
+            },
+            t.sessionId,
+          );
+        }
+      } catch {
+        /* shell may not be ready yet */
+      }
+    }, 2000);
+  } catch {
+    /* demo */
+  }
 }
 
 /** Send a user turn: live chat_stream when in the shell, demo toast otherwise. */

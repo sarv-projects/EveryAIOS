@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, ChevronDown, Cpu, Gauge, Route, Sparkles, Zap } from 'lucide-react'
+import { Check, ChevronDown, Cpu, Download, Gauge, Loader2, Route, Sparkles, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/lib/store'
@@ -56,11 +57,36 @@ export default function AgentModelPicker({ compact }: Props) {
   const autoRoute = useAppStore((s) => s.autoRoute)
   const setAutoRoute = useAppStore((s) => s.setAutoRoute)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  const notify = useAppStore((s) => s.notify)
 
   const liveAgents = useAppStore((s) => s.liveAgents)
   const catalog = liveAgents.length > 0 ? liveAgents : AGENTS
+  const [installing, setInstalling] = useState(false)
 
   const agent = catalog.find((a) => a.id === selectedAgentId) ?? catalog[0]
+
+  // F8 — plan-before-touch install: request (Guard-2 ticket or auto-allow),
+  // then commit. The approved card shows in the transcript via the bridge.
+  const installAgent = async (agentId: string) => {
+    setInstalling(true)
+    try {
+      const { acpInstallRequest, acpInstallCommit } = await import('@/lib/acp')
+      const req = await acpInstallRequest(agentId)
+      if (req.action === 'allow') {
+        await acpInstallCommit(agentId)
+        notify(`${agent?.name} installed — pick it and send`)
+        setOpen(false)
+      } else if (req.ticketId) {
+        notify(`Approval needed — Guard-2 card #${req.ticketId.slice(0, 8)} is in the chat`)
+      } else {
+        notify('Install blocked by policy')
+      }
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Install failed')
+    } finally {
+      setInstalling(false)
+    }
+  }
   const model = getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
   const models = getModelsForAgent(selectedAgentId)
 
@@ -264,6 +290,48 @@ export default function AgentModelPicker({ compact }: Props) {
                 <div className="mt-1.5 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
                   <Sparkles className="h-2.5 w-2.5" />
                   Selected: {agent.name} · {model?.label ?? '—'}
+                </div>
+
+                {/* Install (F8) — one click, then use */}
+                <div className="mt-2 border-t border-border/60 pt-2">
+                  {agent.status === 'installed' || agent.id === 'everyaios-native' ? (
+                    <div className="flex items-center justify-between px-1">
+                      <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
+                        <Check className="h-2.5 w-2.5" />
+                        installed
+                        {agent.version ? ` · v${agent.version}` : ''}
+                      </span>
+                      {agent.id !== 'everyaios-native' && (
+                        <span className="font-mono text-[9px] text-muted-foreground/60">
+                          {agent.vendor}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        disabled={installing}
+                        className="h-6 gap-1 bg-orange-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
+                        onClick={() => installAgent(agent.id)}
+                      >
+                        {installing ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            installing…
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-3 w-3" />
+                            Install
+                          </>
+                        )}
+                      </Button>
+                      <span className="font-mono text-[9px] text-muted-foreground/60">
+                        {agent.note ?? 'Fetch from the ACP registry'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

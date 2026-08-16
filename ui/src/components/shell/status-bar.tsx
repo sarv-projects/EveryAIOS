@@ -71,6 +71,7 @@ export function StatusBar() {
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const selectedModelId = useAppStore((s) => s.selectedModelId)
   const autoRoute = useAppStore((s) => s.autoRoute)
+  const liveBudget = useAppStore((s) => s.liveBudget)
 
   const agent = AGENT_MAP[selectedAgentId]
   const model = MODEL_MAP[selectedModelId]
@@ -120,9 +121,13 @@ export function StatusBar() {
     {
       icon: Zap,
       label: 'cache',
-      value: '94%',
+      value: liveBudget?.cacheHitRate != null
+        ? `${Math.round(liveBudget.cacheHitRate * 100)}%`
+        : '94%',
       color: 'text-emerald-400',
-      tooltip: 'Prompt cache hit rate · 94% (last 30 turns)',
+      tooltip: liveBudget?.cacheHitRate != null
+        ? `Prompt cache hit rate · ${Math.round(liveBudget.cacheHitRate * 100)}% (live)`
+        : 'Prompt cache hit rate · 94% (last 30 turns)',
     },
   ]
 

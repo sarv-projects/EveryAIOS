@@ -114,6 +114,7 @@ function BudgetBar({ used, cap }: { used: number; cap: number }) {
 }
 
 export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
+  const respondMcq = useAppStore((s) => s.respondMcq)
   const notify = useAppStore((s) => s.notify)
   const [selected, setSelected] = useState<string | null>(
     mcq.options?.[0]?.value ?? null
@@ -186,25 +187,16 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
         <Button
           size="sm"
           className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600"
-          onClick={() => notify('Action approved')}
+          onClick={() => respondMcq(mcq.id, 'approve')}
         >
           <Check className="h-3 w-3" />
           Approve
         </Button>
         <Button
           size="sm"
-          variant="outline"
-          className="h-7 gap-1.5 px-2.5 text-[11px]"
-          onClick={() => notify('Editing action')}
-        >
-          <Pencil className="h-3 w-3" />
-          Edit
-        </Button>
-        <Button
-          size="sm"
           variant="ghost"
           className="h-7 gap-1.5 px-2.5 text-[11px] text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
-          onClick={() => notify('Action rejected')}
+          onClick={() => respondMcq(mcq.id, 'reject')}
         >
           <X className="h-3 w-3" />
           Reject
