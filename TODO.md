@@ -4,7 +4,7 @@
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
 > **Scope:** Complete product — 148 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
-> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–69) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals; **doc 66** (anomalyco org, 2026-08-15) for the A6/A9/A7 models.dev catalog steal (TODO P14); **doc 67** (capability deltas + UI/UX finalization, 2026-08-15) for H29 dashboard artifacts (bolt.diy), B7 heartbeat automations (Hatchet lease pattern), and the H20 views-rail redesign (ARCH/12 v2.0); **doc 68** (final all-rounder market research, 2026-08-15) for H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, and the two-channel capability injection (F12/J17/F7); **doc 69** (ACP agent ecosystem + harness deep-dive, 2026-08-16) for the verified ACP entrypoint catalog (Claude Code/Codex/Cline/OpenCode/Hermes/OpenClaw/Copilot/Gemini/…) + Zed/Cline/Hermes steal queue (TODO P17). If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
+> **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–69) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals; **doc 66** (anomalyco org, 2026-08-15) for the A6/A9/A7 models.dev catalog steal (TODO P14); **doc 67** (capability deltas + UI/UX finalization, 2026-08-15) for H29 dashboard artifacts (bolt.diy), B7 heartbeat automations (Hatchet lease pattern), and the H20 views-rail redesign (ARCH/12 v2.0); **doc 68** (final all-rounder market research, 2026-08-15) for H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, and the two-channel capability injection (F12/J17/F7); **doc 69** (ACP agent ecosystem + harness deep-dive, 2026-08-16) for the verified ACP entrypoint catalog (Claude Code/Codex/Cline/OpenCode/Hermes/OpenClaw/Copilot/Gemini/…) + Zed/Cline/Hermes steal queue (TODO P17); **doc 70** (mcpservers.org directory inbuilt analysis, 2026-08-16) for the MCP-directory verdict: **don't** bundle document/browser MCP servers (our Rust engines supersede them); **do** add three *native* inbuilt capabilities — PDF page ops (split/merge/rotate/reorder via lopdf, `oxidize-pdf` steal), content search + OCR (`dowse` adapt), and a Gmail/IMAP read-first connector (`mailwarden`/`Busymail` approve-before-send pattern) — TODO P18. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 >
 > **Connector-platform decision (2026-08-16):** **MCP is the platform — no third-party aggregator.** Composio/Zapier/Nango are cloud SaaS that hold OAuth tokens on *their* servers, which contradicts the zero-founder-server/local-vault promise. In 2026 every connector we care about (Gmail, Slack, GitHub, Linear, Notion, Postgres…) ships an official MCP server; so the connectors surface is **MCP Servers** (user-supplied, run locally via stdio/`npx` or user-hosted HTTP, tools surfaced from the live catalog) + **Native** (first-party BYO OAuth/API-key where a local integration is warranted, tokens in the SQLCipher vault) + **Tool Catalog** (the live `everyaios-mcp` registry). The Composio/Zapier/Nango tabs are removed.
 >
@@ -1223,6 +1223,16 @@
 
 ---
 
+## P18 — MCP Directory Inbuilt Queue (doc 70, 2026-08-16 — mcpservers.org/all, 11,054 servers)
+> **Verdict recorded:** do NOT bundle third-party document/browser MCP servers as inbuilt — extraction-only Python wrappers are superseded by our Rust engines (calamine/lopdf/roxmltree) and hosted "send us your files" servers violate local-first. Three *native* inbuilt capabilities close real gaps (no new deps beyond what's already used):
+
+- [ ] `[NOT DONE]` **PDF page ops (doc 70 §2 — `oxidize-pdf` 🔴 STEAL):** split / merge / rotate / reorder pages, plus reorder — extend `everyaios-office::pdf` with lopdf (same dep); the current engine does form-fill/text-swap/redact/re-author but no page-level ops. **Highest-value, native, no external dep.**
+- [ ] `[NOT DONE]` **Content search + OCR (doc 70 §2 — `dowse` 🟡 ADAPT):** full-text *content* search across a folder + OCR of pasted screenshots/images — extend `everyaios-storage` (currently FTS5 filename-only) with an on-device OCR path.
+- [ ] `[NOT DONE]` **Gmail/IMAP read-first connector (doc 70 §2 — `mailwarden`/`Busymail` 🔴 STEAL the pattern):** the first real external connector — read-first, **approve-before-send** (no silent outbound), tokens in the SQLCipher vault, every send a Guard-2 ticket. Closes the external-connector OAuth gap with the right posture.
+- [ ] `[NOT DONE]` **Connector catalog seed (doc 70 §3 — 258 official remote MCP servers):** list Notion/Linear/Sentry/Stripe/Gmail/Slack as the "MCP Servers" tab seed (user-supplied, hosted — not inbuilt).
+
+---
+
 ## SUMMARY
 
 | Phase | Tasks | Weeks |
@@ -1242,6 +1252,7 @@
 | P15 Capability-Delta Queue (doc 67) | 5 | post-v1 |
 | P16 Final Market-Research Deltas (doc 68) | 8 | post-v1 |
 | P17 ACP Agent Ecosystem Steal Queue (doc 69) | 10 | post-v1 |
+| P18 MCP Directory Inbuilt Queue (doc 70) | 4 | ~1 (parallel) |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
