@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 mod acp_cmds;
 mod cockpit_cmds;
 mod guard_cmds;
+mod mcp_cmds;
 mod office_cmds;
 mod replay_cmds;
 mod trajectory_cmds;
@@ -330,6 +331,7 @@ pub fn run() {
             cockpit_cmds::interrupt_respond,
             cockpit_cmds::cockpit_upsert_agent,
             xlsx_cmds::xlsx_open,
+            mcp_cmds::mcp_catalog,
             office_cmds::docx_open,
             office_cmds::pptx_open,
             office_cmds::pdf_open,

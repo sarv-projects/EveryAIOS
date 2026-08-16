@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  Check, Cloud, Plug, Plus, Search, Server, Zap,
+  Check, Cloud, Plug, Plus, Search, Server, Zap, Wrench,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { mockConnectors, type Connector } from '@/lib/store'
+import { mcpCatalog, type McpCatalog } from '@/lib/mcp'
 import { cn } from '@/lib/utils'
 
 const STATS = [
@@ -16,6 +17,18 @@ const STATS = [
   { label: 'Tools', value: '94', tone: 'text-orange-300' },
   { label: 'MCP servers', value: '3', tone: 'text-sky-300' },
 ]
+
+const KIND_TONE: Record<string, string> = {
+  read: 'bg-emerald-500/15 text-emerald-300',
+  edit: 'bg-orange-500/15 text-orange-300',
+  delete: 'bg-red-500/15 text-red-300',
+  move: 'bg-amber-500/15 text-amber-300',
+  search: 'bg-sky-500/15 text-sky-300',
+  execute: 'bg-violet-500/15 text-violet-300',
+  think: 'bg-zinc-500/15 text-zinc-300',
+  fetch: 'bg-cyan-500/15 text-cyan-300',
+  other: 'bg-zinc-500/15 text-zinc-300',
+}
 
 const LOGO_COLORS = [
   'bg-orange-500/80',
@@ -71,6 +84,18 @@ function initials(name: string) {
 
 export default function ConnectorsPanel() {
   const [tab, setTab] = useState('native')
+  const [catalog, setCatalog] = useState<McpCatalog | null>(null)
+
+  // Live tool catalog from the Rust registry (demo fallback in preview).
+  useEffect(() => {
+    let alive = true
+    mcpCatalog()
+      .then((c) => alive && setCatalog(c))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -108,7 +133,7 @@ export default function ConnectorsPanel() {
           >
             <div className="text-[10px] text-muted-foreground">{s.label}</div>
             <div className={cn('font-mono text-lg font-semibold', s.tone)}>
-              {s.value}
+              {s.label === 'Tools' && catalog ? catalog.total : s.value}
             </div>
           </div>
         ))}
@@ -122,12 +147,17 @@ export default function ConnectorsPanel() {
             <TabsTrigger value="composio" className="text-xs">Composio</TabsTrigger>
             <TabsTrigger value="zapier" className="text-xs">Zapier</TabsTrigger>
             <TabsTrigger value="nango" className="text-xs">Nango</TabsTrigger>
+            <TabsTrigger value="catalog" className="text-xs">Tool Catalog</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-4 p-4">
+          {tab === 'catalog' ? (
+            <ToolCatalogSection catalog={catalog} />
+          ) : (
+          <>
           {/* Native connector grid */}
           <section>
             <div className="mb-2 flex items-center gap-1.5">
@@ -206,6 +236,8 @@ export default function ConnectorsPanel() {
               })}
             </ul>
           </section>
+          </>
+          )}
         </div>
       </div>
 
@@ -217,6 +249,85 @@ export default function ConnectorsPanel() {
         </p>
       </footer>
     </div>
+  )
+}
+
+function ToolCatalogSection({ catalog }: { catalog: McpCatalog | null }) {
+  if (!catalog) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-12 text-center">
+        <Wrench className="h-6 w-6 text-muted-foreground/40" />
+        <p className="text-[11px] text-muted-foreground">
+          Loading the tool registry…
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Aggregate strip (real counts) */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          { label: 'total', value: catalog.total },
+          { label: 'browser', value: catalog.browser },
+          { label: 'storage', value: catalog.storage },
+          { label: 'read-only', value: catalog.read_only },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg border border-border bg-card p-2.5">
+            <div className="font-mono text-base font-semibold text-orange-300">{s.value}</div>
+            <div className="text-[10px] text-muted-foreground">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tool list (the real registry) */}
+      <section>
+        <div className="mb-2 flex items-center gap-1.5">
+          <Wrench className="h-3.5 w-3.5 text-orange-400" />
+          <span className="text-xs font-medium text-foreground">
+            Registered agent tools
+          </span>
+          <Badge variant="secondary" className="text-[9px]">
+            everyaios-mcp
+          </Badge>
+        </div>
+        <ul className="space-y-1">
+          {catalog.tools.map((t) => (
+            <li
+              key={t.name}
+              className="flex items-center gap-2.5 rounded-md border border-border/50 bg-background/30 px-3 py-1.5"
+            >
+              <span className="w-32 shrink-0 truncate font-mono text-[11px] font-medium text-foreground">
+                {t.name}
+              </span>
+              <Badge className={cn('shrink-0 text-[8px]', KIND_TONE[t.kind] ?? KIND_TONE.other)}>
+                {t.kind}
+              </Badge>
+              <span className="w-16 shrink-0 font-mono text-[9px] text-muted-foreground/60">
+                {t.profile}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground/80">
+                {t.description}
+              </span>
+              <span className="shrink-0 font-mono text-[9px] text-muted-foreground/50">
+                {t.args} arg{t.args === 1 ? '' : 's'}
+              </span>
+              {t.read_only && (
+                <Badge variant="secondary" className="shrink-0 text-[8px] text-emerald-300">
+                  ro
+                </Badge>
+              )}
+              {t.open_world && (
+                <Badge variant="secondary" className="shrink-0 text-[8px] text-amber-300">
+                  open
+                </Badge>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </>
   )
 }
 

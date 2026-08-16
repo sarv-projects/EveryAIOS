@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, MessageSquare } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { OfficeOpenBar } from './office-open-bar'
-import { pdfOpen, type PdfPayload } from '@/lib/office'
+import { pdfOpen, pdfBytes, type PdfPayload } from '@/lib/office'
+
+const PdfCanvas = lazy(() => import('./pdf-canvas'))
 
 const FORM_FIELDS = [
   { label: 'Party A:', value: 'Acme Holdings, Inc.', top: 18 },
@@ -19,6 +21,7 @@ export default function OfficePdfView() {
   const [page, setPage] = useState(2)
   const [zoom, setZoom] = useState(100)
   const [payload, setPayload] = useState<PdfPayload | null>(null)
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const open = async (path: string) => {
@@ -26,6 +29,13 @@ export default function OfficePdfView() {
       setError(null)
       setPayload(await pdfOpen(path))
       setPage(1)
+      // Real pixels when the shell can hand us the raw bytes (pdf.js render);
+      // fall back to the text-extraction cards if that fails.
+      try {
+        setDataUrl(await pdfBytes(path))
+      } catch {
+        setDataUrl(null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open PDF')
     }
@@ -69,13 +79,25 @@ export default function OfficePdfView() {
       <ScrollArea className="scroll-thin min-h-0 flex-1 bg-zinc-950/40">
         <div className="flex justify-center p-4">
           {payload ? (
-            <div className="w-full max-w-3xl space-y-2">
-              {payload.texts[page - 1] != null && (
-                <div className="rounded-sm bg-[#fbfbf9] p-6 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-xl">
-                  {payload.texts[page - 1]}
-                </div>
-              )}
-            </div>
+            dataUrl ? (
+              <Suspense
+                fallback={
+                  <div className="rounded-sm bg-[#fbfbf9] p-6 font-mono text-[11px] text-zinc-500">
+                    Rendering page…
+                  </div>
+                }
+              >
+                <PdfCanvas dataUrl={dataUrl} page={page} scale={zoom / 100} />
+              </Suspense>
+            ) : (
+              <div className="w-full max-w-3xl space-y-2">
+                {payload.texts[page - 1] != null && (
+                  <div className="rounded-sm bg-[#fbfbf9] p-6 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-xl">
+                    {payload.texts[page - 1]}
+                  </div>
+                )}
+              </div>
+            )
           ) : (
           <div
             className="relative rounded-sm bg-[#fbfbf9] shadow-xl"

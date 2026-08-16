@@ -1187,6 +1187,7 @@ dependencies = [
  "everyaios-core",
  "everyaios-guard",
  "everyaios-ipc",
+ "everyaios-mcp",
  "everyaios-office",
  "everyaios-vault",
  "serde",
@@ -1218,6 +1219,14 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "everyaios-mcp"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

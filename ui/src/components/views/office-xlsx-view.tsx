@@ -1,9 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { FileSpreadsheet, Sigma } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { OfficeOpenBar } from './office-open-bar'
+import { cellDisplay, colLetter, xlsxOpen, type XlsxWindowPayload } from '@/lib/spreadsheet'
 
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F']
 const ROWS = 15
@@ -60,26 +63,55 @@ const GRID: Record<string, Cell> = {
 const CHART_BARS = [60, 67.5, 90, 105]
 
 export default function OfficeXlsxView() {
+  const [payload, setPayload] = useState<XlsxWindowPayload | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const open = async (path: string) => {
+    try {
+      setError(null)
+      setPayload(await xlsxOpen(path, null, 0, 500))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open workbook')
+    }
+  }
+
+  const colCount = payload ? payload.total_cols : COLS.length
+  const columns = Array.from({ length: colCount }, (_, i) => colLetter(i + 1))
+
   return (
     <div className="flex h-full w-full flex-col bg-card">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
-          <span className="font-mono text-xs font-medium text-foreground">
-            Q3-Financials.xlsx
+          <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
+            {payload?.path ?? 'Q3-Financials.xlsx'}
           </span>
-          <Badge
-            variant="outline"
-            className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
-          >
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
-            Live
-          </Badge>
+          {payload ? (
+            <Badge variant="outline" className="text-[10px] text-emerald-300">
+              {payload.sheet} · {payload.total_rows} rows
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+            >
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+              demo
+            </Badge>
+          )}
         </div>
         <Badge variant="secondary" className="text-[10px]">
           IronCalc
         </Badge>
       </header>
+
+      <OfficeOpenBar onOpen={open} livePath={payload?.path} />
+
+      {error && (
+        <div className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
+          ⚠ {error}
+        </div>
+      )}
 
       <div className="flex items-center gap-2 border-b border-border bg-zinc-900/50 px-3 py-1.5">
         <div className="flex items-center gap-1 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -98,7 +130,7 @@ export default function OfficeXlsxView() {
           <thead>
             <tr>
               <th className="sticky left-0 top-0 z-10 w-8 border border-border bg-zinc-900 text-[9px] font-normal text-muted-foreground" />
-              {COLS.map((c) => (
+              {columns.map((c) => (
                 <th
                   key={c}
                   className="sticky top-0 z-10 min-w-[88px] border border-border bg-zinc-900 px-2 py-0.5 text-[10px] font-normal text-muted-foreground"
@@ -109,7 +141,24 @@ export default function OfficeXlsxView() {
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: ROWS }, (_, r) => r + 1).map((r) => (
+            {payload ? (
+              payload.rows.map((row, i) => {
+                const r = payload.offset + i + 1
+                return (
+                  <tr key={r}>
+                    <td className="sticky left-0 z-10 w-8 border border-border bg-zinc-900 px-2 py-0.5 text-right text-[9px] text-muted-foreground">
+                      {r}
+                    </td>
+                    {columns.map((c, ci) => (
+                      <td key={c} className="min-w-[88px] border border-border px-2 py-0.5 text-foreground">
+                        {cellDisplay(row[ci])}
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })
+            ) : (
+              Array.from({ length: ROWS }, (_, r) => r + 1).map((r) => (
               <tr key={r}>
                 <td className="sticky left-0 z-10 w-8 border border-border bg-zinc-900 px-2 py-0.5 text-right text-[9px] text-muted-foreground">
                   {r}
@@ -150,7 +199,8 @@ export default function OfficeXlsxView() {
                   )
                 })}
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
       </div>
