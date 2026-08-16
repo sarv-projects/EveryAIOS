@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, ChevronDown, Cpu, Download, Gauge, Loader2, Route, Sparkles, Zap } from 'lucide-react'
+import { Check, ChevronDown, Cpu, Download, Gauge, KeyRound, Loader2, RotateCw, Route, Sparkles, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -62,8 +62,18 @@ export default function AgentModelPicker({ compact }: Props) {
   const liveAgents = useAppStore((s) => s.liveAgents)
   const catalog = liveAgents.length > 0 ? liveAgents : AGENTS
   const [installing, setInstalling] = useState(false)
+  const [connecting, setConnecting] = useState(false)
+  const [connected, setConnected] = useState<string | null>(null)
+  const [auth, setAuth] = useState<{
+    handle: string
+    methods: { id: string; name: string; type?: string; description?: string }[]
+    waitingUrl?: string
+  } | null>(null)
 
   const agent = catalog.find((a) => a.id === selectedAgentId) ?? catalog[0]
+  const activeFolder = useAppStore(
+    (s) => s.sessions.find((x) => x.id === s.activeSessionId)?.folder,
+  )
 
   // F8 — plan-before-touch install: request (Guard-2 ticket or auto-allow),
   // then commit. The approved card shows in the transcript via the bridge.
@@ -85,6 +95,49 @@ export default function AgentModelPicker({ compact }: Props) {
       notify(err instanceof Error ? err.message : 'Install failed')
     } finally {
       setInstalling(false)
+    }
+  }
+
+  // J17 — connect + auth: spawn the agent over ACP; if it demands sign-in,
+  // surface its authMethods (url-type opens the system browser, then retry).
+  const connectAgent = async (agentId: string) => {
+    setConnecting(true)
+    setAuth(null)
+    try {
+      const { acpLaunch } = await import('@/lib/acp')
+      const info = await acpLaunch(agentId, activeFolder ?? '~')
+      if (!info.authRequired || info.authMethods.length === 0) {
+        setConnected(info.handle)
+        notify(`${agent?.name} connected (${info.handle.slice(0, 8)}…)`)
+        return
+      }
+      setAuth({ handle: info.handle, methods: info.authMethods })
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Failed to launch agent')
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const signIn = async (methodId: string) => {
+    if (!auth) return
+    const { acpAuthenticate } = await import('@/lib/acp')
+    try {
+      const res = await acpAuthenticate(auth.handle, methodId)
+      if (res.ok || res.sessionId) {
+        setConnected(auth.handle)
+        setAuth(null)
+        notify('Signed in — the agent is ready')
+      } else if (res.pending && res.url) {
+        setAuth({ ...auth, waitingUrl: res.url })
+        window.open(res.url, '_blank')
+        notify('Opened the sign-in page — approve there, then retry')
+      } else if (res.pending) {
+        setAuth({ ...auth, waitingUrl: undefined })
+        notify('Waiting for the agent-side login to complete…')
+      }
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Sign-in failed')
     }
   }
   const model = getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
@@ -292,8 +345,8 @@ export default function AgentModelPicker({ compact }: Props) {
                   Selected: {agent.name} · {model?.label ?? '—'}
                 </div>
 
-                {/* Install (F8) — one click, then use */}
-                <div className="mt-2 border-t border-border/60 pt-2">
+                {/* Install + connect (F8/J17) — one click, then use */}
+                <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
                   {agent.status === 'installed' || agent.id === 'everyaios-native' ? (
                     <div className="flex items-center justify-between px-1">
                       <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
@@ -332,6 +385,74 @@ export default function AgentModelPicker({ compact }: Props) {
                       </span>
                     </div>
                   )}
+
+                  {agent.id !== 'everyaios-native' && (
+                      connected ? (
+                        <div className="flex items-center gap-1.5 px-1">
+                          <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
+                            <Check className="h-2.5 w-2.5" />
+                            connected
+                          </span>
+                          <span className="font-mono text-[9px] text-muted-foreground/50">
+                            {connected.slice(0, 10)}…
+                          </span>
+                        </div>
+                      ) : auth ? (
+                        <div className="space-y-1 rounded-md border border-orange-500/30 bg-orange-500/5 p-2">
+                          <div className="flex items-center gap-1 font-mono text-[9px] text-orange-300">
+                            <KeyRound className="h-2.5 w-2.5" />
+                            {auth.waitingUrl ? 'Waiting for sign-in…' : `${agent.name} needs sign-in`}
+                          </div>
+                          {auth.methods.map((m) => (
+                            <div key={m.id} className="flex items-center gap-1.5">
+                              <Button
+                                size="sm"
+                                className="h-5 gap-1 px-2 text-[9px]"
+                                onClick={() => signIn(m.id)}
+                              >
+                                Sign in with {m.name}
+                              </Button>
+                              {m.description && (
+                                <span className="truncate font-mono text-[8px] text-muted-foreground/60">
+                                  {m.description}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          {auth.waitingUrl && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-5 gap-1 px-2 text-[9px]"
+                              onClick={() => signIn(auth.methods[0]?.id ?? '')}
+                            >
+                              <RotateCw className="h-2.5 w-2.5" />
+                              I finished sign-in — retry
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={connecting}
+                            className="h-6 gap-1 px-2.5 text-[10px]"
+                            onClick={() => connectAgent(agent.id)}
+                          >
+                            {connecting ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <KeyRound className="h-3 w-3 text-orange-400" />
+                            )}
+                            {connecting ? 'connecting…' : 'Connect / sign in'}
+                          </Button>
+                          <span className="font-mono text-[9px] text-muted-foreground/50">
+                            subscription · api key · local
+                          </span>
+                        </div>
+                      )
+                    )}
                 </div>
               </div>
             </div>

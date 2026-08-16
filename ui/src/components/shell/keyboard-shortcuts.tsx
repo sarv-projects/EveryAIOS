@@ -25,6 +25,7 @@ const SHORTCUTS = [
     { keys: '⌘⇧ C', action: 'Code view' },
     { keys: '⌘⇧ O', action: 'Office view' },
     { keys: '⌘⇧ P', action: 'Progress view' },
+    { keys: '⌘⇧ T', action: 'Trajectory view' },
   ]},
   { group: 'Panels', items: [
     { keys: '⌘⇧ A', action: 'Automations' },
@@ -130,6 +131,13 @@ export function KeyboardShortcuts() {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
         e.preventDefault()
         setActiveView('office-xlsx')
+        setCenterScreen('chat')
+        return
+      }
+      // Cmd/Ctrl + Shift + T — trajectory
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault()
+        setActiveView('trajectory')
         setCenterScreen('chat')
         return
       }

@@ -24,6 +24,7 @@ export type ViewId =
   | 'audit'
   | 'storage'
   | 'timeline'
+  | 'trajectory'
 
 export type ChatMode = 'normal' | 'plan' | 'research' | 'quick' | 'code'
 

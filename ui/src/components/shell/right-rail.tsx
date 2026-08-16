@@ -12,6 +12,7 @@ import {
   PanelRightClose,
   PanelRight,
   GripVertical,
+  ScanSearch,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -40,6 +41,7 @@ import ProgressView from '@/components/views/progress-view'
 import DiffView from '@/components/views/diff-view'
 import AuditView from '@/components/views/audit-view'
 import StorageView from '@/components/views/storage-view'
+import TrajectoryView from '@/components/views/trajectory-view'
 import { SessionTimeline } from '@/components/chat/session-timeline'
 
 // Map viewport IDs to the task kind that determines which agent handles them
@@ -57,6 +59,7 @@ const VIEW_TASK_MAP: Partial<Record<ViewId, TaskKind>> = {
   audit: 'plan',
   storage: 'code',
   timeline: 'plan',
+  trajectory: 'plan',
 }
 
 interface RailItem {
@@ -76,6 +79,7 @@ const railItems: RailItem[] = [
 
 const sessionItems: RailItem[] = [
   { id: 'progress', icon: Activity, label: 'Progress', shortcut: '⌘⇧P', live: true },
+  { id: 'trajectory', icon: ScanSearch, label: 'Trajectory', shortcut: '⌘⇧T' },
 ]
 
 const officeFlyoutItems = [
@@ -100,6 +104,7 @@ function ViewportContent({ view }: { view: ViewId }) {
     case 'audit': return <AuditView />
     case 'storage': return <StorageView />
     case 'timeline': return <SessionTimeline />
+    case 'trajectory': return <TrajectoryView />
     default: return null
   }
 }

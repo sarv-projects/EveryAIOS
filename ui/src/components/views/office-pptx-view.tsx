@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Presentation, ChevronLeft, ChevronRight, StickyNote } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { OfficeOpenBar } from './office-open-bar'
+import { pptxOpen, type PptxPayload } from '@/lib/office'
 
 const SLIDES = [
   { title: 'Q3 2026 Results', active: false },
@@ -15,30 +17,70 @@ const SLIDES = [
 
 export default function OfficePptxView() {
   const [current, setCurrent] = useState(2)
+  const [payload, setPayload] = useState<PptxPayload | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const open = async (path: string) => {
+    try {
+      setError(null)
+      setPayload(await pptxOpen(path))
+      setCurrent(0)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open deck')
+    }
+  }
 
   return (
     <div className="flex h-full w-full flex-col bg-zinc-900">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <Presentation className="h-4 w-4 text-orange-400" />
-          <span className="font-mono text-xs font-medium text-foreground">
-            quarterly-deck.pptx
+          <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
+            {payload?.path ?? 'quarterly-deck.pptx'}
           </span>
-          <Badge
-            variant="outline"
-            className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
-          >
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
-            Live
-          </Badge>
+          {payload ? (
+            <Badge variant="outline" className="text-[10px] text-emerald-300">
+              engine read
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+            >
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+              demo
+            </Badge>
+          )}
         </div>
-        <span className="font-mono text-[10px] text-muted-foreground">Slide 3 / 12</span>
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {payload ? `Slide ${current + 1} / ${payload.slides.length}` : 'Slide 3 / 12'}
+        </span>
       </header>
+
+      <OfficeOpenBar onOpen={open} livePath={payload?.path} />
+
+      {error && (
+        <div className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
+          ⚠ {error}
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col bg-zinc-950/40 p-4">
           <div className="relative mx-auto aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-border bg-gradient-to-br from-[#1d1f23] to-[#141518] shadow-lg">
-            <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />
+            {payload && payload.slides[current] && (
+              <div className="flex h-full flex-col p-8">
+                <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />
+                <Badge variant="secondary" className="mb-3 w-fit bg-orange-500/15 text-[9px] text-orange-300">
+                  {payload.slides[current].part}
+                </Badge>
+                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground/80">
+                  {payload.slides[current].text}
+                </pre>
+              </div>
+            )}
+            {!payload && <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />}
+            {!payload && (
             <div className="flex h-full flex-col p-8">
               <Badge
                 variant="secondary"
@@ -77,6 +119,7 @@ export default function OfficePptxView() {
                 Agent editing
               </div>
             </div>
+            )}
           </div>
 
           <div className="mt-3 flex items-center justify-between">
@@ -87,10 +130,12 @@ export default function OfficePptxView() {
               <ChevronLeft className="h-4 w-4" />
             </button>
             <span className="font-mono text-[10px] text-muted-foreground">
-              Editing text box · "Revenue: $1.8M (+20%)"
+              {payload ? payload.slides[current]?.part : 'Editing text box · "Revenue: $1.8M (+20%)"'}
             </span>
             <button
-              onClick={() => setCurrent(Math.min(SLIDES.length - 1, current + 1))}
+              onClick={() =>
+                setCurrent(Math.min((payload ? payload.slides.length : SLIDES.length) - 1, current + 1))
+              }
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <ChevronRight className="h-4 w-4" />
@@ -121,7 +166,7 @@ export default function OfficePptxView() {
 
       <div className="border-t border-border bg-zinc-900/60 px-3 py-2">
         <div className="flex gap-2 overflow-x-auto scroll-thin">
-          {SLIDES.map((s, i) => (
+          {(payload ? payload.slides : SLIDES).map((s, i) => (
             <button
               key={i}
               onClick={() => setCurrent(i)}

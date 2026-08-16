@@ -5,6 +5,8 @@ import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, MessageSquare } f
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { OfficeOpenBar } from './office-open-bar'
+import { pdfOpen, type PdfPayload } from '@/lib/office'
 
 const FORM_FIELDS = [
   { label: 'Party A:', value: 'Acme Holdings, Inc.', top: 18 },
@@ -16,28 +18,65 @@ const FORM_FIELDS = [
 export default function OfficePdfView() {
   const [page, setPage] = useState(2)
   const [zoom, setZoom] = useState(100)
+  const [payload, setPayload] = useState<PdfPayload | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const open = async (path: string) => {
+    try {
+      setError(null)
+      setPayload(await pdfOpen(path))
+      setPage(1)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open PDF')
+    }
+  }
 
   return (
     <div className="flex h-full w-full flex-col bg-zinc-900">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-red-400" />
-          <span className="font-mono text-xs font-medium text-foreground">contract.pdf</span>
-          <Badge
-            variant="outline"
-            className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
-          >
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
-            Live
-          </Badge>
+          <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
+            {payload?.path ?? 'contract.pdf'}
+          </span>
+          {payload ? (
+            <Badge variant="outline" className="text-[10px] text-emerald-300">
+              engine read
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+            >
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+              demo
+            </Badge>
+          )}
         </div>
         <Badge variant="secondary" className="text-[10px]">
           lopdf
         </Badge>
       </header>
 
+      <OfficeOpenBar onOpen={open} livePath={payload?.path} />
+
+      {error && (
+        <div className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
+          ⚠ {error}
+        </div>
+      )}
+
       <ScrollArea className="scroll-thin min-h-0 flex-1 bg-zinc-950/40">
         <div className="flex justify-center p-4">
+          {payload ? (
+            <div className="w-full max-w-3xl space-y-2">
+              {payload.texts[page - 1] != null && (
+                <div className="rounded-sm bg-[#fbfbf9] p-6 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-xl">
+                  {payload.texts[page - 1]}
+                </div>
+              )}
+            </div>
+          ) : (
           <div
             className="relative rounded-sm bg-[#fbfbf9] shadow-xl"
             style={{ width: `${(612 * zoom) / 100}px`, height: `${(792 * zoom) / 100}px` }}
@@ -108,6 +147,7 @@ export default function OfficePdfView() {
               ANNOTATION · §4.1
             </div>
           </div>
+          )}
         </div>
       </ScrollArea>
 
@@ -121,10 +161,10 @@ export default function OfficePdfView() {
             <ChevronLeft className="h-3 w-3" />
           </button>
           <span className="text-foreground">
-            {page} / 8
+            {page} / {payload ? payload.pages : 8}
           </span>
           <button
-            onClick={() => setPage(Math.min(8, page + 1))}
+            onClick={() => setPage(Math.min(payload ? payload.pages : 8, page + 1))}
             className="rounded p-0.5 hover:bg-accent hover:text-foreground"
           >
             <ChevronRight className="h-3 w-3" />

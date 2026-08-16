@@ -1,32 +1,80 @@
 'use client'
 
+import { useState } from 'react'
 import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { OfficeOpenBar } from './office-open-bar'
+import { docxOpen, demoDocx, type DocxPayload } from '@/lib/office'
 
 export default function OfficeDocxView() {
+  const [payload, setPayload] = useState<DocxPayload | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const open = async (path: string) => {
+    try {
+      setError(null)
+      setPayload(await docxOpen(path))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open document')
+    }
+  }
+
+  const title = payload?.path ?? 'exec-summary.docx'
+  const paragraphs = payload
+    ? payload.text.split('\n').filter((l) => l.trim().length > 0)
+    : null
+
   return (
     <div className="flex h-full w-full flex-col bg-zinc-900">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-blue-400" />
-          <span className="font-mono text-xs font-medium text-foreground">
-            exec-summary.docx
+          <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
+            {title}
           </span>
-          <Badge
-            variant="outline"
-            className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
-          >
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
-            Live
-          </Badge>
+          {payload ? (
+            <Badge variant="outline" className="text-[10px] text-emerald-300">
+              engine read
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+            >
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+              demo
+            </Badge>
+          )}
         </div>
         <Badge variant="secondary" className="text-[10px]">
           block-patch
         </Badge>
       </header>
 
+      <OfficeOpenBar onOpen={open} livePath={payload?.path} />
+
+      {error && (
+        <div className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
+          ⚠ {error}
+        </div>
+      )}
+
       <ScrollArea className="scroll-thin min-h-0 flex-1">
+        {payload ? (
+          <div className="mx-auto max-w-3xl bg-[#1c1d20] p-8 sm:p-12">
+            <article className="prose-invert space-y-4">
+              {paragraphs!.map((p, i) => (
+                <p key={i} className="text-sm leading-relaxed text-foreground/90">
+                  {p}
+                </p>
+              ))}
+            </article>
+            <div className="mt-6 border-t border-border pt-3 font-mono text-[10px] text-muted-foreground">
+              {payload.blocks.length} block(s) · surgical OOXML read
+            </div>
+          </div>
+        ) : (
         <div className="mx-auto max-w-3xl bg-[#1c1d20] p-8 sm:p-12">
           <article className="prose-invert space-y-4">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -91,11 +139,12 @@ export default function OfficeDocxView() {
             </p>
           </article>
         </div>
+        )}
       </ScrollArea>
 
       <footer className="flex items-center justify-between border-t border-border bg-zinc-900/60 px-3 py-1.5 font-mono text-[10px] text-muted-foreground">
-        <span>Page 1/3</span>
-        <span>Words: 847</span>
+        <span>{payload ? `Blocks: ${payload.blocks.length}` : 'Page 1/3'}</span>
+        <span>{payload ? `Words: ${payload.text.split(/\s+/).length}` : 'Words: 847'}</span>
         <Badge
           variant="outline"
           className="gap-1 border-orange-500/40 text-[9px] text-orange-300"

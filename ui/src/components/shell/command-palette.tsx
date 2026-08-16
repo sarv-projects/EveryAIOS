@@ -26,6 +26,7 @@ import {
   Moon,
   Cpu,
   Route,
+  ScanSearch,
 } from 'lucide-react'
 import {
   Dialog,
@@ -80,6 +81,7 @@ export function CommandPalette() {
       { id: 'progress', label: 'Progress timeline', icon: Activity, shortcut: '⌘⇧P' },
       { id: 'audit', label: 'Audit & Replay', icon: ShieldCheck, shortcut: '' },
       { id: 'storage', label: 'Storage intelligence', icon: BarChart3, shortcut: '' },
+      { id: 'trajectory', label: 'Trajectory (context injection)', icon: ScanSearch, shortcut: '⌘⇧T' },
     ]
 
     return [
