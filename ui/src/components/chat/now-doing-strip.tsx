@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { Activity } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 
@@ -23,11 +25,18 @@ export default function NowDoingStrip({
   const setActiveView = useAppStore((s) => s.setActiveView)
   const agentPaused = useAppStore((s) => s.agentPaused)
 
+  // Live elapsed ticker (1s) so the banner feels like a real running job.
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setTick((x) => x + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
+
   const stepLabel =
     stepIndex && stepTotal ? `(step ${stepIndex}/${stepTotal})` : ''
 
   const elapsedLabel = elapsedMs
-    ? `${(elapsedMs / 1000).toFixed(1)}s elapsed`
+    ? `${((elapsedMs + tick * 1000) / 1000).toFixed(0)}s elapsed`
     : null
   const tokensLabel = tokensThisTurn
     ? `${Math.round(tokensThisTurn / 1000)}K tokens this turn`
@@ -37,15 +46,16 @@ export default function NowDoingStrip({
   const sub = subParts.join(' · ')
 
   return (
-    <button
+    <motion.button
       type="button"
       onClick={() => setActiveView('progress')}
-      className="group flex w-full items-center gap-2 border-b border-border bg-zinc-950/40 px-3 py-1.5 text-left transition-colors hover:bg-zinc-900/60"
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: 'auto', opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+      className="group flex w-full items-center gap-2 overflow-hidden border-b border-border bg-zinc-950/40 px-3 py-1.5 text-left transition-colors hover:bg-zinc-900/60"
     >
-      <Activity
-        className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-orange-300"
-        aria-hidden
-      />
+      <Activity className="h-3.5 w-3.5 shrink-0 animate-pulse text-orange-400/80 group-hover:text-orange-300" aria-hidden />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {!agentPaused ? (
           <span className="live-dot h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
@@ -66,6 +76,6 @@ export default function NowDoingStrip({
           {sub}
         </span>
       )}
-    </button>
+    </motion.button>
   )
 }

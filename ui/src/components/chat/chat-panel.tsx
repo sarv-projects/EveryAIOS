@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Archive,
   Bell,
@@ -129,6 +129,29 @@ export default function ChatPanel() {
   // Search state
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
+
+  // Auto-scroll: stick to the newest content while streaming / on session
+  // switch; user scroll-up releases the stick.
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const [stickBottom, setStickBottom] = useState(true)
+
+  const handleViewportScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const vp = e.currentTarget
+    const nearBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight < 80
+    setStickBottom(nearBottom)
+  }
+
+  useEffect(() => {
+    const vp = viewportRef.current
+    if (vp && stickBottom) vp.scrollTop = vp.scrollHeight
+  }, [messages, store.activeSessionId, stickBottom])
+
+  const lastMsg = messages[messages.length - 1]
+  const streaming =
+    activeSession?.status === 'running' &&
+    !!lastMsg &&
+    lastMsg.role === 'assistant' &&
+    lastMsg.content === ''
 
   // Resolve current agent + model for header badge
   const agent = AGENT_MAP[selectedAgentId]
@@ -277,23 +300,57 @@ export default function ChatPanel() {
         />
       )}
 
-      <ScrollArea className="min-h-0 flex-1 scroll-thin">
-        <div className="mx-auto flex max-w-3xl flex-col gap-3 px-3 py-4">
-          {messages.length === 0
-            ? <EmptyState onPick={(p) => setComposerValue(p)} />
-            : filteredMessages.length === 0 && query.trim()
-              ? (
-                <div className="flex flex-col items-center gap-2 py-12 text-center">
-                  <Search className="h-6 w-6 text-muted-foreground/40" />
-                  <p className="text-[11px] text-muted-foreground">
-                    No messages match &ldquo;{query}&rdquo;
-                  </p>
-                </div>
-              )
-              : filteredMessages.map((m) => <MessageBubble key={m.id} message={m} />)}
-          <div className="h-2" />
-        </div>
-      </ScrollArea>
+      {/* Auto-scroll: stick to the bottom while a turn streams (or on session
+          switch); release the moment the user scrolls up. */}
+      <div className="relative min-h-0 flex-1">
+        <ScrollArea
+          className="h-full scroll-thin"
+          viewportRef={viewportRef}
+          onScroll={handleViewportScroll}
+        >
+          <div className="mx-auto flex max-w-3xl flex-col gap-3 px-3 py-4">
+            {messages.length === 0
+              ? <EmptyState onPick={(p) => setComposerValue(p)} />
+              : filteredMessages.length === 0 && query.trim()
+                ? (
+                  <div className="flex flex-col items-center gap-2 py-12 text-center">
+                    <Search className="h-6 w-6 text-muted-foreground/40" />
+                    <p className="text-[11px] text-muted-foreground">
+                      No messages match &ldquo;{query}&rdquo;
+                    </p>
+                  </div>
+                )
+                : filteredMessages.map((m) => (
+                  <motion.div
+                    key={m.id}
+                    initial={{ opacity: 0, y: 10, scale: 0.995 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <MessageBubble message={m} />
+                  </motion.div>
+                ))}
+            {streaming && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex items-center gap-2 pl-1"
+              >
+                <span className="flex items-center gap-1 rounded-full border border-orange-500/25 bg-orange-500/5 px-2.5 py-1.5">
+                  <span className="typing-dot bg-orange-400" />
+                  <span className="typing-dot bg-orange-400 [animation-delay:0.15s]" />
+                  <span className="typing-dot bg-orange-400 [animation-delay:0.3s]" />
+                </span>
+                <span className="font-mono text-[9px] text-muted-foreground/70">
+                  agent thinking…
+                </span>
+              </motion.div>
+            )}
+            <div className="h-2" />
+          </div>
+        </ScrollArea>
+      </div>
 
       <div className="shrink-0">
         <ChatComposer

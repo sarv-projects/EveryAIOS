@@ -4,6 +4,7 @@
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
 > **Principle:** ONE project, ONE session, ONE ticket, ONE timeline. Chat + live progress in the center; a thin **right activity rail** switches *what you are watching* — one surface at a time. Never 9 peer tabs, never a Chat/Cowork/Code product split.  
 > **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H25 — H20 redefined doc 67), ARCH/DIAGRAMS #7 (MCQ interrupt), doc 67 §6 (finalization record)
+> **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, 28-screen inventory, motion/accessibility tables) that supersedes this doc's visual details. The v2 cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
 
 ---
 

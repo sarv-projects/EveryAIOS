@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import { FileSpreadsheet, Sigma } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -157,10 +158,16 @@ export default function OfficeXlsxView() {
       <div className="flex items-center gap-3 border-t border-border bg-zinc-900/50 px-3 py-1.5">
         <div className="flex h-8 items-end gap-0.5">
           {CHART_BARS.map((h, i) => (
-            <div
+            <motion.div
               key={i}
-              className="w-3 rounded-t bg-gradient-to-t from-orange-600 to-orange-400"
-              style={{ height: `${h}%` }}
+              initial={{ height: '12%' }}
+              animate={{ height: `${h}%` }}
+              transition={{
+                duration: 0.7,
+                delay: 0.15 + i * 0.12,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+              className="w-3 origin-bottom rounded-t bg-gradient-to-t from-orange-600 to-orange-400"
             />
           ))}
         </div>

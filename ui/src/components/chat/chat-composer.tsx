@@ -10,6 +10,7 @@ import {
   CircleDollarSign,
   FileText,
   FlaskConical,
+  Gauge,
   Hash,
   Mic,
   Package,
@@ -35,6 +36,7 @@ import { useAppStore, type ChatMode } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import AgentModelPicker from './agent-model-picker'
 import { sendUserMessage } from '@/lib/bridge'
+import { getModelsForAgent } from '@/lib/agents'
 
 const MODES: { id: ChatMode; label: string; hint: string; icon: LucideIcon }[] = [
   { id: 'normal', label: 'Normal', hint: 'Balanced agent mode — default', icon: Sparkles },
@@ -126,6 +128,21 @@ export default function ChatComposer({ budget }: Props) {
   const cap = budget?.cap ?? 5
   const tokens = budget?.tokens ?? activeSession?.tokens ?? 0
 
+  // Context-window gauge (P1.6 parity): % of the current model's window used.
+  // Amber ≥75% (start planning compaction), loud red ≥90% (loop risk).
+  const selectedAgentId = useAppStore((s) => s.selectedAgentId)
+  const selectedModelId = useAppStore((s) => s.selectedModelId)
+  const ctxWindow =
+    getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
+      ?.context ?? 128_000
+  const ctxPct = Math.min(100, Math.round((tokens / ctxWindow) * 100))
+  const ctxTone =
+    ctxPct >= 90
+      ? 'border-red-500/40 bg-red-500/10 text-red-400'
+      : ctxPct >= 75
+        ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
+        : 'border-border bg-background/40 text-muted-foreground'
+
   const hint = useMemo(() => {
     const v = composerValue.trimStart()
     if (!v) return null
@@ -205,6 +222,17 @@ export default function ChatComposer({ budget }: Props) {
             <Zap className="h-3 w-3 text-orange-400" />
             <span className="text-foreground">{(tokens / 1000).toFixed(0)}K</span>
             <span className="text-muted-foreground/60">tok</span>
+          </span>
+          <span
+            className={cn(
+              'hidden items-center gap-1 rounded-md border px-1.5 py-0.5 transition-colors md:flex',
+              ctxTone,
+            )}
+            title={`Context used: ${tokens.toLocaleString()} / ${ctxWindow.toLocaleString()} tok (${ctxPct}%)`}
+          >
+            <Gauge className="h-3 w-3" />
+            <span>{ctxPct}%</span>
+            <span className="text-muted-foreground/60">ctx</span>
           </span>
         </div>
       </div>
