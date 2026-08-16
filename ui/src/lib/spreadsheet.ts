@@ -94,7 +94,15 @@ export type XlsxOperation =
   | { SetCell: { address: CellRef; value: Scalar } }
   | { FillRange: { range: RangeRef; mode: "Constant" | "CopyDown"; value: Scalar | null } }
   | { SortRange: { range: RangeRef; by_col: number; desc: boolean } }
-  | { ClearRange: { range: RangeRef } };
+  | { ClearRange: { range: RangeRef } }
+  | {
+      Shift: {
+        sheet: string;
+        kind: "InsertRow" | "DeleteRow" | "InsertCol" | "DeleteCol";
+        at: number;
+        count: number;
+      };
+    };
 
 export interface WorkbookBatch {
   dsl_version: number;

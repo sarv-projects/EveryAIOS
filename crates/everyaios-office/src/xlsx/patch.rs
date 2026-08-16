@@ -16,8 +16,10 @@ use thiserror::Error;
 
 use crate::xml::{escape_text, parse};
 
-use super::address::{CellRef, RangeRef};
-use super::dsl::{pivot_result, FillMode, Operation, PivotRow, Scalar, WorkbookCommandBatch};
+use super::address::{format_ref, CellRef, RangeRef};
+use super::dsl::{
+    pivot_result, FillMode, Operation, PivotRow, Scalar, ShiftKind, WorkbookCommandBatch,
+};
 use super::recalc::{recalc, RecalcResult};
 
 pub const SPREADSHEET_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -137,7 +139,10 @@ pub fn apply_batch(
                 count,
             } => {
                 if sh == sheet {
+                    // Formula refs first (they operate on formula text only),
+                    // then the physical cell move (rows/cols/dimension/merges).
                     sheet_bytes = shift_formulas(&sheet_bytes, sh, *kind, *at, *count)?;
+                    sheet_bytes = shift_structure(&sheet_bytes, *kind, *at, *count)?;
                 }
             }
             Operation::RenameSheet { from, to } => {
@@ -821,6 +826,390 @@ fn shift_formulas(
 }
 
 // ────────────────────────────────────────────────────────────────────────
+// Structural row/column shift (physical move)
+// ────────────────────────────────────────────────────────────────────────
+
+/// Row number after a row shift; `None` = the row/cell is inside the deleted
+/// band and must be removed.
+fn row_after(n: u32, kind: ShiftKind, at: u32, count: u32) -> Option<u32> {
+    match kind {
+        ShiftKind::InsertRow => Some(if n >= at { n + count } else { n }),
+        ShiftKind::DeleteRow => {
+            if n < at {
+                Some(n)
+            } else if n < at + count {
+                None
+            } else {
+                Some(n - count)
+            }
+        }
+        _ => Some(n),
+    }
+}
+
+/// Column number after a column shift; `None` = deleted.
+fn col_after(n: u32, kind: ShiftKind, at: u32, count: u32) -> Option<u32> {
+    match kind {
+        ShiftKind::InsertCol => Some(if n >= at { n + count } else { n }),
+        ShiftKind::DeleteCol => {
+            if n < at {
+                Some(n)
+            } else if n < at + count {
+                None
+            } else {
+                Some(n - count)
+            }
+        }
+        _ => Some(n),
+    }
+}
+
+/// Dispatch the physical part of a [`Operation::Shift`] (cell data moves;
+/// [`shift_formulas`] already rewrote formula references).
+pub fn shift_structure(
+    sheet_bytes: &[u8],
+    kind: ShiftKind,
+    at: u32,
+    count: u32,
+) -> Result<Vec<u8>, PatchError> {
+    let out = match kind {
+        ShiftKind::InsertRow | ShiftKind::DeleteRow => shift_rows(sheet_bytes, kind, at, count)?,
+        ShiftKind::InsertCol | ShiftKind::DeleteCol => shift_cols(sheet_bytes, kind, at, count)?,
+    };
+    let out = shift_dimension(&out, kind, at, count)?;
+    shift_merge_cells(&out, kind, at, count)
+}
+
+/// Rewrite a `<row>` element's `r` + child `<c>` `r` refs for a row shift;
+/// returns `None` when the row itself is deleted.
+fn rewrite_row_rows(raw: &str, kind: ShiftKind, at: u32, count: u32) -> Option<String> {
+    let doc = Document::parse(raw).ok()?;
+    let root = doc.root_element();
+    let r: u32 = root.attribute("r")?.parse().ok()?;
+    let new_r = row_after(r, kind, at, count)?;
+    let mut ops: Vec<(usize, usize, String)> = Vec::new();
+    if let Some(attr) = root.attribute_node("r") {
+        let rng = attr.range_value();
+        ops.push((rng.start, rng.end, new_r.to_string()));
+    }
+    for cell in doc
+        .descendants()
+        .filter(|n| n.is_element() && n.tag_name().name() == "c")
+    {
+        if let Some(attr) = cell.attribute_node("r") {
+            if let Ok((_, cref)) = crate::xlsx::address::parse_ref(attr.value()) {
+                if let Some(nr) = row_after(cref.row, kind, at, count) {
+                    if nr != cref.row {
+                        let newref = format_ref(None, CellRef { row: nr, col: cref.col }, false);
+                        let rng = attr.range_value();
+                        ops.push((rng.start, rng.end, newref));
+                    }
+                }
+            }
+        }
+    }
+    ops.sort_by_key(|(s, _, _)| *s);
+    let mut out = raw.to_string();
+    for (s, e, new) in ops.into_iter().rev() {
+        out.replace_range(s..e, &new);
+    }
+    Some(out)
+}
+
+/// Rewrite a `<row>` element's `<c>` `r` refs for a column shift; cells in
+/// the deleted column band are dropped.
+fn rewrite_row_cols(raw: &str, kind: ShiftKind, at: u32, count: u32) -> String {
+    let doc = match Document::parse(raw) {
+        Ok(d) => d,
+        Err(_) => return raw.to_string(),
+    };
+    let mut ops: Vec<(usize, usize, String)> = Vec::new();
+    for cell in doc
+        .descendants()
+        .filter(|n| n.is_element() && n.tag_name().name() == "c")
+    {
+        if let Some(attr) = cell.attribute_node("r") {
+            if let Ok((_, cref)) = crate::xlsx::address::parse_ref(attr.value()) {
+                match col_after(cref.col, kind, at, count) {
+                    Some(nc) if nc != cref.col => {
+                        let newref = format_ref(None, CellRef { row: cref.row, col: nc }, false);
+                        let rng = attr.range_value();
+                        ops.push((rng.start, rng.end, newref));
+                    }
+                    None => ops.push((cell.range().start, cell.range().end, String::new())),
+                    _ => {}
+                }
+            }
+        }
+    }
+    ops.sort_by_key(|(s, _, _)| *s);
+    let mut out = raw.to_string();
+    for (s, e, new) in ops.into_iter().rev() {
+        out.replace_range(s..e, &new);
+    }
+    out
+}
+
+/// Replace the `<sheetData>…</sheetData>` inner content with rebuilt rows.
+fn replace_sheet_data(
+    sheet_bytes: &[u8],
+    doc: &Document,
+    inner: &str,
+) -> Result<Vec<u8>, PatchError> {
+    let text = std::str::from_utf8(sheet_bytes)
+        .map_err(|_| PatchError::Xml(crate::xml::OfficeXmlError::NotUtf8))?;
+    let sd = doc
+        .descendants()
+        .find(|n| n.is_element() && n.tag_name().name() == "sheetData")
+        .ok_or(PatchError::Xml(crate::xml::OfficeXmlError::Parse(
+            roxmltree::Error::NoRootNode,
+        )))?;
+    let range = sd.range();
+    let raw = &text[range.clone()];
+    let open_end = raw.find('>').map(|i| i + 1).ok_or(PatchError::Xml(
+        crate::xml::OfficeXmlError::Parse(roxmltree::Error::NoRootNode),
+    ))?;
+    let self_closing = raw[..open_end].trim_end().ends_with("/>");
+    let open_tag = if self_closing {
+        format!("{}>", raw[..open_end].trim_end_matches('/').trim_end())
+    } else {
+        raw[..open_end].to_string()
+    };
+    let rebuilt = format!("{open_tag}{inner}</sheetData>");
+    let mut out = sheet_bytes.to_vec();
+    out.splice(range, rebuilt.into_bytes());
+    Ok(out)
+}
+
+fn shift_rows(
+    sheet_bytes: &[u8],
+    kind: ShiftKind,
+    at: u32,
+    count: u32,
+) -> Result<Vec<u8>, PatchError> {
+    let text = std::str::from_utf8(sheet_bytes)
+        .map_err(|_| PatchError::Xml(crate::xml::OfficeXmlError::NotUtf8))?;
+    let doc = Document::parse(text).map_err(crate::xml::OfficeXmlError::Parse)?;
+
+    let mut rows: Vec<(u32, Node)> = doc
+        .descendants()
+        .filter(|n| n.is_element() && n.tag_name().name() == "row")
+        .filter_map(|n| n.attribute("r")?.parse::<u32>().ok().map(|r| (r, n)))
+        .collect();
+    rows.sort_by_key(|(r, _)| *r);
+
+    let is_insert = matches!(kind, ShiftKind::InsertRow);
+    let mut inner = String::new();
+    let mut inserted = false;
+    for (r, node) in &rows {
+        let raw = &text[node.range()];
+        if let Some(new_raw) = rewrite_row_rows(raw, kind, at, count) {
+            if is_insert && !inserted && *r >= at {
+                for i in 0..count {
+                    inner.push_str(&format!("<row r=\"{}\"/>", at + i));
+                }
+                inserted = true;
+            }
+            inner.push_str(&new_raw);
+        }
+    }
+    if is_insert && !inserted {
+        for i in 0..count {
+            inner.push_str(&format!("<row r=\"{}\"/>", at + i));
+        }
+    }
+
+    replace_sheet_data(sheet_bytes, &doc, &inner)
+}
+
+fn shift_cols(
+    sheet_bytes: &[u8],
+    kind: ShiftKind,
+    at: u32,
+    count: u32,
+) -> Result<Vec<u8>, PatchError> {
+    let text = std::str::from_utf8(sheet_bytes)
+        .map_err(|_| PatchError::Xml(crate::xml::OfficeXmlError::NotUtf8))?;
+    let doc = Document::parse(text).map_err(crate::xml::OfficeXmlError::Parse)?;
+    let rows: Vec<Node> = doc
+        .descendants()
+        .filter(|n| n.is_element() && n.tag_name().name() == "row")
+        .collect();
+    let mut out = sheet_bytes.to_vec();
+    for row_node in rows.into_iter().rev() {
+        let raw = &text[row_node.range()];
+        let new_raw = rewrite_row_cols(raw, kind, at, count);
+        if new_raw != *raw {
+            out.splice(row_node.range(), new_raw.into_bytes());
+        }
+    }
+    Ok(out)
+}
+
+/// Shift one axis of a start/end coordinate pair for the dimension ref.
+fn shift_axis(start: u32, end: u32, kind: ShiftKind, at: u32, count: u32) -> (u32, u32) {
+    match kind {
+        ShiftKind::InsertRow | ShiftKind::InsertCol => {
+            let s = if start >= at { start + count } else { start };
+            let e = if end >= at { end + count } else { end };
+            (s, e)
+        }
+        _ => {
+            let del_start = at;
+            let del_end = at + count - 1;
+            let s = if start >= del_start && start <= del_end {
+                at
+            } else if start > del_end {
+                start - count
+            } else {
+                start
+            };
+            let removed_below = if end < del_start {
+                0
+            } else {
+                (end - del_start + 1).min(count)
+            };
+            (s, (end - removed_below).max(s))
+        }
+    }
+}
+
+/// Best-effort update of the sheet `<dimension ref="…">` after a shift.
+fn shift_dimension(
+    sheet_bytes: &[u8],
+    kind: ShiftKind,
+    at: u32,
+    count: u32,
+) -> Result<Vec<u8>, PatchError> {
+    let text = std::str::from_utf8(sheet_bytes)
+        .map_err(|_| PatchError::Xml(crate::xml::OfficeXmlError::NotUtf8))?;
+    let doc = Document::parse(text).map_err(crate::xml::OfficeXmlError::Parse)?;
+    let Some(dim) = doc
+        .descendants()
+        .find(|n| n.is_element() && n.tag_name().name() == "dimension")
+    else {
+        return Ok(sheet_bytes.to_vec());
+    };
+    let Some(attr) = dim.attribute_node("ref") else {
+        return Ok(sheet_bytes.to_vec());
+    };
+    let val = attr.value();
+    let Ok((_, range)) = crate::xlsx::address::parse_range(val) else {
+        return Ok(sheet_bytes.to_vec());
+    };
+    let is_row = matches!(kind, ShiftKind::InsertRow | ShiftKind::DeleteRow);
+    let (mut sr, mut er) = (range.start.row, range.end.row);
+    let (mut sc, mut ec) = (range.start.col, range.end.col);
+    if is_row {
+        (sr, er) = shift_axis(sr, er, kind, at, count);
+    } else {
+        (sc, ec) = shift_axis(sc, ec, kind, at, count);
+    }
+    let start_ref = format_ref(None, CellRef { row: sr, col: sc }, false);
+    let end_ref = format_ref(None, CellRef { row: er, col: ec }, false);
+    let new_ref = if sr == er && sc == ec {
+        start_ref
+    } else {
+        format!("{start_ref}:{end_ref}")
+    };
+    let rng = attr.range_value();
+    let mut out = sheet_bytes.to_vec();
+    out.splice(rng, new_ref.into_bytes());
+    Ok(out)
+}
+
+/// Shift `<mergeCell ref="…">` ranges; a merge whose range is deleted is
+/// dropped and the `count` attribute decremented.
+fn shift_merge_cells(
+    sheet_bytes: &[u8],
+    kind: ShiftKind,
+    at: u32,
+    count: u32,
+) -> Result<Vec<u8>, PatchError> {
+    let text = std::str::from_utf8(sheet_bytes)
+        .map_err(|_| PatchError::Xml(crate::xml::OfficeXmlError::NotUtf8))?;
+    let doc = Document::parse(text).map_err(crate::xml::OfficeXmlError::Parse)?;
+    let Some(mc) = doc
+        .descendants()
+        .find(|n| n.is_element() && n.tag_name().name() == "mergeCells")
+    else {
+        return Ok(sheet_bytes.to_vec());
+    };
+    let is_row = matches!(kind, ShiftKind::InsertRow | ShiftKind::DeleteRow);
+    let mut ops: Vec<(usize, usize, String)> = Vec::new();
+    let mut removed = 0usize;
+    for cell in mc
+        .children()
+        .filter(|n| n.is_element() && n.tag_name().name() == "mergeCell")
+    {
+        let Some(attr) = cell.attribute_node("ref") else {
+            continue;
+        };
+        let val = attr.value();
+        let Ok((_, range)) = crate::xlsx::address::parse_range(val) else {
+            continue;
+        };
+        let (sa, ea) = if is_row {
+            (range.start.row, range.end.row)
+        } else {
+            (range.start.col, range.end.col)
+        };
+        let new_s = if is_row {
+            row_after(sa, kind, at, count)
+        } else {
+            col_after(sa, kind, at, count)
+        };
+        let new_e = if is_row {
+            row_after(ea, kind, at, count)
+        } else {
+            col_after(ea, kind, at, count)
+        };
+        match (new_s, new_e) {
+            (Some(ns), Some(ne)) => {
+                let (sr, er, sc, ec) = if is_row {
+                    (ns, ne, range.start.col, range.end.col)
+                } else {
+                    (range.start.row, range.end.row, ns, ne)
+                };
+                let new_ref = if sr == er && sc == ec {
+                    format_ref(None, CellRef { row: sr, col: sc }, false)
+                } else {
+                    format!(
+                        "{}:{}",
+                        format_ref(None, CellRef { row: sr, col: sc }, false),
+                        format_ref(None, CellRef { row: er, col: ec }, false)
+                    )
+                };
+                if new_ref != val {
+                    let rng = attr.range_value();
+                    ops.push((rng.start, rng.end, new_ref));
+                }
+            }
+            _ => {
+                ops.push((cell.range().start, cell.range().end, String::new()));
+                removed += 1;
+            }
+        }
+    }
+    ops.sort_by_key(|(s, _, _)| *s);
+    let mut out = sheet_bytes.to_vec();
+    for (s, e, new) in ops.into_iter().rev() {
+        out.splice(s..e, new.into_bytes());
+    }
+    if removed > 0 {
+        if let Some(count_attr) = mc.attribute_node("count") {
+            let cur: usize = count_attr.value().parse().unwrap_or(0);
+            let rng = count_attr.range_value();
+            let new_count = cur.saturating_sub(removed);
+            let mut out2 = out.clone();
+            out2.splice(rng, new_count.to_string().into_bytes());
+            out = out2;
+        }
+    }
+    Ok(out)
+}
+
+// ────────────────────────────────────────────────────────────────────────
 // sharedStrings.xml append
 // ────────────────────────────────────────────────────────────────────────
 
@@ -1054,6 +1443,98 @@ mod tests {
         let mut a = crate::zip::OoxmlArchive::open(out.bytes).unwrap();
         let s = String::from_utf8(a.read_part("xl/worksheets/sheet1.xml").unwrap()).unwrap();
         assert!(s.contains("<f>SUM(A1:A3)</f>"), "{s}");
+    }
+
+    #[test]
+    fn insert_row_physically_moves_cells() {
+        let bytes = sample_xlsx(sheet(), None);
+        let b = batch(vec![Operation::Shift {
+            sheet: "Sheet1".to_string(),
+            kind: ShiftKind::InsertRow,
+            at: 2,
+            count: 1,
+        }]);
+        let out = apply_batch(&bytes, &b, "Sheet1").unwrap();
+        let mut a = crate::zip::OoxmlArchive::open(out.bytes).unwrap();
+        let s = String::from_utf8(a.read_part("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+        assert!(s.contains("<row r=\"2\"/>"), "{s}"); // empty inserted row
+        assert!(s.contains("<c r=\"A3\"><v>1</v></c>"), "{s}"); // old A2 moved down
+        assert!(s.contains("<c r=\"B3\"><v>2</v></c>"), "{s}"); // old B2 moved down
+        assert!(s.contains("<c r=\"A4\"><f>SUM(A1:A3)</f>"), "{s}"); // formula cell + ref shifted
+        assert!(!s.contains("<c r=\"A2\">"), "{s}");
+    }
+
+    #[test]
+    fn delete_row_physically_removes_and_shifts() {
+        let bytes = sample_xlsx(sheet(), None);
+        let b = batch(vec![Operation::Shift {
+            sheet: "Sheet1".to_string(),
+            kind: ShiftKind::DeleteRow,
+            at: 2,
+            count: 1,
+        }]);
+        let out = apply_batch(&bytes, &b, "Sheet1").unwrap();
+        let mut a = crate::zip::OoxmlArchive::open(out.bytes).unwrap();
+        let s = String::from_utf8(a.read_part("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+        assert!(!s.contains("<row r=\"3\">"), "{s}"); // row 3 gone
+        assert!(!s.contains("<v>1</v>"), "{s}"); // old row 2 data gone
+        assert!(s.contains("<c r=\"A2\"><f>"), "{s}"); // old A3 moved up to A2
+    }
+
+    #[test]
+    fn insert_col_physically_moves_cells() {
+        let bytes = sample_xlsx(sheet(), None);
+        let b = batch(vec![Operation::Shift {
+            sheet: "Sheet1".to_string(),
+            kind: ShiftKind::InsertCol,
+            at: 2,
+            count: 1,
+        }]);
+        let out = apply_batch(&bytes, &b, "Sheet1").unwrap();
+        let mut a = crate::zip::OoxmlArchive::open(out.bytes).unwrap();
+        let s = String::from_utf8(a.read_part("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+        assert!(s.contains("<c r=\"C1\"><v>20</v></c>"), "{s}"); // old B1 → C1
+        assert!(s.contains("<c r=\"A1\"><v>10</v></c>"), "{s}"); // A unchanged
+        assert!(!s.contains("<c r=\"B1\">"), "{s}");
+    }
+
+    #[test]
+    fn delete_col_physically_removes() {
+        let bytes = sample_xlsx(sheet(), None);
+        let b = batch(vec![Operation::Shift {
+            sheet: "Sheet1".to_string(),
+            kind: ShiftKind::DeleteCol,
+            at: 2,
+            count: 1,
+        }]);
+        let out = apply_batch(&bytes, &b, "Sheet1").unwrap();
+        let mut a = crate::zip::OoxmlArchive::open(out.bytes).unwrap();
+        let s = String::from_utf8(a.read_part("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+        assert!(!s.contains("<c r=\"B"), "{s}"); // B column cells removed
+        assert!(s.contains("<c r=\"A1\"><v>10</v></c>"), "{s}");
+    }
+
+    #[test]
+    fn shift_updates_dimension_and_merges() {
+        let sh = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:C3"/>
+  <sheetData><row r="1"><c r="A1"><v>1</v></c><c r="C1"><v>3</v></c></row><row r="3"><c r="A3"><v>9</v></c></row></sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:A3"/></mergeCells>
+</worksheet>"#;
+        let bytes = sample_xlsx(sh, None);
+        let b = batch(vec![Operation::Shift {
+            sheet: "Sheet1".to_string(),
+            kind: ShiftKind::InsertRow,
+            at: 2,
+            count: 1,
+        }]);
+        let out = apply_batch(&bytes, &b, "Sheet1").unwrap();
+        let mut a = crate::zip::OoxmlArchive::open(out.bytes).unwrap();
+        let s = String::from_utf8(a.read_part("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+        assert!(s.contains("ref=\"A1:C4\""), "{s}"); // dimension end row 3→4
+        assert!(s.contains("<mergeCell ref=\"A1:A4\"/>"), "{s}"); // merge shifted
+        assert!(s.contains("<c r=\"A4\"><v>9</v></c>"), "{s}"); // old A3 moved down
     }
 
     #[test]

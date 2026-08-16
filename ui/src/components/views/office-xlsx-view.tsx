@@ -105,6 +105,9 @@ export default function OfficeXlsxView() {
   const [pivotAgg, setPivotAgg] = useState('1')
   const [pivotFn, setPivotFn] = useState<'sum' | 'count' | 'avg'>('sum')
   const [pivotRows, setPivotRows] = useState<PivotRow[] | null>(null)
+  const [shiftKind, setShiftKind] = useState<'InsertRow' | 'DeleteRow' | 'InsertCol' | 'DeleteCol'>('InsertRow')
+  const [shiftAt, setShiftAt] = useState('1')
+  const [shiftCount, setShiftCount] = useState('1')
   const [batchProposal, setBatchProposal] = useState<{
     summary: string
     batch: WorkbookBatch
@@ -255,6 +258,22 @@ export default function OfficeXlsxView() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Pivot failed')
     }
+  }
+
+  // Structural shift (insert/delete row/col) — the patch layer rewrites every
+  // formula on the target sheet via `shift_formula`.
+  const runShift = () => {
+    if (!payload) return
+    const at = Number(shiftAt)
+    const count = Number(shiftCount)
+    if (!Number.isInteger(at) || at < 1 || !Number.isInteger(count) || count < 1) {
+      setError('Shift needs a 1-based row/col index and a count ≥ 1')
+      return
+    }
+    const batch = newBatch(`${shiftKind} at ${at} × ${count}`, [
+      { Shift: { sheet: payload.sheet, kind: shiftKind, at, count } },
+    ])
+    void proposeBatch(batch)
   }
 
   const colCount = payload ? payload.total_cols : COLS.length
@@ -451,6 +470,38 @@ export default function OfficeXlsxView() {
             </Button>
             <Button size="sm" variant="outline" disabled={!payload || committing} className="h-6 gap-1 px-2 text-[10px]" onClick={runSort}>
               Sort
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1.5 border-l border-border pl-4">
+            <span className="font-mono text-[10px] text-muted-foreground">shift</span>
+            <select
+              value={shiftKind}
+              onChange={(e) => setShiftKind(e.target.value as typeof shiftKind)}
+              disabled={!payload}
+              className="rounded border border-border bg-zinc-950 px-1 py-0.5 font-mono text-[11px] text-foreground focus:outline-none"
+            >
+              <option value="InsertRow">insert row</option>
+              <option value="DeleteRow">delete row</option>
+              <option value="InsertCol">insert col</option>
+              <option value="DeleteCol">delete col</option>
+            </select>
+            <span className="font-mono text-[10px] text-muted-foreground">at</span>
+            <input
+              value={shiftAt}
+              onChange={(e) => setShiftAt(e.target.value)}
+              disabled={!payload}
+              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
+            />
+            <span className="font-mono text-[10px] text-muted-foreground">×</span>
+            <input
+              value={shiftCount}
+              onChange={(e) => setShiftCount(e.target.value)}
+              disabled={!payload}
+              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
+            />
+            <Button size="sm" variant="outline" disabled={!payload || committing} className="h-6 gap-1 px-2 text-[10px]" onClick={runShift}>
+              Shift
             </Button>
           </div>
 
