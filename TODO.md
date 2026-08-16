@@ -1229,7 +1229,8 @@
 - [ ] `[NOT DONE]` **PDF page ops (doc 70 §2 — `oxidize-pdf` 🔴 STEAL):** split / merge / rotate / reorder pages, plus reorder — extend `everyaios-office::pdf` with lopdf (same dep); the current engine does form-fill/text-swap/redact/re-author but no page-level ops. **Highest-value, native, no external dep.**
 - [ ] `[NOT DONE]` **Content search + OCR (doc 70 §2 — `dowse` 🟡 ADAPT):** full-text *content* search across a folder + OCR of pasted screenshots/images — extend `everyaios-storage` (currently FTS5 filename-only) with an on-device OCR path.
 - [ ] `[NOT DONE]` **Gmail/IMAP read-first connector (doc 70 §2 — `mailwarden`/`Busymail` 🔴 STEAL the pattern):** the first real external connector — read-first, **approve-before-send** (no silent outbound), tokens in the SQLCipher vault, every send a Guard-2 ticket. Closes the external-connector OAuth gap with the right posture.
-- [ ] `[NOT DONE]` **Connector catalog seed (doc 70 §3 — 258 official remote MCP servers):** list Notion/Linear/Sentry/Stripe/Gmail/Slack as the "MCP Servers" tab seed (user-supplied, hosted — not inbuilt).
+- [ ] `[NOT DONE]` **Connector catalog seed (doc 70 §3/§5 — 258 official remote MCP servers):** list the official/remote set (Atlassian, GitHub, Google, Supabase, Cloudflare, Exa, Firecrawl, DeepWiki, NotebookLM) + the popular-search SaaS names (Gmail, Slack, Notion, Linear, Figma, Salesforce, Stripe, Sentry, Datadog, Obsidian, n8n, Shopify) as the "MCP Servers" tab seed (user-supplied, hosted — not inbuilt).
+- [ ] `[NOT DONE]` **Context7 docs-lookup reference (doc 70 §5 — official):** up-to-date version-specific library docs into prompts — maps to the I11 code-intel docs-lookup tool (🟢 reference, post-v1).
 
 ---
 

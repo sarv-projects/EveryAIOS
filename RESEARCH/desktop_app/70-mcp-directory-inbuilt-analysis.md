@@ -69,3 +69,31 @@ trustworthy.
   42-tool `everyaios-mcp` registry as the Tool Catalog).
 
 **Queue:** TODO P18 (MCP directory inbuilt analysis).
+
+---
+
+## 5. Homepage "official/featured" set (second pass)
+
+`https://mcpservers.org/` exposes the **official 🌟** curated set — the
+canonical, vendor-maintained servers. The split is clean:
+
+**Official servers that are hosted/remote (user-supplied connectors, NOT inbuilt):**
+Atlassian (Jira/Confluence/Opsgenie), Cloudflare, Supabase, Railway, Exa, Firecrawl,
+DeepWiki (Devin), NotebookLM, Cal.com, MiniMax, Granola, Browserbase.
+
+**Official servers we already cover natively (the tempting-to-bundle ones):**
+- **Chrome DevTools MCP** → our `everyaios-cdp` (doc 63 chrome-devtools-mcp pattern).
+- **Playwright MCP** → our browser tier (`everyaios-browser`/CDP + Lightpanda escalate).
+- **Filesystem / Postgres** → `everyaios-storage` + the database connector category.
+
+**New references (add to the P18 queue):**
+- **Context7** (official) — up-to-date, version-specific library docs into prompts;
+  maps to the code-intel/docs-lookup tool (I11). 🟢 REFERENCE.
+- **NotebookLM MCP** (official) — zero-hallucination answers from *your own*
+  notebooks; hosted → reference for H31 corpus-research surface, not inbuilt.
+
+**Popular-search confirmation:** Gmail, Slack, GitHub, Notion, Linear, Figma,
+Salesforce, Stripe, Sentry, Datadog, Obsidian, n8n, Shopify, SharePoint — the
+connector catalog seed for the "MCP Servers" tab is exactly the official/remote
+set + these SaaS names. This closes the P18 "connector catalog seed" item with
+concrete names.
