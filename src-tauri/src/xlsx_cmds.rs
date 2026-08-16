@@ -4,6 +4,7 @@
 //! H5 viewer with formula bar / cell selection / chat overlay is P4.7).
 
 use everyaios_office::xlsx::read::{self, CellValue, SheetMeta, SheetWindow};
+use everyaios_office::xlsx::recalc::{self, RecalcResult};
 use std::path::PathBuf;
 
 /// Metadata for one opened workbook + one windowed slice of a sheet.
@@ -52,4 +53,13 @@ pub fn xlsx_open(
         total_cols: window.total_cols,
         rows: window.rows,
     })
+}
+
+/// P4.2/D2 — run the IronCalc truth engine over a workbook and return every
+/// engine-computed value. This is the "LLM never invents a number" surface:
+/// the formula bar's Recalc action shows formula_cells + computed values.
+#[tauri::command]
+pub fn xlsx_recalc(path: String) -> Result<RecalcResult, String> {
+    let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    recalc::recalc(&bytes).map_err(|e| e.to_string())
 }

@@ -331,6 +331,7 @@ pub fn run() {
             cockpit_cmds::interrupt_respond,
             cockpit_cmds::cockpit_upsert_agent,
             xlsx_cmds::xlsx_open,
+            xlsx_cmds::xlsx_recalc,
             mcp_cmds::mcp_catalog,
             office_cmds::docx_open,
             office_cmds::pptx_open,

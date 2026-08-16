@@ -2,11 +2,19 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { FileSpreadsheet, Sigma } from 'lucide-react'
+import { FileSpreadsheet, Loader2, RefreshCw, Sigma } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { OfficeOpenBar } from './office-open-bar'
-import { cellDisplay, colLetter, xlsxOpen, type XlsxWindowPayload } from '@/lib/spreadsheet'
+import {
+  cellDisplay,
+  colLetter,
+  xlsxOpen,
+  xlsxRecalc,
+  type RecalcResult,
+  type XlsxWindowPayload,
+} from '@/lib/spreadsheet'
 
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F']
 const ROWS = 15
@@ -65,18 +73,54 @@ const CHART_BARS = [60, 67.5, 90, 105]
 export default function OfficeXlsxView() {
   const [payload, setPayload] = useState<XlsxWindowPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<{ r: number; c: number } | null>(null)
+  const [recalc, setRecalc] = useState<RecalcResult | null>(null)
+  const [recalcing, setRecalcing] = useState(false)
 
   const open = async (path: string) => {
     try {
       setError(null)
       setPayload(await xlsxOpen(path, null, 0, 500))
+      setRecalc(null)
+      setSelected(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open workbook')
     }
   }
 
+  const runRecalc = async () => {
+    if (!payload || recalcing) return
+    setRecalcing(true)
+    try {
+      setRecalc(await xlsxRecalc(payload.path))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Recalc failed')
+    } finally {
+      setRecalcing(false)
+    }
+  }
+
   const colCount = payload ? payload.total_cols : COLS.length
   const columns = Array.from({ length: colCount }, (_, i) => colLetter(i + 1))
+
+  // IronCalc-computed value for a 1-based (row, col), else null.
+  const computed = (r: number, c: number): string | null => {
+    if (!recalc) return null
+    for (const sheet of recalc.sheets) {
+      for (const cell of sheet.cells) {
+        if (cell.row === r && cell.col === c) return cellDisplay(cell.value)
+      }
+    }
+    return null
+  }
+
+  const selRef = selected ? `${colLetter(selected.c)}${selected.r}` : 'B4'
+  const selValue = selected
+    ? (computed(selected.r, selected.c) ??
+      (payload
+        ? cellDisplay(payload.rows[selected.r - payload.offset - 1]?.[selected.c - 1])
+        : GRID[selRef]?.v ?? ''))
+    : ''
 
   return (
     <div className="flex h-full w-full flex-col bg-card">
@@ -113,16 +157,38 @@ export default function OfficeXlsxView() {
         </div>
       )}
 
+      {/* Formula bar — click a cell to select; Recalc runs the truth engine */}
       <div className="flex items-center gap-2 border-b border-border bg-zinc-900/50 px-3 py-1.5">
         <div className="flex items-center gap-1 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-          <span className="font-medium text-orange-300">B4</span>
+          <span className="font-medium text-orange-300">{selRef}</span>
           <span className="text-muted-foreground/40">│</span>
         </div>
         <div className="flex flex-1 items-center gap-1.5 rounded border border-orange-500/40 bg-zinc-950 px-2 py-0.5 font-mono text-xs">
-          <Sigma className="h-3 w-3 text-orange-400" />
-          <span className="text-foreground">=SUM(B2:B5)</span>
-          <span className="caret-blink ml-0.5 inline-block h-3.5 w-1.5 bg-orange-400 align-middle" />
+          <Sigma className="h-3 w-3 shrink-0 text-orange-400" />
+          <span className="min-w-0 flex-1 truncate text-foreground">{selValue}</span>
+          {recalc && selected && computed(selected.r, selected.c) != null && (
+            <span className="shrink-0 text-[9px] text-emerald-400">✓ engine</span>
+          )}
         </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!payload || recalcing}
+          className="h-6 gap-1 px-2 text-[10px]"
+          onClick={runRecalc}
+        >
+          {recalcing ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3 w-3" />
+          )}
+          Recalc
+        </Button>
+        {recalc && (
+          <Badge variant="outline" className="shrink-0 text-[9px] text-emerald-300">
+            {recalc.formula_cells} formula cells · verified
+          </Badge>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto scroll-thin">
@@ -149,57 +215,72 @@ export default function OfficeXlsxView() {
                     <td className="sticky left-0 z-10 w-8 border border-border bg-zinc-900 px-2 py-0.5 text-right text-[9px] text-muted-foreground">
                       {r}
                     </td>
-                    {columns.map((c, ci) => (
-                      <td key={c} className="min-w-[88px] border border-border px-2 py-0.5 text-foreground">
-                        {cellDisplay(row[ci])}
-                      </td>
-                    ))}
+                    {columns.map((c, ci) => {
+                      const recalcVal = computed(r, ci + 1)
+                      const isSel = selected?.r === r && selected?.c === ci + 1
+                      const changed =
+                        recalcVal != null && recalcVal !== cellDisplay(row[ci])
+                      return (
+                        <td
+                          key={c}
+                          onClick={() => setSelected({ r, c: ci + 1 })}
+                          className={cn(
+                            'min-w-[88px] cursor-cell border px-2 py-0.5 text-foreground transition-colors hover:bg-orange-500/5',
+                            isSel && 'ring-1 ring-inset ring-orange-500',
+                            changed && 'bg-emerald-500/10 text-emerald-300',
+                          )}
+                        >
+                          {recalcVal ?? cellDisplay(row[ci])}
+                        </td>
+                      )
+                    })}
                   </tr>
                 )
               })
             ) : (
               Array.from({ length: ROWS }, (_, r) => r + 1).map((r) => (
-              <tr key={r}>
-                <td className="sticky left-0 z-10 w-8 border border-border bg-zinc-900 px-2 py-0.5 text-right text-[9px] text-muted-foreground">
-                  {r}
-                </td>
-                {COLS.map((c) => {
-                  const cell = GRID[`${c}${r}`]
-                  const isSel = `${c}${r}` === 'B4'
-                  const edit = cell?.edit
-                  return (
-                    <td
-                      key={c}
-                      className={cn(
-                        'min-w-[88px] border px-2 py-0.5',
-                        cell?.header
-                          ? 'border-border bg-zinc-800 font-semibold text-foreground'
-                          : edit
-                            ? 'border-orange-500 bg-orange-500/5'
-                            : 'border-border text-foreground',
-                        isSel && 'ring-1 ring-inset ring-orange-500'
-                      )}
-                    >
-                      {edit ? (
-                        <span className="flex items-center gap-1">
-                          <span className="live-dot h-1 w-1 rounded-full bg-orange-500" />
-                          <span className="text-muted-foreground/40">_</span>
-                        </span>
-                      ) : (
-                        <span
-                          className={cn(
-                            cell?.bold && 'font-semibold text-orange-300',
-                            cell?.v?.startsWith('+') && 'text-emerald-300'
-                          )}
-                        >
-                          {cell?.v ?? ''}
-                        </span>
-                      )}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))
+                <tr key={r}>
+                  <td className="sticky left-0 z-10 w-8 border border-border bg-zinc-900 px-2 py-0.5 text-right text-[9px] text-muted-foreground">
+                    {r}
+                  </td>
+                  {COLS.map((c) => {
+                    const cell = GRID[`${c}${r}`]
+                    const isSel = selected?.r === r && selected?.c === COLS.indexOf(c) + 1
+                    const edit = cell?.edit
+                    return (
+                      <td
+                        key={c}
+                        onClick={() => setSelected({ r, c: COLS.indexOf(c) + 1 })}
+                        className={cn(
+                          'min-w-[88px] cursor-cell border px-2 py-0.5',
+                          cell?.header
+                            ? 'border-border bg-zinc-800 font-semibold text-foreground'
+                            : edit
+                              ? 'border-orange-500 bg-orange-500/5'
+                              : 'border-border text-foreground',
+                          isSel && 'ring-1 ring-inset ring-orange-500',
+                        )}
+                      >
+                        {edit ? (
+                          <span className="flex items-center gap-1">
+                            <span className="live-dot h-1 w-1 rounded-full bg-orange-500" />
+                            <span className="text-muted-foreground/40">_</span>
+                          </span>
+                        ) : (
+                          <span
+                            className={cn(
+                              cell?.bold && 'font-semibold text-orange-300',
+                              cell?.v?.startsWith('+') && 'text-emerald-300',
+                            )}
+                          >
+                            {cell?.v ?? ''}
+                          </span>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))
             )}
           </tbody>
         </table>

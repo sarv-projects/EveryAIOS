@@ -31,6 +31,28 @@ export interface XlsxWindowPayload extends SheetWindow {
   sheets: SheetMeta[];
 }
 
+/** IronCalc recalc (D2 truth engine): every engine-computed value + the
+ * number of formula cells evaluated. "LLM never invents a number." */
+export interface RecalcCell {
+  row: number;
+  col: number;
+  value: CellValue;
+}
+
+export interface SheetValues {
+  name: string;
+  cells: RecalcCell[];
+}
+
+export interface RecalcResult {
+  sheets: SheetValues[];
+  formula_cells: number;
+}
+
+export async function xlsxRecalc(path: string): Promise<RecalcResult> {
+  return invoke<RecalcResult>("xlsx_recalc", { path });
+}
+
 /** Read one windowed slice of a sheet from a workbook path. */
 export async function xlsxOpen(
   path: string,
