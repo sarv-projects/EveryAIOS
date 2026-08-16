@@ -14,13 +14,13 @@ No — the layering is already single-source-of-truth, and this fits it cleanly:
 
 ```
 TODO task → SPEC row ID (e.g. A5/P1.8) → ARCH/09-FEATURE-MATRIX Source col
-          → RESEARCH doc (01–78) → doc 41 (STEAL/ADAPT/REF verdict)
+          → RESEARCH doc (01–79) → doc 41 (STEAL/ADAPT/REF verdict)
 ```
 
 - **SPEC** = the master capability/algorithm index (148 rows, 33 algorithms, 281 repos).
 - **ARCH/00–12** = the *derived* layer (Rust/TS/UI boundaries, security invariants).
 - **RESEARCH docs** = the *evidence* layer (verdicts feed SPEC rows).
-- **TODO P0–P12 (build) + P13–P26 (steal queues)** = the *open-work index*.
+- **TODO P0–P12 (build) + P13–P27 (steal queues)** = the *open-work index*.
 
 The new local-model core is **not a new layer** — it extends the existing **A5 (local models) → P1.8** row + feeds **A6/P14 (model catalog)**, so every new task traces through the same chain. This doc records the *evidence* for P27.
 
