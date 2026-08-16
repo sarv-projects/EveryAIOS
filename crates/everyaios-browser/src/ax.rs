@@ -135,6 +135,25 @@ pub struct AxNode {
     pub frame_id: Option<String>,
     /// Extra boolean/string properties of interest (pressed, expanded, checked…).
     pub properties: HashMap<String, String>,
+    /// E16 slim-mode event-listener detection (lightpanda `interactive.zig`
+    /// pattern): an element clickable only via JavaScript (SPA divs with an
+    /// `onclick`/event listener, no native role). Populated by a separate
+    /// `DOMDebugger.getEventListeners` pass — not part of the AX tree.
+    pub has_js_click_handler: bool,
+}
+
+impl AxNode {
+    /// Mark this node as JS-clickable (the capture layer calls this after a
+    /// `DOMDebugger.getEventListeners` pass).
+    pub fn with_js_click_handler(mut self) -> Self {
+        self.has_js_click_handler = true;
+        self
+    }
+
+    /// True when the node is clickable only via JS (no native/ARIA role).
+    pub fn is_js_clickable(&self) -> bool {
+        self.has_js_click_handler
+    }
 }
 
 impl AxNode {
@@ -175,6 +194,9 @@ impl AxNode {
                 .unwrap_or_default(),
             backend_dom_node_id: v.get("backendDOMNodeId").and_then(Value::as_i64),
             frame_id: v.get("frameId").and_then(Value::as_str).map(str::to_string),
+            // The AX tree does not carry event listeners; the capture layer
+            // sets this via `with_js_click_handler` after a DOMDebugger pass.
+            has_js_click_handler: false,
             properties: property_map(v),
         }
     }

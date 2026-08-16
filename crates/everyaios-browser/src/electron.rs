@@ -61,6 +61,56 @@ impl ElectronHandle {
             .capture(&self.client, Some(&self.session.session_id), document_id)
     }
 
+    /// Click a `[ref=eN]` from a snapshot: resolve the ref → backing DOM node
+    /// → `DOM.getBoxModel` content-quad center → dispatch the click. This is
+    /// the "click by ref" half of the E15 Electron loop (snapshot → click →
+    /// read), mirroring [`crate::BrowserActions::act`].
+    pub fn click_ref(&self, ref_id: &str) -> Result<(), CdpError> {
+        let snap = self.snapshot("electron-ref-resolve", SnapshotMode::Interactive)?;
+        let node = crate::find_ref(&snap.root, ref_id).ok_or_else(|| CdpError::Protocol {
+            code: -1,
+            message: format!("ref {ref_id} not found in Electron snapshot"),
+        })?;
+        let backend = node.backend_dom_node_id.ok_or_else(|| CdpError::Protocol {
+            code: -1,
+            message: format!("ref {ref_id} has no backing DOM node"),
+        })?;
+        let out = self.client.call_session(
+            &self.session.session_id,
+            "DOM.getBoxModel",
+            json!({ "backendNodeId": backend }),
+        )?;
+        let quad = out
+            .pointer("/model/content")
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| CdpError::Protocol {
+                code: -1,
+                message: "DOM.getBoxModel returned no content quad".into(),
+            })?;
+        if quad.len() < 8 {
+            return Err(CdpError::Protocol {
+                code: -1,
+                message: "DOM.getBoxModel quad too short".into(),
+            });
+        }
+        let xs: Vec<f64> = quad.iter().step_by(2).filter_map(serde_json::Value::as_f64).collect();
+        let ys: Vec<f64> = quad
+            .iter()
+            .skip(1)
+            .step_by(2)
+            .filter_map(serde_json::Value::as_f64)
+            .collect();
+        if xs.is_empty() || ys.is_empty() {
+            return Err(CdpError::Protocol {
+                code: -1,
+                message: "DOM.getBoxModel quad unparseable".into(),
+            });
+        }
+        let cx = xs.iter().sum::<f64>() / xs.len() as f64;
+        let cy = ys.iter().sum::<f64>() / ys.len() as f64;
+        self.click(cx, cy)
+    }
+
     /// Click at a point (device-independent pixels, page coordinates). Emits
     /// mousePressed + mouseReleased so the click registers on the app.
     pub fn click(&self, x: f64, y: f64) -> Result<(), CdpError> {

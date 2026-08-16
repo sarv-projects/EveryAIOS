@@ -8,6 +8,19 @@
 
 use std::collections::{HashMap, HashSet};
 
+/// A filesystem event mapped onto ghost operations (P5.4). The storage
+/// crate's `notify` watcher maps `notify::EventKind` → this, then drives the
+/// index — keeping this crate free of the `notify` dependency.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FsEvent {
+    /// Path deleted → atomic tombstone (remove path + all its refs).
+    Removed(String),
+    /// Path renamed → re-path (move refs, zero re-embedding).
+    Renamed { from: String, to: String },
+    /// Content changed in place → no structural action needed.
+    Modified(String),
+}
+
 #[derive(Debug, Default)]
 pub struct GhostIndex {
     /// path → set of content ids referencing that path.
@@ -62,6 +75,17 @@ impl GhostIndex {
         target.extend(moved);
         n
     }
+
+    /// Apply a filesystem event (P5.4 — the notify→GhostIndex hookup):
+    /// `Removed` → tombstone, `Renamed` → repath, `Modified` → no-op.
+    /// Returns the number of refs affected (0 for `Modified`).
+    pub fn apply_fs_event(&mut self, event: &FsEvent) -> usize {
+        match event {
+            FsEvent::Removed(path) => self.tombstone(path).len(),
+            FsEvent::Renamed { from, to } => self.repath(from, to),
+            FsEvent::Modified(_) => 0,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -79,6 +103,33 @@ mod tests {
         assert_eq!(ids, vec!["mem:1".to_string(), "mem:2".to_string()]);
         assert_eq!(g.ids_for("/docs/a.md"), Vec::<String>::new());
         assert_eq!(g.ids_for("/docs/b.md"), vec!["mem:3".to_string()]);
+    }
+
+    #[test]
+    fn apply_fs_event_maps_notify_kinds_to_ghost_ops() {
+        let mut g = GhostIndex::new();
+        g.index("/docs/a.md", "mem:1");
+        g.index("/docs/a.md", "mem:2");
+        g.index("/docs/b.md", "mem:3");
+
+        // Remove → tombstone (2 refs affected, path gone).
+        assert_eq!(g.apply_fs_event(&FsEvent::Removed("/docs/a.md".into())), 2);
+        assert!(g.ids_for("/docs/a.md").is_empty());
+
+        // Rename → repath (1 ref moved, zero re-embedding).
+        assert_eq!(
+            g.apply_fs_event(&FsEvent::Renamed {
+                from: "/docs/b.md".into(),
+                to: "/docs/c.md".into()
+            }),
+            1
+        );
+        assert_eq!(g.ids_for("/docs/c.md"), vec!["mem:3".to_string()]);
+        assert!(g.ids_for("/docs/b.md").is_empty());
+
+        // Modify → no structural action.
+        assert_eq!(g.apply_fs_event(&FsEvent::Modified("/docs/c.md".into())), 0);
+        assert_eq!(g.ids_for("/docs/c.md"), vec!["mem:3".to_string()]);
     }
 
     #[test]

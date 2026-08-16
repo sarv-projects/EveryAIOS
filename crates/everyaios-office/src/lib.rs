@@ -75,6 +75,7 @@ pub use conformance::{parts_diff, LibreOfficeOracle, PartsDiff};
 pub use docx::{DocxEngine, OfficeError};
 pub use legacy::{convert_to_modern, LegacyKind, LegacyOpen};
 pub use pdf::{inspect, replace_text, PdfError, PdfInfo};
+pub use pptx::author::{author_deck, speaker_notes as deck_speaker_notes, AuthorError, DeckBrief, DeckSlide};
 pub use pptx::PptxEngine;
 pub use rollback::Snapshot;
 

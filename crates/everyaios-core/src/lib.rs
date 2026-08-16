@@ -17,8 +17,11 @@ pub mod blueprint;
 pub mod challenge;
 pub mod chat;
 pub mod config;
+pub mod hwfit;
 pub mod local;
+pub mod memory_service;
 pub mod orphan;
+pub mod provider_ref;
 pub mod providers;
 pub mod sidecar_link;
 pub mod supervisor;
@@ -33,7 +36,16 @@ pub use challenge::{
 };
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent};
 pub use config::{Config, ConfigError};
+pub use hwfit::{
+    detect as detect_hardware, recommend, score_model, GpuClass, HardwareProfile,
+    LocalModelCandidate, ModelFit,
+};
 pub use local::{LocalConfig, LocalError, LocalManager, LocalModelInfo};
+pub use memory_service::{MemoryService, StoredFact};
+pub use provider_ref::{
+    classify_category, ingest_provider_reference, parse_provider_reference, AuthClass,
+    IngestReport, ProviderEntry,
+};
 pub use providers::{KeyPool, ProviderConfig, ProviderKey, ProvidersError, ProvidersFile};
 pub use sidecar_link::{Inbound, LinkError, SidecarLink, WriterHandle};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};

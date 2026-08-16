@@ -51,6 +51,22 @@ pub fn bounded_preview(data: &str, head_tokens: usize, tail_tokens: usize) -> St
     out
 }
 
+/// P5.8 — query a ref's full payload without serializing it into context:
+/// return only the matching lines (capped at `max_hits`). The E4 script-eval
+/// `data.query(fn)` primitive calls this; the agent gets the matches, not the
+/// payload. Case-insensitive substring match, empty needle → no hits.
+pub fn query_ref(data: &str, term: &str, max_hits: usize) -> Vec<String> {
+    let needle = term.to_lowercase();
+    if needle.is_empty() || max_hits == 0 {
+        return Vec::new();
+    }
+    data.lines()
+        .filter(|l| l.to_lowercase().contains(&needle))
+        .take(max_hits)
+        .map(str::to_string)
+        .collect()
+}
+
 /// Build a ref handle whose preview fits within the 2K-token budget.
 pub fn make_ref_handle(
     id: &str,
@@ -116,5 +132,17 @@ mod tests {
         assert!(p.starts_with("ABCDEFGHIJABCDEFGHIJ"));
         assert!(p.ends_with("ABCDEFGHIJABCDEFGHIJ"));
         assert!(p.contains("truncated"));
+    }
+
+    #[test]
+    fn query_ref_returns_only_matches_not_payload() {
+        let data = "line one alpha\nline two beta\nline three alpha again\nline four";
+        let hits = query_ref(data, "alpha", 5);
+        assert_eq!(hits.len(), 2);
+        assert!(hits[0].contains("alpha"));
+        assert!(hits[1].contains("alpha again"));
+        // Cap + empty needle.
+        assert_eq!(query_ref(data, "alpha", 1).len(), 1);
+        assert!(query_ref(data, "", 5).is_empty());
     }
 }

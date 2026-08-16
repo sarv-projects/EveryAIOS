@@ -23,6 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use everyaios_vault::{Broker, LocalEndpoint, Vault, DEFAULT_SESSION_BUDGET_USD};
 
+use crate::memory_service::MemoryService;
 use crate::sidecar_link::{Inbound, SidecarLink, WriterHandle};
 
 /// P1.8: registered keyless local endpoints (provider → endpoint).
@@ -123,6 +124,9 @@ pub struct ChatRelay<W, R> {
     /// sidecar requests one of these providers the broker routes to the
     /// local runtime — no key ring, GBNF grammar passthrough (B5).
     local_endpoints: Arc<Mutex<LocalEndpointMap>>,
+    /// P5.1/P5.3/P5.4/P5.9: the in-process memory dispatch (facts, planner,
+    /// ghost index, usage ledger) the sidecar calls via `memory/*` methods.
+    memory: Arc<Mutex<MemoryService>>,
     on_event: Arc<Mutex<EventSink>>,
 }
 
@@ -138,8 +142,15 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             base_urls: Arc::new(Mutex::new(HashMap::new())),
             local_endpoints: Arc::new(Mutex::new(HashMap::new())),
+            memory: Arc::new(Mutex::new(MemoryService::new())),
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
         }
+    }
+
+    /// The memory service handle (tests + the Tauri `usage_snapshot` command
+    /// read from it; the sidecar writes through `memory/*` requests).
+    pub fn memory(&self) -> Arc<Mutex<MemoryService>> {
+        Arc::clone(&self.memory)
     }
 
     /// Register a keyless local endpoint (P1.8/A5). The src-tauri shell uses
@@ -178,6 +189,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let on_event = Arc::clone(&self.on_event);
         let base_urls = Arc::clone(&self.base_urls);
         let local_endpoints = Arc::clone(&self.local_endpoints);
+        let memory = Arc::clone(&self.memory);
 
         std::thread::spawn(move || loop {
             let inbound = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
@@ -197,6 +209,20 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         std::thread::spawn(move || {
                             let _ = stream_provider(vault2, base2, local2, params, w2);
                         });
+                    }
+                    // P5.1/P5.3/P5.4/P5.9: memory + usage dispatch. Runs on
+                    // the consumer loop (fast, deterministic, no I/O) so the
+                    // reply is synchronous and the sidecar can await it.
+                    method if method.starts_with("memory/") || method == "usage/snapshot" => {
+                        let mut svc = memory.lock().unwrap_or_else(|e| e.into_inner());
+                        match svc.handle(method, &params) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
                     }
                     _ => {
                         let _ = writer.reply_error(id, &format!("method not found: {method}"));

@@ -13,7 +13,7 @@ mod cockpit_cmds;
 mod office_cmds;
 mod replay_cmds;
 
-use everyaios_guard::Guard;
+use everyaios_guard::prescan::{guard as compiled_guard, Guard};
 use everyaios_vault::Vault;
 
 pub mod xlsx_cmds;
@@ -133,6 +133,20 @@ fn chat_stream(
 }
 
 #[tauri::command]
+fn usage_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    // P5.9: the token/cost dashboard data source — per-key/per-session usage,
+    // cache-hit rate, and cost from the relay's in-process `MemoryService`
+    // ledger. Empty (zeros) until the sidecar connects and records calls.
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected — usage ledger not ready".to_string())?;
+    let memory = relay.memory();
+    let mem = memory.lock().map_err(|e| e.to_string())?;
+    Ok(mem.usage_snapshot())
+}
+
+#[tauri::command]
 fn chat_cancel(state: State<'_, AppState>, stream_id: String) -> Result<(), String> {
     // Abort signal: UI → Rust → sidecar (chat/cancel) → engine/provider.
     let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
@@ -240,7 +254,7 @@ pub fn run() {
     // Build the initial state exactly like the headless binary would.
     let args: Vec<String> = std::env::args().skip(1).collect();
     let boot_report = everyaios_core::boot(&args).unwrap_or_else(|e| format!("boot failed: {e}"));
-    let guard = Guard::default();
+    let guard = compiled_guard().clone();
     let vault = everyaios_vault::Vault::open(
         &everyaios_core::default_data_dir().join("vault.db"),
         &everyaios_core::default_vault_key(),
@@ -269,6 +283,7 @@ pub fn run() {
             probe_vault,
             chat_stream,
             chat_cancel,
+            usage_snapshot,
             replay_cmds::replay_sessions,
             replay_cmds::replay_timeline,
             replay_cmds::replay_screenshot,

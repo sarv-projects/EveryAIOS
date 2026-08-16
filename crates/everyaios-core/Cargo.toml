@@ -10,6 +10,7 @@ description = "EveryAIOS orchestrator binary — boots headless, loads config, s
 everyaios-ipc = { path = "../everyaios-ipc" }
 everyaios-vault = { path = "../everyaios-vault" }
 everyaios-guard = { path = "../everyaios-guard" }
+everyaios-memory = { path = "../everyaios-memory" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
@@ -18,6 +19,7 @@ sha2 = { workspace = true }
 rand = { workspace = true }
 opentelemetry = { workspace = true }
 ureq = { workspace = true }
+sysinfo = "0.30"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

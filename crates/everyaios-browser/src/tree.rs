@@ -178,10 +178,14 @@ fn build_node(
     // Iframe placeholders are always kept — the capture engine stitches the
     // child frame's tree into them after this pass.
     let is_iframe = node.role == "Iframe" || node.role == "iframe";
+    // E16 slim-mode event-listener detection (lightpanda `interactive.zig`):
+    // a node with no native/ARIA role but a JS click handler is still an
+    // actionable element (SPA divs with onClick).
+    let js_clickable = node.is_js_clickable();
     let keep_self = match options.mode {
         crate::SnapshotMode::Full => true,
         crate::SnapshotMode::Interactive | crate::SnapshotMode::Slim => {
-            is_iframe || is_interactive(&node.role) || is_heading(&node.role)
+            is_iframe || is_interactive(&node.role) || is_heading(&node.role) || js_clickable
         }
     };
 
@@ -210,7 +214,7 @@ fn build_node(
     }
 
     out.children = kept_children;
-    if is_interactive(&node.role) {
+    if is_interactive(&node.role) || js_clickable {
         out.ref_id = Some(refs.fresh());
         out.actionable = true;
     }
@@ -238,6 +242,7 @@ mod tests {
             backend_dom_node_id: None,
             frame_id: None,
             properties: Default::default(),
+            has_js_click_handler: false,
         }
     }
 
@@ -338,6 +343,24 @@ mod tests {
         let s = collapse_text(&"a".repeat(100), 10);
         assert_eq!(s.chars().count(), 10);
         assert!(s.ends_with('…'));
+    }
+
+    #[test]
+    fn slim_mode_keeps_js_clickable_spa_divs() {
+        // A generic div (SPA) with a JS click handler + no native role must
+        // survive slim pruning and get a ref (event-listener detection).
+        let mut nodes = vec![node("1", "WebArea", "", &["2", "3"])];
+        nodes.push(node("2", "generic", "Sign up now", &[]));
+        nodes.push(node("3", "paragraph", "plain text", &[]));
+        nodes[1].has_js_click_handler = true;
+
+        let opts = TreeOptions::default().apply_mode(SnapshotMode::Slim);
+        let mut refs = RefMinter::new();
+        let tree = build_tree(&nodes, opts, &mut refs).unwrap();
+        let rendered = tree.render();
+        assert!(rendered.contains("generic Sign up now [ref=e1]"), "{rendered}");
+        // The plain paragraph is pruned (not clickable).
+        assert!(!rendered.contains("paragraph"), "{rendered}");
     }
 
     #[test]

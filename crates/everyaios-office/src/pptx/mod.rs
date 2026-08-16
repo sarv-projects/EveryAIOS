@@ -7,6 +7,7 @@
 //! copied verbatim; only the targeted part(s) change.
 
 pub mod anim;
+pub mod author;
 pub mod notes;
 pub mod parts;
 pub mod text;

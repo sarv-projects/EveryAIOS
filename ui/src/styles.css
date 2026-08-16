@@ -1166,3 +1166,12 @@ body {
 .cell-ref { font-weight: 700; min-width: 48px; }
 .cell-val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-selected { outline: 2px solid var(--accent, #4f8cff); outline-offset: -2px; }
+
+/* P5.9 — spend / token-cost dashboard */
+.spend-totals { display: flex; flex-wrap: wrap; gap: 20px; }
+.spend-total { display: flex; flex-direction: column; gap: 2px; }
+.spend-total strong { font-size: 20px; }
+.spend-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.spend-table th, .spend-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border, #ddd); }
+.spend-table th { color: var(--muted, #777); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+.spend-table td.mono, .spend-table th { font-family: ui-monospace, monospace; }

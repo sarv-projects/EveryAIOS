@@ -52,6 +52,36 @@ pub enum WebMcpError {
     UnknownTool(String),
     #[error("invalid WebMCP input JSON: {0}")]
     InvalidInputJson(String),
+    /// E16 tool-cancellation: the caller aborted the invocation (-32001).
+    /// Clients must **not** retry a cancelled invocation — it is a caller
+    /// decision, not a failure of the tool.
+    #[error("WebMCP invocation cancelled: {0}")]
+    Cancelled(String),
+    /// E16 tool-cancellation: the tool exceeded its deadline (-32002). This is
+    /// a tool-state outcome (the tool may retry or the client may escalate),
+    /// distinct from a caller abort.
+    #[error("WebMCP invocation timed out: {0}")]
+    TimedOut(String),
+}
+
+impl WebMcpError {
+    /// The JSON-RPC error code (lightpanda `mcp/protocol.zig` taxonomy):
+    /// `-32001` = Cancelled (caller aborted), `-32002` = Timeout (deadline
+    /// exceeded). The distinction tells the client whether a retry is safe.
+    pub fn code(&self) -> i64 {
+        match self {
+            WebMcpError::Cancelled(_) => -32001,
+            WebMcpError::TimedOut(_) => -32002,
+            WebMcpError::UnknownTool(_) => -32602,
+            WebMcpError::InvalidInputJson(_) => -32602,
+        }
+    }
+
+    /// Is a retry appropriate? Cancelled = no (caller aborted); everything
+    /// else = the client may choose to retry.
+    pub fn retryable(&self) -> bool {
+        !matches!(self, WebMcpError::Cancelled(_))
+    }
 }
 
 /// Executes a WebMCP tool. The page supplies this (JS-side); the harness calls
@@ -111,6 +141,75 @@ impl WebMcpRegistry {
             ));
         }
         Ok(executor.execute(tool, parsed))
+    }
+}
+
+/// The lifecycle state of one in-flight WebMCP invocation (E16).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InvocationState {
+    Running,
+    Cancelled,
+    TimedOut,
+    Done,
+}
+
+/// Tracks in-flight WebMCP invocations so `cancelInvocation` can abort a
+/// long-running page tool (lightpanda `invokeTool`/`cancelInvocation`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InvocationTracker {
+    invocations: std::collections::HashMap<String, InvocationState>,
+}
+
+impl InvocationTracker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register a running invocation.
+    pub fn start(&mut self, id: &str) {
+        self.invocations.insert(id.to_string(), InvocationState::Running);
+    }
+
+    /// `cancelInvocation` — mark an invocation cancelled. Returns true when a
+    /// running invocation was cancelled (false = unknown or already settled).
+    pub fn cancel(&mut self, id: &str) -> bool {
+        match self.invocations.get(id) {
+            Some(InvocationState::Running) => {
+                self.invocations.insert(id.to_string(), InvocationState::Cancelled);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Mark an invocation as having exceeded its deadline.
+    pub fn timeout(&mut self, id: &str) -> bool {
+        match self.invocations.get(id) {
+            Some(InvocationState::Running) => {
+                self.invocations.insert(id.to_string(), InvocationState::TimedOut);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Mark an invocation as finished normally.
+    pub fn finish(&mut self, id: &str) {
+        self.invocations.insert(id.to_string(), InvocationState::Done);
+    }
+
+    /// The current state (None = never started).
+    pub fn state(&self, id: &str) -> Option<InvocationState> {
+        self.invocations.get(id).copied()
+    }
+
+    pub fn len(&self) -> usize {
+        self.invocations.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.invocations.is_empty()
     }
 }
 
@@ -184,5 +283,53 @@ mod tests {
             r.execute("search", "[1,2,3]", &EchoExecutor),
             Err(WebMcpError::InvalidInputJson(_))
         ));
+    }
+
+    #[test]
+    fn invocation_lifecycle() {
+        let mut t = InvocationTracker::new();
+        t.start("i1");
+        assert_eq!(t.state("i1"), Some(InvocationState::Running));
+        assert!(t.cancel("i1"));
+        assert_eq!(t.state("i1"), Some(InvocationState::Cancelled));
+        // Cancelling twice is not an error (idempotent), but reports false.
+        assert!(!t.cancel("i1"));
+    }
+
+    #[test]
+    fn cancel_after_finish_is_noop() {
+        let mut t = InvocationTracker::new();
+        t.start("i1");
+        t.finish("i1");
+        assert!(!t.cancel("i1"));
+        assert_eq!(t.state("i1"), Some(InvocationState::Done));
+    }
+
+    #[test]
+    fn timeout_is_distinct_from_cancel() {
+        let mut t = InvocationTracker::new();
+        t.start("i1");
+        assert!(t.timeout("i1"));
+        assert_eq!(t.state("i1"), Some(InvocationState::TimedOut));
+    }
+
+    #[test]
+    fn error_taxonomy_cancelled_vs_timeout() {
+        let c = WebMcpError::Cancelled("user aborted".into());
+        let t = WebMcpError::TimedOut("deadline".into());
+        assert_eq!(c.code(), -32001);
+        assert_eq!(t.code(), -32002);
+        // Cancelled must NOT be retried (caller decision); timeout may be.
+        assert!(!c.retryable());
+        assert!(t.retryable());
+    }
+
+    #[test]
+    fn tracker_serializes() {
+        let mut t = InvocationTracker::new();
+        t.start("a");
+        let json = serde_json::to_string(&t).unwrap();
+        let back: InvocationTracker = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.state("a"), Some(InvocationState::Running));
     }
 }

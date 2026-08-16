@@ -19,9 +19,11 @@
 pub mod actions;
 pub mod ax;
 pub mod capture;
+pub mod content;
 pub mod diff;
 pub mod electron;
 pub mod humanize;
+pub mod locator;
 pub mod ownership;
 pub mod protocol;
 pub mod read;
@@ -36,8 +38,9 @@ pub mod webmcp_http;
 mod live_tests;
 
 pub use actions::{
-    find_ref, ActKind, ActResult, BrowserActions, EnhancedSnapshot, FieldValue, NavigateAction,
-    Point, ReadMode, ScrollDirection, TextResult, WaitFor, WaitOutcome,
+    find_ref, ActKind, ActResult, AnnotatedScreenshot, BrowserActions, EnhancedSnapshot,
+    FieldValue, NavigateAction, Point, ReadMode, ScreenshotLabel, ScrollDirection, TextResult,
+    WaitFor, WaitOutcome,
 };
 pub use ax::{AxNode, INTERACTIVE_ROLES};
 pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
@@ -54,9 +57,17 @@ pub use tiers::{
 };
 pub use tree::{build_tree, RefMinter, TreeOptions};
 pub use electron::ElectronHandle;
-pub use webmcp::{WebMcpError, WebMcpExecutor, WebMcpRegistry, WebMcpResult, WebMcpTool};
+pub use webmcp::{
+    InvocationState, InvocationTracker, WebMcpError, WebMcpExecutor, WebMcpRegistry, WebMcpResult,
+    WebMcpTool,
+};
 pub use webmcp_http::{
     handle_mcp_request, parse_http_request, McpHttpServer, MCP_PATH,
+};
+pub use content::{clean_markdown, CleanedText, FilterSet, RuleKind};
+pub use locator::{
+    a11y_audit, find_first, find_semantic, first_actionable_ref, parse_batch, A11yIssue,
+    A11ySeverity, BatchParseError, Located, SemanticQuery,
 };
 
 use serde::{Deserialize, Serialize};

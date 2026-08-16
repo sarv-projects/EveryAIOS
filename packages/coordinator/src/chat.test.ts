@@ -11,6 +11,7 @@ import type { StreamChunk } from "@personal-ai/core-engine";
 import {
   activeStreamCount,
   cancelChatStream,
+  extractFacts,
   FrameProviderBridge,
   runChatStream,
   type ChatEvent,
@@ -90,6 +91,57 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     // No errors, no leaks of active streams.
     expect(events.some((e) => e.type === "error")).toBe(false);
     expect(activeStreamCount()).toBe(0);
+  });
+
+  test("extractFacts keeps short declarative candidates, drops questions/noise", () => {
+    expect(extractFacts("Paris is the capital of France. What about Berlin? ok")).toEqual([
+      "Paris is the capital of France.",
+    ]);
+    expect(extractFacts("Short.")).toEqual([]); // < 12 chars
+    expect(extractFacts("")).toEqual([]);
+    // Cap at maxFacts.
+    const many = Array.from({ length: 12 }, (_, i) => `Fact number ${i} is a declarative sentence that is long enough.`).join(" ");
+    expect(extractFacts(many, 3)).toHaveLength(3);
+  });
+
+  test("P5.1: a turn with a declarative response emits memory_extracted", async () => {
+    const { events, emit } = collector();
+    const bridge = scripted([
+      { type: "text", text: "The Q3 budget was finalized at $12,400. " },
+      { type: "text", text: "The marketing team approved the new slide deck." },
+      { type: "done", usage: { promptTokens: 10, completionTokens: 2 } },
+    ]);
+
+    await runChatStream(PARAMS, emit, bridge, 10);
+
+    const mem = events.filter((e) => e.type === "memory_extracted") as Array<{
+      type: "memory_extracted";
+      sessionId: string;
+      facts: string[];
+    }>;
+    expect(mem.length).toBeGreaterThanOrEqual(1);
+    expect(mem[0]!.sessionId).toBe("s1");
+    expect(mem[0]!.facts.join(" ")).toContain("Q3 budget");
+    expect(mem[0]!.facts.join(" ")).toContain("marketing team");
+  });
+
+  test("P5.1: extracted facts are persisted via memory/write (best-effort)", async () => {
+    const { events, emit } = collector();
+    const bridge = scripted([
+      { type: "text", text: "The Q3 budget was finalized at $12,400." },
+      { type: "done", usage: { promptTokens: 10, completionTokens: 2 } },
+    ]);
+    const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
+
+    await runChatStream(PARAMS, emit, bridge, 10, async (method, params) => {
+      requests.push({ method, params: params as Record<string, unknown> });
+      return { written: 1 };
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.method).toBe("memory/write");
+    expect(requests[0]!.params).toMatchObject({ sessionId: "s1" });
+    expect((requests[0]!.params.facts as string[])[0]).toContain("Q3 budget");
   });
 
   test("cancellation aborts the provider bridge and emits cancelled", async () => {

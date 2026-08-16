@@ -864,13 +864,47 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
             "Page.captureScreenshot",
             json!({ "format": "jpeg", "quality": quality }),
         )?;
-        out.pointer("/result/data")
+        // CDP returns `{data}` as the method result (already JSON-RPC-
+        // unwrapped by the transport) — read `/data`, not `/result/data`.
+        out.get("data")
             .and_then(Value::as_str)
             .map(str::to_string)
             .ok_or_else(|| CdpError::Protocol {
                 code: -1,
                 message: "Page.captureScreenshot returned no data".into(),
             })
+    }
+
+    /// `annotated_screenshot` (post-v1 tool, doc 55): a JPEG capture plus the
+    /// numbered-label overlay data (`ref ↔ accessible name ↔ viewport center`)
+    /// the UI draws on top. Maps `[ref=eN]` ids to pixel positions so a user
+    /// (or model) can see exactly what each ref points at — the deterministic
+    /// half of annotated screenshots; the actual pixel overlay is drawn by the
+    /// frontend, which keeps the image library out of the browser crate.
+    pub fn annotated_screenshot(
+        &self,
+        document_id: &str,
+        quality: u8,
+    ) -> Result<AnnotatedScreenshot, CdpError> {
+        let snap = self.snapshot(document_id)?;
+        let mut labels = Vec::new();
+        collect_actionable(&snap.root, &mut |node| {
+            let (Some(ref_id), Some(backend)) = (node.ref_id.clone(), node.backend_dom_node_id) else {
+                return;
+            };
+            // Geometry can be missing for off-screen/display:none nodes — skip
+            // the label rather than failing the whole capture.
+            if let Ok(center) = self.box_center(&backend) {
+                labels.push(ScreenshotLabel {
+                    ref_id,
+                    label: node.name.clone(),
+                    x: center.x,
+                    y: center.y,
+                });
+            }
+        });
+        let screenshot = self.screenshot_jpeg(quality)?;
+        Ok(AnnotatedScreenshot { screenshot, labels })
     }
 
     /// `pdf` — Page.printToPDF (base64).
@@ -880,7 +914,7 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
             "Page.printToPDF",
             json!({ "printBackground": true }),
         )?;
-        out.pointer("/result/data")
+        out.get("data")
             .and_then(Value::as_str)
             .map(str::to_string)
             .ok_or_else(|| CdpError::Protocol {
@@ -1073,6 +1107,22 @@ pub struct EnhancedSnapshot {
     pub occluded: Vec<String>,
 }
 
+/// One numbered label for an annotated screenshot (ref ↔ name ↔ center).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ScreenshotLabel {
+    pub ref_id: String,
+    pub label: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// `annotated_screenshot` result: JPEG base64 + label overlay data.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AnnotatedScreenshot {
+    pub screenshot: String,
+    pub labels: Vec<ScreenshotLabel>,
+}
+
 fn act_kind_name(act: &ActKind) -> &'static str {
     match act {
         ActKind::Click { .. } => "click",
@@ -1263,6 +1313,7 @@ mod tests {
                     "model": { "content": [0, 0, 100, 0, 100, 50, 0, 50] }
                 })),
                 "DOM.requestNode" => Ok(json!({ "result": { "nodeId": 7 } })),
+                "Page.captureScreenshot" => Ok(json!({ "data": "fakebase64png" })),
                 _ => Ok(json!({})),
             }
         }
@@ -1467,6 +1518,20 @@ mod tests {
             "short names must not be flagged: {:?}",
             es.occluded
         );
+    }
+
+    #[test]
+    fn annotated_screenshot_returns_labels_and_image() {
+        let m = mock(); // button "Go" @ backend 102, content quad center (50,25)
+        let a = BrowserActions::new(&m, Some("sess-1"));
+        let ann = a.annotated_screenshot("doc-1", 70).unwrap();
+        assert_eq!(ann.screenshot, "fakebase64png");
+        assert_eq!(ann.labels.len(), 1);
+        let l = &ann.labels[0];
+        assert_eq!(l.ref_id, "e1");
+        assert_eq!(l.label, "Go");
+        assert_eq!(l.x, 50.0);
+        assert_eq!(l.y, 25.0);
     }
 
     #[test]

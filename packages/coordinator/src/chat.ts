@@ -63,7 +63,13 @@ export type ChatEvent =
       usage?: { promptTokens: number; completionTokens: number };
     }
   | { type: "error"; streamId: string; code: string; message: string }
-  | { type: "cancelled"; streamId: string };
+  | { type: "cancelled"; streamId: string }
+  | {
+      type: "memory_extracted";
+      streamId: string;
+      sessionId: string;
+      facts: string[];
+    };
 
 /** Provider request the bridge turns into a provider stream. */
 export interface ProviderRequest {
@@ -234,6 +240,13 @@ export async function runChatStream(
   emit: (e: ChatEvent) => void,
   bridge: ProviderBridge,
   batchIntervalMs = 33,
+  /**
+   * Outbound JSON-RPC request to Rust (P5.1 memory persistence). When
+   * present, extracted facts are written to the Rust memory store via
+   * `memory/write` (best-effort — a failure never blocks the stream). Tests
+   * omit it, so the memory event is emitted but no request is sent.
+   */
+  request?: (method: string, params: unknown) => Promise<unknown>,
 ): Promise<void> {
   const { sessionId, streamId, text } = params;
   const surface = params.surface ?? "chat";
@@ -300,8 +313,23 @@ export async function runChatStream(
     // the loop contract real today.
     persistTurn: async (input) =>
       `${input.sessionId ?? "sess"}:${++turnCounter}`,
-    extractMemory: async () => {
-      /* core-memory fusion lands in P2 (C1–C12) */
+    // P5.1 core-memory import: the sidecar extracts declarative fact
+    // candidates from the turn and emits them (the UI/audit show them; the
+    // Rust store persists them on the `memory/write` dispatch, which lands
+    // with the memory-store wiring). Deterministic — no LLM round-trip.
+    extractMemory: async (_input, response) => {
+      const facts = extractFacts(response);
+      if (facts.length > 0) {
+        emit({ type: "memory_extracted", streamId, sessionId, facts });
+        // P5.1: persist to the Rust memory store (best-effort). The Rust
+        // relay answers `memory/write`; a missing/refusing handler is
+        // tolerated so the stream never blocks on memory.
+        if (request) {
+          void request("memory/write", { sessionId, facts }).catch(() => {
+            /* memory persistence is best-effort */
+          });
+        }
+      }
     },
   });
 
@@ -393,4 +421,19 @@ export async function runChatStream(
 /** J11 budget-kill detection: the broker's "stopped: $X limit" message. */
 function isBudgetError(message: string): boolean {
   return message.includes("stopped:") && message.includes("limit");
+}
+
+/**
+ * P5.1 core-memory import — deterministic fact-candidate extraction. Splits
+ * the response into sentences, keeps the short declarative ones (12..280
+ * chars, not a question), and returns up to `maxFacts` candidates. The richer
+ * classifier (`everyaios-memory::classify`) decides memory/fact/event/document
+ * class on the Rust side; this is the sidecar's zero-round-trip import step.
+ */
+export function extractFacts(text: string, maxFacts = 8): string[] {
+  return text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim().replace(/^["'\-\u2013\u2014\u2022*]+|["'\-\u2013\u2014\u2022*]+$/g, ""))
+    .filter((s) => s.length >= 12 && s.length <= 280 && !s.endsWith("?"))
+    .slice(0, maxFacts);
 }

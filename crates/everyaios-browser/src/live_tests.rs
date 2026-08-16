@@ -262,6 +262,57 @@ fn live_tiered_stack_escalation() {
     eprintln!("LIVE PASS: tiered stack — static → light → chrome escalation");
 }
 
+/// E15 Electron E2E — attach to a live Electron debug port, snapshot →
+/// click-by-ref → read. Gate: `EVERYAIOS_LIVE_TEST=1` + `EVERYAIOS_ELECTRON_PORT`.
+/// A local Electron app is required (e.g. launch VS Code with
+/// `--remote-debugging-port=9223`); the test skips silently otherwise.
+#[test]
+#[ignore]
+fn live_electron_attach_snapshot_click_read() {
+    if !live_enabled() {
+        return;
+    }
+    let Some(port) = std::env::var("EVERYAIOS_ELECTRON_PORT")
+        .ok()
+        .and_then(|p| p.parse::<u16>().ok())
+    else {
+        eprintln!("skip: EVERYAIOS_ELECTRON_PORT not set");
+        return;
+    };
+
+    // `attach` already runs the Electron probe (Browser: Electron/…) and
+    // errors on any non-Electron target, so a successful attach is the check.
+    let handle = crate::ElectronHandle::attach(port).expect("attach to Electron debug port");
+    assert!(!handle.app.browser_ws_url.is_empty(), "Electron ws url present");
+
+    // snapshot → a tree with at least a root WebArea + some nodes.
+    let snap = handle
+        .snapshot("electron-e2e", SnapshotMode::Interactive)
+        .expect("snapshot Electron window");
+    let rendered = snap.root.render();
+    eprintln!("=== ELECTRON SNAPSHOT ===\n{rendered}\n=== END ===");
+    assert!(!rendered.trim().is_empty(), "snapshot must not be empty");
+
+    // click the first actionable ref (if any) — proves the ref→geometry→click
+    // path works against a real Electron target.
+    let first_ref = crate::first_actionable_ref(&snap.root);
+    if let Some(r) = first_ref {
+        handle.click_ref(&r).expect("click by ref");
+        eprintln!("ELECTRON PASS: clicked ref {r}");
+    } else {
+        eprintln!("ELECTRON PASS: no actionable ref in this window (attach + snapshot only)");
+    }
+
+    // read → the window's visible text comes back through Runtime.evaluate.
+    let text = handle.read().expect("read Electron window");
+    eprintln!("=== ELECTRON READ ({} chars) ===\n{}", text.len(), text);
+
+    // screenshot → non-empty base64 PNG proves the render path works.
+    let png = handle.screenshot().expect("screenshot Electron window");
+    assert!(!png.is_empty(), "screenshot must return a PNG payload");
+    eprintln!("ELECTRON PASS: attach → snapshot → click → read → screenshot");
+}
+
 #[test]
 #[ignore]
 fn live_session_inheritance_pulls_cookies_from_chrome_debug_port() {

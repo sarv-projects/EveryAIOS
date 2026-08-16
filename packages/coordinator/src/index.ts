@@ -163,7 +163,13 @@ export function handleRequest(req: Request): Response | null {
         );
         break;
       }
-      void runChatStream(p as ChatStreamParams, emitChatEvent, frameBridge);
+      void runChatStream(
+        p as ChatStreamParams,
+        emitChatEvent,
+        frameBridge,
+        33,
+        sendRequest,
+      );
       response = ok(id, { accepted: true, streamId: p.streamId });
       break;
     }

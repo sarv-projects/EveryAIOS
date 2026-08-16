@@ -185,6 +185,9 @@ const STR_FILTER: ArgDef = ArgDef::new(
 const BOOL_OUTLINE: ArgDef = ArgDef::new("outline", ArgKind::Bool, false, "Headings + links only");
 const BOOL_RAW: ArgDef = ArgDef::new("raw", ArgKind::Bool, false, "Raw text, no markdown syntax");
 const STR_REF2: ArgDef = ArgDef::new("to_ref", ArgKind::String, false, "Drag target ref");
+const STR_PATH: ArgDef = ArgDef::new("path", ArgKind::String, true, "Directory path to scan");
+const STR_QUERY: ArgDef = ArgDef::new("query", ArgKind::String, true, "Filename search query");
+const NUM_TOP_N: ArgDef = ArgDef::new("top_n", ArgKind::Number, false, "Number of results (default 50)");
 
 /// The 37-tool catalog (ARCH/08 §8.2: 34 + file_ops×3). Ordering: the
 /// original 17 BrowserOS-semantic tools first (prompts/skills transfer),
@@ -456,9 +459,62 @@ pub const BROWSER_TOOLS: &[ToolDef] = tools!(
     &[STR_URL, STR_DIR],
 );
 
-/// Look up a tool by name.
+/// The storage-intelligence tool catalog (P4.8 — D9–D11, G7): the
+/// `everyaios-storage` primitives exposed as agent tools. All are **read-only
+/// proposals** — the crate never deletes; cleanup goes through Guard-2.
+/// Heavy scans respect J16 battery-awareness (the caller gates them).
+pub const STORAGE_TOOLS: &[ToolDef] = tools!(
+    "disk_scan",
+    Read,
+    true,
+    false,
+    State,
+    "Scan a directory tree into an indexed arena (parallel work-stealing walker; battery-aware J16)",
+    &[STR_PATH],
+    "disk_duplicates",
+    Search,
+    true,
+    false,
+    State,
+    "Find duplicate files (7-stage hash: size → xxHash3 → BLAKE3, hardlink-aware)",
+    &[STR_PATH],
+    "disk_large_files",
+    Search,
+    true,
+    false,
+    State,
+    "Find largest files by size/age",
+    &[STR_PATH, NUM_TOP_N],
+    "disk_cleanup",
+    Read,
+    true,
+    false,
+    State,
+    "Propose Guard-2-ticketed cleanup (recycle-bin-aware; NEVER deletes — proposal only)",
+    &[STR_PATH],
+    "filename_search",
+    Search,
+    true,
+    false,
+    State,
+    "FTS5 filename search",
+    &[STR_QUERY],
+);
+
+/// The unified agent tool registry: browser (37) + storage (5). This is what
+/// the P6.x tool-catalog reconciliation exposes to the agent loop.
+pub fn all_tools() -> Vec<&'static ToolDef> {
+    BROWSER_TOOLS.iter().chain(STORAGE_TOOLS.iter()).collect()
+}
+
+/// Look up a browser tool by name.
 pub fn find_tool(name: &str) -> Option<&'static ToolDef> {
     BROWSER_TOOLS.iter().find(|t| t.name == name)
+}
+
+/// Look up a storage tool by name.
+pub fn find_storage_tool(name: &str) -> Option<&'static ToolDef> {
+    STORAGE_TOOLS.iter().find(|t| t.name == name)
 }
 
 /// Tools belonging to a profile (doc 55: paginated discovery per profile).
@@ -652,5 +708,35 @@ mod tests {
         assert!(names.contains(&"ref_id"));
         assert!(names.contains(&"fields"));
         assert!(names.contains(&"x"));
+    }
+
+    #[test]
+    fn storage_catalog_has_5_tools() {
+        assert_eq!(STORAGE_TOOLS.len(), 5);
+        let names: Vec<&str> = STORAGE_TOOLS.iter().map(|t| t.name).collect();
+        assert!(names.contains(&"disk_scan"));
+        assert!(names.contains(&"disk_duplicates"));
+        assert!(names.contains(&"disk_large_files"));
+        assert!(names.contains(&"disk_cleanup"));
+        assert!(names.contains(&"filename_search"));
+    }
+
+    #[test]
+    fn storage_tools_are_read_only_proposals() {
+        for t in STORAGE_TOOLS {
+            assert!(t.read_only, "{} must be read-only (never deletes)", t.name);
+        }
+        assert!(find_storage_tool("disk_cleanup").unwrap().read_only);
+    }
+
+    #[test]
+    fn all_tools_merges_browser_and_storage() {
+        let all = all_tools();
+        assert_eq!(all.len(), 37 + 5);
+        // No name collision across the two catalogs.
+        let mut names: Vec<&str> = all.iter().map(|t| t.name).collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), 42);
     }
 }

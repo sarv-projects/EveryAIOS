@@ -49,10 +49,14 @@
 //!   display + cache-hit-rate queries).
 
 pub mod actr;
+#[cfg(test)]
+mod bench;
 pub mod bm25;
+pub mod cache;
 pub mod classify;
 pub mod cognee;
 pub mod compaction;
+pub mod embedding;
 pub mod fsrs;
 pub mod fusion;
 pub mod ghost;
@@ -62,6 +66,8 @@ pub mod paging;
 pub mod planner;
 pub mod reference;
 pub mod reinforce;
+pub mod repair;
+pub mod rerank;
 pub mod rtk;
 pub mod summary;
 pub mod taste;
@@ -81,7 +87,7 @@ pub use fusion::{
     approx_tokens, budget_tokens, cap_text, dedupe, merge_small_chunks, rrf_fuse, smart_snippets,
     ContentType, Signal,
 };
-pub use ghost::GhostIndex;
+pub use ghost::{FsEvent, GhostIndex};
 pub use graph::{Edge, EdgeType, GraphStore, Node, NodeKind, DEFAULT_MAX_DEPTH, DEFAULT_TOP_K};
 pub use paging::{MemoryEntry, PagedMemory, Surface, CORE_BUDGET_TOKENS};
 pub use classify::{classify, plan_execution, parallel_groups, ExecutionPlan, Intent, IntentKind};
@@ -89,7 +95,9 @@ pub use fsrs::{
     simulate, Fsrs, FsrsError, ItemState, MemoryState, NextStates, Rating, SimulationConfig,
     SimulationReport, DEFAULT_PARAMETERS, FSRS5_DEFAULT_DECAY, FSRS6_DEFAULT_DECAY,
 };
-pub use reference::{bounded_preview, make_ref_handle, RefHandle, RefKind, PREVIEW_BUDGET_TOKENS};
+pub use reference::{
+    bounded_preview, make_ref_handle, query_ref, RefHandle, RefKind, PREVIEW_BUDGET_TOKENS,
+};
 pub use reinforce::{
     extract_candidates, split_sentences, ReviewCandidate, ReviewCard, ReviewQueue,
 };
@@ -104,6 +112,14 @@ pub use planner::{
 };
 pub use rtk::{compress, kind_for, CommandKind, CompressedOutput};
 pub use usage::{UsageLedger, UsageRecord};
+pub use cache::{ResultCache, SemanticCache};
+pub use embedding::{
+    cosine, dot, hamming, l2, quantize_binary, quantize_int8, BinaryVector, Embedder,
+    EmbeddingIndex, Int8Vector,
+};
+pub use repair::{repair_tool_json, Repair};
+pub use rerank::{rerank, Candidate, LexicalReranker, RankedHit, Reranker};
+pub use graph::OPEN;
 pub use summary::{
     answer_over_summaries, index_summaries, summarize_directory, summarize_file, FileSummary,
 };

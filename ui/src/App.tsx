@@ -6,6 +6,7 @@ import DocxViewer from "./pages/DocxViewer";
 import PdfViewer from "./pages/PdfViewer";
 import PptxViewer from "./pages/PptxViewer";
 import Settings from "./pages/Settings";
+import Spend from "./pages/Spend";
 import Spreadsheet from "./pages/Spreadsheet";
 
 const nav = [
@@ -16,6 +17,7 @@ const nav = [
   { to: "/docs", label: "Word", end: false },
   { to: "/slides", label: "Slides", end: false },
   { to: "/pdf", label: "PDF", end: false },
+  { to: "/spend", label: "Spend", end: false },
   { to: "/settings", label: "Settings", end: false },
 ];
 
@@ -53,6 +55,7 @@ export default function App() {
           <Route path="/docs" element={<DocxViewer />} />
           <Route path="/slides" element={<PptxViewer />} />
           <Route path="/pdf" element={<PdfViewer />} />
+          <Route path="/spend" element={<Spend />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

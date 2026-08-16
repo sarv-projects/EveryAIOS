@@ -388,6 +388,54 @@ mod tests {
     }
 
     #[test]
+    fn coordinator_triggers_compact_at_ratio_without_breaking_loop() {
+        // P5.7: the per-turn loop — push turns until the force ratio, compact,
+        // and drain the lifecycle events (PreCompact → Compacted → PostCompact)
+        // in order. The loop never sees a broken/partial state.
+        let mut c = CompactionCoordinator::new(CompactionConfig::default(), 100);
+
+        // Below soft ratio: no action.
+        assert_eq!(c.push_turn(20), ContextAction::None);
+        assert_eq!(c.push_turn(20), ContextAction::None); // 40/100
+
+        // Cross soft ratio (0.5): notice.
+        assert_eq!(c.push_turn(15), ContextAction::SoftCompact); // 55/100
+        assert!(c.should_notice());
+
+        // Cross force ratio (0.9): compact.
+        assert_eq!(c.push_turn(40), ContextAction::ForceCompact); // 95/100
+
+        let text = "x".repeat(800); // ~200 tokens — over the 100 budget
+        let summarizer: &Summarizer = &|_| Some("summarized".to_string());
+        let (out, step) = c.maybe_compact(&text, &[summarizer]).unwrap();
+        assert_eq!(step, FallbackStep::PrimarySummarizer);
+        assert_eq!(out, "summarized");
+        assert!(c.total_tokens() < 95, "compact must shrink the context");
+
+        // Lifecycle events emitted in order.
+        let events = c.drain_events();
+        assert!(matches!(events[0], CompactionEvent::PreCompact { .. }));
+        assert!(matches!(events[1], CompactionEvent::Compacted { .. }));
+        assert!(matches!(events[2], CompactionEvent::PostCompact { .. }));
+
+        // After a compact, pushing more turns restarts accumulation cleanly.
+        assert_eq!(c.push_turn(10), ContextAction::None);
+    }
+
+    #[test]
+    fn coordinator_falls_back_to_truncate_when_summarizer_fails() {
+        let mut c = CompactionCoordinator::new(CompactionConfig::default(), 100);
+        c.push_turn(95); // force
+        let failing: &Summarizer = &|_| None;
+        let text = "y".repeat(800); // ~200 tokens — over the 100 budget
+        let (out, step) = c.maybe_compact(&text, &[failing]).unwrap();
+        assert_eq!(step, FallbackStep::TruncateWithMarker);
+        assert!(out.contains("y"));
+        assert!(out.contains("[context truncated"), "marker must be present: {out}");
+        assert!(out.chars().count() < 800, "truncated shorter than the input");
+    }
+
+    #[test]
     fn snip_anchor_keeps_head_tail() {
         let text = "A".repeat(100);
         let s = snip_anchor(&text, 10, 10);
