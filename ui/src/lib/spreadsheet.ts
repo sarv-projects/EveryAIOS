@@ -80,6 +80,112 @@ export async function xlsxEditCommit(
   return invoke("xlsx_edit_commit", { path, sheet, address, value, ticketId });
 }
 
+// ---------------------------------------------------------------------------
+// P4.7 bulk edit + pivot (D2 DSL): FillRange / SortRange / ClearRange batches
+// go through the same Guard-2 plan-before-touch split as single-cell edits;
+// pivot is read-only (no ticket).
+// ---------------------------------------------------------------------------
+
+export type Scalar = { Number: number } | { Text: string } | { Bool: boolean };
+export type CellRef = { row: number; col: number };
+export type RangeRef = { start: CellRef; end: CellRef };
+
+export type XlsxOperation =
+  | { SetCell: { address: CellRef; value: Scalar } }
+  | { FillRange: { range: RangeRef; mode: "Constant" | "CopyDown"; value: Scalar | null } }
+  | { SortRange: { range: RangeRef; by_col: number; desc: boolean } }
+  | { ClearRange: { range: RangeRef } };
+
+export interface WorkbookBatch {
+  dsl_version: number;
+  transaction_id: string;
+  base_revision: number;
+  summary: string;
+  operations: XlsxOperation[];
+}
+
+export function newBatch(summary: string, ops: XlsxOperation[]): WorkbookBatch {
+  return {
+    dsl_version: 1,
+    transaction_id: `txn-ui-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    base_revision: 0,
+    summary,
+    operations: ops,
+  };
+}
+
+export function scalar(value: string): Scalar {
+  const t = value.trim();
+  if (t.toLowerCase() === "true") return { Bool: true };
+  if (t.toLowerCase() === "false") return { Bool: false };
+  const n = Number(t);
+  if (t !== "" && Number.isFinite(n)) return { Number: n };
+  return { Text: value };
+}
+
+function parseCellRef(s: string): CellRef | null {
+  const m = /^\$?([A-Za-z]+)\$?([1-9][0-9]*)$/.exec(s.trim());
+  if (!m) return null;
+  let col = 0;
+  for (const ch of m[1].toUpperCase()) col = col * 26 + (ch.charCodeAt(0) - 64);
+  return { row: Number(m[2]), col };
+}
+
+export function parseRangeRef(s: string): RangeRef | null {
+  const [a, b] = s.split(":");
+  const start = parseCellRef(a);
+  const end = b ? parseCellRef(b) : start;
+  if (!start || !end) return null;
+  return { start, end };
+}
+
+export interface XlsxBatchRequest {
+  action: "allow" | "ask";
+  summary: string;
+  ticketId?: string;
+}
+
+export async function xlsxBatchRequest(
+  path: string,
+  sheet: string,
+  batch: WorkbookBatch,
+): Promise<XlsxBatchRequest> {
+  return invoke<XlsxBatchRequest>("xlsx_batch_request", { path, sheet, batch });
+}
+
+export async function xlsxBatchCommit(
+  path: string,
+  sheet: string,
+  batch: WorkbookBatch,
+  ticketId?: string,
+): Promise<{ summary: string; sheet: string; changedParts: string[] }> {
+  return invoke("xlsx_batch_commit", { path, sheet, batch, ticketId });
+}
+
+export interface PivotRow {
+  key: string;
+  value: number;
+  count: number;
+}
+
+export async function xlsxPivot(
+  path: string,
+  sheet: string,
+  source: string,
+  groupBy: number,
+  aggregate: number,
+  agg: "sum" | "count" | "avg",
+): Promise<PivotRow[]> {
+  return invoke<PivotRow[]>("xlsx_pivot", {
+    path,
+    sheet,
+    source,
+    groupBy,
+    aggregate,
+    agg,
+  });
+}
+
 /** Read one windowed slice of a sheet from a workbook path. */
 export async function xlsxOpen(
   path: string,

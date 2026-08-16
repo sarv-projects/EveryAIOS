@@ -6,8 +6,10 @@
 
 use everyaios_core::GuardDecision;
 use everyaios_guard::{DecisionPackage, Operation as GuardOp, RiskLevel};
-use everyaios_office::xlsx::address::parse_ref;
-use everyaios_office::xlsx::dsl::{Operation as XlsxOp, Scalar, WorkbookCommandBatch};
+use everyaios_office::xlsx::address::{parse_range, parse_ref};
+use everyaios_office::xlsx::dsl::{
+    pivot_result, Operation as XlsxOp, PivotAgg, Scalar, WorkbookCommandBatch,
+};
 use everyaios_office::xlsx::patch::apply_batch;
 use everyaios_office::xlsx::read::{self, CellValue, SheetMeta, SheetWindow};
 use everyaios_office::xlsx::recalc::{self, RecalcResult};
@@ -166,6 +168,103 @@ pub fn xlsx_edit_commit(
     }))
 }
 
+/// P4.7 — Guard-2 plan-before-touch for a **bulk** batch (fill / sort / …).
+/// The batch is the typed DSL [`WorkbookCommandBatch`] (deserialized from the
+/// UI); the goal on the card is the batch's summary line.
+#[tauri::command]
+pub fn xlsx_batch_request(
+    state: State<'_, AppState>,
+    path: String,
+    sheet: String,
+    batch: WorkbookCommandBatch,
+) -> Result<serde_json::Value, String> {
+    let decision = DecisionPackage::new(batch.summary.clone())
+        .with_risk(RiskLevel::Medium)
+        .with_paths(vec![path.clone()]);
+
+    let args_hash = batch_args_hash(&sheet, &batch);
+    let mut guard = state
+        .guard_service
+        .lock()
+        .map_err(|e| e.to_string())?;
+    match guard.evaluate(
+        "office",
+        "everyaios",
+        "office.xlsx_batch",
+        GuardOp::GenericWrite,
+        decision,
+        &args_hash,
+        0,
+    ) {
+        GuardDecision::Allow => Ok(serde_json::json!({
+            "action": "allow",
+            "summary": batch.summary,
+        })),
+        GuardDecision::Ask { ticket_id } => Ok(serde_json::json!({
+            "action": "ask",
+            "summary": batch.summary,
+            "ticketId": ticket_id,
+        })),
+        GuardDecision::Block { reason } => Err(format!("batch blocked: {reason}")),
+    }
+}
+
+/// P4.7 — the executor half of a bulk batch: consume the ticket, then apply
+/// the batch byte-preserving and write the changed part.
+#[tauri::command]
+pub fn xlsx_batch_commit(
+    state: State<'_, AppState>,
+    path: String,
+    sheet: String,
+    batch: WorkbookCommandBatch,
+    ticket_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    if let Some(tid) = ticket_id {
+        let args_hash = batch_args_hash(&sheet, &batch);
+        let mut guard = state
+            .guard_service
+            .lock()
+            .map_err(|e| e.to_string())?;
+        guard
+            .use_ticket(&tid, &args_hash)
+            .map_err(|e| format!("batch ticket not consumable: {e}"))?;
+    }
+
+    let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    let outcome = apply_batch(&bytes, &batch, &sheet).map_err(|e| e.to_string())?;
+    std::fs::write(PathBuf::from(&path), &outcome.bytes).map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "summary": batch.summary,
+        "sheet": sheet,
+        "changedParts": outcome.changed_parts,
+    }))
+}
+
+/// P4.7 — read-only pivot: group a source range and return the in-memory
+/// summary. No write, so no Guard-2 ticket. `group_by`/`aggregate` are
+/// 0-based column offsets *within* the source range.
+#[tauri::command]
+pub fn xlsx_pivot(
+    path: String,
+    sheet: String,
+    source: String,
+    group_by: usize,
+    aggregate: usize,
+    agg: String,
+) -> Result<serde_json::Value, String> {
+    let (_, range) = parse_range(&source).map_err(|e| e.to_string())?;
+    let agg = match agg.as_str() {
+        "sum" => PivotAgg::Sum,
+        "count" => PivotAgg::Count,
+        _ => PivotAgg::Avg,
+    };
+    let rows =
+        read::read_range(PathBuf::from(&path).as_path(), &sheet, &range).map_err(|e| e.to_string())?;
+    let out = pivot_result(&rows, group_by, aggregate, agg);
+    serde_json::to_value(&out).map_err(|e| e.to_string())
+}
+
 /// Parse a UI-typed value string into the DSL scalar (number/bool/text).
 fn parse_scalar(value: &str) -> Scalar {
     let t = value.trim();
@@ -188,6 +287,17 @@ fn edit_args_hash(path: &str, sheet: &str, address: &str, value: &str) -> String
     sheet.hash(&mut h);
     address.hash(&mut h);
     value.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
+/// Deterministic, scope-tagged args hash for a bulk batch ticket: canonical
+/// JSON of the batch (serde preserves field/operation order) + the target
+/// sheet, so a ticket minted for one sheet can't be replayed on another.
+fn batch_args_hash(sheet: &str, batch: &WorkbookCommandBatch) -> String {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    "office.xlsx_batch".hash(&mut h);
+    sheet.hash(&mut h);
+    serde_json::to_string(batch).unwrap_or_default().hash(&mut h);
     format!("{:016x}", h.finish())
 }
 
@@ -224,5 +334,25 @@ mod tests {
         assert!(parse_ref("!!").is_err());
         assert!(parse_ref("B4").is_ok());
         assert!(parse_ref("AA12").is_ok());
+    }
+
+    #[test]
+    fn batch_args_hash_is_deterministic_and_sheet_scoped() {
+        let mut b1 = WorkbookCommandBatch::new(0, "Fill B2:B10 with 5");
+        b1.operations.push(XlsxOp::FillRange {
+            range: parse_range("B2:B10").unwrap().1,
+            mode: everyaios_office::xlsx::dsl::FillMode::Constant,
+            value: Some(Scalar::Number(5.0)),
+        });
+        let mut b2 = b1.clone();
+        b2.operations[0] = XlsxOp::FillRange {
+            range: parse_range("B2:B10").unwrap().1,
+            mode: everyaios_office::xlsx::dsl::FillMode::Constant,
+            value: Some(Scalar::Number(6.0)),
+        };
+
+        assert_eq!(batch_args_hash("Sheet1", &b1), batch_args_hash("Sheet1", &b1));
+        assert_ne!(batch_args_hash("Sheet1", &b1), batch_args_hash("Sheet2", &b1));
+        assert_ne!(batch_args_hash("Sheet1", &b1), batch_args_hash("Sheet1", &b2));
     }
 }

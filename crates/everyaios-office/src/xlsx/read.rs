@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
 
-use super::address::AddressError;
+use super::address::{AddressError, RangeRef};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum CellValue {
@@ -173,6 +173,45 @@ pub fn read_window(
         total_rows,
         total_cols,
     })
+}
+
+/// Read a specific A1 range from one sheet into a flat cell grid. `range`
+/// is 1-based (row/col); the returned rows are trimmed to the range's width
+/// and are directly usable by `dsl::pivot_result`.
+pub fn read_range(
+    path: &Path,
+    sheet: &str,
+    range: &RangeRef,
+) -> Result<Vec<Vec<CellValue>>, ReadError> {
+    let mut wb: Xlsx<std::io::BufReader<std::fs::File>> =
+        open_workbook(path).map_err(|e: calamine::XlsxError| ReadError::Open {
+            path: path.display().to_string(),
+            err: e.to_string(),
+        })?;
+    let full = wb
+        .worksheet_range(sheet)
+        .map_err(|_| ReadError::SheetNotFound(sheet.to_string()))?;
+
+    let start_row = range.start.row.saturating_sub(1);
+    let start_col = range.start.col.saturating_sub(1);
+    let end_row = range.end.row.saturating_sub(1);
+    let end_col = range.end.col.saturating_sub(1);
+
+    let slice = full.range((start_row, start_col), (end_row, end_col));
+    let mut rows = Vec::with_capacity(slice.height());
+    for r in 0..slice.height() {
+        let mut row = Vec::with_capacity(slice.width());
+        for c in 0..slice.width() {
+            let v = slice
+                .get((r, c))
+                .cloned()
+                .map(CellValue::from)
+                .unwrap_or(CellValue::Empty);
+            row.push(v);
+        }
+        rows.push(row);
+    }
+    Ok(rows)
 }
 
 fn dims(range: &Range<Data>) -> (u32, u32) {

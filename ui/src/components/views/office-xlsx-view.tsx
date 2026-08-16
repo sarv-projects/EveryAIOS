@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, FileSpreadsheet, Loader2, RefreshCw, ShieldAlert, Sigma, X } from 'lucide-react'
+import { Check, ChevronsUpDown, FileSpreadsheet, Loader2, ListFilter, RefreshCw, ShieldAlert, Sigma, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -10,11 +10,19 @@ import { OfficeOpenBar } from './office-open-bar'
 import {
   cellDisplay,
   colLetter,
+  newBatch,
+  parseRangeRef,
+  scalar,
+  xlsxBatchCommit,
+  xlsxBatchRequest,
   xlsxEditCommit,
   xlsxEditRequest,
   xlsxOpen,
+  xlsxPivot,
   xlsxRecalc,
+  type PivotRow,
   type RecalcResult,
+  type WorkbookBatch,
   type XlsxWindowPayload,
 } from '@/lib/spreadsheet'
 import { guardRespond } from '@/lib/guard'
@@ -87,6 +95,22 @@ export default function OfficeXlsxView() {
   } | null>(null)
   const [committing, setCommitting] = useState(false)
 
+  // Bulk edit (range fill / sort) + read-only pivot.
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkRange, setBulkRange] = useState('')
+  const [fillValue, setFillValue] = useState('')
+  const [sortDesc, setSortDesc] = useState(false)
+  const [pivotSource, setPivotSource] = useState('')
+  const [pivotGroup, setPivotGroup] = useState('0')
+  const [pivotAgg, setPivotAgg] = useState('1')
+  const [pivotFn, setPivotFn] = useState<'sum' | 'count' | 'avg'>('sum')
+  const [pivotRows, setPivotRows] = useState<PivotRow[] | null>(null)
+  const [batchProposal, setBatchProposal] = useState<{
+    summary: string
+    batch: WorkbookBatch
+    ticketId: string | null
+  } | null>(null)
+
   const open = async (path: string) => {
     try {
       setError(null)
@@ -155,6 +179,81 @@ export default function OfficeXlsxView() {
       setError(err instanceof Error ? err.message : 'Commit failed')
     } finally {
       setCommitting(false)
+    }
+  }
+
+  // P4.7 — bulk batch (fill/sort) through the same Guard-2 split.
+  const proposeBatch = async (batch: WorkbookBatch) => {
+    if (!payload) return
+    try {
+      const req = await xlsxBatchRequest(payload.path, payload.sheet, batch)
+      if (req.action === 'allow') {
+        await commitBatch(batch, null)
+      } else {
+        setBatchProposal({ summary: batch.summary, batch, ticketId: req.ticketId ?? null })
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk edit failed')
+    }
+  }
+
+  const commitBatch = async (batch: WorkbookBatch, ticketId: string | null) => {
+    if (!payload || committing) return
+    setCommitting(true)
+    try {
+      if (ticketId) await guardRespond(ticketId, 'approve')
+      await xlsxBatchCommit(payload.path, payload.sheet, batch, ticketId ?? undefined)
+      setBatchProposal(null)
+      setPivotRows(null)
+      await open(payload.path)
+      setRecalc(await xlsxRecalc(payload.path))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Batch commit failed')
+    } finally {
+      setCommitting(false)
+    }
+  }
+
+  const runFill = () => {
+    const range = parseRangeRef(bulkRange)
+    if (!range || fillValue === '') {
+      setError('Fill needs a range (e.g. B7:B12) and a value')
+      return
+    }
+    const batch = newBatch(`Fill ${bulkRange} with ${fillValue}`, [
+      { FillRange: { range, mode: 'Constant', value: scalar(fillValue) } },
+    ])
+    void proposeBatch(batch)
+  }
+
+  const runSort = () => {
+    const range = parseRangeRef(bulkRange)
+    if (!range) {
+      setError('Sort needs a range (e.g. A1:F20)')
+      return
+    }
+    const batch = newBatch(`Sort ${bulkRange} by col ${sortDesc ? '↓' : '↑'}`, [
+      { SortRange: { range, by_col: range.start.col, desc: sortDesc } },
+    ])
+    void proposeBatch(batch)
+  }
+
+  const runPivot = async () => {
+    if (!payload || !pivotSource) return
+    try {
+      setError(null)
+      setPivotRows(
+        await xlsxPivot(
+          payload.path,
+          payload.sheet,
+          pivotSource,
+          Number(pivotGroup) || 0,
+          Number(pivotAgg) || 1,
+          pivotFn,
+        ),
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Pivot failed')
     }
   }
 
@@ -256,6 +355,16 @@ export default function OfficeXlsxView() {
         )}
         <Button
           size="sm"
+          variant="outline"
+          disabled={!payload}
+          className="h-6 gap-1 px-2 text-[10px]"
+          onClick={() => setBulkOpen((v) => !v)}
+        >
+          <ListFilter className="h-3 w-3" />
+          Bulk
+        </Button>
+        <Button
+          size="sm"
           disabled={!payload || !selected || draft === selValue || committing}
           className="h-6 gap-1 px-2 text-[10px]"
           onClick={() => void propose()}
@@ -293,6 +402,139 @@ export default function OfficeXlsxView() {
             onClick={() => {
               if (proposal.ticketId) void guardRespond(proposal.ticketId, 'reject')
               setProposal(null)
+            }}
+          >
+            <X className="h-3 w-3" />
+            Reject
+          </Button>
+        </div>
+      )}
+
+      {/* Bulk editor: range fill / sort (Guard-2 ticketed) + read-only pivot */}
+      {bulkOpen && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-zinc-900/30 px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] text-muted-foreground">range</span>
+            <input
+              value={bulkRange}
+              onChange={(e) => setBulkRange(e.target.value)}
+              placeholder="B7:B12"
+              disabled={!payload}
+              className="w-20 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-orange-500/60 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[10px] text-muted-foreground">fill</span>
+            <input
+              value={fillValue}
+              onChange={(e) => setFillValue(e.target.value)}
+              placeholder="42"
+              disabled={!payload}
+              className="w-16 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-orange-500/60 focus:outline-none"
+            />
+            <Button size="sm" disabled={!payload || committing} className="h-6 gap-1 px-2 text-[10px]" onClick={runFill}>
+              Fill
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!payload || committing}
+              className="h-6 gap-1 px-2 text-[10px]"
+              onClick={() => setSortDesc((v) => !v)}
+            >
+              <ChevronsUpDown className="h-3 w-3" />
+              {sortDesc ? 'Desc' : 'Asc'}
+            </Button>
+            <Button size="sm" variant="outline" disabled={!payload || committing} className="h-6 gap-1 px-2 text-[10px]" onClick={runSort}>
+              Sort
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1.5 border-l border-border pl-4">
+            <span className="font-mono text-[10px] text-muted-foreground">pivot</span>
+            <input
+              value={pivotSource}
+              onChange={(e) => setPivotSource(e.target.value)}
+              placeholder="A1:D20"
+              disabled={!payload}
+              className="w-20 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-orange-500/60 focus:outline-none"
+            />
+            <span className="font-mono text-[10px] text-muted-foreground">by</span>
+            <input
+              value={pivotGroup}
+              onChange={(e) => setPivotGroup(e.target.value)}
+              disabled={!payload}
+              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
+            />
+            <select
+              value={pivotFn}
+              onChange={(e) => setPivotFn(e.target.value as 'sum' | 'count' | 'avg')}
+              disabled={!payload}
+              className="rounded border border-border bg-zinc-950 px-1 py-0.5 font-mono text-[11px] text-foreground focus:outline-none"
+            >
+              <option value="sum">sum</option>
+              <option value="count">count</option>
+              <option value="avg">avg</option>
+            </select>
+            <span className="font-mono text-[10px] text-muted-foreground">of</span>
+            <input
+              value={pivotAgg}
+              onChange={(e) => setPivotAgg(e.target.value)}
+              disabled={!payload}
+              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
+            />
+            <Button size="sm" variant="outline" disabled={!payload} className="h-6 gap-1 px-2 text-[10px]" onClick={() => void runPivot()}>
+              Run
+            </Button>
+          </div>
+
+          {pivotRows && (
+            <div className="flex flex-wrap items-center gap-1.5 border-l border-border pl-4">
+              {pivotRows.map((r) => (
+                <span
+                  key={r.key}
+                  className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-300"
+                  title={`count ${r.count}`}
+                >
+                  {r.key}: {r.value}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Guard-2 approval card for a bulk batch "ask" verdict */}
+      {batchProposal && (
+        <div className="flex items-center gap-2 border-b border-orange-500/40 bg-orange-500/5 px-3 py-1.5">
+          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
+            <span className="text-orange-300">{batchProposal.summary}</span>
+            {batchProposal.ticketId
+              ? ` — approval ${batchProposal.ticketId.slice(0, 8)}`
+              : ''}
+          </span>
+          <Button
+            size="sm"
+            disabled={committing}
+            className="h-6 gap-1 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
+            onClick={() => commitBatch(batchProposal.batch, batchProposal.ticketId)}
+          >
+            <Check className="h-3 w-3" />
+            Approve &amp; run
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={committing}
+            className="h-6 gap-1 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
+            onClick={() => {
+              if (batchProposal.ticketId) void guardRespond(batchProposal.ticketId, 'reject')
+              setBatchProposal(null)
             }}
           >
             <X className="h-3 w-3" />
