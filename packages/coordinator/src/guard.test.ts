@@ -70,8 +70,8 @@ describe("coordinator Guard-2 driving (J21)", () => {
 
     expect(d.action).toBe("ask");
     if (d.action === "ask") expect(d.ticketId).toBe("tkt:1");
-    expect(calls[0].method).toBe("guard/evaluate");
-    const body = calls[0].params as Record<string, unknown>;
+    expect(calls[0]!.method).toBe("guard/evaluate");
+    const body = calls[0]!.params as Record<string, unknown>;
     expect(body.operation).toBe("delete");
     expect(body.argsHash).toBe("h1");
     expect(body.decision).toEqual({ goal: "rm", risk: "high", affectedPaths: ["/w/x"] });

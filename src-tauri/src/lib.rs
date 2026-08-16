@@ -61,6 +61,13 @@ pub const CHAT_EVENT: &str = "chat-event";
 /// The relay's consumer loop forwards every `chat/*` notification from the
 /// sidecar to the UI as a `chat-event` (P1.4: token deltas → core → Tauri
 /// events → UI).
+///
+/// `#[allow(dead_code)]` integration seam: fully built + tested, but not yet
+/// called — `pre_spawn_coordinator` spawns the sidecar via the supervisor,
+/// whose stdout/stderr reader threads are internal; handing the pipes to a
+/// `SidecarLink` is the pending wiring (the relay + protocol themselves have
+/// their own unit tests).
+#[allow(dead_code)]
 fn connect_chat_relay(
     app: &AppHandle,
     state: &AppState,

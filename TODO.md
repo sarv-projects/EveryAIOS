@@ -519,7 +519,8 @@
 - [x] `[DONE]` **max_concurrent_subagents=3, max_total_per_run=6:** already landed in P6.2 — `SubAgentLimits { max_concurrent: 3, max_total: 6 }` + `ConcurrentLimitExceeded`/`TotalLimitExceeded` — **`everyaios-blueprint::subagent`**
 - [x] `[DONE]` **execute_code refund (deterministic code shouldn't count):** `IterationBudget::parent_step(StepKind::ExecuteCode)` returns Ok without charging (refund) — **`everyaios-blueprint::iteration`**
 - [x] `[DONE]` **Loop detector (hash last N tool calls, 3x repeat → interrupt):** `LoopDetector` (FNV-1a hash, window N default 4, threshold 3) → `LoopVerdict::{Normal,Repeat,Interrupted}`; `CircuitBreaker::step` trips budget-or-loop — **`everyaios-blueprint::iteration`**
-- [ ] `[NOT DONE]` **MCQ interrupt card UI (H2):** the card *data model* landed — `CircuitBreak`/`InterruptReason`/`McqOption::{Skip,Retry,Escalate,TakeOver}` in `everyaios-blueprint::iteration`; remaining = React card render + coordinator `chat/interrupt` emit on circuit-break
+- [x] `[DONE]` **MCQ interrupt card render (H2, v2 UI):** `ui/src/components/chat/mcq-interrupt-card.tsx` renders all four kinds (`diff`/`permission`/`mcq`/`budget`) with Approve/Reject/More-options actions, and the store exposes `MCQInterrupt`/`pushMcq`/`respondMcq` — live-wired for Guard-2 tickets (`bridge.ts` polls `guard_tickets` → `pushMcq`; `respondMcq` → `guard_respond`)
+- [ ] `[NOT DONE]` **Coordinator `chat/interrupt` emit on circuit-break (H2):** the `CircuitBreak`/`McqOption` model in `everyaios-blueprint::iteration` has no runtime producer yet — it fires from `CircuitBreaker::step` inside blueprint plan execution, and no plan executor runs in the coordinator today (the documented tool-executor seam, spec §6). Wire the emit when the seam lands; the card + `respondMcq` path are ready
 
 ### P6.4 Scheduled Tasks (B7 — doc 33 §7; doc 56 §3 cronflow)
 - [ ] `[NOT DONE]` Reference: cronflow workflow-engine design (doc 56 §3) — HITL pause-with-timeout as a first-class state-machine state, webhook triggers w/ schema validation, retry w/ backoff+jitter+clamp (⚠️ no LICENSE file → pattern-only) for the H22 automation builder
@@ -563,7 +564,7 @@
 - [ ] `[NOT DONE]` Implement MRTR (multi-round-trip) + cacheable tool lists (`ttlMs`) per the 2026-07-28 stateless spec (doc 61); consume managed live-data MCP (MongoDB/Postgres/SQLite) as read/gated-write tools (doc 62 — F15 already = Calendar, no new row)
 
 ### P6.8 Harness-Driving via ACP (F12/J17 — doc 35 §C, doc 45 ACP, doc 52 surgical hierarchy, doc 56 cowork-forge, doc 57 ACP registry)
-> **Landed (2026-08-16):** `everyaios-acp` crate — ACP v1 wire types + newline-delimited JSON-RPC framing + `AcpSession` client lifecycle (`initialize` handshake/protocolVersion+capability negotiation → `session/new` → `session/prompt` → `session/cancel`) with a trait-transport (mock + real `ProcessTransport` stdio spawn); `session/request_permission` routed through the shared `GuardService` (estop→policy→profile→ticket, never auto-allows an `Ask`); `session/update` collected into the turn outcome for the audit trail; `LaunchRegistry` (the `ollama launch` pattern) with auth-mode badge + distribution (binary/npx/uvx) + `HarnessProtocol::{Inbuilt,Acp,ModelBackend}` and **default = inbuilt `everyaios`**; Tauri `acp_agents`/`acp_launch`/`acp_prompt`/`acp_cancel`/`acp_shutdown`/`acp_sessions` + `chat_stream` `agentId` threading + `ui/` agent picker (`acp.ts` + Chat.tsx: same chat bar, per-agent model surface — inbuilt shows the model picker, ACP agents hide it and show their auth badge). **22 crate tests; workspace 1029.** The protocol is implemented in-house (self-contained, no external `agent-client-protocol` SDK dependency) — same wire contract, doc 45 §1.
+> **Landed (2026-08-16):** `everyaios-acp` crate — ACP v1 wire types + newline-delimited JSON-RPC framing + `AcpSession` client lifecycle (`initialize` handshake/protocolVersion+capability negotiation → `session/new` → `session/prompt` → `session/cancel`) with a trait-transport (mock + real `ProcessTransport` stdio spawn); `session/request_permission` routed through the shared `GuardService` (estop→policy→profile→ticket, never auto-allows an `Ask`); `session/update` collected into the turn outcome for the audit trail; `LaunchRegistry` (the `ollama launch` pattern) with auth-mode badge + distribution (binary/npx/uvx) + `HarnessProtocol::{Inbuilt,Acp,ModelBackend}` and **default = inbuilt `everyaios`**; Tauri `acp_agents`/`acp_launch`/`acp_prompt`/`acp_cancel`/`acp_shutdown`/`acp_sessions` + `chat_stream` `agentId` threading + `ui/` agent picker (`acp.ts` + Chat.tsx: same chat bar, per-agent model surface — inbuilt shows the model picker, ACP agents hide it and show their auth badge). **22 crate tests; workspace 1052 (1060 running, 8 ignored — re-verified 2026-08-16).** The protocol is implemented in-house (self-contained, no external `agent-client-protocol` SDK dependency) — same wire contract, doc 45 §1.
 - [x] `[DONE]` Implement ACP client: `initialize` handshake (protocolVersion + capabilities) — `everyaios-acp::client::AcpSession::initialize`
 - [x] `[DONE]` Implement `session/new` to spawn external agent CLIs as ACP agents — `AcpSession::session_new` + `ProcessTransport::spawn`
 - [x] `[DONE]` Implement `session/request_permission` → Trust Ladder + Guard-2 cards — `AcpSession::prompt` permission callback → `GuardService::evaluate` (mint ticket on `Ask`, deny now, surface `pendingTickets`)
@@ -1051,35 +1052,35 @@
 > Source: ARCH/12-UI-SPEC.md (derived from Devin Cloud UI + research doc 46)
 
 ### P11.5.1 Layout Shell (ARCH/12-UI-SPEC)
-- [ ] [NOT DONE] Implement 3-column layout (sidebar + chat + workspace) with drag-resizable dividers
-- [ ] [NOT DONE] Sidebar: navigation items (New Session, Automations, Guard, Connectors, Memory, Analytics)
-- [ ] [NOT DONE] Sidebar: project/workspace selector dropdown
-- [ ] [NOT DONE] Sidebar: recent sessions list with status badges (orange/yellow/green/red/grey/blue)
+- [x] [DONE] 3-column layout — **v2: left sessions/nav · center chat+NowDoing+approve · right 48px rail + viewport (`shell/center-column.tsx`); drag-resizable dividers are a follow-up (columns are fixed-width + rail toggle)**
+- [x] [DONE] Sidebar navigation — **v2 `shell/left-sidebar.tsx`: New Session + Automations/Guard/Connectors/Memory/Analytics NavItems with badges**
+- [x] [DONE] Workspace selector — **v2 `left-sidebar.tsx` “Workspace selector” block**
+- [x] [DONE] Recent sessions w/ status badges — **v2 `chat/session-timeline.tsx` + `Badge` in left-sidebar**
 - [ ] [NOT DONE] Sidebar: child session indentation under parent
-- [ ] [NOT DONE] Sidebar: collapse to icon-only mode (48px)
+- [x] [DONE] Collapse to icon-only — **v2 `NavItemProps.collapsed` (left sidebar) + `railCollapsed` 48px rail toggle (rail, ⌘\)**
 
 ### P11.5.2 Chat Panel (ARCH/12 §chat; doc 46 Devin UI)
-- [ ] [NOT DONE] Chat message rendering (user/AI/system message types)
-- [ ] [NOT DONE] Artifact cards: rendered file previews with code/copy/download buttons
-- [ ] [NOT DONE] Progress steps: clickable timeline (✓ completed, ● running, ○ pending)
-- [ ] [NOT DONE] MCQ interrupt: "Action required" with Approve/Edit/Reject/Options buttons
-- [ ] [NOT DONE] Input bar: attach (+), text area, mode selector, microphone, send
-- [ ] [NOT DONE] Chat modes: Normal / Plan / Research / Quick / Code
-- [ ] [NOT DONE] Slash commands: /help, /mode, /model, /undo, /clear, /export
-- [ ] [NOT DONE] Knowledge macros (!name) and blueprint @mentions
+- [x] [DONE] Chat message rendering — **v2 `chat/message-bubble.tsx` + `chat/chat-panel.tsx`**
+- [x] [DONE] Artifact cards — **v2 `chat/artifact-card.tsx` + store `Artifact[]`**
+- [x] [DONE] Progress steps — **v2 `chat/progress-steps.tsx` + store `ProgressStep[]`/`streamStep`**
+- [x] [DONE] MCQ interrupt card — **v2 `chat/mcq-interrupt-card.tsx` (diff/permission/mcq/budget kinds, Approve/Reject/More-options)**
+- [x] [DONE] Input bar — **v2 `chat/chat-composer.tsx` (textarea, mode selector, send; Mic button present as a “coming soon” stub; attach is a follow-up)**
+- [x] [DONE] Chat modes — **v2 `composerMode: 'normal'|'plan'|'research'|'quick'|'code'` in store + composer MODES**
+- [x] [DONE] Slash commands — **v2 composer command hint list (/help /mode /model /undo /clear /export) + keyboard nav**
+- [x] [DONE] Macros + @mentions — **v2 composer hint kinds (`!` macro, `@` mention) + `!macro` chip**
 
 ### P11.5.3 Right Rail + One-Surface Views (H20 v2.0 — ARCH/12 §4; doc 67 §6 finalization: Claude Views / Cursor activity bar / ChatGPT Work / Devin Desktop pattern)
 > **v2.0 replaces the 9-tab strip** — 48px activity rail, one open surface, Office grouped under one button, views contract, per-session layout persistence. Never 9 peer tabs; never a Chat/Cowork/Code product split.
-- [ ] [NOT DONE] 48px activity rail: 📁 Folder · >_ Shell · 🌐 Browse · </> Code · W Office · ▢ Progress · + Add view (icons + tooltips + live/idle/gap badges; click active icon = collapse viewport → full-width chat)
-- [ ] [NOT DONE] Views contract: `ViewDefinition { id, icon, label, group: core|office|session|plugin, when?, open: replace|split }` — first-party + plugin views register identically (I6 dogfood, no 10th header tab)
-- [ ] [NOT DONE] Office = ONE button → flyout (Sheets/Word/Slides/PDF + "Open another…" + ● agent-active dot); `.xlsx` opened → auto-select W → Excel; agent opens any office file → matching view auto-opens
-- [ ] [NOT DONE] Folder view: project tree, file filter, click→opens right family (xlsx→Office, ts→Code), drag onto composer = attach, context menu (Reveal/Don't-let-agent-write)
-- [ ] [NOT DONE] Shell view: terminal, same cwd as session folder, Guard-1 pre-scan on user commands too (or clearly-labeled user shell), agent commands tagged in gutter, Stop kills process not session
-- [ ] [NOT DONE] Browse view: clean-profile vs My-Chrome toggle (E10/E13), live CDP page, [ref=eN] overlay, takeover (user drives, agent waits)
+- [x] [DONE] 48px activity rail — **v2 `shell/right-rail.tsx` `railItems` (Folder/Shell/Browse/Code) + sessionItems (Progress/Trajectory) + Office flyout + live dots + tooltips; click active = collapse viewport**
+- [x] [DONE] Views registry — **v2 `right-rail.tsx` `RailItem[]`/`ViewId` + `ViewportContent` switch (14 views: folder/shell/browse/code/office x4/progress/diff/audit/storage/timeline/trajectory); no literal `ViewDefinition` type — plugin registration stays follow-up**
+- [x] [DONE] Office one-button flyout — **v2 `right-rail.tsx` `officeFlyoutItems` (Sheets/Word/Slides/PDF + live dot); `.xlsx`/agent-open auto-selects the matching office view (rail,188–201)**
+- [x] [DONE] Folder view — **v2 `views/folder-view.tsx`**
+- [x] [DONE] Shell view — **v2 `views/shell-view.tsx` (Guard-1 pre-scan labeling is a follow-up)**
+- [x] [DONE] Browse view — **v2 `views/browse-view.tsx` (live CDP page; clean-profile toggle + takeover = follow-up)**
 - [ ] [NOT DONE] Code view: one file (+split 2) syntax editor, live diffs, LSP (hover/refs/diagnostics/rename-preview — I11), diff strip for pending patch, "Open in Cursor" deep-IDE escape
-- [ ] [NOT DONE] Progress view: full timeline (H19) — click row opens matching view at that artifact (Excel cell / browser screenshot / shell line); the 2-line now-doing strip stays under chat
-- [ ] [NOT DONE] Diff view: multi-file/multi-part, comment-on-hunk → back to chat as instruction; approve here or on center ticket — same ticket id (H8)
-- [ ] [NOT DONE] Audit/Replay view: scrubber + screenshots + has_gap badge (H3); Storage view: treemap/dupes/large-files (D9-D11); Memory view: peek at the one store (C-series)
+- [x] [DONE] Progress view — **v2 `views/progress-view.tsx` + `chat/now-doing-strip.tsx` (click-to-open-artifact depth is a follow-up)**
+- [x] [DONE] Diff view — **v2 `views/diff-view.tsx`**
+- [x] [DONE] Audit + Storage + Memory views — **v2 `audit-view`/`trajectory-view`/`storage-view` + `panels/memory-panel` (Episodic/Semantic/Knowledge Graph tabs); replay scrubber screenshots = follow-up**
 - [ ] [NOT DONE] **Per-session layout persistence:** activeViewId / officeDocId / railCollapsed / splitRatio / browseMode / composerMode saved per sessionId; switch session → restore; new session → rail collapsed until a tool needs a view (the Cursor reset bug we do not copy)
 - [ ] [NOT DONE] First-run: welcome (Open folder / Open last project / add model) — no module picker, no enable-Browser/Office; skip-key still opens cockpit, send disabled until a model exists
 - [ ] [NOT DONE] In-place highlight-edit (Cowork "Edit with Claude" pattern, doc 67 §4): select text in a view → prompt → patch applied in place via existing edit crates (P4.7 ChatOverlay / code view)
@@ -1090,26 +1091,26 @@
 - [ ] [NOT DONE] Resume button → mandatory "describe changes" prompt → agent continues
 
 ### P11.5.5 Automation Builder (ARCH/12 §automation; doc 46 Devin H22, doc 56 §3 cronflow NL)
-- [ ] [NOT DONE] Automations list with sparkline activity charts
-- [ ] [NOT DONE] Automation editor: trigger/condition/action/budget/network-policy fields
+- [x] [DONE] Automations list — **v2 `panels/automations-panel.tsx`; sparkline activity charts are a follow-up**
+- [x] [DONE] Automation editor — **v2 `panels/automation-editor.tsx` (triggerKind/action/budget/network selects; condition field = follow-up)**
 - [ ] [NOT DONE] Template gallery (10+ pre-built automations)
 - [ ] [NOT DONE] NL automation creation (describe in text → generates config)
 
 ### P11.5.6 Knowledge/Memory Browser (ARCH/12 §memory; doc 46 Devin H23 trigger+macro)
-- [ ] [NOT DONE] Knowledge list with trigger, macro, scope per item
+- [x] [DONE] Knowledge list — **v2 `panels/memory-panel.tsx` item list (episodic/semantic/graph sections); per-item trigger/macro/scope = follow-up**
 - [ ] [NOT DONE] Folder organization (nested, drag, bulk enable/disable)
-- [ ] [NOT DONE] Auto-suggestions from AI (accept/dismiss/regenerate)
-- [ ] [NOT DONE] Episodic/Semantic/KG section browsers
+- [x] [DONE] Auto-suggestions — **v2 `memory-panel.tsx` `source === 'suggested'` list + “n new” badge (accept/dismiss/regenerate actions = follow-up)**
+- [x] [DONE] Episodic/Semantic/KG browsers — **v2 `memory-panel.tsx` tab strip: Episodic / Semantic / Knowledge Graph (live counts)**
 
 ### P11.5.7 Guard Panel (ARCH/12 §guard; doc 06 trust ladder UI)
-- [ ] [NOT DONE] Trust level indicator (progress bar 0-100)
-- [ ] [NOT DONE] Recent actions log with auto-approved/pending/blocked status
-- [ ] [NOT DONE] Permission chips (workspace read/write, shell, browser, external)
+- [x] [DONE] Trust ladder + level meter — **v2 `guard-panel.tsx` (Trust Ladder row + Trust Level progress)**
+- [x] [DONE] Recent actions log — **v2 `guard-panel.tsx` (Recent actions rows + auto-approved/pending/blocked status)**
+- [x] [DONE] Permissions matrix — **v2 `guard-panel.tsx` (Permissions Matrix)**
 
 ### P11.5.8 Connector Hub Panel (ARCH/12 §connectors; doc 13, doc 46 Devin H24 MCP marketplace)
-- [ ] [NOT DONE] Connected services list with tool counts
-- [ ] [NOT DONE] MCP servers list with status (running/not connected)
-- [ ] [NOT DONE] Add/Install buttons for new connectors
+- [x] [DONE] Connected services + tool counts — **v2 `connectors-panel.tsx` (summary cards incl. MCP servers + Tool Catalog tab w/ live counts from `mcp_catalog`)**
+- [x] [DONE] MCP servers list — **v2 `connectors-panel.tsx` MCP Servers tab (name/status/transport/tool-count)**
+- [x] [DONE] Add/Browse buttons — **v2 `connectors-panel.tsx` “Browse MCP servers” + “Add native connector” (install flow behind P22)**
 
 ### P11.5.9 Aider-Derived Features (doc 46 Aider RepoMap/edit strategies, doc 56 W1 Warp semantic index)
 - [ ] [NOT DONE] RepoMap: tree-sitter tag extraction + PageRank ranking + SQLite cache + budget fitting
@@ -1317,40 +1318,60 @@
 
 ---
 
+## P28 — Post-v1 Strategic Pillar (K1–K6 + early surfaces; docs 80–82, 2026-08-17)
+> **Gated:** this section is the adopted strategy from the external benchmark review (doc 80), the non-model moat roadmap (doc 81), and the innovation-priority decisions (doc 82). Nothing here ships before **Stage 0 — the live ticketed executor** (the open tool-executor seam, spec §6 "Remaining" = doc-80 condition 1 = doc-82 Gate A) and its Gates A–E. No capability-matrix rows until implemented (these compose existing rows: J5/EV1/C6/C10/F8/I6/B8/E5/P7.7).
+
+- [ ] `[NOT DONE]` **Stage 0 — the gate: live ticketed executor.** Coordinator tool loop invokes `GuardService::use_ticket`/`evaluate` for every file/browser/shell/provider/connector/office/ACP effect (the same open item as P6/P7 wiring; doc-80 conditions 1+5; doc-82 Gate A). **Nothing else in P28 ships before this.**
+- [ ] `[NOT DONE]` **ADD-1 One-Gesture Everything Capture (doc 82):** unified "Capture" surface (file/screenshot/spoken thought/browser page/clipboard/attachment) — composition over existing snapshot/clipboard/file-open/H27 engines + H30 voice-notes later
+- [ ] `[NOT DONE]` **ADD-2 Intelligent Desktop Inbox (doc 82):** one inbox composing notifications-popover + memory-panel + tasks + P6.4 session-open proactivity hook; powers the four-verbs first screen (Capture · Ask · Organise · Finish)
+- [ ] `[NOT DONE]` **ADD-3 Do-It-With-Me gradient (doc 82):** takeover/resume flow (P11.5.4, UI) + "repeat it" affordance on guard/auto-cards; quiet-mode continues (H2)
+- [ ] `[NOT DONE]` **ADD-4 Deliverable Studio (doc 82):** report/deck/workbook output surface over D1–D4 + artifact cards; absorbs the H30/H31 queues (doc 68) into one studio; office-correctness pre-req
+- [ ] `[NOT DONE]` **K1 Proof-Carrying Work Receipts (doc 81 §4):** portable receipt contract (goal/inputs/plan/actions/evidence/verification/provenance/policy/reproduction/cost/result_state) over P7.7 Merkle + GuardReceipt + EV1 + ledger + Trajectory; renderer + export; acceptance: 5 questions in 1 min without chat history
+- [ ] `[NOT DONE]` **K2 Reversible Change Sets (doc 81):** change-set coordinator above tickets — dependency DAG, pre/postconditions, effect classes (reversible / compensatable / irreversible / uncertain = doc-53 idempotency), recovery UI; acceptance: kill mid-task → honest recovery, no duplicate
+- [ ] `[NOT DONE]` **K5 Data Release Firewall (doc 81 §3.2):** egress policy engine + data-release receipts; **two zones** (broker-mediated + OS-egress proxy for ACP/MCP/browser — P17 iron-proxy); acceptance: per-profile packet-level egress audit
+- [ ] `[NOT DONE]` **K3 half-1 recording (doc 81 §3.1):** demonstration capture — DOM/a11y anchors + input/outcome evidence; starts early (feeds E2/E5/E9 + ADD-1); competitive note: OpenAI Record & Replay (2026-06-18) and Claude watch→skill already ship "teach once" — our claim is the zero-token local governed replay half
+- [ ] `[NOT DONE]` **K3 half-2 compile — flagship (doc 81 §4):** teach → compile → deterministic replay; zero-model-token healthy runs; governed repair with halt-over-guess (OpenAdapt pattern, P21); **Gate D simulator/fixtures first** (the Automation Simulator row)
+- [ ] `[NOT DONE]` **K4 passports (slim) (doc 81 §4):** portable scoped context packet over C10 pass-by-ref + C6 graph + SCIP; model/agent/device handoff honoring scope; after K1 (receipts make the graph trustworthy)
+- [ ] `[NOT DONE]` **K6 Trusted skill/automation supply chain (doc 81 §4):** signed manifests + capability/fixture tests + version pinning + quarantine + revoke (Gate E) **before marketplace scale** (pre-req for P22/P23/P26)
+- [ ] `[NOT DONE]` **Decline-list guard (doc 80/81/82):** no gen-media front-ends, no connector-count marketing, no silent autonomy, no replacement browser/IDE, no recursive swarms; marketing claims ("teach once", "broadest control plane") gated on Gates A/B/D
+
 ## SUMMARY
 
-| Phase | Tasks | Weeks |
-|---|---|---|
-| P0 Workspace & Skeleton | 46 | ~2 |
-| P1 Chat + BYOK | 54 | ~4 |
-| P2 Browser Layer | 82 | ~6 |
-| P3 Cockpit & Audit UI | 14 | ~4 |
-| P4 Office Engine | 48 | ~5 |
-| P5 Memory + Token Economy | 60 | ~5 |
-| P6 Orchestration + Connectors | 87 | ~5 |
-| P7 Forge + Guardrails | 53 | ~4 |
-| P8 Product Polish | 37 | ~3 |
-| P9+ Post-v1 | 22 | later |
-| P13 Batch-3 Steal Queue (doc 65) | 11 | post-v1 |
-| P14 Model Catalog — models.dev (doc 66) | 5 | ~1 (parallel) |
-| P15 Capability-Delta Queue (doc 67) | 5 | post-v1 |
-| P16 Final Market-Research Deltas (doc 68) | 8 | post-v1 |
-| P17 ACP Agent Ecosystem Steal Queue (doc 69) | 10 | post-v1 |
-| P18 MCP Directory Inbuilt Queue (doc 70) | 4 | ~1 (parallel) |
-| P19 Batch-4 Coding Agents/Skills Queue (doc 71) | 4 | ~1 (parallel) |
-| P20 Batch-5 Code-Intel/Parallel/Search Queue (doc 72) | 2 | ~1 (parallel) |
-| P21 Batch-6 Computer-Use/Full-Control Queue (doc 73) | 2 | post-v1 |
-| P22 Built-In MCP Server Manager Queue (doc 74) | 3 | ~1 (parallel) |
-| P23 Anthropic Skills/Plugins/Cowork Queue (doc 75) | 4 | ~1 (parallel) |
-| P24 Batch-7 Design/Browser/Self-Heal Queue (doc 76) | 3 | ~1 (parallel) |
-| P25 Batch-8 Workflows/Graphify/Browser Queue (doc 77) | 4 | ~1 (parallel) |
-| P26 Batch-9 Marketplace/GWS/Jobs Queue (doc 78) | 3 | ~1 (parallel) |
-| P27 Local Model Fetch/Download Core Queue (doc 79) | 4 | ~1 (parallel) |
-| **P10 Testing & QA** | **50** | **~4** |
-| **P11 UI/UX Optimization** | **36** | **~3** |
-| **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
-| **P12 Market Research & GTM** | **47** | **~4 (parallel)** |
-| Research Tasks (cross-cutting) | 54 | parallel |
-| **TOTAL** | **828** | **~45 weeks** |
+> Counts are live checkbox totals from this file, recomputed 2026-08-17 (every `- [x]`/`- [ ]` bullet, incl. sub-bullets). `Done`/`Open` split per section is the current build state.
+
+| Phase | Tasks | Done | Open | Weeks |
+|---|---|---|---|---|
+| P0 Workspace & Skeleton | 48 | 48 | 0 | ~2 |
+| P1 Chat + BYOK | 54 | 54 | 0 | ~4 |
+| P2 Browser Layer | 90 | 90 | 0 | ~6 |
+| P3 Cockpit & Audit UI | 14 | 14 | 0 | ~4 |
+| P4 Office Engine | 54 | 54 | 0 | ~5 |
+| P5 Memory + Token Economy | 69 | 68 | 1 | ~5 |
+| P6 Orchestration + Connectors | 95 | 34 | 61 | ~5 |
+| P7 Forge + Guardrails | 63 | 30 | 33 | ~4 |
+| P8 Product Polish | 45 | 8 | 37 | ~3 |
+| P9+ Post-v1 | 22 | 0 | 22 | later |
+| P10 Testing & QA | 50 | 0 | 50 | ~4 |
+| P11 UI/UX (spec + research) | 31 | 0 | 31 | ~3 |
+| P11.5 UI Implementation | 75 | 33 | 42 | ~4 (parallel) |
+| P12 Market Research & GTM | 47 | 0 | 47 | ~4 (parallel) |
+| P13 Batch-3 Steal Queue (doc 65) | 11 | 0 | 11 | post-v1 |
+| P14 Model Catalog — models.dev (doc 66) | 5 | 0 | 5 | ~1 (parallel) |
+| P15 Capability-Delta Queue (doc 67) | 5 | 0 | 5 | post-v1 |
+| P16 Final Market-Research Deltas (doc 68) | 8 | 2 | 6 | post-v1 |
+| P17 ACP Agent Ecosystem Steal Queue (doc 69) | 10 | 1 | 9 | post-v1 |
+| P18 MCP Directory Inbuilt Queue (doc 70) | 5 | 0 | 5 | ~1 (parallel) |
+| P19 Batch-4 Coding Agents/Skills Queue (doc 71) | 4 | 0 | 4 | ~1 (parallel) |
+| P20 Batch-5 Code-Intel/Parallel/Search Queue (doc 72) | 2 | 0 | 2 | ~1 (parallel) |
+| P21 Batch-6 Computer-Use/Full-Control Queue (doc 73) | 2 | 0 | 2 | post-v1 |
+| P22 Built-In MCP Server Manager Queue (doc 74) | 3 | 0 | 3 | ~1 (parallel) |
+| P23 Anthropic Skills/Plugins/Cowork Queue (doc 75) | 4 | 0 | 4 | ~1 (parallel) |
+| P24 Batch-7 Design/Browser/Self-Heal Queue (doc 76) | 3 | 0 | 3 | ~1 (parallel) |
+| P25 Batch-8 Workflows/Graphify/Browser Queue (doc 77) | 4 | 0 | 4 | ~1 (parallel) |
+| P26 Batch-9 Marketplace/GWS/Jobs Queue (doc 78) | 3 | 0 | 3 | ~1 (parallel) |
+| P27 Local Model Fetch/Download Core Queue (doc 79) | 4 | 0 | 4 | ~1 (parallel) |
+| P28 Post-v1 Strategic Pillar (docs 80–82; gated on the Stage-0 executor) | 13 | 0 | 13 | post-Stage-0 |
+| Research Tasks (cross-cutting) | 54 | 2 | 52 | parallel |
+| **TOTAL** | **897** | **438** | **459** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

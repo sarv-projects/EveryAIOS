@@ -1,10 +1,36 @@
 # DESKTOP-APP-SPEC.md — Complete Product Specification
 
-> **Version:** v3.21 · **Date:** 2026-08-16 · **Supersedes:** v3.20
+> **Version:** v3.22 · **Date:** 2026-08-17 · **Supersedes:** v3.21
 > **Version history:** see `SPEC-CHANGELOG.md` (archived 2026-08-10 — this file is a clean build document).
-> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–79, **281 repos**, ledger docs 27+46+47+48+49+50+52+54+55+56+57+58+60+61+62+63+64+65+66+67; doc 68 = final all-rounder market research + doc 69 = ACP ecosystem/harness deep-dive + doc 70 = MCP-directory inbuilt analysis + doc 71 = batch-4 coding agents/skills/harnesses + doc 72 = batch-5 code-intel/parallel/search + doc 73 = batch-6 computer-use/full-control + doc 74 = built-in MCP Server Manager + doc 75 = anthropic skills/plugins/cowork + doc 76 = batch-7 design/browser/self-healing + doc 77 = batch-8 workflows/graphify/browser + doc 78 = batch-9 marketplace/gws/jobs + doc 79 = local-model fetch/download core, each **0 new repos**) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
+> **Source ground-truth:** `RESEARCH/desktop_app/` (docs 01–79, **281 repos**, ledger docs 27+46+47+48+49+50+52+54+55+56+57+58+60+61+62+63+64+65+66+67; doc 68 = final all-rounder market research + doc 69 = ACP ecosystem/harness deep-dive + doc 70 = MCP-directory inbuilt analysis + doc 71 = batch-4 coding agents/skills/harnesses + doc 72 = batch-5 code-intel/parallel/search + doc 73 = batch-6 computer-use/full-control + doc 74 = built-in MCP Server Manager + doc 75 = anthropic skills/plugins/cowork + doc 76 = batch-7 design/browser/self-healing + doc 77 = batch-8 workflows/graphify/browser + doc 78 = batch-9 marketplace/gws/jobs + doc 79 = local-model fetch/download core, each **0 new repos**; doc 80 = external benchmark reviewed (EveryAIOS vs the global desktop-AI landscape — corrections + release conditions §8 of that doc); doc 81 = non-model moat roadmap review (K1–K6, adopted in §10) + primary-source notes verification; doc 82 = innovation-priority decisions (add/avoid/ignore/defer, Gates A–E), each **0 new repos**) + `desktop_app/ARCH/` (docs 00–12). Everything below traces to those; nothing is invented here.
 > **This app is OPEN SOURCE, local-first, BYOK.** Nothing in the architecture requires a founder-run server — not now, not later.
 > **IPC Architecture validated (doc 42):** code-verified against OpenFang `crates/openfang-kernel/src/kernel.rs` (20+ subsystems, RBAC, Merkle audit, DashMap abort handles) + ZeroClaw `crates/zeroclaw-api/src/lib.rs` (kernel ABI traits: ModelProvider/Channel/Tool/Memory/Observer/RuntimeAdapter). The "sidecar proposes, Rust disposes" axiom is production-proven — both systems use the identical kernel-with-syscalls model with capability-based security.
+
+---
+
+## ⛭ THE FINAL APP — the complete product (every capability below, all together)
+
+> **Capstone vision (v3.22, 2026-08-17).** This is what the finished EveryAIOS is — the state reached when **every row in §0 (A–J + EV), the 10 pillars (§3), and the post-v1 K-pillar (§10) are built, integrated, secured, and release-verified.** Status of each part is tracked live in §0/§6/§7/§10 + TODO; this section is the whole product in one view.
+
+**The final app in one sentence:** a single local-first, BYOK, open-source desktop workspace where your **chat, browser, files, documents, code, automations, agents, and connected accounts** live in one safe continuity — the LLM is the CPU, every real effect (file, browser, shell, provider, connector, office, agent) crosses **one ticket model → one executor → one event log → one progress timeline**, and every capability is spec-driven from Markdown and verified by a deterministic dual-guard (Guard-1/Guard-2) + evidence evaluation (EV1) — never by trust in the model.
+
+**The whole capability surface, in one sweep — A → J → EV → K:**
+- **A · Models & BYOK** — multi-provider + multi-key key-rings with auto-failover; OAuth subscriptions; local models (Ollama/llamafile/MLX, agent-native class); models.dev-backed catalog with per-task capability routing (Fast/Quality/Private/Cheap tiers); 3-layer cache stack with real per-call cost accounting.
+- **B · Agent orchestration** — Markdown blueprints as live execution graphs; continuous planning loops; subagents (depth ≤2, concurrency ≤6, strict budgets); crystallization of repeated work into zero-token flows; NL scheduling; heartbeat automations.
+- **C · Memory & context** — the 7 memory algorithms + knowledge graph (LadybugDB), conflict resolution, ACT-R activation & spontaneous recall, pass-by-reference context (never serialize what you can reference), taste profile, token-economy compaction with byte-stable prefixes (>85% cache-hit target).
+- **D · Office & files (engine-true)** — byte-preserving surgical OOXML part-patching (Word/Excel/PPT), IronCalc deterministic recalculation (300+ functions), PDF render/form-fill/redact, LibreOffice conformance oracle, .doc/.xls/.ppt convert-on-open, snapshot rollback; storage intelligence (parallel walker, arena snapshots, treemap, 7-stage dedup, FTS5 instant filename search).
+- **E · Browser & computer use** — tiered engine stack over one CDP driver (Lightpanda/Obscura → system Chrome/Edge → user-gated stealth), 37 tools, a11y diff (~90% token cut), session vault with sealed cookies (agent never sees raw secrets), session inheritance from the user's own profile, replay with `has_gap` honesty, challenge handler; computer use (pixels) post-v1, gated.
+- **F · Connector hub & messaging** — native adapters + Composio/Zapier/Nango + Local Auth Bridge, Unified Tool Registry, MCP client + MCP server (our tools to other agents), desktop-first email/Telegram/WhatsApp bridges, Gmail/GCal OAuth or IMAP/SMTP.
+- **G · Search & research** — free searxng-first cascade + circuit breaker + BM25 rerank; breadth×depth deep research with cited, confidence-scored reports; multi-channel search; REPL analysis; token economy; RTK output compression; instant local search.
+- **H · UI & product** — the v2 work-cockpit (48px activity rail, 12 views, resumable streams, generative UI in sandboxed iframes, widget cards, voice memo→report, corpus-research surface, agent picker).
+- **I · Forge & skills** — write→sandbox→test→persist tool generation, skill registry that grows the toolset without source changes, versioned extension ABI with capability allow-lists, registry-fed ACP agent discovery and driving.
+- **J · Security (host safety firewall)** — Trust Ladder + Guard-1 regex + Guard-2 visual diff cards, authorization tickets as the only mutation path, append-only audit + replay, credential broker (keys only in Rust, zeroize), policy-driven escalation with decision packages, injection defense, egress controls.
+- **EV · Evaluation & honesty** — the EV1 verification suite: golden tests, conformance evidence, anti-hallucination checks — the product refuses to claim what it cannot show.
+- **K · Post-v1 strategic pillar (§10, TODO P28)** — proof-carrying work receipts, reversible cross-app change sets, teach-once → compile → governed zero-token replay, work graph + context passports, data-release firewall (two zones) — all gated behind Stage 0 (the live ticketed executor).
+
+**What the user experiences at the end state:** open the app → one workspace with four verbs (**Capture · Ask · Organise · Finish**) → drop anything (file, screenshot, spoken thought, browser page, clipboard, email) → the system makes it work — every meaningful write approved, every outcome receipted and repeatable, every data disclosure explicit and policed, every model and agent swappable without losing context, and nothing requires an account, a cloud, or a founder server. Free forever, owned by the user.
+
+**Where it sits (docs 80/81/82):** not the best coding IDE, browser, cloud agent, or office suite — the **user-owned operating layer for agentic work**: the only local-first, BYOK, protocol-native control plane that composes models, agents, browser, office, memory, tools, and automation under one session, one safety, one audit, one memory, one orchestration surface. Foundational-differentiation claims ("teach once", "broadest control plane") are marketable only after Gates A/B/D (doc 82; §10).
 
 ---
 
@@ -613,6 +639,8 @@ flowchart LR
 - ❌ **`cptr`/BrowserOS/Steel/agent-browser as dependencies** — they are design references (doc 55: agent-browser's snapshot-ref/find/read-llms.txt/batch/a11y/MCP-profiles + WebRTC-containment; Steel's full-storage-context sessions; Obscura is a **spawn-only child process** like Chrome — never linked, never a library dependency); we implement the same surfaces natively (harness-driving, workspace, session persistence) with our own dual-guard.
 - ❌ **Mobile's billing/credits/quotas** — desktop is BYOK + local + OAuth-subscriptions; token/cost tracking is analytics, not gating.
 - ❌ **In-app M365/Gemini presence** — Copilot Cowork (inside Outlook/Teams/Excel/Word) and Gemini-in-Workspace (inside Gmail/Docs/Sheets) win where an agent is already *inside* the tenant's tools; we are the control plane *above* those apps (F14/F15 connectors + Office engine + browser-session connectors cover the capability, not the in-app chrome). Recorded in doc 68 §2.
+- ❌ **"Teach once" marketed as a novel capability** — OpenAI Record & Replay (2026-06-18) and Claude watch→skill (2026) already ship demonstration→reusable-skill flows; our differentiated claim is the **zero-token, local, governed deterministic replay with halt-over-guess** (OpenAdapt-proven pattern; doc 81 §3.1), never "we invented teach-once".
+- ❌ **Marketing the benchmark's "broadest control plane" claim before the ticketed executor is live** — doc-80 §8 conditions 1–5 = doc-82 Gate A = roadmap Stage 0; no campaign or fact-sheet may state the full trust claim until the tool-executor seam (spec §6 "Remaining", TODO P6/P7) is wired and receipt/recovery evidence exists.
 
 ---
 
@@ -628,3 +656,19 @@ flowchart LR
 8. **Honesty in verification** — 🔁 items are retested, not presumed; corpus claims are flagged with depth tags (⬛/🟦/🟩/⚪), not dressed up.
 9. **The capability index (section 0) is the contract** — additions land there first; nothing is cut without a written decision in `ARCH/09`.
 10. **Expandable by design (not by rebuild)** — everything new (model, connector, file format, browser engine, agent, workflow) lands as a **versioned extension bundle** (I6) or an **ACP-wired harness** (J17) — a registry entry + manifest, never a core edit. The capability index is the contract; the Extension ABI is the delivery mechanism.
+
+---
+
+## 10. Post-v1 Strategic Pillar — the K-Pillar (v3.22, 2026-08-17; docs 80–82, TODO P28)
+
+> Adopted from the external benchmark review (doc 80), the non-model moat roadmap (doc 81), and the innovation-priority decisions (doc 82) — all web-verified 2026-08-17. **Everything in this section is gated on Stage 0 — the live ticketed executor** (the open tool-executor seam, §6 "Remaining" = the same item as TODO P6/P7 wiring). No new capability-matrix rows until implemented (K rows compose existing rows: J5/EV1/C6/C10/F8/I6/B7/E5/P7.7/D-series).
+
+**The six must-win bets (the K-pillar under product-funnel names):**
+1. **Capture → finish** — "Anything I drop here becomes organised, understood, completed." (ADD-1/2/4 + existing engines)
+2. **Trusted action loop** — "Nothing meaningful happens without scope, proof, and an approve/undo path." (K1 receipts + K2 change sets, after Stage 0)
+3. **Teach once → governed zero-token replay** — "Teach once; I do the repetitive work forever, locally, verified; repair is governed, never guessed." (K3 — reframed per §8: the moat is the OpenAdapt-proven deterministic replay, not the teaching)
+4. **Portable personal work context** — passports over C10/C6 (K4-slim) that move with the user across models and agents.
+5. **Private intelligence loop** — the data-release firewall with two enforcement zones (K5; broker-mediated + OS-egress for ACP/MCP/browser, doc 81 §3.2).
+6. **Verified ecosystem loop** — signed/pinned/fixture-tested/revocable skills & plugins before any large marketplace (K6 = doc-82 Gate E; pre-req for P22/P23/P26).
+
+**Ship order (docs 81/82):** Stage 0 → ADD-1..4 (One-Gesture Capture · Intelligent Inbox · Do-It-With-Me · Deliverable Studio — all composition of existing engines) → K1+K2+K5 foundations → K3 flagship (recording starts early; compile after Gate D / Automation Simulator) → K4 passports → K6 supply chain → optional user-operated team mesh/continuity (never a hidden founder service).
