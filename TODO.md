@@ -1244,6 +1244,14 @@
 
 ---
 
+## P20 — Batch-5 Code-Intel / Parallel Agents / Search Queue (doc 72, 2026-08-16)
+> **Verdict recorded:** 6/10 repos already covered (docs 20/65). The 2 new tasks below are the only work.
+
+- [ ] `[NOT DONE]` **SeekStorm embedded hybrid index (doc 72 §1 — 🔴 STEAL):** evaluate Apache-2.0 `seekstorm` (in-process vector+lexical, 8-mode query planner) as the `everyaios-memory` hybrid index — replaces the hand-rolled BM25+RRF (P5.1/P5.7); keep sqlite-vec as the optional embedding path (doc 34).
+- [ ] `[NOT DONE]` **Superset worktree-per-agent orchestration (doc 72 §1 — 🟡 ADAPT):** fold "100+ CLI agents each in an isolated git worktree + review/open-in-editor" into the existing P17 worktree-isolation (B3/B4) + parallel-multiplexing (H2) tasks — no new row.
+
+---
+
 ## SUMMARY
 
 | Phase | Tasks | Weeks |
@@ -1265,6 +1273,7 @@
 | P17 ACP Agent Ecosystem Steal Queue (doc 69) | 10 | post-v1 |
 | P18 MCP Directory Inbuilt Queue (doc 70) | 4 | ~1 (parallel) |
 | P19 Batch-4 Coding Agents/Skills Queue (doc 71) | 4 | ~1 (parallel) |
+| P20 Batch-5 Code-Intel/Parallel/Search Queue (doc 72) | 2 | ~1 (parallel) |
 | **P10 Testing & QA** | **50** | **~4** |
 | **P11 UI/UX Optimization** | **36** | **~3** |
 | **P11.5 UI Implementation** | **66** | **~4 (parallel)** |
