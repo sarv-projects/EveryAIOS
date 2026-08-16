@@ -7,7 +7,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { mockConnectors, type Connector } from '@/lib/store'
+import { type Connector } from '@/lib/store'
 import { mcpCatalog, type McpCatalog } from '@/lib/mcp'
 import { cn } from '@/lib/utils'
 
@@ -83,7 +83,7 @@ function initials(name: string) {
 }
 
 export default function ConnectorsPanel() {
-  const [tab, setTab] = useState('native')
+  const [tab, setTab] = useState('mcp')
   const [catalog, setCatalog] = useState<McpCatalog | null>(null)
 
   // Live tool catalog from the Rust registry (demo fallback in preview).
@@ -105,7 +105,7 @@ export default function ConnectorsPanel() {
             <Plug className="h-4 w-4 text-orange-400" />
             <h2 className="text-sm font-semibold text-foreground">Connectors</h2>
             <Badge variant="secondary" className="text-[9px]">
-              {mockConnectors.length} configured
+              MCP-first · BYO keys · local vault
             </Badge>
           </div>
           <div className="flex gap-2">
@@ -142,11 +142,8 @@ export default function ConnectorsPanel() {
       <div className="border-b border-border px-4 py-2">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="h-7">
-            <TabsTrigger value="native" className="text-xs">Native</TabsTrigger>
             <TabsTrigger value="mcp" className="text-xs">MCP Servers</TabsTrigger>
-            <TabsTrigger value="composio" className="text-xs">Composio</TabsTrigger>
-            <TabsTrigger value="zapier" className="text-xs">Zapier</TabsTrigger>
-            <TabsTrigger value="nango" className="text-xs">Nango</TabsTrigger>
+            <TabsTrigger value="native" className="text-xs">Native</TabsTrigger>
             <TabsTrigger value="catalog" className="text-xs">Tool Catalog</TabsTrigger>
           </TabsList>
         </Tabs>
