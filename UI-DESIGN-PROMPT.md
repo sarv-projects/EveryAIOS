@@ -110,8 +110,14 @@ Design a **premium AI workspace desktop application** — a unified control plan
 ### Status Bar (28px, bottom)
 - Background: `#F0EFEB`
 - All text: 11px mono, `#6B6860`, items separated by ` · `
-- Items: `● Live` (green) · `awaiting approval` (orange) · `agent analyst` · `sidecar online` (green) · `core rust` · `db 3/14MB` · `mcp 127.0.0.1:9200` · `browser chrome (system)` · `cache 94%` · `guard L2` (orange) · `vault 7 keys` · `audit append` · `EveryAIOS v3.21`
+- Items: `● Live` (green) · `awaiting approval` (orange) · `agent analyst` · `sidecar online` (green) · `core rust` · `db 3/14MB` · `mcp 127.0.0.1:9200` · `browser chrome (system)` · `cache 94%` · `guard L2` (orange) · `vault 7 keys` · `audit append` · `EveryAIOS v3.22`
 - Clickable → opens relevant settings
+
+### Progressive Disclosure — Casual ⇄ Power (B9 / P31)
+- **Casual = the default.** One workspace, four verbs. The first screen shows only what a new user needs; every advanced surface is one toggle away, never in the way.
+- **Casual left sidebar (56px collapsed by default):** agent switcher (compact emoji-avatar + name, click → dropdown) · `+ New chat` (icon) · recent sessions (collapsed into a single "Recents" chip) · ⚙ Settings at bottom. **Hidden in casual:** Automations · Guard · Connectors · Memory · Analytics nav items, the 48px activity rail, provider/model picker (shows "Auto"), spend/status-bar detail.
+- **Power toggle** (bottom of sidebar, `⌘.` or a `…` "More" chevron): expands the sidebar to the full 248px nav + reveals the right activity rail + advanced panels. State persists per user (`settings.ui.powerMode`).
+- **Why:** casual users get "Capture · Ask · Organise · Finish" with zero configuration surface; power users flip one switch and see files/code/guard/memory/connectors/automations/spend/trajectory. This is the same progressive-disclosure the competitive review (doc 80 §8, doc 82 ADD-1..4) and skales (doc 83) demand.
 
 ---
 
@@ -203,6 +209,19 @@ Design a **premium AI workspace desktop application** — a unified control plan
 - Switch: one-click → toast "Switched to @claude-code — context preserved" (200ms crossfade on now-doing)
 - Footer: "Configure agents →" (12px orange link)
 - **Agent-scoped commands**: after switching, composer shows the agent's live `available_commands` as suggestion chips
+
+## Component Design — Custom Agent Builder (B9)
+
+- **Entry:** agent-switcher footer "Configure agents →" opens the Agents panel; a prominent `+ Create agent` button (also in Settings → Agents). "Configure agents" is visible in casual mode too (agents are the one power concept casual users meet early).
+- **Three agent sources, one list:** ① **Default** = EveryAIOS (inbuilt engine, follows the chat-bar model) — always present, pinned first; ② **Installed** = ACP registry agents (F8/F12, one-click install already landed) — shown with their auth-mode badge; ③ **Custom** = user-authored bundles (B9) from `~/.everyaios/agents/`.
+- **Create-agent flow (wizard, 4 steps):**
+  1. **Identity** — name, emoji/avatar, one-line description; start from a template (**General · Coder · Researcher · Email-Triager · Data-Analyst · Writer · Meeting-Notes · Browser-Operator**) that pre-fills the rest.
+  2. **Brain** — persona + system prompt (editable textarea + template prompt snippets) · **Engine**: `Inbuilt (EveryAIOS)` | `ACP agent` (pick an installed CLI: Claude Code/Codex/…) | `Model-only` (pick a model/provider directly). · **Model/provider**: optional — "inherit from chat bar" toggle (default ON) vs pin a specific model/provider (A6/A2).
+  3. **Capabilities (opt-in, no bloat)** — **MCP servers**: tick the exact servers this agent may use (never "all"); **Connectors**: tick the exact connectors (Gmail/Slack/GitHub/…); **Skills**: tick the skill set; **Tools**: allow/deny list → becomes the agent's Guard capability scope.
+  4. **Workflows** — attach blueprints (B2) + scheduled automations (B7) this agent owns; review → **Create** (writes the versioned `agent.toml` bundle under `~/.everyaios/agents/`).
+- **Scoping is the point:** an agent's context + tool schema only includes the MCP servers / connectors / tools it declares — running Agent X never loads Agent Y's servers. This is the anti-bloat, user-controlled guarantee (vs "every MCP server on every agent").
+- **Edit/duplicate/disable/export:** each custom agent row → `⋯` menu (edit wizard, duplicate, disable, export bundle). Custom agents can also be re-bound later: change engine/model/provider without touching persona or scopes.
+- **Runtime:** pick an agent in the composer → the turn runs on that agent's engine + model + scoped capabilities; the chat-bar model selector shows "Using <agent>'s settings" when the agent pins its own provider.
 
 ---
 
