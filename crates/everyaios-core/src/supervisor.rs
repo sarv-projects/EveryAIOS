@@ -150,11 +150,16 @@ impl ProcessSupervisor {
             let _ = handle.join();
         }
 
+        // NOTE: do NOT set `BUN_JSC_heapSize` here — Bun ≥1.3 rejects it as an
+        // invalid JSC environment variable and the embedded runtime exits(1)
+        // before running any app code (verified 2026-08-17 on Bun 1.3.14).
+        // Heap pressure is handled by the coordinator's own heap monitor
+        // (packages/coordinator/src/heap.ts — self-restart at 80%, J13) plus
+        // the clean-rotation path below (exit code 0).
         let mut cmd = Command::new(&self.binary_path);
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .env("BUN_JSC_heapSize", "536870912");
+            .stderr(Stdio::piped());
 
         // Platform-specific pre_exec for orphan prevention.
         #[cfg(target_os = "linux")]
@@ -227,8 +232,12 @@ impl ProcessSupervisor {
         }
         let last_stderr = Arc::clone(&self.last_activity_ms);
         if let Some(err) = child.stderr.take() {
+            // Stderr is forwarded to the app's stderr (prefixed) so sidecar
+            // failures are visible in the terminal instead of being silently
+            // swallowed — the 2026-08-17 "child crashed with code 1" loop was
+            // invisible precisely because stderr was discarded.
             self.readers.push(std::thread::spawn(move || {
-                let _ = pump(err, &last_stderr);
+                let _ = pump_visible(err, &last_stderr);
             }));
         }
 
@@ -436,6 +445,36 @@ fn pump<R: Read>(mut reader: R, last_activity_ms: &AtomicU64) -> io::Result<()> 
             Ok(0) => return Ok(()), // EOF — child closed the pipe
             Ok(_) => {
                 last_activity_ms.store(now_ms(), Ordering::Relaxed);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// Like [`pump`], but also forwards each chunk to the app's stderr (prefixed
+/// `[sidecar]`) so the coordinator's own diagnostics stay visible in the
+/// terminal. Keeps the watchdog clock armed exactly like [`pump`].
+fn pump_visible<R: Read>(mut reader: R, last_activity_ms: &AtomicU64) -> io::Result<()> {
+    let mut buf = [0u8; 4096];
+    let mut pending = Vec::new();
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) => {
+                if !pending.is_empty() {
+                    eprintln!("[sidecar] {}", String::from_utf8_lossy(&pending).trim_end());
+                }
+                return Ok(()); // EOF — child closed the pipe
+            }
+            Ok(n) => {
+                last_activity_ms.store(now_ms(), Ordering::Relaxed);
+                let mut chunk = &buf[..n];
+                while let Some(pos) = chunk.iter().position(|&b| b == b'\n') {
+                    pending.extend_from_slice(&chunk[..pos]);
+                    eprintln!("[sidecar] {}", String::from_utf8_lossy(&pending).trim_end());
+                    pending.clear();
+                    chunk = &chunk[pos + 1..];
+                }
+                pending.extend_from_slice(chunk);
             }
             Err(e) => return Err(e),
         }

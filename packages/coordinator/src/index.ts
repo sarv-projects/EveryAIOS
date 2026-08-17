@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
-// NOTE: For Bun compiled binaries, heap is limited via BUN_JSC_heapSize env var.
-// The ProcessSupervisor (Rust side) should set BUN_JSC_heapSize=536870912 (512MB)
-// when spawning this process. For Node.js: --max-old-space-size=512.
-// For dev: `bun --smol run src/index.ts`
+// NOTE: Heap pressure is handled by this process's own heap monitor (heap.ts —
+// self-restart at 80%, J13); the Rust ProcessSupervisor must NOT set
+// BUN_JSC_heapSize — Bun ≥1.3 rejects it as an invalid JSC env var and exits(1)
+// before running any app code (verified 2026-08-17). For Node.js:
+// --max-old-space-size=512. For dev: `bun --smol run src/index.ts`
 /**
  * EveryAIOS coordinator sidecar — hello-world IPC responder (P0.3).
  *
