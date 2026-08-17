@@ -1,10 +1,14 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-> **Version:** 2.0 (2026-08-15)  
+> **Version:** 3.1 (2026-08-17)  
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
 > **Principle:** ONE project, ONE session, ONE ticket, ONE timeline. Chat + live progress in the center; a thin **right activity rail** switches *what you are watching* — one surface at a time. Never 9 peer tabs, never a Chat/Cowork/Code product split.  
 > **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H25 — H20 redefined doc 67), ARCH/DIAGRAMS #7 (MCQ interrupt), doc 67 §6 (finalization record)
 > **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, 28-screen inventory, motion/accessibility tables) that supersedes this doc's visual details. The v2 cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
+>
+> **v3.1 (2026-08-17): Full-fidelity tool surfaces ("nothing held back").** The right panel is the **live window into the real tool** — every view reproduces the official product's full surface, not a stripped preview: **Word/Excel/PowerPoint get the complete Microsoft ribbon** (File·Home·Insert·…·View + **Copilot** on Home) with all groups/buttons; **PDF gets a full viewer** (page nav, zoom, search, annotations, forms, sign, redact, thumbnails/outline); **Browser gets full Chrome-style chrome** (tabs, omnibox, back/forward/reload, bookmarks bar, extensions, profile, and the built-in **AI Mode / Gemini sidebar**). The agent drives these surfaces; the user can touch them (takeover). Detail in §4.1c.
+>
+> **v3.0 (2026-08-17): Right panel = VS Code-style multi-view tabbed panel** (replaces "one surface at a time"; user directive + doc 84 + VS Code layout logic). **Default open views: Terminal · Folder · Browser.** A **`+` button** opens a picker to add any view (Code, Office, Progress, Diff, Audit, Storage, Memory, Research); tabs **close ×**, reorder, and **persist per session** (same per-session persistence as v2). **Browser = one view with internal page tabs** (many pages, one browser surface). **Office files open as their own tabs** (`Q3.xlsx`, `exec-summary.docx`, `contract.pdf`, `quarterly-deck.pptx`) — opened by the agent or by clicking an artifact card. **PDF study mode:** scope the chat to a document (`📄 Scoped to contract.pdf`) for side-by-side explain-this-document. **"Open perfectly" = LibreOffice/LOKit** (tiled rendering, agentic + normal reading) layered on the surgical engines (IronCalc/calamine/lopdf); **Google Docs/Sheets** open through the authenticated browser view (normal access) or pulled via Drive/Sheets API → OOXML → office engine (agentic). Details in §4.1b.
 
 ---
 
@@ -251,6 +255,61 @@ Displayed when the agent creates/edits a file. Shows:
 │ Open another…               │
 └─────────────────────────────┘
 ```
+
+### 4.1b Multi-view tabbed panel (v3.0 — VS Code logic)
+
+The right viewport is a **tabbed view container** (VS Code editor-group / panel-region pattern), not a single surface.
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│ [📁 Folder] [>_ Terminal] [🌐 Browser] [📄 contract.pdf] [+] │  ← tab strip
+├───────────────────────────────────────────────────────────────┤
+│  active view content (one tab at a time)                      │
+└───────────────────────────────────────────────────────────────┘
+```
+
+- **Defaults:** Terminal · Folder · Browser open on first power-mode use; the rail icon still switches the active tab (click active icon → collapse to 0px, chat full-width — never unmount).
+- **`+` Add view:** picker lists every not-open view (Code, Office files, Progress, Diff, Audit, Storage, Memory, Research, plugin views). Selecting adds a tab and activates it. This is the I6 dogfood slot (no 10th header tab).
+- **Close × / reorder / persist:** tabs close, reorder by drag, and persist per session (`openViews`, `activeView`, `railCollapsed`, `splitRatio` per sessionId — the Cursor layout-reset bug is not copied).
+- **Browser = one view, many pages:** the Browse tab hosts its own internal tab strip (page tabs + `+` new tab). Opening a link spawns a page tab inside the browser view — never a new panel tab.
+- **Office files = one tab each:** opening `Q3.xlsx` / `exec-summary.docx` / `contract.pdf` / `deck.pptx` (agent or artifact click) adds a tab; the matching engine renders it. Reuses the W-flyout to pick among open office docs.
+- **PDF study mode:** a PDF tab can **scope the chat** (`📄 Scoped to contract.pdf` chip in the chat header, ✕ clears). Answers are grounded in that document — side-by-side "explain this paragraph" without leaving the doc.
+- **Open-perfectly renderer (LibreOffice/LOKit):** for Word/PPT/PDF and mixed-format fidelity, `everyaios-office` can drive **LibreOffice headless + LOKit tiled rendering** for *both* agentic mutation and normal human reading (read-only mode = same renderer, no mutation path). Sheets stay on IronCalc/calamine (deterministic recalc); PDFs on lopdf/pdf.js; LOKit is the fallback/perfect-fidelity tier for anything the surgical engines don't cover.
+- **Google Docs/Sheets:** normal access = open in the authenticated browser view (system Chrome session, no re-login). Agentic access = Drive/Sheets API (gws connector, F14/F15, P18) → export OOXML → office engine → mutate → (optional) write back. Never a bespoke Google renderer.
+
+### 4.1c Full-fidelity tool surfaces (v3.1 — "nothing held back")
+
+The right panel is the **user's window into what is actually happening** in the real tool. Every view reproduces the official product's full surface — all buttons, all toolbars, all modes. Nothing is stripped for "preview". The agent drives the same surface the user sees; takeover (H21) makes any control live.
+
+**Word — full Microsoft ribbon** (File · Home · Insert · Draw · Design · Layout · References · Mailings · Review · View · Help · **Copilot**):
+- Home: Clipboard (Paste/Cut/Copy/Format Painter) · Font (type, size, B/I/U, color, highlight) · Paragraph · Styles · Editing
+- Insert: Pages · Tables · Illustrations · Header & Footer · Text · Symbols · Insert Copilot-draft
+- Design: Document Formatting · Page Background · References: TOC · Footnotes · Citations & Bibliography
+- Review: Proofing · Comments · Tracking · View: Views · Show · Zoom · Window
+- **Copilot** (Home, Dynamic Action Button): summarize, rewrite, ask about the document, draft with references
+- Canvas: ruler, page views (Print/Web/Read), zoom slider, status bar (Page x/y · Words · language)
+
+**Excel — full ribbon** (File · Home · Insert · Page Layout · Formulas · Data · Review · View · Help · **Copilot**):
+- Home: Clipboard · Font · Alignment · Number · Styles · Cells · Editing
+- Insert: Tables · Charts · Sparklines · Filters · Links · Text · Insert Copilot-chart
+- Page Layout: Themes · Page Setup · Scale to Fit · Sheet Options · Formulas: Function Library · Defined Names · Formula Auditing · Calculation
+- Data: Get & Transform Data · Queries & Connections · Sort & Filter · Data Tools · Review: Proofing · Comments · Protect
+- **Copilot**: analyze, suggest formulas, highlight trends, build charts
+- Canvas: **Name box + Formula bar**, grid, sheet tabs, status bar (Average/Count/Sum/zoom), freeze panes, autofilter
+
+**PowerPoint — full ribbon** (File · Home · Insert · Design · Transitions · Animations · Slide Show · Review · View · Help · **Copilot**):
+- Home: Clipboard · Slides · Font · Paragraph · Drawing · Editing · Insert: Slides · Tables · Images · Illustrations · Media · Text
+- Design: Themes · Variants · Customize · Transitions: Preview · Transition to This Slide · Timing
+- Animations: Preview · Animation · Advanced Animation · Timing · Slide Show: Start · Set Up · Monitors
+- Review: Proofing · Comments · Compare · View: Presentation Views · Show · Zoom · Window
+- **Copilot**: generate slides from outline, design ideas, rehearse coach
+- Panes: Slide · Outline · Notes · Slide Sorter; thumbnail strip; presenter notes (P4.7b)
+
+**PDF — full viewer** (Adobe/Edge-class): open/save/print/download/share · page nav ◀ ▶ · page number · zoom +/− · fit page/width · search · highlight/underline/strikeout · comment & annotate · draw/shapes/stamps · form fill · sign · redact · thumbnails/outline/annotations sidebar · reader mode · night mode
+
+**Browser — full Chrome-style chrome** (v3.1): tab strip (tabs + `+` new tab + pinned + tab actions) · toolbar (back/forward/reload/home · **omnibox** address+search · star/bookmark · extension icons + puzzle-piece menu · profile avatar · ⋮ menu) · **bookmarks bar** · **built-in AI Mode / Gemini sidebar** (no extension — Chrome 141+ parity) · reader mode · downloads · history · settings · page actions
+
+**Fidelity rule:** a control exists in the view iff the real product has it. Read-only while the agent works (H21); writable on takeover. This is the "right panel connects — the user sees what is actually going on" contract.
 
 ### 4.2 Views Contract (how "+" stays one product)
 

@@ -50,10 +50,10 @@ function Sparkline({ data, enabled }: { data: number[]; enabled: boolean }) {
         <div
           key={i}
           className={cn(
-            'w-[3px] rounded-sm',
+            'spark-draw w-[3px] rounded-sm',
             enabled ? 'bg-orange-500/80' : 'bg-zinc-600/70',
           )}
-          style={{ height: `${Math.max(8, (v / max) * 100)}%` }}
+          style={{ height: `${Math.max(8, (v / max) * 100)}%`, animationDelay: `${i * 8}ms` }}
         />
       ))}
     </div>

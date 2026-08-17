@@ -60,7 +60,7 @@ export interface Artifact {
 export interface ProgressStep {
   id: string
   label: string
-  status: 'done' | 'active' | 'pending'
+  status: 'done' | 'active' | 'pending' | 'failed'
   type: 'file' | 'edit' | 'chart' | 'browser' | 'shell' | 'code' | 'office' | 'export' | 'tool'
   detail?: string
   output?: string
@@ -469,6 +469,16 @@ interface AppState {
   toggleRail: () => void
   setRailCollapsed: (v: boolean) => void
 
+  // Multi-view panel (ARCH/12 v3.0 — VS Code-style tabs). Open views are a
+  // tabbed set; defaults Folder · Shell · Browser; "+" adds more; close × removes.
+  openViews: ViewId[]
+  addView: (v: ViewId) => void
+  closeView: (v: ViewId) => void
+
+  // PDF study mode (chat scoped to an open document)
+  scopedView?: ViewId
+  setScopedView: (v?: ViewId) => void
+
   // Sidebar collapse
   sidebarCollapsed: boolean
   toggleSidebar: () => void
@@ -479,6 +489,10 @@ interface AppState {
   powerMode: boolean
   togglePowerMode: () => void
   setPowerMode: (v: boolean) => void
+
+  // Developer telemetry (status-bar debug strip) — off by default.
+  devMode: boolean
+  setDevMode: (v: boolean) => void
 
   // Chat composer
   composerMode: ChatMode
@@ -560,10 +574,33 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   activeView: 'office-xlsx',
-  setActiveView: (v) => set({ activeView: v, railCollapsed: false }),
+  setActiveView: (v) =>
+    set((s) => ({
+      activeView: v,
+      railCollapsed: false,
+      openViews: s.openViews.includes(v) ? s.openViews : [...s.openViews, v],
+    })),
   railCollapsed: false,
   toggleRail: () => set((s) => ({ railCollapsed: !s.railCollapsed })),
   setRailCollapsed: (v) => set({ railCollapsed: v }),
+
+  openViews: ['office-xlsx', 'folder', 'shell', 'browse'],
+  addView: (v) =>
+    set((s) => ({
+      openViews: s.openViews.includes(v) ? s.openViews : [...s.openViews, v],
+      activeView: v,
+      railCollapsed: false,
+    })),
+  closeView: (v) =>
+    set((s) => {
+      const next = s.openViews.filter((x) => x !== v)
+      if (next.length === 0) return { openViews: next, railCollapsed: true }
+      const active = s.activeView === v ? next[next.length - 1] : s.activeView
+      return { openViews: next, activeView: active }
+    }),
+
+  scopedView: undefined,
+  setScopedView: (v) => set({ scopedView: v }),
 
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
@@ -579,6 +616,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     writePowerMode(v)
     set({ powerMode: v })
   },
+
+  devMode: false,
+  setDevMode: (v) => set({ devMode: v }),
 
   composerMode: 'normal',
   setComposerMode: (m) => set({ composerMode: m }),

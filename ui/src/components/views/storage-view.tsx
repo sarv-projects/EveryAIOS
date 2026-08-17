@@ -55,7 +55,7 @@ export default function StorageView() {
         <div className="space-y-4 p-4">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {STATS.map((s) => (
-              <div key={s.label} className="rounded-lg border border-border bg-card p-3">
+              <div key={s.label} className="hover-lift rounded-lg border border-border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground">{s.label}</div>
                 <div className={cn('font-mono text-lg font-semibold', s.tone)}>{s.value}</div>
               </div>
@@ -72,7 +72,7 @@ export default function StorageView() {
                 <div
                   key={b.label}
                   className={cn(
-                    'flex flex-col justify-end overflow-hidden rounded-sm p-1.5',
+                    'treemap-morph flex flex-col justify-end overflow-hidden rounded-sm p-1.5 hover:brightness-110',
                     b.color,
                     b.span
                   )}

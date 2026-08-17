@@ -141,10 +141,16 @@ export function TitleBar() {
           <TooltipTrigger asChild>
             <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-[10.5px] font-mono">
               <ShieldCheck className="h-3 w-3 text-emerald-400" />
-              <span className="text-emerald-300">Guard · L2</span>
+              {powerMode ? (
+                <span className="text-emerald-300">Guard · L2</span>
+              ) : (
+                <span className="text-emerald-300">Safe &amp; Private</span>
+              )}
             </div>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Trust Level: 75/100 · Write tier</TooltipContent>
+          <TooltipContent side="bottom">
+            {powerMode ? 'Trust Level: 75/100 · Write tier' : '100% local-first — your data, keys and files never leave your device'}
+          </TooltipContent>
         </Tooltip>
 
         {powerMode && (

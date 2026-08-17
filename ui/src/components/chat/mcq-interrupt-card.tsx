@@ -124,7 +124,7 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
   const showRemember = mcq.kind === 'mcq' || mcq.kind === 'permission'
 
   return (
-    <Card className="gap-0 overflow-hidden border-orange-500/40 bg-orange-500/5 p-0">
+    <Card className="enter-approval gap-0 overflow-hidden border-orange-500/40 bg-orange-500/5 p-0">
       {/* header */}
       <div className="flex items-start gap-2.5 border-b border-orange-500/20 px-3 py-2.5">
         <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-orange-500/15 text-orange-400">

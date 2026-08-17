@@ -10,6 +10,7 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/lib/store'
 import { Row, SectionShell } from './settings-shared'
 
 // === General ===
@@ -17,9 +18,23 @@ export function GeneralSection() {
   const [startup, setStartup] = useState('last')
   const [tray, setTray] = useState(true)
   const [telemetry, setTelemetry] = useState(false)
+  const powerMode = useAppStore((s) => s.powerMode)
+  const setPowerMode = useAppStore((s) => s.setPowerMode)
+  const devMode = useAppStore((s) => s.devMode)
+  const setDevMode = useAppStore((s) => s.setDevMode)
 
   return (
-    <SectionShell title="General" desc="App behavior, language and tray">
+    <SectionShell title="General" desc="App behavior, mode, language and tray">
+      <Row label="Mode" desc="Simple hides the technical cockpit; Pro shows the full workspace">
+        <div className="flex items-center gap-2">
+          <span className={cn('text-xs', !powerMode ? 'text-orange-300' : 'text-muted-foreground')}>Simple</span>
+          <Switch checked={powerMode} onCheckedChange={setPowerMode} />
+          <span className={cn('text-xs', powerMode ? 'text-orange-300' : 'text-muted-foreground')}>Pro</span>
+        </div>
+      </Row>
+      <Row label="Developer Mode" desc="Show the full debug telemetry strip (sidecar, IPC, vault, audit, db)">
+        <Switch checked={devMode} onCheckedChange={setDevMode} />
+      </Row>
       <Row label="Language">
         <Select defaultValue="en">
           <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>

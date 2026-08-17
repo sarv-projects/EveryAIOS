@@ -11,6 +11,12 @@ import {
   ChevronDown,
   PanelRightOpen,
   Cookie,
+  Plus,
+  Puzzle,
+  Star,
+  Sparkles,
+  Bookmark,
+  ShieldCheck,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -25,11 +31,92 @@ const PRODUCTS = [
   { name: 'Acme Ultimate', price: '$299/mo', tag: 'Premium' },
 ]
 
+const MOCK_TABS = [
+  { id: 't1', title: 'Competitor pricing', url: 'competitor.acme.com/products' },
+  { id: 't2', title: 'Google', url: 'google.com/search?q=q3+revenue' },
+]
+
+const BOOKMARKS = ['Gmail', 'Drive', 'Docs', 'Sheets', 'GitHub', 'Notion', 'Calendar']
+
+const EXTENSIONS = [
+  { id: 'e1', mark: 'A', color: 'bg-sky-500/20 text-sky-300' },
+  { id: 'e2', mark: 'G', color: 'bg-emerald-500/20 text-emerald-300' },
+  { id: 'e3', mark: 'M', color: 'bg-violet-500/20 text-violet-300' },
+  { id: 'e4', mark: 'R', color: 'bg-rose-500/20 text-rose-300' },
+]
+
 export default function BrowseView() {
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [aiMode, setAiMode] = useState(false)
+  const [tabs, setTabs] = useState(MOCK_TABS)
+  const [activeTab, setActiveTab] = useState('t1')
+
+  const newTab = () => {
+    const id = `t-${Date.now()}`
+    setTabs((t) => [...t, { id, title: 'New tab', url: 'about:blank' }])
+    setActiveTab(id)
+  }
+
+  const closeTab = (id: string) => {
+    setTabs((t) => {
+      const next = t.filter((x) => x.id !== id)
+      if (activeTab === id && next.length) setActiveTab(next[next.length - 1].id)
+      return next
+    })
+  }
+
+  const active = tabs.find((t) => t.id === activeTab) ?? tabs[0]
 
   return (
     <div className="flex h-full w-full flex-col">
+      {/* Browser tab strip — one browser view, many pages (ARCH/12 v3.0) */}
+      <div className="flex shrink-0 items-end gap-0.5 overflow-x-auto scroll-thin border-b border-border bg-sidebar/60 px-1 pt-1 no-select">
+        {tabs.map((t) => (
+          <div
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            className={cn(
+              'group flex max-w-[150px] cursor-pointer items-center gap-1.5 rounded-t-md border border-b-0 px-2 py-1 text-[10.5px] transition-colors',
+              t.id === activeTab
+                ? 'border-border bg-card text-foreground'
+                : 'border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+            )}
+          >
+            <Globe className={cn('h-3 w-3 shrink-0', t.id === activeTab && 'text-orange-500')} />
+            <span className="flex-1 truncate">{t.title}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                closeTab(t.id)
+              }}
+              className="rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={newTab}
+          className="mb-0.5 grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          title="New tab"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Bookmarks bar (Chrome-style) */}
+      <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto scroll-thin border-b border-border bg-sidebar/40 px-2 py-0.5 no-select">
+        <Bookmark className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+        {BOOKMARKS.map((b) => (
+          <button
+            key={b}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {b}
+          </button>
+        ))}
+      </div>
+
       <header className="flex items-center gap-1.5 border-b border-border px-3 py-2">
         <button className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
@@ -48,9 +135,40 @@ export default function BrowseView() {
           <Lock className="h-3 w-3 text-emerald-400" />
           <Globe className="h-3 w-3 text-muted-foreground" />
           <span className="flex-1 truncate font-mono text-xs text-foreground">
-            https://competitor.acme.com/products
-            <span className="text-muted-foreground">?page=23</span>
+            {active?.url ?? 'about:blank'}
           </span>
+        </div>
+
+        {/* Extension icons + AI Mode (Chrome 141+ parity) */}
+        <div className="flex shrink-0 items-center gap-0.5">
+          {EXTENSIONS.map((e) => (
+            <span
+              key={e.id}
+              className={cn('grid h-5 w-5 place-items-center rounded text-[8px] font-bold', e.color)}
+              title="Extension"
+            >
+              {e.mark}
+            </span>
+          ))}
+          <button
+            onClick={() => setAiMode((v) => !v)}
+            className={cn(
+              'flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] transition-colors',
+              aiMode
+                ? 'border-orange-500/50 bg-orange-500/15 text-orange-300'
+                : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground',
+            )}
+            title="Built-in AI Mode / Gemini sidebar"
+          >
+            <Sparkles className="h-3 w-3" />
+            AI
+          </button>
+          <button className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" title="Star / bookmark">
+            <Star className="h-3.5 w-3.5" />
+          </button>
+          <button className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" title="Extensions menu">
+            <Puzzle className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         <Badge
@@ -107,6 +225,28 @@ export default function BrowseView() {
             </div>
           </ScrollArea>
         </div>
+
+        {aiMode && (
+          <aside className="flex w-64 shrink-0 flex-col border-l border-border bg-card">
+            <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
+              <Sparkles className="h-3 w-3 text-orange-400" />
+              <span className="text-[11px] font-medium text-foreground">AI Mode</span>
+            </div>
+            <div className="flex-1 space-y-2 p-3">
+              <div className="rounded-md border border-orange-500/30 bg-orange-500/5 p-2 text-[10.5px] leading-relaxed text-muted-foreground">
+                <span className="font-medium text-orange-300">Key takeaway</span> — Acme's Pro plan is the most-cited
+                pricing anchor across all 47 product pages; Enterprise is contact-only.
+              </div>
+              <div className="rounded-md border border-border bg-zinc-900/50 p-2 text-[10.5px] leading-relaxed text-muted-foreground">
+                Ask about this page, summarize the tab, or start a multi-tab research task…
+              </div>
+              <div className="flex items-center gap-1 rounded-md border border-border bg-zinc-900/50 p-1.5">
+                <ShieldCheck className="h-3 w-3 shrink-0 text-emerald-400" />
+                <span className="text-[9px] text-muted-foreground">Grounded in this page + your session</span>
+              </div>
+            </div>
+          </aside>
+        )}
 
         {inspectorOpen && (
           <aside className="w-56 shrink-0 border-l border-border bg-card">

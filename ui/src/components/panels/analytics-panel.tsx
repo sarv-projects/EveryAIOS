@@ -92,7 +92,7 @@ export default function AnalyticsPanel() {
             subtitle="last 30 days · USD"
             right={<span className="font-mono text-xs text-orange-300">$5.42 total</span>}
           >
-            <div className="h-44 w-full">
+            <div className="chart-crossfade h-44 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={SPEND_30D} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
                   <defs>
@@ -113,7 +113,7 @@ export default function AnalyticsPanel() {
           {/* Second row: tokens by model + cost donut */}
           <div className="grid gap-3 lg:grid-cols-2">
             <ChartCard title="Tokens by model" subtitle="last 30 days · K">
-              <div className="h-40 w-full">
+              <div className="chart-crossfade h-40 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={TOKENS_BY_MODEL} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
                     <XAxis dataKey="model" tick={{ fontSize: 9, fill: 'hsl(240 5% 55%)' }} tickLine={false} axisLine={false} />

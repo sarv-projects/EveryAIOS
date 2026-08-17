@@ -13,6 +13,14 @@ import {
   PanelRight,
   GripVertical,
   ScanSearch,
+  X,
+  FileText,
+  Table,
+  Presentation,
+  File,
+  HardDrive,
+  GitCompare,
+  ShieldCheck,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -24,6 +32,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useAppStore, type ViewId } from '@/lib/store'
 import { AGENT_MAP, DEFAULT_ROUTING, type TaskKind } from '@/lib/agents'
 import { cn } from '@/lib/utils'
@@ -88,6 +104,24 @@ const officeFlyoutItems = [
   { id: 'office-pptx' as ViewId, label: 'quarterly-deck.pptx', live: false, type: 'Slides' },
   { id: 'office-pdf' as ViewId, label: 'invoice-8402.pdf', live: false, type: 'PDF' },
 ]
+
+// View metadata for the multi-view tab strip (ARCH/12 v3.0 — VS Code-style).
+const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
+  folder: { label: 'Folder', icon: Folder },
+  shell: { label: 'Terminal', icon: Terminal },
+  browse: { label: 'Browser', icon: Globe },
+  code: { label: 'Code', icon: Code2 },
+  'office-xlsx': { label: 'Q3-Financials.xlsx', icon: Table },
+  'office-docx': { label: 'exec-summary.docx', icon: FileText },
+  'office-pptx': { label: 'quarterly-deck.pptx', icon: Presentation },
+  'office-pdf': { label: 'contract.pdf', icon: File },
+  progress: { label: 'Progress', icon: Activity },
+  diff: { label: 'Diff', icon: GitCompare },
+  audit: { label: 'Audit', icon: ShieldCheck },
+  storage: { label: 'Storage', icon: HardDrive },
+  timeline: { label: 'Timeline', icon: Activity },
+  trajectory: { label: 'Trajectory', icon: ScanSearch },
+}
 
 function ViewportContent({ view }: { view: ViewId }) {
   switch (view) {
@@ -212,7 +246,7 @@ export function ActivityRail() {
             <span className="ml-2 text-muted-foreground text-[10px] font-mono">⌘⇧O</span>
           </TooltipContent>
         </Tooltip>
-        <PopoverContent side="left" align="start" sideOffset={8} className="w-64 p-2">
+        <PopoverContent side="left" align="start" sideOffset={8} className="scale-in w-64 p-2">
           <div className="space-y-0.5">
             <div className="px-2 py-1 text-[10.5px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
               Open documents
@@ -317,6 +351,9 @@ export function RightViewport() {
   const railCollapsed = useAppStore((s) => s.railCollapsed)
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
+  const openViews = useAppStore((s) => s.openViews)
+  const addView = useAppStore((s) => s.addView)
+  const closeView = useAppStore((s) => s.closeView)
 
   // Resize state — percentage of total window width
   const [viewportPct, setViewportPct] = React.useState<number>(45)
@@ -379,6 +416,75 @@ export function RightViewport() {
           transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
           className="border-l border-border bg-card/40 overflow-hidden flex flex-col min-w-0 relative"
         >
+          {/* Multi-view tab strip (VS Code-style: default Terminal · Folder · Browser, "+" to add, × to close) */}
+          <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto scroll-thin border-b border-border bg-sidebar/60 px-1 pt-1 no-select">
+            {openViews.map((v) => {
+              const meta = VIEW_META[v]
+              const Icon = meta.icon
+              const isActive = v === activeView
+              return (
+                <div
+                  key={v}
+                  onClick={() => setActiveView(v)}
+                  className={cn(
+                    'group flex cursor-pointer items-center gap-1.5 rounded-t-md border border-b-0 px-2 py-1 text-[10.5px] transition-colors',
+                    isActive
+                      ? 'border-border bg-card text-foreground'
+                      : 'border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                  )}
+                >
+                  <Icon className={cn('h-3 w-3 shrink-0', isActive && 'text-orange-500')} />
+                  <span className="max-w-[130px] truncate">{meta.label}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeView(v)
+                    }}
+                    className="rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent"
+                    title="Close view"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )
+            })}
+
+            {/* "+" — add any view (VS Code panel add) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  title="Add view"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" sideOffset={4} className="w-56">
+                <DropdownMenuLabel className="text-[11px]">Add view</DropdownMenuLabel>
+                {Object.entries(VIEW_META)
+                  .filter(([id]) => !openViews.includes(id as ViewId))
+                  .map(([id, meta]) => {
+                    const Icon = meta.icon
+                    return (
+                      <DropdownMenuItem
+                        key={id}
+                        onClick={() => addView(id as ViewId)}
+                        className="text-xs"
+                      >
+                        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                        {meta.label}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                {Object.keys(VIEW_META).every((id) => openViews.includes(id as ViewId)) && (
+                  <DropdownMenuItem disabled className="text-[10px] text-muted-foreground">
+                    All views open
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
           {/* Resize handle */}
           <div
             onMouseDown={(e) => {
@@ -425,14 +531,15 @@ export function RightViewport() {
           </div>
 
           <div className="flex-1 min-h-0 overflow-hidden">
+            {/* Surface crossfade (design doc: no horizontal slides) — enter-surface */}
             <AnimatePresence initial={false} mode="wait">
               <motion.div
                 key={activeView}
-                initial={{ opacity: 0, x: 14 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -14 }}
-                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                className="h-full"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                className="enter-surface h-full"
               >
                 <ViewportContent view={activeView} />
               </motion.div>

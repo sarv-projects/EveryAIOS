@@ -156,7 +156,9 @@ export default function AgentModelPicker({ compact }: Props) {
           autoRoute && 'shadow-[0_0_6px_rgba(249,115,22,0.15)] glow-pulse',
         )}
       >
-        <AgentLogo agent={agent} size="sm" />
+        <span key={selectedAgentId} className="agent-switch-pulse inline-flex">
+          <AgentLogo agent={agent} size="sm" />
+        </span>
         <span className="flex items-baseline gap-1">
           <span className="text-foreground">{agent.name}</span>
           <span className="text-muted-foreground/40">·</span>
@@ -188,7 +190,7 @@ export default function AgentModelPicker({ compact }: Props) {
             className="fixed inset-0 z-20 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute bottom-full left-0 z-30 mb-1.5 w-[min(680px,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-popover shadow-2xl animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+          <div className="scale-in absolute bottom-full left-0 z-30 mb-1.5 w-[min(680px,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-popover shadow-2xl">
             <div className="flex items-center justify-between border-b border-border bg-zinc-900/60 px-3 py-1.5">
               <div className="flex items-center gap-1.5">
                 <Cpu className="h-3 w-3 text-orange-400" />

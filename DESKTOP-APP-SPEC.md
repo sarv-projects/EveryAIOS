@@ -442,7 +442,7 @@ flowchart TD
 
 ---
 
-## 4.1 UI/UX Layout (ARCH/12 v2.0 — work cockpit, doc 67 §6)
+## 4.1 UI/UX Layout (ARCH/12 v3.1 — work cockpit, doc 67 §6; multi-view tabbed panel §4.1b + full-fidelity tool surfaces §4.1c)
 
 > Derived from the 2026 work-cockpit pattern (Claude Views / Cursor activity bar / ChatGPT Work / Devin Desktop — doc 67 §6) + Devin Cloud UI analysis (doc 46) for viewers + EveryAIOS office engine requirements. **v2.0 replaces the 9-tab strip with a 48px activity rail — one surface at a time; never 9 peer tabs, never a Chat/Cowork/Code product split.**
 

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { OfficeOpenBar } from './office-open-bar'
+import { OfficeRibbon } from './office-ribbon'
 import {
   cellDisplay,
   colLetter,
@@ -325,6 +326,9 @@ export default function OfficeXlsxView() {
         </Badge>
       </header>
 
+      {/* Full-fidelity ribbon (ARCH/12 v3.1 — "nothing held back") */}
+      <OfficeRibbon app="Excel" />
+
       <OfficeOpenBar onOpen={open} livePath={payload?.path} />
 
       {error && (
@@ -630,7 +634,7 @@ export default function OfficeXlsxView() {
                           className={cn(
                             'min-w-[88px] cursor-cell border px-2 py-0.5 text-foreground transition-colors hover:bg-orange-500/5',
                             isSel && 'ring-1 ring-inset ring-orange-500',
-                            changed && 'bg-emerald-500/10 text-emerald-300',
+                            changed && 'cell-flash bg-emerald-500/10 text-emerald-300',
                           )}
                         >
                           {recalcVal ?? cellDisplay(row[ci])}

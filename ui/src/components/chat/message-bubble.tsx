@@ -216,9 +216,11 @@ function MessageActions({ message }: { message: ChatMessage }) {
 
 interface Props {
   message: ChatMessage
+  /** When true, append a blinking orange caret to the streamed text */
+  streaming?: boolean
 }
 
-export default function MessageBubble({ message }: Props) {
+export default function MessageBubble({ message, streaming }: Props) {
   if (message.role === 'system') {
     return (
       <div className="fade-up my-2 flex justify-center">
@@ -259,6 +261,9 @@ export default function MessageBubble({ message }: Props) {
         <div className="max-w-full rounded-2xl rounded-tl-sm border border-border bg-card/60 px-3 py-2">
           <div className="prose prose-invert max-w-none">
             <ReactMarkdown components={mdComponents}>{message.content}</ReactMarkdown>
+            {streaming && (
+              <span className="caret-blink ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-sm bg-orange-400" />
+            )}
           </div>
 
           {message.reasoning && message.reasoning.length > 0 && (

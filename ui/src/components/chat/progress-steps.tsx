@@ -13,6 +13,7 @@ import {
   Pencil,
   Terminal,
   Wrench,
+  X,
 } from 'lucide-react'
 import type { ProgressStep } from '@/lib/store'
 import { AGENT_MAP } from '@/lib/agents'
@@ -70,6 +71,12 @@ function StatusDot({ status }: { status: ProgressStep['status'] }) {
         <Loader2 className="h-3 w-3 animate-spin" />
       </span>
     )
+  if (status === 'failed')
+    return (
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/15 text-rose-400">
+        <X className="h-3 w-3" />
+      </span>
+    )
   return (
     <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground">
       <Circle className="h-2 w-2" />
@@ -88,7 +95,7 @@ export default function ProgressSteps({ steps }: Props) {
         {steps.map((step, i) => {
           const isLast = i === steps.length - 1
           return (
-            <li key={step.id} className="relative flex gap-2.5">
+            <li key={step.id} className="enter-step relative flex gap-2.5" style={{ animationDelay: `${Math.min(i * 60, 360)}ms` }}>
               {/* connector */}
               {!isLast && (
                 <span
@@ -111,7 +118,8 @@ export default function ProgressSteps({ steps }: Props) {
                 className={cn(
                   'group flex-1 rounded-md px-2 py-1 text-left transition-colors',
                   'hover:bg-accent/60',
-                  step.status === 'active' && 'bg-orange-500/5'
+                  step.status === 'active' && 'bg-orange-500/5',
+                  step.status === 'failed' && 'step-shake bg-rose-500/5'
                 )}
               >
                 <div className="flex items-center gap-1.5">
@@ -128,6 +136,7 @@ export default function ProgressSteps({ steps }: Props) {
                       'font-mono text-[11px] leading-tight',
                       step.status === 'done' && 'text-muted-foreground line-through decoration-muted-foreground/30',
                       step.status === 'active' && 'text-foreground',
+                      step.status === 'failed' && 'text-rose-300',
                       step.status === 'pending' && 'text-muted-foreground/80'
                     )}
                   >

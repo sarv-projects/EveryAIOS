@@ -286,7 +286,7 @@ export function CommandPalette() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="p-0 gap-0 max-w-[640px] top-[15%] translate-y-0 overflow-hidden">
+      <DialogContent className="scale-in-palette p-0 gap-0 max-w-[640px] top-[15%] translate-y-0 overflow-hidden">
         <DialogHeader className="sr-only">
           <DialogTitle>Command palette</DialogTitle>
         </DialogHeader>

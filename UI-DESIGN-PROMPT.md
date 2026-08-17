@@ -106,6 +106,8 @@ Design a **premium AI workspace desktop application** — a unified control plan
 - Rail order: 📁 Folder · `>_` Shell · 🌐 Browse · `</>` Code · ─separator─ · **W** Office (ONE button → flyout) · ─separator─ · ▢ Progress · `+` Add view
 - Viewport: `#F7F7F4` background, 40px header (view name + "● Live" badge + ⤢ fullscreen)
 - Resize: 4px invisible grip, cursor `col-resize`
+- **Multi-view tabbed panel (v3.0 — VS Code logic, ARCH/12 §4.1b):** the viewport is a tab strip + one active tab. **Default open tabs: Terminal · Folder · Browser.** `+` adds any view (Code, Office, Progress, Diff, Audit, Storage, Memory, Research); tabs close ×, reorder, persist per session. **Browser = one tab with internal page tabs** (many pages, one surface). **Office files open as their own tabs** (`Q3.xlsx`, `exec-summary.docx`, `contract.pdf`, `deck.pptx`) via agent or artifact click. **PDF study mode:** scope the chat to a doc (`📄 Scoped to contract.pdf` chip, ✕ clears) for side-by-side explain-this-document. **"Open perfectly" = LibreOffice/LOKit** (tiled, agentic + reading) over IronCalc/calamine/lopdf; **Google Docs/Sheets** via authenticated browser view (reading) or Drive/Sheets API → OOXML → office engine (agentic).
+- **Full-fidelity tool surfaces (v3.1 — "nothing held back", ARCH/12 §4.1c):** the right panel is the **live window into the real tool**. **Word/Excel/PowerPoint show the complete Microsoft ribbon** (File·Home·Insert·…·View + **Copilot** on Home) with every group/button — no stripped preview. **PDF shows a full viewer** (page nav, zoom, search, annotations, forms, sign, redact, thumbnails/outline). **Browser shows full Chrome-style chrome** — tabs, omnibox, back/forward/reload, bookmarks bar, extension icons + puzzle-piece menu, profile avatar, and the **built-in AI Mode / Gemini sidebar** (Chrome 141+ parity). Agent drives the same surface the user sees; takeover (H21) makes controls live. Fidelity rule: a control exists iff the real product has it.
 
 ### Status Bar (28px, bottom)
 - Background: `#F0EFEB`
@@ -115,7 +117,18 @@ Design a **premium AI workspace desktop application** — a unified control plan
 
 ### Progressive Disclosure — Casual ⇄ Power (B9 / P31)
 
-> **Status: implemented in `ui/src`** (P31.1 done). Store: `powerMode` (localStorage-persisted `everyaios.settings.ui.powerMode`) + `togglePowerMode`. `LeftSidebar` branches `CasualRail` (56px: agent switcher · +New chat · Recents · Settings · power-toggle chevron) vs `PowerSidebar` (full 248px nav). `App.tsx` renders `ActivityRail`/`RightViewport` only in power mode; title bar hides spend/token chips and the status bar hides center stats in casual mode; `⌘.` toggles.
+> **User-research basis: doc 84** (casual-vs-power-user UX, 2026-08-17) — Wharton Blueprint frictions (competence/trust/delegation; control = 26% of adoption weight, privacy = 31%, naming → +20% adoption), Nielsen 2026 ("the winning interface asks the fewest unnecessary questions"; UX = the moat), NN/g progressive disclosure, and power-user needs (transparency, fine-grained control, keyboard-first, cost, model freedom). Casual = trust + plain control + outcomes; power = transparency + control + speed. One `⌘.` toggle crosses the line; same engine, different surface. Remaining gaps → TODO P32.
+>
+> **Status: implemented in `ui/src`** (P31.1 done). Store: `powerMode` (localStorage-persisted `everyaios.settings.ui.powerMode`) + `togglePowerMode` + `devMode` (Developer Mode telemetry). `LeftSidebar` branches `CasualRail` (56px: agent switcher · +New chat · Recents · Settings · power-toggle chevron) vs `PowerSidebar` (full 248px nav). `App.tsx` renders `ActivityRail`/`RightViewport` only in power mode; `⌘.` toggles.
+>
+> **Casual-mode simplification (anti-cognitive-overload):**
+> - **Status bar** → hidden debug telemetry; replaced by a single discreet `● Ready · Local` / `● Processing…` pill + `🛡️ 100% Private (On-Device)` + version. Full 12-badge telemetry returns via **Settings → General → Developer Mode** (`devMode`).
+> - **Title bar** → `Guard · L2` becomes `🛡️ Safe & Private`; spend + token chips hidden.
+> - **Composer** → mode pills, agent/model picker, `$ / tok / ctx` chips and the `/ ! @` helper row all hidden; placeholder becomes `Ask anything, drop files, or type /…` (intent is auto-detected instead of mode-picked).
+> - **Empty-state prompts** → consumer outcomes (`Clean & balance this Excel sheet`, `Compare these two PDF contracts`, `Draft an email from my notes`, `Tidy up my download folder`) instead of developer jargon.
+> - **Settings → General** → `Simple ⇄ Pro` mode switch + `Developer Mode` toggle.
+> - **Streaming caret** → thin orange blinking caret (500ms/500ms, `caret-blink`) appended to the live-streamed message (`MessageBubble streaming` prop).
+> - **Centered composer on empty chat → bottom-pin once chat starts** → a new/empty session shows the composer lifted to the vertical center (empty-state prompts above, clean card container); the moment the first message lands it drops to the bottom-pinned position under the messages (ChatGPT/Claude pattern — `ChatPanel` `isEmpty` branch → `ChatComposer centered`).
 
 - **Casual = the default.** One workspace, four verbs. The first screen shows only what a new user needs; every advanced surface is one toggle away, never in the way.
 - **Casual left sidebar (56px collapsed by default):** agent switcher (compact emoji-avatar + name, click → dropdown) · `+ New chat` (icon) · recent sessions (collapsed into a single "Recents" chip) · ⚙ Settings at bottom. **Hidden in casual:** Automations · Guard · Connectors · Memory · Analytics nav items, the 48px activity rail, provider/model picker (shows "Auto"), spend/status-bar detail.
@@ -519,6 +532,8 @@ Design a **premium AI workspace desktop application** — a unified control plan
 | Live badge pulse | Opacity 50→100%, 1s cycle |
 | Trust ladder drag | Track fills smoothly, zone labels brighten as entered, score rolls |
 | Sparkline (automations) | Draws left→right on card mount, 300ms |
+
+> **Status: fully wired in `ui/src` (2026-08-17).** Every row in this table now has a live implementation — the design-doc animation utilities in `globals.css` are all consumed by components: `enter-approval` (Guard-2 card), `enter-step` (progress steps, staggered) + `step-shake` (new `failed` step state), `enter-surface` (viewport crossfade — horizontal slide removed per the no-slide rule), `cell-flash` (Excel recalc diff), `chart-crossfade` (Analytics recharts), `scale-in-palette` (⌘K), `scale-in` (agent picker + office flyout), `treemap-morph` (Storage), `toast-enter` (radix toast keeps its own in/out — no competing animation), `spark-draw` (Automations sparkline, staggered), `score-roll` (Guard trust ladder), `agent-switch-pulse` (agent avatar on switch), `shimmer` (Skeleton), `breathe` (Now-doing processing), plus the pre-existing `live-dot`/`typing-dot`/`caret-blink`/`glow-pulse`/`hover-lift`/`border-glow`/`fade-up`. Reduced-motion (`prefers-reduced-motion`) still collapses all of it.
 
 ---
 

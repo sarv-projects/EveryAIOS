@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Archive,
+  BarChart3,
   Bell,
   Bookmark,
   ChevronRight,
@@ -10,6 +11,8 @@ import {
   Copy,
   Download,
   FileSearch,
+  FileText,
+  Folder,
   GitBranch,
   MoreHorizontal,
   Pause,
@@ -51,6 +54,14 @@ const EXAMPLE_PROMPTS: { label: string; icon: LucideIcon }[] = [
   { label: 'Find similar bugs', icon: GitBranch },
   { label: 'Open the deck', icon: Sparkles },
   { label: 'Draft a release note', icon: Pencil },
+]
+
+// Casual mode — consumer outcomes instead of developer jargon (P31.1 / doc-83)
+const CASUAL_PROMPTS: { label: string; icon: LucideIcon }[] = [
+  { label: 'Clean & balance this Excel sheet', icon: BarChart3 },
+  { label: 'Compare these two PDF contracts', icon: FileText },
+  { label: 'Draft an email from my notes', icon: Pencil },
+  { label: 'Tidy up my download folder', icon: Folder },
 ]
 
 const STATUS_META: Record<
@@ -120,7 +131,10 @@ export default function ChatPanel() {
   const store = useAppStore()
   const activeSession = store.sessions.find((s) => s.id === store.activeSessionId)
   const messages = activeSession?.messages ?? []
+  const isEmpty = messages.length === 0
   const { agentPaused, toggleAgentPause, notify, setComposerValue, selectedAgentId, selectedModelId } = store
+  const scopedView = useAppStore((s) => s.scopedView)
+  const setScopedView = useAppStore((s) => s.setScopedView)
   const nowDoing = activeSession ? deriveNowDoing(activeSession) : null
   const showStrip =
     !!nowDoing &&
@@ -196,6 +210,22 @@ export default function ChatPanel() {
           )}
         </div>
         {activeSession && <StatusBadge status={activeSession.status} />}
+        {/* Study-mode scope chip — chat answers are scoped to this document */}
+        {scopedView && (
+          <div className="flex items-center gap-1 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 font-mono text-[10px] text-orange-300">
+            <FileText className="h-3 w-3" />
+            <span className="max-w-[140px] truncate">
+              Scoped to {scopedView === 'office-pdf' ? 'contract.pdf' : scopedView.replace('office-', '')}
+            </span>
+            <button
+              onClick={() => setScopedView(undefined)}
+              className="rounded p-0.5 hover:bg-orange-500/20"
+              title="Clear scope"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-0.5">
           <Button
             size="icon"
@@ -300,89 +330,119 @@ export default function ChatPanel() {
         />
       )}
 
-      {/* Auto-scroll: stick to the bottom while a turn streams (or on session
-          switch); release the moment the user scrolls up. */}
-      <div className="relative min-h-0 flex-1">
-        <ScrollArea
-          className="h-full scroll-thin"
-          viewportRef={viewportRef}
-          onScroll={handleViewportScroll}
-        >
-          <div className="mx-auto flex max-w-3xl flex-col gap-3 px-3 py-4">
-            {messages.length === 0
-              ? <EmptyState onPick={(p) => setComposerValue(p)} />
-              : filteredMessages.length === 0 && query.trim()
-                ? (
-                  <div className="flex flex-col items-center gap-2 py-12 text-center">
-                    <Search className="h-6 w-6 text-muted-foreground/40" />
-                    <p className="text-[11px] text-muted-foreground">
-                      No messages match &ldquo;{query}&rdquo;
-                    </p>
-                  </div>
-                )
-                : filteredMessages.map((m) => (
-                  <motion.div
-                    key={m.id}
-                    initial={{ opacity: 0, y: 10, scale: 0.995 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    <MessageBubble message={m} />
-                  </motion.div>
-                ))}
-            {streaming && (
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-                className="flex items-center gap-2 pl-1"
-              >
-                <span className="flex items-center gap-1 rounded-full border border-orange-500/25 bg-orange-500/5 px-2.5 py-1.5">
-                  <span className="typing-dot bg-orange-400" />
-                  <span className="typing-dot bg-orange-400 [animation-delay:0.15s]" />
-                  <span className="typing-dot bg-orange-400 [animation-delay:0.3s]" />
-                </span>
-                <span className="font-mono text-[9px] text-muted-foreground/70">
-                  agent thinking…
-                </span>
-              </motion.div>
-            )}
-            <div className="h-2" />
+      {/* Empty chat → centered composer (lifted, clean). Once a conversation
+          starts, the composer moves to the south (bottom-pinned) with the chat. */}
+      {isEmpty ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1" />
+          <EmptyState onPick={(p) => setComposerValue(p)} />
+          <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-2">
+            <ChatComposer
+              centered
+              budget={
+                store.liveBudget
+                  ? {
+                      spent: store.liveBudget.spent,
+                      cap: store.liveBudget.cap,
+                      tokens: store.liveBudget.tokens,
+                    }
+                  : undefined
+              }
+            />
           </div>
-        </ScrollArea>
-      </div>
+          <div className="flex-1" />
+        </div>
+      ) : (
+        <>
+          {/* Auto-scroll: stick to the bottom while a turn streams (or on session
+              switch); release the moment the user scrolls up. */}
+          <div className="relative min-h-0 flex-1">
+            <ScrollArea
+              className="h-full scroll-thin"
+              viewportRef={viewportRef}
+              onScroll={handleViewportScroll}
+            >
+              <div className="mx-auto flex max-w-3xl flex-col gap-3 px-3 py-4">
+                {filteredMessages.length === 0 && query.trim()
+                  ? (
+                    <div className="flex flex-col items-center gap-2 py-12 text-center">
+                      <Search className="h-6 w-6 text-muted-foreground/40" />
+                      <p className="text-[11px] text-muted-foreground">
+                        No messages match &ldquo;{query}&rdquo;
+                      </p>
+                    </div>
+                  )
+                  : filteredMessages.map((m) => (
+                    <motion.div
+                      key={m.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.995 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      <MessageBubble message={m} streaming={m.id === lastMsg?.id && streaming} />
+                    </motion.div>
+                  ))}
+                {streaming && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center gap-2 pl-1"
+                  >
+                    <span className="flex items-center gap-1 rounded-full border border-orange-500/25 bg-orange-500/5 px-2.5 py-1.5">
+                      <span className="typing-dot bg-orange-400" />
+                      <span className="typing-dot bg-orange-400 [animation-delay:0.15s]" />
+                      <span className="typing-dot bg-orange-400 [animation-delay:0.3s]" />
+                    </span>
+                    <span className="font-mono text-[9px] text-muted-foreground/70">
+                      agent thinking…
+                    </span>
+                  </motion.div>
+                )}
+                <div className="h-2" />
+              </div>
+            </ScrollArea>
+          </div>
 
-      <div className="shrink-0">
-        <ChatComposer
-          budget={
-            store.liveBudget
-              ? {
-                  spent: store.liveBudget.spent,
-                  cap: store.liveBudget.cap,
-                  tokens: store.liveBudget.tokens,
-                }
-              : undefined
-          }
-        />
-      </div>
+          <div className="shrink-0">
+            <ChatComposer
+              budget={
+                store.liveBudget
+                  ? {
+                      spent: store.liveBudget.spent,
+                      cap: store.liveBudget.cap,
+                      tokens: store.liveBudget.tokens,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }
 
 function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
+  const powerMode = useAppStore((s) => s.powerMode)
+  const prompts = powerMode ? EXAMPLE_PROMPTS : CASUAL_PROMPTS
   return (
     <div className="fade-up flex flex-col items-center gap-4 px-4 py-12 text-center bg-radial-fade">
       <div className="flex h-12 w-12 items-center justify-center rounded-full border border-orange-500/30 bg-orange-500/10 glow-pulse">
         <Sparkles className="h-6 w-6 text-orange-400" />
       </div>
       <div className="space-y-1">
-        <h3 className="text-sm font-semibold text-foreground">What should we do next?</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          {powerMode ? 'What should we do next?' : 'What would you like to do?'}
+        </h3>
         <p className="max-w-sm text-[11px] text-muted-foreground">
-          Ask the agent to refresh documents, run scrapers, refactor code, or run an automation. Try one of these to get going.
+          {powerMode
+            ? 'Ask the agent to refresh documents, run scrapers, refactor code, or run an automation. Try one of these to get going.'
+            : 'Drop a file, ask a question, or try one of these.'}
         </p>
       </div>
       <div className="flex flex-wrap justify-center gap-1.5">
-        {EXAMPLE_PROMPTS.map((p) => {
+        {prompts.map((p) => {
           const Icon = p.icon
           return (
             <button

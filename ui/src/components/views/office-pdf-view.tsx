@@ -1,10 +1,12 @@
 'use client'
 
 import { lazy, Suspense, useState } from 'react'
-import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, MessageSquare } from 'lucide-react'
+import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, MessageSquare, ScanSearch } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/lib/store'
 import { OfficeOpenBar } from './office-open-bar'
 import { pdfOpen, pdfBytes, type PdfPayload } from '@/lib/office'
 
@@ -23,6 +25,9 @@ export default function OfficePdfView() {
   const [payload, setPayload] = useState<PdfPayload | null>(null)
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const scopedView = useAppStore((s) => s.scopedView)
+  const setScopedView = useAppStore((s) => s.setScopedView)
+  const scoped = scopedView === 'office-pdf'
 
   const open = async (path: string) => {
     try {
@@ -66,6 +71,20 @@ export default function OfficePdfView() {
         <Badge variant="secondary" className="text-[10px]">
           lopdf
         </Badge>
+        {/* Study mode — scope the chat to this PDF (side-by-side explain) */}
+        <Button
+          size="sm"
+          variant={scoped ? 'default' : 'outline'}
+          onClick={() => setScopedView(scoped ? undefined : 'office-pdf')}
+          className={cn(
+            'h-6 gap-1 px-2 text-[10px]',
+            scoped && 'bg-orange-500 text-white hover:bg-orange-600'
+          )}
+          title="Ask the chat about this PDF — answers are scoped to the document"
+        >
+          <ScanSearch className="h-3 w-3" />
+          {scoped ? 'Scoped — chat explains this PDF' : 'Scope chat to this PDF'}
+        </Button>
       </header>
 
       <OfficeOpenBar onOpen={open} livePath={payload?.path} />

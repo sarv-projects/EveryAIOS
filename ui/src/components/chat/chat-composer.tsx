@@ -112,14 +112,17 @@ function IconBtn({ icon: Icon, label, onClick, hidden }: { icon: LucideIcon; lab
 
 interface Props {
   budget?: { spent: number; cap: number; tokens: number }
+  /** Center-lift the composer on the empty/new-chat state; bottom-pin once chat starts */
+  centered?: boolean
 }
 
-export default function ChatComposer({ budget }: Props) {
+export default function ChatComposer({ budget, centered }: Props) {
   const composerValue = useAppStore((s) => s.composerValue)
   const setComposerValue = useAppStore((s) => s.setComposerValue)
   const composerMode = useAppStore((s) => s.composerMode)
   const setComposerMode = useAppStore((s) => s.setComposerMode)
   const notify = useAppStore((s) => s.notify)
+  const powerMode = useAppStore((s) => s.powerMode)
   const activeSession = useAppStore((s) =>
     s.sessions.find((x) => x.id === s.activeSessionId)
   )
@@ -177,65 +180,74 @@ export default function ChatComposer({ budget }: Props) {
   }
 
   return (
-    <div className="relative border-t border-border bg-card/40 px-2 py-2">
+    <div
+      className={cn(
+        'relative',
+        centered
+          ? 'rounded-xl border border-border bg-card/60 px-3 py-2.5 shadow-lg'
+          : 'border-t border-border bg-card/40 px-2 py-2'
+      )}
+    >
       {hintList && hintList.items.length > 0 && (
         <HintPopover title={hintList.title}>
           {hintList.items.map((c) => <HintRow key={c.cmd} item={c} />)}
         </HintPopover>
       )}
 
-      {/* mode + agent + budget row */}
-      <div className="mb-1.5 flex items-center gap-1.5">
-        <ToggleGroup
-          type="single"
-          value={composerMode}
-          onValueChange={(v) => v && setComposerMode(v as ChatMode)}
-          variant="outline"
-          size="sm"
-          className="h-6 shrink-0 overflow-hidden rounded-md border-border bg-background/40"
-        >
-          {MODES.map((m) => (
-            <Tooltip key={m.id}>
-              <TooltipTrigger asChild>
-                <ToggleGroupItem
-                  value={m.id}
-                  className="h-6 gap-1 px-1.5 text-[10px] data-[state=on]:border-orange-500/60 data-[state=on]:bg-orange-500/10 data-[state=on]:text-orange-300"
-                >
-                  <m.icon className="h-3 w-3" />
-                  <span className="hidden sm:inline">{m.label}</span>
-                </ToggleGroupItem>
-              </TooltipTrigger>
-              <TooltipContent side="top">{m.hint}</TooltipContent>
-            </Tooltip>
-          ))}
-        </ToggleGroup>
-
-        <AgentModelPicker />
-
-        <div className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5">
-            <CircleDollarSign className="h-3 w-3 text-emerald-400" />
-            <span className="text-foreground">${spent.toFixed(2)}</span>
-            <span className="hidden text-muted-foreground/60 md:inline">/ ${cap.toFixed(2)} cap</span>
-          </span>
-          <span className="hidden items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 lg:flex">
-            <Zap className="h-3 w-3 text-orange-400" />
-            <span className="text-foreground">{(tokens / 1000).toFixed(0)}K</span>
-            <span className="text-muted-foreground/60">tok</span>
-          </span>
-          <span
-            className={cn(
-              'hidden items-center gap-1 rounded-md border px-1.5 py-0.5 transition-colors md:flex',
-              ctxTone,
-            )}
-            title={`Context used: ${tokens.toLocaleString()} / ${ctxWindow.toLocaleString()} tok (${ctxPct}%)`}
+      {/* mode + agent + budget row (casual hides it — auto-detect instead) */}
+      {powerMode && (
+        <div className="mb-1.5 flex items-center gap-1.5">
+          <ToggleGroup
+            type="single"
+            value={composerMode}
+            onValueChange={(v) => v && setComposerMode(v as ChatMode)}
+            variant="outline"
+            size="sm"
+            className="h-6 shrink-0 overflow-hidden rounded-md border-border bg-background/40"
           >
-            <Gauge className="h-3 w-3" />
-            <span>{ctxPct}%</span>
-            <span className="text-muted-foreground/60">ctx</span>
-          </span>
+            {MODES.map((m) => (
+              <Tooltip key={m.id}>
+                <TooltipTrigger asChild>
+                  <ToggleGroupItem
+                    value={m.id}
+                    className="h-6 gap-1 px-1.5 text-[10px] data-[state=on]:border-orange-500/60 data-[state=on]:bg-orange-500/10 data-[state=on]:text-orange-300"
+                  >
+                    <m.icon className="h-3 w-3" />
+                    <span className="hidden sm:inline">{m.label}</span>
+                  </ToggleGroupItem>
+                </TooltipTrigger>
+                <TooltipContent side="top">{m.hint}</TooltipContent>
+              </Tooltip>
+            ))}
+          </ToggleGroup>
+
+          <AgentModelPicker />
+
+          <div className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5">
+              <CircleDollarSign className="h-3 w-3 text-emerald-400" />
+              <span className="text-foreground">${spent.toFixed(2)}</span>
+              <span className="hidden text-muted-foreground/60 md:inline">/ ${cap.toFixed(2)} cap</span>
+            </span>
+            <span className="hidden items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 lg:flex">
+              <Zap className="h-3 w-3 text-orange-400" />
+              <span className="text-foreground">{(tokens / 1000).toFixed(0)}K</span>
+              <span className="text-muted-foreground/60">tok</span>
+            </span>
+            <span
+              className={cn(
+                'hidden items-center gap-1 rounded-md border px-1.5 py-0.5 transition-colors md:flex',
+                ctxTone,
+              )}
+              title={`Context used: ${tokens.toLocaleString()} / ${ctxWindow.toLocaleString()} tok (${ctxPct}%)`}
+            >
+              <Gauge className="h-3 w-3" />
+              <span>{ctxPct}%</span>
+              <span className="text-muted-foreground/60">ctx</span>
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* input row */}
       <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background/40 px-1.5 py-1 focus-within:border-orange-500/40 focus-within:ring-1 focus-within:ring-orange-500/30">
@@ -249,7 +261,7 @@ export default function ChatComposer({ budget }: Props) {
               send()
             }
           }}
-          placeholder="Message the agent — use / for commands, ! for macros, @ to mention"
+          placeholder={powerMode ? 'Message the agent — use / for commands, ! for macros, @ to mention' : 'Ask anything, drop files, or type /…'}
           className="max-h-36 min-h-[28px] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-[12px] leading-relaxed shadow-none focus-visible:ring-0"
           rows={1}
         />
@@ -268,13 +280,15 @@ export default function ChatComposer({ budget }: Props) {
         </div>
       </div>
 
-      <div className="mt-1 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
-        <Hash className="h-2.5 w-2.5" />
-        <span>Enter to send · Shift+Enter newline · Esc clear</span>
-        <span className="ml-auto flex items-center gap-1"><AtSign className="h-2.5 w-2.5" /> mention</span>
-        <span className="ml-1 flex items-center gap-1"><ScrollText className="h-2.5 w-2.5" /> slash</span>
-        <span className="ml-1 flex items-center gap-1"><RotateCcw className="h-2.5 w-2.5" /> !macro</span>
-      </div>
+      {powerMode && (
+        <div className="mt-1 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
+          <Hash className="h-2.5 w-2.5" />
+          <span>Enter to send · Shift+Enter newline · Esc clear</span>
+          <span className="ml-auto flex items-center gap-1"><AtSign className="h-2.5 w-2.5" /> mention</span>
+          <span className="ml-1 flex items-center gap-1"><ScrollText className="h-2.5 w-2.5" /> slash</span>
+          <span className="ml-1 flex items-center gap-1"><RotateCcw className="h-2.5 w-2.5" /> !macro</span>
+        </div>
+      )}
     </div>
   )
 }
