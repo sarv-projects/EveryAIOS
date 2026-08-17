@@ -1335,6 +1335,20 @@
 - [ ] `[NOT DONE]` **K6 Trusted skill/automation supply chain (doc 81 §4):** signed manifests + capability/fixture tests + version pinning + quarantine + revoke (Gate E) **before marketplace scale** (pre-req for P22/P23/P26)
 - [ ] `[NOT DONE]` **Decline-list guard (doc 80/81/82):** no gen-media front-ends, no connector-count marketing, no silent autonomy, no replacement browser/IDE, no recursive swarms; marketing claims ("teach once", "broadest control plane") gated on Gates A/B/D
 
+## P29 — Native Sidecar Migration, Tiered (external review 2026-08-17; spec §9.1 R6, ARCH/01 §1.3)
+> **Gated (data-driven, not reflexive):** this is the post-v1 footprint/security play — revisit the spec §8 non-goal ("Rust rewrite of the TS engine now") **only after Stage 0 is live AND P8 publishes real combined RSS** (if measured warm RSS ≈ 150–250MB is acceptable, defer indefinitely). The ~48K-line TS engine (coordinator 3K + `@personal-ai/core-*` ~45K) becomes a native Rust sidecar in three tiers; target ~93MB → ~15MB. **Correction to the review:** its Tier-1 rationale "keys never reach the sidecar" is **already enforced** — the credential broker is already Rust (`everyaios-vault` broker, spec §P3/doc 53 §2; `sealed_channel_never_leaks_secret` test) and guard enforcement is already `everyaios-guard` (guard.ts is only the coordinator's IPC client). The real Tier-1 value = **eliminate IPC hops + drop the V8 execution surface + memory**, not key secrecy.
+- [ ] `[NOT DONE]` **Tier 1a — collapse IPC:** `frame.ts`/`message.ts`/`index.ts` (99+76+364) → native Tokio actor loop (`tokio::sync::mpsc` in-process channels); stdio JSON-RPC framing disappears; `tokio-util::codec::LengthDelimitedCodec` only if any IPC remains
+- [ ] `[NOT DONE]` **Tier 1b — guard.ts (108) → native:** enforce tickets directly inside `everyaios-guard` (ticket consumption with zero IPC hop); the security bridge never lives in a JS/V8 memory surface that can be monkey-patched
+- [ ] `[NOT DONE]` **Tier 1c — core-providers (15/3.3K) → Rust owns streaming:** broker already holds keys + does the HTTP call (done); extend so Rust owns the SSE stream + failover loop end-to-end (`reqwest`/`eventsource-client`) — sidecar becomes a thin prompt/render client only; **heap.ts/orphan.ts (104+47) eliminated** via OS primitives (`prctl(PR_SET_PDEATHSIG)` Linux / Job Objects Win / NSProcessInfo macOS)
+- [ ] `[NOT DONE]` **Tier 2a — core-memory (24/4.7K) → pure-Rust math:** ACT-R decay, spreading activation, FSRS scheduler, fusion as pure Rust fns over SQLite/LadybugDB (algorithms already verified; re-implement over the landed `everyaios-memory` crates)
+- [ ] `[NOT DONE]` **Tier 2b — core-search (45/3.9K) → Rust:** tantivy local index + reqwest parallel fetch cascade + BM25 rerank (G8/G1 already Rust-adjacent; consolidate)
+- [ ] `[NOT DONE]` **Tier 2c — core-files (88/14.5K) → consolidate:** dedup against the already-landed `everyaios-office` (calamine/IronCalc/lopdf) + `everyaios-storage`; keep only text-extraction/chunking/diffing glue in Rust (docx-rs, tree-sitter); largest LOC win
+- [ ] `[NOT DONE]` **Tier 2d — core-automations/core-engine (42/6.8K + 16/2K) → Rust:** state machines, blueprint DAG execution, circuit breakers, deterministic async cancellation (mirrors landed `everyaios-blueprint`)
+- [ ] `[NOT DONE]` **Tier 3a — prompt.ts/router.ts/catalog.ts (190+182+157) → config/templates:** Minijinja/Tera templates + Serde TOML structs (fast-iterating glue; or keep TS)
+- [ ] `[NOT DONE]` **Tier 3b — core-ai (40/4.7K) + core-agents (4/300): keep TS/QuickJS** for prompt tuning, blueprint loops, experimental subagent personas
+- [ ] `[NOT DONE]` **Tier 3c — core-connectors (38/7.1K): keep TS/QuickJS in the rquickjs sandbox** (fast-changing third-party schemas — Google/Slack/Composio); consistent with the MCP-servers + native connector decision
+- [ ] `[NOT DONE]` **Exit criterion:** full test parity (all 1052+ workspace tests + coordinator 66 + UI tsc re-run against the native sidecar), combined warm RSS target (e.g. <120MB), zero plain-text key in non-Rust memory (already asserted), no capability regression
+
 ## SUMMARY
 
 > Counts are live checkbox totals from this file, recomputed 2026-08-17 (every `- [x]`/`- [ ]` bullet, incl. sub-bullets). `Done`/`Open` split per section is the current build state.
@@ -1371,7 +1385,8 @@
 | P26 Batch-9 Marketplace/GWS/Jobs Queue (doc 78) | 3 | 0 | 3 | ~1 (parallel) |
 | P27 Local Model Fetch/Download Core Queue (doc 79) | 4 | 0 | 4 | ~1 (parallel) |
 | P28 Post-v1 Strategic Pillar (docs 80–82; gated on the Stage-0 executor) | 13 | 0 | 13 | post-Stage-0 |
+| P29 Native Sidecar Migration, Tiered (external review 2026-08-17; gated on Stage-0 + P8 RSS) | 11 | 0 | 11 | post-Stage-0 |
 | Research Tasks (cross-cutting) | 54 | 2 | 52 | parallel |
-| **TOTAL** | **897** | **438** | **459** | **~45 weeks** |
+| **TOTAL** | **908** | **438** | **470** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

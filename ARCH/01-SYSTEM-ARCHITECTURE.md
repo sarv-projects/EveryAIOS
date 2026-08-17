@@ -37,6 +37,8 @@ flowchart TD
 
 **Startup order:** everyaios-core boots (config, vault, SQLite) → UI window → sidecar pre-spawned at Tauri boot (hidden, ~200ms perceived cold start per J16) → browser on first browser tool. **Idle RSS:** measure & publish the real numbers — <30MB idle / <80MB warm are targets to verify, not promises (the Bun-compiled sidecar alone is ~93MB, J16); browser adds only when used. No service is loaded at boot unless needed (spec §6.5).
 
+**Footprint roadmap (spec §9.1 R6, TODO P29):** the Tauri native webview is the OS's shared engine — keep it (Electron is the hog, a non-goal); the two real levers are (1) **lazy-load** heavy subsystems (IronCalc, LSP, graph store) until first use and (2) a **post-v1 native Rust sidecar** replacing the Bun process (~93MB → ~15MB) — explicitly deferred per spec §8 "Rust rewrite of the TS engine now", queued as a **three-tier migration (TODO P29, external review 2026-08-17)**: Tier 1 = collapse IPC + native guard + Rust-owned provider streaming; Tier 2 = core-memory/search/files/automations/engine as pure-Rust over the landed `everyaios-*` crates; Tier 3 = prompt/router/catalog → templates + core-ai/agents/connectors stay in the rquickjs sandbox. Gated on Stage 0 + P8 measured RSS; the "keys never touch TS" half is already enforced by the Rust credential broker. Process lifecycle (warm pool, 5min-idle kill, battery-aware) is already J16. The agent browser already prefers the user's own Chrome/Edge via CDP for interactive work (Session Inheritance, no re-login) and the lightweight tier for scrape/RAG.
+
 ## 1.4 IPC contracts
 
 1. **Tauri ⇄ everyaios-core**: Tauri commands + events (typed Rust structs; streaming via channels). Covers UI actions, permission-card responses, live token/cost streams.
