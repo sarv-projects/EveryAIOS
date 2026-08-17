@@ -65,6 +65,7 @@ export function TitleBar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
+  const powerMode = useAppStore((s) => s.powerMode)
   const { theme, toggle } = useTheme()
 
   return (
@@ -86,7 +87,7 @@ export function TitleBar() {
           EveryAIOS
         </span>
         <Badge variant="secondary" className="h-4 text-[10px] px-1 py-0 font-mono">
-          v3.21
+          v3.22
         </Badge>
       </div>
 
@@ -146,16 +147,20 @@ export function TitleBar() {
           <TooltipContent side="bottom">Trust Level: 75/100 · Write tier</TooltipContent>
         </Tooltip>
 
-        <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-orange-500/30 bg-orange-500/10 text-[10.5px] font-mono">
-          <span className="text-orange-300">$1.84</span>
-          <span className="text-muted-foreground/60">/</span>
-          <span className="text-muted-foreground">$5.00</span>
-        </div>
+        {powerMode && (
+          <>
+            <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-orange-500/30 bg-orange-500/10 text-[10.5px] font-mono">
+              <span className="text-orange-300">$1.84</span>
+              <span className="text-muted-foreground/60">/</span>
+              <span className="text-muted-foreground">$5.00</span>
+            </div>
 
-        <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-border bg-background/40 text-[10.5px] font-mono">
-          <Activity className="h-3 w-3 text-blue-400" />
-          <span className="text-muted-foreground">184K tok</span>
-        </div>
+            <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-border bg-background/40 text-[10.5px] font-mono">
+              <Activity className="h-3 w-3 text-blue-400" />
+              <span className="text-muted-foreground">184K tok</span>
+            </div>
+          </>
+        )}
 
         <div className="w-px h-5 bg-border/60 mx-1" />
 

@@ -44,7 +44,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useAppStore, type SessionStatus } from '@/lib/store'
-import { AGENT_MAP } from '@/lib/agents'
+import { AGENT_MAP, AGENTS } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -118,11 +118,14 @@ function NavItem({ icon: Icon, label, shortcut, active, badge, onClick, collapse
   )
 }
 
-export function LeftSidebar() {
+// === Power mode — full 248px nav (existing behavior) =========================
+
+function PowerSidebar() {
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const sessions = useAppStore((s) => s.sessions)
   const activeId = useAppStore((s) => s.activeSessionId)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
+  const newSession = useAppStore((s) => s.newSession)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const centerScreen = useAppStore((s) => s.centerScreen)
   const notify = useAppStore((s) => s.notify)
@@ -177,7 +180,10 @@ export function LeftSidebar() {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button className="grid h-8 w-8 mx-auto place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30 hover:bg-orange-500/25">
+                <button
+                  onClick={newSession}
+                  className="grid h-8 w-8 mx-auto place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30 hover:bg-orange-500/25"
+                >
                   <Plus className="h-4 w-4 text-orange-500" />
                 </button>
               </TooltipTrigger>
@@ -198,7 +204,7 @@ export function LeftSidebar() {
             <Button
               size="sm"
               className="w-full h-7 text-[12px] bg-orange-500 hover:bg-orange-600 text-white"
-              onClick={() => notify('New session created')}
+              onClick={newSession}
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" /> New session
             </Button>
@@ -387,4 +393,135 @@ export function LeftSidebar() {
       </div>
     </aside>
   )
+}
+
+// === Casual mode — 56px rail (default) =======================================
+
+function CasualRail() {
+  const sessions = useAppStore((s) => s.sessions)
+  const activeId = useAppStore((s) => s.activeSessionId)
+  const setActiveSession = useAppStore((s) => s.setActiveSession)
+  const newSession = useAppStore((s) => s.newSession)
+  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  const togglePowerMode = useAppStore((s) => s.togglePowerMode)
+  const selectedAgentId = useAppStore((s) => s.selectedAgentId)
+  const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
+
+  const agent = AGENT_MAP[selectedAgentId]
+
+  return (
+    <aside className="shrink-0 w-12 border-r border-border bg-sidebar flex flex-col no-select">
+      {/* Agent switcher (compact) */}
+      <div className="p-1.5 border-b border-border">
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <button className="w-9 h-9 mx-auto grid place-items-center rounded-md hover:bg-accent transition-colors">
+                  <span className={cn('h-6 w-6 rounded-md text-[9px] font-bold flex items-center justify-center ring-1 ring-border', agent?.accent)}>
+                    {agent?.mark ?? 'E'}
+                  </span>
+                </button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="right">Switch agent — {agent?.name ?? 'EveryAIOS'}</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent side="right" align="start" sideOffset={8} className="w-56">
+            <DropdownMenuLabel className="text-[11px]">Agent</DropdownMenuLabel>
+            {AGENTS.map((a) => (
+              <DropdownMenuItem
+                key={a.id}
+                onClick={() => setSelectedAgent(a.id)}
+                className={cn('text-xs', a.id === selectedAgentId && 'text-orange-500')}
+              >
+                <span className={cn('h-4 w-4 rounded text-[7px] font-bold flex items-center justify-center', a.accent)}>{a.mark}</span>
+                <span className="flex-1">{a.name}</span>
+                {a.id === selectedAgentId && <CheckCircle2 className="h-3.5 w-3.5" />}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-xs text-muted-foreground" onClick={() => setCenterScreen('settings')}>
+              <Cog className="h-3.5 w-3.5 mr-1" /> Configure agents…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* New chat */}
+      <div className="p-1.5 border-b border-border">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={newSession}
+              className="grid h-9 w-9 mx-auto place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30 hover:bg-orange-500/25"
+            >
+              <Plus className="h-4 w-4 text-orange-500" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">New chat (Cmd+N)</TooltipContent>
+        </Tooltip>
+      </div>
+
+      {/* Recent sessions (collapsed) */}
+      <div className="flex-1 overflow-y-auto scroll-thin p-1.5 space-y-1">
+        {sessions.slice(0, 8).map((session) => {
+          const meta = statusMeta[session.status]
+          const Icon = meta.Icon
+          const isActive = session.id === activeId
+          return (
+            <Tooltip key={session.id}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setActiveSession(session.id)}
+                  className={cn(
+                    'relative grid h-8 w-8 mx-auto place-items-center rounded-md transition-colors',
+                    isActive ? 'bg-accent ring-1 ring-border' : 'hover:bg-accent/60'
+                  )}
+                >
+                  <Icon className={cn('h-4 w-4', meta.color)} />
+                  <span className={cn('absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-sidebar', meta.ring)} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{session.title}</TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
+
+      {/* Footer: settings + power toggle */}
+      <div className="p-1.5 border-t border-border space-y-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setCenterScreen('settings')}
+              className="grid h-8 w-8 mx-auto place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              <Cog className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Settings</TooltipContent>
+        </Tooltip>
+
+        {/* Power toggle — reveals the full cockpit */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={togglePowerMode}
+              className="grid h-8 w-8 mx-auto place-items-center rounded-md text-orange-500 hover:bg-orange-500/15 transition-colors"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">More — advanced panels (⌘.)</TooltipContent>
+        </Tooltip>
+      </div>
+    </aside>
+  )
+}
+
+// === Progressive disclosure switch (B9/P31) ==================================
+
+export function LeftSidebar() {
+  const powerMode = useAppStore((s) => s.powerMode)
+  return powerMode ? <PowerSidebar /> : <CasualRail />
 }

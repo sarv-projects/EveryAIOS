@@ -10,8 +10,13 @@ import { StatusBar } from "@/components/shell/status-bar";
 import { CommandPalette } from "@/components/shell/command-palette";
 import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { ToastBridge } from "@/components/shell/toast-bridge";
+import { useAppStore } from "@/lib/store";
 
 export default function App() {
+  // Progressive disclosure (B9/P31): casual users get chat only; the activity
+  // rail + right viewport reveal when the power toggle is flipped.
+  const powerMode = useAppStore((s) => s.powerMode);
+
   return (
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden">
       <KeyboardShortcuts />
@@ -19,8 +24,8 @@ export default function App() {
       <main className="flex-1 min-h-0 flex">
         <LeftSidebar />
         <CenterColumn />
-        <ActivityRail />
-        <RightViewport />
+        {powerMode && <ActivityRail />}
+        {powerMode && <RightViewport />}
       </main>
       <StatusBar />
       <CommandPalette />

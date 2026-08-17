@@ -1370,7 +1370,7 @@
 
 ## P31 — Custom Agent Builder + Simplified UI (B9; user directive 2026-08-17)
 > **Goal:** make the UI work for casual AND power users (progressive disclosure), and let users author custom agents that bundle persona + engine + model/provider + scoped MCP/connectors/tools + workflows — with **per-agent capability scoping so no agent is bloated**. Composes existing rows (F8/F12/J17 ACP, A2/A6 models, P22 MCP manager, F7 MCP, F-connectors, I6 ABI, B2/B7, Guard capability scoping); no new engines.
-- [ ] `[NOT DONE]` **P31.1 — Progressive-disclosure UI:** casual default (collapsed 56px sidebar: agent switcher · +New chat · Recents · Settings; provider/model = "Auto"; hidden = automations/guard/connectors/memory/analytics nav + activity rail + spend detail) + **Power toggle** (`⌘.` / "More" chevron) reveals the full cockpit; state persisted (`settings.ui.powerMode`). → UI-DESIGN-PROMPT "Progressive Disclosure"
+- [x] `[DONE]` **P31.1 — Progressive-disclosure UI:** casual default (collapsed 56px sidebar: agent switcher · +New chat · Recents · Settings; provider/model = "Auto"; hidden = automations/guard/connectors/memory/analytics nav + activity rail + spend detail) + **Power toggle** (`⌘.` / "More" chevron) reveals the full cockpit; state persisted (`settings.ui.powerMode`). → UI-DESIGN-PROMPT "Progressive Disclosure". **Landed in `ui/src`: `powerMode` store state (localStorage-persisted) + `CasualRail` vs `PowerSidebar` split + rail/viewport hidden in casual + spend/token/status detail hidden in casual + `⌘.` shortcut.**
 - [ ] `[NOT DONE]` **P31.2 — Agent bundle manifest (`agent.toml`):** versioned schema (I6-compatible) — name/emoji/description, persona/system-prompt, engine binding, model/provider (optional), mcp_servers[], connectors[], skills[], tools allow/deny[], blueprints[], automations[]; lives in `~/.everyaios/agents/`. → I6 + `everyaios-acp`
 - [ ] `[NOT DONE]` **P31.3 — Create-agent wizard + templates:** 4-step flow (Identity → Brain → Capabilities → Workflows) with 8 templates (General · Coder · Researcher · Email-Triager · Data-Analyst · Writer · Meeting-Notes · Browser-Operator) that pre-fill the bundle. → UI-DESIGN-PROMPT "Custom Agent Builder"
 - [ ] `[NOT DONE]` **P31.4 — Per-agent MCP server scoping:** agent declares an exact MCP-server subset (tick, never "all"); runtime injects only declared servers' tools into that agent's schema — running Agent X never loads Agent Y's servers. → P22 + `everyaios-mcp`
@@ -1419,8 +1419,8 @@
 | P28 Post-v1 Strategic Pillar (docs 80–82; gated on the Stage-0 executor) | 13 | 0 | 13 | post-Stage-0 |
 | P29 Native Sidecar Migration, Tiered (external review 2026-08-17; gated on Stage-0 + P8 RSS) | 11 | 0 | 11 | post-Stage-0 |
 | P30 Competitor Batch Steal Queue (openworker/cc-switch/skales/dsh; doc 83) | 16 | 0 | 16 | post-Stage-0 (12–15 casual-user, can pull earlier) |
-| P31 Custom Agent Builder + Simplified UI (B9; user directive 2026-08-17) | 10 | 0 | 10 | post-Stage-0 (P31.1/P31.3 UI can start early) |
+| P31 Custom Agent Builder + Simplified UI (B9; user directive 2026-08-17) | 10 | 1 | 9 | post-Stage-0 (P31.1 landed; P31.3 wizard next) |
 | Research Tasks (cross-cutting) | 54 | 2 | 52 | parallel |
-| **TOTAL** | **934** | **438** | **496** | **~45 weeks** |
+| **TOTAL** | **934** | **439** | **495** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

@@ -434,6 +434,25 @@ export interface LiveBudget {
 // actions can't hold instance state).
 let activeStreamMsgId: string | null = null
 
+// Progressive-disclosure preference (B9/P31) persisted to localStorage.
+const POWER_MODE_KEY = 'everyaios.settings.ui.powerMode'
+const readPowerMode = (): boolean => {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(POWER_MODE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const writePowerMode = (v: boolean) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(POWER_MODE_KEY, v ? '1' : '0')
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
 // === Zustand store ============================================================
 
 interface AppState {
@@ -441,6 +460,7 @@ interface AppState {
   sessions: Session[]
   activeSessionId: string
   setActiveSession: (id: string) => void
+  newSession: () => void
 
   // Active view (right viewport)
   activeView: ViewId
@@ -452,6 +472,13 @@ interface AppState {
   // Sidebar collapse
   sidebarCollapsed: boolean
   toggleSidebar: () => void
+
+  // Progressive disclosure (B9/P31) — casual (default) vs power mode.
+  // Casual = collapsed rail (agent switcher · new chat · recents · settings).
+  // Power  = full 248px nav + right activity rail + advanced panels.
+  powerMode: boolean
+  togglePowerMode: () => void
+  setPowerMode: (v: boolean) => void
 
   // Chat composer
   composerMode: ChatMode
@@ -513,6 +540,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessions: mockSessions,
   activeSessionId: 's1',
   setActiveSession: (id) => set({ activeSessionId: id, centerScreen: 'chat' }),
+  newSession: () => {
+    const id = `s-${Date.now()}`
+    const fresh: Session = {
+      id,
+      title: 'New chat',
+      status: 'idle',
+      preview: 'What would you like to do?',
+      updatedAt: new Date().toISOString(),
+      agent: 'analyst',
+      messages: [],
+    }
+    set((s) => ({
+      sessions: [fresh, ...s.sessions],
+      activeSessionId: id,
+      centerScreen: 'chat',
+      composerValue: '',
+    }))
+  },
 
   activeView: 'office-xlsx',
   setActiveView: (v) => set({ activeView: v, railCollapsed: false }),
@@ -522,6 +567,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+
+  powerMode: readPowerMode(),
+  togglePowerMode: () =>
+    set((s) => {
+      const next = !s.powerMode
+      writePowerMode(next)
+      return { powerMode: next }
+    }),
+  setPowerMode: (v) => {
+    writePowerMode(v)
+    set({ powerMode: v })
+  },
 
   composerMode: 'normal',
   setComposerMode: (m) => set({ composerMode: m }),

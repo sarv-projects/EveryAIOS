@@ -72,6 +72,7 @@ export function StatusBar() {
   const selectedModelId = useAppStore((s) => s.selectedModelId)
   const autoRoute = useAppStore((s) => s.autoRoute)
   const liveBudget = useAppStore((s) => s.liveBudget)
+  const powerMode = useAppStore((s) => s.powerMode)
 
   const agent = AGENT_MAP[selectedAgentId]
   const model = MODEL_MAP[selectedModelId]
@@ -180,31 +181,34 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* Center — stats */}
-      <div className="flex items-center gap-0 flex-1 overflow-x-auto scroll-thin">
-        {stats.map((stat, i) => {
-          const Icon = stat.icon
-          return (
-            <Tooltip key={stat.label}>
-              <TooltipTrigger asChild>
-                <div className={cn(
-                  'flex items-center gap-1.5 px-2 h-full whitespace-nowrap',
-                  i < stats.length - 1 && 'border-r border-border/40'
-                )}>
-                  <Icon className={cn('h-2.5 w-2.5 text-muted-foreground/70')} />
-                  <span className="text-muted-foreground/60">{stat.label}</span>
-                  <span className={cn('text-foreground/80', stat.color)}>
-                    {stat.value}
-                  </span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="font-mono text-[11px]">
-                {stat.tooltip}
-              </TooltipContent>
-            </Tooltip>
-          )
-        })}
-      </div>
+      {/* Center — stats (power mode only; casual hides status detail) */}
+      {powerMode && (
+        <div className="flex items-center gap-0 flex-1 overflow-x-auto scroll-thin">
+          {stats.map((stat, i) => {
+            const Icon = stat.icon
+            return (
+              <Tooltip key={stat.label}>
+                <TooltipTrigger asChild>
+                  <div className={cn(
+                    'flex items-center gap-1.5 px-2 h-full whitespace-nowrap',
+                    i < stats.length - 1 && 'border-r border-border/40'
+                  )}>
+                    <Icon className={cn('h-2.5 w-2.5 text-muted-foreground/70')} />
+                    <span className="text-muted-foreground/60">{stat.label}</span>
+                    <span className={cn('text-foreground/80', stat.color)}>
+                      {stat.value}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="font-mono text-[11px]">
+                  {stat.tooltip}
+                </TooltipContent>
+              </Tooltip>
+            )
+          })}
+        </div>
+      )}
+      {!powerMode && <div className="flex-1" />}
 
       {/* Right cluster — guard + version */}
       <div className="flex items-center gap-2 px-2 border-l border-border/60 h-full">
@@ -217,7 +221,7 @@ export function StatusBar() {
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/70">audit · append</span>
         <span className="text-muted-foreground/40">·</span>
-        <span className="text-muted-foreground/50">EveryAIOS v3.21</span>
+        <span className="text-muted-foreground/50">EveryAIOS v3.22</span>
       </div>
     </footer>
   )

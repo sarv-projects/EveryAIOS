@@ -14,6 +14,7 @@ const SHORTCUTS = [
   { group: 'Navigation', items: [
     { keys: '⌘ K', action: 'Command palette' },
     { keys: '⌘ B', action: 'Toggle sidebar' },
+    { keys: '⌘ .', action: 'Casual ⇄ power mode' },
     { keys: '⌘ \\', action: 'Toggle viewport' },
     { keys: '⌘ N', action: 'New session' },
     { keys: '⌘ 1–5', action: 'Switch to session 1–5' },
@@ -57,10 +58,12 @@ export function KeyboardShortcuts() {
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const toggleRail = useAppStore((s) => s.toggleRail)
+  const togglePowerMode = useAppStore((s) => s.togglePowerMode)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const toggleAgentPause = useAppStore((s) => s.toggleAgentPause)
   const notify = useAppStore((s) => s.notify)
+  const newSession = useAppStore((s) => s.newSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const sessions = useAppStore((s) => s.sessions)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
@@ -81,6 +84,12 @@ export function KeyboardShortcuts() {
         toggleSidebar()
         return
       }
+      // Cmd/Ctrl + . — casual ⇄ power mode
+      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+        e.preventDefault()
+        togglePowerMode()
+        return
+      }
       // Cmd/Ctrl + \ — viewport
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault()
@@ -90,7 +99,7 @@ export function KeyboardShortcuts() {
       // Cmd/Ctrl + N — new session
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault()
-        notify('New session created')
+        newSession()
         return
       }
       // Cmd/Ctrl + / — keyboard shortcuts overlay
@@ -185,10 +194,12 @@ export function KeyboardShortcuts() {
     setPaletteOpen,
     toggleSidebar,
     toggleRail,
+    togglePowerMode,
     setActiveView,
     setCenterScreen,
     toggleAgentPause,
     notify,
+    newSession,
     setActiveSession,
     sessions,
     activeSessionId,

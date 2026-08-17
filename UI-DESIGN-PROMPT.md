@@ -114,6 +114,9 @@ Design a **premium AI workspace desktop application** — a unified control plan
 - Clickable → opens relevant settings
 
 ### Progressive Disclosure — Casual ⇄ Power (B9 / P31)
+
+> **Status: implemented in `ui/src`** (P31.1 done). Store: `powerMode` (localStorage-persisted `everyaios.settings.ui.powerMode`) + `togglePowerMode`. `LeftSidebar` branches `CasualRail` (56px: agent switcher · +New chat · Recents · Settings · power-toggle chevron) vs `PowerSidebar` (full 248px nav). `App.tsx` renders `ActivityRail`/`RightViewport` only in power mode; title bar hides spend/token chips and the status bar hides center stats in casual mode; `⌘.` toggles.
+
 - **Casual = the default.** One workspace, four verbs. The first screen shows only what a new user needs; every advanced surface is one toggle away, never in the way.
 - **Casual left sidebar (56px collapsed by default):** agent switcher (compact emoji-avatar + name, click → dropdown) · `+ New chat` (icon) · recent sessions (collapsed into a single "Recents" chip) · ⚙ Settings at bottom. **Hidden in casual:** Automations · Guard · Connectors · Memory · Analytics nav items, the 48px activity rail, provider/model picker (shows "Auto"), spend/status-bar detail.
 - **Power toggle** (bottom of sidebar, `⌘.` or a `…` "More" chevron): expands the sidebar to the full 248px nav + reveals the right activity rail + advanced panels. State persists per user (`settings.ui.powerMode`).
