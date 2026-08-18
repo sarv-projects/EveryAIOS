@@ -33,7 +33,7 @@ dual-guard (Guard-1/Guard-2) + evidence evaluation — never by trust in the mod
 | `DESKTOP-APP-SPEC.md` | Complete product specification (capability matrix, build phases, K-Pillar) |
 | `TODO.md` | Master implementation checklist (Stage 0 + P0.1 → P12, 987 tasks) |
 | `ARCH/` | Architecture docs 00–12 + diagrams |
-| `RESEARCH/desktop_app/` | Source research notes (docs 01–83, 282 repos) |
+| `RESEARCH/desktop_app/` | Source research notes (docs 01–84, 282 repos) |
 | `crates/` | Rust core: `everyaios-core`, `guard`, `audit`, `vault`, `browser`, `office`, `memory`, `eval`, `blueprint`, `acp`, … |
 | `packages/coordinator/` | TS sidecar — the supervised agent-loop engine (Bun) |
 | `ui/` | Tauri webview UI (React + Tailwind v4 + framer-motion) |
