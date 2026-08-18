@@ -7,7 +7,12 @@
 // so a missing command or a dead shell never blanks a panel.
 
 import { useAppStore, type LiveBudget } from "./store";
-import { inTauri, chatStream, onChatEvent, type ChatWireEvent } from "./tauri";
+import {
+  inTauri,
+  chatStream,
+  onChatEvent,
+  type ChatWireEvent,
+} from "./tauri";
 import { acpAgents, acpInstallStatus, type HarnessManifest } from "./acp";
 import { usageSnapshot } from "./spend";
 import { AGENTS, type AgentRuntime } from "./agents";
@@ -52,6 +57,27 @@ function synthesizeAgent(m: HarnessManifest): AgentRuntime {
   };
 }
 
+/** Map a circuit-break option value (from the Rust McqOption) to the
+ * human label the card renders. Values are lowercase; labels title-case. */
+function mcqLabel(value: string): string {
+  switch (value) {
+    case "skip":
+      return "Skip this task";
+    case "retry":
+      return "Retry once";
+    case "escalate":
+      return "Escalate to me";
+    case "takeover":
+      return "Take over manually";
+    case "approve":
+      return "Approve & continue";
+    case "reject":
+      return "Reject";
+    default:
+      return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+}
+
 /** Route a live chat wire event into the active session's transcript. */
 function handleChatEvent(e: ChatWireEvent): void {
   const st = useAppStore.getState();
@@ -71,6 +97,31 @@ function handleChatEvent(e: ChatWireEvent): void {
       break;
     case "toolCall":
       st.streamStep(`tool · ${e.text ?? e.code ?? ""}`);
+      break;
+    // P6.3 Stage-0: the plan executor's circuit breaker tripped — render the
+    // H2 cockpit MCQ card. The card's choice goes back via planRespond
+    // (store.respondMcq routes by kind === 'mcq').
+    case "interrupt":
+      st.pushMcq(
+        {
+          id: e.breakId ?? `${e.planId ?? "plan"}-break`,
+          title: e.title ?? "Agent needs a decision",
+          description:
+            e.description ?? "The plan hit a limit or loop. Choose how to continue.",
+          kind: "mcq",
+          options: (e.options ?? []).map((v) => ({ label: mcqLabel(v), value: v })),
+        },
+        undefined,
+      );
+      break;
+    // P6.3 Stage-0: the plan finished (or halted) — end the streaming state.
+    case "planDone":
+      st.streamAppend(
+        e.error
+          ? `⚠ Plan halted: ${e.error}`
+          : `✅ Plan complete · ${e.tasksDone ?? 0} task(s) done`,
+        true,
+      );
       break;
     default:
       break;

@@ -25,6 +25,7 @@ use everyaios_vault::{Broker, LocalEndpoint, Vault, DEFAULT_SESSION_BUDGET_USD};
 
 use crate::guard_service::GuardService;
 use crate::memory_service::MemoryService;
+use crate::plan_service::PlanService;
 use crate::sidecar_link::{Inbound, SidecarLink, WriterHandle};
 
 /// P1.8: registered keyless local endpoints (provider → endpoint).
@@ -82,6 +83,26 @@ pub enum ChatWireEvent {
         limit: f64,
         spent: f64,
     },
+    /// Stage-0 plan executor: a circuit-break MCQ card for the H2 cockpit
+    /// (the coordinator emitted `chat/interrupt` when `CircuitBreaker::step`
+    /// tripped). `options` are the McqOption values; the UI maps them to
+    /// actionable labels and returns the choice via `plan/respond`.
+    Interrupt {
+        stream_id: String,
+        plan_id: String,
+        break_id: String,
+        title: String,
+        description: String,
+        options: Vec<String>,
+    },
+    /// Stage-0 plan executor: the plan finished (or halted). `error` is
+    /// present when it halted on an interrupt/escalation.
+    PlanDone {
+        stream_id: String,
+        plan_id: String,
+        tasks_done: u32,
+        error: Option<String>,
+    },
 }
 
 /// Parameters for one chat turn (mirrors the coordinator's `chat/stream`).
@@ -131,6 +152,9 @@ pub struct ChatRelay<W, R> {
     /// P7.5/J21: the Guard-2 pre-flight (tickets/policy/estop/profile) the
     /// coordinator drives via `guard/*` methods; shared with the Tauri cards.
     guard: Arc<Mutex<GuardService>>,
+    /// P6.3 Stage-0: per-plan circuit-breaker state the coordinator steps via
+    /// `plan/*` methods; trips become `chat/interrupt` → `ChatWireEvent::Interrupt`.
+    plan: Arc<Mutex<PlanService>>,
     on_event: Arc<Mutex<EventSink>>,
 }
 
@@ -165,6 +189,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             local_endpoints: Arc::new(Mutex::new(HashMap::new())),
             memory: Arc::new(Mutex::new(MemoryService::new())),
             guard,
+            plan: Arc::new(Mutex::new(PlanService::new())),
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
         }
     }
@@ -179,6 +204,12 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// coordinator drives `guard/*` requests against it).
     pub fn guard(&self) -> Arc<Mutex<GuardService>> {
         Arc::clone(&self.guard)
+    }
+
+    /// The Stage-0 plan service handle (the coordinator steps per-plan
+    /// circuit breakers via `plan/*`; trips surface as chat interrupts).
+    pub fn plan(&self) -> Arc<Mutex<PlanService>> {
+        Arc::clone(&self.plan)
     }
 
     /// Load the J21 policy file into the Guard-2 service (builder pattern —
@@ -229,6 +260,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let local_endpoints = Arc::clone(&self.local_endpoints);
         let memory = Arc::clone(&self.memory);
         let guard = Arc::clone(&self.guard);
+        let plan = Arc::clone(&self.plan);
 
         std::thread::spawn(move || loop {
             let inbound = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
@@ -266,6 +298,21 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // P7.5/J21: Guard-2 pre-flight + executor call-sites.
                     method if method.starts_with("guard/") => {
                         let mut svc = guard.lock().unwrap_or_else(|e| e.into_inner());
+                        match svc.handle(method, &params) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
+                    }
+                    // P6.3 Stage-0: per-plan circuit-breaker stepping. The
+                    // coordinator proposes each step; Rust disposes (the
+                    // breaker state lives here). Trips come back as
+                    // `{ok:false, interrupt}` and become chat/interrupt.
+                    method if method.starts_with("plan/") => {
+                        let mut svc = plan.lock().unwrap_or_else(|e| e.into_inner());
                         match svc.handle(method, &params) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
@@ -418,6 +465,72 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             },
                         ),
                         "chat/cancelled" => emit(&on_event, ChatWireEvent::Cancelled { stream_id }),
+                        // Stage-0 (P6.3): a plan executor circuit-break trip.
+                        // The coordinator emits the full MCQ card payload;
+                        // Rust relays it to the UI verbatim.
+                        "chat/interrupt" => {
+                            let plan_id = params
+                                .get("planId")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let break_id = params
+                                .get("breakId")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let title = params
+                                .get("title")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("Agent needs a decision")
+                                .to_string();
+                            let description = params
+                                .get("description")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let options = params
+                                .get("options")
+                                .and_then(|v| v.as_array())
+                                .map(|a| {
+                                    a.iter()
+                                        .filter_map(|o| o.as_str().map(str::to_string))
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            emit(
+                                &on_event,
+                                ChatWireEvent::Interrupt {
+                                    stream_id: stream_id.clone(),
+                                    plan_id,
+                                    break_id,
+                                    title,
+                                    description,
+                                    options,
+                                },
+                            );
+                        }
+                        "chat/plan_done" => {
+                            emit(
+                                &on_event,
+                                ChatWireEvent::PlanDone {
+                                    plan_id: params
+                                        .get("planId")
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    tasks_done: params
+                                        .get("tasksDone")
+                                        .and_then(|v| v.as_u64())
+                                        .unwrap_or(0) as u32,
+                                    error: params
+                                        .get("error")
+                                        .and_then(|s| s.as_str())
+                                        .map(str::to_string),
+                                    stream_id,
+                                },
+                            );
+                        }
                         _ => {}
                     }
                 }
@@ -476,6 +589,63 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         self.link
             .writer()
             .notify("chat/cancel", serde_json::json!({ "streamId": stream_id }))?;
+        Ok(())
+    }
+
+    /// Stage-0 (P6.3): dispatch a blueprint plan to the coordinator's plan
+    /// executor. The coordinator begins the plan breaker via `plan/begin`,
+    /// steps it per LLM turn/tool call, and emits `chat/interrupt` on a trip
+    /// + `chat/plan_done` at the end. Returns once the coordinator acks.
+    pub fn start_plan(
+        &self,
+        session_id: &str,
+        plan_id: &str,
+        stream_id: &str,
+        tasks: serde_json::Value,
+        provider: Option<&str>,
+        model: Option<&str>,
+    ) -> Result<(), ChatRelayError> {
+        let mut body = serde_json::json!({
+            "sessionId": session_id,
+            "planId": plan_id,
+            "streamId": stream_id,
+            "tasks": tasks,
+        });
+        if let Some(p) = provider {
+            body["provider"] = serde_json::Value::String(p.to_string());
+        }
+        if let Some(m) = model {
+            body["model"] = serde_json::Value::String(m.to_string());
+        }
+        let ack = self.link.request("plan/execute", body)?;
+        if !ack
+            .get("accepted")
+            .and_then(|a| a.as_bool())
+            .unwrap_or(false)
+        {
+            return Err(ChatRelayError::SidecarRejected(ack.to_string()));
+        }
+        Ok(())
+    }
+
+    /// Stage-0 (P6.3): forward the user's MCQ card choice back to the
+    /// coordinator's plan executor (which is waiting on that interrupt).
+    pub fn respond_plan(
+        &self,
+        break_id: &str,
+        choice: &str,
+    ) -> Result<(), ChatRelayError> {
+        let ack = self.link.request(
+            "plan/respond",
+            serde_json::json!({ "breakId": break_id, "choice": choice }),
+        )?;
+        if !ack
+            .get("resolved")
+            .and_then(|a| a.as_bool())
+            .unwrap_or(false)
+        {
+            return Err(ChatRelayError::SidecarRejected(ack.to_string()));
+        }
         Ok(())
     }
 }
@@ -777,6 +947,83 @@ mod tests {
         assert!(!evs
             .iter()
             .any(|e| matches!(e, ChatWireEvent::BudgetExceeded { .. })));
+        side.join().unwrap();
+    }
+
+    #[test]
+    fn relay_forwards_plan_interrupt_notifications() {
+        // Stage-0 (P6.3): a `chat/interrupt` notification from the coordinator
+        // arrives as a ChatWireEvent::Interrupt — the H2 MCQ card payload.
+        let (a, b) = pair();
+        let side = std::thread::spawn(move || {
+            let mut s = b;
+            while let Ok(Some(payload)) = frame::decode(&mut s) {
+                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
+                if v.get("method").and_then(|m| m.as_str()) == Some("plan/execute") {
+                    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
+                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
+                    let n = serde_json::json!({
+                        "jsonrpc": "2.0", "method": "chat/interrupt",
+                        "params": {
+                            "streamId": "st-1", "planId": "p1", "breakId": "b1",
+                            "title": "Loop detected (3× repeat)",
+                            "description": "The agent repeated the same tool call 3 times.",
+                            "options": ["skip", "retry", "escalate", "takeover"],
+                        },
+                    });
+                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&n).unwrap());
+                    let d = serde_json::json!({
+                        "jsonrpc": "2.0", "method": "chat/plan_done",
+                        "params": { "streamId": "st-1", "planId": "p1", "tasksDone": 2 },
+                    });
+                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&d).unwrap());
+                    break;
+                }
+            }
+        });
+
+        let (_dir, vault) = temp_vault("interrupt");
+        let vault = Arc::new(Mutex::new(vault));
+        let events: Arc<Mutex<Vec<ChatWireEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let ev = Arc::clone(&events);
+        let relay = ChatRelay::new(link_from(a), vault, move |e| {
+            ev.lock().unwrap_or_else(|x| x.into_inner()).push(e);
+        });
+        relay.spawn();
+        relay
+            .start_plan(
+                "s1",
+                "p1",
+                "st-1",
+                serde_json::json!([{ "id": "t1", "goal": "g" }]),
+                None,
+                None,
+            )
+            .expect("start_plan");
+
+        assert!(
+            wait_events(&events, 2, Duration::from_secs(5)),
+            "expected Interrupt+PlanDone, got {:?}",
+            events.lock().unwrap_or_else(|x| x.into_inner())
+        );
+        let evs = events.lock().unwrap_or_else(|x| x.into_inner());
+        match &evs[0] {
+            ChatWireEvent::Interrupt {
+                plan_id,
+                break_id,
+                options,
+                title,
+                ..
+            } => {
+                assert_eq!(plan_id, "p1");
+                assert_eq!(break_id, "b1");
+                assert!(title.contains("Loop detected"));
+                assert_eq!(options, &vec!["skip", "retry", "escalate", "takeover"]);
+            }
+            other => panic!("expected Interrupt, got {other:?}"),
+        }
+        assert!(matches!(evs[1], ChatWireEvent::PlanDone { ref plan_id, tasks_done: 2, error: None, .. } if plan_id == "p1"));
         side.join().unwrap();
     }
 

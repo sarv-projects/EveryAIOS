@@ -806,11 +806,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   respondMcq: (id, choice) => {
     void (async () => {
-      // Real shell: record the decision on the ticket; preview: just dismiss.
+      // Real shell: route by card kind — permission tickets go to Guard-2,
+      // P6.3 circuit-break interrupts go to the plan executor (planRespond).
       if (inTauri()) {
         try {
-          const { guardRespond } = await import('./guard')
-          await guardRespond(id, choice === 'approve' ? 'approve' : 'reject')
+          const kind = get().sessions
+            .flatMap((s) => s.messages)
+            .find((m) => m.mcq?.id === id)?.mcq?.kind
+          if (kind === 'mcq') {
+            const { planRespond } = await import('./tauri')
+            await planRespond(id, choice)
+          } else {
+            const { guardRespond } = await import('./guard')
+            await guardRespond(id, choice === 'approve' ? 'approve' : 'reject')
+          }
         } catch {
           /* keep card state */
         }

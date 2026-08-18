@@ -1157,9 +1157,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "everyaios-blueprint"
+version = "0.1.0"
+dependencies = [
+ "everyaios-eval",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "everyaios-core"
 version = "0.1.0"
 dependencies = [
+ "everyaios-blueprint",
  "everyaios-guard",
  "everyaios-ipc",
  "everyaios-memory",
@@ -1194,6 +1205,16 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+]
+
+[[package]]
+name = "everyaios-eval"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
 ]
 
 [[package]]

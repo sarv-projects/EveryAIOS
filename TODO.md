@@ -520,7 +520,7 @@
 - [x] `[DONE]` **execute_code refund (deterministic code shouldn't count):** `IterationBudget::parent_step(StepKind::ExecuteCode)` returns Ok without charging (refund) — **`everyaios-blueprint::iteration`**
 - [x] `[DONE]` **Loop detector (hash last N tool calls, 3x repeat → interrupt):** `LoopDetector` (FNV-1a hash, window N default 4, threshold 3) → `LoopVerdict::{Normal,Repeat,Interrupted}`; `CircuitBreaker::step` trips budget-or-loop — **`everyaios-blueprint::iteration`**
 - [x] `[DONE]` **MCQ interrupt card render (H2, v2 UI):** `ui/src/components/chat/mcq-interrupt-card.tsx` renders all four kinds (`diff`/`permission`/`mcq`/`budget`) with Approve/Reject/More-options actions, and the store exposes `MCQInterrupt`/`pushMcq`/`respondMcq` — live-wired for Guard-2 tickets (`bridge.ts` polls `guard_tickets` → `pushMcq`; `respondMcq` → `guard_respond`)
-- [ ] `[NOT DONE]` **Coordinator `chat/interrupt` emit on circuit-break (H2):** the `CircuitBreak`/`McqOption` model in `everyaios-blueprint::iteration` has no runtime producer yet — it fires from `CircuitBreaker::step` inside blueprint plan execution, and no plan executor runs in the coordinator today (the documented tool-executor seam, spec §6). Wire the emit when the seam lands; the card + `respondMcq` path are ready
+- [x] `[DONE]` **Coordinator `chat/interrupt` emit on circuit-break (H2) — the Stage-0 tool-executor seam, landed:** (1) **`everyaios-core::PlanService`** — per-plan `CircuitBreaker` owner (begin/step/end/list over `plan/*` JSON-RPC: `plan/begin` registers a breaker w/ Hermes 500/50 + loop window/threshold, `plan/step` steps `LLM_TURN`/`TOOL_CALL`/`EXECUTE_CODE` — trips return `{ok:false, interrupt:<CircuitBreak>}`; execute-code refund + loop detector verified in tests); (2) **`ChatRelay`** — `plan/*` requests dispatched to the shared `PlanService` (single source of truth, "Rust disposes"), `chat/interrupt` + `chat/plan_done` notifications forwarded as `ChatWireEvent::Interrupt`/`PlanDone` (full MCQ card payload: planId/breakId/title/description/options), `start_plan` (dispatch `plan/execute`) + `respond_plan` (forward `plan/respond`); (3) **coordinator `plan.ts`** — the live plan executor: `plan/begin` → per-task LLM turns through the broker (`provider/stream`) → `plan/step` per turn/tool → on a trip **emits `chat/interrupt`** and awaits `plan/respond` (skip/retry/escalate/takeover) → resume or halt → `chat/plan_done`; (4) **Tauri `plan_execute`/`plan_respond`** commands; (5) **UI** — `chat-event` `interrupt` → `pushMcq` `kind:'mcq'` with human labels (skip/retry/escalate/takeover), card's Continue button submits the SELECTED option (not hardcoded approve), `respondMcq` routes by kind (`mcq` → `planRespond`, `permission` → `guardRespond`), `planDone` → completion/halt line. Tests: 7 PlanService + relay interrupt-forwarding tests (117 core, was 109) + 12 coordinator plan-executor tests (78, was 66). **This closes the P6.3 gap and opens the Stage-0 gate for P28–P32**
 
 ### P6.4 Scheduled Tasks (B7 — doc 33 §7; doc 56 §3 cronflow)
 - [ ] `[NOT DONE]` Reference: cronflow workflow-engine design (doc 56 §3) — HITL pause-with-timeout as a first-class state-machine state, webhook triggers w/ schema validation, retry w/ backoff+jitter+clamp (⚠️ no LICENSE file → pattern-only) for the H22 automation builder
@@ -1429,7 +1429,7 @@
 | P3 Cockpit & Audit UI | 14 | 14 | 0 | ~4 |
 | P4 Office Engine | 54 | 54 | 0 | ~5 |
 | P5 Memory + Token Economy | 69 | 68 | 1 | ~5 |
-| P6 Orchestration + Connectors | 95 | 34 | 61 | ~5 |
+| P6 Orchestration + Connectors | 95 | 35 | 60 | ~5 |
 | P7 Forge + Guardrails | 63 | 30 | 33 | ~4 |
 | P8 Product Polish | 45 | 8 | 37 | ~3 |
 | P9+ Post-v1 | 22 | 0 | 22 | later |
@@ -1461,6 +1461,6 @@
 | P34 Full-Fidelity Tool Surfaces (ARCH/12 v3.1) | 7 | 2 | 5 | post-Stage-0 (P34.1/6 landed; P34.2-5 need ribbon+viewer build) |
 | P35 Full Animation Wiring (design-doc motion table) | 4 | 1 | 3 | landed P35.1 (11 files) |
 | Research Tasks (cross-cutting) | 54 | 2 | 52 | parallel |
-| **TOTAL** | **958** | **445** | **513** | **~45 weeks** |
+| **TOTAL** | **958** | **446** | **512** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

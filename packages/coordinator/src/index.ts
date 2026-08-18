@@ -38,6 +38,14 @@ import {
   type ChatStreamParams,
   type ProviderChunk,
 } from "./chat";
+import {
+  cancelPlan,
+  respondToBreak,
+  runPlanExecution,
+  type PlanChoice,
+  type PlanExecutionParams,
+  type PlanTask,
+} from "./plan";
 
 /** Must stay in lock-step with `everyaios_ipc::PROTOCOL_VERSION` (Rust, = 1). */
 export const PROTOCOL_VERSION = 1;
@@ -193,6 +201,66 @@ export function handleRequest(req: Request): Response | null {
         frameBridge.handleChunk(p as ProviderChunk);
       }
       response = null;
+      break;
+    }
+
+    case "plan/execute": {
+      // Stage-0 (P6.3): run one blueprint plan through the plan executor
+      // (detached, like chat/stream). The reply is immediate ({accepted});
+      // all progress arrives as `chat/plan_start|step|interrupt|plan_done`
+      // notifications, and the LLM turn streams as chat/ttft|batch|done.
+      const p = (req.params ?? {}) as Partial<PlanExecutionParams>;
+      if (
+        typeof p.sessionId !== "string" ||
+        typeof p.planId !== "string" ||
+        typeof p.streamId !== "string" ||
+        !Array.isArray(p.tasks) ||
+        p.tasks.length === 0
+      ) {
+        response = err(
+          id,
+          ERROR_CODES.INVALID_REQUEST,
+          "plan/execute requires sessionId, planId, streamId and a non-empty tasks array",
+        );
+        break;
+      }
+      void runPlanExecution(
+        p as PlanExecutionParams,
+        (e) => notify(`chat/${e.type}`, e as unknown as Record<string, unknown>),
+        emitChatEvent,
+        frameBridge,
+        sendRequest,
+        33,
+      );
+      response = ok(id, { accepted: true, planId: p.planId });
+      break;
+    }
+
+    case "plan/respond": {
+      // Stage-0 (P6.3): the user answered a circuit-break MCQ card (UI →
+      // Tauri → ChatRelay::respond_plan → here). Resolves the executor's
+      // pending wait; it resumes with the chosen path.
+      const p = (req.params ?? {}) as { breakId?: string; choice?: string };
+      if (typeof p.breakId !== "string" || typeof p.choice !== "string") {
+        response = err(
+          id,
+          ERROR_CODES.INVALID_REQUEST,
+          "plan/respond requires breakId and choice",
+        );
+        break;
+      }
+      const resolved = respondToBreak(p.breakId, p.choice as PlanChoice);
+      response = ok(id, { resolved });
+      break;
+    }
+
+    case "plan/cancel": {
+      // Notification: abort a running plan execution.
+      const p = (req.params ?? {}) as { planId?: string };
+      if (typeof p.planId === "string") {
+        cancelPlan(p.planId);
+      }
+      response = null; // notifications never get a reply
       break;
     }
 

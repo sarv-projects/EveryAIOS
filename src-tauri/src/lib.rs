@@ -164,6 +164,47 @@ fn chat_stream(
     Ok(stream_id)
 }
 
+/// Stage-0 (P6.3): dispatch a blueprint plan to the coordinator's plan
+/// executor. The reply is the streamId; all progress arrives as `chat-event`
+/// emits (plan_start/step/interrupt/plan_done + the turn's ttft/batch/done).
+#[tauri::command]
+fn plan_execute(
+    state: State<'_, AppState>,
+    session_id: String,
+    plan_id: String,
+    tasks: serde_json::Value,
+    provider: Option<String>,
+    model: Option<String>,
+) -> Result<String, String> {
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected — coordinator link not established".to_string())?;
+    let stream_id = format!("pl{}", STREAM_COUNTER.fetch_add(1, Ordering::Relaxed));
+    relay
+        .start_plan(
+            &session_id,
+            &plan_id,
+            &stream_id,
+            tasks,
+            provider.as_deref(),
+            model.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(stream_id)
+}
+
+/// Stage-0 (P6.3): forward the user's MCQ card choice back to the coordinator's
+/// plan executor (which is waiting on that circuit-break interrupt).
+#[tauri::command]
+fn plan_respond(state: State<'_, AppState>, break_id: String, choice: String) -> Result<(), String> {
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected".to_string())?;
+    relay.respond_plan(&break_id, &choice).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn usage_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     // P5.9: the token/cost dashboard data source — per-key/per-session usage,
@@ -317,6 +358,8 @@ pub fn run() {
             probe_vault,
             chat_stream,
             chat_cancel,
+            plan_execute,
+            plan_respond,
             usage_snapshot,
             replay_cmds::replay_sessions,
             replay_cmds::replay_timeline,

@@ -791,6 +791,7 @@ dependencies = [
 name = "everyaios-core"
 version = "0.1.0"
 dependencies = [
+ "everyaios-blueprint",
  "everyaios-guard",
  "everyaios-ipc",
  "everyaios-memory",

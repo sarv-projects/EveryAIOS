@@ -11,6 +11,7 @@ everyaios-ipc = { path = "../everyaios-ipc" }
 everyaios-vault = { path = "../everyaios-vault" }
 everyaios-guard = { path = "../everyaios-guard" }
 everyaios-memory = { path = "../everyaios-memory" }
+everyaios-blueprint = { path = "../everyaios-blueprint" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

@@ -182,25 +182,53 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
         )}
       </div>
 
-      {/* actions */}
+      {/* actions — for kind === 'mcq' the confirm submits the SELECTED option
+          (skip/retry/escalate/takeover → planRespond); otherwise the classic
+          Approve/Reject pair for Guard-2 permission tickets. */}
       <div className="flex items-center gap-1.5 border-t border-orange-500/20 bg-zinc-950/30 px-3 py-2">
-        <Button
-          size="sm"
-          className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600"
-          onClick={() => respondMcq(mcq.id, 'approve')}
-        >
-          <Check className="h-3 w-3" />
-          Approve
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 gap-1.5 px-2.5 text-[11px] text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
-          onClick={() => respondMcq(mcq.id, 'reject')}
-        >
-          <X className="h-3 w-3" />
-          Reject
-        </Button>
+        {mcq.kind === 'mcq' ? (
+          <>
+            <Button
+              size="sm"
+              className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600"
+              onClick={() =>
+                respondMcq(mcq.id, selected ?? mcq.options?.[0]?.value ?? 'skip')
+              }
+            >
+              <Check className="h-3 w-3" />
+              Continue
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 px-2.5 text-[11px] text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+              onClick={() => respondMcq(mcq.id, 'takeover')}
+            >
+              <X className="h-3 w-3" />
+              Stop
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              size="sm"
+              className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600"
+              onClick={() => respondMcq(mcq.id, 'approve')}
+            >
+              <Check className="h-3 w-3" />
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 px-2.5 text-[11px] text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+              onClick={() => respondMcq(mcq.id, 'reject')}
+            >
+              <X className="h-3 w-3" />
+              Reject
+            </Button>
+          </>
+        )}
         <Button
           size="sm"
           variant="ghost"
