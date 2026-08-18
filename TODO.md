@@ -1,6 +1,6 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (updated 2026-08-17) · **Spec:** v3.22 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (updated 2026-08-18) · **Spec:** v3.23 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
 > **Scope:** Complete product — 149 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.

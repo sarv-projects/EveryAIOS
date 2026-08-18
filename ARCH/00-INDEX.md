@@ -1,13 +1,13 @@
 # ARCH — The Desktop Agentic-OS Architecture (Hybrid)
 
-> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-15) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.22)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
+> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-15) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.23)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
 > **Docs:** 00-INDEX + 01–12 (12 = UI/UX specification and layout design — **v3.1, 2026-08-17: activity-rail work cockpit → multi-view tabbed panel (§4.1b) + full-fidelity tool surfaces (§4.1c)**, doc 67 §6) + research docs 49–83 (storage intelligence, generative-UI/image/voice/email gaps, aider recheck, gap-pass-2 hierarchy/search-stack, formalization, dep+catalog audit, agent-browser ecosystem, agentic dev-environments + closed-source agents, ACP registry + subscription auth, repo batch 2 — OmniRoute provider/routing goldmine, OmniRoute deep-dive, TencentDB Agent Memory, capability deltas — Sites/heartbeat + UI finalization, final all-rounder market research — H30/H31/H32 + two-channel injection; doc 69 = ACP ecosystem/harness → P17, doc 70 = MCP-directory → P18, docs 71–79 = batches 4–9 + local-model core → P19–P27, docs 80–82 = benchmark/moat/priority reviews → §9.1/§10/P28, doc 83 = competitor batch openworker/cc-switch/skales/deepseek-harness → P30).
 > **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (new `everyaios-storage` crate, doc 49). **No scope compromise**: every capability in the research corpus (docs 01–83, **282 repos**) is derived in `09-FEATURE-MATRIX.md` (149 rows).
 > **Working name:** "EveryAIOS" (from the v2.0 spec's `~/.everyaios/`). Final name TBD.
 
 ## The two specs reconciled
 
-> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.22 — hybrid**, in sync with this ARCH).
+> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.23 — hybrid**, in sync with this ARCH).
 
 | | Earlier v2.0 spec | All-Rust research spec (`RESEARCH/desktop_app/DESKTOP-APP-SPEC.md` — **superseded** draft) | This architecture |
 |---|---|---|---|
@@ -15,7 +15,7 @@
 | Browser | a11y-snapshot tool | CDP over system Chrome | **CDP child-process (Rust) + injected recorder** |
 | Office | block-patch (TS, later) | surgical OOXML | **Surgical OOXML part-patching + IronCalc + pdf-lib/lopdf** |
 | BYOK | provider clients built | ProviderAdapter | **Multi-key rings per provider + fallback rotation + OAuth** |
-| Connectors | Composio/Zapier/Nango/Local Auth Bridge | local-first hub, no cloud proxy | **Same 5-engine hub; cloud engines optional/self-hosted** |
+| Connectors | MCP-first (decision 2026-08-16): MCP Servers + Native + Tool Catalog + Local Auth Bridge | local-first hub, no cloud proxy | **MCP is the platform; Composio/Zapier/Nango aggregator tabs removed (cloud SaaS holding OAuth tokens server-side)** |
 | Memory | built algos (TS) | 7 algorithms + SOTA | **Built algos kept + SOTA retrieval layer (mem0/Letta patterns)** |
 | Guardrails | dual-guard (regex + diff cards) | Trust Ladder + interceptors | **Dual-guard in Rust + Trust Ladder in TS engine (kept)** |
 

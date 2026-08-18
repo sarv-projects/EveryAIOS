@@ -58,3 +58,73 @@ jobs:
 
       - name: cargo test
         run: cargo test --all-features
+
+  # UI: self-contained (own package-lock.json, no @personal-ai deps) — always runs.
+  ui:
+    name: ui typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps
+        working-directory: ui
+        run: npm ci
+      - name: Typecheck
+        working-directory: ui
+        run: npm run type-check
+      - name: Build
+        working-directory: ui
+        run: npm run build
+
+  # Sidecar: coordinator bun tests + typecheck. Needs the private APP repo
+  # (sarv-projects/APP — the @personal-ai/core-* packages) checked out as a
+  # sibling of this repo (pnpm-workspace.yaml: `../APP/packages/*`). Configure
+  # a fine-grained PAT with read access to sarv-projects/APP as the
+  # APP_CLONE_TOKEN secret; without it the coordinator steps are skipped.
+  sidecar:
+    name: coordinator bun test + typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: desktop_app
+      - name: Check out APP (core packages) — needs APP_CLONE_TOKEN
+        if: env.APP_CLONE_TOKEN != ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        uses: actions/checkout@v4
+        with:
+          repository: sarv-projects/APP
+          path: APP
+          token: ${{ secrets.APP_CLONE_TOKEN }}
+      - name: Skip note when APP token missing
+        if: env.APP_CLONE_TOKEN == ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        run: echo "::warning::APP_CLONE_TOKEN secret not set — coordinator tests skipped (needs private sarv-projects/APP)"
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install workspace deps
+        if: env.APP_CLONE_TOKEN != ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        working-directory: desktop_app
+        run: |
+          npm install -g pnpm
+          pnpm install
+      - name: Coordinator typecheck
+        if: env.APP_CLONE_TOKEN != ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        working-directory: desktop_app/packages/coordinator
+        run: bun run type-check
+      - name: Coordinator tests
+        if: env.APP_CLONE_TOKEN != ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        working-directory: desktop_app/packages/coordinator
+        run: bun test

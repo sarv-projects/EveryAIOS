@@ -667,7 +667,7 @@ Unified timeline of all agent actions:
 │ Connected:                                                           │
 │ ✓ Gmail (OAuth)          │ 3 tools available                        │
 │ ✓ Google Calendar        │ 5 tools available                        │
-│ ✓ Composio (12 toolkits)│ 47 tools available                       │
+│ ✓ MCP Servers (user)   │ n tools available                       │
 │ ✓ Local SearXNG         │ Web search                                │
 │                                                                       │
 │ MCP Servers:                                                         │

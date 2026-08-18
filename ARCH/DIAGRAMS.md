@@ -458,19 +458,17 @@ flowchart TD
     Request[Agent needs external action<br/>e.g. 'send Gmail', 'create Jira ticket'] --> Registry[Unified Tool Registry<br/>lookup ToolDefinition]
     Registry --> Route{Hub Router:<br/>which engine handles this?}
 
-    Route -->|direct API available| Native[Native Adapter<br/>27+ built-in<br/>direct HTTP/SDK call]
-    Route -->|no native, user has Composio key| Composio[Composio SDK<br/>250+ apps, managed OAuth<br/>user's own key]
-    Route -->|no native/Composio, Zapier configured| Zapier[Zapier MCP<br/>9000+ apps<br/>user's Zapier account]
-    Route -->|OAuth needed, no hosted proxy| Nango[Nango (self-hosted)<br/>OAuth + sync → RAG]
+    Route -->|official MCP server exists| MCPServer[MCP Server<br/>user-supplied stdio/npx or HTTP<br/>Gmail/Slack/GitHub/Linear…]
+    Route -->|direct API available| Native[Native Adapter<br/>BYO OAuth/API-key in vault<br/>direct HTTP/SDK call]
     Route -->|simple OAuth, no 3rd party| AuthBridge[Local Auth Bridge<br/>PKCE client, no secret<br/>local token manager]
     Route -->|logged-in web session exists| BrowserConn[Browser-Session Connector<br/>drive via CDP + Session Vault]
 
-    Native --> Exec[Execute + audit]
-    Composio --> Exec
-    Zapier --> Exec
-    Nango --> Exec
+    MCPServer --> Exec[Execute + audit]
+    Native --> Exec
     AuthBridge --> Exec
     BrowserConn --> Exec
+
+    note right of Route: Connector-platform decision 2026-08-16 — MCP is the platform; Composio/Zapier/Nango aggregator tabs removed
 
     Exec --> Dedup{Already connected<br/>via another engine?}
     Dedup -->|yes| Skip[Skip: no double-connect]

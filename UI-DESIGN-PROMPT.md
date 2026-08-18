@@ -112,7 +112,7 @@ Design a **premium AI workspace desktop application** — a unified control plan
 ### Status Bar (28px, bottom)
 - Background: `#F0EFEB`
 - All text: 11px mono, `#6B6860`, items separated by ` · `
-- Items: `● Live` (green) · `awaiting approval` (orange) · `agent analyst` · `sidecar online` (green) · `core rust` · `db 3/14MB` · `mcp 127.0.0.1:9200` · `browser chrome (system)` · `cache 94%` · `guard L2` (orange) · `vault 7 keys` · `audit append` · `EveryAIOS v3.22`
+- Items: `● Live` (green) · `awaiting approval` (orange) · `agent analyst` · `sidecar online` (green) · `core rust` · `db 3/14MB` · `mcp 127.0.0.1:9200` · `browser chrome (system)` · `cache 94%` · `guard L2` (orange) · `vault 7 keys` · `audit append` · `EveryAIOS v3.23`
 - Clickable → opens relevant settings
 
 ### Progressive Disclosure — Casual ⇄ Power (B9 / P31)

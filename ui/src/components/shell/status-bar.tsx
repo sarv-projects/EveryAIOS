@@ -25,6 +25,7 @@ import {
 import { useAppStore } from '@/lib/store'
 import { AGENT_MAP, MODEL_MAP, AGENTS } from '@/lib/agents'
 import { cn } from '@/lib/utils'
+import { inTauri } from '@/lib/tauri'
 
 // Simulated health data for agent runtimes
 const AGENT_HEALTH: Record<string, {
@@ -137,18 +138,26 @@ export function StatusBar() {
   // restores the full 12-badge telemetry (devMode).
   if (!devMode) {
     const busy = active?.status === 'running' || active?.status === 'action-required'
+    const preview = !inTauri()
     return (
       <footer className="shrink-0 h-6 border-t border-border bg-sidebar/80 backdrop-blur-xl flex items-center text-[10.5px] font-mono no-select">
         <div className="flex items-center gap-1.5 px-3">
-          <span className={cn('h-1.5 w-1.5 rounded-full', busy ? 'bg-orange-500 live-dot' : 'bg-emerald-400')} />
-          <span className="text-muted-foreground">{busy ? 'Processing…' : 'Ready · Local'}</span>
+          <span className={cn('h-1.5 w-1.5 rounded-full', preview ? 'bg-amber-400' : busy ? 'bg-orange-500 live-dot' : 'bg-emerald-400')} />
+          <span className="text-muted-foreground">{preview ? 'Preview · demo data' : busy ? 'Processing…' : 'Ready · Local'}</span>
         </div>
         <div className="flex-1" />
-        <span className="flex items-center gap-1.5 px-3 text-muted-foreground/70">
-          <ShieldCheck className="h-2.5 w-2.5 text-emerald-400" />
-          100% Private (On-Device)
-        </span>
-        <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.22</span>
+        {preview ? (
+          <span className="flex items-center gap-1.5 px-3 text-muted-foreground/70">
+            <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+            Plain-browser preview — not connected to the shell
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 px-3 text-muted-foreground/70">
+            <ShieldCheck className="h-2.5 w-2.5 text-emerald-400" />
+            100% Private (On-Device)
+          </span>
+        )}
+        <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.23</span>
       </footer>
     )
   }
@@ -239,7 +248,7 @@ export function StatusBar() {
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/70">audit · append</span>
         <span className="text-muted-foreground/40">·</span>
-        <span className="text-muted-foreground/50">EveryAIOS v3.22</span>
+        <span className="text-muted-foreground/50">EveryAIOS v3.23</span>
       </div>
     </footer>
   )

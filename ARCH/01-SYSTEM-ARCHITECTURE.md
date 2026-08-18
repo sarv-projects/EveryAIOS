@@ -6,7 +6,7 @@
 flowchart TD
     UI["**UI LAYER** — Tauri 2 window (Rust), native webview, React SPA<br/>chat · cockpit dashboard · audit+replay · blueprint editor · office docs<br/>reader · connector hub · permission cards · token/cost analytics · tray"]
     CORE["**RUST CORE** — everyaios-core binary (orchestrator + safety + browser)<br/>BrowserSvc (CDP child, 37 tools, snapshot/refs/diff) · ScriptEval (rquickjs sandbox)<br/>GuardRail (regex interceptors, diff cards) · Audit/Replay (NDJSON ingest, recording index, token estimates)<br/>MCP server (rust-sdk, 127.0.0.1:9200/mcp) · Key-ring vault · ProcessSupervisor"]
-    SIDE["**TS SIDECAR** — coordinator (Bun-compiled, reuses @personal-ai/core-*)<br/>Agent loop (pi-style) · Spec/blueprint loader · Memory+RAG (7 algos, FTS5+vec, KG)<br/>Connector Hub (native/Composio/Zapier/Nango/AuthBridge) · Search cascade · automations<br/>Engine stages + risk compass · Trust Ladder · Providers + BYOK"]
+    SIDE["**TS SIDECAR** — coordinator (Bun-compiled, reuses @personal-ai/core-*)<br/>Agent loop (pi-style) · Spec/blueprint loader · Memory+RAG (7 algos, FTS5+vec, KG)<br/>Connector Hub (MCP-first: MCP Servers/Native/Tool Catalog/AuthBridge — decision 2026-08-16) · Search cascade · automations<br/>Engine stages + risk compass · Trust Ladder · Providers + BYOK"]
     CHROME["**Chromium child** — system Chrome/Edge or chrome-for-testing fallback"]
     LOCAL["**Local services** — searxng (optional) · Ollama/llamafile · SQLite (app.db + memory.db + vault) · LadybugDB (KG) · sandbox (subprocess/WASM)"]
     UI -->|"IPC: JSON-RPC over stdio + local WS"| CORE

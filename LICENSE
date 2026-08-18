@@ -1,0 +1,12 @@
+EveryAIOS Desktop — dual-licensed under MIT OR Apache-2.0, matching the
+license claim in DESKTOP-APP-SPEC.md §2.
+
+Choose the license that applies to you:
+
+- MIT — see LICENSE-MIT
+- Apache License, Version 2.0 — see LICENSE-APACHE
+
+The MIT license text and the Apache-2.0 license text are included in this
+repository. Bundled third-party engines keep their own licenses (see the
+DESKTOP-APP-SPEC.md §2 licensing note); the choice above applies to
+EveryAIOS's own code.
