@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Check,
   Clock,
-  MessageSquare,
+  Pause,
   Play,
   Plus,
   Webhook,
@@ -15,18 +15,27 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { mockAutomations, type Automation } from '@/lib/store'
+import {
+  schedulerDelete,
+  schedulerEnable,
+  schedulerList,
+  schedulerPause,
+  schedulerResume,
+  schedulerRunNow,
+  type SchedulerJob,
+  triggerLabel,
+} from '@/lib/scheduler'
 import { cn } from '@/lib/utils'
 import AutomationEditor from './automation-editor'
 
 const TRIGGER_ICON: Record<
-  Automation['triggerKind'],
+  SchedulerJob['trigger']['type'],
   { icon: typeof Clock; label: string }
 > = {
-  schedule: { icon: Clock, label: 'Schedule' },
+  cron: { icon: Clock, label: 'Schedule' },
+  interval: { icon: Clock, label: 'Interval' },
   webhook: { icon: Webhook, label: 'Webhook' },
   event: { icon: Zap, label: 'Event' },
-  slack: { icon: MessageSquare, label: 'Slack' },
 }
 
 const TEMPLATES = [
@@ -40,34 +49,45 @@ const TEMPLATES = [
   'Log Rotator',
 ]
 
-function Sparkline({ data, enabled }: { data: number[]; enabled: boolean }) {
-  const max = Math.max(...data, 1)
-  // Render first 24 bars
-  const bars = data.slice(0, 24)
-  return (
-    <div className="flex h-7 items-end gap-[2px]" aria-hidden>
-      {bars.map((v, i) => (
-        <div
-          key={i}
-          className={cn(
-            'spark-draw w-[3px] rounded-sm',
-            enabled ? 'bg-orange-500/80' : 'bg-zinc-600/70',
-          )}
-          style={{ height: `${Math.max(8, (v / max) * 100)}%`, animationDelay: `${i * 8}ms` }}
-        />
-      ))}
-    </div>
-  )
-}
-
 export default function AutomationsPanel() {
-  const [automations, setAutomations] = useState(mockAutomations)
+  const [automations, setAutomations] = useState<SchedulerJob[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [nlInput, setNlInput] = useState('')
 
-  const toggleEnabled = (id: string) =>
-    setAutomations((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)),
+  // H14: live job list from the Rust scheduler (demo fallback in preview).
+  useEffect(() => {
+    void schedulerList().then((s) => setAutomations(s.jobs))
+  }, [])
+
+  const toggleEnabled = (id: string) => {
+    const next = !automations.find((a) => a.id === id)?.enabled
+    void schedulerEnable(id, next).then(() =>
+      setAutomations((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, enabled: next } : a)),
+      ),
+    )
+  }
+
+  const runNow = (id: string) => void schedulerRunNow(id)
+  const pauseJob = (id: string) =>
+    void schedulerPause(id).then(() =>
+      setAutomations((prev) =>
+        prev.map((a) =>
+          a.id === id
+            ? { ...a, state: { state: 'paused' as const, resumeDeadline: undefined } }
+            : a,
+        ),
+      ),
+    )
+  const resumeJob = (id: string) =>
+    void schedulerResume(id).then(() =>
+      setAutomations((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, state: { state: 'idle' as const } } : a)),
+      ),
+    )
+  const removeJob = (id: string) =>
+    void schedulerDelete(id).then(() =>
+      setAutomations((prev) => prev.filter((a) => a.id !== id)),
     )
 
   const selected = automations.find((a) => a.id === selectedId) ?? null
@@ -117,8 +137,11 @@ export default function AutomationsPanel() {
         <div className="space-y-3 p-4">
           <div className="grid gap-3 xl:grid-cols-2">
             {automations.map((a) => {
-              const Trigger = TRIGGER_ICON[a.triggerKind]
+              const Trigger = TRIGGER_ICON[a.trigger.type]
               const Icon = Trigger.icon
+              const paused = a.state.state === 'paused'
+              const running = a.state.state === 'running'
+              const failed = a.state.state === 'failed'
               return (
                 <div
                   key={a.id}
@@ -138,24 +161,70 @@ export default function AutomationsPanel() {
                         <h3 className="truncate text-sm font-medium text-foreground">
                           {a.name}
                         </h3>
+                        {paused && (
+                          <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-[9px] text-amber-300">
+                            Paused
+                          </Badge>
+                        )}
+                        {running && (
+                          <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-[9px] text-emerald-300">
+                            Running
+                          </Badge>
+                        )}
+                        {failed && (
+                          <Badge variant="outline" className="border-rose-500/40 bg-rose-500/10 text-[9px] text-rose-300">
+                            Retrying
+                          </Badge>
+                        )}
                       </div>
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        {a.trigger}
+                        {triggerLabel(a.trigger)}
                       </p>
                       <p className="mt-0.5 text-xs text-foreground/70">
-                        {a.action}
+                        {a.steps.length} step(s) · session {a.sessionId}
                       </p>
                     </div>
-                    <Switch
-                      checked={a.enabled}
-                      onClick={(e) => e.stopPropagation()}
-                      onCheckedChange={() => toggleEnabled(a.id)}
-                      aria-label="Toggle automation"
-                    />
-                  </div>
-
-                  <div className="mt-3">
-                    <Sparkline data={a.activity} enabled={a.enabled} />
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          runNow(a.id)
+                        }}
+                        className="flex size-6 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-emerald-500/40 hover:text-emerald-300"
+                        aria-label="Run now"
+                        title="Run now"
+                      >
+                        <Play className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          paused ? resumeJob(a.id) : pauseJob(a.id)
+                        }}
+                        className="flex size-6 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-amber-500/40 hover:text-amber-300"
+                        aria-label={paused ? 'Resume' : 'Pause'}
+                        title={paused ? 'Resume' : 'Pause'}
+                      >
+                        <Pause className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeJob(a.id)
+                        }}
+                        className="flex size-6 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-rose-500/40 hover:text-rose-300"
+                        aria-label="Delete automation"
+                        title="Delete"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <Switch
+                        checked={a.enabled}
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={() => toggleEnabled(a.id)}
+                        aria-label="Toggle automation"
+                      />
+                    </div>
                   </div>
 
                   <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
@@ -163,15 +232,16 @@ export default function AutomationsPanel() {
                       <span>Runs: {a.runs}</span>
                       <span className="text-emerald-400">
                         <Check className="mr-0.5 inline h-3 w-3" />
-                        {a.success}
+                        {a.successes}
                       </span>
                       <span className="text-red-400">
                         <X className="mr-0.5 inline h-3 w-3" />
-                        {a.failed}
+                        {a.failures}
                       </span>
                     </div>
                     <span className="text-[10px]">
-                      Last run: {a.lastRun ?? 'never'}
+                      Last run:{' '}
+                      {a.lastRunAt ? new Date(a.lastRunAt * 1000).toLocaleString() : 'never'}
                     </span>
                   </div>
                 </div>

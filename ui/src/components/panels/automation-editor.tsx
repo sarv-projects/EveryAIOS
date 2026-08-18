@@ -17,11 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { Automation } from '@/lib/store'
+import type { SchedulerJob } from '@/lib/scheduler'
 import { cn } from '@/lib/utils'
 
 interface Props {
-  automation: Automation
+  automation: SchedulerJob
   onClose: () => void
 }
 
@@ -32,12 +32,12 @@ const ACTIVITY_30D = Array.from({ length: 30 }, (_, i) => ({
 
 export default function AutomationEditor({ automation, onClose }: Props) {
   const [budget, setBudget] = useState(0.5)
-  const [trigger, setTrigger] = useState(automation.triggerKind)
+  const [trigger, setTrigger] = useState(automation.trigger.type)
   const [action, setAction] = useState('session')
   const [network, setNetwork] = useState('restricted')
 
   const successRate = Math.round(
-    (automation.success / Math.max(automation.runs, 1)) * 100,
+    (automation.successes / Math.max(automation.runs, 1)) * 100,
   )
 
   return (
@@ -74,17 +74,17 @@ export default function AutomationEditor({ automation, onClose }: Props) {
               <Select
                 value={trigger}
                 onValueChange={(v) =>
-                  setTrigger(v as Automation['triggerKind'])
+                  setTrigger(v as SchedulerJob['trigger']['type'])
                 }
               >
                 <SelectTrigger className="h-8 w-full text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="schedule">Schedule</SelectItem>
+                  <SelectItem value="cron">Schedule (cron)</SelectItem>
+                  <SelectItem value="interval">Interval</SelectItem>
                   <SelectItem value="webhook">Webhook</SelectItem>
                   <SelectItem value="event">Event</SelectItem>
-                  <SelectItem value="slack">Slack</SelectItem>
                 </SelectContent>
               </Select>
             </div>

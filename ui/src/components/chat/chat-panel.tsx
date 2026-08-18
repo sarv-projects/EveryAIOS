@@ -42,6 +42,10 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore, type ProgressStep, type Session } from '@/lib/store'
 import { AGENT_MAP, MODEL_MAP } from '@/lib/agents'
+import {
+  schedulerNudges,
+  type NudgeSuggestion as SchedulerNudge,
+} from '@/lib/scheduler'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import ChatComposer from './chat-composer'
@@ -426,6 +430,18 @@ export default function ChatPanel() {
 function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
   const powerMode = useAppStore((s) => s.powerMode)
   const prompts = powerMode ? EXAMPLE_PROMPTS : CASUAL_PROMPTS
+  // P6.4 (B7, doc 67 §3): session-open proactivity hook — nudge sentinels
+  // surface 1–3 repeating-pattern schedule suggestions in the composer.
+  const [nudges, setNudges] = useState<SchedulerNudge[]>([])
+  useEffect(() => {
+    let alive = true
+    void schedulerNudges().then((s) => {
+      if (alive) setNudges(s.slice(0, 3))
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
   return (
     <div className="fade-up flex flex-col items-center gap-4 px-4 py-12 text-center bg-radial-fade">
       <div className="flex h-12 w-12 items-center justify-center rounded-full border border-orange-500/30 bg-orange-500/10 glow-pulse">
@@ -458,6 +474,28 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
           )
         })}
       </div>
+
+      {/* P6.4 (B7, doc 67 §3): session-open proactivity — nudge sentinels
+          surface repeating-pattern schedule suggestions (H14 nudge cards). */}
+      {nudges.length > 0 && (
+        <div className="fade-up mt-2 flex flex-wrap justify-center gap-1.5">
+          {nudges.map((n) => (
+            <button
+              key={n.goal + n.cron}
+              type="button"
+              onClick={() => onPick(`Schedule "${n.goal}" ${n.cron}`)}
+              className="group inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/5 px-2.5 py-1 text-[11px] text-amber-200/90 transition-all hover:border-amber-500/50 hover:text-amber-100 hover-lift"
+              title={`Repeated ${n.observedAt.join(', ')} · confidence ${Math.round(n.confidence * 100)}%`}
+            >
+              <Clock className="h-3 w-3 text-amber-300 group-hover:text-amber-400" />
+              Make “{n.goal}” a recurring task
+              <span className="font-mono text-[10px] text-amber-300/70">
+                {n.cron}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

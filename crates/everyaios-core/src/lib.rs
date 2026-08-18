@@ -24,6 +24,7 @@ pub mod memory_service;
 pub mod orphan;
 pub mod plan_service;
 pub mod provider_ref;
+pub mod scheduler_service;
 pub mod providers;
 pub mod sidecar_link;
 pub mod supervisor;
@@ -45,6 +46,7 @@ pub use hwfit::{
 pub use local::{LocalConfig, LocalError, LocalManager, LocalModelInfo};
 pub use guard_service::{GuardDecision, GuardService, PendingGuardCard};
 pub use plan_service::PlanService;
+pub use scheduler_service::SchedulerService;
 pub use memory_service::{MemoryService, StoredFact};
 pub use provider_ref::{
     classify_category, ingest_provider_reference, parse_provider_reference, AuthClass,

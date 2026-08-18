@@ -15,6 +15,7 @@ mod guard_cmds;
 mod mcp_cmds;
 mod office_cmds;
 mod replay_cmds;
+mod scheduler_cmds;
 mod trajectory_cmds;
 
 use everyaios_core::GuardService;
@@ -405,7 +406,20 @@ pub fn run() {
             acp_cmds::acp_install_request,
             acp_cmds::acp_install_commit,
             acp_cmds::acp_install,
-            acp_cmds::acp_authenticate
+            acp_cmds::acp_authenticate,
+            // P6.4 (B7): scheduled tasks.
+            scheduler_cmds::scheduler_list,
+            scheduler_cmds::scheduler_create,
+            scheduler_cmds::scheduler_delete,
+            scheduler_cmds::scheduler_enable,
+            scheduler_cmds::scheduler_pause,
+            scheduler_cmds::scheduler_resume,
+            scheduler_cmds::scheduler_run_now,
+            scheduler_cmds::scheduler_battery,
+            scheduler_cmds::scheduler_fire_event,
+            scheduler_cmds::scheduler_fire_webhook,
+            scheduler_cmds::scheduler_nudges,
+            scheduler_cmds::scheduler_nudge
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray
@@ -423,14 +437,17 @@ pub fn run() {
         .expect("error while running EveryAIOS");
 }
 
-/// System tray (P0.2 task 17): status icon + Show/Quit menu.
+/// System tray (P0.2 task 17 / H11): status icon + Show/Run-automations/Quit
+/// menu. Scheduled tasks execute headless via the coordinator's own due-loop;
+/// the tray item just forces a manual tick (works with the window hidden).
 fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::TrayIconBuilder;
 
     let show = MenuItem::with_id(app, "show", "Show EveryAIOS", true, None::<&str>)?;
+    let run = MenuItem::with_id(app, "run-automations", "Run automations now", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &run, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("main-tray");
     if let Some(icon) = app.default_window_icon().cloned() {
@@ -445,6 +462,18 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     let _ = win.show();
                     let _ = win.unminimize();
                     let _ = win.set_focus();
+                }
+            }
+            // H11: force a due-check + execution pass headless (no window).
+            // The tick is fire-and-forget — the coordinator acks its own
+            // executed-job list; failures surface in the sidecar log.
+            "run-automations" => {
+                let state = app.state::<AppState>();
+                let Ok(guard) = state.chat_relay.lock() else {
+                    return;
+                };
+                if let Some(relay) = guard.as_ref() {
+                    let _ = relay.tick_scheduler();
                 }
             }
             "quit" => app.exit(0),

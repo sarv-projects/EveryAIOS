@@ -26,6 +26,7 @@ use everyaios_vault::{Broker, LocalEndpoint, Vault, DEFAULT_SESSION_BUDGET_USD};
 use crate::guard_service::GuardService;
 use crate::memory_service::MemoryService;
 use crate::plan_service::PlanService;
+use crate::scheduler_service::SchedulerService;
 use crate::sidecar_link::{Inbound, SidecarLink, WriterHandle};
 
 /// P1.8: registered keyless local endpoints (provider → endpoint).
@@ -155,6 +156,10 @@ pub struct ChatRelay<W, R> {
     /// P6.3 Stage-0: per-plan circuit-breaker state the coordinator steps via
     /// `plan/*` methods; trips become `chat/interrupt` → `ChatWireEvent::Interrupt`.
     plan: Arc<Mutex<PlanService>>,
+    /// P6.4 (B7): the durable scheduled-task core (cron/interval/event/webhook
+    /// triggers, leases, retry, battery policy, nudge sentinels). The
+    /// coordinator drives it via `scheduler/*` methods.
+    scheduler: Arc<Mutex<SchedulerService>>,
     on_event: Arc<Mutex<EventSink>>,
 }
 
@@ -190,6 +195,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             memory: Arc::new(Mutex::new(MemoryService::new())),
             guard,
             plan: Arc::new(Mutex::new(PlanService::new())),
+            scheduler: Arc::new(Mutex::new(SchedulerService::new())),
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
         }
     }
@@ -210,6 +216,12 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// circuit breakers via `plan/*`; trips surface as chat interrupts).
     pub fn plan(&self) -> Arc<Mutex<PlanService>> {
         Arc::clone(&self.plan)
+    }
+
+    /// The P6.4 scheduled-task service handle (the coordinator + Tauri shell
+    /// drive it via `scheduler/*` methods).
+    pub fn scheduler(&self) -> Arc<Mutex<SchedulerService>> {
+        Arc::clone(&self.scheduler)
     }
 
     /// Load the J21 policy file into the Guard-2 service (builder pattern —
@@ -261,6 +273,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let memory = Arc::clone(&self.memory);
         let guard = Arc::clone(&self.guard);
         let plan = Arc::clone(&self.plan);
+        let scheduler = Arc::clone(&self.scheduler);
 
         std::thread::spawn(move || loop {
             let inbound = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
@@ -313,6 +326,20 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // `{ok:false, interrupt}` and become chat/interrupt.
                     method if method.starts_with("plan/") => {
                         let mut svc = plan.lock().unwrap_or_else(|e| e.into_inner());
+                        match svc.handle(method, &params) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
+                    }
+                    // P6.4 (B7): scheduled-task dispatch. The coordinator
+                    // ticks `scheduler/due`, starts/finishes leases, fires
+                    // events + webhooks; Rust owns the job state.
+                    method if method.starts_with("scheduler/") => {
+                        let mut svc = scheduler.lock().unwrap_or_else(|e| e.into_inner());
                         match svc.handle(method, &params) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
@@ -626,6 +653,22 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             return Err(ChatRelayError::SidecarRejected(ack.to_string()));
         }
         Ok(())
+    }
+
+    /// P6.4 (B7): trigger one due-check + execution pass in the coordinator's
+    /// scheduler executor (the tray's "Run automations now" + the UI's
+    /// Run-now path). Returns the executed job ids.
+    pub fn tick_scheduler(&self) -> Result<Vec<String>, ChatRelayError> {
+        let ack = self.link.request("scheduler/execute", serde_json::json!({}))?;
+        Ok(ack
+            .get("executed")
+            .and_then(|a| a.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default())
     }
 
     /// Stage-0 (P6.3): forward the user's MCQ card choice back to the
@@ -1225,5 +1268,56 @@ mod tests {
         assert!(matches!(err, ChatRelayError::BudgetExceeded { .. }));
         side.join().unwrap();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn relay_dispatches_scheduler_requests() {
+        // P6.4: `scheduler/*` requests from the coordinator hit the shared
+        // SchedulerService; the same job state is visible via the relay handle.
+        let (a, b) = pair();
+        let side = std::thread::spawn(move || {
+            // Coordinator role: issue upsert + due to Rust, drain the acks.
+            let mut s = b;
+            let up = serde_json::json!({
+                "jsonrpc": "2.0", "id": "u1", "method": "scheduler/upsert",
+                "params": {
+                    "id": "j1", "name": "probe", "sessionId": "s1",
+                    "trigger": { "type": "interval", "secs": 60 },
+                    "steps": [],
+                    "now": 1_750_000_000,
+                },
+            });
+            let _ = frame::write_frame(&mut s, &serde_json::to_vec(&up).unwrap());
+            let due = serde_json::json!({
+                "jsonrpc": "2.0", "id": "d1", "method": "scheduler/due",
+                "params": { "now": 1_750_000_061 },
+            });
+            let _ = frame::write_frame(&mut s, &serde_json::to_vec(&due).unwrap());
+            let mut acks = Vec::new();
+            while let Ok(Some(payload)) = frame::decode(&mut s) {
+                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&payload) {
+                    if v.get("id").is_some() {
+                        acks.push(v);
+                    }
+                    if acks.len() == 2 {
+                        break;
+                    }
+                }
+            }
+            acks
+        });
+        let (_dir, vault) = temp_vault("scheduler");
+        let vault = Arc::new(Mutex::new(vault));
+        let relay = ChatRelay::new(link_from(a), vault, |_| {});
+        relay.spawn();
+
+        // The sidecar thread drives the protocol — the relay just needs to
+        // be alive; the ack content is asserted on the coordinator side.
+        let acks = side.join().unwrap();
+        assert_eq!(acks.len(), 2);
+        let up_ack = &acks[0];
+        assert_eq!(up_ack["result"]["ok"], serde_json::json!(true));
+        let due_ack = &acks[1];
+        assert_eq!(due_ack["result"]["due"], serde_json::json!(["j1"]));
     }
 }

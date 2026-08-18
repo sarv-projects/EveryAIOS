@@ -149,7 +149,7 @@ fn parse_step_kind(params: &Value) -> Result<everyaios_blueprint::StepKind, Stri
 mod tests {
     use super::*;
     use everyaios_blueprint::{
-        CircuitBreak, InterruptReason, McqOption, Scope, StepKind, SUBAGENT_MAX_ITERATIONS,
+        CircuitBreak, InterruptReason, McqOption, Scope, SUBAGENT_MAX_ITERATIONS,
     };
 
     fn params(value: serde_json::Value) -> Value {

@@ -46,6 +46,7 @@ import {
   type PlanExecutionParams,
   type PlanTask,
 } from "./plan";
+import { startScheduler } from "./scheduler";
 
 /** Must stay in lock-step with `everyaios_ipc::PROTOCOL_VERSION` (Rust, = 1). */
 export const PROTOCOL_VERSION = 1;
@@ -264,6 +265,32 @@ export function handleRequest(req: Request): Response | null {
       break;
     }
 
+    case "scheduler/execute": {
+      // P6.4 (B7): run one due-check + execution pass synchronously. The
+      // reply carries the executed job ids (the UI's Run-now / test path).
+      const p = (req.params ?? {}) as { now?: number };
+      void schedulerRuntime.tickOnce(p.now).then(
+        (executed) => {
+          if (req.id !== undefined) {
+            process.stdout.write(
+              encodeJson(ok(req.id, { executed })),
+            );
+          }
+        },
+        (e: Error) => {
+          if (req.id !== undefined) {
+            process.stdout.write(
+              encodeJson(
+                err(id, ERROR_CODES.INTERNAL_ERROR, e.message ?? "scheduler failed"),
+              ),
+            );
+          }
+        },
+      );
+      response = null; // answered asynchronously via the write callback
+      break;
+    }
+
     case "session/shutdown": {
       // Graceful stop: flush the reply (if this was a request) through the
       // write callback, then exit — process.exit() alone would truncate
@@ -420,6 +447,13 @@ export function run(reader: NodeJS.ReadableStream = process.stdin): void {
   });
 }
 
+/** P6.4: the scheduled-task executor (started in main; tests use the handle). */
+export const schedulerRuntime = startScheduler(
+  sendRequest,
+  (e) => notify(`chat/${e.type}`, e as unknown as Record<string, unknown>),
+  frameBridge,
+);
+
 // Only start the loop when run directly (not when imported by tests).
 if (import.meta.main) {
   startOrphanWatch();
@@ -429,5 +463,7 @@ if (import.meta.main) {
   // Keeps the supervisor's idle watchdog (30s) from false-killing an idle
   // but healthy process.
   startHeartbeat();
+  // P6.4 (B7): tick due jobs + host the loopback webhook listener.
+  schedulerRuntime.start();
   run();
 }
