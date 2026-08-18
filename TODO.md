@@ -796,7 +796,7 @@
 - [ ] `[NOT DONE]` Implement data-analysis REPL (G4): sandboxed pandas/numpy
 - [ ] `[NOT DONE]` Implement repo-wide engineering (G5): workspace scan → dependency map → test-loop → patch
 - [ ] `[NOT DONE]` Implement site/domain search (SeekStorm-class inverted index)
-- [ ] `[NOT DONE]` Implement G8 tiered cascade: SQLite result cache (5-min TTL) → optional WebSurfx (Rust) → SearXNG → circuit-breaker fallback; Algorithm #33 routing (doc 52 §4)
+- [ ] `[NOT DONE]` Implement G8 tiered cascade: SQLite result cache (5-min TTL) → optional WebSurfx (Rust) → SearXNG (instances discovered live from `searx.space/data/instances.json`, health-gated + cached) → circuit-breaker fallback; Algorithm #33 routing (doc 52 §4)
 - [ ] `[NOT DONE]` Implement parallel top-N fetch cascade (searxng-mcp 4-tier pattern: Firecrawl → Crawl4AI → raw → Wayback); test: 50-page baseline completes ≈ single-page time
 
 ### P8.5 Workspace UI (H20 — doc 46 Devin + ARCH/12)

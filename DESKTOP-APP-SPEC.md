@@ -143,14 +143,14 @@
 ### G. Search & research
 | ID | Capability | Status |
 |---|---|---|
-| G1 | Free search cascade — searxng-first + public instances + circuit breaker + BM25 rerank; **SQLite result cache (5-min TTL) + parallel top-N fetch cascade** (searxng-mcp 4-tier pattern, doc 52 §4) | 🟢 (**exists in `core-search` but NOT yet wired into the coordinator runtime — no `search.ts` consumer; see Stage-0 tool-runtime seam**, annotated 2026-08-18) |
+| G1 | Free search cascade — searxng-first + public instances (**live `searx.space/data/instances.json` feed**) + circuit breaker + BM25 rerank; **SQLite result cache (5-min TTL) + parallel top-N fetch cascade** (searxng-mcp 4-tier pattern, doc 52 §4) | 🟢 (**exists in `core-search` but NOT yet wired into the coordinator runtime — no `search.ts` consumer; see Stage-0 tool-runtime seam**, annotated 2026-08-18) |
 | G2 | Deep research — breadth×depth tree, learnings-up, gap-check, cited reports (Vane pipeline validates) | 🟢+🟡 |
 | G3 | Multi-channel search — arXiv/GitHub/EDGAR/Reddit adapters | 🟡 |
 | G4 | Data-analysis REPL — sandboxed pandas/numpy for CSV/Excel/SQLite | 🟡 |
 | G5 | Repo-wide engineering — scan/dep-map/test-loop/patch in workspace | 🟡 |
 | G6 | Site/domain search — SeekStorm-class inverted index for local corpora | 🟡 |
 | G7 | **Instant filename/content search** — SQLite FTS5 filename index + notify-watcher incremental updates + optional OS-native hooks (Everything/MFT, mdfind, Baloo); Everything/UltraSearch UX, cross-platform (doc 49) | 🟡 (P4.8 ✅) |
-| G8 | **Tiered search cascade & cache** — cached instant tier (SQLite, 5-min TTL) → optional Rust metasearch (**WebSurfx**, ~20–40MB) → SearXNG → external fallback via circuit breaker; parallel fetch cascade so a 50-page baseline completes in ~single-page time; BM25 rerank at each tier (doc 52 §4, Algorithm #33) | 🟡 (**NOT built** — no WebSurfx tier, no coordinator `search.ts`; part of the Stage-0 tool-runtime seam, annotated 2026-08-18) |
+| G8 | **Tiered search cascade & cache** — cached instant tier (SQLite, 5-min TTL) → optional Rust metasearch (**WebSurfx**, ~20–40MB) → SearXNG (**instances from the live `searx.space/data/instances.json` feed**) → external fallback via circuit breaker; parallel fetch cascade so a 50-page baseline completes in ~single-page time; BM25 rerank at each tier (doc 52 §4, Algorithm #33) | 🟡 (**NOT built** — no WebSurfx tier, no coordinator `search.ts`; part of the Stage-0 tool-runtime seam, annotated 2026-08-18) |
 | G9 | **Read-cleaner / content filter (doc 64 §4)** — strip ads/trackers/consent-walls before `read`/`snapshot`/markdown-export + domain/network blocklists for the F11 containment layer; **`adblock` crate (brave/adblock-rust v0.13.0, MIT) as direct dependency** — `FilterSet` (bundled + user lists), `Engine::matches` (url/hostname/initiator/request_type → BlockerResult), cosmetic selectors + CSP directives, serialized compiled-engine cache; **FiltersProvider composition** (component/custom/subscription providers → merged set, rebuild-on-change) | 🟡 (P7.8 ✅ — `everyaios-browser::content` landed; full brave `adblock` crate = swap-in) |
 
 ### H. UI & product
@@ -295,13 +295,13 @@
 
 ## 2. Dependency & Sovereignty Model (the open-source promise)
 
-> Everything below is **user-side** — EveryAIOS never proxies user data through a founder-controlled backend (provider calls go direct from the user's machine). There is no founder-run server in the architecture — not even "later". Free chat is local (bundled models / Ollama) or BYOK. Free search is local searxng + public instances (public instances are third-party, not founder-controlled).
+> Everything below is **user-side** — EveryAIOS never proxies user data through a founder-controlled backend (provider calls go direct from the user's machine). There is no founder-run server in the architecture — not even "later". Free chat is local (bundled models / Ollama) or BYOK. Free search is local searxng + public instances (discovered live from `searx.space/data/instances.json`; public instances are third-party, not founder-controlled).
 
 | Layer | Runs where | Founder dependency |
 |---|---|---|
 | App (Tauri shell + Rust core + Bun-compiled sidecar + all core packages) | User's machine | None |
 | LLM calls | User's BYOK key (direct to OpenAI/Anthropic/DeepSeek/OpenRouter) **or** local Ollama/llamafile **or** OAuth subscriptions (ChatGPT Pro/Copilot) | None |
-| Free web search | Local searxng-first cascade + public instances + optional user-installed searxng | None |
+| Free web search | Local searxng-first cascade + public instances (live `searx.space` feed) + optional user-installed searxng | None |
 | RAG / memory / embeddings / KG | Local SQLite + sqlite-vec + FTS5 + Rust-native graph store (LadybugDB optional/deferred) + local ONNX models (bundled) | None |
 | Browser | System Chrome/Edge via CDP → lightweight engines (**Lightpanda** default / **Obscura** opt-in) for scrape/RAG → optional user-gated stealth engines (Camoufox/Fortress; ⚠️ CloakBrowser binary is proprietary — use with caution) | None |
 | Automations / workflows / crystallization | Local engine | None |
@@ -405,7 +405,7 @@ flowchart TD
     SIDE -.->|"JSON-RPC requests — guard/* · memory/* · scheduler/* · provider/* (never opens vault)"| CORE
 ```
 
-**Division of trust (the core safety axiom): the sidecar proposes, Rust disposes.** Every mutating call from the TS sidecar requires a `everyaios-guard` authorization ticket; browser/script/audit/keys live only in Rust. **External-agent containment (honest, 2026-08-18):** ACP/MCP agents must run *brokered* (their file/terminal ops are EveryAIOS-implemented, so every mutation consumes a Rust ticket) or *sandboxed* (isolated worktree/container, host changes imported via a reviewed change set); *uncontrolled* mode is explicitly labeled as outside the ticket guarantee and never marketed as verified. Key decisions (code-verified in research): Tauri not Electron (lean native webview vs 500MB+ Electron — real RSS measured at P8, see J16/P8); single-window SPA, not multi-tab webviews; supervised child processes with reconnect/resume; Markdown specs not config UIs; cache-first token discipline; dual-guard security; tiered browser engines; zero founder servers.
+**Division of trust (the core safety axiom): the sidecar proposes, Rust disposes.** Every mutating call from the TS sidecar requires a `everyaios-guard` authorization ticket; browser/script/audit/keys live only in Rust. **External-agent containment (honest, 2026-08-18):** ACP/MCP agents must run *brokered* (their file/terminal ops are EveryAIOS-implemented, so every mutation consumes a Rust ticket) or *sandboxed* (isolated worktree/container, host changes imported via a reviewed change set); *uncontrolled* mode is explicitly labeled as outside the ticket guarantee and never marketed as verified. Key decisions (code-verified in research): Tauri not Electron (lean native webview vs 500MB+ Electron — real RSS measured at P8, see J16/P8); single-window SPA, not multi-tab webviews; supervised child processes with reconnect/resume; Markdown specs not config UIs; cache-first token discipline; dual-guard security; tiered browser engines; zero founder servers; **live-discovery over hardcoded catalogs (future-proofing):** every external surface — MCP servers (`registry.modelcontextprotocol.io/v0/servers`) · ACP agents (`cdn.agentclientprotocol.com/registry/v1/latest/registry.json`) · models (`models.dev` `models.json`) · search instances (`searx.space/data/instances.json`) · skills/plugins/extensions — is discovered from its official live registry/API and cached + version-pinned, never a hand-maintained list (a hardcoded catalog is a bug, not a feature).
 
 **Design axiom — no unreconstructable sidecar state:** The sidecar must never hold mutable state that isn't also in a checkpoint. Every agent turn boundary is a checkpoint write. On crash recovery (ProcessSupervisor: exponential backoff 1s→2s→4s→60s cap, circuit breaker after 5 crashes/10min), the sidecar cold-starts in 50–150ms and resumes from the last checkpoint. This is the Hermes 20-snapshot/500MB pattern (doc 38).
 
