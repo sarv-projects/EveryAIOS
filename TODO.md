@@ -1185,7 +1185,7 @@
 ---
 
 ## P14 — Model Catalog: models.dev Steal (doc 66, 2026-08-15 — anomalyco/models.dev, MIT)
-> **The single biggest catalog win since doc 19:** a vendorable, MIT-licensed open database of model capabilities/pricing/limits — 186 providers / 364 compiled entries with cache-read/write pricing and a two-tier lab-vs-provider schema that is exactly our model-family vs transport-provider adapter split. Implementation target: new `everyaios-catalog` crate.
+> **The single biggest catalog win since doc 19:** a vendorable, MIT-licensed open database of model capabilities/pricing/limits — 186 providers / 364 compiled entries at snapshot (live count drifts) with cache-read/write pricing and a two-tier lab-vs-provider schema that is exactly our model-family vs transport-provider adapter split. Implementation target: new `everyaios-catalog` crate.
 
 - [ ] `[NOT DONE]` **A6 catalog ingest (doc 66 §1.3):** vendor `models.json` (432KB) as the baseline catalog; `ModelEntry` struct mirroring the compiled shape (`id`, `canonical_slug`, `context_length`, `architecture` modalities/tokenizer, `pricing{prompt,completion,web_search,input_cache_read,input_cache_write}`, `supported_parameters` capability proxy, `default_parameters`, `top_provider.max_completion_tokens`) — new `everyaios-catalog` crate; parsed once at startup into an in-memory index
 - [ ] `[NOT DONE]` **Two-tier lab/provider schema (doc 66 §1.1):** `base_model` override-only inheritance — canonical lab model + per-host cost/limits overrides; BYOK providers (and any future provider) added as override entries, never duplicate the canonical facts (this *is* the model-family vs transport-provider adapter separation)
