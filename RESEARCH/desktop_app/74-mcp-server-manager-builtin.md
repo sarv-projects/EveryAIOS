@@ -67,3 +67,21 @@ The ACP crate already proves every mechanism we need. The MCP Server Manager map
 **Also:** doc 70's three *native* gaps (PDF page ops, content search + OCR, Gmail read-first) stay in TODO P18 — the manager is the *consumption* layer, those are the *engine* layer.
 
 **Ledger:** unchanged **281 repos** (this pass adds no new live repos — all references already tracked in docs 35/47/55/63/70).
+
+---
+
+## 7. Addendum (2026-08-18 — final research: official MCP Registry API is the discovery source)
+
+**Finding (verified):** the official **MCP Registry** — `registry.modelcontextprotocol.io` (backed by `modelcontextprotocol/registry`, MIT, OpenAPI 3.1, **API freeze v0.1** since 2025-10-24) — is the canonical discovery feed and removes the need to hand-curate the mcpservers.org 9,800-server sampling.
+
+**API (REST, 100/page, `?search=` + cursor pagination):**
+- `GET /v0/servers` → list · `?search=` → filter · per-server `name` (GitHub-namespace), `description`, `repository.url`, `version`.
+- **`packages[]`** → `registryType` (npm/pypi/…), `identifier`, `runtimeHint` (`npx`/`uvx`), `transport` (`stdio`/`sse`/`streamable-http`), `packageArguments` (config args + required env vars e.g. `YOUR_API_KEY`).
+
+That `packages[]` block is the **same install shape as the F8 ACP `registry.json`** already consumed by `everyaios-acp`, so `everyaios-mcp::manager` reuses `registry_client`/`installer`/`ProcessTransport` 1:1 — the official API replaces the bespoke allow-list as the seed.
+
+**Skills ≠ MCP (two ecosystems, not one site's tabs):** the official registry is MCP-servers-only. "Skills" is Anthropic's **Claude Skills** (`SKILL.md` instruction packs) — a separate feed → TODO P23. The combined marketplaces (MCP Market, PulseMCP, Smithery, Glama) list both but are third-party.
+
+**Trust boundary unchanged:** the registry is community-curated **discovery**, never a security boundary — sha256 pinning + quarantine + allow-list + Guard-2 install/write tickets + read-first/approve-before-send (K6) stay mandatory. A published server can do anything; the registry only replaces the *catalog*, never the *guard*.
+
+**Net:** TODO P22's `registry_index` step is now concretely sourced from the official API; **ledger unchanged** (no new repos — `modelcontextprotocol/registry` is the protocol org's own repo, already within the MCP ecosystem already tracked).

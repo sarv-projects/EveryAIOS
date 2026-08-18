@@ -2,7 +2,7 @@
 
 > **Generated:** 2026-08-07 (updated 2026-08-18) · **Spec:** v3.23 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass. Leave `[NOT DONE]` until verified.
-> **Scope:** Complete product — 149 capabilities, 33 algorithms, 13 build phases (P0–P12) + UI implementation (P11.5).
+> **Scope:** Complete product — 149 capabilities, 33 algorithms, 14 build phases (**Stage 0** + P0–P12) + UI implementation (P11.5).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
 > **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–83) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals; **doc 66** (anomalyco org, 2026-08-15) for the A6/A9/A7 models.dev catalog steal (TODO P14); **doc 67** (capability deltas + UI/UX finalization, 2026-08-15) for H29 dashboard artifacts (bolt.diy), B7 heartbeat automations (Hatchet lease pattern), and the H20 views-rail redesign (ARCH/12 v2.0); **doc 68** (final all-rounder market research, 2026-08-15) for H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, and the two-channel capability injection (F12/J17/F7); **doc 69** (ACP agent ecosystem + harness deep-dive, 2026-08-16) for the verified ACP entrypoint catalog (Claude Code/Codex/Cline/OpenCode/Hermes/OpenClaw/Copilot/Gemini/…) + Zed/Cline/Hermes steal queue (TODO P17); **doc 70** (mcpservers.org directory inbuilt analysis, 2026-08-16) for the MCP-directory verdict: **don't** bundle document/browser MCP servers (our Rust engines supersede them); **do** add three *native* inbuilt capabilities — PDF page ops (split/merge/rotate/reorder via lopdf, `oxidize-pdf` steal), content search + OCR (`dowse` adapt), and a Gmail/IMAP read-first connector (`mailwarden`/`Busymail` approve-before-send pattern) — TODO P18; **doc 71** (batch-4 coding agents/skills/harnesses, 2026-08-16) for the Kilo Gateway routing / ruflo swarm+federation / system-prompt structure / ui-ux-pro-max design-skill queue — TODO P19; **doc 72** (batch-5 code-intel/parallel/search, 2026-08-16) for the SeekStorm embedded hybrid index + Superset worktree-per-agent queue — TODO P20; **doc 73** (batch-6 computer-use/full-control, 2026-08-16) for the OpenAdapt demonstration compiler (B8 crystallization + E9) + ShowUI-Aloha learning half + auggie F12/ACP entry — TODO P21; **doc 74** (built-in MCP Server Manager, 2026-08-16) for the "bundle the manager, not the servers" optimization — mirror the ACP registry/installer/transport machinery to consume third-party MCP servers, postgres-mcp-hardened refuse-twice write template — TODO P22; **doc 75** (anthropic skills/plugins/cowork, 2026-08-16) for the `.claude-plugin/plugin.json` component schema (skills+agents+hooks+MCP+LSP+monitors), inbuilt native skill-wrappers vs marketplace "Add", and the source-available document-skills license boundary — TODO P23; **doc 76** (batch-7 design/browser/self-healing, 2026-08-16) for open-design `DESIGN.md` brand-system + composable design-skills, browser-harness self-healing, and the MagenticLite browser+FS+HITL validation — TODO P24; **doc 77** (batch-8 workflows/graphify/browser, 2026-08-16) for the agent-authored programmable-workflow model (Airflow DAG/retry/backfill semantics), Graphify queryable knowledge-graph, and addyosmani exit-criteria skills — TODO P25; **doc 78** (batch-9 marketplace/gws/jobs, 2026-08-16) for the wshobson/agents multi-harness plugin catalog, the `gws` Google Workspace connector, and the AIHawk "Jobs" vertical — TODO P26; **doc 79** (local-model fetch/download core, 2026-08-16) for the resumable HF GGUF/MLX downloader + canonical store + `local://` model URL — TODO P27. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 >
@@ -14,6 +14,63 @@
      Verification means: code compiles, tests pass, behavior confirmed (manual or automated).
      If verification is not possible (e.g. no test runner, external dependency), document WHY
      in the task line and mark [DONE — unverified: reason]. Never mark [DONE] on faith alone. -->
+
+---
+
+## STAGE 0 — Guard-Gated Tool Executor (the open gate · production standard, ~3 weeks)
+
+> **This is the #1 remaining build gate — the one seam the spec's §6 "Remaining" note and every external review flags.** The core safety axiom is *"sidecar proposes, Rust disposes": every real effect (file, browser, shell, provider, connector, office, agent) crosses **one ticket model → one executor → one event log → one progress timeline**.* The guard machinery is **fully landed** (P7.4/P7.5 — `GuardService::evaluate`/`use_ticket` over `guard/*`, Tauri `guard_tickets`/`guard_respond`, the Cockpit/chat approval cards, and the ACP install split `acp_install_request`/`acp_install_commit` which already proves the *evaluate → card → use_ticket → execute* pattern). The tool **engines** are landed too (`everyaios-browser` act/snapshot/read, `everyaios-script` rquickjs InnerCallHook sandbox, `everyaios-office` D1–D8, `everyaios-storage`, `everyaios-mcp` 42-tool catalog). **What does NOT exist yet is the executor runtime that connects them**: the coordinator forwards `tool_call`/`tool_result` as UI notifications only (`chat.ts`), `plan.ts` `taskTools()` hard-returns `[]`, there is no `tool/exec` dispatch in `ChatRelay`, and `guard.ts` (`evaluateGuard`/`useTicket`/`guardGate`) is tested but never called from a live tool path. This section closes that gap at production grade — every tool, not a demo slice.
+>
+> **Scope (full, not minimal):** all 42 Rust tools (37 browser + 5 storage) + `script.run` + office ops + `file_ops` + the search cascade, all flowing through the same ticketed executor. Foundational pieces already landed are listed as *foundation* (not re-counted below).
+
+### S0.1 Rust tool dispatch (`everyaios-core` + `ChatRelay`)
+
+- [ ] `[NOT DONE]` **`ToolRegistry`** in `everyaios-core` — register the full catalog with per-tool metadata: `id`, family, `risk_level`, surface allow-list, the guard `Operation` mapping (delete / multi_file_edit / external_network / terminal_shell / web_action / write), and a JSON args schema. One registry is the single source of truth for `tool/list`, the guard pre-flight, and the coordinator's function-calling defs.
+- [ ] `[NOT DONE]` **`tool/list`** JSON-RPC — return the catalog (id, description, args schema, risk, `read_only`, `operation`) so the coordinator and the UI render the same tool surface; wire it into `ChatRelay::spawn` dispatch.
+- [ ] `[NOT DONE]` **`tool/exec` (pre-flight)** JSON-RPC — run Guard-1 pre-scan (`scan_shell`/`scan_path`/`scan_url`) on the concrete args, then `GuardService::evaluate` (estop → policy → profile → ticket). Returns `allow` | `ask { ticketId }` | `block { reason }`; an `ask` mints a single-use ticket and the existing `guard_tickets` card renders it (no new card path needed).
+- [ ] `[NOT DONE]` **`tool/commit` (execute)** JSON-RPC — `GuardService::use_ticket` (args-hash + single-use) → TOCTOU re-verify (S0.6) → dispatch to the tool implementation → unified result `{ ok, result | error, durationMs, auditSeq }`. A mutation that cannot show a consumed ticket is refused (fail-closed).
+- [ ] `[NOT DONE]` **Dispatch table** — map tool ids to the landed engines: `browser.*` → `everyaios-browser` (act/snapshot/read/navigate/tier), `script.run` → `everyaios-script` (`Sandbox::eval`, InnerCallHook), `office.*` → `everyaios-office` (D1–D8), `storage.*` → `everyaios-storage` (walk/dedup/cleanup/FTS5), `file_ops.*` (read/write/delete/list), `search.*` → the G1/G8 cascade.
+- [ ] `[NOT DONE]` **Audit row per execution** — every tool run writes an `everyaios-audit` Merkle-chain row (tool_id, args_hash, ticket_id, result hash, outcome, duration), so the "one event log" half of the axiom is real, not aspirational.
+
+### S0.2 Coordinator tool executor (`packages/coordinator/src/tools.ts`)
+
+- [ ] `[NOT DONE]` **`ToolExecutor`** class — `listTools()` + `executeTool(toolId, args)` over `tool/exec`→`tool/commit`; the ask→wait→consume loop (pending-ticket map resolved by the `guard/respond` handler, mirroring `plan.ts` `waitForChoice`). Never auto-consumes an `ask`.
+- [ ] `[NOT DONE]` **Wire `executeTool` + tool defs** as the `ConversationEngine.executeTool` dep in `chat.ts` (currently omitted — tool calls are parsed then dropped).
+- [ ] `[NOT DONE]` **Tool-result sanitization** (P7.6) — sanitize every tool result before it re-enters the model context (strip injected instructions), then emit `chat/tool_result`.
+- [ ] `[NOT DONE]` **Multi-turn tool loop** — `tool_call → execute → tool_result → feed back → repeat` until the model completes, with a loop guard + max-iteration cap (reuse `everyaios-guard::loopguard` SHA256 circuit-breaker semantics).
+
+### S0.3 Model function-calling (native)
+
+- [ ] `[NOT DONE]` **Wire `tools:` + `tool_choice`** into `ProviderRequest` (`chat.ts`) and through the broker `provider/stream` (the broker already forwards a `tools` body; the coordinator never sends it today).
+- [ ] `[NOT DONE]` **Schema → OpenAI function defs** — pin ONE source of truth (the Rust `ToolRegistry` schema, or `core-tools` `toolsToOpenAI`); serialize it once into the provider request, never two divergent copies.
+- [ ] `[NOT DONE]` **Parse tool-call chunks** from the provider stream (core-engine already parses `tool_call`; confirm + test end-to-end against a scripted provider so a real tool call actually reaches the executor).
+- [ ] `[NOT DONE]` **Local grammar-enforced tool-call extraction** (B5) — the vault already derives JSON-mode grammar from a `tools` body for ollama/llamafile; verify + wire it so local models call tools as reliably as hosted ones.
+
+### S0.4 Plan executor tool wiring
+
+- [ ] `[NOT DONE]` **`plan.ts` `taskTools()` → real execution** — replace the `return []` stub so a blueprint task's declared tools actually run through the executor (and their results feed the task's verify checks).
+- [ ] `[NOT DONE]` **Plan tool steps consume tickets** — each plan `tool_call` breaker step also drives a guard ticket (one ticket per tool call), so multi-task blueprints can't sidestep the guard by going through the planner.
+
+### S0.5 UI (tool surface)
+
+- [ ] `[NOT DONE]` **Tool-call/result rendering** in the transcript — a chip per tool call (risk badge + args preview) and a collapsible result, fed by the existing `chat/tool_call` + `chat/tool_result` events (currently emitted but not rendered).
+- [ ] `[NOT DONE]` **Tool result streaming + error/retry** — long-running tools surface progress, failures surface `chat/error` with a retry affordance that re-runs the same guarded path.
+
+### S0.6 Security invariants (production)
+
+- [ ] `[NOT DONE]` **Fail-closed + audit-everything** — a mutating tool can never run without a consumed ticket; read tools may auto-allow under policy but are always audit-logged (no silent reads).
+- [ ] `[NOT DONE]` **TOCTOU hardening (J21)** — bind tickets to canonical path + parent-dir file handle + inode/version where supported; resolve network destination + DNS/IP policy + executable digest; re-verify preconditions immediately before mutation.
+- [ ] `[NOT DONE]` **Canonical args-hash** — deterministic, order-stable serialization of tool args (shared by coordinator + Rust) so `args-hash` cannot drift between `guard/evaluate` and `guard/use`.
+- [ ] `[NOT DONE]` **Estop covers tools** — verify `tool/commit` honors the global estop (it flows through `use_ticket`, which already checks estop) and add a regression test.
+- [ ] `[NOT DONE]` **External-agent containment at the tool layer** — brokered (EveryAIOS-implemented ops, ticketed) vs sandboxed (isolated worktree/container + reviewed change set) vs uncontrolled (labeled, never marketed as verified); enforce so an ACP/MCP agent's file/terminal ops always consume a Rust ticket.
+
+### S0.7 Testing & verification (production gate)
+
+- [ ] `[NOT DONE]` **Rust golden tests** for `tool/exec`/`tool/commit`: allow/ask/block, single-use, args-mismatch, expired/revoked, estop, TOCTOU, audit row written.
+- [ ] `[NOT DONE]` **Coordinator tests** for `tools.ts`: mock `tool/exec`/`tool/commit`; ask→approve→execute, block, error, sanitization, loop cap.
+- [ ] `[NOT DONE]` **Red-team + path-floor + URL-floor fuzz** on tool args routed through the real executor (reuse the P7.7 corpus — the gate must hold under adversarial tool args, not just chat prompts).
+- [ ] `[NOT DONE]` **End-to-end** — scripted provider emits a tool call → ticket card → human approve → tool executes → result → audit row → `chat/tool_result`; the full "one ticket → one executor → one event log" path proven in a test.
+- [ ] `[NOT DONE]` **EV1 runtime wiring (verified-completion receipts)** — call `everyaios-eval` at task completion so the K1 work receipt can carry a verified-conformance claim; closes the "dev/test-time only" qualification on EV1 in the spec banner.
 
 ---
 
@@ -1264,9 +1321,9 @@
 ---
 
 ## P22 — Built-In MCP Server Manager Queue (doc 74, 2026-08-16)
-> **Verdict recorded:** bundle the **manager**, not the 9,800 servers — mirror the proven `everyaios-acp` registry/installer/transport machinery for *consuming* third-party MCP servers. Doc 70's three *native* engine gaps stay in P18.
+> **Verdict recorded:** bundle the **manager**, not the 9,800 servers — mirror the proven `everyaios-acp` registry/installer/transport machinery for *consuming* third-party MCP servers. **Discovery source (final research 2026-08-18) = the official MCP Registry API — `registry.modelcontextprotocol.io/v0/servers` (OpenAPI 3.1, API-freeze v0.1, MIT, 100/page + `?search=` + cursor pagination), whose per-server `packages[]` (`registryType`/`identifier`/`runtimeHint`/`transport`/`packageArguments`) is the same install shape as the F8 ACP `registry.json` — so `registry_index`/`registry_client`/`installer`/`ProcessTransport` reuse 1:1. The registry is community-curated *discovery*, never a trust boundary — K6 sha256-pin + quarantine + allow-list + Guard-2 install/write tickets stay mandatory. Skills ≠ MCP: the official registry is MCP-servers-only; Claude Skills/SKILL.md is a separate ecosystem → P23.** Doc 70's three *native* engine gaps stay in P18.
 
-- [ ] `[NOT DONE]` **`everyaios-mcp::manager` (doc 74 §3 — 🟢 STEAL/ADAPT):** MCP-server manager — curated allow-list registry index + one-click install (npx/uvx/binary → sha256 → extract, reuse `everyaios-acp` registry_client/installer) + managed stdio child (reuse `frame.rs` + `ProcessTransport`) + `tools/list` surfacing merged into the agent registry with kind/readOnly/openWorld/profile.
+- [ ] `[NOT DONE]` **`everyaios-mcp::manager` (doc 74 §3 — 🟢 STEAL/ADAPT):** MCP-server manager — registry index fed from the official MCP Registry API (`registry.modelcontextprotocol.io/v0/servers`, search + paginate + offline cache) → curated allow-list, then one-click install (npx/uvx/binary → sha256 → extract, reuse `everyaios-acp` registry_client/installer) + managed stdio child (reuse `frame.rs` + `ProcessTransport`) + `tools/list` surfacing merged into the agent registry with kind/readOnly/openWorld/profile.
 - [ ] `[NOT DONE]` **Tauri + Connectors surface (doc 74 §3):** `mcp_servers`/`mcp_install`/`mcp_run`/`mcp_tools` commands + the "MCP Servers" tab → live manager (one-click install → run → tool list) with Guard-2 install + per-write tickets and vault-held tokens.
 - [ ] `[NOT DONE]` **Native connector write template (doc 74 §4 — postgres-mcp-hardened 🟡 ADAPT):** refuse-twice (AST validation + DB read-only default + statement_timeout) + column redaction + EXPLAIN cost guard + hash-chained audit — the template for every Native connector write path.
 
@@ -1425,6 +1482,7 @@
 
 | Phase | Tasks | Done | Open | Weeks |
 |---|---|---|---|---|
+| **Stage 0 Guard-Gated Tool Executor** | **28** | **0** | **28** | **~3** |
 | P0 Workspace & Skeleton | 48 | 48 | 0 | ~2 |
 | P1 Chat + BYOK | 54 | 54 | 0 | ~4 |
 | P2 Browser Layer | 90 | 90 | 0 | ~6 |
@@ -1463,6 +1521,6 @@
 | P34 Full-Fidelity Tool Surfaces (ARCH/12 v3.1) | 7 | 2 | 5 | post-Stage-0 (P34.1/6 landed; P34.2-5 need ribbon+viewer build) |
 | P35 Full Animation Wiring (design-doc motion table) | 4 | 1 | 3 | landed P35.1 (11 files) |
 | Research Tasks (cross-cutting) | 54 | 2 | 52 | parallel |
-| **TOTAL** | **959** | **457** | **502** | **~45 weeks** |
+| **TOTAL** | **987** | **457** | **530** | **~48 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.
