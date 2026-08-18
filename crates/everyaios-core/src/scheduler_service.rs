@@ -117,7 +117,7 @@ impl CronExpr {
 /// Civil date parts from a unix timestamp (Howard Hinnant algorithms).
 fn civil_parts(unix_secs: u64) -> (u8, u8, u8, u8, u8) {
     let days = (unix_secs / 86_400) as i64;
-    let secs_of_day = (unix_secs % 86_400) as u64;
+    let secs_of_day = unix_secs % 86_400;
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let doe = (z - era * 146_097) as u64; // [0, 146096]
@@ -328,6 +328,7 @@ impl SchedulerService {
     }
 
     /// Create (or replace) a job. `now` seeds next-run for cron/interval.
+    #[allow(clippy::too_many_arguments)]
     pub fn upsert(
         &mut self,
         id: impl Into<String>,
@@ -1007,9 +1008,9 @@ mod tests {
     fn retry_backoff_clamps_and_jitters() {
         // Base 30s; attempt 0 → ~30s, attempt 7 → clamped at 3600s.
         let a0 = Job::retry_delay_ms(0, 30_000, 3_600_000, 0.2);
-        assert!(a0 >= 30_000 && a0 <= 36_000, "a0={a0}");
+        assert!((30_000..=36_000).contains(&a0), "a0={a0}");
         let a7 = Job::retry_delay_ms(7, 30_000, 3_600_000, 0.2);
-        assert!(a7 >= 3_600_000 - 720_000 && a7 <= 3_600_000, "a7={a7}");
+        assert!((3_600_000 - 720_000..=3_600_000).contains(&a7), "a7={a7}");
         // Deterministic (no RNG).
         assert_eq!(Job::retry_delay_ms(2, 30_000, 3_600_000, 0.2), Job::retry_delay_ms(2, 30_000, 3_600_000, 0.2));
     }

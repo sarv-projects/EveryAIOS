@@ -544,14 +544,15 @@
 - [ ] `[NOT DONE]` Test: crystallized task runs at 0 tokens, produces same output
 
 ### P6.6 Connector Hub (F1-F5 — doc 13 connector-hub, doc 12, doc 41 P9 nango)
+> **MCP-first (Connector-platform decision 2026-08-16):** the aggregator chain (Composio → Zapier → Nango) was removed — the hub routes native → MCP servers → Auth Bridge; aggregator attach tasks below are reworded to the MCP-first equivalents.
 - [ ] `[NOT DONE]` Wire core-connectors from APP as coordinator dep (F2: 27+ native adapters)
-- [ ] `[NOT DONE]` Implement hub routing engine: native → Composio → Zapier → Nango → Auth Bridge
-- [ ] `[NOT DONE]` Implement no-double-connect logic (if native adapter exists, skip Composio)
+- [ ] `[NOT DONE]` Implement hub routing engine: native → MCP servers → Auth Bridge (aggregator chain removed per the Connector-platform decision)
+- [ ] `[NOT DONE]` Implement no-double-connect logic (if a native adapter exists, skip the MCP duplicate)
 - [ ] `[NOT DONE]` Implement browser-session connectors (F3): drive Gmail/Notion/Linear via CDP + vault
 - [ ] `[NOT DONE]` Implement Local Auth Bridge (F4): PKCE client, no secret, local token manager
-- [ ] `[NOT DONE]` Implement Composio SDK attach (user-key, optional)
-- [ ] `[NOT DONE]` Implement Zapier MCP attach (user-key, optional)
-- [ ] `[NOT DONE]` Implement Nango self-hosted attach (optional)
+- [ ] `[NOT DONE]` Implement MCP server attach (user-supplied, stdio/npx or user-hosted HTTP — P22 MCP Server Manager)
+- [ ] `[NOT DONE]` Implement Native connector attach (BYO OAuth/API-key, tokens in the SQLCipher vault)
+- [ ] `[NOT DONE]` Implement connector attach via official MCP servers (Gmail/Slack/GitHub/Linear — local stdio, no cloud SaaS)
 - [ ] `[NOT DONE]` Implement usage metering per connector
 - [ ] `[NOT DONE]` Test: Gmail-via-browser-session flow with dev credentials
 
@@ -796,9 +797,9 @@
 ### P9.6 HTML→Video Reports (doc 46 Devin hyperframes)
 - [ ] `[NOT DONE]` Hyperframes integration for agent-generated video content
 
-### P9.7 Magic Completion (H16 — doc 01 AnythingLLM Magic Tab; doc 13 Nango sync)
+### P9.7 Magic Completion (H16 — doc 01 AnythingLLM Magic Tab; doc 13 connector sync)
 - [ ] `[NOT DONE]` Implement inline context-aware completion (AnythingLLM pattern)
-- [ ] `[NOT DONE]` Nango sync → RAG (self-hosted connector sync pipeline)
+- [ ] `[NOT DONE]` Connector sync → RAG (self-hosted pipeline via MCP/native connectors — aggregator sync removed per the Connector-platform decision)
 - [ ] `[NOT DONE]` AutomationBench eval harness (long-horizon desktop automation scoring)
 - [ ] `[NOT DONE]` Community skills marketplace (signing + install flow)
 - [ ] `[NOT DONE]` Self-hosted connector-hub server (doc 13 opt-in)

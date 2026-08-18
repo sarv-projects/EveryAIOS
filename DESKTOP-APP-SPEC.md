@@ -10,7 +10,7 @@
 
 ## ⛭ THE FINAL APP — the complete product (every capability below, all together)
 
-> **Capstone vision (v3.22, 2026-08-17).** This is what the finished EveryAIOS is — the state reached when **every row in §0 (A–J + EV), the 10 pillars (§3), and the post-v1 K-pillar (§10) are built, integrated, secured, and release-verified.** Status of each part is tracked live in §0/§6/§7/§10 + TODO; this section is the whole product in one view.
+> **Capstone vision (v3.23, 2026-08-18).** This is what the finished EveryAIOS is — the state reached when **every row in §0 (A–J + EV), the 10 pillars (§3), and the post-v1 K-pillar (§10) are built, integrated, secured, and release-verified.** Status of each part is tracked live in §0/§6/§7/§10 + TODO; this section is the whole product in one view.
 
 **The final app in one sentence:** a single local-first, BYOK, open-source desktop workspace where your **chat, browser, files, documents, code, automations, agents, and connected accounts** live in one safe continuity — the LLM is the CPU, every real effect (file, browser, shell, provider, connector, office, agent) crosses **one ticket model → one executor → one event log → one progress timeline**, and every capability is spec-driven from Markdown and verified by a deterministic dual-guard (Guard-1/Guard-2) + evidence evaluation (EV1) — never by trust in the model.
 
@@ -312,7 +312,7 @@
 | Updates + distribution | GitHub Releases + optional auto-update channel | Signing cert (one-time per release) |
 | Model catalog | Shipped in the binary; updatable via app updates | None |
 
-Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own licenses (Composio SDK MIT, Nango/Zapier ELv2, Camoufox user-gated open-source, ⚠️ CloakBrowser binary is **proprietary/closed-source** (Python wrapper MIT but Chromium binary is a black box — document risk to users), Fortress (stealth Chromium, more transparent), **Lightpanda AGPL → spawn-only (default, never linked)**, Obscura Apache-2.0). Mobile-app concepts — hosted free-model pool, hosted searxng pool, cloud relay — belong to the mobile product and are explicitly **not** part of this project.
+Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own licenses (Camoufox user-gated open-source, ⚠️ CloakBrowser binary is **proprietary/closed-source** (Python wrapper MIT but Chromium binary is a black box — document risk to users), Fortress (stealth Chromium, more transparent), **Lightpanda AGPL → spawn-only (default, never linked)**, Obscura Apache-2.0). Mobile-app concepts — hosted free-model pool, hosted searxng pool, cloud relay — belong to the mobile product and are explicitly **not** part of this project.
 
 ---
 
@@ -623,7 +623,7 @@ flowchart LR
 | **P6** (~5wk) | Orchestration + connectors — blueprints (B2), sub-agents (B3/B4), scheduling (B7), harness installer (F8) + **harness-driving (F12) via ACP bridge (J17)** + **messaging bridges (F13)** + **email/calendar connectors (F14/F15)**, hub (F1/F3/F4/F5/F6) | two spec-driven agents run a plan; scheduled task fires; harness entry managed; **two external agent CLIs driven via ACP side-by-side (test: initialize handshake, session/update → audit, request_permission → diff-card, cancel kills)**; **messaging round-trip via stub (test)**; Gmail-via-browser flow; email read→summarize→reply round-trip via stub (F14) |
 | **P7** (~4wk) | Forge (I1/I2/I4/I5) + **code-intel (I11 LSP / SCIP / repo-map, doc 63 §2.1)** + **Extension ABI (I6)** + guardrails hardening (J2/J3/J6/**J21**) + retest suite | agent-writes-a-skill-survives-restart; **plugin manifest schema rejects bad bundles; capability allow-list blocks unlisted exec (Zed test vectors); lazy activation = registered-but-not-loaded until first use**; **LSP hover/references/rename-with-preview round-trip; SCIP symbol query on a fixture repo**; 100% red-team list blocked; path-floor fuzz = 0 |
 | **P8** (~3wk) | Product polish — **verified-completion eval subsystem (EV1, doc 63 §2.3)**, widget cards (H17), workspace UI, tray, telemetry, packaging, idle-RSS perf, **tiered search cascade (G8)** | Windows beta installs; **eval: 30-task adversarial suite — verifier rejects a plausible-but-unsupported completion (the anti-"sounds finished" regression)**; **measure & publish real idle/warm RSS with the coordinator running** (<30MB idle / <80MB warm are targets to *verify*, not promises — the Bun-compiled sidecar alone is ~93MB, J16); telemetry off-by-default; **G8: cached query <10ms, 50-page parallel fetch completes** |
-| **P9+** | Computer-use (E9), WASM sandbox (I3), Nango sync→RAG, HTML→video, remote handoff (H18), local OpenAI server (A8), AutomationBench, CLI, **image generation (A10)**, **clipboard tool (H26)**, **voice output TTS (H28)** | — |
+| **P9+** | Computer-use (E9), WASM sandbox (I3), connector sync→RAG (MCP/native), HTML→video, remote handoff (H18), local OpenAI server (A8), AutomationBench, CLI, **image generation (A10)**, **clipboard tool (H26)**, **voice output TTS (H28)** | — |
 
 **Retest gate:** the Algorithm Index 🔁 items are re-verified (test suite + benchmark) as part of P5 (memory) and P7 (security); a 🔁 item is only "done on desktop" when its tests run green in the sidecar/runtime.
 
@@ -682,7 +682,7 @@ flowchart LR
 
 ---
 
-## 10. Post-v1 Strategic Pillar — the K-Pillar (v3.22, 2026-08-17; docs 80–82, TODO P28)
+## 10. Post-v1 Strategic Pillar — the K-Pillar (v3.23, 2026-08-18; docs 80–82, TODO P28)
 
 > Adopted from the external benchmark review (doc 80), the non-model moat roadmap (doc 81), and the innovation-priority decisions (doc 82) — all web-verified 2026-08-17. **Everything in this section is gated on Stage 0 — the live ticketed executor** (the open tool-executor seam, §6 "Remaining" = the same item as TODO P6/P7 wiring). No new capability-matrix rows until implemented (K rows compose existing rows: J5/EV1/C6/C10/F8/I6/B7/E5/P7.7/D-series).
 

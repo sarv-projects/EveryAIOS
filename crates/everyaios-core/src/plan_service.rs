@@ -18,17 +18,9 @@ use everyaios_blueprint::iteration::{CircuitBreaker, IterationBudget, LoopDetect
 use serde_json::{json, Value};
 
 /// The executor-facing pre-flight state: one breaker per active plan.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PlanService {
     breakers: HashMap<String, CircuitBreaker>,
-}
-
-impl Default for PlanService {
-    fn default() -> Self {
-        Self {
-            breakers: HashMap::new(),
-        }
-    }
 }
 
 impl PlanService {
