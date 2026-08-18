@@ -8,7 +8,7 @@ flowchart TD
     CORE["**RUST CORE** — everyaios-core binary (orchestrator + safety + browser)<br/>BrowserSvc (CDP child, 37 tools, snapshot/refs/diff) · ScriptEval (rquickjs sandbox)<br/>GuardRail (regex interceptors, diff cards) · Audit/Replay (NDJSON ingest, recording index, token estimates)<br/>MCP server (rust-sdk, 127.0.0.1:9200/mcp) · Key-ring vault · ProcessSupervisor"]
     SIDE["**TS SIDECAR** — coordinator (Bun-compiled, reuses @personal-ai/core-*)<br/>Agent loop (pi-style) · Spec/blueprint loader · Memory+RAG (7 algos, FTS5+vec, KG)<br/>Connector Hub (MCP-first: MCP Servers/Native/Tool Catalog/AuthBridge — decision 2026-08-16) · Search cascade · automations<br/>Engine stages + risk compass · Trust Ladder · Providers + BYOK"]
     CHROME["**Chromium child** — system Chrome/Edge or chrome-for-testing fallback"]
-    LOCAL["**Local services** — searxng (optional) · Ollama/llamafile · SQLite (app.db + memory.db + vault) · LadybugDB (KG) · sandbox (subprocess/WASM)"]
+    LOCAL["**Local services** — searxng (optional) · Ollama/llamafile · SQLite (app.db + memory.db + vault) · Rust-native graph store (LadybugDB optional) · sandbox (subprocess/WASM)"]
     UI -->|"IPC: JSON-RPC over stdio + local WS"| CORE
     CORE -->|"streamed events"| UI
     CORE -->|"stdio JSON-RPC (supervised child)"| SIDE
@@ -31,7 +31,7 @@ flowchart TD
 | `coordinator` (Bun-compiled sidecar) | everyaios-core | pre-spawned at boot (J16) | crash, idle, explicit stop | Supervisor: exponential backoff (1s→2s→4s→60s cap), circuit breaker after 5 crashes/10min, `reconnecting` state surfaced to UI (doc 03, v2.0 §4.3) |
 | Chromium child | everyaios-core | on first browser use | idle sweep (session retention 60min default), explicit close | one-shot spawn; no auto-restart |
 
-**Browser children are tiered (08 §8.8):** system Chrome/Edge = interactive default; **Lightpanda** (default) / **Obscura** (opt-in) = lightweight CDP tier for scrape/RAG at ~16× less memory; optional user-gated stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard bot defenses. One CDP driver (`everyaios-cdp`), task tier picks the engine. Sessions/accounts live in the encrypted **Session Vault** (08 §8.9) with Trust-Ladder-gated access; challenges go through the handler tier (08 §8.10).
+**Browser children are tiered (08 §8.8):** system Chrome/Edge = interactive default; **Lightpanda** (default) / **Obscura** (opt-in) = lightweight CDP tier for scrape/RAG at ~16× less memory (vendor benchmark); optional user-gated stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard bot defenses. One CDP driver (`everyaios-cdp`), task tier picks the engine. Sessions/accounts live in the encrypted **Session Vault** (08 §8.9) with Trust-Ladder-gated access; challenges go through the handler tier (08 §8.10).
 | Ollama / llamafile | everyaios-core (optional) | on local-model use | user stop | spawned only when a local model is selected |
 | searxng instance | everyaios-core (optional) | on search use (if user-installed) | user stop | optional; primary path is public-instance cascade (core-search built) |
 

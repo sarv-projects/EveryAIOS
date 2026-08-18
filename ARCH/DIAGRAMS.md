@@ -48,14 +48,14 @@ graph TB
 
     subgraph Browser["BROWSER CHILDREN (tiered)"]
         Chrome[System Chrome/Edge]
-        Lightpanda[Lightpanda ~16× less mem (default)]
+        Lightpanda[Lightpanda ~16× less mem (vendor benchmark)]
         Obscura[Obscura ~30MB (opt-in)]
         Stealth[Fortress/Camoufox]
     end
 
     subgraph Storage["LOCAL STORAGE"]
         SQLite[(SQLite<br/>app.db + memory.db)]
-        LadybugDB[(LadybugDB<br/>Knowledge Graph)]
+        LadybugDB[(Rust-native graph store<br/>(LadybugDB optional))]
         SqliteVec[(sqlite-vec<br/>Vectors)]
         Vault[(SQLCipher<br/>vault.db)]
     end
@@ -171,7 +171,7 @@ flowchart LR
     Q[User Query] --> IC[Intent Classifier<br/>memory/fact/event/document]
     IC --> S1[S1: FTS5/BM25<br/>keyword + headings 5×<br/>trigram + Porter stem]
     IC --> S2[S2: sqlite-vec<br/>bge-micro embeddings<br/>cosine similarity]
-    IC --> S3[S3: LadybugDB<br/>Spreading Activation<br/>per-hop decay + inhibition]
+    IC --> S3[S3: Rust-native graph<br/>Spreading Activation<br/>per-hop decay + inhibition]
     IC --> S4[S4: Temporal Recency<br/>graphiti-style edge timestamps]
     
     S1 --> Fuse[Score Fusion<br/>weighted RRF<br/>mem0-style single score]
@@ -203,7 +203,7 @@ flowchart TD
     Task[Browser Task Arrives] --> T0{Tier 0: Static OK?<br/>No JS needed?}
     T0 -->|yes| Static[reqwest + markitdown<br/>0 browser overhead]
     T0 -->|no, needs JS| T1{Tier 1: Lightweight?<br/>No login/WebGL needed?}
-    T1 -->|yes (default)| LP[Lightpanda ~16× less mem<br/>Zig, AGPL spawn-only]
+    T1 -->|yes (default)| LP[Lightpanda ~16× less mem (vendor benchmark)<br/>Zig, AGPL spawn-only]
     T1 -->|opt-in| Obscura[Obscura ~30MB RSS<br/>V8 + CDP + stealth-lite]
     T1 -->|no, needs auth/WebGL| T2[Tier 2: System Chrome/Edge<br/>full browser via CDP]
     T2 --> Check{Challenge/block<br/>detected?}
@@ -635,7 +635,7 @@ sequenceDiagram
     participant Coord as Memory Coordinator
     participant FTS as FTS5 Index
     participant Vec as sqlite-vec
-    participant Graph as LadybugDB
+    participant Graph as RustGraph
 
     FS->>Notify: File renamed (old → new)
     Notify->>Coord: Rename(old_path, new_path)
@@ -808,7 +808,7 @@ flowchart TB
         AppDB[(app.db)]
         MemDB[(memory.db)]
         VaultDB[(vault.db<br/>SQLCipher)]
-        LDB[(LadybugDB<br/>graph)]
+        LDB[(Rust-native graph<br/>(LadybugDB optional))]
         VecDB[(sqlite-vec)]
     end
 

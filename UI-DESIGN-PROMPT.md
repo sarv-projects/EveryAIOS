@@ -427,7 +427,7 @@ Design a **premium AI workspace desktop application** — a unified control plan
 
 **General:** Theme (Light/Dark/System) · Language · Data directory · Keyboard shortcuts link
 
-**Models (A6):** Card grid — each: provider icon + model name + context window badge + capability badges (🔧 tools · 👁 vision · 💭 reasoning · 💰 cost tier) + `[Configure]`. Full catalog in power-user drawer (364 models), intent-first default (Fast/Quality/Private/Cheap).
+**Models (A6):** Card grid — each: provider icon + model name + context window badge + capability badges (🔧 tools · 👁 vision · 💭 reasoning · 💰 cost tier) + `[Configure]`. Full catalog in power-user drawer (vendored snapshot; live count drifts), intent-first default (Fast/Quality/Private/Cheap).
 
 **Routing (A7):** Rule table — task type → model assignment + fallback chain. Tiers: `planner_model` · `subagent_models` · `depth: 2` · `concurrency: 6`
 
