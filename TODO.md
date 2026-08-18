@@ -39,6 +39,7 @@
 - [x] `[DONE]` Wire everyaios-core as Tauri's Rust backend (Tauri commands: version, core_boot_report, scan_text, probe_vault — boot report, Guard-1 scan, vault probe)
 - [x] `[DONE]` Verify `tauri dev` boots and shows empty webview window — **verified headless on Xvfb (never on the user's display)**: 1280×800 window mapped, webview page renders (985K white px + accent-blue boot card), process + WebKitWebProcess/NetworkProcess alive; tray icon present in X tree
 - [x] `[DONE]` Add system tray with basic status icon (Show EveryAIOS / Quit menu, `icons/32x32.png`, generated via `scripts/gen-icons.py`)
+- [x] `[DONE]` **Tauri↔Coordinator bridge wired (2026-08-18 — closes the "sidecar not connected" gap, adversarial-review C8):** `ProcessSupervisor` gained a link handoff (`new_with_link` / `start_supervisor_with_link`) that sends each spawned child's stdin/stdout to a channel; `SidecarLink::new_with_activity` re-arms the idle watchdog on every decoded frame; `pre_spawn_coordinator` now drains the handoffs and (re)builds the `ChatRelay` on every (re)spawn via `connect_chat_relay` (`#[allow(dead_code)]` removed). `chat_stream` / `plan_execute` / `scheduler_*` / `usage_snapshot` now reach the live sidecar instead of returning "sidecar not connected". *(Stage 0 — the **tool executor** consuming tickets — remains the open gate; this wires the chat/plan/scheduler relay only.)*
 
 ### P0.3 TS Sidecar (Coordinator) (ARCH/02 §2.3 — TS coordinator responsibilities)
 - [x] `[DONE]` Create `packages/coordinator/` — TS project with tsconfig (Bun target, strict, ESM; deps on all 10 `@personal-ai/core-*`)
@@ -688,7 +689,7 @@
 - [x] `[DONE]` Add loop guard — SHA256 circuit breaker to prevent infinite agent loops — **`everyaios-guard::loopguard` — `step_hash(tool, args)` + rolling-window `LoopGuard` tripping on repeat; progress never trips, window expiry + reset tested**
 - [x] `[DONE]` Add session repair (7-phase validation) for corrupt session recovery — **`everyaios-audit::repair` — `validate_session` over Parse/Sequence/ToolPairing/Ordering/Identity/TimeMonotonic/Termination → `RepairReport` with `RecoveryAction` (Resume/ReplayIdempotent/RestoreCheckpoint/AskUser); 7 failure tests**
 
-**P7 Exit Criterion:** Agent writes skill that survives restart; plugin manifest rejects bad bundles; capability blocks unlisted exec; 100% red-team blocked; path-floor fuzz = 0.
+**P7 Exit Criterion:** Agent writes skill that survives restart; plugin manifest rejects bad bundles; capability blocks unlisted exec; 100% red-team corpus blocked (deny-filter — hard floors are structural, not regex); path-floor fuzz = 0.
 
 ### P7.8 Sandbox Profiles + FS Broker (doc 64 §2/§3/§5 — ladybird Landlock+seccomp, serenity pledge/unveil, chromium syscall-broker)
 - [ ] `[NOT DONE]` Implement `everyaios-guard::sandbox` — `SandboxProfile` builder composing the 3 layers: no_new_privs (PR_SET_NO_NEW_PRIVS) → Landlock/App-Sandbox path allowlist (per-path ReadOnly/ReadAndExecute/ReadWrite, add-if-exists) → seccomp-bpf policy groups (readonly-file-opens / fs-metadata / fs-writes / fd-ops / process-creation / ipc / common-runtime / exec-mem) — **ladybird `RendererSandboxLinux.cpp` + `LibSandbox/Seccomp.cpp` (doc 64 S1); profiles: `Renderer` (read-only fs), `Worker` (rw scratch), `Network` (no fs)**
@@ -899,7 +900,7 @@
 - [ ] `[NOT DONE]` Run prompt-injection test suite: 50+ adversarial payloads in web pages, PDFs, emails
 - [ ] `[NOT DONE]` Run path-traversal fuzz: 10,000 adversarial paths against everyaios-guard → 0 escapes
 - [ ] `[NOT DONE]` Run symlink attack suite: symlink chains, circular symlinks, TOCTOU races
-- [ ] `[NOT DONE]` Verify Guard-2 non-bypassable: attempt to synthesize click from webview JS → must fail
+- [ ] `[NOT DONE]` Nonce-harden Guard-2 approve (bind a crypto nonce to the rendered card; `guard_respond` rejects nonce-mismatched approvals) so a webview-JS-synthesized click fails — the command is webview-callable today
 - [ ] `[NOT DONE]` Test: revoked API key → verify immediate suspension + user alert + failover
 - [ ] `[NOT DONE]` Test: sidecar crash mid-tool-call → verify no orphan processes + clean resume
 - [ ] `[NOT DONE]` Test: kill everyaios-core process → verify all children die within 5s (orphan prevention)
@@ -1462,6 +1463,6 @@
 | P34 Full-Fidelity Tool Surfaces (ARCH/12 v3.1) | 7 | 2 | 5 | post-Stage-0 (P34.1/6 landed; P34.2-5 need ribbon+viewer build) |
 | P35 Full Animation Wiring (design-doc motion table) | 4 | 1 | 3 | landed P35.1 (11 files) |
 | Research Tasks (cross-cutting) | 54 | 2 | 52 | parallel |
-| **TOTAL** | **958** | **456** | **502** | **~45 weeks** |
+| **TOTAL** | **959** | **457** | **502** | **~45 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

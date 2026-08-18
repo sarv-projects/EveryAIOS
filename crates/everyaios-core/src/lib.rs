@@ -111,6 +111,18 @@ pub fn start_supervisor(binary_path: PathBuf) -> Result<ProcessSupervisor, Super
     Ok(ProcessSupervisor::new(binary_path))
 }
 
+/// Like [`start_supervisor`], but also returns the link-handoff receiver the
+/// shell drains to build a `SidecarLink` on every (re)spawn.
+pub fn start_supervisor_with_link(
+    binary_path: PathBuf,
+) -> (
+    ProcessSupervisor,
+    std::sync::mpsc::Receiver<(std::process::ChildStdin, std::process::ChildStdout)>,
+) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    (ProcessSupervisor::new_with_link(binary_path, Some(tx)), rx)
+}
+
 /// P0.1 placeholder key derivation. **Not for production** — replaced by the
 /// P1.1 key-management design (user passphrase + keyfile + KDF).
 pub fn default_vault_key() -> String {

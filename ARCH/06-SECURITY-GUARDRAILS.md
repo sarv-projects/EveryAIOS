@@ -28,7 +28,7 @@ LLM output ──► [1] Trust Ladder policy (sidecar, proposes)
 
 ## 6.4 Guard 2 — human diff-card handshake (Rust)
 
-Escalated actions freeze the loop and render a native card (not LLM-generated): exact file paths (pre/post), script lines, execution target (host vs sandbox vs browser), env vars being set, network destinations. **Approval = a real host click** (non-bypassable — the card is rendered by the **Tauri shell (Rust side)** as a real OS dialog from a everyaios-guard payload over IPC, not by the webview's JS, so prompt-injected webview JS cannot synthesize the click). Every approval/denial is audit-logged with a receipt.
+Escalated actions freeze the loop and render a native card (not LLM-generated): exact file paths (pre/post), script lines, execution target (host vs sandbox vs browser), env vars being set, network destinations. **Approval = an explicit human action** — the card is rendered by the **Tauri shell (Rust side)** from a everyaios-guard payload over IPC (never by the webview's JS), and every approval/denial is audit-logged with a receipt. **Honesty caveat:** the `guard_respond` Tauri command is webview-callable (the webview is the trusted presentation layer, not a security boundary) — a compromised webview *could* self-approve; the hard boundary is the ticket's single-use + args-hash (J21), and a crypto-nonce-bound approve is a P7.5 hardening item, not yet shipped.
 
 ## 6.5 Prompt-injection defense (browser + files + web)
 

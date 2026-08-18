@@ -61,20 +61,18 @@ pub const CHAT_EVENT: &str = "chat-event";
 /// Wire a live coordinator link into the chat relay and store it in state.
 /// The relay's consumer loop forwards every `chat/*` notification from the
 /// sidecar to the UI as a `chat-event` (P1.4: token deltas → core → Tauri
-/// events → UI).
-///
-/// `#[allow(dead_code)]` integration seam: fully built + tested, but not yet
-/// called — `pre_spawn_coordinator` spawns the sidecar via the supervisor,
-/// whose stdout/stderr reader threads are internal; handing the pipes to a
-/// `SidecarLink` is the pending wiring (the relay + protocol themselves have
-/// their own unit tests).
-#[allow(dead_code)]
+/// events → UI). Called once per (re)spawn from the link-drain thread.
 fn connect_chat_relay(
     app: &AppHandle,
-    state: &AppState,
-    link: everyaios_core::SidecarLink<ChildStdin, ChildStdout>,
+    stdin: ChildStdin,
+    stdout: ChildStdout,
+    activity: Arc<AtomicU64>,
 ) {
     let handle = app.clone();
+    let state = app.state::<AppState>();
+    // The SidecarLink reader re-arms the supervisor's idle-watchdog clock on
+    // every decoded frame (session/ready + session/heartbeat).
+    let link = everyaios_core::SidecarLink::new_with_activity(stdin, stdout, Some(activity));
     // J21: the relay shares the app's Guard-2 service, and loads the user's
     // `permissions.toml` escalation policy at boot.
     let relay = everyaios_core::ChatRelay::new_with_guard(
@@ -267,21 +265,28 @@ fn locate_coordinator_bin() -> Option<PathBuf> {
 
 /// J16: pre-spawn the coordinator sidecar at boot (hidden — the app window
 /// and the sidecar warm up in parallel, so the first chat request never waits
-/// on a process spawn: ~200ms perceived cold start). Non-fatal: the app runs
-/// fine without the sidecar; the supervisor just isn't started.
-fn pre_spawn_coordinator() {
+/// on a process spawn: ~200ms perceived cold start). Two threads: one runs the
+/// process lifecycle (spawn/watchdog/restart), the other drains the link
+/// handoffs and (re)builds the `ChatRelay` on every (re)spawn. Non-fatal: the
+/// app runs fine without the sidecar; chat simply reports "sidecar not
+/// connected".
+fn pre_spawn_coordinator(app: AppHandle) {
     let Some(bin) = locate_coordinator_bin() else {
         eprintln!("everyaios-desktop: coordinator binary not found — pre-spawn skipped");
         return;
     };
+    let (mut supervisor, link_rx) = everyaios_core::start_supervisor_with_link(bin);
+    let activity = Arc::clone(&supervisor.last_activity_ms);
+    // Lifecycle thread: spawn, watchdog, restart. Blocks until circuit open.
     std::thread::spawn(move || {
-        match everyaios_core::start_supervisor(bin) {
-            Ok(mut supervisor) => {
-                if let Err(e) = supervisor.wait_or_restart() {
-                    eprintln!("everyaios-desktop: supervisor ended: {e}");
-                }
-            }
-            Err(e) => eprintln!("everyaios-desktop: supervisor create failed: {e}"),
+        if let Err(e) = supervisor.wait_or_restart() {
+            eprintln!("everyaios-desktop: supervisor ended: {e}");
+        }
+    });
+    // Link thread: rebuild the chat relay on every (re)spawn handoff.
+    std::thread::spawn(move || {
+        while let Ok((stdin, stdout)) = link_rx.recv() {
+            connect_chat_relay(&app, stdin, stdout, Arc::clone(&activity));
         }
     });
 }
@@ -428,7 +433,7 @@ pub fn run() {
                 eprintln!("everyaios-desktop: tray setup failed (continuing): {e}");
             }
             // J16: pre-spawn the coordinator + bind the unix control socket.
-            pre_spawn_coordinator();
+            pre_spawn_coordinator(app.handle().clone());
             #[cfg(unix)]
             serve_unix_control_channel();
             Ok(())

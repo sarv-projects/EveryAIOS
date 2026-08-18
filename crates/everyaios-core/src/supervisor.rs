@@ -12,8 +12,9 @@
 use std::collections::VecDeque;
 use std::io::{self, Read};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -113,11 +114,25 @@ pub struct ProcessSupervisor {
     /// Kept open for the app's lifetime so the OS kills the child on parent death.
     #[cfg(target_os = "windows")]
     pub job_handle: Option<isize>,
+    /// New-link handoff: each successful spawn sends the fresh child's stdin
+    /// (write) and stdout (read) ends here so the shell can build a
+    /// `SidecarLink`. `None` for the headless coordinator binary (which has no
+    /// shell to wire a link to and pumps stdout for the watchdog instead).
+    pub link_tx: Option<Sender<(ChildStdin, ChildStdout)>>,
 }
 
 impl ProcessSupervisor {
     /// Create a new supervisor for the given binary.
     pub fn new(binary_path: PathBuf) -> Self {
+        Self::new_with_link(binary_path, None)
+    }
+
+    /// Create a supervisor that hands each spawned child's stdio pipes to a
+    /// `SidecarLink` via `link_tx` (the Tauri shell path).
+    pub fn new_with_link(
+        binary_path: PathBuf,
+        link_tx: Option<Sender<(ChildStdin, ChildStdout)>>,
+    ) -> Self {
         Self {
             child: None,
             binary_path,
@@ -127,6 +142,7 @@ impl ProcessSupervisor {
             started_at: None,
             last_activity_ms: Arc::new(AtomicU64::new(0)),
             readers: Vec::new(),
+            link_tx,
             #[cfg(target_os = "windows")]
             job_handle: None,
         }
@@ -223,21 +239,33 @@ impl ProcessSupervisor {
         // treats `0` as "never produced a byte".)
         self.last_activity_ms.store(0, Ordering::Relaxed);
 
-        // stdout/stderr reader threads: every byte re-arms the idle watchdog.
-        let last_stdout = Arc::clone(&self.last_activity_ms);
-        if let Some(out) = child.stdout.take() {
-            self.readers.push(std::thread::spawn(move || {
-                let _ = pump(out, &last_stdout);
-            }));
-        }
+        // stderr reader thread: every byte re-arms the idle watchdog and the
+        // lines are forwarded to the app's stderr (prefixed) so sidecar
+        // failures are visible in the terminal instead of being silently
+        // swallowed — the 2026-08-17 "child crashed with code 1" loop was
+        // invisible precisely because stderr was discarded.
         let last_stderr = Arc::clone(&self.last_activity_ms);
         if let Some(err) = child.stderr.take() {
-            // Stderr is forwarded to the app's stderr (prefixed) so sidecar
-            // failures are visible in the terminal instead of being silently
-            // swallowed — the 2026-08-17 "child crashed with code 1" loop was
-            // invisible precisely because stderr was discarded.
             self.readers.push(std::thread::spawn(move || {
                 let _ = pump_visible(err, &last_stderr);
+            }));
+        }
+
+        // stdout carries the framed JSON-RPC stream (`session/ready`, the
+        // periodic `session/heartbeat`, responses). When a link is wired, hand
+        // stdin+stdout to the shell so it can build a `SidecarLink` (whose
+        // reader re-arms the watchdog clock on every decoded frame). Headless,
+        // pump stdout for the watchdog clock instead.
+        if let Some(tx) = &self.link_tx {
+            if let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) {
+                if tx.send((stdin, stdout)).is_err() {
+                    eprintln!("[supervisor] link handoff failed — shell receiver gone");
+                }
+            }
+        } else if let Some(out) = child.stdout.take() {
+            let last_stdout = Arc::clone(&self.last_activity_ms);
+            self.readers.push(std::thread::spawn(move || {
+                let _ = pump(out, &last_stdout);
             }));
         }
 

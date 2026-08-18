@@ -21,9 +21,10 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use everyaios_ipc::frame;
 use everyaios_ipc::message::Request;
@@ -126,6 +127,14 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> SidecarLink<W, R> {
     /// Own the coordinator's stdin (write) and stdout (read) ends and start
     /// the reader thread.
     pub fn new(stdin: W, stdout: R) -> Self {
+        Self::new_with_activity(stdin, stdout, None)
+    }
+
+    /// Like [`SidecarLink::new`], but re-arms an optional watchdog activity
+    /// clock on every decoded frame. The sidecar's `session/ready` (first
+    /// byte) + periodic `session/heartbeat` frames keep the supervisor's idle
+    /// watchdog from falsely killing a healthy-but-idle process.
+    pub fn new_with_activity(stdin: W, stdout: R, activity: Option<Arc<AtomicU64>>) -> Self {
         let writer = Arc::new(Mutex::new(stdin));
         let pending: Arc<Mutex<PendingRequests>> = Arc::new(Mutex::new(HashMap::new()));
         let (inbound_tx, inbound) = channel();
@@ -136,6 +145,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> SidecarLink<W, R> {
         std::thread::spawn(move || {
             let mut reader = stdout;
             while let Ok(Some(payload)) = frame::decode(&mut reader) {
+                if let Some(clock) = &activity {
+                    clock.store(now_ms(), Ordering::Relaxed);
+                }
                 let Ok(value) = serde_json::from_slice::<serde_json::Value>(&payload) else {
                     continue;
                 };
@@ -277,6 +289,14 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> SidecarLink<W, R> {
             .map_err(|_| LinkError::Poisoned("writer".into()))?;
         frame::write_frame(&mut *w, payload).map_err(|e| LinkError::Io(e.to_string()))
     }
+}
+
+/// UNIX millisecond timestamp (watchdog activity clock source).
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 static REQUEST_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
