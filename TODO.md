@@ -400,9 +400,9 @@
 
 ### P4.4 PDF Engine (D4 — doc 04)
 - [x] `[DONE]` Implement pdf.js-class renderer in webview — **`ui/pages/PdfViewer.tsx` now renders real pages via `pdfjs-dist` (canvas draw from a `pdf_bytes` base64 data URL, page nav + zoom + Canvas/Text toggle, React.lazy code-split so the 1.4MB worker only ships to the PDF route); the lopdf text extraction stays as the accessibility layer (`pdf_open`)**
-- [x] `[DONE]` Implement form-fill + annotation via pdf-lib (AcroForms) — **`pdf/form.rs` `form_fill(bytes, &[(name, value)])` via lopdf 0.36 (Rust, not TS pdf-lib — same capability): walks catalog `/AcroForm` `/Fields` recursively (parent `Kids` → dotted full names), sets `/V` on matching leaf fields; `NoAcroForm` error; appearance-stream (`/AP`) regeneration + free-text/highlight annotation = later**
+- [x] `[DONE]` Implement form-fill + annotation via pdf-lib (AcroForms) — **`pdf/form.rs` `form_fill(bytes, &[(name, value)])` via lopdf 0.36 (Rust, not TS pdf-lib — same capability): walks catalog `/AcroForm` `/Fields` recursively (parent `Kids` → dotted full names), sets `/V` on matching leaf fields; `NoAcroForm` error; appearance-stream (`/AP`) regeneration + free-text/highlight annotation = TODO P18 (PDF page ops, post-v1)**
 - [x] `[DONE]` Implement text-swap via lopdf Rust bridge (exact-match only) — **`pdf/mod.rs` `replace_text(bytes, page, find, replace)` — `Document::replace_text` (exact-match `Tj` text, layout preserved: glyph positions untouched, never reflow)**
-- [x] `[DONE]` Implement redaction (fill glyph boxes + remove text streams) — **`pdf/redact.rs` `redact(bytes, &[(page, [x1,y1,x2,y2])])` — appends `/Subtype /Redact` annotations (`/Rect` + `/F 4`) to each page's `/Annots` (inline / reference-array / created-on-demand); mark-for-redact step — glyph burn-in removal = later audit-logged pass**
+- [x] `[DONE]` Implement redaction (fill glyph boxes + remove text streams) — **`pdf/redact.rs` `redact(bytes, &[(page, [x1,y1,x2,y2])])` — appends `/Subtype /Redact` annotations (`/Rect` + `/F 4`) to each page's `/Annots` (inline / reference-array / created-on-demand); mark-for-redact step — glyph burn-in removal = TODO P4.4/P18 (audit-logged burn-in pass)**
 - [x] `[DONE]` Implement re-author path (structural edits → generate new PDF) — **`pdf/author.rs` `author_pages(&[&str])` — builds a clean new PDF (Courier/Type1, one page per text block) via lopdf `Document::with_version` + `Content`/`Stream`; the structural-edit path instead of corrupting the source**
 - [x] `[DONE]` Test: pdf form-fill round-trip — **6 pdf tests (100 office total): author→extract text (multi-page), replace_text swaps `Tj` text, form_fill sets `/V` (verified by re-reading the AcroForm), form_fill without AcroForm errors, redact adds a `/Redact` annotation, redact page-out-of-range errors — 463 ws tests, clippy 0, fmt clean**
 
@@ -1123,7 +1123,7 @@
 - [x] [DONE] Artifact cards — **v2 `chat/artifact-card.tsx` + store `Artifact[]`**
 - [x] [DONE] Progress steps — **v2 `chat/progress-steps.tsx` + store `ProgressStep[]`/`streamStep`**
 - [x] [DONE] MCQ interrupt card — **v2 `chat/mcq-interrupt-card.tsx` (diff/permission/mcq/budget kinds, Approve/Reject/More-options)**
-- [x] [DONE] Input bar — **v2 `chat/chat-composer.tsx` (textarea, mode selector, send; Mic button present as a “coming soon” stub; attach is a follow-up)**
+- [x] [DONE] Input bar — **v2 `chat/chat-composer.tsx` (textarea, mode selector, send; Mic button = H15 voice-input (TODO P16, post-v1); attach = follow-up)**
 - [x] [DONE] Chat modes — **v2 `composerMode: 'normal'|'plan'|'research'|'quick'|'code'` in store + composer MODES**
 - [x] [DONE] Slash commands — **v2 composer command hint list (/help /mode /model /undo /clear /export) + keyboard nav**
 - [x] [DONE] Macros + @mentions — **v2 composer hint kinds (`!` macro, `@` mention) + `!macro` chip**
@@ -1381,7 +1381,7 @@
 > **Gated:** this section is the adopted strategy from the external benchmark review (doc 80), the non-model moat roadmap (doc 81), and the innovation-priority decisions (doc 82). Nothing here ships before **Stage 0 — the live ticketed executor** (the open tool-executor seam, spec §6 "Remaining" = doc-80 condition 1 = doc-82 Gate A) and its Gates A–E. No capability-matrix rows until implemented (these compose existing rows: J5/EV1/C6/C10/F8/I6/B8/E5/P7.7).
 
 - [ ] `[NOT DONE]` **Stage 0 — the gate: live ticketed executor.** Coordinator tool loop invokes `GuardService::use_ticket`/`evaluate` for every file/browser/shell/provider/connector/office/ACP effect (the same open item as P6/P7 wiring; doc-80 conditions 1+5; doc-82 Gate A). **Nothing else in P28 ships before this.**
-- [ ] `[NOT DONE]` **ADD-1 One-Gesture Everything Capture (doc 82):** unified "Capture" surface (file/screenshot/spoken thought/browser page/clipboard/attachment) — composition over existing snapshot/clipboard/file-open/H27 engines + H30 voice-notes later
+- [ ] `[NOT DONE]` **ADD-1 One-Gesture Everything Capture (doc 82):** unified "Capture" surface (file/screenshot/spoken thought/browser page/clipboard/attachment) — composition over existing snapshot/clipboard/file-open/H27 engines + H30 voice-notes (TODO P16)
 - [ ] `[NOT DONE]` **ADD-2 Intelligent Desktop Inbox (doc 82):** one inbox composing notifications-popover + memory-panel + tasks + P6.4 session-open proactivity hook; powers the four-verbs first screen (Capture · Ask · Organise · Finish)
 - [ ] `[NOT DONE]` **ADD-3 Do-It-With-Me gradient (doc 82):** takeover/resume flow (P11.5.4, UI) + "repeat it" affordance on guard/auto-cards; quiet-mode continues (H2)
 - [ ] `[NOT DONE]` **ADD-4 Deliverable Studio (doc 82):** report/deck/workbook output surface over D1–D4 + artifact cards; absorbs the H30/H31 queues (doc 68) into one studio; office-correctness pre-req

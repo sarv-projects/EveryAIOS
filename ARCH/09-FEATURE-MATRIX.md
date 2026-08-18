@@ -166,7 +166,7 @@
 |---|---|---|---|---|---|
 | I1 | Code synthesis loop | write→sandbox→test→iterate | sidecar + sandbox | 🟡 | v2.0 §P6 |
 | I2 | Skill registry | ~/.everyaios/skills/, manifest + ownership markers, auto-inject into planner; **SKILL.md format alignment** (name/description/allowed-tools frontmatter + references/ — agent-browser `skill-data`, doc 55) so our skills work with the ecosystem | sidecar + Rust | 🟡 | v2.0 §P6, 33 §8, 55 + 65 §4 (SKILL.md anatomy) + 65 §6 (skills_index.json) |
-| I3 | WASM fuel-metered sandbox | compute budget + epoch kill | Rust (later) | ⚪ | 09 |
+| I3 | WASM fuel-metered sandbox | compute budget + epoch kill | Rust (post-v1) | ⚪ | 09 |
 | I4 | TDD loop | auto-generate tests, read stderr, rewrite | sidecar | 🟡 | v2.0 §P6 |
 | I5 | ECC guardrails | plan-before-build, session scanning | sidecar | 🟡 | 09 |
 | I6 | **Extension/plugin ABI** | versioned bundles (`abi_version`, cumulative host adapters — Zed WIT `since_v0_0_x` pattern); typed manifest: `contributes` + `capabilities` allow-lists with `*`/`**` arg wildcards (Zed `CapabilityGranter`); fail-closed per-extension trust flags (Hermes `allowed_*`); explicit agent-binding (Cherry Studio); lazy activation (VS Code); host facades `ctx.llm`/`ctx.files`/`ctx.approval()`; dogfood first-party plugins | sidecar + Rust everyaios-guard | 🟡 | 44 §5 |

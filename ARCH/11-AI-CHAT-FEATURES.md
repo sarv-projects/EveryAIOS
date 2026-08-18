@@ -76,7 +76,7 @@ These are proven patterns we implement in the sidecar (or Rust where noted). Eac
 | B-14 | **Chat history as searchable tool** | AnythingLLM AIbitat `chat-history` (16 §21) | reuse `search_chat_history` tool (already in A catalog) + `chat_search_index` FTS5 | 🟢 (exists) |
 | B-15 | **Event-stream shape** | pi `EventStream` (05) | turn_start/turn_end/agent_end + text deltas + tool calls — **A-1 already yields these**; align naming, don't re-build | 🟢 |
 | B-16 | **Prompt-injection scan of persona files** | Hermes `prompt_builder.py` (16 §38) | scan AGENTS.md/.cursorrules/SOUL.md for promptware before injection | 🟡 (J6) |
-| B-17 | **Streaming TTS input** | Hermes `tts_streaming.py`/BrowserOS voice (02, 33 §10) | voice chat (VAD) — later/optional | ⚪ (H15) |
+| B-17 | **Streaming TTS input** | Hermes `tts_streaming.py`/BrowserOS voice (02, 33 §10) | voice chat (VAD) — post-v1/optional | ⚪ (H15) |
 
 ---
 
@@ -136,7 +136,7 @@ After applying COPY (A-1…A-16, B-1…B-17), CONVERT (C-1…C-11), REJECT (R-1�
 - Reasoning blocks (B-11), resumable streams (B-12), artifacts/Generative UI (B-13, A-16)
 - Message branching, pinning, searchable history via `chat_search_index` (A-14/B-14)
 - Chat overlay on office docs/reader (ARCH 04 §overlay) + cockpit + audit/replay UI (H2/H3)
-- Voice input later (H15)
+- Voice input post-v1 (H15)
 
 **Gates (unchanged from ARCH 06/08):** sidecar proposes → everyaios-guard ticket → Rust disposes; keys in everyaios-vault; every mutating chat tool call audited.
 

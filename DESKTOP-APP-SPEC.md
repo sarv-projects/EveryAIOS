@@ -370,7 +370,7 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 - Free searxng-first cascade + circuit breaker + BM25 rerank (built). Deep research: breadth×depth tree, learnings-up, gap-check, cited reports with confidence metrics (Vane's classifier→researcher→scrapeURL pipeline validates the shape). Multi-channel search (arXiv/GitHub/EDGAR/Reddit). Autonomous data-analysis REPL (sandboxed pandas/numpy). Repo-wide engineering loops. SeekStorm-class local site search. **Instant filename/content search (G7, doc 49):** FTS5 filename index + incremental watcher + optional OS-native hooks — the Everything/UltraSearch UX, cross-platform.
 - **Token economy (05):** snip (0.6) → soft (0.5) → force (0.9) compaction with byte-stable prefix (Reasonix, 99.82% cache-hit reality); lossless compaction via dense anchors + frozen-snapshot MEMORY.md; per-model cache/cost accounting; key affinity; target >85% cache hit on long sessions.
 - **RTK output compression (doc 46):** command-specific shell output filtering (60-90% reduction) before LLM ingestion — per-command parsers extract only failures/changes/relevant output.
-- Zero-token crystallization (built). NL scheduling ("every Monday 9AM scrape competitors"). HTML→video reports (later, optional).
+- Zero-token crystallization (built). NL scheduling ("every Monday 9AM scrape competitors"). HTML→video reports (post-v1, optional — §8/P10).
 
 ### P8 · The Forge: Sandbox Tool Generation & Evolvability
 - Write→sandbox→test→persist loop; ephemeral sandboxes (Docker / locked WSL / MicroVM / process); automated TDD loop; **skill registry** (`~/.everyaios/skills/`, Codex-style convention, ownership markers, auto-inject into planner) — the system permanently grows its own toolset without source changes. ECC guardrails (plan-before-build, session scanning). Future: WASM fuel-metered sandbox. No hardcoded toolset — ceilings = sandbox + permissions.
@@ -380,7 +380,7 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 - **Trust Ladder** (0–100, built, 🔁) + **Guard 1** deterministic regex interceptors (compiled blocklist, pre-exec scan — a fast deny-filter, not the primary security boundary) + **Guard 2** visual diff-confirmation cards (native click-to-approve, human-gated; covers sensitive web actions like checkout — the approve command is webview-callable, so nonce hardening is a P7.5 item, not an absolute boundary). Capability-gated state-mutation (read-only default, structured diff before external writes). Isolated file-access hard-floors. Secure env vault (SQLCipher, CES executor — keys never enter the LLM context). Prompt-injection defense (`<user_document>` wrapping, context scan, tool-result sanitization — probabilistic, not absolute; the hard invariant is injection never *suffices* for a privileged side effect, enforced by ticket + guard). Append-only audit + replay. Device-local guarantee; E2E-encrypted sync opt-in.
 - **Escalation rules & decision packages (J21, doc 52 §2):** the Trust-Ladder bands are policy-driven via `~/.everyaios/permissions.toml` (delete=always_ask, multi_file_edit=ask_if_gt_5, external_network=ask_if_new_domain, terminal_shell=ask_if_destructive; `min_confidence_for_auto` threshold). Escalation passes a structured **decision package** (goal + proposed diff + risk + affected paths) that renders as the existing Guard-2 card; approvals/denials feed the correction-detector (#9) and taste profile (C9) so autonomy grows from user behavior, never from the model's own judgment.
 
-### P10 · Remote & Cross-Device (later, opt-in)
+### P10 · Remote & Cross-Device (post-v1, opt-in)
 - **Remote session handoff (H18, ⚪):** LAN/Tailscale/tunnel view of running sessions — start at your desk, pick up from your phone mid-run (extends session checkpointing + E2E sync). Post-v1.
 
 ---
@@ -604,8 +604,8 @@ flowchart LR
 11. Connector hub core (registry, routing, usage metering) + Auth Bridge (F4) + **MCP-first connectors surface (F1/F5 per Connector-platform decision 2026-08-16 — aggregator tabs removed)**
 12. Forge runtime (sandbox exec, TDD loop, skill registry with Codex-style convention)
 13. WSL bridge + port/network hooks + tray daemon
-14. Widget cards (H17) · remote handoff (H18, later) · computer-use (E9, later) · WASM sandbox (I3, later) · HTML→video (later)
-15. Multi-channel deep-research adapters + AutomationBench eval harness (later)
+14. Widget cards (H17) · remote handoff (H18, post-v1) · computer-use (E9, post-v1) · WASM sandbox (I3, post-v1) · HTML→video (post-v1)
+15. Multi-channel deep-research adapters + AutomationBench eval harness (post-v1, P10)
 16. **Storage intelligence (D9–D11, G7)** — `everyaios-storage` crate: parallel work-stealing walker, immutable zstd snapshots, squarified treemap, 7-stage hash dedup, large-file finder, Guard-2-gated cleanup, FTS5 instant filename search (doc 49)
 17. **Generative UI (H25)** — AG-UI channel + sandboxed live components · **clipboard tool (H26)** · **resumable streams (H27)** · **voice output TTS (H28)** + offline STT/wake-word (H15 ext) · **image generation (A10)** · **email/calendar connectors (F14/F15)** (doc 50)
 18. **Tiered search cascade & cache (G8 + Algorithm #33)** — SQLite cache, WebSurfx Rust tier, parallel fetch cascade · **storage health & analytics (D12)** — thresholds, cleanup plans, dashboard · **escalation rules & decision packages (J21)** — permissions.toml + decision-package contract; **Aider in the F12 harness set** + surgical-hierarchy framing (P2)

@@ -47,7 +47,7 @@ Escalated actions freeze the loop and render a native card (not LLM-generated): 
 | Docker (optional) | heavy/data workflows | user-installed Docker only; never required |
 | MicroVM (future) | highest isolation | microsandbox msb_krun pattern (doc 23) |
 | Browser tab | web content | per-tab process, ownership claims, no extension bridges into the app core |
-| Remote-SSH (optional, later) | dev servers / VPS execution | port-forward + SFTP + detached `serve` (Reasonix's 6th backend, doc 05) — always diff-card gated |
+| Remote-SSH (P10, post-v1, optional) | dev servers / VPS execution | port-forward + SFTP + detached `serve` (Reasonix's 6th backend, doc 05) — always diff-card gated |
 
 ## 6.7 Audit (append-only, replayable)
 
