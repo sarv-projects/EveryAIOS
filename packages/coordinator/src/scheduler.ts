@@ -29,6 +29,23 @@ export interface ListReport {
   onBattery: boolean;
 }
 
+/** Monitoring config on a job (mirror of the Rust `MonitorConfig` serde shape). */
+export interface MonitorConfig {
+  stopOnCondition: boolean;
+  lastObservation?: string;
+  notifications: number;
+}
+
+/** The verdict `scheduler/monitor` returns (mirror of Rust `MonitorVerdict`). */
+export interface MonitorVerdict {
+  changed: boolean;
+  notified: boolean;
+  stopped: boolean;
+  previous?: string;
+  current: string;
+  notifications: number;
+}
+
 /** One scheduled job (mirror of the Rust `Job` serde shape). */
 export interface SchedulerJob {
   id: string;
@@ -57,6 +74,8 @@ export interface SchedulerJob {
   runs: number;
   successes: number;
   failures: number;
+  /** Monitoring semantics (`None` in Rust = a plain scheduled job). */
+  monitor?: MonitorConfig;
 }
 
 export interface WebhookBody {
@@ -68,6 +87,15 @@ export interface WebhookBody {
 export const DEFAULT_TICK_MS = 5_000;
 /** Lease heartbeat interval (ms) — well inside Rust's 30s lease expiry. */
 export const DEFAULT_HEARTBEAT_MS = 10_000;
+/**
+ * Stop-condition marker for monitoring jobs. The coordinator's LLM pass owns
+ * the semantic "is the end condition met" judgment (the "scheduler ≠ agent"
+ * split): a monitoring run's prompt asks the model to end its reply with this
+ * exact marker when the monitored end condition is now true. The executor
+ * strips it from the stored observation and reports `conditionMet` to
+ * `scheduler/monitor`.
+ */
+export const MONITOR_STOP_MARKER = "[MONITOR_DONE]";
 
 /**
  * The executor loop. Returns a handle to stop ticking (tests call `stop()`
@@ -127,21 +155,28 @@ export function startScheduler(
       // (doc 67 §2: the same conversation, its history still there).
       const streamId = `automation-${job.id}-${now}`;
       let failed = false;
+      // A monitoring run captures the assistant's final reply as its
+      // "observation" (the state being watched) for the delta comparison.
+      let observation = "";
       const emitJob = (e: ChatEvent): void => {
         // A chat/error (or cancelled) means the run did NOT complete — the
         // lease must finish with ok:false so Rust schedules the retry.
         if (e.type === "error" || e.type === "cancelled") failed = true;
+        if (e.type === "done") observation = e.fullText;
         // Tag automation emissions so the UI can badge them (surface field).
         emit({ ...e, streamId });
       };
       // The checkpoint is the durable resume point — completed work is never
       // re-executed; the run continues from the last finished step.
       const resume = checkpoint > 0 ? `[resume from checkpoint ${checkpoint}] ` : "";
+      const monitorDirective = job.monitor
+        ? `\n\nThis is a monitoring task. Report the current state you observe. If the monitored end condition is now met, end your response with the exact marker ${MONITOR_STOP_MARKER}.`
+        : "";
       await runChatStream(
         {
           sessionId: job.sessionId,
           streamId,
-          text: `${resume}Run scheduled task "${job.name}"`,
+          text: `${resume}Run scheduled task "${job.name}"${monitorDirective}`,
           surface: "automation",
         },
         emitJob,
@@ -149,6 +184,28 @@ export function startScheduler(
         33,
         request,
       );
+      // Monitoring jobs evaluate the observation ("run vs notify"): Rust owns
+      // WHEN + state + the deterministic delta; the coordinator's LLM pass owns
+      // the semantic stop judgment (the marker above).
+      if (job.monitor) {
+        const conditionMet = observation.includes(MONITOR_STOP_MARKER);
+        const clean = observation.replaceAll(MONITOR_STOP_MARKER, "").trim();
+        const verdict = (await request("scheduler/monitor", {
+          id: job.id,
+          observation: clean,
+          conditionMet,
+        })) as MonitorVerdict;
+        emit({
+          type: "monitor",
+          streamId,
+          jobId: job.id,
+          changed: verdict.changed,
+          notified: verdict.notified,
+          stopped: verdict.stopped,
+          current: verdict.current,
+          notifications: verdict.notifications,
+        });
+      }
       await request("scheduler/lease_finish", {
         id: job.id,
         ok: !failed,

@@ -70,6 +70,18 @@ export type ChatEvent =
       streamId: string;
       sessionId: string;
       facts: string[];
+    }
+  | {
+      /** Monitoring-run verdict (P6.4): the "notify vs silent" split. Emitted
+       * after `scheduler/monitor` evaluates a monitoring job's observation. */
+      type: "monitor";
+      streamId: string;
+      jobId: string;
+      changed: boolean;
+      notified: boolean;
+      stopped: boolean;
+      current: string;
+      notifications: number;
     };
 
 /** Provider request the bridge turns into a provider stream. */

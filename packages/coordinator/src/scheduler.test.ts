@@ -22,6 +22,8 @@ const failBridge: ProviderBridge = {
 function scriptedRust(initial: Record<string, unknown> = {}) {
   const jobs = new Map<string, SchedulerJob>();
   const calls: string[] = [];
+  /** Captured `scheduler/monitor` invocations: {id, observation, conditionMet}. */
+  const monitorCalls: Array<{ id: string; observation: string; conditionMet: boolean }> = [];
   let now = initial["now"] as number | undefined ?? 1_750_000_000;
   const dueQueue: string[] = [];
 
@@ -73,6 +75,18 @@ function scriptedRust(initial: Record<string, unknown> = {}) {
       }
       case "scheduler/fire_webhook":
         return { fired: [String(p.path)] };
+      case "scheduler/monitor": {
+        const rec = { id: String(p.id), observation: String(p.observation ?? ""), conditionMet: Boolean(p.conditionMet) };
+        monitorCalls.push(rec);
+        return {
+          changed: true,
+          notified: true,
+          stopped: rec.conditionMet,
+          previous: undefined,
+          current: rec.observation,
+          notifications: 1,
+        };
+      }
       default:
         return {};
     }
@@ -81,6 +95,7 @@ function scriptedRust(initial: Record<string, unknown> = {}) {
   return {
     request,
     calls,
+    monitorCalls,
     setNow: (t: number) => {
       now = t;
     },
@@ -160,6 +175,77 @@ test("webhook listener answers POST and forwards to scheduler/fire_webhook", asy
     expect(body.ok).toBe(true);
     expect(r.calls).toContain("scheduler/fire_webhook");
   }
+  runtime.stop();
+});
+
+test("monitor job calls scheduler/monitor with the observation and emits a verdict", async () => {
+  const r = scriptedRust();
+  r.putJob(
+    r.makeJob("m1", {
+      monitor: { stopOnCondition: true, notifications: 0 },
+    }),
+  );
+  r.queueDue("m1");
+
+  const obsBridge: ProviderBridge = {
+    async *streamChat(): AsyncGenerator<StreamChunk, void> {
+      yield { type: "text", text: "price is now $42" };
+      yield { type: "done" };
+    },
+  };
+
+  const events: ChatEvent[] = [];
+  const runtime = startScheduler(r.request, (e) => events.push(e), obsBridge);
+  await runtime.tickOnce(1_750_000_060);
+  await new Promise((res) => setTimeout(res, 20));
+
+  expect(r.monitorCalls.length).toBe(1);
+  expect(r.monitorCalls[0]!.id).toBe("m1");
+  expect(r.monitorCalls[0]!.observation).toBe("price is now $42");
+  expect(r.monitorCalls[0]!.conditionMet).toBe(false);
+
+  const verdict = events.find((e) => e.type === "monitor");
+  expect(verdict).toBeDefined();
+  expect((verdict as { notified: boolean }).notified).toBe(true);
+  runtime.stop();
+});
+
+test("monitor stop marker is stripped and reported as conditionMet", async () => {
+  const r = scriptedRust();
+  r.putJob(
+    r.makeJob("m2", {
+      monitor: { stopOnCondition: true, notifications: 0 },
+    }),
+  );
+  r.queueDue("m2");
+
+  const stopBridge: ProviderBridge = {
+    async *streamChat(): AsyncGenerator<StreamChunk, void> {
+      yield { type: "text", text: "package delivered [MONITOR_DONE]" };
+      yield { type: "done" };
+    },
+  };
+
+  const runtime = startScheduler(r.request, () => {}, stopBridge);
+  await runtime.tickOnce(1_750_000_060);
+  await new Promise((res) => setTimeout(res, 20));
+
+  expect(r.monitorCalls.length).toBe(1);
+  expect(r.monitorCalls[0]!.conditionMet).toBe(true);
+  expect(r.monitorCalls[0]!.observation).toBe("package delivered");
+  runtime.stop();
+});
+
+test("plain job (no monitor) never calls scheduler/monitor", async () => {
+  const r = scriptedRust();
+  r.putJob(r.makeJob("p1"));
+  r.queueDue("p1");
+
+  const runtime = startScheduler(r.request, () => {}, okBridge);
+  await runtime.tickOnce(1_750_000_060);
+  await new Promise((res) => setTimeout(res, 20));
+
+  expect(r.monitorCalls.length).toBe(0);
   runtime.stop();
 });
 
