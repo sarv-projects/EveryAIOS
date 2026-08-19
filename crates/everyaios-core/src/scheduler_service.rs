@@ -168,6 +168,7 @@ pub enum TriggerSpec {
 
 /// Policy controls per job (doc 62 §3: scope + frequency; battery-aware B7).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SchedulePolicy {
     /// Suppress runs while the device is on battery.
     pub suppress_on_battery: bool,
@@ -194,15 +195,47 @@ pub enum RunState {
     Idle,
     /// A run is in flight; the lease expires if the executor stops heartbeating
     /// (Hatchet pattern) → the job becomes reassignable on the next due-cycle.
-    Running { lease_expires_at: u64 },
+    Running {
+        #[serde(rename = "leaseExpiresAt")]
+        lease_expires_at: u64,
+    },
     /// HITL pause (approval / review). `resume_deadline` = auto-resume-or-cancel
     /// bound; `None` = paused indefinitely until an explicit resume.
-    Paused { resume_deadline: Option<u64> },
+    Paused {
+        #[serde(rename = "resumeDeadline")]
+        resume_deadline: Option<u64>,
+    },
     /// Failed after retries; `next_retry_at` is the backoff schedule.
-    Failed { retries: u32, next_retry_at: Option<u64> },
+    Failed {
+        retries: u32,
+        #[serde(rename = "nextRetryAt")]
+        next_retry_at: Option<u64>,
+    },
+}
+
+/// Monitoring semantics (the ChatGPT "monitoring task" pattern): a recurring
+/// job whose runs *observe* state and notify only on a meaningful delta,
+/// remembering the previous observation between runs ("previous runs are
+/// remembered"). `stop_on_condition` stops the monitor when the executor
+/// reports the end condition met (e.g. "package delivered").
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitorConfig {
+    /// Stop the recurring monitor when the executor reports the end condition
+    /// met (disable the job + keep the record).
+    #[serde(default)]
+    pub stop_on_condition: bool,
+    /// Previous run's observation (persisted monitoring state). `None` = never
+    /// observed (the first run always notifies as the baseline).
+    #[serde(default)]
+    pub last_observation: Option<String>,
+    /// Notifications sent so far (the "run vs notify" accounting).
+    #[serde(default)]
+    pub notifications: u32,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Job {
     pub id: String,
     pub name: String,
@@ -224,6 +257,32 @@ pub struct Job {
     pub runs: u32,
     pub successes: u32,
     pub failures: u32,
+    /// Monitoring config (`None` = a plain scheduled/event job; lazily created
+    /// by `monitor_evaluate` for delta-notify semantics).
+    #[serde(default)]
+    pub monitor: Option<MonitorConfig>,
+}
+
+/// The outcome of one monitoring evaluation (stateful-polling delta check).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitorVerdict {
+    /// The new observation differs from the previous one (or it's the first run).
+    pub changed: bool,
+    /// Should the user be notified this run? (first run, a delta, or the stop
+    /// condition) — the "run vs notify" split: a run completes without
+    /// notifying when nothing changed.
+    pub notified: bool,
+    /// The end condition was met and `stop_on_condition` was set → the monitor
+    /// was stopped (job disabled, state reset to idle).
+    pub stopped: bool,
+    /// The previous observation (None on the first run).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous: Option<String>,
+    /// The observation just recorded.
+    pub current: String,
+    /// Total notifications sent after this run.
+    pub notifications: u32,
 }
 
 impl Job {
@@ -244,6 +303,7 @@ impl Job {
             runs: 0,
             successes: 0,
             failures: 0,
+            monitor: None,
         }
     }
 
@@ -364,6 +424,49 @@ impl SchedulerService {
             job.next_run_at = compute_next_run(&job.trigger, now, None);
         }
         Ok(())
+    }
+
+    /// Attach/replace a job's monitoring config (or clear it with `None`).
+    pub fn set_monitor(&mut self, id: &str, monitor: Option<MonitorConfig>) -> Result<(), String> {
+        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+        job.monitor = monitor;
+        Ok(())
+    }
+
+    /// P6.4 monitoring semantics (the "notify only on a meaningful delta"
+    /// pattern from the ChatGPT Scheduled-Tasks model): compare this run's
+    /// `observation` against the job's previous observation and return whether
+    /// to notify + whether the stop condition ended the monitor. Stores the new
+    /// observation (stateful polling — "previous runs are remembered").
+    pub fn monitor_evaluate(
+        &mut self,
+        id: &str,
+        observation: &str,
+        condition_met: bool,
+    ) -> Result<MonitorVerdict, String> {
+        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+        let monitor = job.monitor.get_or_insert_with(MonitorConfig::default);
+        let previous = monitor.last_observation.clone();
+        let changed = previous.as_deref() != Some(observation);
+        let notified = previous.is_none() || changed || condition_met;
+        if notified {
+            monitor.notifications += 1;
+        }
+        monitor.last_observation = Some(observation.to_string());
+        let stopped = condition_met && monitor.stop_on_condition;
+        if stopped {
+            // End condition met: stop the recurring monitor (keep the record).
+            job.enabled = false;
+            job.state = RunState::Idle;
+        }
+        Ok(MonitorVerdict {
+            changed,
+            notified,
+            stopped,
+            previous,
+            current: observation.to_string(),
+            notifications: monitor.notifications,
+        })
     }
 
     // -- HITL pause (cronflow: a first-class state with explicit transitions) -
@@ -760,6 +863,23 @@ impl SchedulerService {
                 job.next_run_at = Some(now);
                 Ok(json!({ "ok": true, "id": id }))
             }
+            "scheduler/monitor" => {
+                let id = str_param(params, "id").ok_or("scheduler/monitor requires id")?;
+                let observation = str_param(params, "observation").unwrap_or("");
+                let condition_met = params.get("conditionMet").and_then(Value::as_bool).unwrap_or(false);
+                let verdict = self.monitor_evaluate(id, observation, condition_met)?;
+                Ok(serde_json::to_value(verdict).unwrap_or(Value::Null))
+            }
+            "scheduler/monitor_config" => {
+                let id = str_param(params, "id").ok_or("scheduler/monitor_config requires id")?;
+                let monitor = params
+                    .get("monitor")
+                    .cloned()
+                    .map(|v| serde_json::from_value::<MonitorConfig>(v).map_err(|e| format!("bad monitor: {e}")))
+                    .transpose()?;
+                self.set_monitor(id, monitor)?;
+                Ok(json!({ "ok": true, "id": id }))
+            }
             _ => Err(format!("method not found: {method}")),
         }
     }
@@ -1084,5 +1204,79 @@ mod tests {
         let mut svc = SchedulerService::new();
         assert!(svc.handle("scheduler/pause", &json!({ "id": "ghost" })).is_err());
         assert!(svc.handle("scheduler/nope", &json!({})).is_err());
+    }
+
+    #[test]
+    fn monitor_notifies_on_first_run_and_stores_observation() {
+        let mut svc = SchedulerService::new();
+        svc.upsert("m1", "watch", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
+        let v = svc.monitor_evaluate("m1", "price=100", false).unwrap();
+        assert!(v.notified, "first run always notifies (baseline)");
+        assert!(v.changed, "no previous observation → changed");
+        assert!(!v.stopped);
+        assert_eq!(v.previous, None);
+        assert_eq!(v.current, "price=100");
+        assert_eq!(v.notifications, 1);
+        assert_eq!(
+            svc.get("m1").unwrap().monitor.as_ref().unwrap().last_observation.as_deref(),
+            Some("price=100"),
+            "the observation is remembered for the next run (stateful polling)"
+        );
+    }
+
+    #[test]
+    fn monitor_suppresses_unchanged_runs() {
+        let mut svc = SchedulerService::new();
+        svc.upsert("m1", "watch", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
+        svc.monitor_evaluate("m1", "price=100", false).unwrap();
+        let v = svc.monitor_evaluate("m1", "price=100", false).unwrap();
+        assert!(!v.changed);
+        assert!(!v.notified, "no delta → no notification (the run vs notify split)");
+        assert_eq!(v.notifications, 1, "an unchanged run does not bump the count");
+    }
+
+    #[test]
+    fn monitor_notifies_on_delta() {
+        let mut svc = SchedulerService::new();
+        svc.upsert("m1", "watch", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
+        svc.monitor_evaluate("m1", "price=100", false).unwrap();
+        let v = svc.monitor_evaluate("m1", "price=80", false).unwrap();
+        assert!(v.changed);
+        assert!(v.notified);
+        assert_eq!(v.previous.as_deref(), Some("price=100"));
+        assert_eq!(v.notifications, 2);
+    }
+
+    #[test]
+    fn monitor_stops_on_condition() {
+        let mut svc = SchedulerService::new();
+        svc.upsert("m1", "watch", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
+        svc.set_monitor("m1", Some(MonitorConfig { stop_on_condition: true, ..MonitorConfig::default() })).unwrap();
+        svc.monitor_evaluate("m1", "shipped=false", false).unwrap();
+        let v = svc.monitor_evaluate("m1", "delivered", true).unwrap();
+        assert!(v.stopped, "condition met + stop_on_condition → stopped");
+        assert!(v.notified, "the stop event is worth reporting");
+        let job = svc.get("m1").unwrap();
+        assert!(!job.enabled, "a stopped monitor is disabled");
+        assert!(matches!(job.state, RunState::Idle));
+    }
+
+    #[test]
+    fn job_serializes_camel_case_for_the_sidecar() {
+        let mut svc = SchedulerService::new();
+        svc.upsert("j1", "brief", "s1", TriggerSpec::Interval { secs: 60 }, vec![], None, now());
+        let list = svc.handle("scheduler/list", &json!({ "now": now() })).unwrap();
+        let job = &list["jobs"][0];
+        assert_eq!(job["sessionId"], "s1", "session_id must serialize as sessionId for the coordinator: {job}");
+        assert!(job.get("session_id").is_none(), "no snake_case leakage: {job}");
+        assert!(job["policy"]["suppressOnBattery"].as_bool().is_some(), "policy is camelCase: {}", job["policy"]);
+        assert!(job["policy"].get("suppress_on_battery").is_none());
+
+        // RunState struct-variant fields must be camelCase too.
+        svc.lease_start("j1", now()).unwrap();
+        let list2 = svc.handle("scheduler/list", &json!({ "now": now() })).unwrap();
+        let state = &list2["jobs"][0]["state"];
+        assert!(state["leaseExpiresAt"].as_u64().is_some(), "RunState must serialize leaseExpiresAt: {state}");
+        assert!(state.get("lease_expires_at").is_none());
     }
 }
