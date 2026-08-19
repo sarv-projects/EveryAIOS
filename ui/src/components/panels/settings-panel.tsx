@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Info,
   Keyboard,
@@ -84,17 +85,27 @@ export default function SettingsPanel() {
           </nav>
         </aside>
 
-        {/* Active section content */}
+        {/* Active section content — crossfade on nav switch */}
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-4xl p-4">
-            {section === 'general' && <GeneralSection />}
-            {section === 'appearance' && <AppearanceSection />}
-            {section === 'agents' && <AgentsModelsSection />}
-            {section === 'apikeys' && <ModelsSection />}
-            {section === 'privacy' && <PrivacySection />}
-            {section === 'keyboard' && <KeyboardSection />}
-            {section === 'advanced' && <AdvancedSection />}
-            {section === 'about' && <AboutSection />}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={section}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+              >
+                {section === 'general' && <GeneralSection />}
+                {section === 'appearance' && <AppearanceSection />}
+                {section === 'agents' && <AgentsModelsSection />}
+                {section === 'apikeys' && <ModelsSection />}
+                {section === 'privacy' && <PrivacySection />}
+                {section === 'keyboard' && <KeyboardSection />}
+                {section === 'advanced' && <AdvancedSection />}
+                {section === 'about' && <AboutSection />}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </div>

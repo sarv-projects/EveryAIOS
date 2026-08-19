@@ -1,10 +1,12 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-> **Version:** 3.1 (2026-08-17)  
+> **Version:** 3.2 (2026-08-19)  
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
 > **Principle:** ONE project, ONE session, ONE ticket, ONE timeline. Chat + live progress in the center; a thin **right activity rail** switches *what you are watching* — one surface at a time. Never 9 peer tabs, never a Chat/Cowork/Code product split.  
 > **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H25 — H20 redefined doc 67), ARCH/DIAGRAMS #7 (MCQ interrupt), doc 67 §6 (finalization record)
-> **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, 28-screen inventory, motion/accessibility tables) that supersedes this doc's visual details. The v2 cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
+> **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, full screen/panel/tab/overlay inventory, motion + mock-data tables) that supersedes this doc's visual details. The cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
+>
+> **v3.2 (2026-08-19):** the canonical spec was **completely rewritten to match the shipped cockpit** — every tab is now live (Automations Active/Templates/History, Memory Episodic/Semantic/Graph/Skills, Connectors Native/MCP/Catalog), every panel button wired (right-rail view actions, Guard Allow/Deny + vault CTAs, Storage cleanup, Settings actions, Analytics export, automation editor Save/Cancel), tab-content crossfades added, and the mock-data inventory documented. Layout contract unchanged.
 >
 > **v3.1 (2026-08-17): Full-fidelity tool surfaces ("nothing held back").** The right panel is the **live window into the real tool** — every view reproduces the official product's full surface, not a stripped preview: **Word/Excel/PowerPoint get the complete Microsoft ribbon** (File·Home·Insert·…·View + **Copilot** on Home) with all groups/buttons; **PDF gets a full viewer** (page nav, zoom, search, annotations, forms, sign, redact, thumbnails/outline); **Browser gets full Chrome-style chrome** (tabs, omnibox, back/forward/reload, bookmarks bar, extensions, profile, and the built-in **AI Mode / Gemini sidebar**). The agent drives these surfaces; the user can touch them (takeover). Detail in §4.1c.
 >

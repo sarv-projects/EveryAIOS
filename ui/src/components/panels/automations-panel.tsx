@@ -1,9 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Check,
   Clock,
+  History,
+  LayoutTemplate,
   Pause,
   Play,
   Plus,
@@ -14,7 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   schedulerDelete,
   schedulerEnable,
@@ -26,6 +29,7 @@ import {
   triggerLabel,
 } from '@/lib/scheduler'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/lib/store'
 import AutomationEditor from './automation-editor'
 
 const TRIGGER_ICON: Record<
@@ -39,25 +43,61 @@ const TRIGGER_ICON: Record<
 }
 
 const TEMPLATES = [
-  'CI Fixer',
-  'Weekly Deps',
-  'Security Scan',
-  'Release Notes',
-  'Slack Digest',
-  'Standup Bot',
-  'Invoice Batch',
-  'Log Rotator',
+  { name: 'CI Fixer', desc: 'Watch for red builds and open a fixing session', trigger: 'on ci_build_fail', runs: 142 },
+  { name: 'Weekly Deps', desc: 'Scan dependencies every Monday, patch CVEs', trigger: '0 6 * * 1', runs: 12 },
+  { name: 'Security Scan', desc: 'Nightly surface scan of the workspace', trigger: '0 2 * * *', runs: 89 },
+  { name: 'Release Notes', desc: 'Draft release notes from merged PRs', trigger: 'on release draft', runs: 23 },
+  { name: 'Slack Digest', desc: 'Summarize #support into a morning brief', trigger: '0 8 * * 1-5', runs: 64 },
+  { name: 'Standup Bot', desc: 'Collect yesterday/today from git activity', trigger: '0 9 * * 1-5', runs: 118 },
+  { name: 'Invoice Batch', desc: 'Fill + sign a folder of PDF invoices', trigger: '0 0 1 * *', runs: 9 },
+  { name: 'Log Rotator', desc: 'Archive + trim agent logs over 30 days', trigger: 'interval 86400', runs: 31 },
+]
+
+// Mock run history — what a completed/paused/failed run looks like.
+const RUN_HISTORY = [
+  { id: 'r1', job: 'CI Fixer', ts: 'today 09:12', result: 'success' as const, detail: 'Fixed TS build — 2 commits', cost: '$0.04', dur: '1m 12s' },
+  { id: 'r2', job: 'Morning brief', ts: 'today 08:00', result: 'success' as const, detail: '12 sources · 3 highlights', cost: '$0.18', dur: '2m 04s' },
+  { id: 'r3', job: 'CI Fixer', ts: 'yesterday 16:41', result: 'failed' as const, detail: 'Timeout after 3 retries', cost: '$0.11', dur: '4m 55s' },
+  { id: 'r4', job: 'Weekly deps scan', ts: 'Mon 06:00', result: 'success' as const, detail: '2 CVEs found · 1 patched', cost: '$0.09', dur: '58s' },
+  { id: 'r5', job: 'CI Fixer', ts: 'Mon 11:20', result: 'success' as const, detail: 'Fixed flaky e2e test', cost: '$0.06', dur: '2m 31s' },
+  { id: 'r6', job: 'Morning brief', ts: 'Sun 08:00', result: 'success' as const, detail: '9 sources · 2 highlights', cost: '$0.15', dur: '1m 48s' },
+  { id: 'r7', job: 'Slack triage', ts: 'Fri 17:03', result: 'success' as const, detail: 'Triage: 3 urgent · 8 later', cost: '$0.21', dur: '3m 10s' },
 ]
 
 export default function AutomationsPanel() {
   const [automations, setAutomations] = useState<SchedulerJob[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [nlInput, setNlInput] = useState('')
+  const [tab, setTab] = useState('active')
+  const notify = useAppStore((s) => s.notify)
 
   // H14: live job list from the Rust scheduler (demo fallback in preview).
   useEffect(() => {
     void schedulerList().then((s) => setAutomations(s.jobs))
   }, [])
+
+  // NL create: in preview we fake the parse and prepend a new enabled job.
+  const createFromNl = () => {
+    const text = nlInput.trim()
+    if (!text) return
+    const newJob: SchedulerJob = {
+      id: `j-nl-${Date.now()}`,
+      name: text.length > 40 ? `${text.slice(0, 40)}…` : text,
+      sessionId: 's-nl',
+      trigger: { type: 'cron', expr: '0 9 * * *' },
+      steps: [{ step: 'prompt', text }],
+      policy: { suppressOnBattery: true, maxRunsPerHour: 1 },
+      enabled: true,
+      state: { state: 'idle' },
+      checkpoint: 0,
+      runs: 0,
+      successes: 0,
+      failures: 0,
+    }
+    setAutomations((prev) => [newJob, ...prev])
+    setNlInput('')
+    notify('Automation created — “Every morning at 09:00”')
+  }
 
   const toggleEnabled = (id: string) => {
     const next = !automations.find((a) => a.id === id)?.enabled
@@ -106,6 +146,10 @@ export default function AutomationsPanel() {
           <Button
             size="sm"
             className="h-8 bg-orange-500 text-black hover:bg-orange-400"
+            onClick={() => {
+              setTab('templates')
+              notify('Pick a template or describe an automation below')
+            }}
           >
             <Plus className="h-3.5 w-3.5" />
             Create automation
@@ -115,7 +159,7 @@ export default function AutomationsPanel() {
           Scheduled tasks, webhooks &amp; event triggers that drive headless
           agent sessions
         </p>
-        <Tabs defaultValue="active" className="mt-3">
+        <Tabs value={tab} onValueChange={setTab} className="mt-3">
           <TabsList className="h-7">
             <TabsTrigger value="active" className="text-xs">
               Active
@@ -127,15 +171,98 @@ export default function AutomationsPanel() {
               History
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="active" />
-          <TabsContent value="templates" />
-          <TabsContent value="history" />
         </Tabs>
       </header>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <div className="space-y-3 p-4">
-          <div className="grid gap-3 xl:grid-cols-2">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            className="space-y-3 p-4"
+          >
+          {tab === 'templates' ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {TEMPLATES.map((t) => (
+                <div
+                  key={t.name}
+                  className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-orange-500/40 hover-lift"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-orange-500/15 text-orange-400">
+                      <LayoutTemplate className="h-4 w-4" />
+                    </div>
+                    <Badge variant="secondary" className="font-mono text-[9px]">{t.runs} runs</Badge>
+                  </div>
+                  <h3 className="mt-2.5 text-sm font-medium text-foreground">{t.name}</h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{t.desc}</p>
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <span className="rounded border border-border bg-background/40 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+                      {t.trigger}
+                    </span>
+                    <Button
+                      size="sm"
+                      className="h-7 gap-1 bg-orange-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
+                      onClick={() => notify(`Created automation from “${t.name}” template`)}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Use template
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : tab === 'history' ? (
+            <div className="rounded-lg border border-border bg-card">
+              <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+                <div className="flex items-center gap-1.5">
+                  <History className="h-3.5 w-3.5 text-orange-400" />
+                  <span className="text-xs font-medium text-foreground">Recent runs</span>
+                </div>
+                <span className="font-mono text-[10px] text-muted-foreground">last 7 days</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full font-mono text-[11px]">
+                  <thead className="sticky top-0 bg-zinc-900/90 backdrop-blur">
+                    <tr className="text-left text-[9px] uppercase tracking-wide text-muted-foreground">
+                      <th className="px-3 py-1.5 font-normal">When</th>
+                      <th className="px-3 py-1.5 font-normal">Job</th>
+                      <th className="px-3 py-1.5 font-normal">Result</th>
+                      <th className="hidden px-3 py-1.5 font-normal sm:table-cell">Detail</th>
+                      <th className="hidden px-3 py-1.5 font-normal md:table-cell">Cost</th>
+                      <th className="hidden px-3 py-1.5 font-normal md:table-cell">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {RUN_HISTORY.map((r) => (
+                      <tr key={r.id} className="border-t border-border/50 hover:bg-accent/40">
+                        <td className="px-3 py-1.5 text-muted-foreground">{r.ts}</td>
+                        <td className="px-3 py-1.5 text-foreground">{r.job}</td>
+                        <td className="px-3 py-1.5">
+                          {r.result === 'success' ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-300">
+                              <Check className="h-3 w-3" /> success
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-red-300">
+                              <X className="h-3 w-3" /> failed
+                            </span>
+                          )}
+                        </td>
+                        <td className="hidden px-3 py-1.5 text-muted-foreground sm:table-cell">{r.detail}</td>
+                        <td className="hidden px-3 py-1.5 text-orange-300/80 md:table-cell">{r.cost}</td>
+                        <td className="hidden px-3 py-1.5 text-muted-foreground md:table-cell">{r.dur}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+          <>
             {automations.map((a) => {
               const Trigger = TRIGGER_ICON[a.trigger.type]
               const Icon = Trigger.icon
@@ -247,7 +374,6 @@ export default function AutomationsPanel() {
                 </div>
               )
             })}
-          </div>
 
           {selected && (
             <AutomationEditor
@@ -255,30 +381,10 @@ export default function AutomationsPanel() {
               onClose={() => setSelectedId(null)}
             />
           )}
-
-          {/* Templates row */}
-          <div className="rounded-lg border border-border bg-card p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-xs font-medium text-foreground">
-                Templates
-              </span>
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {TEMPLATES.length} presets
-              </span>
-            </div>
-            <div className="scroll-thin flex gap-2 overflow-x-auto pb-1">
-              {TEMPLATES.map((t) => (
-                <button
-                  key={t}
-                  className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-background/40 px-3 py-1.5 text-xs text-foreground/80 transition-colors hover:border-orange-500/40 hover:bg-orange-500/10 hover:text-orange-300"
-                >
-                  <Plus className="h-3 w-3" />
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+          </>
+          )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Natural-language composer */}
@@ -294,6 +400,7 @@ export default function AutomationsPanel() {
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
           <button
+            onClick={createFromNl}
             className="flex size-6 shrink-0 items-center justify-center rounded-md bg-orange-500 text-black hover:bg-orange-400"
             aria-label="Create automation from description"
           >

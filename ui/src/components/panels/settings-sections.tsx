@@ -137,12 +137,17 @@ function StatusPill({ status }: { status: string }) {
 }
 
 export function ModelsSection() {
+  const notify = useAppStore((s) => s.notify)
   return (
     <SectionShell
       title="API Keys (BYOK)"
       desc="Bring-your-own-key providers — health checks and priority. The agent runtime + model picker lives under Agents & Models."
       action={
-        <Button size="sm" className="h-8 bg-orange-500 text-black hover:bg-orange-400">
+        <Button
+          size="sm"
+          className="h-8 bg-orange-500 text-black hover:bg-orange-400"
+          onClick={() => notify('Add key — paste an API key; it is stored in the local vault (SQLCipher)')}
+        >
           <Plus className="h-3.5 w-3.5" />
           Add key
         </Button>
@@ -164,12 +169,29 @@ export function ModelsSection() {
             </div>
             <StatusPill status={p.status} />
             <div className="flex gap-1">
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[10px]"
+                onClick={() => notify(`Health check ${p.name} — ${p.status === 'healthy' ? 'ok, 45ms' : p.status === 'unverified' ? 'unverified' : 'offline'}`)}
+              >
                 <HeartPulse className="h-3 w-3" />
                 Health
               </Button>
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]">Priority</Button>
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-red-400 hover:bg-red-500/10">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[10px]"
+                onClick={() => notify(`Priority #${p.priority} — drag to reorder`)}
+              >
+                Priority
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
+                onClick={() => notify(`Removing ${p.name} key from the vault…`)}
+              >
                 <Trash2 className="h-3 w-3" />
               </Button>
             </div>

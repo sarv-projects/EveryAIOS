@@ -207,12 +207,18 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
 }
 
 function AgentsTab() {
+  const notify = useAppStore((s) => s.notify)
   return (
     <SectionShell
       title="Agent runtimes"
       desc="The underlying coding-agent CLI / IDE plugin EveryAIOS can drive. Each runtime ships its own model support — Claude Code only drives Anthropic models, Codex CLI only OpenAI, etc."
       action={
-        <Button size="sm" variant="outline" className="h-8">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8"
+          onClick={() => notify('Discover more — browsing the ACP registry (live in the shell)')}
+        >
           <Boxes className="h-3.5 w-3.5" />
           Discover more
         </Button>

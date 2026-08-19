@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/lib/store'
 
 const TREEMAP = [
   { label: 'raw-events.csv', size: '18 MB', color: 'bg-sky-500/80', span: 'col-span-4 row-span-3' },
@@ -31,6 +32,7 @@ const DUP_GROUPS = [
 ]
 
 export default function StorageView() {
+  const notify = useAppStore((s) => s.notify)
   return (
     <div className="flex h-full w-full flex-col">
       <header className="border-b border-border px-4 py-2.5">
@@ -166,11 +168,20 @@ export default function StorageView() {
               via revision log.
             </p>
             <div className="flex gap-2">
-              <Button size="sm" variant="default" className="bg-orange-500 text-black hover:bg-orange-400">
+              <Button
+                size="sm"
+                variant="default"
+                className="bg-orange-500 text-black hover:bg-orange-400"
+                onClick={() => notify('Reviewing cleanup diff — 5 files · 4.21 MB reclaimable')}
+              >
                 <GitCompare className="h-3 w-3" />
                 Review diff
               </Button>
-              <Button size="sm" variant="outline">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => notify('Kept all files — no changes made')}
+              >
                 Keep all
               </Button>
             </div>

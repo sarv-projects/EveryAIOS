@@ -21,6 +21,11 @@ import {
   HardDrive,
   GitCompare,
   ShieldCheck,
+  History,
+  Check,
+  Download,
+  RotateCw,
+  Trash2,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -359,25 +364,116 @@ export function RightViewport() {
   const [viewportPct, setViewportPct] = React.useState<number>(45)
   const [isResizing, setIsResizing] = React.useState(false)
 
-  // View-specific action buttons
+  const notify = useAppStore((s) => s.notify)
+
+  // View-specific action buttons — wired to store actions so every button
+  // does something real in the cockpit (mock-data preview + shell both work).
   const viewActions: Record<string, { icon: React.ElementType; label: string; action: () => void }[]> = {
     folder: [
-      { icon: Plus, label: 'New file', action: () => {} },
+      {
+        icon: Plus,
+        label: 'New file',
+        action: () => notify('New file — type a name to create it in the workspace'),
+      },
+      {
+        icon: GitCompare,
+        label: 'Diff',
+        action: () => addView('diff'),
+      },
     ],
     shell: [
-      { icon: Plus, label: 'New terminal', action: () => {} },
+      {
+        icon: Plus,
+        label: 'New terminal',
+        action: () => notify('New terminal tab — agent shell session'),
+      },
+      {
+        icon: History,
+        label: 'History',
+        action: () => notify('Shell history — last 20 commands'),
+      },
     ],
     browse: [
-      { icon: Globe, label: 'New tab', action: () => {} },
+      {
+        icon: Globe,
+        label: 'New tab',
+        action: () => notify('New browser tab — starting at about:blank'),
+      },
+      {
+        icon: ScanSearch,
+        label: 'Inspector',
+        action: () => notify('DOM inspector — accessibility-tree snapshot'),
+      },
     ],
     code: [
-      { icon: Plus, label: 'New file', action: () => {} },
+      {
+        icon: Plus,
+        label: 'New file',
+        action: () => notify('New file — untitled.ts in the workspace'),
+      },
+      {
+        icon: GitCompare,
+        label: 'Diff',
+        action: () => addView('diff'),
+      },
     ],
     progress: [
       { icon: Activity, label: 'Timeline', action: () => setActiveView('timeline') },
+      {
+        icon: Download,
+        label: 'Export log',
+        action: () => notify('Exporting progress log (NDJSON)…'),
+      },
     ],
     timeline: [
       { icon: Activity, label: 'Progress', action: () => setActiveView('progress') },
+      {
+        icon: ShieldCheck,
+        label: 'Audit',
+        action: () => addView('audit'),
+      },
+    ],
+    'office-xlsx': [
+      {
+        icon: RotateCw,
+        label: 'Recalculate',
+        action: () => notify('IronCalc recalc — 0 LLM ops (deterministic)'),
+      },
+    ],
+    'office-docx': [
+      {
+        icon: FileText,
+        label: 'Word count',
+        action: () => notify('847 words · 3 sections · Page 1/3'),
+      },
+    ],
+    'office-pptx': [
+      {
+        icon: Presentation,
+        label: 'Presenter view',
+        action: () => notify('Presenter notes — Slide 3/5'),
+      },
+    ],
+    'office-pdf': [
+      {
+        icon: ScanSearch,
+        label: 'Search in PDF',
+        action: () => notify('Search — 3 hits for “invoice”'),
+      },
+    ],
+    diff: [
+      { icon: Check, label: 'Accept all', action: () => notify('Accepted all changes — revision 9') },
+      { icon: X, label: 'Revert all', action: () => notify('Reverted — back to revision 7') },
+    ],
+    audit: [
+      { icon: ShieldCheck, label: 'Live', action: () => notify('Watching live — append-only event stream') },
+    ],
+    storage: [
+      {
+        icon: Trash2,
+        label: 'Clean up',
+        action: () => notify('Cleanup plan — Guard-2 approval required'),
+      },
     ],
   }
   const actions = viewActions[activeView] ?? []

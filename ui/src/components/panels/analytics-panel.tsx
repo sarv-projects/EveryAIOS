@@ -1,11 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { BarChart3, Coins, Cpu, DollarSign, Layers, Timer } from 'lucide-react'
+import { useAppStore } from '@/lib/store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -49,6 +51,7 @@ const TOOLTIP_STYLE = {
 
 export default function AnalyticsPanel() {
   const [range, setRange] = useState('30d')
+  const notify = useAppStore((s) => s.notify)
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -69,7 +72,15 @@ export default function AnalyticsPanel() {
       </header>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <div className="space-y-4 p-4">
+        <AnimatePresence mode="wait">
+        <motion.div
+          key={range}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+          className="space-y-4 p-4"
+        >
           {/* KPI cards */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {KPIS.map((k) => {
@@ -157,7 +168,8 @@ export default function AnalyticsPanel() {
             <ModelLeaderboard />
             <AgentBreakdown />
           </div>
-        </div>
+        </motion.div>
+        </AnimatePresence>
       </div>
 
       <footer className="flex items-center justify-between border-t border-border bg-card px-4 py-2">
@@ -165,7 +177,14 @@ export default function AnalyticsPanel() {
           <Coins className="mr-1 inline h-3 w-3" />
           pricing synced 4m ago
         </span>
-        <Button size="sm" variant="outline" className="h-7 text-xs">Export CSV</Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          onClick={() => notify('Exporting sessions.csv — 10 rows')}
+        >
+          Export CSV
+        </Button>
       </footer>
     </div>
   )

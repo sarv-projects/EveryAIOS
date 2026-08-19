@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import {
   Check, Cloud, Plug, Plus, Search, Server, Zap, Wrench,
 } from 'lucide-react'
@@ -8,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type Connector } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
 import { mcpCatalog, type McpCatalog } from '@/lib/mcp'
 import { cn } from '@/lib/utils'
 
@@ -83,8 +85,9 @@ function initials(name: string) {
 }
 
 export default function ConnectorsPanel() {
-  const [tab, setTab] = useState('mcp')
+  const [tab, setTab] = useState('native')
   const [catalog, setCatalog] = useState<McpCatalog | null>(null)
+  const notify = useAppStore((s) => s.notify)
 
   // Live tool catalog from the Rust registry (demo fallback in preview).
   useEffect(() => {
@@ -96,6 +99,12 @@ export default function ConnectorsPanel() {
       alive = false
     }
   }, [])
+
+  const [mcpList, setMcpList] = useState(MCP_SERVERS)
+  const connectMcp = (name: string) =>
+    setMcpList((prev) =>
+      prev.map((s) => (s.name === name ? { ...s, status: 'connected' as const } : s)),
+    )
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -109,13 +118,22 @@ export default function ConnectorsPanel() {
             </Badge>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="h-8 text-xs">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              onClick={() => {
+                setTab('mcp')
+                notify('Browsing the MCP registry (live fetch in the shell)')
+              }}
+            >
               <Search className="h-3.5 w-3.5" />
               Browse MCP servers
             </Button>
             <Button
               size="sm"
               className="h-8 bg-orange-500 text-black hover:bg-orange-400"
+              onClick={() => notify('Add native connector — opens the OAuth flow in the shell')}
             >
               <Plus className="h-3.5 w-3.5" />
               Add native connector
@@ -150,92 +168,103 @@ export default function ConnectorsPanel() {
       </div>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <div className="space-y-4 p-4">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+          className="space-y-4 p-4"
+        >
           {tab === 'catalog' ? (
             <ToolCatalogSection catalog={catalog} />
+          ) : tab === 'native' ? (
+            <>
+              <section>
+                <div className="mb-2 flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 text-orange-400" />
+                  <span className="text-xs font-medium text-foreground">Native connectors</span>
+                  <Badge variant="secondary" className="text-[9px]">OAuth tokens in local vault</Badge>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {NATIVE_SAMPLES.map((c, i) => (
+                    <ConnectorCard
+                      key={c.id}
+                      c={c}
+                      colorIdx={i}
+                      onConnect={() => notify(`Connect ${c.name} — OAuth flow opens in the shell`)}
+                    />
+                  ))}
+                </div>
+              </section>
+            </>
           ) : (
-          <>
-          {/* Native connector grid */}
-          <section>
-            <div className="mb-2 flex items-center gap-1.5">
-              <Zap className="h-3.5 w-3.5 text-orange-400" />
-              <span className="text-xs font-medium text-foreground">Native connectors</span>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {NATIVE_SAMPLES.map((c, i) => (
-                <ConnectorCard key={c.id} c={c} colorIdx={i} />
-              ))}
-            </div>
-          </section>
-
-          {/* MCP servers */}
-          <section className="rounded-lg border border-border bg-card p-3">
-            <div className="mb-3 flex items-center gap-1.5">
-              <Server className="h-3.5 w-3.5 text-orange-400" />
-              <span className="text-xs font-medium text-foreground">MCP servers</span>
-              <Badge variant="secondary" className="text-[9px]">model-context-protocol</Badge>
-            </div>
-            <ul className="space-y-1.5">
-              {MCP_SERVERS.map((s, i) => {
-                const connected = s.status === 'connected'
-                return (
-                  <li
-                    key={i}
-                    className="flex items-center gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2"
-                  >
-                    <span
-                      className={cn(
-                        'flex size-8 shrink-0 items-center justify-center rounded-md font-mono text-[11px] font-semibold',
-                        'bg-orange-500/15 text-orange-300',
-                      )}
+            <section className="rounded-lg border border-border bg-card p-3">
+              <div className="mb-3 flex items-center gap-1.5">
+                <Server className="h-3.5 w-3.5 text-orange-400" />
+                <span className="text-xs font-medium text-foreground">MCP servers</span>
+                <Badge variant="secondary" className="text-[9px]">model-context-protocol</Badge>
+              </div>
+              <ul className="space-y-1.5">
+                {mcpList.map((s, i) => {
+                  const connected = s.status === 'connected'
+                  return (
+                    <li
+                      key={i}
+                      className="flex items-center gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2"
                     >
-                      {s.name.slice(0, 2).toUpperCase()}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-xs font-medium text-foreground">
-                          {s.name}
-                        </span>
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            'text-[9px]',
-                            s.transport === 'http'
-                              ? 'bg-sky-500/15 text-sky-300'
-                              : 'bg-emerald-500/15 text-emerald-300',
-                          )}
-                        >
-                          {s.transport === 'http'
-                            ? 'Running on HTTP'
-                            : 'Running on stdio'}
-                        </Badge>
-                      </div>
-                      <div className="truncate font-mono text-[10px] text-muted-foreground">
-                        {s.desc} · {s.tools} tools
-                      </div>
-                    </div>
-                    {connected ? (
-                      <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">
-                        <Check className="h-3 w-3" />
-                        connected
-                      </Badge>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10"
+                      <span
+                        className={cn(
+                          'flex size-8 shrink-0 items-center justify-center rounded-md font-mono text-[11px] font-semibold',
+                          'bg-orange-500/15 text-orange-300',
+                        )}
                       >
-                        Connect
-                      </Button>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-          </>
+                        {s.name.slice(0, 2).toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-xs font-medium text-foreground">
+                            {s.name}
+                          </span>
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              'text-[9px]',
+                              s.transport === 'http'
+                                ? 'bg-sky-500/15 text-sky-300'
+                                : 'bg-emerald-500/15 text-emerald-300',
+                            )}
+                          >
+                            {s.transport === 'http'
+                              ? 'Running on HTTP'
+                              : 'Running on stdio'}
+                          </Badge>
+                        </div>
+                        <div className="truncate font-mono text-[10px] text-muted-foreground">
+                          {s.desc} · {s.tools} tools
+                        </div>
+                      </div>
+                      {connected ? (
+                        <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">
+                          <Check className="h-3 w-3" />
+                          connected
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10"
+                          onClick={() => connectMcp(s.name)}
+                        >
+                          Connect
+                        </Button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
           )}
-        </div>
+        </motion.div>
       </div>
 
       <footer className="border-t border-border bg-card px-4 py-2">
@@ -331,9 +360,11 @@ function ToolCatalogSection({ catalog }: { catalog: McpCatalog | null }) {
 function ConnectorCard({
   c,
   colorIdx,
+  onConnect,
 }: {
   c: Connector & { lastUsed?: string }
   colorIdx: number
+  onConnect?: () => void
 }) {
   const connected = c.status === 'connected'
   const color = LOGO_COLORS[colorIdx % LOGO_COLORS.length]
@@ -390,6 +421,7 @@ function ConnectorCard({
             size="sm"
             variant="outline"
             className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10"
+            onClick={onConnect}
           >
             Connect
           </Button>

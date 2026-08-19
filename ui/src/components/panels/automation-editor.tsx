@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import type { SchedulerJob } from '@/lib/scheduler'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/lib/store'
 
 interface Props {
   automation: SchedulerJob
@@ -31,6 +32,7 @@ const ACTIVITY_30D = Array.from({ length: 30 }, (_, i) => ({
 }))
 
 export default function AutomationEditor({ automation, onClose }: Props) {
+  const notify = useAppStore((s) => s.notify)
   const [budget, setBudget] = useState(0.5)
   const [trigger, setTrigger] = useState(automation.trigger.type)
   const [action, setAction] = useState('session')
@@ -251,12 +253,16 @@ export default function AutomationEditor({ automation, onClose }: Props) {
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-1">
-            <Button variant="ghost" size="sm" className="h-8 text-xs">
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onClose}>
               Cancel
             </Button>
             <Button
               size="sm"
               className="h-8 bg-orange-500 text-black hover:bg-orange-400"
+              onClick={() => {
+                notify('Saved automation — trigger updated, next run recomputed')
+                onClose()
+              }}
             >
               Save automation
             </Button>

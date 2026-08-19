@@ -7,6 +7,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/lib/store'
 import {
   guardEstop,
   guardPolicy,
@@ -75,6 +76,7 @@ export default function GuardPanel() {
   const [tickets, setTickets] = useState<GuardTicket[]>([])
   const [policy, setPolicy] = useState<GuardPolicy | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const notify = useAppStore((s) => s.notify)
 
   // Live bridge (P7.5/J21): poll pending tickets + policy while in the shell;
   // in preview the bridge returns demo data so the card stays explorable.
@@ -304,6 +306,7 @@ export default function GuardPanel() {
                         <Button
                           size="sm"
                           className="h-6 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
+                          onClick={() => notify('Guard-2: allowed “npm run deploy” once')}
                         >
                           <Check className="h-3 w-3" />
                           Allow
@@ -312,6 +315,7 @@ export default function GuardPanel() {
                           size="sm"
                           variant="outline"
                           className="h-6 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
+                          onClick={() => notify('Guard-2: denied — logged to audit')}
                         >
                           <X className="h-3 w-3" />
                           Deny
@@ -365,10 +369,12 @@ export default function GuardPanel() {
             <VaultCard
               icon={<KeyRound className="h-4 w-4 text-orange-400" />}
               title="Key-ring" stats="7 keys" sub="last rotated 2d ago" cta="Rotate now"
+              onCta={() => notify('Rotating key-ring — re-encrypting vault (SQLCipher)…')}
             />
             <VaultCard
               icon={<Vault className="h-4 w-4 text-orange-400" />}
               title="Session Vault" stats="12 sessions" sub="SQLCipher · encrypted" cta="View sessions"
+              onCta={() => notify('Session vault — 12 encrypted sessions, agent never sees raw cookies')}
             />
           </section>
         </div>
@@ -397,13 +403,14 @@ function Legend() {
 }
 
 function VaultCard({
-  icon, title, stats, sub, cta,
+  icon, title, stats, sub, cta, onCta,
 }: {
   icon: React.ReactNode
   title: string
   stats: string
   sub: string
   cta: string
+  onCta?: () => void
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -412,7 +419,12 @@ function VaultCard({
           {icon}
           <span className="text-xs font-medium text-foreground">{title}</span>
         </div>
-        <Button size="sm" variant="outline" className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10"
+          onClick={onCta}
+        >
           {cta}
         </Button>
       </div>

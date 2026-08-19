@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ExternalLink, Github } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useAppStore } from '@/lib/store'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -51,6 +52,7 @@ const SHORTCUTS = [
 ]
 
 export function KeyboardSection() {
+  const notify = useAppStore((s) => s.notify)
   return (
     <SectionShell title="Keyboard" desc="Shortcut bindings">
       <ul className="divide-y divide-border/40 rounded-md border border-border/50 bg-background/30">
@@ -68,7 +70,14 @@ export function KeyboardSection() {
                   </kbd>
                 ))}
               </div>
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]">Edit</Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-[10px]"
+                onClick={() => notify(`Edit binding for “${s.action}” — press new keys`)}
+              >
+                Edit
+              </Button>
             </div>
           </li>
         ))}
