@@ -10,12 +10,37 @@
 //! the schema here is exactly what that layer will hydrate on boot.
 
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use everyaios_memory::{
     Bm25Doc, Bm25Index, ContextPlanner, EdgeType, FsEvent, GhostIndex, GraphStore, MemoryEntry,
     NodeKind, PagedMemory, PlannerConfig, UsageLedger,
 };
+
+/// Current wall-clock time in milliseconds since the Unix epoch (0 when the
+/// clock is unavailable — the store still works, timestamps just degenerate).
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// The lifecycle state of one stored fact. Memory is a *changing belief state*,
+/// not an append-only log: a newer fact can supersede an older one (the
+/// write-side synthesis the ChatGPT/Dreaming architecture describes), and the
+/// warm set only injects what is still `Active`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FactStatus {
+    /// Currently believed — eligible for warm-set injection and retrieval.
+    #[default]
+    Active,
+    /// Superseded by a later fact (kept for history/provenance, not injected).
+    Superseded,
+}
 
 /// Persistence / parse failures for the memory service (on-disk durability).
 #[derive(Debug, thiserror::Error)]
@@ -40,6 +65,16 @@ pub struct StoredFact {
     pub session_id: String,
     pub text: String,
     pub importance: u8,
+    /// When the fact was first recorded (ms epoch) — the temporal axis.
+    #[serde(default)]
+    pub created_at_ms: u64,
+    /// When the fact was last changed (superseded by a later fact, etc.).
+    #[serde(default)]
+    pub updated_at_ms: u64,
+    /// Lifecycle state (Active vs Superseded). Backward-compatible with
+    /// persisted stores predating the field (defaults to Active).
+    #[serde(default)]
+    pub status: FactStatus,
 }
 
 /// The coordinator-facing memory service. All state is behind one `&mut self`
@@ -85,15 +120,19 @@ impl MemoryService {
     }
 
     /// Ingest one fact into every surface (paged + ghost + graph + BM25 +
-    /// the durable `facts` list). Shared by `write` and `load_from`.
-    fn ingest(&mut self, id: String, session: &str, text: String) {
+    /// the durable `facts` list). Shared by `write` (fresh, `now`) and
+    /// `load_from` (restored — timestamps/status preserved verbatim).
+    fn ingest(&mut self, fact: StoredFact) {
+        let id = fact.id.clone();
+        let session = fact.session_id.clone();
+        let text = fact.text.clone();
         self.paged.write(MemoryEntry {
             id: id.clone(),
             content: text.clone(),
-            importance: 8,
+            importance: fact.importance,
         });
         self.ghost.index(&format!("memory://{session}"), &id);
-        self.graph.add_node(&id, NodeKind::Episodic, session);
+        self.graph.add_node(&id, NodeKind::Episodic, &session);
         self.graph.add_edge(
             &format!("session:{session}"),
             &id,
@@ -105,12 +144,7 @@ impl MemoryService {
             id: id.clone(),
             text: text.clone(),
         });
-        self.facts.push(StoredFact {
-            id,
-            session_id: session.to_string(),
-            text,
-            importance: 8,
-        });
+        self.facts.push(fact);
     }
 
     /// P5.1 `memory/write`: store declarative fact candidates for a session.
@@ -125,7 +159,16 @@ impl MemoryService {
                 continue;
             }
             let id = self.next_id();
-            self.ingest(id, session, text);
+            let now = now_ms();
+            self.ingest(StoredFact {
+                id,
+                session_id: session.to_string(),
+                text,
+                importance: 8,
+                created_at_ms: now,
+                updated_at_ms: now,
+                status: FactStatus::Active,
+            });
             n += 1;
         }
         self.paged.flush_writes();
@@ -156,7 +199,7 @@ impl MemoryService {
         let mut m = Self::new();
         m.counter = persisted.counter;
         for f in &persisted.facts {
-            m.ingest(f.id.clone(), &f.session_id, f.text.clone());
+            m.ingest(f.clone());
         }
         m.paged.flush_writes();
         if !m.docs.is_empty() {
@@ -166,9 +209,90 @@ impl MemoryService {
     }
 
     /// P5.3: the core warm set (durable facts) the coordinator injects below
-    /// the cache boundary on each turn.
+    /// the cache boundary on each turn. Only `Active` facts are injected —
+    /// superseded facts stay in history/provenance but never re-enter the
+    /// model context (the "relevant, current state" guarantee).
     pub fn core_facts(&self) -> Vec<String> {
-        self.facts.iter().map(|f| f.text.clone()).collect()
+        self.facts
+            .iter()
+            .filter(|f| f.status == FactStatus::Active)
+            .map(|f| f.text.clone())
+            .collect()
+    }
+
+    /// P5 write-side synthesis (the deterministic floor of the ChatGPT
+    /// "Dreaming"/consolidation insight): a fact carrying a negation marker
+    /// that shares a subject with an earlier `Active` fact supersedes it — the
+    /// earlier fact is marked `Superseded` (kept for history, no longer
+    /// injected). This is the safe, deterministic half of consolidation; the
+    /// model-assisted importance/consolidation pass is a follow-up TODO.
+    /// Returns `(superseded_count, active_count)`.
+    pub fn consolidate(&mut self) -> (usize, usize) {
+        let sigs: Vec<HashSet<String>> = self
+            .facts
+            .iter()
+            .map(|f| significant_words(&f.text))
+            .collect();
+        let negs: Vec<bool> = self.facts.iter().map(|f| has_negation(&f.text)).collect();
+
+        let mut superseded = 0usize;
+        // `facts` is append-only, so index order is chronological. A later
+        // negation fact supersedes every earlier Active fact it shares a
+        // subject with.
+        for i in 0..self.facts.len() {
+            if !negs[i] || self.facts[i].status == FactStatus::Superseded {
+                continue;
+            }
+            if sigs[i].is_empty() {
+                continue;
+            }
+            for j in 0..i {
+                if self.facts[j].status != FactStatus::Active || sigs[j].is_empty() {
+                    continue;
+                }
+                if sigs[i].intersection(&sigs[j]).next().is_some() {
+                    self.facts[j].status = FactStatus::Superseded;
+                    self.facts[j].updated_at_ms = now_ms();
+                    superseded += 1;
+                }
+            }
+        }
+
+        let active = self
+            .facts
+            .iter()
+            .filter(|f| f.status == FactStatus::Active)
+            .count();
+        (superseded, active)
+    }
+
+    /// `memory/status`: the full fact store with lifecycle + temporal fields —
+    /// the provenance surface (which facts are Active vs Superseded, and when
+    /// each was recorded/updated).
+    pub fn status(&self) -> Value {
+        let facts = self
+            .facts
+            .iter()
+            .map(|f| {
+                json!({
+                    "id": f.id,
+                    "sessionId": f.session_id,
+                    "text": f.text,
+                    "importance": f.importance,
+                    "status": match f.status {
+                        FactStatus::Active => "active",
+                        FactStatus::Superseded => "superseded",
+                    },
+                    "createdAtMs": f.created_at_ms,
+                    "updatedAtMs": f.updated_at_ms,
+                })
+            })
+            .collect::<Vec<_>>();
+        json!({
+            "facts": facts,
+            "active": self.facts.iter().filter(|f| f.status == FactStatus::Active).count(),
+            "superseded": self.facts.iter().filter(|f| f.status == FactStatus::Superseded).count(),
+        })
     }
 
     /// P5.1 `memory/read`: BM25-ranked fact ids for a query (the vectorless
@@ -190,12 +314,36 @@ impl MemoryService {
         })
     }
 
-    /// P5.1 `memory/forget`: drop a fact from paged memory. Returns whether an
-    /// entry with that id existed.
+    /// P5.1 `memory/forget`: drop a fact from **every** surface — paged, the
+    /// durable `facts` list, the BM25 index, the graph node (bi-temporally
+    /// closed), and the ghost index. A forgotten fact never re-surfaces via
+    /// any retrieval path (the "deletion propagates to derived state" rule the
+    /// ChatGPT/Dreaming architecture surfaces: derived indexes can't keep a
+    /// stale reference after the source is removed). Returns whether an entry
+    /// with that id existed.
     pub fn forget(&mut self, id: &str) -> bool {
-        let had = self.paged.read(id).is_some();
+        let Some(fact) = self.facts.iter().find(|f| f.id == id).cloned() else {
+            // Unknown id — clear paged (best-effort) and report the miss.
+            let had = self.paged.read(id).is_some();
+            if had {
+                self.paged.forget(id);
+            }
+            return had;
+        };
+
+        let session = fact.session_id.clone();
+        // `PagedMemory::forget` queues a turn-boundary forget; flush it now so
+        // the entry is removed from core/archival/recall immediately.
         self.paged.forget(id);
-        had
+        self.paged.flush_writes();
+        self.graph.close_node(id, self.counter);
+        self.ghost.remove_id(&format!("memory://{session}"), id);
+        self.facts.retain(|f| f.id != id);
+        self.docs.retain(|d| d.id != id);
+        // Rebuild BM25 from the surviving docs (indexes are derived state;
+        // rebuild keeps them consistent with `facts`).
+        self.bm25.build(self.docs.clone());
+        true
     }
 
     /// P5.4 `memory/ghost`: apply a filesystem event (delete/rename) to the
@@ -320,6 +468,15 @@ impl MemoryService {
                 Ok(json!({ "affected": affected, "events": events.len() }))
             }
             "memory/core" => Ok(json!({ "facts": self.core_facts() })),
+            "memory/consolidate" => {
+                let (superseded, active) = self.consolidate();
+                Ok(json!({
+                    "superseded": superseded,
+                    "active": active,
+                    "total": self.facts.len(),
+                }))
+            }
+            "memory/status" => Ok(self.status()),
             "memory/save" => {
                 let path = params
                     .get("path")
@@ -384,6 +541,44 @@ fn parse_fs_event(params: &Value) -> Result<FsEvent, String> {
             .ok_or_else(|| "memory/ghost modified requires path".to_string()),
         other => Err(format!("unknown memory/ghost kind: {other}")),
     }
+}
+
+/// Tokens that signal a fact *revises or negates* a prior belief (the
+/// deterministic supersession floor; the model-assisted synthesis pass is a
+/// follow-up TODO — this is deliberately conservative, never destructive).
+const NEGATION_MARKERS: &[&str] = &[
+    "not", "never", "no", "stop", "stopped", "cancel", "cancelled", "canceled", "anymore",
+    "instead", "longer", "dont", "doesnt", "wont", "cant",
+];
+
+/// Common words that don't identify a fact's *subject* (dropped before
+/// shared-subject matching so two facts about the same thing match on their
+/// content words, not their grammar).
+const SUBJECT_STOPWORDS: &[&str] = &[
+    "about", "with", "from", "have", "has", "had", "will", "would", "been", "were", "was",
+    "are", "they", "their", "there", "them", "this", "that", "these", "those", "what", "when",
+    "where", "which", "your", "yours", "here", "than", "then", "into", "onto", "very", "just",
+    "really", "some", "more", "most", "also", "only", "now", "already", "still", "next", "year",
+    "month", "week", "day", "going", "planning", "thinking", "actually",
+];
+
+/// The subject words of a fact: lowercase alphanumeric tokens of length ≥ 4
+/// that aren't stopwords or negation markers (the words that identify *what*
+/// the fact is about).
+fn significant_words(text: &str) -> HashSet<String> {
+    everyaios_memory::tokenize(text)
+        .into_iter()
+        .filter(|t| t.len() >= 4)
+        .filter(|t| !SUBJECT_STOPWORDS.contains(&t.as_str()))
+        .filter(|t| !NEGATION_MARKERS.contains(&t.as_str()))
+        .collect()
+}
+
+/// Does this fact carry a negation/revocation marker?
+fn has_negation(text: &str) -> bool {
+    everyaios_memory::tokenize(text)
+        .iter()
+        .any(|t| NEGATION_MARKERS.contains(&t.as_str()))
 }
 
 #[cfg(test)]
@@ -529,6 +724,124 @@ mod tests {
         let loaded = m2.handle("memory/load", &json!({ "path": path_s })).unwrap();
         assert_eq!(loaded["loaded"], 1);
         assert_eq!(m2.core_facts().len(), 1);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn consolidate_supersedes_a_contradicted_belief() {
+        let mut m = MemoryService::new();
+        m.write("s1", &["I might visit Japan next year.".into()]);
+        m.write("s1", &["I am not planning the Japan trip anymore.".into()]);
+        assert_eq!(m.facts.len(), 2);
+
+        let (superseded, active) = m.consolidate();
+        assert_eq!(superseded, 1);
+        assert_eq!(active, 1);
+
+        // Only the current belief is injected into the warm set.
+        assert_eq!(m.core_facts().len(), 1);
+        assert!(m.core_facts()[0].contains("not planning"));
+        assert_eq!(m.facts[0].status, FactStatus::Superseded);
+        assert_eq!(m.facts[1].status, FactStatus::Active);
+    }
+
+    #[test]
+    fn consolidate_is_idempotent_and_keeps_unrelated_facts() {
+        let mut m = MemoryService::new();
+        m.write(
+            "s1",
+            &[
+                "I might visit Japan next year.".into(),
+                "I like cats.".into(),
+                "I am not planning the Japan trip anymore.".into(),
+            ],
+        );
+
+        let (s1, a1) = m.consolidate();
+        assert_eq!(s1, 1);
+        assert_eq!(a1, 2, "the cats fact + the revision remain active");
+
+        // A second pass changes nothing (idempotent).
+        let (s2, a2) = m.consolidate();
+        assert_eq!(s2, 0);
+        assert_eq!(a2, 2);
+        assert!(m.core_facts().iter().any(|f| f.contains("cats")));
+    }
+
+    #[test]
+    fn forget_fully_propagates_across_surfaces() {
+        let mut m = MemoryService::new();
+        m.write(
+            "s1",
+            &[
+                "The Q3 budget was finalized at twelve thousand dollars.".into(),
+                "The marketing team approved the new slide deck.".into(),
+            ],
+        );
+        assert!(m.forget("mem:1"));
+
+        // facts + core warm set no longer surface mem:1.
+        assert_eq!(m.facts.len(), 1);
+        assert!(!m.facts.iter().any(|f| f.id == "mem:1"));
+        assert!(!m.core_facts().iter().any(|f| f.contains("budget")));
+
+        // BM25 derived index dropped the forgotten doc.
+        let hits = m.read("budget", 5);
+        assert!(!hits.iter().any(|id| id == "mem:1"), "BM25 must drop the forgotten doc: {hits:?}");
+
+        // paged + graph + ghost all dropped the id.
+        assert!(m.paged.read("mem:1").is_none());
+        assert!(m.graph.node_active_at("mem:1", m.counter + 1, 0).is_none());
+        assert!(m.ghost.ids_for("memory://s1").iter().all(|id| id != "mem:1"));
+
+        // Unknown id is a no-op miss.
+        assert!(!m.forget("mem:999"));
+    }
+
+    #[test]
+    fn status_dispatch_reports_lifecycle() {
+        let mut m = MemoryService::new();
+        m.write("s1", &["I might visit Japan next year.".into()]);
+        m.write("s1", &["I am not planning the Japan trip anymore.".into()]);
+        m.consolidate();
+
+        let out = m.handle("memory/status", &json!({})).unwrap();
+        assert_eq!(out["active"], 1);
+        assert_eq!(out["superseded"], 1);
+        assert_eq!(out["facts"][0]["status"], "superseded");
+        assert_eq!(out["facts"][1]["status"], "active");
+    }
+
+    #[test]
+    fn consolidate_dispatch_returns_counts() {
+        let mut m = MemoryService::new();
+        m.write("s1", &["I might visit Japan next year.".into()]);
+        m.write("s1", &["I am not planning the Japan trip anymore.".into()]);
+
+        let out = m.handle("memory/consolidate", &json!({})).unwrap();
+        assert_eq!(out["superseded"], 1);
+        assert_eq!(out["active"], 1);
+        assert_eq!(out["total"], 2);
+    }
+
+    #[test]
+    fn load_from_is_backward_compatible_without_temporal_fields() {
+        let dir = std::env::temp_dir()
+            .join(format!("everyaios-memory-backcompat-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("memory.db");
+        // Hand-written persisted shape predating the temporal/status fields.
+        std::fs::write(
+            &path,
+            r#"{"counter":1,"facts":[{"id":"mem:1","session_id":"s1","text":"The Q3 budget was twelve thousand dollars.","importance":8}]}"#,
+        )
+        .unwrap();
+
+        let loaded = MemoryService::load_from(&path).unwrap();
+        assert_eq!(loaded.facts.len(), 1);
+        assert_eq!(loaded.facts[0].status, FactStatus::Active, "missing status defaults to Active");
+        assert_eq!(loaded.facts[0].created_at_ms, 0, "missing created_at_ms defaults to 0");
 
         std::fs::remove_dir_all(&dir).ok();
     }

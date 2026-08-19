@@ -63,6 +63,20 @@ impl GhostIndex {
         ids
     }
 
+    /// Remove a single id from a path's ref set (per-fact forget — a fact is
+    /// forgotten without tombstoning the whole path's refs). Returns whether
+    /// the id was present. An emptied set is dropped so `ids_for` stays clean.
+    pub fn remove_id(&mut self, path: &str, id: &str) -> bool {
+        let mut removed = false;
+        if let Some(ids) = self.entries.get_mut(path) {
+            removed = ids.remove(id);
+            if ids.is_empty() {
+                self.entries.remove(path);
+            }
+        }
+        removed
+    }
+
     /// Re-path on rename: move every ref from `old` to `new`, returning how
     /// many ids moved. No content is re-embedded (zero re-embedding).
     pub fn repath(&mut self, old: &str, new: &str) -> usize {
@@ -130,6 +144,22 @@ mod tests {
         // Modify → no structural action.
         assert_eq!(g.apply_fs_event(&FsEvent::Modified("/docs/c.md".into())), 0);
         assert_eq!(g.ids_for("/docs/c.md"), vec!["mem:3".to_string()]);
+    }
+
+    #[test]
+    fn remove_id_forgets_one_fact_without_tombstoning_the_path() {
+        let mut g = GhostIndex::new();
+        g.index("memory://s1", "mem:1");
+        g.index("memory://s1", "mem:2");
+
+        assert!(g.remove_id("memory://s1", "mem:1"));
+        assert_eq!(g.ids_for("memory://s1"), vec!["mem:2".to_string()]);
+        assert!(!g.remove_id("memory://s1", "mem:1"), "double-remove is a no-op");
+
+        // Removing the last id drops the emptied path entirely.
+        assert!(g.remove_id("memory://s1", "mem:2"));
+        assert_eq!(g.ids_for("memory://s1"), Vec::<String>::new());
+        assert_eq!(g.path_count(), 0);
     }
 
     #[test]

@@ -97,7 +97,8 @@
 
 - [ ] `[NOT DONE]` **Capability index / deferred tool discovery** — name as a first-class pattern: tools/skills are registered in a `ToolRegistry` index and *loaded into context on demand*, never all-injected. Feeds S0.3 (schema single-source) + P7.2 `MAX_ACTIVE_SKILLS=20`; the index is the catalog, the model sees only the resolved subset.
 - [ ] `[NOT DONE]` **Monitoring tasks — notify only on a meaningful delta** (P6.4 scheduler). Add a compare-before-notify rule: a scheduled task snapshots the monitored state and only surfaces when it crosses a threshold (the "monitor and notify on change" pattern), not on every tick.
-- [ ] `[NOT DONE]` **Memory consolidation framing** (P5). Add an explicit "consolidation" pass to the memory pipeline — synthesize the current memory state from many turns in the background (the landed ACT-R activation + spontaneous recall already do the retrieval half; this names the *write-side synthesis* so stale/contradictory facts are superseded, not just appended).
+- [x] `[DONE]` **Memory consolidation — write-side synthesis landed** (P5, 2026-08-19). `MemoryService` now maintains a *changing belief state*, not an append-only log: `StoredFact` gained temporal fields (`created_at_ms`/`updated_at_ms`) + a `FactStatus` (`Active`/`Superseded`) lifecycle; a deterministic `consolidate()` pass supersedes an earlier `Active` fact when a later fact carries a negation marker and shares a subject (the "I might visit Japan" → "not planning the Japan trip" case); `core_facts()` injects only `Active` facts; `forget()` now fully propagates across paged + BM25 + graph (bi-temporally closed) + ghost (the "deletion reaches derived state" rule); new `memory/consolidate` + `memory/status` JSON-RPC. Backward-compatible persistence (`#[serde(default)]` + a backcompat test). The deterministic floor is deliberately conservative — model-assisted importance/consolidation is the remaining item below.
+- [ ] `[NOT DONE]` **Background + provenance + scope for memory synthesis** (P5). The remaining pieces of the ChatGPT/Dreaming memory model beyond the deterministic floor: (a) a *scheduled/triggered* consolidation pass — run `consolidate` + `reinforce::extract_candidates` on a cadence / after-N-turns, not only on demand (the "offline/async vs online" split); (b) per-fact *provenance* — which source/chat/file a fact derived from (the "Memory Sources" explainability layer); (c) *project-scope* isolation — a global vs project memory boundary, not just session keying; (d) *model-assisted* importance assessment + semantic consolidation (the LLM half the deterministic floor deliberately leaves out).
 - [ ] `[NOT DONE]` **Project-only memory isolation** (P5/P6). Tighten workspace scoping so a project's memory boundary can be enforced as *project-only* (no cross-project retrieval) — the isolation-mode semantics, on top of the existing workspace scoping.
 - [ ] `[NOT DONE]` **Deterministic tool ordering for cache stability** (A9/ARCH/05). Canonicalize tool-call + tool-list ordering into the append-only history so prompt-cache prefixes stay byte-stable as the capability index grows (extends the landed byte-stable-prefix compaction).
 
@@ -1512,7 +1513,7 @@
 | Phase | Tasks | Done | Open | Weeks |
 |---|---|---|---|---|
 | **Stage 0 Guard-Gated Tool Executor** | **28** | **0** | **28** | **~3** |
-| **HARDENING Security + Harness Patterns** | **15** | **10** | **5** | **landed + ~1** |
+| **HARDENING Security + Harness Patterns** | **16** | **11** | **5** | **landed + ~1** |
 | P0 Workspace & Skeleton | 48 | 48 | 0 | ~2 |
 | P1 Chat + BYOK | 54 | 54 | 0 | ~4 |
 | P2 Browser Layer | 90 | 90 | 0 | ~6 |
@@ -1551,6 +1552,6 @@
 | P34 Full-Fidelity Tool Surfaces (ARCH/12 v3.1) | 7 | 2 | 5 | post-Stage-0 (P34.1/6 landed; P34.2-5 need ribbon+viewer build) |
 | P35 Full Animation Wiring (design-doc motion table) | 4 | 1 | 3 | landed P35.1 (11 files) |
 | Research Tasks (cross-cutting) | 54 | 2 | 52 | parallel |
-| **TOTAL** | **1002** | **467** | **535** | **~48 weeks** |
+| **TOTAL** | **1003** | **468** | **535** | **~48 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.
