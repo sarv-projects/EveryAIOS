@@ -278,12 +278,13 @@ pub fn acp_install_request(
         &args_hash,
         0,
     ) {
-        GuardDecision::Allow => Ok(serde_json::json!({
+        GuardDecision::Allow { ticket_id } => Ok(serde_json::json!({
             "action": "allow",
             "agentId": agent_id,
             "version": spec.version,
-            // auto-allowed: the caller may commit immediately (no ticket).
-            "commit": "direct",
+            // Auto-allowed still carries a (pre-approved) single-use ticket —
+            // the executor consumes it in `acp_install_commit` either way.
+            "ticketId": ticket_id,
         })),
         GuardDecision::Ask { ticket_id } => Ok(serde_json::json!({
             "action": "ask",
@@ -296,28 +297,27 @@ pub fn acp_install_request(
 }
 
 /// F8 — the **install executor** (the "touch" half). Consumes the Guard-2
-/// ticket (`use_ticket`, single-use + args-hash match) when one was minted,
-/// then executes the plan: binary agents download → sha256-verify → extract;
-/// npx/uvx agents record the pin. The user's explicit click satisfied the
-/// `Ask` verdict by approving the card that [`acp_install_request`] minted;
-/// an auto-allowed (`allow`) request commits without a ticket.
+/// ticket (**mandatory** — `use_ticket` enforces approval + single-use +
+/// args-hash), then executes the plan: binary agents download → sha256-verify
+/// → extract; npx/uvx agents record the pin. The user's explicit click
+/// satisfied an `Ask` verdict by approving the card; an auto-allowed (`allow`)
+/// request carries a pre-approved ticket that is still consumed here.
 #[tauri::command]
 pub fn acp_install_commit(
     state: State<'_, AppState>,
     agent_id: String,
-    ticket_id: Option<String>,
+    ticket_id: String,
 ) -> Result<serde_json::Value, String> {
     let spec = resolve_spec(&agent_id)?;
-    if let Some(tid) = ticket_id {
-        let args_hash = install_args_hash(&agent_id, &spec.version);
-        let mut guard = state
-            .guard_service
-            .lock()
-            .map_err(|e| e.to_string())?;
-        guard
-            .use_ticket(&tid, &args_hash)
-            .map_err(|e| format!("install ticket not consumable: {e}"))?;
-    }
+    let args_hash = install_args_hash(&agent_id, &spec.version);
+    let mut guard = state
+        .guard_service
+        .lock()
+        .map_err(|e| e.to_string())?;
+    guard
+        .use_ticket(&ticket_id, &args_hash)
+        .map_err(|e| format!("install ticket not consumable: {e}"))?;
+    drop(guard);
 
     let outcome = installer().install(&spec).map_err(|e| e.to_string())?;
     Ok(serde_json::json!({
@@ -550,7 +550,7 @@ pub fn acp_prompt(
                 &args_hash,
                 0,
             ) {
-                GuardDecision::Allow => PermissionDecision::allow(),
+                GuardDecision::Allow { .. } => PermissionDecision::allow(),
                 GuardDecision::Block { .. } => PermissionDecision::deny(),
                 GuardDecision::Ask { ticket_id } => {
                     pending_tickets.push(ticket_id);

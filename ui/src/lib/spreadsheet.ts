@@ -53,12 +53,13 @@ export async function xlsxRecalc(path: string): Promise<RecalcResult> {
   return invoke<RecalcResult>("xlsx_recalc", { path });
 }
 
-/** P4.7 — Guard-2 cell-edit split (plan-before-touch). */
+/** P4.7 — Guard-2 cell-edit split (plan-before-touch). Ticket-every-effect:
+ * both `allow` and `ask` carry a single-use ticket the commit must consume. */
 export interface XlsxEditRequest {
   action: "allow" | "ask";
   address: string;
   value: string;
-  ticketId?: string;
+  ticketId: string;
 }
 
 export async function xlsxEditRequest(
@@ -75,7 +76,7 @@ export async function xlsxEditCommit(
   sheet: string,
   address: string,
   value: string,
-  ticketId?: string,
+  ticketId: string,
 ): Promise<{ address: string; sheet: string; changedParts: string[] }> {
   return invoke("xlsx_edit_commit", { path, sheet, address, value, ticketId });
 }
@@ -150,7 +151,7 @@ export function parseRangeRef(s: string): RangeRef | null {
 export interface XlsxBatchRequest {
   action: "allow" | "ask";
   summary: string;
-  ticketId?: string;
+  ticketId: string;
 }
 
 export async function xlsxBatchRequest(
@@ -165,7 +166,7 @@ export async function xlsxBatchCommit(
   path: string,
   sheet: string,
   batch: WorkbookBatch,
-  ticketId?: string,
+  ticketId: string,
 ): Promise<{ summary: string; sheet: string; changedParts: string[] }> {
   return invoke("xlsx_batch_commit", { path, sheet, batch, ticketId });
 }

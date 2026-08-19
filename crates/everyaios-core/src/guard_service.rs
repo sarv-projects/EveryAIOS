@@ -25,12 +25,21 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 /// The outcome of a pre-flight evaluation.
+///
+/// **Ticket-every-effect:** both `Allow` and `Ask` carry a single-use
+/// [`AuthorizationTicket`] the executor must consume. `Allow` mints an
+/// *already-approved* ticket (policy auto-approved — consumable immediately);
+/// `Ask` mints a *pending* ticket the human must approve before the executor
+/// can consume it. There is no ticketless mutation path.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "action", rename_all = "lowercase")]
 pub enum GuardDecision {
-    /// Run without a human ticket.
-    Allow,
-    /// A ticket was minted — the card renders; the executor waits.
+    /// Policy auto-approved — the ticket is already `Approved`, consumable now.
+    Allow {
+        #[serde(rename = "ticketId")]
+        ticket_id: String,
+    },
+    /// A pending ticket was minted — the card renders; the executor waits.
     Ask {
         #[serde(rename = "ticketId")]
         ticket_id: String,
@@ -111,8 +120,11 @@ impl GuardService {
     }
 
     /// The **executor pre-flight**. Order matters: estop (hard stop) → policy
-    /// (rule map) → profile (risk threshold). `Ask` mints the ticket and
-    /// retains its decision package for the card.
+    /// (rule map) → profile (risk threshold) → confidence floor. **Every
+    /// non-blocked outcome mints a single-use ticket**: `Ask` mints it
+    /// `Pending` (human must approve), `Allow` mints it `Approved` (policy
+    /// auto-approved). The executor consumes the ticket either way, so there
+    /// is no ticketless mutation path.
     // (kept as explicit params — the arg count mirrors the ticket contract,
     // same as `everyaios-guard::path_ticket`.)
     #[allow(clippy::too_many_arguments)]
@@ -134,37 +146,49 @@ impl GuardService {
 
         let policy_action = self.policy.evaluate(&operation);
         let needs_human = decision.risk >= self.profile.human_approval_threshold();
+        // J21: a model-reported confidence below the policy floor forces the
+        // auto path to ask, even when the rule map would otherwise allow it.
+        let low_confidence = decision
+            .confidence
+            .map(|c| !self.policy.auto_confidence_ok(c))
+            .unwrap_or(false);
 
-        let action = if policy_action == PolicyAction::Block {
-            GuardDecision::Block {
+        if policy_action == PolicyAction::Block {
+            return GuardDecision::Block {
                 reason: format!("policy denies {}", operation.name()),
-            }
-        } else if policy_action == PolicyAction::Ask || needs_human {
-            self.counter += 1;
-            let ticket_id = format!("tkt:{}", self.counter);
-            let ticket = AuthorizationTicket {
-                ticket_id: ticket_id.clone(),
-                agent_id: agent_id.to_string(),
-                session_id: session_id.to_string(),
-                tool_id: tool_id.to_string(),
-                operation: operation.name().to_string(),
-                args_hash: args_hash.to_string(),
-                paths: decision.affected_paths.clone(),
-                expires_at_ms: now_ms() + 60_000,
-                single_use: true,
-                approval_source: everyaios_guard::ApprovalSource::Policy,
-                risk: decision.risk,
-                audit_seq,
-                state: everyaios_guard::TicketState::Pending,
             };
-            self.tickets.mint(ticket);
-            self.decisions.insert(ticket_id.clone(), decision);
+        }
+
+        let ask = policy_action == PolicyAction::Ask || needs_human || low_confidence;
+        self.counter += 1;
+        let ticket_id = format!("tkt:{}", self.counter);
+        let ticket = AuthorizationTicket {
+            ticket_id: ticket_id.clone(),
+            agent_id: agent_id.to_string(),
+            session_id: session_id.to_string(),
+            tool_id: tool_id.to_string(),
+            operation: operation.name().to_string(),
+            args_hash: args_hash.to_string(),
+            paths: decision.affected_paths.clone(),
+            expires_at_ms: now_ms() + 60_000,
+            single_use: true,
+            approval_source: everyaios_guard::ApprovalSource::Policy,
+            risk: decision.risk,
+            audit_seq,
+            state: if ask {
+                everyaios_guard::TicketState::Pending
+            } else {
+                everyaios_guard::TicketState::Approved
+            },
+        };
+        self.tickets.mint(ticket);
+        self.decisions.insert(ticket_id.clone(), decision);
+
+        if ask {
             GuardDecision::Ask { ticket_id }
         } else {
-            GuardDecision::Allow
-        };
-
-        action
+            GuardDecision::Allow { ticket_id }
+        }
     }
 
     /// The **executor call-site** that consumes a ticket right before running
@@ -211,9 +235,39 @@ impl GuardService {
         self.tickets.receipts().to_vec()
     }
 
-    /// JSON-RPC dispatch (`guard/*`) — the coordinator drives the same
-    /// service the approval cards render, so there is one source of truth.
+    /// JSON-RPC dispatch (`guard/*`) for the **Tauri UI / control plane**.
+    /// Exposes the full surface (approve/reject/estop/reset/profile) because
+    /// the webview is the human-in-the-loop surface.
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
+        self.handle_inner(method, params, true)
+    }
+
+    /// JSON-RPC dispatch for the **coordinator sidecar** (less trusted). The
+    /// sidecar may pre-flight (`evaluate`), consume a ticket (`use`), and read
+    /// (`pending`/`receipts`/`estop_status`/`policy`) — but it may **not**
+    /// approve/reject its own tickets, pull/reset estop, or change the
+    /// security profile. Those are human-only control-plane operations.
+    pub fn handle_sidecar(&mut self, method: &str, params: &Value) -> Result<Value, String> {
+        self.handle_inner(method, params, false)
+    }
+
+    fn handle_inner(
+        &mut self,
+        method: &str,
+        params: &Value,
+        control_plane: bool,
+    ) -> Result<Value, String> {
+        if !control_plane {
+            match method {
+                "guard/approve" | "guard/reject" | "guard/estop" | "guard/reset"
+                | "guard/profile" => {
+                    return Err(format!(
+                        "{method} is a control-plane operation, not available to the sidecar"
+                    ));
+                }
+                _ => {}
+            }
+        }
         match method {
             "guard/evaluate" => {
                 let session = str_param(params, "sessionId").unwrap_or("default");
@@ -401,7 +455,69 @@ mod tests {
             "h",
             0,
         );
+        // Generic write defaults to always_ask policy → Ask, still.
         assert!(matches!(d, GuardDecision::Ask { .. }), "generic write defaults to always_ask policy; got {d:?}");
+    }
+
+    #[test]
+    fn allow_mints_an_auto_approved_ticket() {
+        // An auto-allowed action still mints a single-use ticket, but it is
+        // pre-Approved so the executor can consume it without a human wait.
+        let mut g = GuardService::new();
+        g.policy = PermissionsPolicy::parse("[permissions]\nwrite = \"allow\"\n");
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/workspace/a.txt"]),
+            "h",
+            0,
+        );
+        let ticket_id = match d {
+            GuardDecision::Allow { ref ticket_id } => ticket_id.clone(),
+            other => panic!("expected Allow, got {other:?}"),
+        };
+        // Directly consumable (already Approved), single-use.
+        assert!(g.use_ticket(&ticket_id, "h").is_ok());
+        assert!(g.use_ticket(&ticket_id, "h").is_err());
+    }
+
+    #[test]
+    fn low_confidence_forces_ask() {
+        let mut g = GuardService::new();
+        g.policy = PermissionsPolicy::parse(
+            "[permissions]\nwrite = \"allow\"\nmin_confidence_for_auto = 0.90\n",
+        );
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            DecisionPackage::new("g")
+                .with_risk(RiskLevel::Low)
+                .with_confidence(0.5),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Ask { .. }), "low confidence must force Ask; got {d:?}");
+    }
+
+    #[test]
+    fn sidecar_surface_rejects_control_plane_ops() {
+        let mut g = GuardService::new();
+        // The sidecar may evaluate + use + read…
+        assert!(g.handle_sidecar("guard/evaluate", &json!({
+            "operation": "delete", "argsHash": "h", "decision": { "risk": "high" }
+        })).is_ok());
+        assert!(g.handle_sidecar("guard/estop_status", &json!({})).is_ok());
+        // …but may NOT approve/reset/estop/profile.
+        assert!(g.handle_sidecar("guard/approve", &json!({ "ticketId": "tkt:1" })).is_err());
+        assert!(g.handle_sidecar("guard/reset", &json!({})).is_err());
+        assert!(g.handle_sidecar("guard/estop", &json!({})).is_err());
+        assert!(g.handle_sidecar("guard/profile", &json!({ "profile": "minimal" })).is_err());
+        // The control-plane handle still allows them (the UI path).
+        assert!(g.handle("guard/estop", &json!({})).is_ok());
     }
 
     #[test]
@@ -455,6 +571,10 @@ mod tests {
         let ticket_id = out["ticketId"].as_str().unwrap().to_string();
         assert_eq!(out["action"], "ask");
 
+        // A pending ticket must not be consumable until approved.
+        assert!(g.handle("guard/use", &json!({ "ticketId": ticket_id, "argsHash": "h1" })).is_err());
+        g.handle("guard/approve", &json!({ "ticketId": ticket_id }))
+            .unwrap();
         let used = g
             .handle("guard/use", &json!({ "ticketId": ticket_id, "argsHash": "h1" }))
             .unwrap();

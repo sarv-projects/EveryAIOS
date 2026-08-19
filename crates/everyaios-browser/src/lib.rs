@@ -62,7 +62,8 @@ pub use webmcp::{
     WebMcpTool,
 };
 pub use webmcp_http::{
-    handle_mcp_request, parse_http_request, McpHttpServer, MCP_PATH,
+    bearer_token, fresh_token, handle_mcp_request, parse_http_request, HttpParseError, McpHttpServer,
+    MCP_PATH, MAX_BODY_BYTES,
 };
 pub use content::{clean_markdown, CleanedText, FilterSet, RuleKind};
 pub use locator::{

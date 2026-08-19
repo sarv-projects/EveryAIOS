@@ -110,10 +110,11 @@ pub fn xlsx_edit_request(
         &args_hash,
         0,
     ) {
-        GuardDecision::Allow => Ok(serde_json::json!({
+        GuardDecision::Allow { ticket_id } => Ok(serde_json::json!({
             "action": "allow",
             "address": address,
             "value": value,
+            "ticketId": ticket_id,
         })),
         GuardDecision::Ask { ticket_id } => Ok(serde_json::json!({
             "action": "ask",
@@ -125,10 +126,11 @@ pub fn xlsx_edit_request(
     }
 }
 
-/// P4.7 — the executor half of a cell edit: consume the ticket (single-use +
-/// args-hash match), then read → patch → write the workbook byte-preserving.
-/// Formula writes go through the recalc engine (the LLM never supplies a
-/// number); the patch rewrites only the changed sheet part.
+/// P4.7 — the executor half of a cell edit: consume the ticket (**mandatory**
+/// — single-use + args-hash match; approval is a hard prerequisite), then read
+/// → patch → write the workbook byte-preserving (atomic temp+rename). Formula
+/// writes go through the recalc engine (the LLM never supplies a number); the
+/// patch rewrites only the changed sheet part.
 #[tauri::command]
 pub fn xlsx_edit_commit(
     state: State<'_, AppState>,
@@ -136,20 +138,21 @@ pub fn xlsx_edit_commit(
     sheet: String,
     address: String,
     value: String,
-    ticket_id: Option<String>,
+    ticket_id: String,
 ) -> Result<serde_json::Value, String> {
     let (_, cell) = parse_ref(&address).map_err(|e| e.to_string())?;
 
-    if let Some(tid) = ticket_id {
-        let args_hash = edit_args_hash(&path, &sheet, &address, &value);
-        let mut guard = state
-            .guard_service
-            .lock()
-            .map_err(|e| e.to_string())?;
-        guard
-            .use_ticket(&tid, &args_hash)
-            .map_err(|e| format!("edit ticket not consumable: {e}"))?;
-    }
+    // The ticket is mandatory: no ticket, no mutation. `use_ticket` enforces
+    // approval + single-use + args-hash match in one call.
+    let args_hash = edit_args_hash(&path, &sheet, &address, &value);
+    let mut guard = state
+        .guard_service
+        .lock()
+        .map_err(|e| e.to_string())?;
+    guard
+        .use_ticket(&ticket_id, &args_hash)
+        .map_err(|e| format!("edit ticket not consumable: {e}"))?;
+    drop(guard);
 
     let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
     let mut batch = WorkbookCommandBatch::new(0, format!("Set {address} to {value}"));
@@ -159,7 +162,7 @@ pub fn xlsx_edit_commit(
     });
 
     let outcome = apply_batch(&bytes, &batch, &sheet).map_err(|e| e.to_string())?;
-    std::fs::write(PathBuf::from(&path), &outcome.bytes).map_err(|e| e.to_string())?;
+    atomic_write(&path, &outcome.bytes).map_err(|e| e.to_string())?;
 
     Ok(serde_json::json!({
         "address": address,
@@ -196,9 +199,10 @@ pub fn xlsx_batch_request(
         &args_hash,
         0,
     ) {
-        GuardDecision::Allow => Ok(serde_json::json!({
+        GuardDecision::Allow { ticket_id } => Ok(serde_json::json!({
             "action": "allow",
             "summary": batch.summary,
+            "ticketId": ticket_id,
         })),
         GuardDecision::Ask { ticket_id } => Ok(serde_json::json!({
             "action": "ask",
@@ -209,36 +213,53 @@ pub fn xlsx_batch_request(
     }
 }
 
-/// P4.7 — the executor half of a bulk batch: consume the ticket, then apply
-/// the batch byte-preserving and write the changed part.
+/// P4.7 — the executor half of a bulk batch: consume the ticket (**mandatory**),
+/// then apply the batch byte-preserving and write the changed part atomically.
 #[tauri::command]
 pub fn xlsx_batch_commit(
     state: State<'_, AppState>,
     path: String,
     sheet: String,
     batch: WorkbookCommandBatch,
-    ticket_id: Option<String>,
+    ticket_id: String,
 ) -> Result<serde_json::Value, String> {
-    if let Some(tid) = ticket_id {
-        let args_hash = batch_args_hash(&sheet, &batch);
-        let mut guard = state
-            .guard_service
-            .lock()
-            .map_err(|e| e.to_string())?;
-        guard
-            .use_ticket(&tid, &args_hash)
-            .map_err(|e| format!("batch ticket not consumable: {e}"))?;
-    }
+    let args_hash = batch_args_hash(&sheet, &batch);
+    let mut guard = state
+        .guard_service
+        .lock()
+        .map_err(|e| e.to_string())?;
+    guard
+        .use_ticket(&ticket_id, &args_hash)
+        .map_err(|e| format!("batch ticket not consumable: {e}"))?;
+    drop(guard);
 
     let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
     let outcome = apply_batch(&bytes, &batch, &sheet).map_err(|e| e.to_string())?;
-    std::fs::write(PathBuf::from(&path), &outcome.bytes).map_err(|e| e.to_string())?;
+    atomic_write(&path, &outcome.bytes).map_err(|e| e.to_string())?;
 
     Ok(serde_json::json!({
         "summary": batch.summary,
         "sheet": sheet,
         "changedParts": outcome.changed_parts,
     }))
+}
+
+/// Write bytes atomically: temp file + rename in the same directory (never a
+/// half-written workbook on crash/error).
+fn atomic_write(path: &str, bytes: &[u8]) -> Result<(), std::io::Error> {
+    let p = PathBuf::from(path);
+    let dir = p.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no parent")
+    })?;
+    let file_name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name")
+        })?;
+    let tmp = dir.join(format!(".{file_name}.tmp-{}", std::process::id()));
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, p)
 }
 
 /// P4.7 — read-only pivot: group a source range and return the in-memory

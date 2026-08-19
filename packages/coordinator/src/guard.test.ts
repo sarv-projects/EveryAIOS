@@ -10,7 +10,6 @@ import { describe, expect, test } from "bun:test";
 import {
   evaluateGuard,
   guardGate,
-  setEstop,
   useTicket,
   type GuardRequest,
 } from "./guard";
@@ -34,19 +33,11 @@ function fakeRust(): {
       case "guard/evaluate": {
         if (state.estopPulled) return { action: "block", reason: "estop pulled" };
         if (p.operation === "delete") return { action: "ask", ticketId: "tkt:1" };
-        return { action: "allow" };
+        return { action: "allow", ticketId: "tkt:auto" };
       }
       case "guard/use": {
         state.usedTickets.push(String(p.ticketId));
         return { consumed: true };
-      }
-      case "guard/estop": {
-        state.estopPulled = true;
-        return { pulled: true };
-      }
-      case "guard/reset": {
-        state.estopPulled = false;
-        return { pulled: false };
       }
       default:
         return {};
@@ -84,9 +75,8 @@ describe("coordinator Guard-2 driving (J21)", () => {
     expect(usedTickets).toEqual(["tkt:1"]);
   });
 
-  test("estop blocks subsequent evaluations", async () => {
-    const { request } = fakeRust();
-    await setEstop(request, true);
+  test("guardGate is a thin pre-flight wrapper (no control-plane access)", async () => {
+    const { request, calls } = fakeRust();
     const d = await guardGate(request, {
       sessionId: "s1",
       agentId: "a1",
@@ -94,10 +84,12 @@ describe("coordinator Guard-2 driving (J21)", () => {
       operation: "delete",
       argsHash: "h2",
     });
-    expect(d.action).toBe("block");
+    expect(d.action).toBe("ask");
+    // The sidecar only ever sent guard/evaluate — never estop/reset/approve.
+    expect(calls.map((c) => c.method)).toEqual(["guard/evaluate"]);
   });
 
-  test("non-delete operations auto-allow", async () => {
+  test("non-delete operations auto-allow with a pre-approved ticket", async () => {
     const { request } = fakeRust();
     const d = await evaluateGuard(request, {
       sessionId: "s1",
@@ -107,5 +99,6 @@ describe("coordinator Guard-2 driving (J21)", () => {
       argsHash: "h3",
     });
     expect(d.action).toBe("allow");
+    if (d.action === "allow") expect(d.ticketId).toBe("tkt:auto");
   });
 });

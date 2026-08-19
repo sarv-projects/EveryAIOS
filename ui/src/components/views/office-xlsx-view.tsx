@@ -92,7 +92,7 @@ export default function OfficeXlsxView() {
   const [proposal, setProposal] = useState<{
     address: string
     value: string
-    ticketId: string | null
+    ticketId: string
   } | null>(null)
   const [committing, setCommitting] = useState(false)
 
@@ -112,7 +112,7 @@ export default function OfficeXlsxView() {
   const [batchProposal, setBatchProposal] = useState<{
     summary: string
     batch: WorkbookBatch
-    ticketId: string | null
+    ticketId: string
   } | null>(null)
 
   const open = async (path: string) => {
@@ -149,31 +149,36 @@ export default function OfficeXlsxView() {
     setDraft(v)
   }
 
-  // P4.7 — propose an edit: Guard-2 plan-before-touch (allow → commit; ask →
-  // render the approval card).
+  // P4.7 — propose an edit: Guard-2 plan-before-touch. `allow` carries a
+  // pre-approved ticket (commit directly); `ask` renders the approval card.
   const propose = async () => {
     if (!payload || !selected) return
     const address = `${colLetter(selected.c)}${selected.r}`
     try {
       const req = await xlsxEditRequest(payload.path, payload.sheet, address, draft)
       if (req.action === 'allow') {
-        await commitEdit(address, draft, null)
+        await commitEdit(address, draft, req.ticketId, false)
       } else {
-        setProposal({ address, value: draft, ticketId: req.ticketId ?? null })
+        setProposal({ address, value: draft, ticketId: req.ticketId })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Edit failed')
     }
   }
 
-  const commitEdit = async (address: string, value: string, ticketId: string | null) => {
+  const commitEdit = async (
+    address: string,
+    value: string,
+    ticketId: string,
+    approve: boolean,
+  ) => {
     if (!payload || committing) return
     setCommitting(true)
     try {
-      // Record the human approval on the ticket (audit receipt), then consume
-      // it (single-use + args-hash match) in the executor.
-      if (ticketId) await guardRespond(ticketId, 'approve')
-      await xlsxEditCommit(payload.path, payload.sheet, address, value, ticketId ?? undefined)
+      // `ask` tickets need the human approval first (audit receipt); `allow`
+      // tickets are already approved. Either way the commit consumes it.
+      if (approve) await guardRespond(ticketId, 'approve')
+      await xlsxEditCommit(payload.path, payload.sheet, address, value, ticketId)
       setProposal(null)
       setDraft(value)
       // Re-read + re-verify: the changed cell flashes via the recalc diff.
@@ -192,21 +197,21 @@ export default function OfficeXlsxView() {
     try {
       const req = await xlsxBatchRequest(payload.path, payload.sheet, batch)
       if (req.action === 'allow') {
-        await commitBatch(batch, null)
+        await commitBatch(batch, req.ticketId, false)
       } else {
-        setBatchProposal({ summary: batch.summary, batch, ticketId: req.ticketId ?? null })
+        setBatchProposal({ summary: batch.summary, batch, ticketId: req.ticketId })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Bulk edit failed')
     }
   }
 
-  const commitBatch = async (batch: WorkbookBatch, ticketId: string | null) => {
+  const commitBatch = async (batch: WorkbookBatch, ticketId: string, approve: boolean) => {
     if (!payload || committing) return
     setCommitting(true)
     try {
-      if (ticketId) await guardRespond(ticketId, 'approve')
-      await xlsxBatchCommit(payload.path, payload.sheet, batch, ticketId ?? undefined)
+      if (approve) await guardRespond(ticketId, 'approve')
+      await xlsxBatchCommit(payload.path, payload.sheet, batch, ticketId)
       setBatchProposal(null)
       setPivotRows(null)
       await open(payload.path)
@@ -404,15 +409,13 @@ export default function OfficeXlsxView() {
           <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
             Set <span className="text-orange-300">{proposal.address}</span> to{' '}
             <span className="text-orange-300">{proposal.value}</span>
-            {proposal.ticketId
-              ? ` — approval ${proposal.ticketId.slice(0, 8)}`
-              : ''}
+            {' — approval ' + proposal.ticketId.slice(0, 8)}
           </span>
           <Button
             size="sm"
             disabled={committing}
             className="h-6 gap-1 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
-            onClick={() => commitEdit(proposal.address, proposal.value, proposal.ticketId)}
+            onClick={() => commitEdit(proposal.address, proposal.value, proposal.ticketId, true)}
           >
             <Check className="h-3 w-3" />
             Approve &amp; run
@@ -569,15 +572,13 @@ export default function OfficeXlsxView() {
           <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-orange-400" />
           <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
             <span className="text-orange-300">{batchProposal.summary}</span>
-            {batchProposal.ticketId
-              ? ` — approval ${batchProposal.ticketId.slice(0, 8)}`
-              : ''}
+            {' — approval ' + batchProposal.ticketId.slice(0, 8)}
           </span>
           <Button
             size="sm"
             disabled={committing}
             className="h-6 gap-1 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
-            onClick={() => commitBatch(batchProposal.batch, batchProposal.ticketId)}
+            onClick={() => commitBatch(batchProposal.batch, batchProposal.ticketId, true)}
           >
             <Check className="h-3 w-3" />
             Approve &amp; run

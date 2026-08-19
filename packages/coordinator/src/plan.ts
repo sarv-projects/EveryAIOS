@@ -411,10 +411,21 @@ function taskTools(task: PlanTask): string[] {
 
 /**
  * Dependency order: every task after its dependsOn. Stable (insertion order
- * within a level); unknown deps are ignored so a partial plan still runs.
+ * within a level). **Fail-closed:** an unknown dependency or a dependency
+ * cycle throws (never silently drops tasks), so a malformed plan can't
+ * report a false "completed".
  */
 export function topologicalOrder(tasks: PlanTask[]): string[] {
   const ids = new Set(tasks.map((t) => t.id));
+  // Unknown dependency → refuse the plan (a task naming a task that doesn't
+  // exist is a planning error, not a satisfied dependency).
+  for (const t of tasks) {
+    for (const d of t.dependsOn ?? []) {
+      if (!ids.has(d)) {
+        throw new Error(`task "${t.id}" depends on unknown task "${d}"`);
+      }
+    }
+  }
   const done = new Set<string>();
   const order: string[] = [];
   let progress = true;
@@ -422,12 +433,17 @@ export function topologicalOrder(tasks: PlanTask[]): string[] {
     progress = false;
     for (const t of tasks) {
       if (done.has(t.id)) continue;
-      const depsOk = (t.dependsOn ?? []).every((d) => !ids.has(d) || done.has(d));
+      const depsOk = (t.dependsOn ?? []).every((d) => done.has(d));
       if (!depsOk) continue;
       done.add(t.id);
       order.push(t.id);
       progress = true;
     }
+  }
+  // Any task not ordered means a dependency cycle — fail, don't drop.
+  if (order.length !== tasks.length) {
+    const stuck = tasks.filter((t) => !done.has(t.id)).map((t) => t.id);
+    throw new Error(`dependency cycle detected among tasks: ${stuck.join(", ")}`);
   }
   return order;
 }

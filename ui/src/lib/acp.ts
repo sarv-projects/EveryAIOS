@@ -57,12 +57,13 @@ export interface InstallState {
   binaryPath?: string | null;
 }
 
-/** The install-request verdict (Guard-2 ticket minted, or auto-allowed). */
+/** The install-request verdict (Guard-2 ticket minted, or auto-allowed).
+ * Ticket-every-effect: both `allow` and `ask` carry a single-use ticket. */
 export interface InstallRequest {
   action: "allow" | "ask";
   agentId: string;
   version: string;
-  ticketId?: string;
+  ticketId: string;
 }
 
 /** The result of `acp_authenticate` (url-type pending vs completed). */
@@ -89,11 +90,11 @@ export async function acpInstallRequest(agentId: string): Promise<InstallRequest
   return invoke<InstallRequest>("acp_install_request", { agentId });
 }
 
-/** F8 — the executor half: consume the approved ticket (when one was minted)
- * and install. Auto-allowed requests commit with no ticket. */
+/** F8 — the executor half: consume the (mandatory) single-use ticket and
+ * install. Both auto-allowed and approved requests commit with a ticket. */
 export async function acpInstallCommit(
   agentId: string,
-  ticketId?: string,
+  ticketId: string,
 ): Promise<{ agentId: string; version: string; kind: string; binaryPath?: string }> {
   return invoke("acp_install_commit", { agentId, ticketId });
 }

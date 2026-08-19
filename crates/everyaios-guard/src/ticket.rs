@@ -35,9 +35,11 @@ pub enum RiskLevel {
 /// Current ticket lifecycle state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TicketState {
-    /// Minted, not yet used.
+    /// Minted, awaiting a human decision (or auto-approved under policy).
     #[default]
     Pending,
+    /// Human-approved (or policy auto-approved) — consumable by an executor.
+    Approved,
     /// Consumed by an executor (single-use).
     Used,
     /// Rejected by the executor (arg-hash mismatch / path outside grant).
@@ -77,9 +79,11 @@ pub struct AuthorizationTicket {
 }
 
 impl AuthorizationTicket {
-    /// Is this ticket still usable right now?
+    /// Is this ticket consumable right now? A ticket is consumable only once
+    /// it has been *approved* (human `approve()` or policy auto-approval) —
+    /// a `Pending` ticket is not valid for execution.
     pub fn is_valid(&self) -> bool {
-        if self.state != TicketState::Pending {
+        if self.state != TicketState::Approved {
             return false;
         }
         if self.expires_at_ms != 0 && now_ms() > self.expires_at_ms {
@@ -139,7 +143,10 @@ impl TicketStore {
         id
     }
 
-    /// Look up + consume. Enforces validity, arg match and single-use.
+    /// Look up + consume. Enforces **approval first**, then validity, arg
+    /// match and single-use. A `Pending` ticket (minted but not yet approved)
+    /// is refused with [`TicketError::NotApproved`] — approval is a hard
+    /// prerequisite for consumption, never a side-channel.
     pub fn use_ticket(&mut self, id: &str, args_hash: &str) -> Result<(), TicketError> {
         let Some(t) = self.tickets.get_mut(id) else {
             return Err(TicketError::Unknown);
@@ -153,6 +160,9 @@ impl TicketStore {
         }
         if t.state == TicketState::Revoked {
             return Err(TicketError::Revoked);
+        }
+        if t.state == TicketState::Pending {
+            return Err(TicketError::NotApproved);
         }
         if !t.matches_args(args_hash) {
             t.state = TicketState::Rejected;
@@ -179,14 +189,16 @@ impl TicketStore {
             .collect()
     }
 
-    /// P7.5 (Guard-2) — record a human approve on a pending ticket (sets
-    /// `approval_source = Human` + appends an audit receipt). Returns false
-    /// when the ticket is missing or no longer pending. Consumption still
-    /// happens later via `use_ticket`, which enforces the arg hash +
-    /// single-use rules.
+    /// P7.5 (Guard-2) — record a human approve on a pending ticket. This is
+    /// the **only** transition into [`TicketState::Approved`] (consumable):
+    /// it flips `Pending → Approved`, sets `approval_source = Human`, and
+    /// appends an audit receipt. Returns false when the ticket is missing or
+    /// no longer pending. Consumption still happens later via `use_ticket`,
+    /// which now *requires* this Approved state (args hash + single-use).
     pub fn approve(&mut self, id: &str) -> bool {
         let ok = match self.tickets.get_mut(id) {
             Some(t) if t.state == TicketState::Pending => {
+                t.state = TicketState::Approved;
                 t.approval_source = ApprovalSource::Human;
                 true
             }
@@ -229,6 +241,8 @@ pub enum TicketError {
     AlreadyUsed,
     #[error("ticket revoked")]
     Revoked,
+    #[error("ticket not approved (pending human decision)")]
+    NotApproved,
     #[error("args hash mismatch")]
     ArgsMismatch,
 }
@@ -357,18 +371,36 @@ mod tests {
         path_ticket(id, "agent-1", "sess-1", "fs.delete", "delete", &["/workspace/x"], "h1", RiskLevel::High, 1)
     }
 
+    /// A ticket that has already been human-approved (consumable).
+    fn approved(id: &str) -> AuthorizationTicket {
+        let mut t = ticket(id);
+        t.state = TicketState::Approved;
+        t
+    }
+
     #[test]
     fn single_use_enforced() {
         let mut store = TicketStore::new();
-        let id = store.mint(ticket("t1"));
+        let id = store.mint(approved("t1"));
         assert!(store.use_ticket(&id, "h1").is_ok());
         assert_eq!(store.use_ticket(&id, "h1"), Err(TicketError::AlreadyUsed));
     }
 
     #[test]
+    fn pending_ticket_requires_approval() {
+        let mut store = TicketStore::new();
+        // A freshly-minted (Pending) ticket must NOT be consumable — approval
+        // is the prerequisite, not an optional side-channel.
+        let id = store.mint(ticket("tp"));
+        assert_eq!(store.use_ticket(&id, "h1"), Err(TicketError::NotApproved));
+        assert!(store.approve(&id));
+        assert!(store.use_ticket(&id, "h1").is_ok());
+    }
+
+    #[test]
     fn args_mismatch_rejects() {
         let mut store = TicketStore::new();
-        let id = store.mint(ticket("t2"));
+        let id = store.mint(approved("t2"));
         assert_eq!(store.use_ticket(&id, "wrong"), Err(TicketError::ArgsMismatch));
         assert_eq!(store.get(&id).unwrap().state, TicketState::Rejected);
     }
@@ -376,7 +408,7 @@ mod tests {
     #[test]
     fn revoke_blocks() {
         let mut store = TicketStore::new();
-        let id = store.mint(ticket("t3"));
+        let id = store.mint(approved("t3"));
         store.revoke(&id);
         assert_eq!(store.use_ticket(&id, "h1"), Err(TicketError::Revoked));
     }

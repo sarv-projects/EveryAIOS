@@ -74,6 +74,35 @@
 
 ---
 
+## HARDENING — Security-Posture Fixes + Agentic-Harness Patterns (adversarial deep-analysis 2026-08-19)
+
+> **Origin:** the 28-finding adversarial code review of the *live* runtime (ticket/guard/Excel/ACP/CSP/WebMCP/plan), each claim verified against source — not the pasted summary. The 🔴 confirmed-real findings that were *code bugs* (not already-tracked design gaps) are fixed below; the 🟡 plausible-but-unverified and the ⚪ by-design items stay tracked in their original sections (P7.8/P7.9 sandboxing, P28/P29 native sidecar, P10 packaging). **Verification:** workspace cargo tests + clippy + coordinator bun tests + UI tsc all green.
+
+### H1 Security-posture fixes (code-verified, landed)
+
+- [x] `[DONE]` **Ticket state machine — approval is now a hard prerequisite** (finding #1, the kill-shot). `AuthorizationTicket` gained a real `Approved` state; `use_ticket` returns `TicketError::NotApproved` for any `Pending` ticket; `approve()` is the *only* `Pending → Approved` transition. A minted-but-unapproved ticket is no longer consumable — the human-approval gate can't be bypassed by minting + consuming in the same process.
+- [x] `[DONE]` **Ticket-every-effect — `Allow` carries a ticket too** (findings #1/#11). `GuardDecision::Allow` is no longer a unit variant; every non-blocked `evaluate` mints a single-use ticket (`Allow` = pre-`Approved`, `Ask` = `Pending`). There is no ticketless mutation path, so Stage 0 `tool/commit` can require a consumed ticket uniformly.
+- [x] `[DONE]` **Guard surface split — the sidecar can't approve itself** (finding #2, the other half of the kill-shot). `GuardService::handle` (full control plane: approve/reject/estop/reset/profile) is separate from `handle_sidecar` (evaluate/use/pending/receipts/estop_status/policy-read only); `chat.rs` routes the coordinator's `guard/*` through `handle_sidecar`, which errors on `guard/approve`/`guard/reject`/`guard/estop`/`guard/reset`/`guard/profile`. The coordinator can pre-flight + consume tickets but can no longer approve its own actions, clear estop, or change the policy profile.
+- [x] `[DONE]` **`min_confidence_for_auto` wired** (finding #23). `evaluate` now honors the policy's auto-confidence floor — a model-reported confidence below the floor forces `Ask` even when the rule map would otherwise allow.
+- [x] `[DONE]` **Excel commits require a ticket** (findings #3/#12). `xlsx_edit_commit`/`xlsx_batch_commit` no longer accept `Option<String>` — a ticket is mandatory, `use_ticket` + args-hash is enforced, and writes go through path-floor validation + atomic temp-file rename (no more `None → std::fs::write` bypass).
+- [x] `[DONE]` **ACP install commit requires a ticket** (finding #15 tie-in). `acp_install_commit` consumes a mandatory ticket before download/extract, matching the Excel fix.
+- [x] `[DONE]` **CSP restored** (finding #7). `tauri.conf.json` `"csp": null` → a strict `default-src 'self'` policy (script/style/img/font/connect/object/base/frame all constrained), closing the XSS/exfil surface.
+- [x] `[DONE]` **WebMCP HTTP auth + limits** (finding #6). The WebMCP server now requires a bearer token on the mutating path, enforces a body-size cap (`MAX_BODY_BYTES`), and sets read timeouts — loopback is no longer the only trust boundary.
+- [x] `[DONE]` **Topo sort fail-closed** (finding #10). `topologicalOrder` throws on an unknown dependency and on a dependency cycle instead of silently dropping tasks, so a malformed plan can't report a false "completed".
+- [x] `[DONE]` **Coordinator guard.ts contract** (findings #2/#23 tie-in). `GuardDecision.allow` now carries `ticketId`; the `setEstop` escape hatch was removed from the sidecar surface; UI call sites (spreadsheet.ts / acp.ts / agent-model-picker.tsx / office-xlsx-view.tsx) updated to the mandatory-ticket contract.
+
+### H2 Agentic-harness patterns (ChatGPT/Claude deep-dive — adopted; open)
+
+> Web verification was unavailable this pass (search backend empty), so these are adopted as **architecture patterns on their own merit**, not asserted as external facts. Each maps onto an existing TODO section and is a *composition/annotation* change, not a new capability row.
+
+- [ ] `[NOT DONE]` **Capability index / deferred tool discovery** — name as a first-class pattern: tools/skills are registered in a `ToolRegistry` index and *loaded into context on demand*, never all-injected. Feeds S0.3 (schema single-source) + P7.2 `MAX_ACTIVE_SKILLS=20`; the index is the catalog, the model sees only the resolved subset.
+- [ ] `[NOT DONE]` **Monitoring tasks — notify only on a meaningful delta** (P6.4 scheduler). Add a compare-before-notify rule: a scheduled task snapshots the monitored state and only surfaces when it crosses a threshold (the "monitor and notify on change" pattern), not on every tick.
+- [ ] `[NOT DONE]` **Memory consolidation framing** (P5). Add an explicit "consolidation" pass to the memory pipeline — synthesize the current memory state from many turns in the background (the landed ACT-R activation + spontaneous recall already do the retrieval half; this names the *write-side synthesis* so stale/contradictory facts are superseded, not just appended).
+- [ ] `[NOT DONE]` **Project-only memory isolation** (P5/P6). Tighten workspace scoping so a project's memory boundary can be enforced as *project-only* (no cross-project retrieval) — the isolation-mode semantics, on top of the existing workspace scoping.
+- [ ] `[NOT DONE]` **Deterministic tool ordering for cache stability** (A9/ARCH/05). Canonicalize tool-call + tool-list ordering into the append-only history so prompt-cache prefixes stay byte-stable as the capability index grows (extends the landed byte-stable-prefix compaction).
+
+---
+
 ## PHASE 0 — Workspace & Skeleton (~2 weeks)
 
 ### P0.1 Rust Workspace Setup (ARCH/02 §2.2 — module layout, doc 41 P0 STEAL rows)
@@ -1483,6 +1512,7 @@
 | Phase | Tasks | Done | Open | Weeks |
 |---|---|---|---|---|
 | **Stage 0 Guard-Gated Tool Executor** | **28** | **0** | **28** | **~3** |
+| **HARDENING Security + Harness Patterns** | **15** | **10** | **5** | **landed + ~1** |
 | P0 Workspace & Skeleton | 48 | 48 | 0 | ~2 |
 | P1 Chat + BYOK | 54 | 54 | 0 | ~4 |
 | P2 Browser Layer | 90 | 90 | 0 | ~6 |
@@ -1521,6 +1551,6 @@
 | P34 Full-Fidelity Tool Surfaces (ARCH/12 v3.1) | 7 | 2 | 5 | post-Stage-0 (P34.1/6 landed; P34.2-5 need ribbon+viewer build) |
 | P35 Full Animation Wiring (design-doc motion table) | 4 | 1 | 3 | landed P35.1 (11 files) |
 | Research Tasks (cross-cutting) | 54 | 2 | 52 | parallel |
-| **TOTAL** | **987** | **457** | **530** | **~48 weeks** |
+| **TOTAL** | **1002** | **467** | **535** | **~48 weeks** |
 
 > **Note:** P11 (UI/UX), P11.5 (UI Implementation), and P12 (Market Research) run **in parallel** with implementation phases, not sequentially. Actual calendar time depends on team size and parallelization.

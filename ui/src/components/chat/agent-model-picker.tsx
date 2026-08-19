@@ -83,13 +83,12 @@ export default function AgentModelPicker({ compact }: Props) {
       const { acpInstallRequest, acpInstallCommit } = await import('@/lib/acp')
       const req = await acpInstallRequest(agentId)
       if (req.action === 'allow') {
-        await acpInstallCommit(agentId)
+        // Auto-allowed still consumes its pre-approved single-use ticket.
+        await acpInstallCommit(agentId, req.ticketId)
         notify(`${agent?.name} installed — pick it and send`)
         setOpen(false)
-      } else if (req.ticketId) {
-        notify(`Approval needed — Guard-2 card #${req.ticketId.slice(0, 8)} is in the chat`)
       } else {
-        notify('Install blocked by policy')
+        notify(`Approval needed — Guard-2 card #${req.ticketId.slice(0, 8)} is in the chat`)
       }
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Install failed')

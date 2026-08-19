@@ -9,9 +9,11 @@
  * + single-use, so a dead or replaying sidecar can't double-execute.
  */
 
-/** The decision Rust returns from `guard/evaluate`. */
+/** The decision Rust returns from `guard/evaluate`.
+ * Ticket-every-effect: `allow` carries a pre-approved single-use ticket the
+ * executor consumes; `ask` carries a pending ticket that needs human approval. */
 export type GuardDecision =
-  | { action: "allow" }
+  | { action: "allow"; ticketId: string }
   | { action: "ask"; ticketId: string }
   | { action: "block"; reason: string };
 
@@ -87,14 +89,6 @@ export async function useTicket(
     consumed?: boolean;
   };
   return out.consumed === true;
-}
-
-/** Pull (or reset) the global estop. Returns the new pulled state. */
-export async function setEstop(request: GuardRequest, pulled: boolean): Promise<boolean> {
-  const out = (await request(pulled ? "guard/estop" : "guard/reset", {})) as {
-    pulled?: boolean;
-  };
-  return out.pulled === true;
 }
 
 /** The full executor call: pre-flight → (ticket?) → consume. Returns the

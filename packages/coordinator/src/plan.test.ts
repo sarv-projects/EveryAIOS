@@ -119,10 +119,19 @@ describe("plan executor — topological order", () => {
     ).toEqual(["a", "b", "c"]);
   });
 
-  test("ignores unknown deps (partial plan still runs)", () => {
-    expect(
+  test("throws on unknown deps (fail-closed)", () => {
+    expect(() =>
       topologicalOrder([{ id: "x", goal: "x", dependsOn: ["ghost"] }]),
-    ).toEqual(["x"]);
+    ).toThrow(/depends on unknown task "ghost"/);
+  });
+
+  test("throws on dependency cycles", () => {
+    expect(() =>
+      topologicalOrder([
+        { id: "a", goal: "a", dependsOn: ["b"] },
+        { id: "b", goal: "b", dependsOn: ["a"] },
+      ]),
+    ).toThrow(/dependency cycle detected/);
   });
 
   test("token estimate counts goals + verify blocks", () => {

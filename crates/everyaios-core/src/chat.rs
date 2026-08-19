@@ -308,10 +308,13 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             }
                         }
                     }
-                    // P7.5/J21: Guard-2 pre-flight + executor call-sites.
+                    // P7.5/J21: Guard-2 pre-flight + executor call-sites. The
+                    // sidecar drives the *restricted* surface (`handle_sidecar`):
+                    // it can evaluate + use tickets + read, but never
+                    // approve/reject/reset/estop/profile (human-only).
                     method if method.starts_with("guard/") => {
                         let mut svc = guard.lock().unwrap_or_else(|e| e.into_inner());
-                        match svc.handle(method, &params) {
+                        match svc.handle_sidecar(method, &params) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
