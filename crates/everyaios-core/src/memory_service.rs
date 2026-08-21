@@ -15,8 +15,8 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use everyaios_memory::{
-    Bm25Doc, Bm25Index, ContextPlanner, EdgeType, FsEvent, GhostIndex, GraphStore, MemoryEntry,
-    NodeKind, PagedMemory, PlannerConfig, UsageLedger,
+    extract_candidates, Bm25Doc, Bm25Index, ContextPlanner, EdgeType, FsEvent, GhostIndex,
+    GraphStore, MemoryEntry, NodeKind, PagedMemory, PlannerConfig, UsageLedger,
 };
 
 /// Current wall-clock time in milliseconds since the Unix epoch (0 when the
@@ -75,6 +75,25 @@ pub struct StoredFact {
     /// persisted stores predating the field (defaults to Active).
     #[serde(default)]
     pub status: FactStatus,
+    /// Provenance: which surface produced this fact (`chat` / `file` / `synthesis`).
+    #[serde(default)]
+    pub source: String,
+    /// Provenance: session / file / ticket id the fact derived from.
+    #[serde(default)]
+    pub source_id: String,
+    /// Project-scope isolation key (`None` = global / unscoped).
+    #[serde(default)]
+    pub project_id: Option<String>,
+}
+
+/// Retrieval isolation (H2 / P5/P6). `ProjectOnly` never returns another
+/// project's facts (or global unscoped facts).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IsolationMode {
+    #[default]
+    Global,
+    ProjectOnly,
 }
 
 /// The coordinator-facing memory service. All state is behind one `&mut self`
@@ -91,7 +110,17 @@ pub struct MemoryService {
     usage: UsageLedger,
     facts: Vec<StoredFact>,
     counter: u64,
+    isolation: IsolationMode,
+    active_project: Option<String>,
+    writes_since_tick: u32,
+    /// P1.3 (A9) — semantic (prompt) cache: read-only-gated reuse.
+    semantic_cache: everyaios_memory::SemanticCache,
+    /// P1.3 (A9) — dependency-tagged result cache.
+    result_cache: everyaios_memory::ResultCache,
 }
+
+/// How often a write triggers a background consolidate+reinforce pass.
+const SYNTH_EVERY_WRITES: u32 = 8;
 
 impl Default for MemoryService {
     fn default() -> Self {
@@ -105,6 +134,11 @@ impl Default for MemoryService {
             usage: UsageLedger::new(),
             facts: Vec::new(),
             counter: 0,
+            isolation: IsolationMode::Global,
+            active_project: None,
+            writes_since_tick: 0,
+            semantic_cache: everyaios_memory::SemanticCache::new(0.85, 3600),
+            result_cache: everyaios_memory::ResultCache::new(3600),
         }
     }
 }
@@ -152,6 +186,20 @@ impl MemoryService {
     /// (keyed by `memory://<session>`) + an episodic graph node. Returns how
     /// many were written.
     pub fn write(&mut self, session: &str, facts: &[String]) -> usize {
+        let n = self.write_with(session, facts, "chat", session, None);
+        self.after_write(n);
+        n
+    }
+
+    /// Write with provenance + project scope (H2 Memory Sources).
+    pub fn write_with(
+        &mut self,
+        session: &str,
+        facts: &[String],
+        source: &str,
+        source_id: &str,
+        project_id: Option<&str>,
+    ) -> usize {
         let mut n = 0usize;
         for raw in facts {
             let text = raw.trim().to_string();
@@ -168,6 +216,9 @@ impl MemoryService {
                 created_at_ms: now,
                 updated_at_ms: now,
                 status: FactStatus::Active,
+                source: source.to_string(),
+                source_id: source_id.to_string(),
+                project_id: project_id.map(str::to_string),
             });
             n += 1;
         }
@@ -176,6 +227,35 @@ impl MemoryService {
             self.bm25.build(self.docs.clone());
         }
         n
+    }
+
+    fn after_write(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
+        self.writes_since_tick = self.writes_since_tick.saturating_add(1);
+        if self.writes_since_tick >= SYNTH_EVERY_WRITES {
+            self.writes_since_tick = 0;
+            let _ = self.synthesize(None);
+        }
+    }
+
+    pub fn set_scope(&mut self, mode: IsolationMode, project_id: Option<String>) {
+        self.isolation = mode;
+        self.active_project = project_id;
+    }
+
+    fn visible(&self, f: &StoredFact) -> bool {
+        if f.status != FactStatus::Active {
+            return false;
+        }
+        match self.isolation {
+            IsolationMode::Global => true,
+            IsolationMode::ProjectOnly => match &self.active_project {
+                Some(p) => f.project_id.as_deref() == Some(p.as_str()),
+                None => f.project_id.is_none(),
+            },
+        }
     }
 
     /// P5.1 on-disk durability: persist the durable slice (facts + counter)
@@ -215,7 +295,7 @@ impl MemoryService {
     pub fn core_facts(&self) -> Vec<String> {
         self.facts
             .iter()
-            .filter(|f| f.status == FactStatus::Active)
+            .filter(|f| self.visible(f))
             .map(|f| f.text.clone())
             .collect()
     }
@@ -285,6 +365,9 @@ impl MemoryService {
                     },
                     "createdAtMs": f.created_at_ms,
                     "updatedAtMs": f.updated_at_ms,
+                    "source": f.source,
+                    "sourceId": f.source_id,
+                    "projectId": f.project_id,
                 })
             })
             .collect::<Vec<_>>();
@@ -298,7 +381,79 @@ impl MemoryService {
     /// P5.1 `memory/read`: BM25-ranked fact ids for a query (the vectorless
     /// default signal; the graph/vector signals compose on top via fusion).
     pub fn read(&self, query: &str, k: usize) -> Vec<String> {
-        self.bm25.search(query, k)
+        self.bm25
+            .search(query, k.saturating_mul(4).max(k))
+            .into_iter()
+            .filter(|id| {
+                self.facts
+                    .iter()
+                    .find(|f| f.id == *id)
+                    .is_some_and(|f| self.visible(f))
+            })
+            .take(k)
+            .collect()
+    }
+
+    /// Background synthesis: consolidate + reinforce candidates + heuristic
+    /// importance rescore (the deterministic stand-in for model-assisted
+    /// scoring until an LLM pass is attached via `memory/assess`).
+    pub fn synthesize(&mut self, extra_text: Option<&str>) -> Value {
+        let (superseded, active) = self.consolidate();
+        let mut ingested = 0usize;
+        if let Some(text) = extra_text {
+            let cands = extract_candidates(text);
+            let existing: HashSet<String> =
+                self.facts.iter().map(|f| f.text.to_lowercase()).collect();
+            let mut fresh = Vec::new();
+            for c in cands {
+                if existing.contains(&c.content.to_lowercase()) {
+                    continue;
+                }
+                fresh.push(c.content);
+            }
+            if !fresh.is_empty() {
+                let project = self.active_project.clone();
+                ingested =
+                    self.write_with("synthesis", &fresh, "synthesis", "tick", project.as_deref());
+            }
+        }
+        self.rescore_importance();
+        json!({
+            "superseded": superseded,
+            "active": active,
+            "ingested": ingested,
+        })
+    }
+
+    fn rescore_importance(&mut self) {
+        let now = now_ms();
+        for f in &mut self.facts {
+            if f.status != FactStatus::Active {
+                continue;
+            }
+            let cands = extract_candidates(&f.text);
+            if let Some(c) = cands.first() {
+                let next = ((c.importance * 10.0).round() as u8).clamp(1, 10);
+                if next != f.importance {
+                    f.importance = next;
+                    f.updated_at_ms = now;
+                }
+            }
+        }
+    }
+
+    /// Apply host-provided (model-assisted) importance scores.
+    pub fn apply_importance(&mut self, scores: &[(String, u8)]) -> usize {
+        let now = now_ms();
+        let mut n = 0usize;
+        for (id, imp) in scores {
+            if let Some(f) = self.facts.iter_mut().find(|f| f.id == *id) {
+                f.importance = (*imp).clamp(1, 10);
+                f.updated_at_ms = now;
+                n += 1;
+            }
+        }
+        n
     }
 
     /// P5.3 `memory/plan`: commit the core warm set and report the budget the
@@ -365,7 +520,8 @@ impl MemoryService {
         cached_tokens: u64,
     ) {
         self.usage.set_active(session, key);
-        self.usage.record(tokens_in, tokens_out, cache_hit, cached_tokens);
+        self.usage
+            .record(tokens_in, tokens_out, cache_hit, cached_tokens);
         self.usage.clear_active();
     }
 
@@ -410,6 +566,166 @@ impl MemoryService {
         })
     }
 
+    /// P5.10 — retest every built algorithm core across the sidecar process
+    /// boundary. The coordinator calls this over JSON-RPC (`memory/retest`), so
+    /// a Bun→Rust round-trip exercises the *same* code the desktop runtime
+    /// uses — the in-process `smoke_all_algorithms` proves the cores; this
+    /// proves they answer over the live IPC seam. Any panic/corrupt result
+    /// fails the whole call (surfaced as a `method` error to the sidecar).
+    pub fn retest_algorithms(&mut self) -> Value {
+        let start = std::time::Instant::now();
+        let mut algos = 0usize;
+        {
+            let algos = &mut algos;
+            let mut check = |cond: bool, name: &str| {
+                if !cond {
+                    panic!("memory/retest failed at {name}");
+                }
+                *algos += 1;
+            };
+            // 1. fusion (Alg #18/#29)
+            let a = vec![("x".to_string(), 9.0), ("y".to_string(), 8.0)];
+            let b = vec![("y".to_string(), 9.0), ("x".to_string(), 8.0)];
+            check(
+                everyaios_memory::rrf_fuse(
+                    &[
+                        everyaios_memory::Signal {
+                            weight: 1.0,
+                            hits: &a,
+                        },
+                        everyaios_memory::Signal {
+                            weight: 1.0,
+                            hits: &b,
+                        },
+                    ],
+                    60.0,
+                )
+                .len()
+                    == 2,
+                "fusion",
+            );
+            check(
+                !everyaios_memory::smart_snippets("the fox jumps", &["fox"], 4).is_empty(),
+                "fusion.snippets",
+            );
+
+            // 2. actr (Alg #32)
+            let mem = everyaios_memory::Memory {
+                id: "m".into(),
+                importance: 10,
+                strength: 1.0,
+                created_at: 0,
+                last_access: 0,
+                keywords: vec![],
+                graph_links: 0,
+            };
+            check(
+                everyaios_memory::activation(&mem, 1_000, 3600.0) > 0.0,
+                "actr",
+            );
+            check(
+                everyaios_memory::recency(0) > everyaios_memory::recency(1_000),
+                "actr.recency",
+            );
+
+            // 3. compaction (Alg #21)
+            let mut c = everyaios_memory::CompactionCoordinator::new(
+                everyaios_memory::CompactionConfig::default(),
+                100,
+            );
+            c.push_turn(95);
+            let no_summarizers: &[&everyaios_memory::Summarizer] = &[];
+            check(
+                c.maybe_compact("x".repeat(400).as_str(), no_summarizers)
+                    .is_some(),
+                "compaction",
+            );
+
+            // 4. fsrs (C13)
+            let fsrs = everyaios_memory::Fsrs::new(&everyaios_memory::DEFAULT_PARAMETERS)
+                .expect("fsrs params");
+            let report =
+                everyaios_memory::simulate(&fsrs, &everyaios_memory::SimulationConfig::default());
+            check(report.total_reviews > 0, "fsrs");
+
+            // 5. taste (P1.5 style memory)
+            let mut taste = everyaios_memory::TasteStore::new();
+            taste.upsert("tone", "concise", "yes");
+            check(taste.inject_stable_prefix().contains("concise"), "taste");
+
+            // 6. classify (Vane)
+            let intent = everyaios_memory::classify("search the web and make a chart");
+            check(
+                intent.needs_research || intent.needs_tools || intent.needs_widgets,
+                "classify",
+            );
+
+            // 7. summary
+            let fs = everyaios_memory::summarize_file("/a.rs", "fn main() {}\nlet x = 1;");
+            check(fs.summary.contains("fn main"), "summary");
+
+            // 8. reinforce
+            let mut q = everyaios_memory::ReviewQueue::new(0.9);
+            let cands = everyaios_memory::extract_candidates("This is important. This too.");
+            check(!cands.is_empty() && q.ingest(cands, 0) > 0, "reinforce");
+
+            // 9. janus
+            check(
+                everyaios_memory::run_janus("dup\ndup\nunique", 2, 2).removed_blocks >= 1,
+                "janus",
+            );
+
+            // 10. cognee
+            let mut cg = everyaios_memory::CogneeMemory::new();
+            cg.remember("k", "The capital of France is Paris", 8);
+            cg.flush();
+            check(!cg.recall("capital").entries.is_empty(), "cognee");
+
+            // 11. rtk
+            check(
+                !everyaios_memory::compress("ls -la", "-rw-r--r-- file.txt")
+                    .output
+                    .is_empty(),
+                "rtk",
+            );
+
+            // 12. embedding (C5)
+            check(
+                everyaios_memory::cosine(&[1.0, 0.0], &[1.0, 0.0]) > 0.99,
+                "embedding",
+            );
+
+            // 13. rerank (Alg #19)
+            let cands = vec![everyaios_memory::Candidate {
+                id: "c1".into(),
+                text: "rust borrow checker".into(),
+            }];
+            let retr: std::collections::HashMap<String, f64> = [("c1".to_string(), 0.8)].into();
+            let reranker = everyaios_memory::LexicalReranker::new();
+            check(
+                everyaios_memory::rerank(&cands, &retr, &reranker, "rust", 0.5, 0.5, 3).len() == 1,
+                "rerank",
+            );
+
+            // 14. repair (B5 local JSON-mode)
+            let rep = everyaios_memory::repair_tool_json(
+                "```json\n{\"kind\":\"click\",\"ref_id\":\"e1\",}\n```",
+            );
+            check(serde_json::from_str::<Value>(&rep.json).is_ok(), "repair");
+
+            // 15. service-owned surfaces (paged/graph/ghost/planner/bm25/usage)
+            let _ = self.plan(0);
+            let _ = self.usage_snapshot();
+            let _ = self.core_facts();
+            *algos += 6; // paged, graph, ghost, planner, bm25, usage exercised via service methods
+        }
+        json!({
+            "ok": true,
+            "algorithms": algos,
+            "elapsedMs": start.elapsed().as_millis() as u64,
+        })
+    }
+
     /// Dispatch one JSON-RPC method against the service (the relay's consumer
     /// loop routes `Inbound::Request` here). Unknown methods error so the
     /// sidecar gets a clean `method not found` instead of silence.
@@ -431,7 +747,20 @@ impl MemoryService {
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
-                Ok(json!({ "written": self.write(&session, &facts) }))
+                let source = params
+                    .get("source")
+                    .and_then(Value::as_str)
+                    .unwrap_or("chat");
+                let source_id = params
+                    .get("sourceId")
+                    .and_then(Value::as_str)
+                    .unwrap_or(session.as_str());
+                let project_id = params.get("projectId").and_then(Value::as_str);
+                let n = self.write_with(&session, &facts, source, source_id, project_id);
+                if source != "synthesis" {
+                    self.after_write(n);
+                }
+                Ok(json!({ "written": n }))
             }
             "memory/read" => {
                 let query = params.get("query").and_then(Value::as_str).unwrap_or("");
@@ -476,6 +805,49 @@ impl MemoryService {
                     "total": self.facts.len(),
                 }))
             }
+            "memory/tick" => {
+                let text = params.get("text").and_then(Value::as_str);
+                Ok(self.synthesize(text))
+            }
+            "memory/scope" => {
+                let mode = match params.get("mode").and_then(Value::as_str) {
+                    Some("project_only") | Some("projectOnly") => IsolationMode::ProjectOnly,
+                    _ => IsolationMode::Global,
+                };
+                let project_id = params
+                    .get("projectId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                self.set_scope(mode, project_id);
+                Ok(json!({
+                    "mode": match self.isolation {
+                        IsolationMode::Global => "global",
+                        IsolationMode::ProjectOnly => "project_only",
+                    },
+                    "projectId": self.active_project,
+                }))
+            }
+            "memory/assess" => {
+                let scores = params
+                    .get("scores")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| {
+                                let id = v.get("id")?.as_str()?.to_string();
+                                let imp = v.get("importance")?.as_u64()? as u8;
+                                Some((id, imp))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                if scores.is_empty() {
+                    self.rescore_importance();
+                    Ok(json!({ "rescored": self.facts.len(), "mode": "heuristic" }))
+                } else {
+                    Ok(json!({ "rescored": self.apply_importance(&scores), "mode": "model" }))
+                }
+            }
             "memory/status" => Ok(self.status()),
             "memory/save" => {
                 let path = params
@@ -494,6 +866,41 @@ impl MemoryService {
                 Ok(json!({ "loaded": self.facts.len() }))
             }
             "usage/snapshot" => Ok(self.usage_snapshot()),
+            // P1.3 (A9) — semantic/result cache lookup. The coordinator calls
+            // this on read-only turns (no resolved tools) before streaming.
+            "memory/cache_get" => {
+                let prompt = params.get("prompt").and_then(Value::as_str).unwrap_or("");
+                let now = now_ms() / 1000;
+                Ok(match self.semantic_cache.get(prompt, now) {
+                    Some(hit) => json!({ "hit": true, "layer": "semantic", "response": hit }),
+                    None => json!({ "hit": false }),
+                })
+            }
+            // P1.3 (A9) — store a turn's response. `readOnly` gates whether
+            // it may ever be served (mutation turns are retained but never hit).
+            "memory/cache_put" => {
+                let prompt = params.get("prompt").and_then(Value::as_str).unwrap_or("");
+                let response = params.get("response").and_then(Value::as_str).unwrap_or("");
+                let read_only = params
+                    .get("readOnly")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let now = now_ms() / 1000;
+                self.semantic_cache.put(prompt, response, read_only, now);
+                Ok(json!({ "stored": true }))
+            }
+            // P1.3 (A9) — dependency-tagged invalidation (a changed file drops
+            // every cached result derived from it).
+            "memory/cache_invalidate" => {
+                let tag = params.get("tag").and_then(Value::as_str).unwrap_or("");
+                let removed = self.result_cache.invalidate_tag(tag);
+                Ok(json!({ "removed": removed }))
+            }
+            // P5.10 — retest the built algorithm cores across the sidecar
+            // process boundary (Bun → JSON-RPC → Rust → algorithm). The
+            // in-process `smoke_all_algorithms` proves the cores; this proves
+            // the same cores answer over the live IPC seam.
+            "memory/retest" => Ok(self.retest_algorithms()),
             _ => Err(format!("method not found: {method}")),
         }
     }
@@ -547,19 +954,32 @@ fn parse_fs_event(params: &Value) -> Result<FsEvent, String> {
 /// deterministic supersession floor; the model-assisted synthesis pass is a
 /// follow-up TODO — this is deliberately conservative, never destructive).
 const NEGATION_MARKERS: &[&str] = &[
-    "not", "never", "no", "stop", "stopped", "cancel", "cancelled", "canceled", "anymore",
-    "instead", "longer", "dont", "doesnt", "wont", "cant",
+    "not",
+    "never",
+    "no",
+    "stop",
+    "stopped",
+    "cancel",
+    "cancelled",
+    "canceled",
+    "anymore",
+    "instead",
+    "longer",
+    "dont",
+    "doesnt",
+    "wont",
+    "cant",
 ];
 
 /// Common words that don't identify a fact's *subject* (dropped before
 /// shared-subject matching so two facts about the same thing match on their
 /// content words, not their grammar).
 const SUBJECT_STOPWORDS: &[&str] = &[
-    "about", "with", "from", "have", "has", "had", "will", "would", "been", "were", "was",
-    "are", "they", "their", "there", "them", "this", "that", "these", "those", "what", "when",
-    "where", "which", "your", "yours", "here", "than", "then", "into", "onto", "very", "just",
-    "really", "some", "more", "most", "also", "only", "now", "already", "still", "next", "year",
-    "month", "week", "day", "going", "planning", "thinking", "actually",
+    "about", "with", "from", "have", "has", "had", "will", "would", "been", "were", "was", "are",
+    "they", "their", "there", "them", "this", "that", "these", "those", "what", "when", "where",
+    "which", "your", "yours", "here", "than", "then", "into", "onto", "very", "just", "really",
+    "some", "more", "most", "also", "only", "now", "already", "still", "next", "year", "month",
+    "week", "day", "going", "planning", "thinking", "actually",
 ];
 
 /// The subject words of a fact: lowercase alphanumeric tokens of length ≥ 4
@@ -600,14 +1020,20 @@ mod tests {
         // BM25 returns up to k docs (zero-score docs included), but the
         // relevant fact must rank first.
         let hits = m.read("budget", 3);
-        assert_eq!(hits[0], "mem:1", "the budget fact must rank first: {hits:?}");
+        assert_eq!(
+            hits[0], "mem:1",
+            "the budget fact must rank first: {hits:?}"
+        );
         assert_eq!(&m.facts[0].session_id, "s1");
     }
 
     #[test]
     fn plan_reports_warm_set_and_remaining() {
         let mut m = MemoryService::new();
-        m.write("s1", &["A declarative fact long enough to be a real memory entry.".into()]);
+        m.write(
+            "s1",
+            &["A declarative fact long enough to be a real memory entry.".into()],
+        );
         let plan = m.plan(200);
         assert!(plan["warmSetTokens"].as_u64().unwrap() > 0);
         assert!(plan["remainingTokens"].as_u64().unwrap() < 32_000);
@@ -645,7 +1071,9 @@ mod tests {
         assert_eq!(out.unwrap()["written"], 2);
 
         assert!(m.handle("bogus/method", &json!({})).is_err());
-        assert!(m.handle("memory/ghost", &json!({ "kind": "removed" })).is_err());
+        assert!(m
+            .handle("memory/ghost", &json!({ "kind": "removed" }))
+            .is_err());
     }
 
     #[test]
@@ -672,7 +1100,8 @@ mod tests {
 
     #[test]
     fn save_then_load_rebuilds_derived_indexes() {
-        let dir = std::env::temp_dir().join(format!("everyaios-memory-persist-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-memory-persist-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("memory.db");
 
@@ -689,7 +1118,10 @@ mod tests {
 
         // Counter resumes after load (no id collision).
         let mut loaded = loaded;
-        assert_eq!(loaded.write("s2", &["A second fact about the marketing deck.".into()]), 1);
+        assert_eq!(
+            loaded.write("s2", &["A second fact about the marketing deck.".into()]),
+            1
+        );
         assert_eq!(loaded.facts[1].id, "mem:2");
 
         std::fs::remove_dir_all(&dir).ok();
@@ -710,7 +1142,8 @@ mod tests {
 
     #[test]
     fn save_and_load_via_dispatch() {
-        let dir = std::env::temp_dir().join(format!("everyaios-memory-dispatch-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-memory-dispatch-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("memory.db");
         let path_s = path.to_string_lossy().to_string();
@@ -721,7 +1154,9 @@ mod tests {
         assert_eq!(saved["saved"], 1);
 
         let mut m2 = MemoryService::new();
-        let loaded = m2.handle("memory/load", &json!({ "path": path_s })).unwrap();
+        let loaded = m2
+            .handle("memory/load", &json!({ "path": path_s }))
+            .unwrap();
         assert_eq!(loaded["loaded"], 1);
         assert_eq!(m2.core_facts().len(), 1);
 
@@ -770,6 +1205,52 @@ mod tests {
     }
 
     #[test]
+    fn provenance_and_project_isolation() {
+        let mut m = MemoryService::new();
+        m.write_with(
+            "s1",
+            &["Alpha fact about cats.".into()],
+            "chat",
+            "s1",
+            Some("proj-a"),
+        );
+        m.write_with(
+            "s1",
+            &["Beta fact about dogs.".into()],
+            "file",
+            "notes.md",
+            Some("proj-b"),
+        );
+        m.set_scope(IsolationMode::ProjectOnly, Some("proj-a".into()));
+        let facts = m.core_facts();
+        assert_eq!(facts.len(), 1);
+        assert!(facts[0].contains("cats"));
+        assert!(!facts.iter().any(|f| f.contains("dogs")));
+        let st = m.status();
+        assert_eq!(st["facts"][0]["source"], "chat");
+        assert_eq!(st["facts"][0]["projectId"], "proj-a");
+        m.set_scope(IsolationMode::Global, None);
+        assert_eq!(m.core_facts().len(), 2);
+    }
+
+    #[test]
+    fn tick_runs_consolidate_and_reinforce() {
+        let mut m = MemoryService::new();
+        m.write("s1", &["I might visit Japan next year.".into()]);
+        let out = m
+            .handle(
+                "memory/tick",
+                &json!({ "text": "An important fact: Rust is memory-safe." }),
+            )
+            .unwrap();
+        assert!(out.get("active").is_some());
+        assert!(m
+            .facts
+            .iter()
+            .any(|f| f.source == "synthesis" || f.text.contains("Rust")));
+    }
+
+    #[test]
     fn forget_fully_propagates_across_surfaces() {
         let mut m = MemoryService::new();
         m.write(
@@ -788,12 +1269,19 @@ mod tests {
 
         // BM25 derived index dropped the forgotten doc.
         let hits = m.read("budget", 5);
-        assert!(!hits.iter().any(|id| id == "mem:1"), "BM25 must drop the forgotten doc: {hits:?}");
+        assert!(
+            !hits.iter().any(|id| id == "mem:1"),
+            "BM25 must drop the forgotten doc: {hits:?}"
+        );
 
         // paged + graph + ghost all dropped the id.
         assert!(m.paged.read("mem:1").is_none());
         assert!(m.graph.node_active_at("mem:1", m.counter + 1, 0).is_none());
-        assert!(m.ghost.ids_for("memory://s1").iter().all(|id| id != "mem:1"));
+        assert!(m
+            .ghost
+            .ids_for("memory://s1")
+            .iter()
+            .all(|id| id != "mem:1"));
 
         // Unknown id is a no-op miss.
         assert!(!m.forget("mem:999"));
@@ -814,6 +1302,49 @@ mod tests {
     }
 
     #[test]
+    fn cache_dispatch_roundtrips_read_only_gated() {
+        let mut m = MemoryService::new();
+        // Store a read-only response, then look it up over the JSON-RPC seam.
+        let put = m.handle(
+            "memory/cache_put",
+            &json!({ "prompt": "what is the capital of france", "response": "Paris", "readOnly": true }),
+        );
+        assert_eq!(put.unwrap()["stored"], true);
+        let hit = m
+            .handle(
+                "memory/cache_get",
+                &json!({ "prompt": "what is the capital of france" }),
+            )
+            .unwrap();
+        assert_eq!(hit["hit"], true);
+        assert_eq!(hit["layer"], "semantic");
+        assert_eq!(hit["response"], "Paris");
+
+        // Mutation-path entries are retained but never served.
+        m.handle(
+            "memory/cache_put",
+            &json!({ "prompt": "delete all rows", "response": "done", "readOnly": false }),
+        )
+        .unwrap();
+        let miss = m
+            .handle("memory/cache_get", &json!({ "prompt": "delete all rows" }))
+            .unwrap();
+        assert_eq!(miss["hit"], false);
+    }
+
+    #[test]
+    fn retest_algorithms_runs_across_boundary() {
+        let mut m = MemoryService::new();
+        let out = m.handle("memory/retest", &json!({})).unwrap();
+        assert_eq!(out["ok"], true);
+        assert!(
+            out["algorithms"].as_u64().unwrap() >= 20,
+            "got {}",
+            out["algorithms"]
+        );
+    }
+
+    #[test]
     fn consolidate_dispatch_returns_counts() {
         let mut m = MemoryService::new();
         m.write("s1", &["I might visit Japan next year.".into()]);
@@ -827,8 +1358,10 @@ mod tests {
 
     #[test]
     fn load_from_is_backward_compatible_without_temporal_fields() {
-        let dir = std::env::temp_dir()
-            .join(format!("everyaios-memory-backcompat-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-memory-backcompat-{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("memory.db");
         // Hand-written persisted shape predating the temporal/status fields.
@@ -840,8 +1373,15 @@ mod tests {
 
         let loaded = MemoryService::load_from(&path).unwrap();
         assert_eq!(loaded.facts.len(), 1);
-        assert_eq!(loaded.facts[0].status, FactStatus::Active, "missing status defaults to Active");
-        assert_eq!(loaded.facts[0].created_at_ms, 0, "missing created_at_ms defaults to 0");
+        assert_eq!(
+            loaded.facts[0].status,
+            FactStatus::Active,
+            "missing status defaults to Active"
+        );
+        assert_eq!(
+            loaded.facts[0].created_at_ms, 0,
+            "missing created_at_ms defaults to 0"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

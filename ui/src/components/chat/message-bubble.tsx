@@ -2,7 +2,12 @@
 
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { Brain, Check, ChevronRight, Copy, RotateCw, Sparkles, ThumbsDown, ThumbsUp, User } from 'lucide-react'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import rehypeHighlight from 'rehype-highlight'
+import { Brain, Check, ChevronRight, Copy, GitFork, RotateCw, Sparkles, ThumbsDown, ThumbsUp, User } from 'lucide-react'
+import 'katex/dist/katex.min.css'
+import 'highlight.js/styles/github-dark.css'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,6 +21,7 @@ import { useAppStore } from '@/lib/store'
 import ArtifactCard from './artifact-card'
 import McqInterruptCard from './mcq-interrupt-card'
 import ProgressSteps from './progress-steps'
+import ToolChips from './tool-chip'
 
 function CodeBlock({ children, className, ...props }: React.ComponentProps<'code'> & { inline?: boolean }) {
   const [copied, setCopied] = useState(false)
@@ -162,6 +168,7 @@ function MessageActions({ message }: { message: ChatMessage }) {
   const [copied, setCopied] = useState(false)
   const [vote, setVote] = useState<'up' | 'down' | null>(null)
   const notify = useAppStore((s) => s.notify)
+  const forkFromMessage = useAppStore((s) => s.forkFromMessage)
 
   const copy = () => {
     navigator.clipboard?.writeText(message.content)
@@ -210,6 +217,13 @@ function MessageActions({ message }: { message: ChatMessage }) {
       <button className={baseBtn} onClick={() => act('Regenerating response…')} title="Regenerate">
         <RotateCw className="h-3 w-3" />
       </button>
+      <button
+        className={baseBtn}
+        onClick={() => forkFromMessage(message.id)}
+        title="Fork conversation from here"
+      >
+        <GitFork className="h-3 w-3" />
+      </button>
     </div>
   )
 }
@@ -243,7 +257,16 @@ export default function MessageBubble({ message, streaming }: Props) {
           <div className="rounded-2xl rounded-tr-sm bg-secondary px-3 py-2 text-[12px] leading-relaxed text-foreground">
             {message.content}
           </div>
-          <TimeStamp ts={message.timestamp} />
+          <div className="flex items-center gap-1">
+            <TimeStamp ts={message.timestamp} />
+            <button
+              className="rounded p-0.5 text-muted-foreground/70 hover:text-foreground"
+              title="Fork from here"
+              onClick={() => useAppStore.getState().forkFromMessage(message.id)}
+            >
+              <GitFork className="h-3 w-3" />
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -260,7 +283,13 @@ export default function MessageBubble({ message, streaming }: Props) {
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="max-w-full rounded-2xl rounded-tl-sm border border-border bg-card/60 px-3 py-2">
           <div className="prose prose-invert max-w-none">
-            <ReactMarkdown components={mdComponents}>{message.content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkMath]}
+              rehypePlugins={[rehypeKatex, rehypeHighlight]}
+              components={mdComponents}
+            >
+              {message.content}
+            </ReactMarkdown>
             {streaming && (
               <span className="caret-blink ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-sm bg-orange-400" />
             )}
@@ -270,6 +299,10 @@ export default function MessageBubble({ message, streaming }: Props) {
             <Reasoning items={message.reasoning} />
           )}
         </div>
+
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <ToolChips calls={message.toolCalls} />
+        )}
 
         {message.steps && message.steps.length > 0 && (
           <ProgressSteps steps={message.steps} />

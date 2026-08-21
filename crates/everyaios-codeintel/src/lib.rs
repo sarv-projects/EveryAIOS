@@ -14,6 +14,8 @@
 //!   that decodes a SCIP `Document` into the `SemanticIndex`.
 
 pub mod lsp;
+pub mod lsp_config;
+pub mod lsp_runner;
 pub mod repomap;
 pub mod scip;
 pub mod semantic;
@@ -23,11 +25,15 @@ pub use lsp::{
     decode_messages, encode_message, CodeAction, Diagnostic, FramingError, Hover, HoverContents,
     InlayHint, Location, LspRequest, LspResponse, Position, Range, TextEdit, WorkspaceEdit,
 };
+pub use lsp_config::{DiagnosticBatch, DiagnosticsService, LspConfig, LspServerConfig};
+pub use lsp_runner::{LspRunner, LspRunnerError};
 pub use repomap::{
     build_repo_map, build_repo_map_with, extract_tags, extract_tags_with, fit_budget, page_rank,
     rank_tags, CompositeTagSource, LexicalTagSource, RepoMap, Tag, TagKind, TagSource,
 };
-pub use scip::{parse_document, to_semantic_index, ScipDocument, ScipError, ScipOccurrence, ScipSymbol};
+pub use scip::{
+    parse_document, to_semantic_index, ScipDocument, ScipError, ScipOccurrence, ScipSymbol,
+};
 pub use semantic::{
     OccurrenceRole, RelationKind, Relationship, SemanticIndex, Symbol, SymbolKind, SymbolOccurrence,
 };

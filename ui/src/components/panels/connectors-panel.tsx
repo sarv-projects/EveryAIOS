@@ -12,6 +12,14 @@ import { type Connector } from '@/lib/store'
 import { useAppStore } from '@/lib/store'
 import { mcpCatalog, type McpCatalog } from '@/lib/mcp'
 import { cn } from '@/lib/utils'
+import {
+  oauthAccounts,
+  oauthPollDevice,
+  oauthStartDevice,
+  oauthStartPkce,
+  oauthStatus,
+  type OAuthAccount,
+} from '@/lib/oauth'
 
 const STATS = [
   { label: 'Connected', value: '5', tone: 'text-emerald-300' },
@@ -88,6 +96,18 @@ export default function ConnectorsPanel() {
   const [tab, setTab] = useState('native')
   const [catalog, setCatalog] = useState<McpCatalog | null>(null)
   const notify = useAppStore((s) => s.notify)
+  const [oauthOn, setOauthOn] = useState(false)
+  const [oauthAccts, setOauthAccts] = useState<OAuthAccount[]>([])
+  const [deviceHint, setDeviceHint] = useState<string | null>(null)
+
+  useEffect(() => {
+    oauthStatus()
+      .then((s) => setOauthOn(s.enabled))
+      .catch(() => setOauthOn(false))
+    oauthAccounts()
+      .then(setOauthAccts)
+      .catch(() => setOauthAccts([]))
+  }, [])
 
   // Live tool catalog from the Rust registry (demo fallback in preview).
   useEffect(() => {
@@ -105,6 +125,37 @@ export default function ConnectorsPanel() {
     setMcpList((prev) =>
       prev.map((s) => (s.name === name ? { ...s, status: 'connected' as const } : s)),
     )
+
+  const startOauth = async (provider: string, kind: 'pkce' | 'device') => {
+    try {
+      if (kind === 'pkce') {
+        const r = await oauthStartPkce(provider)
+        window.open(r.authUrl, '_blank')
+        notify(`Opened ${provider} sign-in — finish in the browser`)
+      } else {
+        const d = await oauthStartDevice(provider)
+        setDeviceHint(`${provider}: enter ${d.userCode} at ${d.verificationUri}`)
+        if (d.verificationUri) window.open(d.verificationUriComplete || d.verificationUri, '_blank')
+        const tick = async () => {
+          const p = await oauthPollDevice(provider)
+          if (p.status === 'approved') {
+            setDeviceHint(null)
+            setOauthAccts(await oauthAccounts())
+            notify(`${provider} connected`)
+            return
+          }
+          if (p.status === 'expired' || p.status === 'denied') {
+            setDeviceHint(`${provider}: ${p.status}`)
+            return
+          }
+          setTimeout(() => void tick(), (p.intervalSecs ?? 5) * 1000)
+        }
+        void tick()
+      }
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'OAuth failed — set EVERYAIOS_OAUTH=1')
+    }
+  }
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -141,6 +192,36 @@ export default function ConnectorsPanel() {
           </div>
         </div>
       </header>
+
+      <div className="border-b border-border px-4 py-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[11px] font-medium text-foreground">Subscription OAuth</span>
+          <Badge className={oauthOn ? 'bg-emerald-500/20 text-[9px] text-emerald-300' : 'bg-zinc-700 text-[9px] text-zinc-300'}>
+            {oauthOn ? 'EVERYAIOS_OAUTH=1' : 'flag off'}
+          </Badge>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button size="sm" className="h-7 text-[10px]" disabled={!oauthOn} onClick={() => void startOauth('chatgpt-pro', 'pkce')}>
+            ChatGPT Pro (PKCE)
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={!oauthOn} onClick={() => void startOauth('copilot', 'device')}>
+            Copilot device
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={!oauthOn} onClick={() => void startOauth('qwen', 'device')}>
+            Qwen device
+          </Button>
+        </div>
+        {deviceHint && <p className="mt-2 font-mono text-[10px] text-amber-300">{deviceHint}</p>}
+        {oauthAccts.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {oauthAccts.map((a) => (
+              <li key={`${a.provider}:${a.accountId}`} className="font-mono text-[10px] text-muted-foreground">
+                {a.provider} · {a.email ?? a.accountId}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* Stats strip */}
       <div className="grid grid-cols-2 gap-2 border-b border-border p-3 sm:grid-cols-4">

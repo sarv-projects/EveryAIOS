@@ -16,6 +16,7 @@ import {
 } from "./catalog";
 import {
   ASYMMETRIC_TIERS,
+  classifyTask,
   plannerForTask,
   selectModelForTask,
   subagentForTask,
@@ -137,6 +138,14 @@ describe("router (P1.9 → A7)", () => {
     if (plannerHints.costScore !== subHints.costScore) {
       expect(plannerHints.costScore).toBeGreaterThan(subHints.costScore);
     }
+  });
+
+  test("classifies task text conservatively for dynamic routing", () => {
+    expect(classifyTask("fix the failing TypeScript test")).toBe("coding");
+    expect(classifyTask("show me the screenshot")).toBe("vision");
+    expect(classifyTask("research and compare MCP transports with citations")).toBe("deep");
+    expect(classifyTask("what is 2 + 2?")).toBe("quick");
+    expect(classifyTask("please help me think through this decision over several paragraphs")).toBe("chat");
   });
 
   test("A7 tiering defaults are fixed", () => {

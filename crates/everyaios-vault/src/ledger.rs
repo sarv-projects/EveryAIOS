@@ -201,6 +201,17 @@ pub struct UsageRow {
     pub tool: Option<String>,
 }
 
+/// One per-session aggregate row for the analytics cost table (P5.9) — the
+/// `token_usage` ledger grouped by session, ordered by cost descending.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionTotal {
+    pub session: String,
+    pub tokens_in: u64,
+    pub tokens_out: u64,
+    pub cost: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

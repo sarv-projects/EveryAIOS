@@ -134,9 +134,13 @@ pub struct LoopDetector {
 pub enum LoopVerdict {
     Normal,
     /// The sequence repeated, but below the interrupt threshold.
-    Repeat { repeats: usize },
+    Repeat {
+        repeats: usize,
+    },
     /// The sequence repeated `threshold` times → interrupt.
-    Interrupted { repeats: usize },
+    Interrupted {
+        repeats: usize,
+    },
 }
 
 impl Default for LoopDetector {
@@ -368,7 +372,10 @@ mod tests {
     fn loop_detector_interrupts_on_3x_repeat() {
         let mut d = LoopDetector::new(1, 3);
         assert_eq!(d.observe("read_file(foo)"), LoopVerdict::Normal);
-        assert_eq!(d.observe("read_file(foo)"), LoopVerdict::Repeat { repeats: 2 });
+        assert_eq!(
+            d.observe("read_file(foo)"),
+            LoopVerdict::Repeat { repeats: 2 }
+        );
         assert_eq!(
             d.observe("read_file(foo)"),
             LoopVerdict::Interrupted { repeats: 3 }
@@ -438,10 +445,7 @@ mod tests {
 
     #[test]
     fn circuit_breaker_trips_on_loop() {
-        let mut cb = CircuitBreaker::new(
-            IterationBudget::default(),
-            LoopDetector::new(1, 3),
-        );
+        let mut cb = CircuitBreaker::new(IterationBudget::default(), LoopDetector::new(1, 3));
         cb.step(StepKind::LlmTurn, "x").unwrap();
         cb.step(StepKind::LlmTurn, "x").unwrap();
         let err = cb.step(StepKind::LlmTurn, "x").unwrap_err();

@@ -42,10 +42,7 @@ impl PlanService {
             parent_max.unwrap_or(everyaios_blueprint::PARENT_MAX_ITERATIONS),
             subagent_max.unwrap_or(everyaios_blueprint::SUBAGENT_MAX_ITERATIONS),
         );
-        let detector = LoopDetector::new(
-            loop_window.unwrap_or(4),
-            loop_threshold.unwrap_or(3),
-        );
+        let detector = LoopDetector::new(loop_window.unwrap_or(4), loop_threshold.unwrap_or(3));
         self.breakers
             .insert(plan_id.to_string(), CircuitBreaker::new(budget, detector));
     }
@@ -89,24 +86,34 @@ impl PlanService {
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
         match method {
             "plan/begin" => {
-                let plan_id =
-                    str_param(params, "planId").ok_or("plan/begin requires planId")?;
-                let parent_max = params.get("parentMax").and_then(Value::as_u64).map(|v| v as u32);
+                let plan_id = str_param(params, "planId").ok_or("plan/begin requires planId")?;
+                let parent_max = params
+                    .get("parentMax")
+                    .and_then(Value::as_u64)
+                    .map(|v| v as u32);
                 let subagent_max = params
                     .get("subagentMax")
                     .and_then(Value::as_u64)
                     .map(|v| v as u32);
-                let loop_window = params.get("loopWindow").and_then(Value::as_u64).map(|v| v as usize);
+                let loop_window = params
+                    .get("loopWindow")
+                    .and_then(Value::as_u64)
+                    .map(|v| v as usize);
                 let loop_threshold = params
                     .get("loopThreshold")
                     .and_then(Value::as_u64)
                     .map(|v| v as usize);
-                self.begin(plan_id, parent_max, subagent_max, loop_window, loop_threshold);
+                self.begin(
+                    plan_id,
+                    parent_max,
+                    subagent_max,
+                    loop_window,
+                    loop_threshold,
+                );
                 Ok(json!({ "started": true, "planId": plan_id }))
             }
             "plan/step" => {
-                let plan_id =
-                    str_param(params, "planId").ok_or("plan/step requires planId")?;
+                let plan_id = str_param(params, "planId").ok_or("plan/step requires planId")?;
                 let kind = parse_step_kind(params)?;
                 let tool_call = str_param(params, "toolCall").unwrap_or("");
                 self.step(plan_id, kind, tool_call)
@@ -159,11 +166,12 @@ mod tests {
         assert_eq!(svc.active_plans(), vec!["p1".to_string()]);
 
         // Two LLM turns fit the parent budget of 2.
-        let s1 = svc.handle(
-            "plan/step",
-            &params(json!({ "planId": "p1", "kind": "llm_turn", "toolCall": "t1" })),
-        )
-        .unwrap();
+        let s1 = svc
+            .handle(
+                "plan/step",
+                &params(json!({ "planId": "p1", "kind": "llm_turn", "toolCall": "t1" })),
+            )
+            .unwrap();
         assert_eq!(s1, json!({ "ok": true }));
 
         // Third turn trips the budget → the interrupt payload the coordinator
@@ -190,7 +198,8 @@ mod tests {
         assert!(break_.options.contains(&McqOption::Skip));
         assert!(break_.options.contains(&McqOption::Escalate));
 
-        svc.handle("plan/end", &params(json!({ "planId": "p1" }))).unwrap();
+        svc.handle("plan/end", &params(json!({ "planId": "p1" })))
+            .unwrap();
         assert!(svc.active_plans().is_empty());
     }
 
@@ -277,16 +286,21 @@ mod tests {
         // Sub-agent budget is separate from the parent — begin with parent=500
         // and verify the sub-agent cap default is 50 via a dedicated breaker.
         let mut svc = PlanService::new();
-        svc.handle("plan/begin", &params(json!({ "planId": "p1" }))).unwrap();
+        svc.handle("plan/begin", &params(json!({ "planId": "p1" })))
+            .unwrap();
         let breaker = svc.breakers.get("p1").unwrap();
         assert_eq!(breaker.budget.subagent_max, SUBAGENT_MAX_ITERATIONS);
-        assert_eq!(breaker.budget.parent_max, everyaios_blueprint::PARENT_MAX_ITERATIONS);
+        assert_eq!(
+            breaker.budget.parent_max,
+            everyaios_blueprint::PARENT_MAX_ITERATIONS
+        );
     }
 
     #[test]
     fn step_kind_parse_rejects_unknown() {
         let mut svc = PlanService::new();
-        svc.handle("plan/begin", &params(json!({ "planId": "p1" }))).unwrap();
+        svc.handle("plan/begin", &params(json!({ "planId": "p1" })))
+            .unwrap();
         let err = svc
             .handle(
                 "plan/step",

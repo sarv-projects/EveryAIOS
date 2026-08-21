@@ -1,10 +1,12 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-> **Version:** 3.2 (2026-08-19)  
+> **Version:** 3.3 (2026-08-19)
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
-> **Principle:** ONE project, ONE session, ONE ticket, ONE timeline. Chat + live progress in the center; a thin **right activity rail** switches *what you are watching* — one surface at a time. Never 9 peer tabs, never a Chat/Cowork/Code product split.  
+> **Principle:** ONE project, ONE session, ONE ticket, ONE timeline. Chat + live progress stay in the center; the **right activity rail** selects the active lens while the viewport supports multiple open, reorderable tabs. Only one view is rendered at a time inside that viewport; the product is not split into separate Chat/Cowork/Code applications.
 > **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H25 — H20 redefined doc 67), ARCH/DIAGRAMS #7 (MCQ interrupt), doc 67 §6 (finalization record)
 > **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, full screen/panel/tab/overlay inventory, motion + mock-data tables) that supersedes this doc's visual details. The cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
+>
+> **v3.3 (2026-08-19):** resolved the layout identity split: the activity rail remains the navigation lens, while the right viewport is a persistent multi-view tab container; only the active tab renders at once. Updated H20, the diagrams, and the index to use this single contract. Cache/server status and deferred-runtime boundaries remain explicit.
 >
 > **v3.2 (2026-08-19):** the canonical spec was **completely rewritten to match the shipped cockpit** — every tab is now live (Automations Active/Templates/History, Memory Episodic/Semantic/Graph/Skills, Connectors Native/MCP/Catalog), every panel button wired (right-rail view actions, Guard Allow/Deny + vault CTAs, Storage cleanup, Settings actions, Analytics export, automation editor Save/Cancel), tab-content crossfades added, and the mock-data inventory documented. Layout contract unchanged.
 >
@@ -19,7 +21,7 @@
 ```
 ┌───────────────┬─────────────────────────────┬──┬───────────────────────────────┐
 │  LEFT         │      CENTER                 │R │ RIGHT VIEWPORT (collapsible)   │
-│  sessions     │  chat · now-doing · tickets │A │ one surface at a time          │
+│  sessions     │  chat · now-doing · tickets │R │ active view + persisted tab strip │
 │  automations  │  approve cards              │I │ (0px collapsed ~ 50-60% open)  │
 │  memory/guard │                             │L │                                │
 │  (240 / 48px) │                             │  │                                │
@@ -212,7 +214,7 @@ Displayed when the agent creates/edits a file. Shows:
 
 ---
 
-## 4. Right Panel: Activity Rail + One-Surface Views (v2.0 — replaces the 9-tab strip)
+## 4. Right Panel: Activity Rail + Multi-View Viewport (v3.0)
 
 ### 4.0 First-Run Rule (non-negotiable — tasks, not modules)
 
@@ -240,10 +242,10 @@ Displayed when the agent creates/edits a file. Shows:
 └────┘
 ```
 
-- **4 core verbs:** Folder · Shell · Browse · Code. Everything else opens from an icon, not another tab.
+- **4 core verbs:** Folder · Shell · Browse · Code. The rail is the fast lens switcher; the viewport may keep several views open as tabs without turning them into competing product modules.
 - **Office = one button (W).** Word/Excel/PPT/PDF are a flyout, not four rail icons. Opening `Q3-Budget.xlsx` auto-selects W → Excel (the agent's file opens the matching view; the user never hunts a tab).
 - **Session views** (Progress full-timeline, Diff, Audit/Replay, Storage) under ▢ / +; a 2-line "now doing" strip stays under chat so collapsing the rail never hides the agent.
-- Click **active icon → collapse** viewport (center 100%). Click another icon → switch lens; session keeps running. Hover = tooltip + live/idle/gap badge.
+- Click **active icon → collapse** viewport (center 100%). Click another icon → switch lens; the selected tab remains persisted and the session keeps running. Hover = tooltip + live/idle/gap badge.
 - `+` = **Add view** — first-party office/session views and third-party plugins register through the same slot (the I6 dogfood rule: no 10th header tab).
 
 **Office flyout**
@@ -270,7 +272,7 @@ The right viewport is a **tabbed view container** (VS Code editor-group / panel-
 └───────────────────────────────────────────────────────────────┘
 ```
 
-- **Defaults:** Terminal · Folder · Browser open on first power-mode use; the rail icon still switches the active tab (click active icon → collapse to 0px, chat full-width — never unmount).
+- **Defaults:** Terminal · Folder · Browser open on first power-mode use; the rail icon switches the active tab (click active icon → collapse to 0px, chat full-width — never unmount).
 - **`+` Add view:** picker lists every not-open view (Code, Office files, Progress, Diff, Audit, Storage, Memory, Research, plugin views). Selecting adds a tab and activates it. This is the I6 dogfood slot (no 10th header tab).
 - **Close × / reorder / persist:** tabs close, reorder by drag, and persist per session (`openViews`, `activeView`, `railCollapsed`, `splitRatio` per sessionId — the Cursor layout-reset bug is not copied).
 - **Browser = one view, many pages:** the Browse tab hosts its own internal tab strip (page tabs + `+` new tab). Opening a link spawns a page tab inside the browser view — never a new panel tab.

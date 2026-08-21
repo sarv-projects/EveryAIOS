@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils'
 import AgentModelPicker from './agent-model-picker'
 import { sendUserMessage } from '@/lib/bridge'
 import { getModelsForAgent } from '@/lib/agents'
+import { PERSONA_PRESETS, SOUL_PRESETS } from '@/lib/personas'
 
 const MODES: { id: ChatMode; label: string; hint: string; icon: LucideIcon }[] = [
   { id: 'normal', label: 'Normal', hint: 'Balanced agent mode — default', icon: Sparkles },
@@ -135,6 +136,13 @@ export default function ChatComposer({ budget, centered }: Props) {
   // Amber ≥75% (start planning compaction), loud red ≥90% (loop risk).
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const selectedModelId = useAppStore((s) => s.selectedModelId)
+  const personaId = useAppStore((s) => s.personaId)
+  const setPersonaId = useAppStore((s) => s.setPersonaId)
+  const soulId = useAppStore((s) => s.soulId)
+  const setSoulId = useAppStore((s) => s.setSoulId)
+  const streamStats = useAppStore((s) => s.streamStats)
+  const localRuntime = useAppStore((s) => s.localRuntime)
+  const localCtxWindow = useAppStore((s) => s.localCtxWindow)
   const ctxWindow =
     getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
       ?.context ?? 128_000
@@ -223,6 +231,31 @@ export default function ChatComposer({ budget, centered }: Props) {
 
           <AgentModelPicker />
 
+          <select
+            value={personaId}
+            onChange={(e) => setPersonaId(e.target.value)}
+            className="h-6 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
+            title="Persona (SOUL.md tone)"
+          >
+            {Object.keys(PERSONA_PRESETS).map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          <select
+            value={soulId}
+            onChange={(e) => setSoulId(e.target.value)}
+            className="h-6 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
+            title="SOUL.md identity"
+          >
+            {Object.keys(SOUL_PRESETS).map((id) => (
+              <option key={id} value={id}>
+                soul:{id}
+              </option>
+            ))}
+          </select>
+
           <div className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
             <span className="flex items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5">
               <CircleDollarSign className="h-3 w-3 text-emerald-400" />
@@ -245,7 +278,30 @@ export default function ChatComposer({ budget, centered }: Props) {
               <span>{ctxPct}%</span>
               <span className="text-muted-foreground/60">ctx</span>
             </span>
+            <span
+              className="hidden items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 md:flex"
+              title="Tokens per second this turn"
+            >
+              <Zap className="h-3 w-3 text-sky-400" />
+              <span className="text-foreground">{streamStats.tokensPerSec.toFixed(1)}</span>
+              <span className="text-muted-foreground/60">tok/s</span>
+            </span>
+            {streamStats.activeKey && (
+              <span className="hidden max-w-[120px] truncate rounded-md border border-border bg-background/40 px-1.5 py-0.5 text-emerald-300 lg:inline">
+                key {streamStats.activeKey}
+              </span>
+            )}
           </div>
+        </div>
+      )}
+
+      {localRuntime && (localCtxWindow ?? ctxWindow) <= 20_000 && (
+        <div className="mb-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] text-amber-300">
+          Local {localRuntime} context {(localCtxWindow ?? ctxWindow).toLocaleString()} tok
+          {(localCtxWindow ?? ctxWindow) < 15_000
+            ? ' — below the 15K agent-loop floor'
+            : ' — at/under the 20K local soft cap'}
+          . Agent tool loops may compact aggressively.
         </div>
       )}
 

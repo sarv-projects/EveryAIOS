@@ -22,21 +22,22 @@ pub fn guard_tickets(state: State<'_, AppState>) -> Result<Vec<PendingGuardCard>
 }
 
 /// Record a human decision on a ticket: `approve` (records Human source +
-/// audit receipt) or `reject` (revokes + audit receipt). Consumption still
-/// happens via the executor's `guard/use` call, which enforces args/single-use.
+/// audit receipt) or `reject` (revokes + audit receipt). The card-bound nonce
+/// is mandatory; the ticket id alone is not an approval capability.
 #[tauri::command]
 pub fn guard_respond(
     state: State<'_, AppState>,
     ticket_id: String,
     action: String,
+    approval_nonce: String,
 ) -> Result<bool, String> {
     let mut svc = state
         .guard_service
         .lock()
         .map_err(|e| e.to_string())?;
     match action.as_str() {
-        "approve" => Ok(svc.approve(&ticket_id)),
-        "reject" => Ok(svc.reject(&ticket_id)),
+        "approve" => Ok(svc.approve_with_nonce(&ticket_id, &approval_nonce)),
+        "reject" => Ok(svc.reject_with_nonce(&ticket_id, &approval_nonce)),
         other => Err(format!("unknown guard action: {other}")),
     }
 }

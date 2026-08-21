@@ -139,7 +139,11 @@ pub enum SubAgentError {
     #[error("parent {parent_id:?} unknown for task {task_id}")]
     UnknownParent { task_id: String, parent_id: String },
     #[error("task {task_id} depth {depth} exceeds max_depth {max_depth} (no recursive spawn)")]
-    DepthExceeded { task_id: String, depth: u32, max_depth: u32 },
+    DepthExceeded {
+        task_id: String,
+        depth: u32,
+        max_depth: u32,
+    },
     #[error("task {task_id} exceeds concurrent limit ({active} active of {max_concurrent})")]
     ConcurrentLimitExceeded {
         task_id: String,
@@ -227,8 +231,7 @@ impl SubAgentRuntime {
     /// (no-recursive-spawn) / concurrent / total limits.
     pub fn spawn(&mut self, mut spec: SubAgentSpec) -> Result<(), SubAgentError> {
         let task_id = spec.spec.id.clone();
-        if self.active.contains_key(&task_id)
-            || self.completed.iter().any(|c| c.task_id == task_id)
+        if self.active.contains_key(&task_id) || self.completed.iter().any(|c| c.task_id == task_id)
         {
             return Err(SubAgentError::DuplicateTask { task_id });
         }
@@ -352,7 +355,11 @@ mod tests {
     use super::*;
 
     fn spec(id: &str, model: &str) -> SubAgentSpec {
-        SubAgentSpec::new(TaskSpec::new(id, format!("goal {id}")), model, format!("/ws/{id}"))
+        SubAgentSpec::new(
+            TaskSpec::new(id, format!("goal {id}")),
+            model,
+            format!("/ws/{id}"),
+        )
     }
 
     #[test]
@@ -409,7 +416,11 @@ mod tests {
         let err = rt.spawn(spec("d", "m").with_parent("c")).unwrap_err();
         assert!(matches!(
             err,
-            SubAgentError::DepthExceeded { depth: 3, max_depth: 2, .. }
+            SubAgentError::DepthExceeded {
+                depth: 3,
+                max_depth: 2,
+                ..
+            }
         ));
     }
 
@@ -459,12 +470,20 @@ mod tests {
         // Active → no summary yet.
         assert!(rt.parent_sees_summary("a").is_none());
         let r = rt
-            .complete("a", "wrote the summary", TaskStatus::Done, vec!["out.md".into()])
+            .complete(
+                "a",
+                "wrote the summary",
+                TaskStatus::Done,
+                vec!["out.md".into()],
+            )
             .unwrap();
         assert_eq!(r.summary, "wrote the summary");
         assert_eq!(r.artifacts, vec!["out.md".to_string()]);
         // Summary-only: the result has no transcript field by construction.
-        assert_eq!(rt.parent_sees_summary("a").unwrap().summary, "wrote the summary");
+        assert_eq!(
+            rt.parent_sees_summary("a").unwrap().summary,
+            "wrote the summary"
+        );
     }
 
     #[test]
@@ -516,8 +535,11 @@ mod tests {
         // child cannot recurse.
         let mut rt = SubAgentRuntime::new(SubAgentLimits::default());
 
-        let planner = spec("planner", "claude-sonnet")
-            .with_tools(vec!["delegate".into(), "read".into(), "write".into()]);
+        let planner = spec("planner", "claude-sonnet").with_tools(vec![
+            "delegate".into(),
+            "read".into(),
+            "write".into(),
+        ]);
         rt.spawn(planner).unwrap();
 
         let coder = spec("coder", "gpt-5-codex")
@@ -531,12 +553,25 @@ mod tests {
         // The coder's effective tools strip `delegate` → cannot recurse.
         let coder_spec = rt.active.get("coder").unwrap();
         assert_eq!(coder_spec.model, "gpt-5-codex");
-        assert!(!coder_spec.effective_tools().contains(&"delegate".to_string()));
+        assert!(!coder_spec
+            .effective_tools()
+            .contains(&"delegate".to_string()));
 
         // Coder finishes → planner receives a summary, not the transcript.
-        rt.complete("coder", "implemented /health", TaskStatus::Done, vec!["src".into()])
-            .unwrap();
-        assert_eq!(rt.parent_sees_summary("coder").unwrap().summary, "implemented /health");
-        assert_eq!(rt.parent_sees_summary("coder").unwrap().status, TaskStatus::Done);
+        rt.complete(
+            "coder",
+            "implemented /health",
+            TaskStatus::Done,
+            vec!["src".into()],
+        )
+        .unwrap();
+        assert_eq!(
+            rt.parent_sees_summary("coder").unwrap().summary,
+            "implemented /health"
+        );
+        assert_eq!(
+            rt.parent_sees_summary("coder").unwrap().status,
+            TaskStatus::Done
+        );
     }
 }

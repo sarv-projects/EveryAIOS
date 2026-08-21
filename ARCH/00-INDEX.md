@@ -1,13 +1,13 @@
 # ARCH — The Desktop Agentic-OS Architecture (Hybrid)
 
-> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-15) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.23)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
+> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-20) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.36)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
 > **Docs:** 00-INDEX + 01–12 (12 = UI/UX specification and layout design — **v3.1, 2026-08-17: activity-rail work cockpit → multi-view tabbed panel (§4.1b) + full-fidelity tool surfaces (§4.1c)**, doc 67 §6) + research docs 49–83 (storage intelligence, generative-UI/image/voice/email gaps, aider recheck, gap-pass-2 hierarchy/search-stack, formalization, dep+catalog audit, agent-browser ecosystem, agentic dev-environments + closed-source agents, ACP registry + subscription auth, repo batch 2 — OmniRoute provider/routing goldmine, OmniRoute deep-dive, TencentDB Agent Memory, capability deltas — Sites/heartbeat + UI finalization, final all-rounder market research — H30/H31/H32 + two-channel injection; doc 69 = ACP ecosystem/harness → P17, doc 70 = MCP-directory → P18, docs 71–79 = batches 4–9 + local-model core → P19–P27, docs 80–82 = benchmark/moat/priority reviews → §9.1/§10/P28, doc 83 = competitor batch openworker/cc-switch/skales/deepseek-harness → P30).
 > **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (new `everyaios-storage` crate, doc 49). **No scope compromise**: every capability in the research corpus (docs 01–84, **282 repos**) is derived in `09-FEATURE-MATRIX.md` (149 rows).
 > **Working name:** "EveryAIOS" (from the v2.0 spec's `~/.everyaios/`) — canonical across code + docs. Final branding is a **P12.6 GTM item**, not an open build dependency.
 
 ## The two specs reconciled
 
-> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.23 — hybrid**, in sync with this ARCH).
+> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.36 — hybrid**, in sync with this ARCH).
 
 | | Earlier v2.0 spec | All-Rust research spec (`RESEARCH/desktop_app/DESKTOP-APP-SPEC.md` — **superseded** draft) | This architecture |
 |---|---|---|---|
@@ -34,7 +34,7 @@
 9. **09-FEATURE-MATRIX.md** — the complete capability→feature→module→status derivation
 10. **10-BUILD-PLAN.md** — phases with exit criteria
 11. **11-AI-CHAT-FEATURES.md** — AI chat derivation: copy (from APP engine + Hermes/etc.), convert, reject
-12. **12-UI-SPEC.md** — UI/UX specification **v2.0**: 48px activity rail + one-surface views (Folder/Shell/Browse/Code + ONE Office flyout + session views + plugin slot), views contract, takeover/resume, per-session layout persistence (2026 work-cockpit pattern — Claude Views/Cursor/ChatGPT Work/Devin, doc 67 §6)
+12. **12-UI-SPEC.md** — UI/UX specification **v3.3**: 48px activity rail + multi-view tabbed viewport (Folder/Shell/Browse/Code + ONE Office flyout + session views + plugin slot), views contract, takeover/resume, per-session tab/layout persistence (2026 work-cockpit pattern — Claude Views/Cursor/ChatGPT Work/Devin, doc 67 §6)
 13. **research docs 49–51** — storage intelligence (49: eDirStat/UltraSearch/WinDirStat/fclones → `everyaios-storage` + matrix D9–D11/G7), generative UI/image/voice/email gaps (50: AG-UI → H25, A10, F14–F15, H26–H28, H15 ext), aider recheck (51: doc 46 corrections — edit formats ~9, providers 100+, "4.2×/71%" flagged third-party)
 14. **research doc 52** — gap pass 2 (Aider-in-F12 + surgical hierarchy, J21 escalation rules & decision packages, D12 storage health, G8 tiered search cascade + Algorithm #33, E9/J14 refs; 26 repos live-verified, 8 hallucinated flagged → ledger 218)
 15. **research doc 53** — formalization of 4 review gaps (credential broker, ticket contract, durable events + idempotency, shortest-path routing) → SPEC v3.10 + ARCH/06 §6.9–6.11

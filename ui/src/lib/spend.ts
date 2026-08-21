@@ -30,10 +30,35 @@ export interface UsageSnapshot {
   bySession: SessionUsage[];
 }
 
+/** One per-session aggregate row (mirrors the vault's `SessionTotal`). */
+export interface SessionTotal {
+  session: string
+  tokensIn: number
+  tokensOut: number
+  cost: number
+}
+
 /** The per-key/per-session/cache-hit dashboard data (polled by the page). */
 export async function usageSnapshot(): Promise<UsageSnapshot> {
   if (!inTauri()) return demoSnapshot();
   return invoke<UsageSnapshot>("usage_snapshot");
+}
+
+/** P5.9 — real per-session cost/token breakdown from the durable ledger. */
+export async function sessionTotals(): Promise<SessionTotal[]> {
+  if (!inTauri()) return demoSessionTotals();
+  return invoke<SessionTotal[]>("session_totals");
+}
+
+function demoSessionTotals(): SessionTotal[] {
+  return [
+    { session: 'sess-q3-budget', tokensIn: 184_000, tokensOut: 22_400, cost: 1.84 },
+    { session: 'sess-invoice-batch', tokensIn: 240_000, tokensOut: 31_800, cost: 2.41 },
+    { session: 'sess-soc2-review', tokensIn: 142_000, tokensOut: 18_100, cost: 1.31 },
+    { session: 'sess-competitor-crawl', tokensIn: 88_000, tokensOut: 12_300, cost: 0.92 },
+    { session: 'sess-refactor-users', tokensIn: 51_000, tokensOut: 8_600, cost: 0.51 },
+    { session: 'sess-dns-migration', tokensIn: 48_000, tokensOut: 6_900, cost: 0.38 },
+  ];
 }
 
 function demoSnapshot(): UsageSnapshot {

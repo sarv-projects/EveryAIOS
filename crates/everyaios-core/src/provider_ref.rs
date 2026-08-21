@@ -29,7 +29,10 @@ pub enum AuthClass {
 impl AuthClass {
     /// Is this class in the A6 import allow-list?
     pub fn allowed(self) -> bool {
-        matches!(self, AuthClass::ApiKey | AuthClass::Local | AuthClass::Keyless)
+        matches!(
+            self,
+            AuthClass::ApiKey | AuthClass::Local | AuthClass::Keyless
+        )
     }
 
     /// Is this class in the doc-57 reject list?
@@ -94,7 +97,9 @@ pub fn classify_category(category: &str) -> AuthClass {
 pub fn parse_provider_reference(md: &str) -> Vec<ProviderEntry> {
     let mut lines = md.lines().filter_map(|l| {
         let t = l.trim();
-        t.strip_prefix('|').and_then(|s| s.strip_suffix('|')).map(|s| s.trim().to_string())
+        t.strip_prefix('|')
+            .and_then(|s| s.strip_suffix('|'))
+            .map(|s| s.trim().to_string())
     });
 
     // Header row → column names (lowercased).
@@ -122,9 +127,16 @@ pub fn parse_provider_reference(md: &str) -> Vec<ProviderEntry> {
         if cells.is_empty() {
             continue;
         }
-        let id = cells.get(id_col).map(|s| s.trim().to_string()).unwrap_or_default();
+        let id = cells
+            .get(id_col)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
         // Skip the markdown table separator row (`---` / `:--:`).
-        if id.is_empty() || id.chars().all(|c| c == '-' || c == ':' || c.is_whitespace()) {
+        if id.is_empty()
+            || id
+                .chars()
+                .all(|c| c == '-' || c == ':' || c.is_whitespace())
+        {
             continue;
         }
         let category = cells

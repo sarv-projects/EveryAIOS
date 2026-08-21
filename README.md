@@ -22,7 +22,14 @@ dual-guard (Guard-1/Guard-2) + evidence evaluation — never by trust in the mod
   connectors (MCP-first), and agents (ACP harnesses).
 - **MCP is the connector platform** (decision 2026-08-16) — user-supplied MCP
   servers + native BYO OAuth/API-key + the live tool catalog; no third-party
-  aggregator tabs.
+  aggregator tabs. The P6.7 server now has guarded stdio and authenticated
+  loopback-HTTP transport contracts; external server/client installs remain
+  user-configured.
+- **Orchestration seams are live** — the coordinator consumes the APP connector
+  registry and MCP search client lazily, and task text dynamically selects a
+  routing tier when the user has not locked a model. P6's local transport and
+  routing contracts are tested; OAuth, external binaries, and live provider
+  connections remain explicitly gated.
 - **Open source** — dual-licensed MIT OR Apache-2.0 (see `LICENSE`). Bundled
   engines keep their own licenses.
 
@@ -31,7 +38,7 @@ dual-guard (Guard-1/Guard-2) + evidence evaluation — never by trust in the mod
 | Path | What lives there |
 |---|---|
 | `DESKTOP-APP-SPEC.md` | Complete product specification (capability matrix, build phases, K-Pillar) |
-| `TODO.md` | Master implementation checklist (Stage 0 + HARDENING + P0.1 → P12, 1013 tasks) |
+| `TODO.md` | Master implementation checklist (Stage 0 + HARDENING + P0.1 → P12, 1039 tasks = 648 done + 391 open; P6 = 91 done + 8 open; P7 = 64 done + 0 open (COMPLETE); P8 = 26 done + 19 open) |
 | `ARCH/` | Architecture docs 00–12 + diagrams |
 | `RESEARCH/desktop_app/` | Source research notes (docs 01–84, 282 repos) |
 | `crates/` | Rust core: `everyaios-core`, `guard`, `audit`, `vault`, `browser`, `office`, `memory`, `eval`, `blueprint`, `acp`, … |

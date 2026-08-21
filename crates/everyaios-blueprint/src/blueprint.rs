@@ -165,9 +165,11 @@ impl Blueprint {
             .iter()
             .filter(|t| t.status != TaskStatus::Done && t.status != TaskStatus::Failed)
             .filter(|t| {
-                t.depends_on
-                    .iter()
-                    .all(|d| self.find(d).map(|d| d.status == TaskStatus::Done).unwrap_or(false))
+                t.depends_on.iter().all(|d| {
+                    self.find(d)
+                        .map(|d| d.status == TaskStatus::Done)
+                        .unwrap_or(false)
+                })
             })
             .collect()
     }
@@ -327,7 +329,10 @@ mod tests {
         let mut a = BlueprintTask::new(spec("a"), VerifyBlock::new(vec![]));
         a.depends_on.push("ghost".into());
         bp.push(a);
-        assert!(matches!(bp.validate(), Err(BlueprintError::UnknownDependency(..))));
+        assert!(matches!(
+            bp.validate(),
+            Err(BlueprintError::UnknownDependency(..))
+        ));
 
         let mut bp2 = Blueprint::new("bp2", "g");
         let mut a = BlueprintTask::new(spec("a"), VerifyBlock::new(vec![]));
@@ -342,7 +347,9 @@ mod tests {
     #[test]
     fn status_machine_enforces_legal_transitions() {
         assert_eq!(
-            TaskStatus::Pending.transition(TaskStatus::InProgress).unwrap(),
+            TaskStatus::Pending
+                .transition(TaskStatus::InProgress)
+                .unwrap(),
             TaskStatus::InProgress
         );
         assert_eq!(
@@ -350,11 +357,15 @@ mod tests {
             TaskStatus::Done
         );
         assert_eq!(
-            TaskStatus::Blocked.transition(TaskStatus::InProgress).unwrap(),
+            TaskStatus::Blocked
+                .transition(TaskStatus::InProgress)
+                .unwrap(),
             TaskStatus::InProgress
         );
         assert_eq!(
-            TaskStatus::Failed.transition(TaskStatus::InProgress).unwrap(),
+            TaskStatus::Failed
+                .transition(TaskStatus::InProgress)
+                .unwrap(),
             TaskStatus::InProgress
         );
         // Done is terminal.
@@ -403,7 +414,10 @@ mod tests {
         b.depends_on.push("a".into());
         bp.push(a);
         bp.push(b);
-        assert!(matches!(bp.topological_order(), Err(BlueprintError::Cycle(_))));
+        assert!(matches!(
+            bp.topological_order(),
+            Err(BlueprintError::Cycle(_))
+        ));
     }
 
     #[test]

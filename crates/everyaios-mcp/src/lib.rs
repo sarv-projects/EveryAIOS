@@ -13,6 +13,15 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod attach;
+pub mod server;
+
+pub use attach::{AttachError, AttachRequest, AttachedServer};
+pub use server::{
+    tool_list, ExternalTool, McpServer, MrtrHandle, StatelessRequest, ToolCallHandler, ToolCatalog,
+    ToolListEntry, ToolListResponse,
+};
+
 /// ACP tool-kind taxonomy (F9 — doc 45 §4.3): a shared vocabulary that maps
 /// onto our F9 permission classes.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -187,7 +196,12 @@ const BOOL_RAW: ArgDef = ArgDef::new("raw", ArgKind::Bool, false, "Raw text, no 
 const STR_REF2: ArgDef = ArgDef::new("to_ref", ArgKind::String, false, "Drag target ref");
 const STR_PATH: ArgDef = ArgDef::new("path", ArgKind::String, true, "Directory path to scan");
 const STR_QUERY: ArgDef = ArgDef::new("query", ArgKind::String, true, "Filename search query");
-const NUM_TOP_N: ArgDef = ArgDef::new("top_n", ArgKind::Number, false, "Number of results (default 50)");
+const NUM_TOP_N: ArgDef = ArgDef::new(
+    "top_n",
+    ArgKind::Number,
+    false,
+    "Number of results (default 50)",
+);
 
 /// The 37-tool catalog (ARCH/08 §8.2: 34 + file_ops×3). Ordering: the
 /// original 17 BrowserOS-semantic tools first (prompts/skills transfer),

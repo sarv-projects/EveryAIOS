@@ -281,6 +281,85 @@ impl LocalManager {
             .collect()
     }
 
+    /// LM-Studio-style picker rows: every installed model + hwfit fit badge +
+    /// 15K context warning. Non-fitting models are listed, not hidden.
+    pub fn list_for_picker(&self) -> Vec<serde_json::Value> {
+        let hw = crate::hwfit::detect();
+        let mut rows = Vec::new();
+        for m in self.list_ollama_models() {
+            let cand = crate::hwfit::LocalModelCandidate {
+                name: m.name.clone(),
+                size_bytes: m.size_bytes,
+                context_window: m.context_window,
+            };
+            let fit = crate::hwfit::score_model(&cand, &hw);
+            rows.push(serde_json::json!({
+                "name": m.name,
+                "runtime": "ollama",
+                "provider": "ollama",
+                "sizeBytes": m.size_bytes,
+                "contextWindow": m.context_window,
+                "fits": fit.fits,
+                "score": fit.score,
+                "warnCtx": m.context_window < 15_000,
+                "softCtx": m.context_window <= 20_000,
+            }));
+        }
+        if let Some(bin) = self.find_llamafile(&crate::default_data_dir()) {
+            let name = bin
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "llamafile".into());
+            let cand = crate::hwfit::LocalModelCandidate {
+                name: name.clone(),
+                size_bytes: std::fs::metadata(&bin).map(|m| m.len()).unwrap_or(0),
+                context_window: self.cfg.num_ctx,
+            };
+            let fit = crate::hwfit::score_model(&cand, &hw);
+            rows.push(serde_json::json!({
+                "name": name,
+                "runtime": "llamafile",
+                "provider": "llamafile",
+                "sizeBytes": cand.size_bytes,
+                "contextWindow": self.cfg.num_ctx,
+                "fits": fit.fits,
+                "score": fit.score,
+                "warnCtx": self.cfg.num_ctx < 15_000,
+                "softCtx": self.cfg.num_ctx <= 20_000,
+            }));
+        }
+        rows.sort_by(|a, b| {
+            let fa = a.get("fits").and_then(|v| v.as_bool()).unwrap_or(false);
+            let fb = b.get("fits").and_then(|v| v.as_bool()).unwrap_or(false);
+            fb.cmp(&fa)
+        });
+        rows
+    }
+
+    /// Refuse to advertise a model that does not fit RAM (spawn still
+    /// happens for the *runtime*; load is the UI's job).
+    pub fn disqualify_unfit(&self, name: &str) -> Result<(), LocalError> {
+        let hw = crate::hwfit::detect();
+        if let Some(m) = self
+            .list_ollama_models()
+            .into_iter()
+            .find(|m| m.name == name)
+        {
+            let cand = crate::hwfit::LocalModelCandidate {
+                name: m.name.clone(),
+                size_bytes: m.size_bytes,
+                context_window: m.context_window,
+            };
+            let fit = crate::hwfit::score_model(&cand, &hw);
+            if !fit.fits {
+                return Err(LocalError::Http(format!(
+                    "model {name} does not fit this machine (hwfit)"
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Effective context for one ollama model: `min(num_ctx, model max)`.
     /// Model max comes from `/api/show` (a **POST** with `{"name": ...}` —
     /// ollama does not serve it over GET) `model_info`

@@ -34,6 +34,7 @@ import {
   cancelChatStream,
   FrameProviderBridge,
   runChatStream,
+  runToolRetry,
   type ChatEvent,
   type ChatStreamParams,
   type ProviderChunk,
@@ -47,6 +48,8 @@ import {
   type PlanTask,
 } from "./plan";
 import { startScheduler } from "./scheduler";
+import { connectorCatalog, queryConnectors } from "./connector-bridge";
+import { searchExternalMcp } from "./mcp-bridge";
 
 /** Must stay in lock-step with `everyaios_ipc::PROTOCOL_VERSION` (Rust, = 1). */
 export const PROTOCOL_VERSION = 1;
@@ -194,6 +197,38 @@ export function handleRequest(req: Request): Response | null {
       break;
     }
 
+    case "chat/tool_retry": {
+      const p = (req.params ?? {}) as {
+        sessionId?: string;
+        streamId?: string;
+        toolId?: string;
+        args?: Record<string, unknown>;
+        agentId?: string;
+      };
+      if (
+        typeof p.sessionId !== "string" ||
+        typeof p.streamId !== "string" ||
+        typeof p.toolId !== "string"
+      ) {
+        response = err(
+          id,
+          ERROR_CODES.INVALID_REQUEST,
+          "chat/tool_retry requires sessionId, streamId, toolId",
+        );
+        break;
+      }
+      const retry = {
+        sessionId: p.sessionId,
+        streamId: p.streamId,
+        toolId: p.toolId,
+        args: p.args ?? {},
+        ...(p.agentId !== undefined ? { agentId: p.agentId } : {}),
+      };
+      void runToolRetry(retry, emitChatEvent, sendRequest);
+      response = ok(id, { accepted: true });
+      break;
+    }
+
     case "chat/provider_chunk": {
       // Notification: Rust pushes broker stream chunks here; the engine's
       // streamProvider consumes them (P1.4, provider bridge).
@@ -262,6 +297,56 @@ export function handleRequest(req: Request): Response | null {
         cancelPlan(p.planId);
       }
       response = null; // notifications never get a reply
+      break;
+    }
+
+    case "mcp/search": {
+      const p = (req.params ?? {}) as { endpoint?: unknown; query?: unknown; toolName?: unknown };
+      if (typeof p.endpoint !== "string" || typeof p.query !== "string" || p.query.trim().length === 0) {
+        response = err(id, ERROR_CODES.INVALID_REQUEST, "mcp/search requires endpoint and query");
+        break;
+      }
+      void searchExternalMcp(
+        p.endpoint,
+        p.query,
+        typeof p.toolName === "string" ? p.toolName : "search",
+      ).then(
+        (results) => {
+          if (req.id !== undefined) process.stdout.write(encodeJson(ok(req.id, { results })));
+        },
+        (e: Error) => {
+          if (req.id !== undefined) process.stdout.write(encodeJson(err(id, ERROR_CODES.INTERNAL_ERROR, e.message)));
+        },
+      );
+      response = null;
+      break;
+    }
+
+    case "connector/list": {
+      response = ok(id, { connectors: connectorCatalog() });
+      break;
+    }
+
+    case "connector/query": {
+      const p = (req.params ?? {}) as { query?: unknown; activeNames?: unknown };
+      if (typeof p.query !== "string" || p.query.trim().length === 0) {
+        response = err(id, ERROR_CODES.INVALID_REQUEST, "connector/query requires a non-empty query");
+        break;
+      }
+      const activeNames = Array.isArray(p.activeNames)
+        ? p.activeNames.filter((name): name is string => typeof name === "string")
+        : undefined;
+      // Connector adapters own their authorization checks. Results are
+      // normalized and returned without exposing credential material.
+      void queryConnectors(p.query, activeNames).then(
+        (results) => {
+          if (req.id !== undefined) process.stdout.write(encodeJson(ok(req.id, { results })));
+        },
+        (e: Error) => {
+          if (req.id !== undefined) process.stdout.write(encodeJson(err(id, ERROR_CODES.INTERNAL_ERROR, e.message)));
+        },
+      );
+      response = null;
       break;
     }
 

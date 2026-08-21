@@ -30,26 +30,56 @@
 pub mod blocklist;
 pub mod configscan;
 pub mod decision;
+pub mod diffcard;
+pub mod ecc;
+pub mod egress;
+pub mod fs_broker;
+pub mod granter;
 pub mod injection;
 pub mod loopguard;
 pub mod manifest;
+pub mod path_seal;
 pub mod pathfloor;
 pub mod permissions;
 pub mod prescan;
 pub mod profiles;
 pub mod redteam;
+pub mod sandbox;
+pub mod seccomp;
 pub mod ticket;
+pub mod toctou;
 pub mod urlfloor;
 
-pub use blocklist::{BLOCKLIST, BlocklistCategory, blocklist_for};
+pub use blocklist::{blocklist_for, BlocklistCategory, BLOCKLIST};
 pub use decision::{DecisionPackage, WebActionKind};
+pub use diffcard::{render_native_card, CardAction, CardResponse, NativeCard};
+pub use egress::{ConnectivityMode, EgressEngine, EgressPlan, EgressVerdict};
+pub use fs_broker::{
+    BrokerHost, BrokerOp, BrokerRequest, BrokerResponse, BrokerTransport, InProcessBroker,
+};
+pub use granter::{
+    wildcard_match, CapabilityGranter, GrantError, GrantRequest, GrantedCapabilities, HostGrant,
+    TrustFlags,
+};
 pub use injection::Estop;
+pub use path_seal::{PathSeal, SealError, SealState};
+pub use pathfloor::{
+    canonicalize_no_follow, enforce_floor, is_inside_root, normalize_lexical, FloorVerdict, FsOp,
+    GrantAxis, PathGrant,
+};
 pub use permissions::{Operation, PermissionsPolicy, PolicyAction, Rule};
-pub use prescan::{PreExecScan, ScanTarget, scan_path, scan_shell, scan_url};
+pub use prescan::{scan_path, scan_shell, scan_url, PreExecScan, ScanTarget};
 pub use profiles::{GateAction, Hook, Profile};
+pub use sandbox::{PathAccess, PathRule, SandboxError, SandboxProfile, SyscallGroup};
+pub use seccomp::{Action, ArgFilter, SeccompError, SeccompPolicy, SyscallRule};
 pub use ticket::{
-    ApprovalSource, AuthorizationTicket, GuardReceipt, ReceiptAction, RiskLevel, TicketState,
-    TicketStore,
+    ApprovalSource, AuthorizationTicket, GuardReceipt, ReceiptAction, RiskLevel, RiskTier,
+    TicketState, TicketStore,
+};
+pub use toctou::{
+    bind_exec_bytes, bind_path, bind_url, is_blocked_ip, open_parent_dir, reverify_exec,
+    reverify_path, reverify_url, ExecBinding, FileBinding, NetBinding, ResourceBinding,
+    ToctouError,
 };
 
 /// Scan everything pre-exec: shell string, filesystem paths, URLs.
@@ -58,16 +88,28 @@ pub fn scan_all(shell: &str, paths: &[&str], urls: &[&str]) -> Vec<PreExecScan> 
     let mut hits = Vec::new();
     let guard = prescan::guard();
     if guard.is_blocked(shell) {
-        hits.push(PreExecScan::new(ScanTarget::Shell, shell.to_string(), guard.scan(shell)));
+        hits.push(PreExecScan::new(
+            ScanTarget::Shell,
+            shell.to_string(),
+            guard.scan(shell),
+        ));
     }
     for p in paths {
         if guard.is_blocked(p) {
-            hits.push(PreExecScan::new(ScanTarget::Path, (*p).to_string(), guard.scan(p)));
+            hits.push(PreExecScan::new(
+                ScanTarget::Path,
+                (*p).to_string(),
+                guard.scan(p),
+            ));
         }
     }
     for u in urls {
         if guard.is_blocked(u) {
-            hits.push(PreExecScan::new(ScanTarget::Url, (*u).to_string(), guard.scan(u)));
+            hits.push(PreExecScan::new(
+                ScanTarget::Url,
+                (*u).to_string(),
+                guard.scan(u),
+            ));
         }
     }
     hits

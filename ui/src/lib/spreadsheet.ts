@@ -60,6 +60,7 @@ export interface XlsxEditRequest {
   address: string;
   value: string;
   ticketId: string;
+  approvalNonce: string;
 }
 
 export async function xlsxEditRequest(
@@ -152,6 +153,7 @@ export interface XlsxBatchRequest {
   action: "allow" | "ask";
   summary: string;
   ticketId: string;
+  approvalNonce: string;
 }
 
 export async function xlsxBatchRequest(

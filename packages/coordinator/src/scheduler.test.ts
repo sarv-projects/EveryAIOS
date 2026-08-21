@@ -60,8 +60,8 @@ function scriptedRust(initial: Record<string, unknown> = {}) {
         return out;
       }
       case "scheduler/lease_start":
-        jobs.set(String(p.id), { ...(jobs.get(String(p.id))!), state: { state: "running", leaseExpiresAt: now + 30 } });
-        return { ok: true, resumed: false, checkpoint: 0 };
+        jobs.set(String(p.id), { ...(jobs.get(String(p.id))!), state: { state: "running", leaseExpiresAt: now + 30, fence: `fence-${String(p.id)}` } });
+        return { ok: true, resumed: false, checkpoint: 0, fence: `fence-${String(p.id)}`, runId: `run-${String(p.id)}` };
       case "scheduler/lease_heartbeat":
         return { ok: true, leaseExpiresAt: now + 30 };
       case "scheduler/lease_finish": {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, ChevronDown, Cpu, Download, Gauge, KeyRound, Loader2, RotateCw, Route, Sparkles, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import {
   type AgentRuntime,
 } from '@/lib/agents'
 import { cn } from '@/lib/utils'
+import { ensureLocal, listLocalModels, type LocalModelRow } from '@/lib/local-models'
 
 function StatusDot({ status }: { status: AgentRuntime['status'] }) {
   const tone =
@@ -64,6 +65,8 @@ export default function AgentModelPicker({ compact }: Props) {
   const [installing, setInstalling] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [connected, setConnected] = useState<string | null>(null)
+  const [localRows, setLocalRows] = useState<LocalModelRow[]>([])
+  const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
   const [auth, setAuth] = useState<{
     handle: string
     methods: { id: string; name: string; type?: string; description?: string }[]
@@ -82,6 +85,16 @@ export default function AgentModelPicker({ compact }: Props) {
     try {
       const { acpInstallRequest, acpInstallCommit } = await import('@/lib/acp')
       const req = await acpInstallRequest(agentId)
+      const cmd = (req.exactCommand ?? []).join(' ')
+      if (req.consentRequired && cmd) {
+        const ok = window.confirm(
+          `SEP-1024 exact-command consent\n\nInstall ${agentId}?\n\n${cmd}${req.preferNative ? '\n\nPrefer verified native artifact.' : ''}`,
+        )
+        if (!ok) {
+          notify('Install cancelled')
+          return
+        }
+      }
       if (req.action === 'allow') {
         // Auto-allowed still consumes its pre-approved single-use ticket.
         await acpInstallCommit(agentId, req.ticketId)
@@ -139,6 +152,13 @@ export default function AgentModelPicker({ compact }: Props) {
       notify(err instanceof Error ? err.message : 'Sign-in failed')
     }
   }
+  useEffect(() => {
+    if (!open) return
+    void listLocalModels()
+      .then((r) => setLocalRows(r.models ?? []))
+      .catch(() => setLocalRows([]))
+  }, [open])
+
   const model = getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
   const models = getModelsForAgent(selectedAgentId)
 
@@ -282,7 +302,10 @@ export default function AgentModelPicker({ compact }: Props) {
                         key={m.id}
                         type="button"
                         disabled={disabled}
-                        onClick={() => setSelectedModel(m.id)}
+                        onClick={() => {
+                          setSelectedModel(m.id)
+                          setLocalRuntime(undefined)
+                        }}
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40',
                           isActive
@@ -326,6 +349,62 @@ export default function AgentModelPicker({ compact }: Props) {
                     )
                   })}
                 </div>
+
+                {localRows.length > 0 && (
+                  <div className="mt-2 border-t border-border/60 pt-2">
+                    <div className="mb-1 px-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                      Local (LM Studio-style)
+                    </div>
+                    <div className="space-y-1">
+                      {localRows.map((row) => {
+                        const isActive = selectedModelId === row.name && useAppStore.getState().localRuntime === row.runtime
+                        return (
+                          <button
+                            key={`${row.runtime}:${row.name}`}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAgent('everyaios-native')
+                              setSelectedModel(row.name)
+                              setLocalRuntime(row.runtime, row.contextWindow)
+                              void ensureLocal(row.runtime, row.name).catch((e) =>
+                                notify(e instanceof Error ? e.message : 'Local load failed'),
+                              )
+                            }}
+                            className={cn(
+                              'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left',
+                              isActive
+                                ? 'border-orange-500/60 bg-orange-500/10'
+                                : 'border-transparent hover:border-border hover:bg-accent/40',
+                              !row.fits && 'opacity-60',
+                            )}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-medium text-foreground">{row.name}</span>
+                                <Badge
+                                  className={cn(
+                                    'px-1 text-[8px]',
+                                    row.fits ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300',
+                                  )}
+                                >
+                                  {row.fits ? 'fits' : 'too big'}
+                                </Badge>
+                                {row.warnCtx && (
+                                  <Badge className="bg-amber-500/20 px-1 text-[8px] text-amber-300">
+                                    &lt;15K ctx
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="font-mono text-[9px] text-muted-foreground">
+                                {row.runtime} · {(row.sizeBytes / 1e9).toFixed(1)}GB · {formatContext(row.contextWindow)} · score {row.score.toFixed(2)}
+                              </div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Auto-route toggle */}
                 <div className="mt-3 flex items-center justify-between rounded-md border border-border/60 bg-background/40 px-2 py-1.5">

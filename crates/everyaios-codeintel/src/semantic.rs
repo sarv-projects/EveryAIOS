@@ -124,15 +124,51 @@ mod tests {
     fn index() -> SemanticIndex {
         SemanticIndex {
             symbols: vec![
-                Symbol { name: "main".into(), kind: SymbolKind::Function, language: "rust".into() },
-                Symbol { name: "helper".into(), kind: SymbolKind::Function, language: "rust".into() },
-                Symbol { name: "dead_code".into(), kind: SymbolKind::Function, language: "rust".into() },
+                Symbol {
+                    name: "main".into(),
+                    kind: SymbolKind::Function,
+                    language: "rust".into(),
+                },
+                Symbol {
+                    name: "helper".into(),
+                    kind: SymbolKind::Function,
+                    language: "rust".into(),
+                },
+                Symbol {
+                    name: "dead_code".into(),
+                    kind: SymbolKind::Function,
+                    language: "rust".into(),
+                },
             ],
             occurrences: vec![
-                SymbolOccurrence { symbol: "main".into(), file: "src/main.rs".into(), line: 1, column: 0, role: OccurrenceRole::Definition },
-                SymbolOccurrence { symbol: "helper".into(), file: "src/main.rs".into(), line: 5, column: 0, role: OccurrenceRole::Definition },
-                SymbolOccurrence { symbol: "helper".into(), file: "src/main.rs".into(), line: 2, column: 4, role: OccurrenceRole::Reference },
-                SymbolOccurrence { symbol: "dead_code".into(), file: "src/lib.rs".into(), line: 9, column: 0, role: OccurrenceRole::Definition },
+                SymbolOccurrence {
+                    symbol: "main".into(),
+                    file: "src/main.rs".into(),
+                    line: 1,
+                    column: 0,
+                    role: OccurrenceRole::Definition,
+                },
+                SymbolOccurrence {
+                    symbol: "helper".into(),
+                    file: "src/main.rs".into(),
+                    line: 5,
+                    column: 0,
+                    role: OccurrenceRole::Definition,
+                },
+                SymbolOccurrence {
+                    symbol: "helper".into(),
+                    file: "src/main.rs".into(),
+                    line: 2,
+                    column: 4,
+                    role: OccurrenceRole::Reference,
+                },
+                SymbolOccurrence {
+                    symbol: "dead_code".into(),
+                    file: "src/lib.rs".into(),
+                    line: 9,
+                    column: 0,
+                    role: OccurrenceRole::Definition,
+                },
             ],
             relationships: vec![Relationship {
                 source: "main".into(),

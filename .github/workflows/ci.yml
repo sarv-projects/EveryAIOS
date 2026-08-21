@@ -59,6 +59,39 @@ jobs:
       - name: cargo test
         run: cargo test --all-features
 
+  # P4.5 — LibreOffice headless oracle (D6/D7 conformance gate). The office
+  # engines' surgical patch must round-trip through a real LibreOffice parse
+  # without a repair warning. This is a separate job (LO install is heavy) and
+  # runs on ubuntu only — the oracle is deterministic regardless of host.
+  office-oracle:
+    name: office LibreOffice oracle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+
+      - name: Install LibreOffice (writer)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+
+      - name: LibreOffice oracle (docx patch round-trip)
+        run: >-
+          cargo test -p everyaios-office --lib
+          conformance::tests::live_oracle_opens_clean
+          -- --ignored --test-threads=1
+        env:
+          EVERYAIOS_LIVE_TEST: "1"
+
   # UI: self-contained (own package-lock.json, no @personal-ai deps) — always runs.
   ui:
     name: ui typecheck + build

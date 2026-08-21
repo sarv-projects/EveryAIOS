@@ -90,70 +90,22 @@ pub fn cockpit_quiet(
     Ok(())
 }
 
-/// UNDO: JSON-RPC `agent/undo` over the unix control channel (revert last
-/// action) + mirror into the cockpit state.
-#[cfg(unix)]
+/// UNDO: revert last action (cockpit + audit). Unix clients hit the same
+/// helper via `agent/undo` on the control channel.
 #[tauri::command]
-pub fn agent_undo(state: State<'_, AppState>, session_id: String) -> Result<(), String> {
-    let cfg = everyaios_core::Config::load().unwrap_or_default();
-    let sock = cfg.resolved_socket_path();
-    let msg = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "agent/undo",
-        "params": { "sessionId": session_id },
-    });
-    let payload = serde_json::to_vec(&msg).map_err(|e| e.to_string())?;
-    everyaios_ipc::socket::request(&sock, &payload).map_err(|e| e.to_string())?;
-    state
-        .cockpit
-        .lock()
-        .expect("cockpit poisoned")
-        .undo(&session_id);
-    Ok(())
+pub fn agent_undo(app: AppHandle, session_id: String) -> Result<(), String> {
+    crate::control::undo_session(&app, &session_id)
 }
 
-#[cfg(not(unix))]
-#[tauri::command]
-pub fn agent_undo(_state: State<'_, AppState>, _session_id: String) -> Result<(), String> {
-    Err("agent/undo requires the unix control channel".into())
-}
-
-/// Answer a circuit-break MCQ interrupt card: record the choice + forward it
-/// to the coordinator over the control channel (`agent/interrupt-response`).
-#[cfg(unix)]
+/// Answer a circuit-break MCQ interrupt card and forward it to the plan
+/// executor (`agent/interrupt-response`).
 #[tauri::command]
 pub fn interrupt_respond(
-    state: State<'_, AppState>,
+    app: AppHandle,
     interrupt_id: String,
     choice: usize,
 ) -> Result<(), String> {
-    let chosen = {
-        let mut s = state.cockpit.lock().expect("cockpit poisoned");
-        s.respond_interrupt(&interrupt_id, choice)
-            .ok_or_else(|| format!("unknown or already-answered interrupt: {interrupt_id}"))?
-    };
-    let cfg = everyaios_core::Config::load().unwrap_or_default();
-    let sock = cfg.resolved_socket_path();
-    let msg = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "agent/interrupt-response",
-        "params": { "interruptId": interrupt_id, "choice": choice, "chosen": chosen },
-    });
-    let payload = serde_json::to_vec(&msg).map_err(|e| e.to_string())?;
-    everyaios_ipc::socket::request(&sock, &payload).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-#[tauri::command]
-pub fn interrupt_respond(
-    _state: State<'_, AppState>,
-    _interrupt_id: String,
-    _choice: usize,
-) -> Result<(), String> {
-    Err("interrupt response requires the unix control channel".into())
+    crate::control::interrupt_response(&app, &interrupt_id, &choice.to_string())
 }
 
 /// Feed seam: upsert a full agent card (coordinator registration).

@@ -781,7 +781,7 @@ flowchart TB
         Guard[everyaios-guard<br/>Guard-1 + Guard-2 + Trust Ladder]
         Vault[everyaios-vault<br/>SQLCipher keys + sessions]
         Audit[everyaios-audit<br/>NDJSON append-only]
-        MCP[everyaios-mcp<br/>stateless HTTP server]
+        MCP[everyaios-mcp<br/>adapter-negotiated MCP server]
         CDP[everyaios-cdp<br/>browser driver]
         Script[everyaios-script<br/>rquickjs sandbox]
         Super[ProcessSupervisor<br/>spawn/kill/restart]

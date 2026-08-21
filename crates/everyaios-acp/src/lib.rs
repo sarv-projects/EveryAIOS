@@ -16,6 +16,7 @@
 //! - [`installer`] — F8: the install executor (download → sha256 → extract +
 //!   install-state persistence).
 
+pub mod a2a;
 pub mod client;
 pub mod frame;
 pub mod installer;
@@ -24,6 +25,9 @@ pub mod registry;
 pub mod registry_client;
 pub mod registry_index;
 
+pub use a2a::{
+    A2aError, AgentCard, AgentCardVerifier, AgentSkill, CardTrust, SignedAgentCard,
+};
 pub use client::{AcpError, AcpSession, AcpTransport, ProcessTransport, PromptOutcome};
 pub use frame::{decode_messages, encode_message};
 pub use messages::{
@@ -43,4 +47,4 @@ pub use registry_index::{
     RegistryDistribution, RegistryIndex, RegistryPolicy,
 };
 pub use registry_client::{FetchError, RegistryClient};
-pub use installer::{InstallError, InstallOutcome, Installer};
+pub use installer::{InstallError, InstallOutcome, Installer, OwnershipMarker};

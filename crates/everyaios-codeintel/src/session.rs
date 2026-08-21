@@ -9,6 +9,7 @@
 
 use crate::lsp::{decode_messages, encode_message};
 use serde_json::{json, Value};
+use std::collections::VecDeque;
 use std::io::{self, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use thiserror::Error;
@@ -65,17 +66,30 @@ pub struct ProcessTransport {
     reader: BufReader<ChildStdout>,
     /// Partial frames from the server accumulate here until complete.
     buf: Vec<u8>,
+    /// Decoded frames not yet handed out. `decode_messages` can yield several
+    /// complete frames from one read; queue them rather than dropping them, or
+    /// a fast server's response can be lost and the caller block forever.
+    pending: VecDeque<String>,
 }
 
 impl ProcessTransport {
     /// Spawn `command` with `args` and take over its stdio.
     pub fn spawn(command: &str, args: &[&str]) -> io::Result<Self> {
-        let mut child = Command::new(command)
-            .args(args)
+        Self::spawn_env(command, args, &[])
+    }
+
+    /// Spawn `command` with `args` + `env` overrides and take over its stdio
+    /// (the live-LSP seam for `lsp-config.json` per-server environment).
+    pub fn spawn_env(command: &str, args: &[&str], env: &[(&str, &str)]) -> io::Result<Self> {
+        let mut cmd = Command::new(command);
+        cmd.args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
+            .stderr(Stdio::null());
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let mut child = cmd.spawn()?;
         let stdin = child.stdin.take().ok_or_else(|| {
             io::Error::new(io::ErrorKind::BrokenPipe, "no stdin on spawned server")
         })?;
@@ -87,6 +101,7 @@ impl ProcessTransport {
             stdin,
             reader: BufReader::new(stdout),
             buf: Vec::new(),
+            pending: VecDeque::new(),
         })
     }
 }
@@ -99,15 +114,28 @@ impl LspTransport for ProcessTransport {
 
     fn recv(&mut self) -> io::Result<Option<String>> {
         loop {
-            // A complete frame may already be buffered from a prior read.
+            // Serve frames already decoded but not yet returned (they arrived
+            // together in one read chunk).
+            if let Some(m) = self.pending.pop_front() {
+                return Ok(Some(m));
+            }
             if let Ok(msgs) = decode_messages(&mut self.buf) {
-                if let Some(m) = msgs.into_iter().next() {
-                    return Ok(Some(m));
+                if !msgs.is_empty() {
+                    self.pending.extend(msgs);
+                    if let Some(m) = self.pending.pop_front() {
+                        return Ok(Some(m));
+                    }
                 }
             }
             let mut chunk = [0u8; 8192];
             let n = self.reader.read(&mut chunk)?;
             if n == 0 {
+                // EOF: flush any partial trailing frame before signalling end.
+                if let Ok(msgs) = decode_messages(&mut self.buf) {
+                    if let Some(m) = msgs.into_iter().next() {
+                        return Ok(Some(m));
+                    }
+                }
                 return Ok(None); // EOF — server closed stdout
             }
             self.buf.extend_from_slice(&chunk[..n]);
@@ -143,7 +171,11 @@ impl<T: LspTransport> LspSession<T> {
     /// Perform the LSP handshake: send `initialize`, wait for its response,
     /// then send the `initialized` notification. Returns the server's
     /// capabilities result (best-effort — callers read what they need).
-    pub fn initialize(&mut self, root_uri: &str, client_name: &str) -> Result<Value, LspSessionError> {
+    pub fn initialize(
+        &mut self,
+        root_uri: &str,
+        client_name: &str,
+    ) -> Result<Value, LspSessionError> {
         let id = self.next_id;
         self.next_id += 1;
         let req = json!({
@@ -198,6 +230,41 @@ impl<T: LspTransport> LspSession<T> {
     /// Is the underlying server process still alive? (keep-alive probe)
     pub fn is_alive(&mut self) -> bool {
         self.transport.is_alive()
+    }
+
+    /// Read the next server message and, if it is a
+    /// `textDocument/publishDiagnostics` notification, return the parsed
+    /// batch. Returns `Ok(None)` when the next message is *not* a
+    /// diagnostics notification (e.g. a log/telemetry message) or the stream
+    /// hit EOF. Used by the LSP-config diagnostics service (P6.8).
+    pub fn recv_diagnostics(
+        &mut self,
+    ) -> Result<Option<crate::lsp_config::DiagnosticBatch>, LspSessionError> {
+        let Some(raw) = self.transport.recv()? else {
+            return Ok(None);
+        };
+        let v: Value =
+            serde_json::from_str(&raw).map_err(|e| LspSessionError::Malformed(e.to_string()))?;
+        if v.get("method").and_then(Value::as_str) != Some("textDocument/publishDiagnostics") {
+            return Ok(None);
+        }
+        let params = v.get("params").cloned().unwrap_or(Value::Null);
+        let uri = params
+            .get("uri")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let diags: Vec<crate::lsp::Diagnostic> = params
+            .get("diagnostics")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|e| LspSessionError::Malformed(e.to_string()))?
+            .unwrap_or_default();
+        Ok(Some(crate::lsp_config::DiagnosticBatch {
+            uri,
+            diagnostics: diags,
+        }))
     }
 
     /// Graceful shutdown: `shutdown` request → `exit` notification → reap.
@@ -303,9 +370,7 @@ mod tests {
             &result_response(2, json!({ "contents": "x" })),
         ]);
         let mut session = LspSession::new(&mut t);
-        session
-            .initialize("file:///w", "everyaios")
-            .unwrap();
+        session.initialize("file:///w", "everyaios").unwrap();
         let res = session
             .request("textDocument/hover", json!({ "uri": "file:///a.rs" }))
             .unwrap();
@@ -387,5 +452,20 @@ mod tests {
     #[test]
     fn spawn_missing_binary_errors() {
         assert!(ProcessTransport::spawn("definitely-not-a-real-lsp", &[]).is_err());
+    }
+
+    /// Regression: two frames arriving in one read chunk must BOTH be
+    /// delivered — the old `recv` kept only the first and dropped the rest.
+    /// The fixture emits two proper Content-Length frames back-to-back.
+    #[cfg(unix)]
+    #[test]
+    fn recv_queues_multiple_frames_from_one_chunk() {
+        let frames = "Content-Length: 3\r\n\r\nabcContent-Length: 3\r\n\r\ndef";
+        let cmd = format!("printf '{}'", frames);
+        let mut t = ProcessTransport::spawn("sh", &["-c", &cmd]).unwrap();
+        assert_eq!(t.recv().unwrap().as_deref(), Some("abc"));
+        assert_eq!(t.recv().unwrap().as_deref(), Some("def"));
+        assert_eq!(t.recv().unwrap(), None);
+        t.shutdown();
     }
 }

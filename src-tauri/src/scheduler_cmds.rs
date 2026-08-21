@@ -87,6 +87,14 @@ pub fn scheduler_enable(state: State<'_, AppState>, id: String, enabled: bool) -
     Ok(true)
 }
 
+/// Pause every job bound to a chat session (delete-chat cascade).
+#[tauri::command]
+pub fn scheduler_pause_session(state: State<'_, AppState>, session_id: String) -> Result<u32, String> {
+    let handle = svc(&state)?;
+    let mut svc = handle.lock().map_err(|e| e.to_string())?;
+    Ok(svc.pause_session(&session_id) as u32)
+}
+
 /// HITL pause (first-class state with an optional resume deadline).
 #[tauri::command]
 pub fn scheduler_pause(state: State<'_, AppState>, id: String, resume_deadline: Option<u64>) -> Result<bool, String> {
@@ -125,6 +133,9 @@ pub fn scheduler_battery(state: State<'_, AppState>, on_battery: bool) -> Result
     let handle = svc(&state)?;
     let mut svc = handle.lock().map_err(|e| e.to_string())?;
     svc.set_battery(on_battery);
+    // J16 — mirror to the shared AppState flag so the storage commands (heavy
+    // scans) defer from the same OS power event.
+    state.battery.store(on_battery, std::sync::atomic::Ordering::Relaxed);
     Ok(true)
 }
 

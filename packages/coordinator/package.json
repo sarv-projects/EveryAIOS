@@ -6,7 +6,7 @@
   "description": "EveryAIOS TS sidecar — the supervised agent-loop engine (P0.3). A sidecar binary, not a library — no `main` entry (build emits a compiled binary via `bun build --compile`).",
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build --compile ./src/index.ts --outfile dist/coordinator",
+    "build": "bun build --compile ./src/index.ts --external canvas --outfile dist/coordinator",
     "type-check": "tsc --noEmit",
     "test": "bun test"
   },

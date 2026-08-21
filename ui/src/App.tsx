@@ -11,6 +11,7 @@ import { CommandPalette } from "@/components/shell/command-palette";
 import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { ToastBridge } from "@/components/shell/toast-bridge";
 import { useAppStore } from "@/lib/store";
+import VaultGate from "@/components/shell/vault-gate";
 
 export default function App() {
   // Progressive disclosure (B9/P31): casual users get chat only; the activity
@@ -18,6 +19,7 @@ export default function App() {
   const powerMode = useAppStore((s) => s.powerMode);
 
   return (
+    <VaultGate>
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden">
       <KeyboardShortcuts />
       <TitleBar />
@@ -31,5 +33,6 @@ export default function App() {
       <CommandPalette />
       <ToastBridge />
     </div>
+    </VaultGate>
   );
 }

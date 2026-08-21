@@ -214,6 +214,7 @@ impl LaunchRegistry {
                 acp("agoragentic", "Agoragentic", "Agent marketplace with 174+ AI capabilities.", AuthMode::Local, npx("agoragentic-mcp", &["--acp"])),
                 acp("commandcode", "Command Code", "Frontier coding agent that learns your taste (candidate — verify ACP flag via registry).", AuthMode::Local, bin("commandcode", &["acp"])),
                 // ---- API-key harness (DeepSeek) ----
+                acp("codewhale", "CodeWhale", "Rust TUI coding agent (Hmbown/CodeWhale, the DeepSeek-TUI project renamed — doc 58 §6).", AuthMode::ApiKey, bin("codewhale", &[])),
                 acp("dsh", "DeepSeek Harness", "DeepSeek's open-source agent harness.", AuthMode::ApiKey, bin("dsh", &[])),
                 acp("pi", "Pi", "Minimal AI agent toolkit (via the pi-acp adapter).", AuthMode::Local, npx("pi-acp", &[])),
             ],

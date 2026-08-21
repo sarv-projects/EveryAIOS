@@ -12,10 +12,7 @@ pub fn step_hash(tool: &str, args: &str) -> String {
     h.update(tool.as_bytes());
     h.update([0u8]);
     h.update(args.as_bytes());
-    h.finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Rolling-window loop detector. `max_repeats` repeats of the same step
@@ -29,7 +26,11 @@ pub struct LoopGuard {
 
 impl LoopGuard {
     pub fn new(window: usize, max_repeats: usize) -> Self {
-        Self { window, recent: Vec::new(), max_repeats }
+        Self {
+            window,
+            recent: Vec::new(),
+            max_repeats,
+        }
     }
 
     pub fn with_defaults() -> Self {
@@ -63,8 +64,14 @@ mod tests {
 
     #[test]
     fn hash_is_stable() {
-        assert_eq!(step_hash("shell.exec", "ls -la"), step_hash("shell.exec", "ls -la"));
-        assert_ne!(step_hash("shell.exec", "ls -la"), step_hash("shell.exec", "ls -l"));
+        assert_eq!(
+            step_hash("shell.exec", "ls -la"),
+            step_hash("shell.exec", "ls -la")
+        );
+        assert_ne!(
+            step_hash("shell.exec", "ls -la"),
+            step_hash("shell.exec", "ls -l")
+        );
     }
 
     #[test]

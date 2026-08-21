@@ -74,7 +74,7 @@ impl Drop for BrowserChild {
 
 /// Default profile dir: `$EVERYAIOS_HOME/browser-profile` or
 /// `~/.everyaios/browser-profile`.
-fn default_profile_dir() -> PathBuf {
+pub fn default_profile_dir() -> PathBuf {
     if let Ok(home) = env::var("EVERYAIOS_HOME") {
         if !home.is_empty() {
             return PathBuf::from(home).join("browser-profile");

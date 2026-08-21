@@ -57,6 +57,8 @@ impl Installer {
 
     /// Install an agent from its spec. For `Binary`: download → verify sha256
     /// → extract → record state. For npx/uvx: record the pin (no download).
+    /// Every install writes an **ownership marker** (provenance: source URL +
+    /// sha256 + exact argv) so the installed artifact is auditable (F8).
     pub fn install(&self, spec: &InstallSpec) -> Result<InstallOutcome, InstallError> {
         let dir = self.install_root.join(&spec.agent_id).join(&spec.version);
         match &spec.kind {
@@ -68,7 +70,7 @@ impl Installer {
                     binary_path: None,
                     env: env.clone(),
                 };
-                self.record(&outcome, package, args)?;
+                self.record(&outcome, &Ownership::new(package, String::new(), args.clone()))?;
                 Ok(outcome)
             }
             InstallKind::Uvx { package, args, env } => {
@@ -79,7 +81,7 @@ impl Installer {
                     binary_path: None,
                     env: env.clone(),
                 };
-                self.record(&outcome, package, args)?;
+                self.record(&outcome, &Ownership::new(package, String::new(), args.clone()))?;
                 Ok(outcome)
             }
             InstallKind::Binary { archive, cmd, args, sha256, env } => {
@@ -97,7 +99,7 @@ impl Installer {
                     binary_path: Some(binary_path.clone()),
                     env: env.clone(),
                 };
-                self.record(&outcome, archive, args)?;
+                self.record(&outcome, &Ownership::new(archive, sha256.clone(), args.clone()))?;
                 Ok(outcome)
             }
         }
@@ -139,8 +141,7 @@ impl Installer {
     fn record(
         &self,
         outcome: &InstallOutcome,
-        _source: &str,
-        _args: &[String],
+        ownership: &Ownership,
     ) -> Result<(), InstallError> {
         // The "current" pointer lives at `<root>/<agent>/installed.json`;
         // versioned binary packages live at `<root>/<agent>/<version>/pkg`.
@@ -159,7 +160,26 @@ impl Installer {
             agent_dir.join("installed.json"),
             serde_json::to_string_pretty(&state).unwrap_or_default(),
         )?;
+        // Ownership marker (F8): provenance of every installed artifact.
+        std::fs::write(
+            agent_dir.join("OWNERSHIP.json"),
+            serde_json::to_string_pretty(&OwnershipMarker {
+                agent_id: outcome.agent_id.clone(),
+                version: outcome.version.clone(),
+                source: ownership.source.clone(),
+                sha256: ownership.sha256.clone(),
+                args: ownership.args.clone(),
+                installed_at_ms: now_ms(),
+            })
+            .unwrap_or_default(),
+        )?;
         Ok(())
+    }
+
+    /// Read back the ownership marker for an installed agent (audit seam).
+    pub fn ownership(&self, agent_id: &str) -> Option<OwnershipMarker> {
+        let path = self.install_root.join(agent_id).join("OWNERSHIP.json");
+        serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
     }
 }
 
@@ -171,6 +191,45 @@ struct InstallState {
     binary_path: Option<String>,
     #[serde(default)]
     env: Vec<(String, String)>,
+}
+
+/// Provenance passed into `record` (F8 ownership markers).
+struct Ownership {
+    source: String,
+    sha256: String,
+    args: Vec<String>,
+}
+
+impl Ownership {
+    fn new(source: impl Into<String>, sha256: impl Into<String>, args: Vec<String>) -> Self {
+        Self {
+            source: source.into(),
+            sha256: sha256.into(),
+            args,
+        }
+    }
+}
+
+/// The on-disk ownership marker (F8) — auditable provenance for every
+/// installed artifact.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct OwnershipMarker {
+    pub agent_id: String,
+    pub version: String,
+    pub source: String,
+    #[serde(default)]
+    pub sha256: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    pub installed_at_ms: i64,
+}
+
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 fn verify_sha256(bytes: &[u8], expected_hex: &str) -> Result<(), InstallError> {

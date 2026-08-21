@@ -38,8 +38,17 @@ pub const DEFAULT_BASE_URLS: &[(&str, &str)] = &[
     ("qwen", "https://portal.qwen.ai/v1"),
 ];
 
+/// Incremental native function-call fragment (`choices[0].delta.tool_calls`).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ToolCallDelta {
+    pub index: i64,
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub arguments: Option<String>,
+}
+
 /// One SSE event from a streaming chat completion.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ChatStreamEvent {
     /// Text delta from `choices[0].delta.content` (None on non-content events).
     pub delta: Option<String>,
@@ -50,6 +59,8 @@ pub struct ChatStreamEvent {
     /// `stream_options.include_usage` was requested; Anthropic splits it
     /// (input/cache-write in `message_start`, output in `message_delta`).
     pub usage: Option<Usage>,
+    /// Native tool-call fragments on this chunk (OpenAI `delta.tool_calls`).
+    pub tool_calls: Vec<ToolCallDelta>,
 }
 
 /// The credential broker: key resolution + HTTP execution + scrubbing +
@@ -174,12 +185,16 @@ impl<'a> Broker<'a> {
         provider: &str,
         model: &str,
         session_id: &str,
-        body: serde_json::Value,
+        mut body: serde_json::Value,
     ) -> Result<serde_json::Value, BrokerError> {
         // P1.8 (A5): keyless local runtime — no key ring, no auth header.
         if let Some(ep) = self.local_endpoints.get(provider) {
             return self.local_chat_completion(ep, provider, model, session_id, body);
         }
+        // P1.3 (A9): prompt-cache prefixing — Anthropic gets explicit
+        // `cache_control:ephemeral` markers on the stable prefix; OpenAI-
+        // compatible providers cache the ≥1024-token prefix automatically.
+        annotate_prompt_cache(provider, &mut body);
         self.run_with_failover(
             provider,
             model,
@@ -220,6 +235,8 @@ impl<'a> Broker<'a> {
         }
         body["stream"] = serde_json::json!(true);
         body["stream_options"] = serde_json::json!({"include_usage": true});
+        // P1.3 (A9): same prefixing as the non-streaming path.
+        annotate_prompt_cache(provider, &mut body);
         self.run_with_failover(
             provider,
             model,
@@ -455,6 +472,57 @@ impl<'a> Broker<'a> {
     }
 }
 
+/// P1.3 (A9) — prompt-cache prefixing. Anthropic requires an explicit
+/// `cache_control: {"type":"ephemeral"}` marker on the content blocks that
+/// should anchor the cache (system + the final message); OpenAI-compatible
+/// providers cache the ≥1024-token prefix automatically and need no marker.
+/// This mutates the outgoing body in place so the cached prefix is the same
+/// byte-stable block the coordinator already keeps above its cache boundary.
+fn annotate_prompt_cache(provider: &str, body: &mut serde_json::Value) {
+    if provider != "anthropic" {
+        return; // OpenAI-compatible: automatic ≥1024-token prefix caching.
+    }
+    // Anthropic `system` can be a bare string — promote it to a content block
+    // list so the ephemeral marker can attach (a plain string is also valid
+    // input but cannot carry a cache_control hint).
+    if let Some(system) = body.get_mut("system") {
+        if let Some(text) = system.as_str().map(str::to_string) {
+            *system = serde_json::json!([{
+                "type": "text",
+                "text": text,
+                "cache_control": { "type": "ephemeral" }
+            }]);
+        }
+    }
+    // Attach the marker to the last message's final content block (the
+    // conventional Anthropic breakpoint; the provider computes the cache from
+    // the marked prefix backward).
+    if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+        if let Some(last) = messages.last_mut() {
+            if let Some(obj) = last.as_object_mut() {
+                if let Some(text) = obj
+                    .get("content")
+                    .and_then(|c| c.as_str())
+                    .map(str::to_string)
+                {
+                    obj.insert(
+                        "content".into(),
+                        serde_json::json!([{
+                            "type": "text",
+                            "text": text,
+                            "cache_control": { "type": "ephemeral" }
+                        }]),
+                    );
+                } else if let Some(arr) = obj.get_mut("content").and_then(|c| c.as_array_mut()) {
+                    if let Some(block) = arr.last_mut() {
+                        block["cache_control"] = serde_json::json!({ "type": "ephemeral" });
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Build the auth header for a provider. Returns `(name, value)`; the value
 /// buffer is dropped right after the request and its bytes are never logged.
 /// The header string is `Zeroizing`-wrapped so the secret bytes are scrubbed
@@ -567,13 +635,155 @@ pub(crate) fn parse_sse<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
             .get("usage")
             .or_else(|| value.get("message").and_then(|m| m.get("usage")))
             .and_then(Usage::from_any);
+        let tool_calls = choice
+            .and_then(|c| c.get("delta"))
+            .and_then(|d| d.get("tool_calls"))
+            .and_then(|t| t.as_array())
+            .map(|arr| arr.iter().filter_map(parse_tool_call_delta).collect())
+            .unwrap_or_default();
         events.push(ChatStreamEvent {
             delta,
             finish,
             usage,
+            tool_calls,
         });
     }
     events
+}
+
+fn parse_tool_call_delta(v: &serde_json::Value) -> Option<ToolCallDelta> {
+    let function = v.get("function");
+    let name = function
+        .and_then(|f| f.get("name"))
+        .and_then(|n| n.as_str())
+        .map(str::to_string);
+    let arguments = function.and_then(|f| f.get("arguments")).and_then(|a| {
+        if let Some(s) = a.as_str() {
+            Some(s.to_string())
+        } else if a.is_object() || a.is_array() {
+            Some(a.to_string())
+        } else {
+            None
+        }
+    });
+    let id = v.get("id").and_then(|s| s.as_str()).map(str::to_string);
+    let index = v.get("index").and_then(|i| i.as_i64()).unwrap_or(0);
+    if id.is_none() && name.is_none() && arguments.is_none() {
+        return None;
+    }
+    Some(ToolCallDelta {
+        index,
+        id,
+        name,
+        arguments,
+    })
+}
+
+/// Merge streamed `delta.tool_calls` fragments into complete (name, args) pairs.
+pub fn assemble_tool_calls(events: &[ChatStreamEvent]) -> Vec<(String, serde_json::Value)> {
+    use std::collections::BTreeMap;
+    let mut by_index: BTreeMap<i64, (String, String, String)> = BTreeMap::new();
+    for ev in events {
+        for d in &ev.tool_calls {
+            let entry = by_index
+                .entry(d.index)
+                .or_insert_with(|| (String::new(), String::new(), String::new()));
+            if let Some(id) = &d.id {
+                if !id.is_empty() {
+                    entry.0 = id.clone();
+                }
+            }
+            if let Some(name) = &d.name {
+                if !name.is_empty() {
+                    entry.1 = name.clone();
+                }
+            }
+            if let Some(args) = &d.arguments {
+                entry.2.push_str(args);
+            }
+        }
+    }
+    by_index
+        .into_values()
+        .filter_map(|(_id, name, args)| {
+            if name.is_empty() {
+                return None;
+            }
+            let parsed = serde_json::from_str(&args).unwrap_or_else(|_| {
+                if args.is_empty() {
+                    serde_json::json!({})
+                } else {
+                    serde_json::json!({ "_raw": args })
+                }
+            });
+            Some((name, parsed))
+        })
+        .collect()
+}
+
+/// B5 local JSON-mode: parse a grammar-enforced object into tool calls.
+/// Accepts `{"tool":"…","args":{…}}`, `{"name":"…","arguments":{…}}`,
+/// and `{"tool_calls":[…]}`. Arbitrary JSON (no tool name) is ignored.
+pub fn extract_json_tool_calls(text: &str) -> Vec<(String, serde_json::Value)> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+    let unfenced = trimmed
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+    let value = parse_json_object(unfenced);
+    match value {
+        Some(v) => json_value_to_tool_calls(&v),
+        None => Vec::new(),
+    }
+}
+
+fn parse_json_object(text: &str) -> Option<serde_json::Value> {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(text) {
+        return Some(v);
+    }
+    let start = text.find('{')?;
+    let end = text.rfind('}')?;
+    if end <= start {
+        return None;
+    }
+    serde_json::from_str(&text[start..=end]).ok()
+}
+
+fn json_value_to_tool_calls(value: &serde_json::Value) -> Vec<(String, serde_json::Value)> {
+    if let Some(arr) = value.get("tool_calls").and_then(|t| t.as_array()) {
+        return arr.iter().flat_map(json_value_to_tool_calls).collect();
+    }
+    let name = value
+        .get("tool")
+        .and_then(|t| t.as_str())
+        .or_else(|| value.get("name").and_then(|t| t.as_str()))
+        .or_else(|| {
+            value
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+        })
+        .unwrap_or("");
+    if name.is_empty() {
+        return Vec::new();
+    }
+    let raw = value
+        .get("args")
+        .or_else(|| value.get("arguments"))
+        .or_else(|| value.get("function").and_then(|f| f.get("arguments")));
+    let args = match raw {
+        Some(serde_json::Value::String(s)) => {
+            serde_json::from_str(s).unwrap_or_else(|_| serde_json::json!({ "_raw": s }))
+        }
+        Some(v) if v.is_object() => v.clone(),
+        Some(v) => serde_json::json!({ "value": v }),
+        None => serde_json::json!({}),
+    };
+    vec![(name.to_string(), args)]
 }
 
 /// Extract usage token counts from a completion response (for budgets).
@@ -646,6 +856,14 @@ mod tests {
         }
     }
 
+    /// Find the first byte offset of `needle` in `haystack`.
+    fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        if needle.is_empty() {
+            return Some(0);
+        }
+        haystack.windows(needle.len()).position(|w| w == needle)
+    }
+
     /// Spin a fake OpenAI-compatible endpoint. `respond` receives the raw
     /// request (headers + body) and returns `(status, body)`.
     fn mock_server(respond: impl Fn(&str) -> (u16, String) + Send + 'static) -> String {
@@ -657,12 +875,52 @@ mod tests {
                     Ok(s) => s,
                     Err(_) => continue,
                 };
-                let mut buf = [0u8; 16_384];
-                let n = match s.read(&mut buf) {
-                    Ok(n) => n,
-                    Err(_) => continue,
+                // Read the full request (headers + body) instead of a single
+                // read(), which can return before the body arrives and make
+                // body assertions flaky under load.
+                let mut buf = Vec::new();
+                let mut tmp = [0u8; 16_384];
+                let header_end = loop {
+                    let n = match s.read(&mut tmp) {
+                        Ok(0) | Err(_) => {
+                            // Connection closed mid-request — nothing to serve.
+                            buf.clear();
+                            break None;
+                        }
+                        Ok(n) => n,
+                    };
+                    buf.extend_from_slice(&tmp[..n]);
+                    if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                        break Some(pos + 4);
+                    }
+                    if buf.len() > 1_048_576 {
+                        break None; // oversized / malformed — give up
+                    }
                 };
-                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let Some(header_end) = header_end else {
+                    continue;
+                };
+                // Parse Content-Length and drain the remaining body bytes so
+                // the handler sees the complete payload.
+                let headers = String::from_utf8_lossy(&buf[..header_end]);
+                let content_length = headers
+                    .lines()
+                    .find_map(|l| {
+                        let l = l.trim_end();
+                        let (k, v) = l.split_once(':')?;
+                        k.eq_ignore_ascii_case("content-length")
+                            .then(|| v.trim().parse::<usize>().ok())
+                            .flatten()
+                    })
+                    .unwrap_or(0);
+                while buf.len() < header_end + content_length {
+                    let n = match s.read(&mut tmp) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => n,
+                    };
+                    buf.extend_from_slice(&tmp[..n]);
+                }
+                let req = String::from_utf8_lossy(&buf).to_string();
                 let (code, body) = respond(&req);
                 let reason = if code == 429 {
                     "Too Many Requests"
@@ -713,6 +971,59 @@ mod tests {
         assert_eq!(info[0].success_count, 1);
         assert_eq!(info[0].fail_count, 0);
         assert!(info[0].tokens_day >= 12);
+    }
+
+    #[test]
+    fn anthropic_prompt_cache_prefixing() {
+        let base = mock_server(|req| {
+            assert!(
+                req.contains("cache_control"),
+                "cache_control marker missing: {req}"
+            );
+            assert!(req.contains("ephemeral"), "{req}");
+            (200, r#"{"usage":{"total_tokens":3}}"#.into())
+        });
+        let vault = vault();
+        let broker = Broker::new(vault).with_base_url("anthropic", base);
+        broker
+            .ring()
+            .add_key(spec("anthropic", "a1", "sk-ant"))
+            .unwrap();
+        broker
+            .chat_completion(
+                "anthropic",
+                "claude",
+                "s1",
+                serde_json::json!({
+                    "system": "you are helpful",
+                    "messages": [{"role": "user", "content": "hi"}]
+                }),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn openai_prompt_cache_not_annotated() {
+        // OpenAI-compatible providers cache the ≥1024-token prefix
+        // automatically — no cache_control marker must be injected.
+        let base = mock_server(|req| {
+            assert!(
+                !req.contains("cache_control"),
+                "must not annotate OpenAI: {req}"
+            );
+            (200, r#"{"usage":{"total_tokens":3}}"#.into())
+        });
+        let vault = vault();
+        let broker = Broker::new(vault).with_base_url("nvidia", base);
+        broker.ring().add_key(spec("nvidia", "k", "sk")).unwrap();
+        broker
+            .chat_completion(
+                "nvidia",
+                "m",
+                "s1",
+                serde_json::json!({"messages": [{"role": "user", "content": "hi"}]}),
+            )
+            .unwrap();
     }
 
     #[test]
@@ -834,6 +1145,34 @@ mod tests {
         assert_eq!(events[2].finish.as_deref(), Some("stop"));
         let text: String = events.iter().filter_map(|e| e.delta.clone()).collect();
         assert_eq!(text, "Hello");
+    }
+
+    #[test]
+    fn parses_sse_native_tool_calls() {
+        let sse = concat!(
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"search.query\",\"arguments\":\"{\\\"q\\\"\"}}]}}]}\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":\\\"hi\\\"}\"}}]}}]}\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n",
+            "data: [DONE]\n",
+        );
+        let events = parse_sse(BufReader::new(sse.as_bytes()));
+        let calls = assemble_tool_calls(&events);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "search.query");
+        assert_eq!(calls[0].1["q"], "hi");
+        assert_eq!(
+            events.last().and_then(|e| e.finish.as_deref()),
+            Some("tool_calls")
+        );
+    }
+
+    #[test]
+    fn extract_json_tool_calls_b5_shape() {
+        let calls = extract_json_tool_calls("{\"tool\":\"weather\",\"args\":{\"city\":\"Paris\"}}");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "weather");
+        assert_eq!(calls[0].1["city"], "Paris");
+        assert!(extract_json_tool_calls("{\"city\":\"Paris\"}").is_empty());
     }
 
     #[test]

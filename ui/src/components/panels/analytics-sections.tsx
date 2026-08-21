@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -11,6 +12,7 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { AGENTS, AGENT_MAP, CAPABILITY_LABELS } from '@/lib/agents'
+import { sessionTotals, type SessionTotal } from '@/lib/spend'
 
 const SESSIONS = [
   { title: 'Q3 report refresh', agent: 'analyst', tokens: '184K', cost: '$1.84', status: 'action-required', dur: '8m' },
@@ -72,8 +74,37 @@ export function ChartCard({
 }
 
 export function SessionsTable() {
+  const [live, setLive] = useState<SessionTotal[] | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    sessionTotals()
+      .then((rows) => {
+        if (mounted && rows.length > 0) setLive(rows)
+      })
+      .catch(() => {
+        /* no shell — keep the demo rows */
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const rows = live ?? []
+  const isLive = live !== null && rows.length > 0
+
   return (
-    <ChartCard title="Recent sessions" subtitle="last 10">
+    <ChartCard
+      title="Per-session cost breakdown"
+      subtitle={isLive ? 'live ledger · cost desc' : 'last 10 (demo)'}
+      right={
+        isLive ? (
+          <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">live</Badge>
+        ) : (
+          <Badge className="bg-orange-500/15 text-[9px] text-orange-300">demo</Badge>
+        )
+      }
+    >
       <Table>
         <TableHeader>
           <TableRow className="border-border hover:bg-transparent">
@@ -86,18 +117,35 @@ export function SessionsTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {SESSIONS.map((s, i) => (
-            <TableRow key={i} className="border-border/50">
-              <TableCell className="py-1.5 text-xs text-foreground">{s.title}</TableCell>
-              <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">{s.agent}</TableCell>
-              <TableCell className="py-1.5 text-right font-mono text-[11px] text-foreground/70">{s.tokens}</TableCell>
-              <TableCell className="py-1.5 text-right font-mono text-[11px] text-orange-300">{s.cost}</TableCell>
-              <TableCell className="py-1.5">
-                <Badge className={cn('text-[9px]', STATUS_TONE[s.status])}>{s.status}</Badge>
-              </TableCell>
-              <TableCell className="py-1.5 text-right font-mono text-[11px] text-muted-foreground">{s.dur}</TableCell>
-            </TableRow>
-          ))}
+          {isLive
+            ? rows.map((s) => (
+                <TableRow key={s.session} className="border-border/50">
+                  <TableCell className="py-1.5 font-mono text-xs text-foreground">{s.session}</TableCell>
+                  <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">—</TableCell>
+                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-foreground/70">
+                    {(s.tokensIn + s.tokensOut).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-orange-300">
+                    ${s.cost.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="py-1.5">
+                    <Badge className={cn('text-[9px]', STATUS_TONE.completed)}>ledger</Badge>
+                  </TableCell>
+                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-muted-foreground">—</TableCell>
+                </TableRow>
+              ))
+            : SESSIONS.map((s, i) => (
+                <TableRow key={i} className="border-border/50">
+                  <TableCell className="py-1.5 text-xs text-foreground">{s.title}</TableCell>
+                  <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">{s.agent}</TableCell>
+                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-foreground/70">{s.tokens}</TableCell>
+                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-orange-300">{s.cost}</TableCell>
+                  <TableCell className="py-1.5">
+                    <Badge className={cn('text-[9px]', STATUS_TONE[s.status])}>{s.status}</Badge>
+                  </TableCell>
+                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-muted-foreground">{s.dur}</TableCell>
+                </TableRow>
+              ))}
         </TableBody>
       </Table>
     </ChartCard>

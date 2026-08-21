@@ -11,11 +11,15 @@ use std::sync::{Arc, Mutex};
 
 mod acp_cmds;
 mod cockpit_cmds;
+mod control;
 mod guard_cmds;
+mod local_cmds;
 mod mcp_cmds;
+mod oauth_cmds;
 mod office_cmds;
 mod replay_cmds;
 mod scheduler_cmds;
+mod storage_cmds;
 mod trajectory_cmds;
 
 use everyaios_core::GuardService;
@@ -50,6 +54,14 @@ pub struct AppState {
     /// F12/J17 (ACP harness bridge): live ACP agent sessions keyed by handle
     /// id — spawned via `acp_launch`, driven via `acp_prompt`/`acp_cancel`.
     pub(crate) acp_sessions: Mutex<std::collections::HashMap<String, acp_cmds::AcpHandle>>,
+    /// H4: Merkle chain of mutations (Excel / ACP-install / undo).
+    pub audit: Mutex<everyaios_audit::merkle::MerkleChain>,
+    /// Durable NDJSON audit log (best-effort; None if the file couldn't open).
+    pub audit_log: Mutex<Option<everyaios_audit::AuditWriter>>,
+    /// File snapshots for agent undo (xlsx + other shell mutations).
+    pub file_undos: Mutex<Vec<control::FileUndo>>,
+    /// J16: whether the device is on battery (heavy storage scans defer).
+    pub battery: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// Monotonic stream-id source for `chat_stream` calls.
@@ -136,6 +148,9 @@ fn chat_stream(
     model: Option<String>,
     surface: Option<String>,
     agent_id: Option<String>,
+    persona_id: Option<String>,
+    soul_md: Option<String>,
+    user_documents: Option<Vec<everyaios_core::UserDocument>>,
 ) -> Result<String, String> {
     // P1.4: dispatch one turn through the coordinator's ConversationEngine.
     // The reply is the streamId; all output arrives as `chat-event` emits
@@ -156,8 +171,12 @@ fn chat_stream(
             // tags the turn with the selected agent for per-agent model
             // surface + prompt persona (coordinator threads it into opts).
             agent_id,
-            provider: provider.unwrap_or_else(|| "nvidia".into()),
-            model: model.unwrap_or_else(|| "meta/llama".into()),
+            // P1.9: `None` lets the coordinator's task→model router pick.
+            provider,
+            model,
+            persona_id,
+            soul_md,
+            user_documents,
         })
         .map_err(|e| e.to_string())?;
     Ok(stream_id)
@@ -218,6 +237,14 @@ fn usage_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, Strin
     Ok(mem.usage_snapshot())
 }
 
+/// P5.9 — per-session cost/token breakdown (the durable `token_usage` ledger,
+/// grouped by session). Feeds the analytics cost table.
+#[tauri::command]
+fn session_totals(state: State<'_, AppState>) -> Result<Vec<everyaios_vault::SessionTotal>, String> {
+    let vault = state.vault.lock().map_err(|e| e.to_string())?;
+    vault.session_totals().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn chat_cancel(state: State<'_, AppState>, stream_id: String) -> Result<(), String> {
     // Abort signal: UI → Rust → sidecar (chat/cancel) → engine/provider.
@@ -228,15 +255,135 @@ fn chat_cancel(state: State<'_, AppState>, stream_id: String) -> Result<(), Stri
     relay.cancel(&stream_id).map_err(|e| e.to_string())
 }
 
+/// S0.5: re-run a failed tool through Guard-2 exec→commit (same ticket path).
+#[tauri::command]
+fn chat_tool_retry(
+    state: State<'_, AppState>,
+    session_id: String,
+    stream_id: String,
+    tool_id: String,
+    args: serde_json::Value,
+    agent_id: Option<String>,
+) -> Result<(), String> {
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected".to_string())?;
+    relay
+        .retry_tool(
+            &session_id,
+            &stream_id,
+            &tool_id,
+            args,
+            agent_id.as_deref(),
+        )
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn probe_vault() -> Result<String, String> {
     // Security (P0.2 stub): the path is NOT webview-controlled — it is pinned
     // to the data dir. Arbitrary path handling arrives with P1.1 key
     // management (vault path comes from config, never from the frontend).
     let path = everyaios_core::default_data_dir().join("vault.db");
-    let key = everyaios_core::default_vault_key();
-    let vault = everyaios_vault::Vault::open(&path, &key).map_err(|e| e.to_string())?;
+    let resolved = everyaios_core::resolve_vault_key(&everyaios_core::default_data_dir())
+        .map_err(|e| e.to_string())?;
+    let vault = everyaios_vault::Vault::open(&path, &resolved.key).map_err(|e| e.to_string())?;
     Ok(vault.status())
+}
+
+#[tauri::command]
+fn vault_key_status() -> Result<serde_json::Value, String> {
+    let dir = everyaios_core::default_data_dir();
+    let mode = everyaios_core::gate_mode(&dir);
+    let gate = everyaios_core::needs_passphrase_gate(&dir);
+    match everyaios_core::resolve_vault_key(&dir) {
+        Ok(r) => Ok(serde_json::json!({
+            "ok": true,
+            "origin": r.origin,
+            "path": r.path,
+            "needsSetup": gate,
+            "mode": if r.origin == everyaios_core::VaultKeyOrigin::Generated { "wrap" } else { mode },
+            "locked": false,
+        })),
+        Err(everyaios_core::VaultKeyError::NeedsSetup) => Ok(serde_json::json!({
+            "ok": false,
+            "needsSetup": true,
+            "mode": mode,
+            "locked": mode == "unlock",
+        })),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn reopen_disk_vault(state: &AppState, key: &str) -> Result<String, String> {
+    let path = everyaios_core::default_data_dir().join("vault.db");
+    let vault = Vault::open(&path, key).map_err(|e| e.to_string())?;
+    let status = vault.status();
+    *state.vault.lock().map_err(|e| e.to_string())? = vault;
+    Ok(status)
+}
+
+#[tauri::command]
+fn vault_setup(state: State<'_, AppState>, passphrase: String) -> Result<serde_json::Value, String> {
+    let r = everyaios_core::setup_vault_passphrase(
+        &everyaios_core::default_data_dir(),
+        &passphrase,
+    )
+    .map_err(|e| e.to_string())?;
+    let status = reopen_disk_vault(&state, &r.key)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "origin": r.origin,
+        "path": r.path,
+        "needsSetup": false,
+        "status": status,
+    }))
+}
+
+#[tauri::command]
+fn vault_unlock(state: State<'_, AppState>, passphrase: String) -> Result<serde_json::Value, String> {
+    let r = everyaios_core::unlock_vault_passphrase(
+        &everyaios_core::default_data_dir(),
+        &passphrase,
+    )
+    .map_err(|e| e.to_string())?;
+    let status = reopen_disk_vault(&state, &r.key)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "origin": r.origin,
+        "needsSetup": false,
+        "status": status,
+    }))
+}
+
+#[tauri::command]
+fn session_list(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let vault = state.vault.lock().map_err(|e| e.to_string())?;
+    let rows = vault.list_ui_sessions().map_err(|e| e.to_string())?;
+    let sessions: Vec<serde_json::Value> = rows
+        .into_iter()
+        .filter_map(|(_, payload)| serde_json::from_str(&payload).ok())
+        .collect();
+    Ok(serde_json::json!({ "sessions": sessions }))
+}
+
+#[tauri::command]
+fn session_put(state: State<'_, AppState>, session: serde_json::Value) -> Result<(), String> {
+    let id = session
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or("session id required")?
+        .to_string();
+    let payload = serde_json::to_string(&session).map_err(|e| e.to_string())?;
+    let vault = state.vault.lock().map_err(|e| e.to_string())?;
+    vault.put_ui_session(&id, &payload).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn session_delete(state: State<'_, AppState>, session_id: String) -> Result<(), String> {
+    let vault = state.vault.lock().map_err(|e| e.to_string())?;
+    vault.delete_ui_session(&session_id).map_err(|e| e.to_string())
 }
 
 /// Locate the coordinator sidecar binary. `EVERYAIOS_COORDINATOR_BIN` wins;
@@ -291,12 +438,75 @@ fn pre_spawn_coordinator(app: AppHandle) {
     });
 }
 
-/// J16: bind the UNIX-domain socket control channel (zero port collisions —
-/// no TCP port is ever allocated for local IPC). Serves a minimal framed
-/// JSON-RPC responder on a background thread; the full dispatcher arrives with
-/// the coordinator integration.
+/// P2.11 (E16) — spawn the WebMCP HTTP server on a loopback port so browser
+/// sessions can serve MCP tools (`tools/list` + `tools/call`) to any local
+/// HTTP client. The registry mirrors the 37-tool browser catalog; tool calls
+/// fail honestly until a live browser session is attached (the executor is a
+/// "not attached" stub — the engine itself lives in `everyaios-browser`).
+fn spawn_webmcp_server() {
+    use everyaios_browser::webmcp::{WebMcpExecutor, WebMcpRegistry, WebMcpResult, WebMcpTool};
+    use everyaios_mcp::ArgKind;
+    use serde_json::json;
+
+    let mut registry = WebMcpRegistry::new();
+    for def in everyaios_mcp::BROWSER_TOOLS {
+        let mut properties = serde_json::Map::new();
+        let mut required = Vec::new();
+        for a in def.args {
+            let ty = match a.kind {
+                ArgKind::String => "string",
+                ArgKind::Number => "number",
+                ArgKind::Bool => "boolean",
+                ArgKind::StringArray => "array",
+                ArgKind::Object => "object",
+            };
+            let mut spec = json!({ "type": ty, "description": a.description });
+            if a.kind == ArgKind::StringArray {
+                spec["items"] = json!({ "type": "string" });
+            }
+            properties.insert(a.name.to_string(), spec);
+            if a.required {
+                required.push(serde_json::Value::String(a.name.to_string()));
+            }
+        }
+        registry.register(WebMcpTool {
+            name: def.name.to_string(),
+            description: def.description.to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            }),
+        });
+    }
+
+    struct NotAttached;
+    impl WebMcpExecutor for NotAttached {
+        fn execute(&self, tool: &WebMcpTool, _input: serde_json::Value) -> WebMcpResult {
+            WebMcpResult::err(format!(
+                "browser session not attached — {} is catalog-only until a CDP session is wired",
+                tool.name
+            ))
+        }
+    }
+
+    match everyaios_browser::webmcp_http::McpHttpServer::serve(
+        "127.0.0.1:0",
+        registry,
+        std::sync::Arc::new(NotAttached),
+    ) {
+        Ok(server) => match server.local_addr() {
+            Ok(addr) => eprintln!("everyaios-desktop: WebMCP HTTP listening on http://{addr}/mcp (token {})", server.token()),
+            Err(e) => eprintln!("everyaios-desktop: WebMCP addr lookup failed: {e}"),
+        },
+        Err(e) => eprintln!("everyaios-desktop: WebMCP server spawn failed (continuing): {e}"),
+    }
+}
+
+/// J16: bind the UNIX-domain socket control channel and dispatch
+/// `agent/stop` / `agent/undo` / `agent/interrupt-response`.
 #[cfg(unix)]
-fn serve_unix_control_channel() {
+fn serve_unix_control_channel(app: AppHandle) {
     let cfg = everyaios_core::Config::load().unwrap_or_default();
     let sock = cfg.resolved_socket_path();
     let server = match everyaios_ipc::UnixFrameServer::bind(&sock) {
@@ -309,13 +519,17 @@ fn serve_unix_control_channel() {
     std::thread::spawn(move || loop {
         match server.accept() {
             Ok(stream) => {
-                let _ = server.serve_connection(stream, |payload| {
+                let app = app.clone();
+                let _ = server.serve_connection(stream, move |payload| {
                     let parsed: serde_json::Value =
                         serde_json::from_slice(&payload).unwrap_or_default();
+                    let method = parsed.get("method").and_then(|m| m.as_str()).unwrap_or("");
+                    let params = parsed.get("params").cloned().unwrap_or(serde_json::json!({}));
+                    let result = control::dispatch(&app, method, &params);
                     let reply = serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": parsed.get("id"),
-                        "result": { "transport": "unix-socket", "ok": true },
+                        "result": result,
                     });
                     Some(serde_json::to_vec(&reply).unwrap_or_default())
                 });
@@ -334,17 +548,23 @@ pub fn run() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let boot_report = everyaios_core::boot(&args).unwrap_or_else(|e| format!("boot failed: {e}"));
     let guard = compiled_guard().clone();
-    let vault = everyaios_vault::Vault::open(
-        &everyaios_core::default_data_dir().join("vault.db"),
-        &everyaios_core::default_vault_key(),
-    )
-    .unwrap_or_else(|e| {
-        // Boot already reported the failure; keep a fresh in-memory vault so
-        // the shell stays responsive (nothing persists).
-        eprintln!("everyaios-desktop: vault open failed (using in-memory): {e}");
-        Vault::open_in_memory(&everyaios_core::default_vault_key()).expect("in-memory vault")
-    });
+    let data_dir = everyaios_core::default_data_dir();
+    let resolved = everyaios_core::resolve_vault_key(&data_dir);
+    let vault = match resolved {
+        Ok(r) => Vault::open(&data_dir.join("vault.db"), &r.key).unwrap_or_else(|e| {
+            eprintln!("everyaios-desktop: vault open failed (using in-memory): {e}");
+            Vault::open_in_memory(&r.key).unwrap_or_else(|_| {
+                Vault::open_in_memory(&everyaios_core::default_vault_key())
+                    .expect("in-memory vault")
+            })
+        }),
+        Err(e) => {
+            eprintln!("everyaios-desktop: vault key resolve failed (using in-memory): {e}");
+            Vault::open_in_memory(&everyaios_core::default_vault_key()).expect("in-memory vault")
+        }
+    };
     let vault = Arc::new(Mutex::new(vault));
+    let audit_log = everyaios_audit::AuditWriter::open(&data_dir.join("audit.ndjson")).ok();
 
     tauri::Builder::default()
         .manage(AppState {
@@ -356,17 +576,38 @@ pub fn run() {
             cockpit: Arc::new(Mutex::new(Default::default())),
             guard_service: Arc::new(Mutex::new(GuardService::new())),
             acp_sessions: Mutex::new(std::collections::HashMap::new()),
+            audit: Mutex::new(everyaios_audit::merkle::MerkleChain::new()),
+            audit_log: Mutex::new(audit_log),
+            file_undos: Mutex::new(Vec::new()),
+            battery: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
         .invoke_handler(tauri::generate_handler![
             version,
             core_boot_report,
             scan_text,
             probe_vault,
+            vault_key_status,
+            vault_setup,
+            vault_unlock,
+            session_list,
+            session_put,
+            session_delete,
+            oauth_cmds::oauth_status,
+            oauth_cmds::oauth_accounts,
+            oauth_cmds::oauth_start_pkce,
+            oauth_cmds::oauth_start_device,
+            oauth_cmds::oauth_poll_device,
+            oauth_cmds::oauth_revoke,
+            local_cmds::local_models,
+            local_cmds::local_ensure,
+            local_cmds::local_hardware,
             chat_stream,
             chat_cancel,
+            chat_tool_retry,
             plan_execute,
             plan_respond,
             usage_snapshot,
+            session_totals,
             replay_cmds::replay_sessions,
             replay_cmds::replay_timeline,
             replay_cmds::replay_screenshot,
@@ -418,13 +659,20 @@ pub fn run() {
             scheduler_cmds::scheduler_delete,
             scheduler_cmds::scheduler_enable,
             scheduler_cmds::scheduler_pause,
+            scheduler_cmds::scheduler_pause_session,
             scheduler_cmds::scheduler_resume,
             scheduler_cmds::scheduler_run_now,
             scheduler_cmds::scheduler_battery,
             scheduler_cmds::scheduler_fire_event,
             scheduler_cmds::scheduler_fire_webhook,
             scheduler_cmds::scheduler_nudges,
-            scheduler_cmds::scheduler_nudge
+            scheduler_cmds::scheduler_nudge,
+            storage_cmds::storage_health,
+            storage_cmds::storage_scan,
+            storage_cmds::storage_large_files,
+            storage_cmds::storage_duplicates,
+            storage_cmds::storage_cleanup_proposals,
+            storage_cmds::storage_battery
         ])
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray
@@ -435,7 +683,9 @@ pub fn run() {
             // J16: pre-spawn the coordinator + bind the unix control socket.
             pre_spawn_coordinator(app.handle().clone());
             #[cfg(unix)]
-            serve_unix_control_channel();
+            serve_unix_control_channel(app.handle().clone());
+            // P2.11 (E16): serve the WebMCP tool catalog over loopback HTTP.
+            spawn_webmcp_server();
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn registry_exposes_agent_configs() {
-        use crate::frontmatter::{PermissionMode, AgentConfig};
+        use crate::frontmatter::{AgentConfig, PermissionMode};
         let mut reg = BlueprintRegistry::new();
         reg.insert(BlueprintDoc {
             agent_config: Some(AgentConfig {

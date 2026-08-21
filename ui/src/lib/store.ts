@@ -37,6 +37,17 @@ export type SessionStatus =
   | 'paused'
   | 'scheduled'
 
+export interface ToolCallRecord {
+  id: string
+  toolId: string
+  args?: Record<string, unknown>
+  result?: unknown
+  status: 'running' | 'done' | 'failed'
+  risk?: string
+  error?: string
+  progress?: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -44,6 +55,7 @@ export interface ChatMessage {
   timestamp: string
   artifacts?: Artifact[]
   steps?: ProgressStep[]
+  toolCalls?: ToolCallRecord[]
   mcq?: MCQInterrupt
   reasoning?: string[]
   pinned?: boolean
@@ -71,10 +83,19 @@ export interface MCQInterrupt {
   id: string
   title: string
   description: string
-  kind: 'diff' | 'permission' | 'mcq' | 'budget'
+  kind: 'diff' | 'permission' | 'mcq' | 'budget' | 'plan'
   diff?: { file: string; added: string[]; removed: string[] }[]
   options?: { label: string; value: string }[]
   budget?: { used: number; cap: number }
+  /** Guard-2 permission cards must echo this nonce when approving/rejecting. */
+  approvalNonce?: string
+}
+
+export interface StreamStats {
+  tokensPerSec: number
+  ctxPct: number
+  activeKey?: string
+  tokensThisTurn: number
 }
 
 export interface Session {
@@ -86,6 +107,7 @@ export interface Session {
   pinned?: boolean
   messages: ChatMessage[]
   children?: Session[]
+  parentId?: string
   agent?: string
   folder?: string
   spent?: number
@@ -433,6 +455,26 @@ export interface LiveBudget {
 // The assistant message currently being streamed (module-level, since zustand
 // actions can't hold instance state).
 let activeStreamMsgId: string | null = null
+let streamT0 = 0
+let streamTok = 0
+
+function patchActiveAssistant(
+  set: (partial: object | ((s: { sessions: Session[]; activeSessionId: string }) => object)) => void,
+  fn: (m: ChatMessage) => ChatMessage,
+) {
+  set((s) => ({
+    sessions: s.sessions.map((x) => {
+      if (x.id !== s.activeSessionId) return x
+      const last = x.messages[x.messages.length - 1]
+      const targetId = activeStreamMsgId ?? (last?.role === 'assistant' ? last.id : undefined)
+      if (!targetId) return x
+      return {
+        ...x,
+        messages: x.messages.map((m) => (m.id === targetId ? fn(m) : m)),
+      }
+    }),
+  }))
+}
 
 // Progressive-disclosure preference (B9/P31) persisted to localStorage.
 const POWER_MODE_KEY = 'everyaios.settings.ui.powerMode'
@@ -461,6 +503,10 @@ interface AppState {
   activeSessionId: string
   setActiveSession: (id: string) => void
   newSession: () => void
+  deleteSession: (id: string) => Promise<void>
+  monitorBadge: { count: number; last?: string; stopped: boolean }
+  pushMonitor: (ev: { notified: boolean; stopped: boolean; current: string; jobId?: string }) => void
+  clearMonitorBadge: () => void
 
   // Active view (right viewport)
   activeView: ViewId
@@ -505,6 +551,17 @@ interface AppState {
   setSelectedAgent: (id: string) => void
   selectedModelId: string
   setSelectedModel: (id: string) => void
+  personaId: string
+  setPersonaId: (id: string) => void
+  soulId: string
+  setSoulId: (id: string) => void
+  /** `ollama` | `llamafile` when the picker selected a local model. */
+  localRuntime?: string
+  localCtxWindow?: number
+  setLocalRuntime: (runtime?: string, ctx?: number) => void
+  streamStats: StreamStats
+  noteStreamTick: (tokenCount: number) => void
+  forkFromMessage: (messageId: string) => void
 
   // Auto-route per task kind — when true, agent selection follows routing table
   autoRoute: boolean
@@ -543,11 +600,25 @@ interface AppState {
   streamStart: () => void
   streamAppend: (text: string, done: boolean) => void
   streamFail: (msg: string) => void
+  streamBudgetKill: (msg: string) => void
   streamStep: (label: string) => void
+  streamToolCall: (toolId: string, args?: Record<string, unknown>, risk?: string) => void
+  streamToolResult: (toolId: string, result?: unknown, error?: string) => void
+  streamToolProgress: (toolId: string, progress: string) => void
+  retryToolCall: (recordId: string) => Promise<void>
 
   // Guard-2 tickets (bridge) — live approval cards in the transcript
   pushMcq: (mcq: MCQInterrupt, sessionId?: string) => void
   respondMcq: (id: string, choice: string) => void
+
+  /** Live ACP handles keyed by catalog agent id. */
+  acpHandles: Record<string, string>
+  setAcpHandle: (agentId: string, handle: string) => void
+
+  pendingPlan?: { planId: string; tasks: { id: string; goal: string; dependsOn?: string[] }[] }
+  setPendingPlan: (
+    p: { planId: string; tasks: { id: string; goal: string; dependsOn?: string[] }[] } | undefined,
+  ) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -571,6 +642,41 @@ export const useAppStore = create<AppState>((set, get) => ({
       centerScreen: 'chat',
       composerValue: '',
     }))
+  },
+  monitorBadge: { count: 0, stopped: false },
+  pushMonitor: (ev) => {
+    set((s) => ({
+      monitorBadge: {
+        count: ev.notified ? s.monitorBadge.count + 1 : s.monitorBadge.count,
+        last: ev.current,
+        stopped: ev.stopped || s.monitorBadge.stopped,
+      },
+    }))
+    if (ev.notified) {
+      get().notify(
+        ev.stopped ? `Monitor stopped · ${ev.current}` : `Monitor · ${ev.current}`,
+      )
+    }
+  },
+  clearMonitorBadge: () => set({ monitorBadge: { count: 0, stopped: false } }),
+  deleteSession: async (id) => {
+    const st = get()
+    const remaining = st.sessions.filter((x) => x.id !== id)
+    const nextActive =
+      st.activeSessionId === id ? (remaining[0]?.id ?? st.activeSessionId) : st.activeSessionId
+    set({
+      sessions: remaining,
+      activeSessionId: nextActive,
+    })
+    if (inTauri()) {
+      try {
+        const { schedulerPauseSession, invoke } = await import('./tauri')
+        await schedulerPauseSession(id)
+        await invoke('session_delete', { sessionId: id })
+      } catch {
+        /* scheduler / vault may be unwired in preview */
+      }
+    }
   },
 
   activeView: 'office-xlsx',
@@ -625,8 +731,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   composerValue: '',
   setComposerValue: (v) => set({ composerValue: v }),
 
-  // Default to Claude Code driving Claude Sonnet 4.5
-  selectedAgentId: 'claude-code',
+  // Default = inbuilt EveryAIOS (not an ACP harness).
+  selectedAgentId: 'everyaios-native',
   setSelectedAgent: (id) => {
     const next = AGENT_MAP[id]
     if (!next) return
@@ -640,8 +746,59 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     })
   },
-  selectedModelId: 'claude-sonnet-4.5',
+  selectedModelId: getDefaultModelForAgent('everyaios-native'),
   setSelectedModel: (id) => set({ selectedModelId: id }),
+  personaId: 'straight-shooter',
+  setPersonaId: (id) => set({ personaId: id }),
+  soulId: 'default',
+  setSoulId: (id) => set({ soulId: id }),
+  localRuntime: undefined,
+  localCtxWindow: undefined,
+  setLocalRuntime: (runtime, ctx) => set({ localRuntime: runtime, localCtxWindow: ctx }),
+  streamStats: { tokensPerSec: 0, ctxPct: 0, tokensThisTurn: 0 },
+  noteStreamTick: (tokenCount) => {
+    const now = Date.now()
+    if (streamT0 === 0) streamT0 = now
+    streamTok += tokenCount
+    const elapsed = Math.max(0.25, (now - streamT0) / 1000)
+    set((s) => {
+      const sess = s.sessions.find((x) => x.id === s.activeSessionId)
+      const used = (sess?.tokens ?? 0) + streamTok
+      const ctxWindow = 128_000
+      return {
+        streamStats: {
+          tokensPerSec: streamTok / elapsed,
+          tokensThisTurn: streamTok,
+          ctxPct: Math.min(100, Math.round((used / ctxWindow) * 100)),
+          activeKey: s.streamStats.activeKey,
+        },
+      }
+    })
+  },
+  forkFromMessage: (messageId) => {
+    const s = get()
+    const cur = s.sessions.find((x) => x.id === s.activeSessionId)
+    if (!cur) return
+    const idx = cur.messages.findIndex((m) => m.id === messageId)
+    if (idx < 0) return
+    const id = `s-${Date.now()}`
+    const forked: Session = {
+      ...cur,
+      id,
+      parentId: cur.id,
+      title: `${cur.title} ⑂`,
+      status: 'idle',
+      updatedAt: new Date().toISOString(),
+      messages: cur.messages.slice(0, idx + 1).map((m) => ({ ...m })),
+      children: undefined,
+    }
+    set({
+      sessions: [forked, ...s.sessions],
+      activeSessionId: id,
+      centerScreen: 'chat',
+    })
+    get().notify(`Forked from message — history truncated after that turn`)
+  },
 
   autoRoute: true,
   setAutoRoute: (v) => set({ autoRoute: v }),
@@ -687,8 +844,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
   streamStart: () => {
+    if (activeStreamMsgId) return
     const id = `a-${Date.now()}`
     activeStreamMsgId = id
+    streamT0 = Date.now()
+    streamTok = 0
     const msg: ChatMessage = {
       id,
       role: 'assistant',
@@ -718,7 +878,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }),
     }))
-    if (done) activeStreamMsgId = null
+    if (done) {
+      activeStreamMsgId = null
+      streamT0 = 0
+    }
   },
   streamFail: (msg) => {
     const msgId = activeStreamMsgId
@@ -737,6 +900,110 @@ export const useAppStore = create<AppState>((set, get) => ({
       }),
     }))
     activeStreamMsgId = null
+  },
+  streamBudgetKill: (msg) => {
+    const msgId = activeStreamMsgId
+    set((s) => ({
+      sessions: s.sessions.map((x) => {
+        if (x.id !== s.activeSessionId) return x
+        return {
+          ...x,
+          status: 'failed',
+          messages: msgId
+            ? x.messages.map((m) =>
+                m.id === msgId ? { ...m, content: `⛔ ${msg}` } : m,
+              )
+            : x.messages,
+        }
+      }),
+    }))
+    activeStreamMsgId = null
+  },
+  streamToolCall: (toolId, args, risk) => {
+    if (!activeStreamMsgId) get().streamStart()
+    const rec: ToolCallRecord = {
+      id: `tc-${Date.now()}-${toolId}`,
+      toolId,
+      status: 'running',
+      ...(args ? { args } : {}),
+      ...(risk ? { risk } : {}),
+    }
+    patchActiveAssistant(set, (m) => ({
+      ...m,
+      toolCalls: [...(m.toolCalls ?? []), rec],
+    }))
+  },
+  streamToolResult: (toolId, result, error) => {
+    patchActiveAssistant(set, (m) => {
+      const list = [...(m.toolCalls ?? [])]
+      const idx = [...list].reverse().findIndex((t) => t.toolId === toolId && t.status === 'running')
+      const real = idx === -1 ? -1 : list.length - 1 - idx
+      if (real >= 0) {
+        list[real] = {
+          ...list[real]!,
+          result,
+          error,
+          status: error ? 'failed' : 'done',
+        }
+      } else {
+        list.push({
+          id: `tc-${Date.now()}-${toolId}`,
+          toolId,
+          result,
+          error,
+          status: error ? 'failed' : 'done',
+        })
+      }
+      return { ...m, toolCalls: list }
+    })
+  },
+  streamToolProgress: (toolId, progress) => {
+    patchActiveAssistant(set, (m) => {
+      const list = (m.toolCalls ?? []).map((t) =>
+        t.toolId === toolId && t.status === 'running' ? { ...t, progress } : t,
+      )
+      return { ...m, toolCalls: list }
+    })
+  },
+  retryToolCall: async (recordId) => {
+    const st = get()
+    const session = st.sessions.find((x) => x.id === st.activeSessionId)
+    const rec = session?.messages.flatMap((m) => m.toolCalls ?? []).find((t) => t.id === recordId)
+    if (!rec) return
+    patchActiveAssistant(set, (m) => ({
+      ...m,
+      toolCalls: (m.toolCalls ?? []).map((t) =>
+        t.id === recordId
+          ? { ...t, status: 'running' as const, error: undefined, progress: 'retrying…' }
+          : t,
+      ),
+    }))
+    if (!inTauri()) {
+      st.notify('Preview mode — retry needs the live executor')
+      return
+    }
+    try {
+      const { chatToolRetry } = await import('./tauri')
+      await chatToolRetry({
+        sessionId: st.activeSessionId,
+        streamId: activeStreamMsgId ?? recordId,
+        toolId: rec.toolId,
+        args: rec.args ?? {},
+      })
+    } catch (err) {
+      patchActiveAssistant(set, (m) => ({
+        ...m,
+        toolCalls: (m.toolCalls ?? []).map((t) =>
+          t.id === recordId
+            ? {
+                ...t,
+                status: 'failed' as const,
+                error: err instanceof Error ? err.message : String(err),
+              }
+            : t,
+        ),
+      }))
+    }
   },
   streamStep: (label) => {
     set((s) => {
@@ -813,12 +1080,31 @@ export const useAppStore = create<AppState>((set, get) => ({
           const kind = get().sessions
             .flatMap((s) => s.messages)
             .find((m) => m.mcq?.id === id)?.mcq?.kind
-          if (kind === 'mcq') {
+          if (kind === 'plan') {
+            const pending = get().pendingPlan
+            if (choice === 'approve' && pending) {
+              const { planExecute } = await import('./tauri')
+              await planExecute({
+                sessionId: get().activeSessionId,
+                planId: pending.planId,
+                tasks: pending.tasks,
+              })
+            }
+            get().setPendingPlan(undefined)
+          } else if (kind === 'mcq') {
             const { planRespond } = await import('./tauri')
             await planRespond(id, choice)
           } else {
             const { guardRespond } = await import('./guard')
-            await guardRespond(id, choice === 'approve' ? 'approve' : 'reject')
+            const permission = get().sessions
+              .flatMap((s) => s.messages)
+              .find((m) => m.mcq?.id === id)?.mcq
+            if (!permission?.approvalNonce) return
+            await guardRespond(
+              id,
+              choice === 'approve' ? 'approve' : 'reject',
+              permission.approvalNonce,
+            )
           }
         } catch {
           /* keep card state */
@@ -836,4 +1122,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
     get().notify(`Guard-2: ${choice === 'approve' ? 'approved' : 'rejected'} #${id.slice(0, 8)}`)
   },
+
+  acpHandles: {},
+  setAcpHandle: (agentId, handle) =>
+    set((s) => ({ acpHandles: { ...s.acpHandles, [agentId]: handle } })),
+
+  pendingPlan: undefined,
+  setPendingPlan: (p) => set({ pendingPlan: p }),
 }))
+
+/** Vault-backed persist (Codex JSONL / Claude transcripts analog). Preview
+ * keeps mockSessions; the shell loads via `session_list` in initBridge. */
+if (typeof window !== 'undefined') {
+  let persistTimer: ReturnType<typeof setTimeout> | undefined
+  useAppStore.subscribe((s) => {
+    if (!inTauri()) return
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(() => {
+      void (async () => {
+        try {
+          const { invoke } = await import('./tauri')
+          for (const sess of s.sessions) {
+            await invoke('session_put', { session: sess })
+          }
+        } catch {
+          /* vault locked / sidecar */
+        }
+      })()
+    }, 400)
+  })
+}

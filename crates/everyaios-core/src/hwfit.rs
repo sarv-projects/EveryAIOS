@@ -53,9 +53,9 @@ pub struct HardwareProfile {
 }
 
 /// One local model candidate to score.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LocalModelCandidate {
-    pub name: &'static str,
+    pub name: String,
     /// On-disk (quantized) size in bytes.
     pub size_bytes: u64,
     /// Effective context window (tokens).
@@ -132,10 +132,7 @@ pub fn score_model(candidate: &LocalModelCandidate, hw: &HardwareProfile) -> Mod
 
 /// Rank candidate models best-first (fits first, then combined score).
 pub fn recommend(candidates: &[LocalModelCandidate], hw: &HardwareProfile) -> Vec<ModelFit> {
-    let mut out: Vec<ModelFit> = candidates
-        .iter()
-        .map(|c| score_model(c, hw))
-        .collect();
+    let mut out: Vec<ModelFit> = candidates.iter().map(|c| score_model(c, hw)).collect();
     out.sort_by(|a, b| {
         b.fits
             .cmp(&a.fits)
@@ -226,17 +223,17 @@ mod tests {
     fn models() -> Vec<LocalModelCandidate> {
         vec![
             LocalModelCandidate {
-                name: "qwen2.5:0.5b",
+                name: "qwen2.5:0.5b".into(),
                 size_bytes: 397 * 1024 * 1024,
                 context_window: 16_384,
             },
             LocalModelCandidate {
-                name: "muse-glimmer-30b",
+                name: "muse-glimmer-30b".into(),
                 size_bytes: 18_000 * 1024 * 1024, // ~18 GiB quantized 30B
                 context_window: 120_000,
             },
             LocalModelCandidate {
-                name: "tiny-ctx",
+                name: "tiny-ctx".into(),
                 size_bytes: 200 * 1024 * 1024,
                 context_window: 4_096,
             },
@@ -269,16 +266,21 @@ mod tests {
 
     #[test]
     fn gpu_class_affects_speed() {
-        let m = models()[0];
-        let gpu = score_model(&m, &big_machine());
+        let m = &models()[0];
+        let gpu = score_model(m, &big_machine());
         let cpu = score_model(
-            &m,
+            m,
             &HardwareProfile {
                 gpu: GpuClass::CpuOnly,
                 ..big_machine()
             },
         );
-        assert!(gpu.speed > cpu.speed, "gpu {} vs cpu {}", gpu.speed, cpu.speed);
+        assert!(
+            gpu.speed > cpu.speed,
+            "gpu {} vs cpu {}",
+            gpu.speed,
+            cpu.speed
+        );
     }
 
     #[test]

@@ -27,7 +27,9 @@ export interface GuardTicket {
   operation: string;
   paths: string[];
   risk: string;
+  riskTier?: string;
   approvalSource: string;
+  approvalNonce: string;
   expiresAtMs: number;
   decision?: GuardDecision;
 }
@@ -62,9 +64,10 @@ export async function guardTickets(): Promise<GuardTicket[]> {
 export async function guardRespond(
   ticketId: string,
   action: "approve" | "reject",
+  approvalNonce: string,
 ): Promise<boolean> {
   if (!inTauri()) return true;
-  return invoke<boolean>("guard_respond", { ticketId, action });
+  return invoke<boolean>("guard_respond", { ticketId, action, approvalNonce });
 }
 
 /** The append-only approve/reject receipts. */
@@ -102,7 +105,9 @@ function demoTickets(): GuardTicket[] {
       operation: "write",
       paths: ["/workspace/Q3-Budget.xlsx"],
       risk: "high",
+      riskTier: "R3",
       approvalSource: "policy",
+      approvalNonce: "demo-approval-nonce",
       expiresAtMs: Date.now() + 60_000,
       decision: {
         goal: "Update the Q3 budget with the 14 extracted receipts",
@@ -115,6 +120,31 @@ function demoTickets(): GuardTicket[] {
         networkDestinations: [],
         webAction: null,
         confidence: 0.93,
+      },
+    },
+    {
+      ticketId: "tkt-demo-2",
+      agentId: "agent-researcher",
+      sessionId: "sess-q3-budget",
+      toolId: "browser.navigate",
+      operation: "web_action",
+      paths: ["https://invoices.example.com/pay"],
+      risk: "high",
+      riskTier: "R3",
+      approvalSource: "policy",
+      approvalNonce: "demo-approval-nonce-2",
+      expiresAtMs: Date.now() + 60_000,
+      decision: {
+        goal: "Submit the approved invoice payment on the vendor portal",
+        proposedDiff: "POST https://invoices.example.com/pay (invoice #1042)",
+        risk: "high",
+        affectedPaths: ["https://invoices.example.com/pay"],
+        scriptLines: [],
+        executionTarget: "browser (owned tab)",
+        envVars: [],
+        networkDestinations: ["invoices.example.com"],
+        webAction: "payment",
+        confidence: 0.91,
       },
     },
   ];

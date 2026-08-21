@@ -116,10 +116,7 @@ pub fn extract_tags(content: &str, file: &str) -> Vec<Tag> {
         } else {
             continue;
         };
-        let line = content[..cap.get(0).unwrap().start()]
-            .matches('\n')
-            .count() as u32
-            + 1;
+        let line = content[..cap.get(0).unwrap().start()].matches('\n').count() as u32 + 1;
         tags.push(Tag {
             symbol,
             kind,
@@ -214,7 +211,10 @@ pub fn rank_tags<'a>(query: &str, map: &'a RepoMap, scores: &HashMap<String, f64
         .iter()
         .map(|t| {
             let sym = t.symbol.to_lowercase();
-            let match_score = terms.iter().filter(|term| sym.contains(term.as_str())).count() as f64;
+            let match_score = terms
+                .iter()
+                .filter(|term| sym.contains(term.as_str()))
+                .count() as f64;
             let centrality = scores.get(&t.symbol).copied().unwrap_or(0.0);
             (t, match_score * 2.0 + centrality)
         })
@@ -248,7 +248,8 @@ pub fn fit_budget<'a>(ranked: &[&'a Tag], max_tokens: usize) -> Vec<&'a Tag> {
 mod tests {
     use super::*;
 
-    const RUST: &str = "fn main() { helper(); }\npub fn helper() {}\nstruct Config {}\nconst LIMIT: u32 = 5;";
+    const RUST: &str =
+        "fn main() { helper(); }\npub fn helper() {}\nstruct Config {}\nconst LIMIT: u32 = 5;";
 
     #[test]
     fn extracts_function_type_and_const_tags() {
@@ -295,7 +296,10 @@ mod tests {
         let map = build_repo_map(&[("src/main.rs".into(), RUST.into())]);
         let ranked: Vec<&Tag> = map.tags.iter().collect();
         let fitted = fit_budget(&ranked, 20); // ~80 chars budget
-        let cost: usize = fitted.iter().map(|t| t.symbol.len() + t.file.len() + 8).sum();
+        let cost: usize = fitted
+            .iter()
+            .map(|t| t.symbol.len() + t.file.len() + 8)
+            .sum();
         assert!(cost <= 80);
     }
 
@@ -308,10 +312,8 @@ mod tests {
     #[test]
     fn composite_source_unions_and_dedupes() {
         // Two lexical passes over the same content: identical tags dedup.
-        let composite = CompositeTagSource::new(vec![
-            Box::new(LexicalTagSource),
-            Box::new(LexicalTagSource),
-        ]);
+        let composite =
+            CompositeTagSource::new(vec![Box::new(LexicalTagSource), Box::new(LexicalTagSource)]);
         let tags = composite.extract(RUST, "src/main.rs");
         let single = extract_tags(RUST, "src/main.rs");
         assert_eq!(tags.len(), single.len());

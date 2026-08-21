@@ -169,7 +169,10 @@ mod tests {
 
     #[test]
     fn web_action_kind_roundtrips() {
-        assert_eq!(WebActionKind::parse("checkout"), Some(WebActionKind::Checkout));
+        assert_eq!(
+            WebActionKind::parse("checkout"),
+            Some(WebActionKind::Checkout)
+        );
         assert_eq!(WebActionKind::parse("nope"), None);
         assert_eq!(WebActionKind::Payment.as_str(), "payment");
     }

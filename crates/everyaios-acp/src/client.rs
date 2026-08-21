@@ -11,6 +11,7 @@
 use crate::frame::{decode_messages, encode_message};
 use crate::messages::*;
 use serde_json::{json, Value};
+use std::collections::VecDeque;
 use std::io::{self, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use thiserror::Error;
@@ -68,6 +69,11 @@ pub struct ProcessTransport {
     stdin: ChildStdin,
     reader: BufReader<ChildStdout>,
     buf: Vec<u8>,
+    /// Decoded messages not yet returned to the caller. `decode_messages` can
+    /// yield several complete frames from one read; they must be queued, not
+    /// dropped, or a fast agent's result can be lost and the caller will block
+    /// forever waiting for it.
+    pending: VecDeque<String>,
 }
 
 impl ProcessTransport {
@@ -93,6 +99,7 @@ impl ProcessTransport {
             stdin,
             reader: BufReader::new(stdout),
             buf: Vec::new(),
+            pending: VecDeque::new(),
         })
     }
 }
@@ -105,14 +112,29 @@ impl AcpTransport for ProcessTransport {
 
     fn recv(&mut self) -> io::Result<Option<String>> {
         loop {
+            // Serve any frames already decoded but not yet handed out (they
+            // arrived together in one read chunk).
+            if let Some(m) = self.pending.pop_front() {
+                return Ok(Some(m));
+            }
             if let Ok(msgs) = decode_messages(&mut self.buf) {
-                if let Some(m) = msgs.into_iter().next() {
-                    return Ok(Some(m));
+                if !msgs.is_empty() {
+                    self.pending.extend(msgs);
+                    if let Some(m) = self.pending.pop_front() {
+                        return Ok(Some(m));
+                    }
                 }
             }
             let mut chunk = [0u8; 8192];
             let n = self.reader.read(&mut chunk)?;
             if n == 0 {
+                // EOF: flush any partial trailing frame (best effort) before
+                // signalling the stream is closed.
+                if let Ok(msgs) = decode_messages(&mut self.buf) {
+                    if let Some(m) = msgs.into_iter().next() {
+                        return Ok(Some(m));
+                    }
+                }
                 return Ok(None);
             }
             self.buf.extend_from_slice(&chunk[..n]);
@@ -203,8 +225,8 @@ impl<T: AcpTransport> AcpSession<T> {
         });
         self.transport.send(&req.to_string())?;
         let resp = self.read_response(id)?;
-        let result: InitializeResult = serde_json::from_value(resp)
-            .map_err(|e| AcpError::Malformed(e.to_string()))?;
+        let result: InitializeResult =
+            serde_json::from_value(resp).map_err(|e| AcpError::Malformed(e.to_string()))?;
         if result.protocol_version != PROTOCOL_VERSION {
             return Err(AcpError::ProtocolMismatch(result.protocol_version));
         }
@@ -234,8 +256,8 @@ impl<T: AcpTransport> AcpSession<T> {
         });
         self.transport.send(&req.to_string())?;
         let resp = self.read_response(id)?;
-        let result: AuthenticateResult = serde_json::from_value(resp)
-            .map_err(|e| AcpError::Malformed(e.to_string()))?;
+        let result: AuthenticateResult =
+            serde_json::from_value(resp).map_err(|e| AcpError::Malformed(e.to_string()))?;
         // A `url` means the user must complete login in the browser first;
         // an empty result means the flow already succeeded.
         if result.url.is_none() {
@@ -264,7 +286,11 @@ impl<T: AcpTransport> AcpSession<T> {
     }
 
     /// Create a session in the agent's workspace (`session/new`).
-    pub fn session_new(&mut self, cwd: &str, mcp_servers: Vec<McpServer>) -> Result<String, AcpError> {
+    pub fn session_new(
+        &mut self,
+        cwd: &str,
+        mcp_servers: Vec<McpServer>,
+    ) -> Result<String, AcpError> {
         self.ensure_ready()?;
         let id = self.next_id;
         self.next_id += 1;
@@ -276,8 +302,8 @@ impl<T: AcpTransport> AcpSession<T> {
         });
         self.transport.send(&req.to_string())?;
         let resp = self.read_response(id)?;
-        let result: SessionNewResult = serde_json::from_value(resp)
-            .map_err(|e| AcpError::Malformed(e.to_string()))?;
+        let result: SessionNewResult =
+            serde_json::from_value(resp).map_err(|e| AcpError::Malformed(e.to_string()))?;
         self.session_id = Some(result.session_id.clone());
         Ok(result.session_id)
     }
@@ -322,10 +348,9 @@ impl<T: AcpTransport> AcpSession<T> {
                 if let Some(err) = v.get("error") {
                     return Err(map_error(err));
                 }
-                let result: SessionPromptResult = serde_json::from_value(
-                    v.get("result").cloned().unwrap_or(Value::Null),
-                )
-                .map_err(|e| AcpError::Malformed(e.to_string()))?;
+                let result: SessionPromptResult =
+                    serde_json::from_value(v.get("result").cloned().unwrap_or(Value::Null))
+                        .map_err(|e| AcpError::Malformed(e.to_string()))?;
                 outcome.stop_reason = result.stop_reason;
                 return Ok(outcome);
             }
@@ -345,8 +370,9 @@ impl<T: AcpTransport> AcpSession<T> {
                         let option_id = resolve_option(&params, &decision);
                         outcome.permissions.push(params);
                         outcome.permission_decisions.push(decision);
-                        let result =
-                            PermissionResult { outcome: PermissionOutcome { option_id } };
+                        let result = PermissionResult {
+                            outcome: PermissionOutcome { option_id },
+                        };
                         let reply = json!({ "jsonrpc": "2.0", "id": rid, "result": result });
                         self.transport.send(&reply.to_string())?;
                     }
@@ -590,7 +616,9 @@ mod tests {
         s.initialize(client_info()).unwrap();
         s.session_new("/w", vec![]).unwrap();
 
-        let outcome = s.prompt("fix the bug", |_p| PermissionDecision::allow()).unwrap();
+        let outcome = s
+            .prompt("fix the bug", |_p| PermissionDecision::allow())
+            .unwrap();
         assert_eq!(outcome.stop_reason, StopReason::EndTurn);
         assert_eq!(outcome.updates.len(), 1);
         assert!(outcome.updates[0].is_tool_call());
@@ -602,7 +630,11 @@ mod tests {
             .sent
             .iter()
             .map(|s| serde_json::from_str(s).unwrap())
-            .filter(|v: &Value| v.get("method").and_then(Value::as_str).is_none() && v.get("id").is_some() && v.get("result").is_some())
+            .filter(|v: &Value| {
+                v.get("method").and_then(Value::as_str).is_none()
+                    && v.get("id").is_some()
+                    && v.get("result").is_some()
+            })
             .collect();
         let perm_reply = replies
             .iter()
@@ -633,7 +665,9 @@ mod tests {
         let mut s = AcpSession::new(&mut t);
         s.initialize(client_info()).unwrap();
         s.session_new("/w", vec![]).unwrap();
-        let outcome = s.prompt("delete it", |_p| PermissionDecision::deny()).unwrap();
+        let outcome = s
+            .prompt("delete it", |_p| PermissionDecision::deny())
+            .unwrap();
         assert_eq!(outcome.stop_reason, StopReason::Refusal);
         let reply: Value = serde_json::from_str(&t.sent[t.sent.len() - 1]).unwrap();
         assert_eq!(reply["result"]["outcome"]["optionId"], "reject-once");
@@ -664,7 +698,10 @@ mod tests {
         let mut t = MockTransport::new(vec![
             &result_response(1, init_result()),
             // url-type: first call returns the browser URL, not yet authed.
-            &result_response(2, json!({ "url": "https://agent.example.com/login?code=abc" })),
+            &result_response(
+                2,
+                json!({ "url": "https://agent.example.com/login?code=abc" }),
+            ),
             // after the user completes login, the second call returns {}.
             &result_response(3, json!({})),
         ]);
@@ -804,7 +841,8 @@ mod tests {
     fn process_transport_roundtrips_through_stdio() {
         let mut t = ProcessTransport::spawn("cat", &[], &[]).unwrap();
         assert!(t.is_alive());
-        t.send(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#).unwrap();
+        t.send(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#)
+            .unwrap();
         let echoed = t.recv().unwrap().expect("cat echoes");
         assert_eq!(echoed, r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#);
         t.shutdown();
@@ -814,5 +852,24 @@ mod tests {
     #[test]
     fn spawn_missing_binary_errors() {
         assert!(ProcessTransport::spawn("definitely-not-a-real-agent", &[], &[]).is_err());
+    }
+
+    /// Regression: two frames arriving in a single read chunk must BOTH be
+    /// delivered. The old `recv` kept only the first message and dropped the
+    /// rest, which could hang the client waiting for a response that was
+    /// already received and discarded.
+    #[cfg(unix)]
+    #[test]
+    fn recv_queues_multiple_frames_from_one_chunk() {
+        let mut t =
+            ProcessTransport::spawn("sh", &["-c", "printf '{\"a\":1}\\n{\"b\":2}\\n'"], &[])
+                .unwrap();
+        let first = t.recv().unwrap().expect("first frame");
+        let second = t.recv().unwrap().expect("second frame");
+        assert_eq!(first, "{\"a\":1}");
+        assert_eq!(second, "{\"b\":2}");
+        // Stream is now at EOF.
+        assert_eq!(t.recv().unwrap(), None);
+        t.shutdown();
     }
 }

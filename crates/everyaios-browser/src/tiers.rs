@@ -556,7 +556,7 @@ impl TieredEngine {
                 "returnByValue": true,
             }),
         )?;
-        let mut markdown = out
+        let markdown = out
             .pointer("/result/value")
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default()
@@ -564,6 +564,13 @@ impl TieredEngine {
         if markdown.trim().is_empty() {
             return Err(EngineError::NotFound);
         }
+        // G9 read-cleaner (P2.11): strip ad/tracker links + consent walls.
+        let cleaned = crate::content::clean_markdown(
+            &crate::content::default_filter_set(),
+            url,
+            &markdown,
+        );
+        let mut markdown = cleaned.text;
         let truncated = cap_output(&mut markdown, self.config.max_output);
         Ok(EngineResult {
             tier,

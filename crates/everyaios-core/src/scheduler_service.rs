@@ -60,7 +60,9 @@ fn parse_field(field: &str, min: u8, max: u8) -> Result<Vec<u8>, String> {
                 b.parse::<u8>().map_err(|_| format!("bad range {range}"))?,
             )
         } else {
-            let v = range.parse::<u8>().map_err(|_| format!("bad value {range}"))?;
+            let v = range
+                .parse::<u8>()
+                .map_err(|_| format!("bad value {range}"))?;
             (v, v)
         };
         if lo < min || hi > max || lo > hi {
@@ -82,7 +84,10 @@ impl CronExpr {
     pub fn parse(source: &str) -> Result<Self, String> {
         let parts: Vec<&str> = source.split_whitespace().collect();
         if parts.len() != 5 {
-            return Err(format!("cron needs 5 fields, got {}: {source:?}", parts.len()));
+            return Err(format!(
+                "cron needs 5 fields, got {}: {source:?}",
+                parts.len()
+            ));
         }
         Ok(Self {
             minute: parse_field(parts[0], 0, 59)?,
@@ -126,8 +131,8 @@ fn civil_parts(unix_secs: u64) -> (u8, u8, u8, u8, u8) {
     let mp = (5 * doy + 2) / 153; // [0, 11]
     let d = (doy - (153 * mp + 2) / 5 + 1) as u8; // [1, 31]
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u8; // [1, 12]
-    // 1970-01-01 was a Thursday; days % 7 = 0 is Thursday, so +4 shifts to
-    // Sunday = 0 (cron dow convention).
+                                                         // 1970-01-01 was a Thursday; days % 7 = 0 is Thursday, so +4 shifts to
+                                                         // Sunday = 0 (cron dow convention).
     let weekday = (((days + 4) % 7) + 7) % 7; // 0 = Sunday (cron dow)
     (
         (secs_of_day / 60 % 60) as u8,
@@ -153,17 +158,57 @@ pub enum EventKind {
     TelemetryThreshold,
 }
 
+/// Named civil-day windows above raw cron (H2 / P6.4). Fires once per day
+/// at the window start hour (UTC + optional offset).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DayWindow {
+    /// 06:00–11:59
+    Morning,
+    /// 12:00–17:59
+    Afternoon,
+    /// 18:00–21:59
+    Evening,
+}
+
+impl DayWindow {
+    pub fn start_hour(self) -> u8 {
+        match self {
+            Self::Morning => 6,
+            Self::Afternoon => 12,
+            Self::Evening => 18,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TriggerSpec {
-    Cron { expr: String },
-    Interval { secs: u64 },
+    Cron {
+        expr: String,
+    },
+    Interval {
+        secs: u64,
+    },
     /// Event-triggered; `filter` matches a payload field (repo path, ticket id
     /// pattern, metric name…). `scope` (in [`SchedulePolicy`]) narrows further.
-    Event { kind: EventKind, filter: String },
+    Event {
+        kind: EventKind,
+        filter: String,
+    },
     /// Loopback webhook ingress (F11); `path` is the URL path, `schema` lists
     /// required body keys (validated before the job is queued).
-    Webhook { path: String, schema: Vec<String> },
+    Webhook {
+        path: String,
+        schema: Vec<String>,
+    },
+    /// Broader time window (morning / afternoon / evening) — a schedule
+    /// primitive above raw cron.
+    Window {
+        window: DayWindow,
+        #[serde(default, alias = "utcOffsetMinutes")]
+        utc_offset_minutes: i32,
+    },
 }
 
 /// Policy controls per job (doc 62 §3: scope + frequency; battery-aware B7).
@@ -198,6 +243,9 @@ pub enum RunState {
     Running {
         #[serde(rename = "leaseExpiresAt")]
         lease_expires_at: u64,
+        /// Fencing token: a stale worker cannot commit after expiry/reassign.
+        #[serde(default)]
+        fence: String,
     },
     /// HITL pause (approval / review). `resume_deadline` = auto-resume-or-cancel
     /// bound; `None` = paused indefinitely until an explicit resume.
@@ -261,6 +309,25 @@ pub struct Job {
     /// by `monitor_evaluate` for delta-notify semantics).
     #[serde(default)]
     pub monitor: Option<MonitorConfig>,
+    /// Frozen context for the in-flight run (Task/Occurrence/Run snapshot).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_run: Option<RunSnapshot>,
+}
+
+/// Frozen per-run snapshot so a live session edit cannot mutate an in-flight
+/// automation (H3 Task/Occurrence/Run).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunSnapshot {
+    pub run_id: String,
+    pub task_version: u32,
+    pub permission_snapshot: String,
+    pub context_snapshot: String,
+    pub scheduled_at: u64,
+    #[serde(default)]
+    pub timezone: String,
+    #[serde(default)]
+    pub missed_policy: String,
 }
 
 /// The outcome of one monitoring evaluation (stateful-polling delta check).
@@ -286,7 +353,12 @@ pub struct MonitorVerdict {
 }
 
 impl Job {
-    fn new(id: impl Into<String>, name: impl Into<String>, session_id: impl Into<String>, trigger: TriggerSpec) -> Self {
+    fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        session_id: impl Into<String>,
+        trigger: TriggerSpec,
+    ) -> Self {
         Self {
             id: id.into(),
             name: name.into(),
@@ -304,6 +376,7 @@ impl Job {
             successes: 0,
             failures: 0,
             monitor: None,
+            current_run: None,
         }
     }
 
@@ -400,9 +473,10 @@ impl SchedulerService {
         now: u64,
     ) -> &mut Job {
         let id = id.into();
-        let job = self.jobs.entry(id.clone()).or_insert_with(|| {
-            Job::new(id.clone(), name, session_id, trigger.clone())
-        });
+        let job = self
+            .jobs
+            .entry(id.clone())
+            .or_insert_with(|| Job::new(id.clone(), name, session_id, trigger.clone()));
         job.name = job.name.clone();
         job.trigger = trigger;
         job.steps = steps;
@@ -418,7 +492,10 @@ impl SchedulerService {
     }
 
     pub fn set_enabled(&mut self, id: &str, enabled: bool, now: u64) -> Result<(), String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
         job.enabled = enabled;
         if enabled && job.next_run_at.is_none() {
             job.next_run_at = compute_next_run(&job.trigger, now, None);
@@ -428,7 +505,10 @@ impl SchedulerService {
 
     /// Attach/replace a job's monitoring config (or clear it with `None`).
     pub fn set_monitor(&mut self, id: &str, monitor: Option<MonitorConfig>) -> Result<(), String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
         job.monitor = monitor;
         Ok(())
     }
@@ -444,7 +524,10 @@ impl SchedulerService {
         observation: &str,
         condition_met: bool,
     ) -> Result<MonitorVerdict, String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
         let monitor = job.monitor.get_or_insert_with(MonitorConfig::default);
         let previous = monitor.last_observation.clone();
         let changed = previous.as_deref() != Some(observation);
@@ -471,14 +554,39 @@ impl SchedulerService {
 
     // -- HITL pause (cronflow: a first-class state with explicit transitions) -
 
+    /// Pause every job bound to `session_id` (chat-delete cascade). Returns
+    /// how many jobs were paused.
+    pub fn pause_session(&mut self, session_id: &str) -> usize {
+        let mut n = 0usize;
+        for job in self.jobs.values_mut() {
+            if job.session_id == session_id
+                && job.enabled
+                && !matches!(job.state, RunState::Paused { .. })
+            {
+                job.enabled = false;
+                job.state = RunState::Paused {
+                    resume_deadline: None,
+                };
+                n += 1;
+            }
+        }
+        n
+    }
+
     pub fn pause(&mut self, id: &str, resume_deadline: Option<u64>) -> Result<(), String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
         job.state = RunState::Paused { resume_deadline };
         Ok(())
     }
 
     pub fn resume(&mut self, id: &str, now: u64) -> Result<(), String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
         if !matches!(job.state, RunState::Paused { .. }) {
             return Err(format!("job {id:?} is not paused"));
         }
@@ -491,25 +599,94 @@ impl SchedulerService {
 
     // -- lease / heartbeat (Hatchet pattern) ---------------------------------
 
-    /// Start a run: Idle/Paused-expired/Failed → Running with a lease.
+    /// Start a run: Idle/Paused-expired/Failed → Running with a lease + fence.
     pub fn lease_start(&mut self, id: &str, now: u64) -> Result<Value, String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
-        if matches!(job.state, RunState::Running { .. }) {
-            // already running — idempotent for the coordinator's ticker
-            return Ok(json!({ "ok": true, "resumed": true, "checkpoint": job.checkpoint }));
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        if let RunState::Running { ref fence, .. } = job.state {
+            return Ok(json!({
+                "ok": true,
+                "resumed": true,
+                "checkpoint": job.checkpoint,
+                "fence": fence,
+                "runId": job.current_run.as_ref().map(|r| r.run_id.clone()),
+            }));
         }
-        job.state = RunState::Running { lease_expires_at: now + LEASE_SECS };
-        Ok(json!({ "ok": true, "resumed": false, "checkpoint": job.checkpoint }))
+        let fence = format!("fence-{id}-{now}");
+        job.state = RunState::Running {
+            lease_expires_at: now + LEASE_SECS,
+            fence: fence.clone(),
+        };
+        let run_id = format!("run-{id}-{now}");
+        job.current_run = Some(RunSnapshot {
+            run_id: run_id.clone(),
+            task_version: job.runs,
+            permission_snapshot: format!(
+                "suppressOnBattery={} maxRuns={:?}",
+                job.policy.suppress_on_battery, job.policy.max_runs_per_hour
+            ),
+            context_snapshot: serde_json::json!({
+                "sessionId": job.session_id,
+                "jobId": job.id,
+                "name": job.name,
+            })
+            .to_string(),
+            scheduled_at: now,
+            timezone: "UTC".into(),
+            missed_policy: "run_now".into(),
+        });
+        Ok(json!({
+            "ok": true,
+            "resumed": false,
+            "checkpoint": job.checkpoint,
+            "fence": fence,
+            "runId": run_id,
+        }))
+    }
+
+    fn fence_ok(job: &Job, fence: Option<&str>) -> Result<String, String> {
+        match &job.state {
+            RunState::Running { fence: held, .. } => {
+                let got = fence.ok_or_else(|| "fence required".to_string())?;
+                if got != held {
+                    return Err("stale fence".into());
+                }
+                Ok(held.clone())
+            }
+            _ => Err(format!("job {:?} is not running", job.id)),
+        }
     }
 
     /// Renew the lease. Returns `{ok:false}` if the lease already expired
     /// (another executor may have reassigned it).
-    pub fn lease_heartbeat(&mut self, id: &str, now: u64) -> Result<Value, String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
-        match job.state {
-            RunState::Running { lease_expires_at } if lease_expires_at >= now => {
-                job.state = RunState::Running { lease_expires_at: now + LEASE_SECS };
-                Ok(json!({ "ok": true, "leaseExpiresAt": now + LEASE_SECS }))
+    pub fn lease_heartbeat(
+        &mut self,
+        id: &str,
+        now: u64,
+        fence: Option<&str>,
+    ) -> Result<Value, String> {
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        match &job.state {
+            RunState::Running {
+                lease_expires_at,
+                fence: held,
+            } if *lease_expires_at >= now => {
+                if let Some(g) = fence {
+                    if g != held {
+                        return Ok(json!({ "ok": false, "reason": "stale_fence" }));
+                    }
+                }
+                let f = held.clone();
+                job.state = RunState::Running {
+                    lease_expires_at: now + LEASE_SECS,
+                    fence: f.clone(),
+                };
+                Ok(json!({ "ok": true, "leaseExpiresAt": now + LEASE_SECS, "fence": f }))
             }
             RunState::Running { .. } => Ok(json!({ "ok": false, "reason": "lease_expired" })),
             _ => Err(format!("job {id:?} is not running")),
@@ -517,16 +694,35 @@ impl SchedulerService {
     }
 
     /// Advance the checkpoint (call after each completed step).
-    pub fn lease_checkpoint(&mut self, id: &str, index: u32) -> Result<(), String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+    pub fn lease_checkpoint(
+        &mut self,
+        id: &str,
+        index: u32,
+        fence: Option<&str>,
+    ) -> Result<(), String> {
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        Self::fence_ok(job, fence)?;
         job.checkpoint = index.max(job.checkpoint);
         Ok(())
     }
 
     /// Finish a run: success resets retries; failure schedules a retry with
     /// backoff + jitter + clamp (cronflow pattern).
-    pub fn lease_finish(&mut self, id: &str, ok: bool, now: u64) -> Result<(), String> {
-        let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+    pub fn lease_finish(
+        &mut self,
+        id: &str,
+        ok: bool,
+        now: u64,
+        fence: Option<&str>,
+    ) -> Result<(), String> {
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        Self::fence_ok(job, fence)?;
         job.runs += 1;
         job.last_run_at = Some(now);
         job.recent_runs.push(now);
@@ -539,6 +735,7 @@ impl SchedulerService {
             job.successes += 1;
             job.checkpoint = 0;
             job.state = RunState::Idle;
+            job.current_run = None;
             job.next_run_at = compute_next_run(&job.trigger, now, None);
         } else {
             job.failures += 1;
@@ -547,7 +744,10 @@ impl SchedulerService {
                 _ => job.failures,
             };
             let delay = Job::retry_delay_ms(retries, RETRY_BASE_MS, RETRY_MAX_MS, RETRY_JITTER);
-            job.state = RunState::Failed { retries, next_retry_at: Some(now + delay / 1000) };
+            job.state = RunState::Failed {
+                retries,
+                next_retry_at: Some(now + delay / 1000),
+            };
         }
         Ok(())
     }
@@ -572,16 +772,22 @@ impl SchedulerService {
         // First: expire stale leases → mark reassignable (Running → Idle with
         // the checkpoint preserved; the executor resumes from it).
         for job in self.jobs.values_mut() {
-            if let RunState::Running { lease_expires_at } = job.state {
+            if let RunState::Running {
+                lease_expires_at, ..
+            } = job.state
+            {
                 if lease_expires_at < now {
                     job.state = RunState::Idle; // reassignable, checkpoint intact
+                    job.current_run = None;
                 }
             }
         }
         let on_battery = self.on_battery;
         let ids: Vec<String> = self.jobs.keys().cloned().collect();
         for id in ids {
-            let Some(job) = self.jobs.get(&id) else { continue };
+            let Some(job) = self.jobs.get(&id) else {
+                continue;
+            };
             if !job.enabled {
                 continue;
             }
@@ -599,20 +805,26 @@ impl SchedulerService {
             }
             let due = match &job.trigger {
                 TriggerSpec::Cron { expr } => match CronExpr::parse(expr) {
-                    Ok(c) => {
-                        job.next_run_at.is_some_and(|nr| nr <= now) && c.matches(now)
-                    }
+                    Ok(c) => job.next_run_at.is_some_and(|nr| nr <= now) && c.matches(now),
                     Err(_) => false,
                 },
-                TriggerSpec::Interval { .. } => job.next_run_at.is_some_and(|nr| nr <= now),
+                TriggerSpec::Interval { .. } | TriggerSpec::Window { .. } => {
+                    job.next_run_at.is_some_and(|nr| nr <= now)
+                }
                 TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. } => false,
             };
-            let retry_due = matches!(job.state, RunState::Failed { next_retry_at: Some(t), .. } if t <= now);
+            let retry_due =
+                matches!(job.state, RunState::Failed { next_retry_at: Some(t), .. } if t <= now);
             if due || retry_due {
                 out.push(id);
             }
         }
-        out.sort_by_key(|id| self.jobs.get(id).and_then(|j| j.next_run_at).unwrap_or(u64::MAX));
+        out.sort_by_key(|id| {
+            self.jobs
+                .get(id)
+                .and_then(|j| j.next_run_at)
+                .unwrap_or(u64::MAX)
+        });
         out
     }
 
@@ -625,11 +837,15 @@ impl SchedulerService {
         let ids: Vec<String> = self.jobs.keys().cloned().collect();
         let mut fired = Vec::new();
         for id in ids {
-            let Some(job) = self.jobs.get(&id) else { continue };
+            let Some(job) = self.jobs.get(&id) else {
+                continue;
+            };
             if !job.enabled {
                 continue;
             }
-            let TriggerSpec::Event { kind: k, filter } = &job.trigger else { continue };
+            let TriggerSpec::Event { kind: k, filter } = &job.trigger else {
+                continue;
+            };
             if *k != kind {
                 continue;
             }
@@ -673,16 +889,22 @@ impl SchedulerService {
         let ids: Vec<String> = self.jobs.keys().cloned().collect();
         let mut fired = Vec::new();
         for id in ids {
-            let Some(job) = self.jobs.get(&id) else { continue };
+            let Some(job) = self.jobs.get(&id) else {
+                continue;
+            };
             if !job.enabled {
                 continue;
             }
-            let TriggerSpec::Webhook { path: p, schema } = &job.trigger else { continue };
+            let TriggerSpec::Webhook { path: p, schema } = &job.trigger else {
+                continue;
+            };
             if p != path {
                 continue;
             }
             // Schema validation: every required key must be present.
-            let obj = body.as_object().ok_or_else(|| format!("webhook {path}: body must be a JSON object"))?;
+            let obj = body
+                .as_object()
+                .ok_or_else(|| format!("webhook {path}: body must be a JSON object"))?;
             for key in schema {
                 if !obj.contains_key(key) {
                     return Err(format!("webhook {path}: missing required key {key:?}"));
@@ -717,14 +939,14 @@ impl SchedulerService {
     pub fn nudges(&self) -> Vec<NudgeSuggestion> {
         let mut by_goal: HashMap<&str, Vec<u64>> = HashMap::new();
         for s in &self.nudge_log {
-            by_goal.entry(s.goal.as_str()).or_default().push(s.unix_secs);
+            by_goal
+                .entry(s.goal.as_str())
+                .or_default()
+                .push(s.unix_secs);
         }
         let mut out = Vec::new();
         for (goal, times) in by_goal {
-            let mut hours: Vec<u8> = times
-                .iter()
-                .map(|t| ((t % 86_400) / 3600) as u8)
-                .collect();
+            let mut hours: Vec<u8> = times.iter().map(|t| ((t % 86_400) / 3600) as u8).collect();
             hours.sort_unstable();
             hours.dedup();
             // Distinct days the goal fired on.
@@ -743,7 +965,11 @@ impl SchedulerService {
                 });
             }
         }
-        out.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        out.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         out
     }
 
@@ -753,7 +979,12 @@ impl SchedulerService {
         let now = params
             .get("now")
             .and_then(Value::as_u64)
-            .unwrap_or_else(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
+            .unwrap_or_else(|| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0)
+            });
         match method {
             "scheduler/list" => {
                 let jobs: Vec<Value> = self
@@ -768,7 +999,10 @@ impl SchedulerService {
                 let name = str_param(params, "name").unwrap_or(id);
                 let session_id = str_param(params, "sessionId").unwrap_or("");
                 let trigger = serde_json::from_value::<TriggerSpec>(
-                    params.get("trigger").cloned().ok_or("scheduler/upsert requires trigger")?,
+                    params
+                        .get("trigger")
+                        .cloned()
+                        .ok_or("scheduler/upsert requires trigger")?,
                 )
                 .map_err(|e| format!("bad trigger: {e}"))?;
                 let steps = serde_json::from_value::<Vec<AutomationStep>>(
@@ -778,7 +1012,10 @@ impl SchedulerService {
                 let policy = params
                     .get("policy")
                     .cloned()
-                    .map(|v| serde_json::from_value::<SchedulePolicy>(v).map_err(|e| format!("bad policy: {e}")))
+                    .map(|v| {
+                        serde_json::from_value::<SchedulePolicy>(v)
+                            .map_err(|e| format!("bad policy: {e}"))
+                    })
                     .transpose()?;
                 self.upsert(id, name, session_id, trigger, steps, policy, now);
                 Ok(json!({ "ok": true, "id": id }))
@@ -789,7 +1026,10 @@ impl SchedulerService {
             }
             "scheduler/enable" => {
                 let id = str_param(params, "id").ok_or("scheduler/enable requires id")?;
-                let enabled = params.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+                let enabled = params
+                    .get("enabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true);
                 self.set_enabled(id, enabled, now)?;
                 Ok(json!({ "ok": true }))
             }
@@ -798,6 +1038,12 @@ impl SchedulerService {
                 let deadline = params.get("resumeDeadline").and_then(Value::as_u64);
                 self.pause(id, deadline)?;
                 Ok(json!({ "ok": true }))
+            }
+            "scheduler/pause_session" => {
+                let session_id = str_param(params, "sessionId")
+                    .ok_or("scheduler/pause_session requires sessionId")?;
+                let paused = self.pause_session(session_id);
+                Ok(json!({ "ok": true, "paused": paused }))
             }
             "scheduler/resume" => {
                 let id = str_param(params, "id").ok_or("scheduler/resume requires id")?;
@@ -811,42 +1057,55 @@ impl SchedulerService {
             }
             "scheduler/lease_heartbeat" => {
                 let id = str_param(params, "id").ok_or("scheduler/lease_heartbeat requires id")?;
-                self.lease_heartbeat(id, now)
+                let fence = str_param(params, "fence");
+                self.lease_heartbeat(id, now, fence)
             }
             "scheduler/lease_checkpoint" => {
                 let id = str_param(params, "id").ok_or("scheduler/lease_checkpoint requires id")?;
                 let index = params.get("index").and_then(Value::as_u64).unwrap_or(0) as u32;
-                self.lease_checkpoint(id, index)?;
+                let fence = str_param(params, "fence");
+                self.lease_checkpoint(id, index, fence)?;
                 Ok(json!({ "ok": true }))
             }
             "scheduler/lease_finish" => {
                 let id = str_param(params, "id").ok_or("scheduler/lease_finish requires id")?;
                 let ok = params.get("ok").and_then(Value::as_bool).unwrap_or(false);
-                self.lease_finish(id, ok, now)?;
+                let fence = str_param(params, "fence");
+                self.lease_finish(id, ok, now, fence)?;
                 Ok(json!({ "ok": true }))
             }
             "scheduler/battery" => {
-                let on = params.get("onBattery").and_then(Value::as_bool).unwrap_or(false);
+                let on = params
+                    .get("onBattery")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 self.set_battery(on);
                 Ok(json!({ "ok": true, "onBattery": on }))
             }
             "scheduler/fire_event" => {
                 let kind = serde_json::from_value::<EventKind>(
-                    params.get("kind").cloned().ok_or("scheduler/fire_event requires kind")?,
+                    params
+                        .get("kind")
+                        .cloned()
+                        .ok_or("scheduler/fire_event requires kind")?,
                 )
                 .map_err(|e| format!("bad kind: {e}"))?;
                 let payload = params.get("payload").cloned().unwrap_or(Value::Null);
                 Ok(json!({ "fired": self.fire_event(kind, &payload, now) }))
             }
             "scheduler/fire_webhook" => {
-                let path = str_param(params, "path").ok_or("scheduler/fire_webhook requires path")?;
+                let path =
+                    str_param(params, "path").ok_or("scheduler/fire_webhook requires path")?;
                 let body = params.get("body").cloned().unwrap_or(Value::Null);
                 let token = params.get("token").and_then(Value::as_str);
                 let fired = self.fire_webhook(path, &body, now, token)?;
                 Ok(json!({ "fired": fired }))
             }
             "scheduler/webhook_token" => {
-                let token = params.get("token").and_then(Value::as_str).map(str::to_string);
+                let token = params
+                    .get("token")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
                 self.set_webhook_token(token);
                 Ok(json!({ "ok": true }))
             }
@@ -859,14 +1118,20 @@ impl SchedulerService {
             "scheduler/nudges" => Ok(json!({ "suggestions": self.nudges() })),
             "scheduler/run_now" => {
                 let id = str_param(params, "id").ok_or("scheduler/run_now requires id")?;
-                let job = self.jobs.get_mut(id).ok_or_else(|| format!("unknown job {id:?}"))?;
+                let job = self
+                    .jobs
+                    .get_mut(id)
+                    .ok_or_else(|| format!("unknown job {id:?}"))?;
                 job.next_run_at = Some(now);
                 Ok(json!({ "ok": true, "id": id }))
             }
             "scheduler/monitor" => {
                 let id = str_param(params, "id").ok_or("scheduler/monitor requires id")?;
                 let observation = str_param(params, "observation").unwrap_or("");
-                let condition_met = params.get("conditionMet").and_then(Value::as_bool).unwrap_or(false);
+                let condition_met = params
+                    .get("conditionMet")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 let verdict = self.monitor_evaluate(id, observation, condition_met)?;
                 Ok(serde_json::to_value(verdict).unwrap_or(Value::Null))
             }
@@ -875,7 +1140,10 @@ impl SchedulerService {
                 let monitor = params
                     .get("monitor")
                     .cloned()
-                    .map(|v| serde_json::from_value::<MonitorConfig>(v).map_err(|e| format!("bad monitor: {e}")))
+                    .map(|v| {
+                        serde_json::from_value::<MonitorConfig>(v)
+                            .map_err(|e| format!("bad monitor: {e}"))
+                    })
                     .transpose()?;
                 self.set_monitor(id, monitor)?;
                 Ok(json!({ "ok": true, "id": id }))
@@ -909,7 +1177,31 @@ fn compute_next_run(trigger: &TriggerSpec, now: u64, current: Option<u64>) -> Op
             }
         }
         TriggerSpec::Interval { secs } => Some(now + secs),
+        TriggerSpec::Window {
+            window,
+            utc_offset_minutes,
+        } => Some(next_window_unix(now, *window, *utc_offset_minutes)),
         TriggerSpec::Event { .. } | TriggerSpec::Webhook { .. } => None,
+    }
+}
+
+/// Next daily fire at the window's start hour in the given UTC offset.
+pub fn next_window_unix(now: u64, window: DayWindow, utc_offset_minutes: i32) -> u64 {
+    let offset = (utc_offset_minutes as i64).saturating_mul(60);
+    let local = now as i64 + offset;
+    let local = if local < 0 { 0 } else { local as u64 };
+    let day = local / 86_400;
+    let start_today = day * 86_400 + u64::from(window.start_hour()) * 3600;
+    let start_local = if local < start_today {
+        start_today
+    } else {
+        start_today + 86_400
+    };
+    let utc = start_local as i64 - offset;
+    if utc < 0 {
+        0
+    } else {
+        utc as u64
     }
 }
 
@@ -973,9 +1265,13 @@ mod tests {
     fn interval_due_respects_next_run() {
         let mut svc = SchedulerService::new();
         svc.upsert(
-            "j1", "probe", "s1",
+            "j1",
+            "probe",
+            "s1",
             TriggerSpec::Interval { secs: 60 },
-            vec![], None, now(),
+            vec![],
+            None,
+            now(),
         );
         // Not due immediately after creation (next_run_at = now + 60).
         assert!(svc.due(now()).is_empty());
@@ -988,9 +1284,15 @@ mod tests {
         let mut svc = SchedulerService::new();
         // Job created at 15:06; cron fires at 16:00 (later today).
         svc.upsert(
-            "j1", "hourly", "s1",
-            TriggerSpec::Cron { expr: "0 16 * * *".into() },
-            vec![], None, now(),
+            "j1",
+            "hourly",
+            "s1",
+            TriggerSpec::Cron {
+                expr: "0 16 * * *".into(),
+            },
+            vec![],
+            None,
+            now(),
         );
         // 16:00 today (now() is 15:06) — day_start + 16h.
         let day_start = now() - (now() % 86_400);
@@ -1003,9 +1305,13 @@ mod tests {
     fn battery_suppression_skips_jobs() {
         let mut svc = SchedulerService::new();
         svc.upsert(
-            "j1", "bat", "s1",
+            "j1",
+            "bat",
+            "s1",
             TriggerSpec::Interval { secs: 5 },
-            vec![], None, now(),
+            vec![],
+            None,
+            now(),
         );
         svc.set_battery(true);
         // Interval job is due (now + 5 passed) but suppressed on battery.
@@ -1015,10 +1321,15 @@ mod tests {
         // A job that opted out runs on battery.
         let mut svc2 = SchedulerService::new();
         svc2.upsert(
-            "j2", "always", "s1",
+            "j2",
+            "always",
+            "s1",
             TriggerSpec::Interval { secs: 5 },
             vec![],
-            Some(SchedulePolicy { suppress_on_battery: false, ..SchedulePolicy::default() }),
+            Some(SchedulePolicy {
+                suppress_on_battery: false,
+                ..SchedulePolicy::default()
+            }),
             now(),
         );
         svc2.set_battery(true);
@@ -1029,14 +1340,28 @@ mod tests {
     fn event_fire_matches_kind_filter_scope() {
         let mut svc = SchedulerService::new();
         svc.upsert(
-            "j1", "ci", "s1",
-            TriggerSpec::Event { kind: EventKind::CiBuildFail, filter: "repo-a".into() },
-            vec![], None, now(),
+            "j1",
+            "ci",
+            "s1",
+            TriggerSpec::Event {
+                kind: EventKind::CiBuildFail,
+                filter: "repo-a".into(),
+            },
+            vec![],
+            None,
+            now(),
         );
         svc.upsert(
-            "j2", "other", "s1",
-            TriggerSpec::Event { kind: EventKind::TestRegression, filter: "".into() },
-            vec![], None, now(),
+            "j2",
+            "other",
+            "s1",
+            TriggerSpec::Event {
+                kind: EventKind::TestRegression,
+                filter: "".into(),
+            },
+            vec![],
+            None,
+            now(),
         );
         let fired = svc.fire_event(
             EventKind::CiBuildFail,
@@ -1049,15 +1374,31 @@ mod tests {
         assert!(fired2.is_empty());
         // With scope policy.
         svc.upsert(
-            "j3", "scoped", "s1",
-            TriggerSpec::Event { kind: EventKind::RepoChange, filter: "".into() },
+            "j3",
+            "scoped",
+            "s1",
+            TriggerSpec::Event {
+                kind: EventKind::RepoChange,
+                filter: "".into(),
+            },
             vec![],
-            Some(SchedulePolicy { scope: Some("src/".into()), ..SchedulePolicy::default() }),
+            Some(SchedulePolicy {
+                scope: Some("src/".into()),
+                ..SchedulePolicy::default()
+            }),
             now(),
         );
-        let fired3 = svc.fire_event(EventKind::RepoChange, &json!({ "path": "README.md" }), now());
+        let fired3 = svc.fire_event(
+            EventKind::RepoChange,
+            &json!({ "path": "README.md" }),
+            now(),
+        );
         assert!(fired3.is_empty());
-        let fired4 = svc.fire_event(EventKind::RepoChange, &json!({ "path": "src/main.rs" }), now());
+        let fired4 = svc.fire_event(
+            EventKind::RepoChange,
+            &json!({ "path": "src/main.rs" }),
+            now(),
+        );
         assert_eq!(fired4, vec!["j3".to_string()]);
     }
 
@@ -1066,19 +1407,49 @@ mod tests {
         let mut svc = SchedulerService::new();
         svc.set_webhook_token(Some("tok".into()));
         svc.upsert(
-            "w1", "hook", "s1",
-            TriggerSpec::Webhook { path: "/hooks/ci".into(), schema: vec!["ref".into(), "sha".into()] },
-            vec![], None, now(),
+            "w1",
+            "hook",
+            "s1",
+            TriggerSpec::Webhook {
+                path: "/hooks/ci".into(),
+                schema: vec!["ref".into(), "sha".into()],
+            },
+            vec![],
+            None,
+            now(),
         );
         // Bad token → error.
-        assert!(svc.fire_webhook("/hooks/ci", &json!({"ref":"main","sha":"x"}), now(), Some("nope")).is_err());
+        assert!(svc
+            .fire_webhook(
+                "/hooks/ci",
+                &json!({"ref":"main","sha":"x"}),
+                now(),
+                Some("nope")
+            )
+            .is_err());
         // Missing key → error.
-        assert!(svc.fire_webhook("/hooks/ci", &json!({"ref":"main"}), now(), Some("tok")).is_err());
+        assert!(svc
+            .fire_webhook("/hooks/ci", &json!({"ref":"main"}), now(), Some("tok"))
+            .is_err());
         // Good → fires.
-        let fired = svc.fire_webhook("/hooks/ci", &json!({"ref":"main","sha":"abc"}), now(), Some("tok")).unwrap();
+        let fired = svc
+            .fire_webhook(
+                "/hooks/ci",
+                &json!({"ref":"main","sha":"abc"}),
+                now(),
+                Some("tok"),
+            )
+            .unwrap();
         assert_eq!(fired, vec!["w1".to_string()]);
         // Wrong path → nothing.
-        let fired2 = svc.fire_webhook("/hooks/nope", &json!({"ref":"main","sha":"x"}), now(), Some("tok")).unwrap();
+        let fired2 = svc
+            .fire_webhook(
+                "/hooks/nope",
+                &json!({"ref":"main","sha":"x"}),
+                now(),
+                Some("tok"),
+            )
+            .unwrap();
         assert!(fired2.is_empty());
     }
 
@@ -1086,38 +1457,75 @@ mod tests {
     fn frequency_policy_caps_event_fires() {
         let mut svc = SchedulerService::new();
         svc.upsert(
-            "j1", "noisy", "s1",
-            TriggerSpec::Event { kind: EventKind::TelemetryThreshold, filter: "".into() },
+            "j1",
+            "noisy",
+            "s1",
+            TriggerSpec::Event {
+                kind: EventKind::TelemetryThreshold,
+                filter: "".into(),
+            },
             vec![],
-            Some(SchedulePolicy { max_runs_per_hour: Some(2), ..SchedulePolicy::default() }),
+            Some(SchedulePolicy {
+                max_runs_per_hour: Some(2),
+                ..SchedulePolicy::default()
+            }),
             now(),
         );
-        assert_eq!(svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now()).len(), 1);
+        assert_eq!(
+            svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now())
+                .len(),
+            1
+        );
         // Finish run 1 (records a recent run).
-        svc.lease_start("j1", now()).unwrap();
-        svc.lease_finish("j1", true, now()).unwrap();
-        assert_eq!(svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now()).len(), 1);
-        svc.lease_start("j1", now()).unwrap();
-        svc.lease_finish("j1", true, now()).unwrap();
+        let s1 = svc.lease_start("j1", now()).unwrap();
+        svc.lease_finish("j1", true, now(), s1["fence"].as_str())
+            .unwrap();
+        assert_eq!(
+            svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now())
+                .len(),
+            1
+        );
+        let s2 = svc.lease_start("j1", now()).unwrap();
+        svc.lease_finish("j1", true, now(), s2["fence"].as_str())
+            .unwrap();
         // At cap → suppressed.
-        assert!(svc.fire_event(EventKind::TelemetryThreshold, &json!({}), now()).is_empty());
+        assert!(svc
+            .fire_event(EventKind::TelemetryThreshold, &json!({}), now())
+            .is_empty());
         // After the hour window → allowed again.
         let later = now() + 3700;
-        assert_eq!(svc.fire_event(EventKind::TelemetryThreshold, &json!({}), later).len(), 1);
+        assert_eq!(
+            svc.fire_event(EventKind::TelemetryThreshold, &json!({}), later)
+                .len(),
+            1
+        );
     }
 
     #[test]
     fn lease_expiry_reassigns_and_resumes_from_checkpoint() {
         let mut svc = SchedulerService::new();
-        svc.upsert("j1", "long", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
+        svc.upsert(
+            "j1",
+            "long",
+            "s1",
+            TriggerSpec::Interval { secs: 3600 },
+            vec![],
+            None,
+            now(),
+        );
         let started = svc.lease_start("j1", now()).unwrap();
         assert_eq!(started["checkpoint"], json!(0));
-        svc.lease_checkpoint("j1", 2).unwrap();
+        let fence = started["fence"].as_str();
+        assert!(fence.is_some());
+        svc.lease_checkpoint("j1", 2, fence).unwrap();
         // Heartbeat renews.
-        assert_eq!(svc.lease_heartbeat("j1", now() + 10).unwrap()["ok"], json!(true));
+        assert_eq!(
+            svc.lease_heartbeat("j1", now() + 10, fence).unwrap()["ok"],
+            json!(true)
+        );
         // Executor dies — no heartbeat for LEASE_SECS+ → due() expires the lease.
         let dead = now() + LEASE_SECS + 5;
-        svc.lease_finish("j1", false, dead).unwrap();
+        svc.lease_finish("j1", false, dead, fence).unwrap();
         // The checkpoint survives; the retry is scheduled with backoff.
         let job = svc.get("j1").unwrap();
         assert_eq!(job.checkpoint, 2);
@@ -1132,15 +1540,31 @@ mod tests {
         let a7 = Job::retry_delay_ms(7, 30_000, 3_600_000, 0.2);
         assert!((3_600_000 - 720_000..=3_600_000).contains(&a7), "a7={a7}");
         // Deterministic (no RNG).
-        assert_eq!(Job::retry_delay_ms(2, 30_000, 3_600_000, 0.2), Job::retry_delay_ms(2, 30_000, 3_600_000, 0.2));
+        assert_eq!(
+            Job::retry_delay_ms(2, 30_000, 3_600_000, 0.2),
+            Job::retry_delay_ms(2, 30_000, 3_600_000, 0.2)
+        );
     }
 
     #[test]
     fn hitl_pause_is_a_state_with_deadline() {
         let mut svc = SchedulerService::new();
-        svc.upsert("j1", "review", "s1", TriggerSpec::Interval { secs: 60 }, vec![], None, now());
+        svc.upsert(
+            "j1",
+            "review",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
         svc.pause("j1", Some(now() + 300)).unwrap();
-        assert!(matches!(svc.get("j1").unwrap().state, RunState::Paused { resume_deadline: Some(_) }));
+        assert!(matches!(
+            svc.get("j1").unwrap().state,
+            RunState::Paused {
+                resume_deadline: Some(_)
+            }
+        ));
         // Paused jobs are not due.
         assert!(svc.due(now() + 10).is_empty());
         svc.resume("j1", now()).unwrap();
@@ -1152,7 +1576,10 @@ mod tests {
         let mut svc = SchedulerService::new();
         // Same goal, same hour (09:00), 3 distinct days.
         for day in 0..3u64 {
-            svc.record_nudge("Morning brief", now() + day * 86_400 - now() % 86_400 + 9 * 3600);
+            svc.record_nudge(
+                "Morning brief",
+                now() + day * 86_400 - now() % 86_400 + 9 * 3600,
+            );
         }
         let suggestions = svc.nudges();
         assert_eq!(suggestions.len(), 1);
@@ -1184,32 +1611,54 @@ mod tests {
             }),
         )
         .unwrap();
-        let list = svc.handle("scheduler/list", &json!({ "now": now() })).unwrap();
+        let list = svc
+            .handle("scheduler/list", &json!({ "now": now() }))
+            .unwrap();
         assert_eq!(list["jobs"].as_array().unwrap().len(), 1);
         // run_now forces a due.
-        svc.handle("scheduler/run_now", &json!({ "id": "j1", "now": now() })).unwrap();
-        let due = svc.handle("scheduler/due", &json!({ "now": now() })).unwrap();
+        svc.handle("scheduler/run_now", &json!({ "id": "j1", "now": now() }))
+            .unwrap();
+        let due = svc
+            .handle("scheduler/due", &json!({ "now": now() }))
+            .unwrap();
         assert_eq!(due["due"], json!(["j1"]));
         // enable/disable.
-        svc.handle("scheduler/enable", &json!({ "id": "j1", "enabled": false, "now": now() })).unwrap();
-        let due2 = svc.handle("scheduler/due", &json!({ "now": now() })).unwrap();
+        svc.handle(
+            "scheduler/enable",
+            &json!({ "id": "j1", "enabled": false, "now": now() }),
+        )
+        .unwrap();
+        let due2 = svc
+            .handle("scheduler/due", &json!({ "now": now() }))
+            .unwrap();
         assert!(due2["due"].as_array().unwrap().is_empty());
         // battery.
-        svc.handle("scheduler/battery", &json!({ "onBattery": true })).unwrap();
+        svc.handle("scheduler/battery", &json!({ "onBattery": true }))
+            .unwrap();
         assert!(svc.on_battery());
     }
 
     #[test]
     fn unknown_job_methods_error() {
         let mut svc = SchedulerService::new();
-        assert!(svc.handle("scheduler/pause", &json!({ "id": "ghost" })).is_err());
+        assert!(svc
+            .handle("scheduler/pause", &json!({ "id": "ghost" }))
+            .is_err());
         assert!(svc.handle("scheduler/nope", &json!({})).is_err());
     }
 
     #[test]
     fn monitor_notifies_on_first_run_and_stores_observation() {
         let mut svc = SchedulerService::new();
-        svc.upsert("m1", "watch", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
+        svc.upsert(
+            "m1",
+            "watch",
+            "s1",
+            TriggerSpec::Interval { secs: 3600 },
+            vec![],
+            None,
+            now(),
+        );
         let v = svc.monitor_evaluate("m1", "price=100", false).unwrap();
         assert!(v.notified, "first run always notifies (baseline)");
         assert!(v.changed, "no previous observation → changed");
@@ -1218,7 +1667,13 @@ mod tests {
         assert_eq!(v.current, "price=100");
         assert_eq!(v.notifications, 1);
         assert_eq!(
-            svc.get("m1").unwrap().monitor.as_ref().unwrap().last_observation.as_deref(),
+            svc.get("m1")
+                .unwrap()
+                .monitor
+                .as_ref()
+                .unwrap()
+                .last_observation
+                .as_deref(),
             Some("price=100"),
             "the observation is remembered for the next run (stateful polling)"
         );
@@ -1227,18 +1682,40 @@ mod tests {
     #[test]
     fn monitor_suppresses_unchanged_runs() {
         let mut svc = SchedulerService::new();
-        svc.upsert("m1", "watch", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
+        svc.upsert(
+            "m1",
+            "watch",
+            "s1",
+            TriggerSpec::Interval { secs: 3600 },
+            vec![],
+            None,
+            now(),
+        );
         svc.monitor_evaluate("m1", "price=100", false).unwrap();
         let v = svc.monitor_evaluate("m1", "price=100", false).unwrap();
         assert!(!v.changed);
-        assert!(!v.notified, "no delta → no notification (the run vs notify split)");
-        assert_eq!(v.notifications, 1, "an unchanged run does not bump the count");
+        assert!(
+            !v.notified,
+            "no delta → no notification (the run vs notify split)"
+        );
+        assert_eq!(
+            v.notifications, 1,
+            "an unchanged run does not bump the count"
+        );
     }
 
     #[test]
     fn monitor_notifies_on_delta() {
         let mut svc = SchedulerService::new();
-        svc.upsert("m1", "watch", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
+        svc.upsert(
+            "m1",
+            "watch",
+            "s1",
+            TriggerSpec::Interval { secs: 3600 },
+            vec![],
+            None,
+            now(),
+        );
         svc.monitor_evaluate("m1", "price=100", false).unwrap();
         let v = svc.monitor_evaluate("m1", "price=80", false).unwrap();
         assert!(v.changed);
@@ -1250,8 +1727,23 @@ mod tests {
     #[test]
     fn monitor_stops_on_condition() {
         let mut svc = SchedulerService::new();
-        svc.upsert("m1", "watch", "s1", TriggerSpec::Interval { secs: 3600 }, vec![], None, now());
-        svc.set_monitor("m1", Some(MonitorConfig { stop_on_condition: true, ..MonitorConfig::default() })).unwrap();
+        svc.upsert(
+            "m1",
+            "watch",
+            "s1",
+            TriggerSpec::Interval { secs: 3600 },
+            vec![],
+            None,
+            now(),
+        );
+        svc.set_monitor(
+            "m1",
+            Some(MonitorConfig {
+                stop_on_condition: true,
+                ..MonitorConfig::default()
+            }),
+        )
+        .unwrap();
         svc.monitor_evaluate("m1", "shipped=false", false).unwrap();
         let v = svc.monitor_evaluate("m1", "delivered", true).unwrap();
         assert!(v.stopped, "condition met + stop_on_condition → stopped");
@@ -1264,19 +1756,172 @@ mod tests {
     #[test]
     fn job_serializes_camel_case_for_the_sidecar() {
         let mut svc = SchedulerService::new();
-        svc.upsert("j1", "brief", "s1", TriggerSpec::Interval { secs: 60 }, vec![], None, now());
-        let list = svc.handle("scheduler/list", &json!({ "now": now() })).unwrap();
+        svc.upsert(
+            "j1",
+            "brief",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        let list = svc
+            .handle("scheduler/list", &json!({ "now": now() }))
+            .unwrap();
         let job = &list["jobs"][0];
-        assert_eq!(job["sessionId"], "s1", "session_id must serialize as sessionId for the coordinator: {job}");
-        assert!(job.get("session_id").is_none(), "no snake_case leakage: {job}");
-        assert!(job["policy"]["suppressOnBattery"].as_bool().is_some(), "policy is camelCase: {}", job["policy"]);
+        assert_eq!(
+            job["sessionId"], "s1",
+            "session_id must serialize as sessionId for the coordinator: {job}"
+        );
+        assert!(
+            job.get("session_id").is_none(),
+            "no snake_case leakage: {job}"
+        );
+        assert!(
+            job["policy"]["suppressOnBattery"].as_bool().is_some(),
+            "policy is camelCase: {}",
+            job["policy"]
+        );
         assert!(job["policy"].get("suppress_on_battery").is_none());
 
         // RunState struct-variant fields must be camelCase too.
         svc.lease_start("j1", now()).unwrap();
-        let list2 = svc.handle("scheduler/list", &json!({ "now": now() })).unwrap();
+        let list2 = svc
+            .handle("scheduler/list", &json!({ "now": now() }))
+            .unwrap();
         let state = &list2["jobs"][0]["state"];
-        assert!(state["leaseExpiresAt"].as_u64().is_some(), "RunState must serialize leaseExpiresAt: {state}");
+        assert!(
+            state["leaseExpiresAt"].as_u64().is_some(),
+            "RunState must serialize leaseExpiresAt: {state}"
+        );
         assert!(state.get("lease_expires_at").is_none());
+    }
+
+    #[test]
+    fn window_trigger_fires_at_named_hour() {
+        // 09:30 UTC — morning (06:00) already passed, next morning is tomorrow 06:00.
+        let t = sun_0930();
+        let next = next_window_unix(t, DayWindow::Morning, 0);
+        assert!(next > t);
+        let (_min, hour, ..) = civil_parts(next);
+        assert_eq!(hour, 6);
+        // Afternoon 12:00 is still ahead today.
+        let aft = next_window_unix(t, DayWindow::Afternoon, 0);
+        let (_m, h, ..) = civil_parts(aft);
+        assert_eq!(h, 12);
+        assert!(aft > t);
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "w1",
+            "brief",
+            "s1",
+            TriggerSpec::Window {
+                window: DayWindow::Afternoon,
+                utc_offset_minutes: 0,
+            },
+            vec![],
+            None,
+            t,
+        );
+        assert_eq!(svc.get("w1").unwrap().next_run_at, Some(aft));
+    }
+
+    #[test]
+    fn pause_session_cascades_to_session_jobs() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "a",
+            "a",
+            "chat-1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        svc.upsert(
+            "b",
+            "b",
+            "chat-1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        svc.upsert(
+            "c",
+            "c",
+            "other",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        let n = svc.pause_session("chat-1");
+        assert_eq!(n, 2);
+        assert!(!svc.get("a").unwrap().enabled);
+        assert!(matches!(
+            svc.get("a").unwrap().state,
+            RunState::Paused { .. }
+        ));
+        assert!(svc.get("c").unwrap().enabled);
+        let out = svc
+            .handle("scheduler/pause_session", &json!({ "sessionId": "chat-1" }))
+            .unwrap();
+        assert_eq!(out["paused"], 0, "already paused — no double count");
+    }
+
+    #[test]
+    fn stale_fence_cannot_finish() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "j1",
+            "x",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        let start = svc.lease_start("j1", now()).unwrap();
+        let fence = start["fence"].as_str();
+        assert!(svc
+            .lease_finish("j1", true, now(), Some("fence-other"))
+            .is_err());
+        assert!(svc.lease_checkpoint("j1", 1, Some("nope")).is_err());
+        svc.lease_finish("j1", true, now(), fence).unwrap();
+        assert!(matches!(svc.get("j1").unwrap().state, RunState::Idle));
+        assert!(svc.get("j1").unwrap().current_run.is_none());
+    }
+
+    #[test]
+    fn run_snapshot_frozen_at_lease_start() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "j1",
+            "brief",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        let start = svc.lease_start("j1", now()).unwrap();
+        let snap = svc
+            .get("j1")
+            .unwrap()
+            .current_run
+            .clone()
+            .expect("snapshot");
+        assert_eq!(start["runId"], snap.run_id);
+        assert_eq!(snap.timezone, "UTC");
+        assert!(!snap.permission_snapshot.is_empty());
+        assert!(snap.context_snapshot.contains("s1"));
+        let fence = start["fence"].as_str();
+        svc.lease_heartbeat("j1", now() + 1, fence).unwrap();
+        let still = svc.get("j1").unwrap().current_run.clone().unwrap();
+        assert_eq!(
+            still, snap,
+            "heartbeat must not rewrite the frozen run snapshot"
+        );
     }
 }

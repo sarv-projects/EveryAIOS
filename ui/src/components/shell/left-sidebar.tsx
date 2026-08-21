@@ -27,6 +27,7 @@ import {
   Pause,
   Timer,
   RotateCw,
+  Trash2,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -126,6 +127,7 @@ function PowerSidebar() {
   const activeId = useAppStore((s) => s.activeSessionId)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const newSession = useAppStore((s) => s.newSession)
+  const deleteSession = useAppStore((s) => s.deleteSession)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const centerScreen = useAppStore((s) => s.centerScreen)
   const notify = useAppStore((s) => s.notify)
@@ -339,6 +341,17 @@ function PowerSidebar() {
                       {session.pinned && (
                         <Pin className="h-3 w-3 text-orange-500/80 shrink-0" fill="currentColor" />
                       )}
+                      <span
+                        role="button"
+                        title="Delete chat (pauses its scheduled jobs)"
+                        className="ml-auto hidden shrink-0 rounded p-0.5 text-muted-foreground/50 hover:bg-rose-500/15 hover:text-rose-300 group-hover:inline-flex"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void deleteSession(session.id)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </span>
                     </div>
                     <p className="text-[11px] text-muted-foreground/70 line-clamp-1 pl-5">
                       {session.preview}

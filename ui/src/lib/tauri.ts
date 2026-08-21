@@ -39,7 +39,8 @@ export interface ChatWireEvent {
     | "cancelled"
     | "budgetExceeded"
     | "interrupt"
-    | "planDone";
+    | "planDone"
+    | "monitor";
   streamId?: string;
   latencyMs?: number;
   text?: string;
@@ -49,6 +50,13 @@ export interface ChatWireEvent {
   totalTokens?: number;
   code?: string;
   message?: string;
+  stage?: string;
+  toolId?: string;
+  args?: Record<string, unknown>;
+  result?: unknown;
+  retryable?: boolean;
+  risk?: string;
+  error?: string;
   sessionId?: string;
   limit?: number;
   spent?: number;
@@ -59,7 +67,17 @@ export interface ChatWireEvent {
   tasksDone?: number;
   title?: string;
   description?: string;
-  error?: string;
+  jobId?: string;
+  changed?: boolean;
+  notified?: boolean;
+  stopped?: boolean;
+  current?: string;
+  notifications?: number;
+}
+
+/** Pause every scheduled job bound to a chat (delete-session cascade). */
+export async function schedulerPauseSession(sessionId: string): Promise<number> {
+  return tauriInvoke<number>("scheduler_pause_session", { sessionId });
 }
 
 /** P1.4: start a chat turn. Resolves with the streamId. */
@@ -74,6 +92,8 @@ export async function chatStream(args: {
   soulMd?: string;
   /** F12/J17 — selected agent id (None = inbuilt engine). */
   agentId?: string;
+  /** P4.7 — documents to inject below the cache boundary (J6 wrapping). */
+  userDocuments?: { title: string; content: string }[];
 }): Promise<string> {
   return tauriInvoke<string>("chat_stream", args);
 }
@@ -83,18 +103,28 @@ export async function chatCancel(streamId: string): Promise<void> {
   return tauriInvoke("chat_cancel", { streamId });
 }
 
+/** S0.5: re-run a failed tool through the same Guard-2 ticket path. */
+export async function chatToolRetry(args: {
+  sessionId: string;
+  streamId: string;
+  toolId: string;
+  args: Record<string, unknown>;
+  agentId?: string;
+}): Promise<void> {
+  return tauriInvoke("chat_tool_retry", args);
+}
+
 /** P6.3 Stage-0: run a blueprint plan through the coordinator's plan executor
  * (which steps the Rust-owned circuit breaker per LLM turn / tool call and
  * emits `chat/interrupt` on a trip). Resolves once the coordinator acks. */
 export async function planExecute(args: {
   sessionId: string;
   planId: string;
-  streamId: string;
   tasks: unknown[];
   provider?: string;
   model?: string;
-}): Promise<void> {
-  return tauriInvoke("plan_execute", args);
+}): Promise<string> {
+  return tauriInvoke<string>("plan_execute", args);
 }
 
 /** P6.3 Stage-0: return a circuit-break card choice (skip/retry/escalate/…)

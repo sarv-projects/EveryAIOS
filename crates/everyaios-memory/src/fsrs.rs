@@ -1,8 +1,8 @@
-//! FSRS-6 spaced-repetition scheduler (C13 — doc 63 §2.2, anki
-//! `rslib/src/scheduler/fsrs`).
+//! FSRS-6 spaced-repetition scheduler (C13 — doc 63 §2.2).
 //!
 //! A faithful Rust port of `open-spaced-repetition/fsrs-rs` (`model.rs` /
-//! `inference.rs`). The memory state is `(stability S, difficulty D)`; a
+//! `inference.rs`). Anki's AGPL-licensed `rslib` is not a dependency; the
+//! implementation follows the permissively licensed fsrs-rs model instead. The memory state is `(stability S, difficulty D)`; a
 //! review rating is Again(1) / Hard(2) / Good(3) / Easy(4).
 //!
 //! The core question the scheduler answers is "when should I next review

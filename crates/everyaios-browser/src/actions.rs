@@ -810,10 +810,16 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
+        // G9 read-cleaner (P2.11): strip ad/tracker links + consent walls.
+        let cleaned = crate::content::clean_markdown(
+            &crate::content::default_filter_set(),
+            &self.current_url(),
+            &text,
+        );
         Ok(TextResult {
             truncated: false,
             saved_to: None,
-            text,
+            text: cleaned.text,
         })
     }
 
@@ -1011,6 +1017,61 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
             })
             .unwrap_or_default();
         Ok((entries, idx))
+    }
+
+    /// E16 — `DOMDebugger.getEventListeners` pass (doc 63 §4.2): does the DOM
+    /// node behind `backend_node_id` have a JavaScript `click` listener? SPA
+    /// divs with `onClick` have no ARIA role, so this is how slim snapshots
+    /// decide they are still actionable.
+    pub fn js_click_handler(&self, backend_node_id: u64) -> Result<bool, CdpError> {
+        let resolved = self.client.call_session(
+            self.sid()?,
+            "DOM.resolveNode",
+            json!({ "backendNodeId": backend_node_id }),
+        )?;
+        let object_id = match resolved
+            .pointer("/object/objectId")
+            .and_then(Value::as_str)
+        {
+            Some(id) => id,
+            None => return Ok(false),
+        };
+        let listeners = self.client.call_session(
+            self.sid()?,
+            "DOMDebugger.getEventListeners",
+            json!({ "objectId": object_id }),
+        )?;
+        Ok(listeners
+            .pointer("/listeners")
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .any(|l| l.get("type").and_then(Value::as_str) == Some("click"))
+            })
+            .unwrap_or(false))
+    }
+
+    /// The current page URL (best-effort, for the G9 read-cleaner).
+    fn current_url(&self) -> String {
+        let sid = match self.sid() {
+            Ok(s) => s,
+            Err(_) => return String::new(),
+        };
+        self.client
+            .call_session(sid, "Page.getNavigationHistory", json!({}))
+            .ok()
+            .and_then(|out| {
+                let idx = out
+                    .pointer("/result/currentIndex")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as usize;
+                out.pointer("/result/entries")
+                    .and_then(Value::as_array)
+                    .and_then(|a| a.get(idx))
+                    .and_then(|e| e.get("url").and_then(Value::as_str))
+                    .map(str::to_string)
+            })
+            .unwrap_or_default()
     }
 
     // ------------------------------------------------------------------
@@ -1313,6 +1374,10 @@ mod tests {
                     "model": { "content": [0, 0, 100, 0, 100, 50, 0, 50] }
                 })),
                 "DOM.requestNode" => Ok(json!({ "result": { "nodeId": 7 } })),
+                "DOM.resolveNode" => Ok(json!({ "object": { "objectId": "obj-1" } })),
+                "DOMDebugger.getEventListeners" => Ok(json!({
+                    "listeners": [{ "type": "click", "useCapture": false }]
+                })),
                 "Page.captureScreenshot" => Ok(json!({ "data": "fakebase64png" })),
                 _ => Ok(json!({})),
             }
@@ -1481,6 +1546,19 @@ mod tests {
         assert!(r.text.contains("# Mock Page"));
         let outline = a.read(ReadMode::Outline).unwrap();
         assert_eq!(outline.text, "# Mock Page\n\nbody content");
+    }
+
+    #[test]
+    fn js_click_handler_detects_click_listener() {
+        let m = mock();
+        let a = BrowserActions::new(&m, Some("sess-1"));
+        assert!(a.js_click_handler(101).unwrap());
+        assert!(m
+            .responded_methods()
+            .contains(&"DOMDebugger.getEventListeners".to_string()));
+        assert!(m
+            .responded_methods()
+            .contains(&"DOM.resolveNode".to_string()));
     }
 
     #[test]

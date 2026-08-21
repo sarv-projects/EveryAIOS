@@ -12,11 +12,17 @@ everyaios-vault = { path = "../everyaios-vault" }
 everyaios-guard = { path = "../everyaios-guard" }
 everyaios-memory = { path = "../everyaios-memory" }
 everyaios-blueprint = { path = "../everyaios-blueprint" }
+everyaios-mcp = { path = "../everyaios-mcp" }
+everyaios-audit = { path = "../everyaios-audit" }
+everyaios-script = { path = "../everyaios-script" }
+everyaios-storage = { path = "../everyaios-storage" }
+everyaios-eval = { path = "../everyaios-eval" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 sha2 = { workspace = true }
+argon2 = { workspace = true }
 rand = { workspace = true }
 opentelemetry = { workspace = true }
 ureq = { workspace = true }

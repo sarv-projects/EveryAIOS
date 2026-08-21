@@ -64,6 +64,9 @@ export interface InstallRequest {
   agentId: string;
   version: string;
   ticketId: string;
+  exactCommand?: string[];
+  consentRequired?: boolean;
+  preferNative?: boolean;
 }
 
 /** The result of `acp_authenticate` (url-type pending vs completed). */

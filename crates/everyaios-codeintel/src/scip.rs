@@ -9,8 +9,7 @@
 //! unknown enum values map to `Unknown`.
 
 use crate::semantic::{
-    OccurrenceRole, RelationKind, Relationship, SemanticIndex, Symbol, SymbolKind,
-    SymbolOccurrence,
+    OccurrenceRole, RelationKind, Relationship, SemanticIndex, Symbol, SymbolKind, SymbolOccurrence,
 };
 use thiserror::Error;
 
@@ -67,9 +66,7 @@ fn read_varint(buf: &[u8], pos: &mut usize) -> Result<u64, ScipError> {
     let mut result: u64 = 0;
     let mut shift = 0u32;
     loop {
-        let byte = *buf
-            .get(*pos)
-            .ok_or(ScipError::Truncated(*pos))?;
+        let byte = *buf.get(*pos).ok_or(ScipError::Truncated(*pos))?;
         *pos += 1;
         result |= u64::from(byte & 0x7f) << shift;
         if byte & 0x80 == 0 {
@@ -390,7 +387,7 @@ mod tests {
         e.string_field(2, "src/main.rs"); // relative_path
         e.message_field(3, &symbol_msg("sym::main", 1, "main")); // fn
         e.message_field(3, &symbol_msg("sym::Helper", 3, "Helper")); // class
-        // Occurrence: definition of main at 0:0.
+                                                                     // Occurrence: definition of main at 0:0.
         let mut occ = Encoder::new();
         occ.packed_field(1, &[0, 0, 0, 8]);
         occ.string_field(2, "sym::main");

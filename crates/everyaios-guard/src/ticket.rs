@@ -32,6 +32,56 @@ pub enum RiskLevel {
     Critical,
 }
 
+/// Named risk tiers R0–R4 (H3). Formalizes RiskLevel for cards + catalog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum RiskTier {
+    /// Harmless read — auto.
+    R0,
+    /// Reversible local write — auto per policy.
+    R1,
+    /// External effect — approval.
+    R2,
+    /// Destructive — approval.
+    R3,
+    /// High-privilege credential/network/system — explicit, deny-by-default.
+    R4,
+}
+
+impl RiskTier {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::R0 => "R0",
+            Self::R1 => "R1",
+            Self::R2 => "R2",
+            Self::R3 => "R3",
+            Self::R4 => "R4",
+        }
+    }
+
+    pub fn from_risk_and_op(risk: RiskLevel, operation: &str, read_only: bool) -> Self {
+        let op = operation.to_lowercase();
+        if op.contains("credential") || op.contains("install") || op.contains("estop") {
+            return Self::R4;
+        }
+        if op.contains("network") || op.contains("external") || op.contains("web") {
+            return Self::R2;
+        }
+        if read_only {
+            return Self::R0;
+        }
+        if op.contains("delete") || op.contains("destructive") || risk >= RiskLevel::High {
+            return Self::R3;
+        }
+        match risk {
+            RiskLevel::Low => Self::R1,
+            RiskLevel::Medium => Self::R1,
+            RiskLevel::High => Self::R3,
+            RiskLevel::Critical => Self::R4,
+        }
+    }
+}
+
 /// Current ticket lifecycle state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TicketState {
@@ -70,12 +120,26 @@ pub struct AuthorizationTicket {
     /// Single-use: `true` (default) — consumed on first valid use.
     pub single_use: bool,
     pub approval_source: ApprovalSource,
+    /// Secret bound to the rendered Guard-2 card. Human approval must present
+    /// this nonce; the ticket id alone is not an approval capability.
+    #[serde(default)]
+    pub approval_nonce: String,
     pub risk: RiskLevel,
     /// Audit sequence of the approval event this ticket refers to.
     pub audit_seq: u64,
     /// Set by the executor on consume/reject/expire.
     #[serde(default)]
     pub state: TicketState,
+    /// S0.6 TOCTOU: resource identities captured at mint, re-checked at use.
+    #[serde(default)]
+    pub bindings: Vec<crate::toctou::ResourceBinding>,
+    /// H3 idempotency: bind this ticket to an execution + action.
+    #[serde(default)]
+    pub execution_id: String,
+    #[serde(default)]
+    pub action_id: String,
+    #[serde(default)]
+    pub idempotency_key: String,
 }
 
 impl AuthorizationTicket {
@@ -189,15 +253,28 @@ impl TicketStore {
             .collect()
     }
 
-    /// P7.5 (Guard-2) — record a human approve on a pending ticket. This is
-    /// the **only** transition into [`TicketState::Approved`] (consumable):
-    /// it flips `Pending → Approved`, sets `approval_source = Human`, and
-    /// appends an audit receipt. Returns false when the ticket is missing or
-    /// no longer pending. Consumption still happens later via `use_ticket`,
-    /// which now *requires* this Approved state (args hash + single-use).
+    /// Internal approval for policy-controlled paths (for example, a read-only
+    /// tool that is deliberately auto-approved by the executor). Human-facing
+    /// approval must use [`Self::approve_with_nonce`].
     pub fn approve(&mut self, id: &str) -> bool {
+        self.approve_inner(id, None)
+    }
+
+    /// P7.5/P10.2 — approve only when the nonce displayed in the Guard-2 card
+    /// matches the ticket. A ticket id copied or synthesized by webview code
+    /// is insufficient without the card-bound nonce.
+    pub fn approve_with_nonce(&mut self, id: &str, nonce: &str) -> bool {
+        self.approve_inner(id, Some(nonce))
+    }
+
+    fn approve_inner(&mut self, id: &str, nonce: Option<&str>) -> bool {
         let ok = match self.tickets.get_mut(id) {
-            Some(t) if t.state == TicketState::Pending => {
+            Some(t)
+                if t.state == TicketState::Pending
+                    && nonce
+                        .map(|n| !n.is_empty() && n == t.approval_nonce)
+                        .unwrap_or(true) =>
+            {
                 t.state = TicketState::Approved;
                 t.approval_source = ApprovalSource::Human;
                 true
@@ -210,8 +287,28 @@ impl TicketStore {
         ok
     }
 
-    /// P7.5 (Guard-2) — record a human reject on a pending ticket (revokes it
-    /// + appends an audit receipt). Returns false when missing/non-pending.
+    /// P7.5/P10.2 — reject only when the nonce displayed in the Guard-2 card
+    /// matches the ticket. Rejection is also card-bound so stale/synthetic
+    /// webview requests cannot alter a live approval state.
+    pub fn reject_with_nonce(&mut self, id: &str, nonce: &str) -> bool {
+        let ok = match self.tickets.get_mut(id) {
+            Some(t)
+                if t.state == TicketState::Pending
+                    && !nonce.is_empty()
+                    && nonce == t.approval_nonce =>
+            {
+                t.state = TicketState::Revoked;
+                true
+            }
+            _ => false,
+        };
+        if ok {
+            self.record(id, ReceiptAction::Reject);
+        }
+        ok
+    }
+
+    /// Internal rejection used by non-UI control paths.
     pub fn reject(&mut self, id: &str) -> bool {
         let ok = match self.tickets.get_mut(id) {
             Some(t) if t.state == TicketState::Pending => {
@@ -224,6 +321,33 @@ impl TicketStore {
             self.record(id, ReceiptAction::Reject);
         }
         ok
+    }
+
+    pub fn approval_nonce(&self, id: &str) -> Option<&str> {
+        self.tickets.get(id).map(|t| t.approval_nonce.as_str())
+    }
+
+    pub fn set_bindings(
+        &mut self,
+        id: &str,
+        bindings: Vec<crate::toctou::ResourceBinding>,
+    ) -> bool {
+        if let Some(t) = self.tickets.get_mut(id) {
+            t.bindings = bindings;
+            return true;
+        }
+        false
+    }
+
+    pub fn set_execution(&mut self, id: &str, execution_id: &str) -> bool {
+        if let Some(t) = self.tickets.get_mut(id) {
+            t.execution_id = execution_id.to_string();
+            if t.idempotency_key.is_empty() {
+                t.idempotency_key = format!("{}:{}:{}", t.session_id, t.tool_id, t.args_hash);
+            }
+            return true;
+        }
+        false
     }
 
     pub fn get(&self, id: &str) -> Option<&AuthorizationTicket> {
@@ -311,6 +435,16 @@ impl GuardReceipt {
     }
 }
 
+/// Generate an unpredictable card-bound approval nonce. It is never sent to
+/// the coordinator; only the human-facing card bridge receives it.
+pub fn new_approval_nonce() -> String {
+    use base64::Engine;
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
 /// Stable helper: hash the args for a ticket (deterministic, keyed by
 /// serialization order — caller must serialize canonically).
 pub fn hash_args(parts: &[&str]) -> String {
@@ -351,9 +485,14 @@ pub fn path_ticket(
         expires_at_ms: now_ms() + 60_000,
         single_use: true,
         approval_source: ApprovalSource::Policy,
+        approval_nonce: new_approval_nonce(),
         risk,
         audit_seq,
         state: TicketState::Pending,
+        bindings: Vec::new(),
+        execution_id: String::new(),
+        action_id: tool_id.to_string(),
+        idempotency_key: format!("{session_id}:{tool_id}:{args_hash}"),
     }
 }
 
@@ -368,7 +507,17 @@ mod tests {
     use super::*;
 
     fn ticket(id: &str) -> AuthorizationTicket {
-        path_ticket(id, "agent-1", "sess-1", "fs.delete", "delete", &["/workspace/x"], "h1", RiskLevel::High, 1)
+        path_ticket(
+            id,
+            "agent-1",
+            "sess-1",
+            "fs.delete",
+            "delete",
+            &["/workspace/x"],
+            "h1",
+            RiskLevel::High,
+            1,
+        )
     }
 
     /// A ticket that has already been human-approved (consumable).
@@ -376,6 +525,34 @@ mod tests {
         let mut t = ticket(id);
         t.state = TicketState::Approved;
         t
+    }
+
+    #[test]
+    fn r0_to_r4_mapping() {
+        assert_eq!(
+            RiskTier::from_risk_and_op(RiskLevel::Low, "write", true),
+            RiskTier::R0
+        );
+        assert_eq!(
+            RiskTier::from_risk_and_op(RiskLevel::Medium, "write", false),
+            RiskTier::R1
+        );
+        assert_eq!(
+            RiskTier::from_risk_and_op(RiskLevel::Medium, "external_network", false),
+            RiskTier::R2
+        );
+        assert_eq!(
+            RiskTier::from_risk_and_op(RiskLevel::High, "delete", false),
+            RiskTier::R3
+        );
+        assert_eq!(
+            RiskTier::from_risk_and_op(RiskLevel::Critical, "install", false),
+            RiskTier::R4
+        );
+        assert_eq!(
+            RiskTier::from_risk_and_op(RiskLevel::Low, "external_network", true),
+            RiskTier::R2
+        );
     }
 
     #[test]
@@ -401,7 +578,10 @@ mod tests {
     fn args_mismatch_rejects() {
         let mut store = TicketStore::new();
         let id = store.mint(approved("t2"));
-        assert_eq!(store.use_ticket(&id, "wrong"), Err(TicketError::ArgsMismatch));
+        assert_eq!(
+            store.use_ticket(&id, "wrong"),
+            Err(TicketError::ArgsMismatch)
+        );
         assert_eq!(store.get(&id).unwrap().state, TicketState::Rejected);
     }
 
@@ -436,11 +616,28 @@ mod tests {
         assert_eq!(store.pending()[0].ticket_id, "ta");
         // Human approve records the source; consumption still enforces args.
         assert!(store.approve(&a));
-        assert_eq!(store.get(&a).unwrap().approval_source, ApprovalSource::Human);
+        assert_eq!(
+            store.get(&a).unwrap().approval_source,
+            ApprovalSource::Human
+        );
         assert!(store.use_ticket(&a, "h1").is_ok());
         // Approve on a non-pending/unknown ticket is a no-op.
         assert!(!store.approve(&a));
         assert!(!store.approve("ghost"));
+    }
+
+    #[test]
+    fn nonce_binds_human_approval_to_the_card() {
+        let mut store = TicketStore::new();
+        let id = store.mint(ticket("nonce"));
+        let nonce = store.get(&id).unwrap().approval_nonce.clone();
+        assert!(!store.approve_with_nonce(&id, "wrong"));
+        assert_eq!(store.get(&id).unwrap().state, TicketState::Pending);
+        assert!(store.approve_with_nonce(&id, &nonce));
+        assert_eq!(
+            store.get(&id).unwrap().approval_source,
+            ApprovalSource::Human
+        );
     }
 
     #[test]

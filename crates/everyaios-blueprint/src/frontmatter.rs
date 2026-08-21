@@ -124,8 +124,9 @@ pub fn parse_frontmatter(fm: &str) -> Result<AgentConfig, FrontmatterError> {
             let value = value.trim();
             match key {
                 "permissionMode" | "permission" => {
-                    config.permission_mode = PermissionMode::parse(value)
-                        .ok_or_else(|| FrontmatterError::UnknownPermissionMode(value.to_string()))?;
+                    config.permission_mode = PermissionMode::parse(value).ok_or_else(|| {
+                        FrontmatterError::UnknownPermissionMode(value.to_string())
+                    })?;
                 }
                 "color" => config.color = Some(value.to_string()),
                 "maxTurns" | "max_turns" => {
@@ -217,11 +218,23 @@ mod tests {
 
     #[test]
     fn permission_to_approval_bridge() {
-        assert_eq!(PermissionMode::Default.to_approval_mode(), ApprovalMode::Default);
+        assert_eq!(
+            PermissionMode::Default.to_approval_mode(),
+            ApprovalMode::Default
+        );
         assert_eq!(PermissionMode::Plan.to_approval_mode(), ApprovalMode::Plan);
-        assert_eq!(PermissionMode::AcceptEdits.to_approval_mode(), ApprovalMode::Plan);
+        assert_eq!(
+            PermissionMode::AcceptEdits.to_approval_mode(),
+            ApprovalMode::Plan
+        );
         assert_eq!(PermissionMode::Auto.to_approval_mode(), ApprovalMode::Auto);
-        assert_eq!(PermissionMode::BypassPermissions.to_approval_mode(), ApprovalMode::Bypass);
-        assert_eq!(PermissionMode::DontAsk.to_approval_mode(), ApprovalMode::Default);
+        assert_eq!(
+            PermissionMode::BypassPermissions.to_approval_mode(),
+            ApprovalMode::Bypass
+        );
+        assert_eq!(
+            PermissionMode::DontAsk.to_approval_mode(),
+            ApprovalMode::Default
+        );
     }
 }

@@ -10,4 +10,6 @@ description = "P6 — orchestration core: spec-per-task files, verify-gated blue
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+toml = { workspace = true }
 everyaios-eval = { path = "../everyaios-eval" }
+everyaios-guard = { path = "../everyaios-guard" }

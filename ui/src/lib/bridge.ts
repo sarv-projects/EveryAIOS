@@ -11,11 +11,12 @@ import {
   inTauri,
   chatStream,
   onChatEvent,
+  planExecute,
   type ChatWireEvent,
 } from "./tauri";
-import { acpAgents, acpInstallStatus, type HarnessManifest } from "./acp";
+import { acpAgents, acpInstallStatus, acpLaunch, acpPrompt, type HarnessManifest } from "./acp";
 import { usageSnapshot } from "./spend";
-import { AGENTS, type AgentRuntime } from "./agents";
+import { AGENTS, getModel, type AgentRuntime } from "./agents";
 
 /** ACP registry id → the v2 catalog's agent id (same brain, curated skin). */
 const ACP_TO_CATALOG: Record<string, string> = {
@@ -78,6 +79,17 @@ function mcqLabel(value: string): string {
   }
 }
 
+/**
+ * J11 budget-kill surface: the broker's message is
+ * `session 'X' stopped: $2.00 limit (spent $2.10)`. Normalize it to the
+ * canonical `stopped: $spent / $limit` form the composer strip shows.
+ */
+function budgetKillText(message: string): string {
+  const m = message.match(/stopped:\s*\$([\d.]+)\s*limit\s*\(spent\s*\$([\d.]+)\)/i);
+  if (!m) return message.includes("stopped") ? message : `stopped: limit ${message}`;
+  return `stopped: $${m[2]} / $${m[1]}`;
+}
+
 /** Route a live chat wire event into the active session's transcript. */
 function handleChatEvent(e: ChatWireEvent): void {
   const st = useAppStore.getState();
@@ -88,16 +100,50 @@ function handleChatEvent(e: ChatWireEvent): void {
       break;
     case "batch":
       st.streamAppend(e.text ?? "", false);
+      st.noteStreamTick(e.tokenCount ?? Math.max(1, Math.round((e.text ?? "").length / 4)));
       break;
     case "done":
       st.streamAppend(e.fullText ?? e.text ?? "", true);
       break;
     case "error":
-      st.streamFail(e.message ?? "Agent error");
+      if (e.code === "budget_exceeded") {
+        st.streamBudgetKill(budgetKillText(e.message ?? ""));
+      } else if (e.code === "tool_failed" || e.toolId) {
+        st.streamToolResult(e.toolId ?? "tool", undefined, e.message ?? "tool failed");
+      } else {
+        st.streamFail(e.message ?? "Agent error");
+      }
+      break;
+    case "stage":
+      if (typeof e.stage === "string" && e.stage.startsWith("tool:")) {
+        const parts = e.stage.split(":");
+        const toolId = parts[1] ?? "tool";
+        const phase = parts[2] ?? "";
+        st.streamToolProgress(toolId, phase);
+      }
+      break;
+    case "monitor":
+      if (e.notified || e.stopped) {
+        st.pushMonitor({
+          notified: e.notified ?? false,
+          stopped: e.stopped ?? false,
+          current: e.current ?? "",
+          jobId: e.jobId,
+        });
+      }
       break;
     case "toolCall":
-      st.streamStep(`tool · ${e.text ?? e.code ?? ""}`);
+      st.streamToolCall(e.toolId ?? e.text ?? e.code ?? "tool", e.args, e.risk);
       break;
+    case "toolResult": {
+      const err =
+        e.error ??
+        (e.result && typeof e.result === "object" && e.result !== null && "error" in e.result
+          ? String((e.result as { error?: unknown }).error ?? "")
+          : undefined);
+      st.streamToolResult(e.toolId ?? "tool", e.result, err || undefined);
+      break;
+    }
     // P6.3 Stage-0: the plan executor's circuit breaker tripped — render the
     // H2 cockpit MCQ card. The card's choice goes back via planRespond
     // (store.respondMcq routes by kind === 'mcq').
@@ -173,6 +219,14 @@ export async function initBridge(): Promise<void> {
       cacheHitRate: snap.cacheHitRate,
     };
     useAppStore.getState().setLiveBudget(budget);
+    const top = snap.byKey[0];
+    if (top?.key) {
+      const st = useAppStore.getState();
+      st.noteStreamTick(0);
+      useAppStore.setState({
+        streamStats: { ...st.streamStats, activeKey: top.key },
+      });
+    }
   } catch {
     /* demo */
   }
@@ -182,6 +236,19 @@ export async function initBridge(): Promise<void> {
     void onChatEvent(handleChatEvent);
   } catch {
     /* demo */
+  }
+
+  try {
+    const { invoke } = await import("./tauri");
+    const listed = await invoke<{ sessions?: Array<import("./store").Session> }>("session_list");
+    if (listed?.sessions && listed.sessions.length > 0) {
+      useAppStore.setState({
+        sessions: listed.sessions,
+        activeSessionId: listed.sessions[0]!.id,
+      });
+    }
+  } catch {
+    /* vault locked — VaultGate handles setup */
   }
 
   // 4. Guard-2 tickets — poll pending approvals into the transcript as
@@ -204,6 +271,7 @@ export async function initBridge(): Promise<void> {
                 t.decision?.goal ??
                 `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk`,
               kind: "permission",
+              approvalNonce: t.approvalNonce,
               options: [
                 { label: "Approve & run", value: "approve" },
                 { label: "Reject", value: "reject" },
@@ -221,15 +289,49 @@ export async function initBridge(): Promise<void> {
   }
 }
 
-/** Send a user turn: live chat_stream when in the shell, demo toast otherwise. */
-export async function sendUserMessage(text: string): Promise<void> {
+const CATALOG_TO_ACP: Record<string, string> = {
+  "everyaios-native": "everyaios",
+  "claude-code": "claude",
+  "codex-cli": "codex",
+  "grok-build": "grok",
+  "gemini-cli": "gemini",
+  "cursor-agent": "cursor",
+};
+
+function isInbuilt(agentId: string): boolean {
+  return agentId === "everyaios-native" || agentId === "everyaios" || agentId === "";
+}
+
+function selectedProviderModel(modelId: string): { provider: string; model: string } {
+  const st = useAppStore.getState();
+  if (st.localRuntime) {
+    return { provider: st.localRuntime, model: modelId };
+  }
+  const m = getModel(modelId);
+  if (!m) return { provider: "nvidia", model: modelId };
+  const provider =
+    m.provider === "meta" ? "nvidia" : m.provider;
+  return { provider, model: m.slug || m.id };
+}
+
+/**
+ * Send a user turn: live chat_stream when in the shell, demo toast otherwise.
+ * `context` (P4.7 chat-overlay) injects an open document's text below the
+ * cache boundary as a J6 `<user_document>`.
+ */
+export async function sendUserMessage(
+  text: string,
+  context?: { title: string; content: string },
+): Promise<void> {
   const st = useAppStore.getState();
   const trimmed = text.trim();
   if (!trimmed) return;
 
   const sessionId = st.activeSessionId;
-  const agentId =
-    st.selectedAgentId === "everyaios-native" ? undefined : st.selectedAgentId;
+  const catalogId = st.selectedAgentId;
+  const inbuilt = isInbuilt(catalogId);
+  const agentId = inbuilt ? undefined : catalogId;
+  const { provider, model } = selectedProviderModel(st.selectedModelId);
   st.pushUserMessage(trimmed);
 
   if (!inTauri()) {
@@ -238,7 +340,61 @@ export async function sendUserMessage(text: string): Promise<void> {
   }
 
   try {
-    await chatStream({ sessionId, text: trimmed, agentId });
+    if (st.composerMode === "plan") {
+      const { draftPlanTasks } = await import("./plan-draft");
+      const tasks = draftPlanTasks(trimmed);
+      const planId = `plan-${Date.now()}`;
+      st.setPendingPlan({ planId, tasks });
+      st.streamStart();
+      const body = [
+        "Plan (read-only — Codex/Claude plan mode). Approve to execute:",
+        ...tasks.map((t, i) => `${i + 1}. ${t.goal}`),
+      ].join("\n");
+      st.streamAppend(body, false);
+      st.pushMcq({
+        id: planId,
+        title: "Approve this plan?",
+        description: `${tasks.length} task(s). Nothing has been executed.`,
+        kind: "plan",
+        options: [
+          { label: "Approve & run", value: "approve" },
+          { label: "Discard", value: "reject" },
+        ],
+      });
+      return;
+    }
+    if (!inbuilt) {
+      const acpId = CATALOG_TO_ACP[catalogId] ?? catalogId;
+      let handle = st.acpHandles[catalogId];
+      if (!handle) {
+        const folder =
+          st.sessions.find((s) => s.id === sessionId)?.folder ?? "~";
+        const info = await acpLaunch(acpId, folder);
+        handle = info.handle;
+        st.setAcpHandle(catalogId, handle);
+      }
+      const result = await acpPrompt(handle, trimmed);
+      const pending = result.pendingTickets?.length
+        ? ` · ${result.pendingTickets.length} approval(s)`
+        : "";
+      st.streamStart();
+      st.streamAppend(
+        `ACP ${result.stopReason ?? "done"}${pending}`,
+        true,
+      );
+      return;
+    }
+    const { SOUL_PRESETS } = await import("./personas");
+    await chatStream({
+      sessionId,
+      text: trimmed,
+      agentId,
+      provider,
+      model,
+      personaId: st.personaId,
+      soulMd: SOUL_PRESETS[st.soulId] || undefined,
+      ...(context ? { userDocuments: [context] } : {}),
+    });
   } catch (err) {
     st.streamFail(err instanceof Error ? err.message : "Failed to reach the agent");
   }

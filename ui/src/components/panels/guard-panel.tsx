@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import {
-  AlertTriangle, Check, KeyRound, OctagonX, ShieldCheck, Vault, X,
+  AlertTriangle, Check, Globe, KeyRound, OctagonX, ShieldCheck, Vault, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -102,7 +102,17 @@ export default function GuardPanel() {
 
   const respond = async (ticketId: string, action: 'approve' | 'reject') => {
     setBusy(ticketId)
-    await guardRespond(ticketId, action)
+    const ticket = tickets.find((t) => t.ticketId === ticketId)
+    if (!ticket) {
+      setBusy(null)
+      return
+    }
+    const accepted = await guardRespond(ticketId, action, ticket.approvalNonce)
+    if (!accepted) {
+      notify('Guard-2: stale or invalid approval card — no action taken')
+      setBusy(null)
+      return
+    }
     setTickets((ts) => ts.filter((t) => t.ticketId !== ticketId))
     setBusy(null)
   }
@@ -150,15 +160,59 @@ export default function GuardPanel() {
                             {t.operation}
                           </span>
                           <span className="rounded border border-red-500/30 bg-red-500/10 px-1 text-[8px] uppercase text-red-400">
-                            {t.risk}
+                            {t.riskTier ?? t.risk}
                           </span>
                         </div>
                         <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
                           {t.paths.join(' · ')}
                         </div>
+                        {t.decision?.networkDestinations && t.decision.networkDestinations.length > 0 && (
+                          <div className="mt-1 font-mono text-[10px] text-amber-400/90">
+                            data leaving device: {t.decision.networkDestinations.join(' · ')}
+                          </div>
+                        )}
                         {t.decision?.goal && (
                           <div className="mt-1 text-[10px] text-muted-foreground/80">
                             {t.decision.goal}
+                          </div>
+                        )}
+                        {/* Web-action confirm banner (P7.5) — sensitive
+                            browser mutations need an explicit Confirm & run;
+                            Block rejects the same nonce-bound card. */}
+                        {t.decision?.webAction && (
+                          <div className="mt-2 rounded-md border border-red-500/40 bg-red-500/10 p-2">
+                            <div className="flex items-center gap-1.5">
+                              <Globe className="h-3 w-3 text-red-400" />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-red-400">
+                                Web action · {t.decision.webAction.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              Confirm before running this browser mutation — it
+                              can submit forms, change account settings, or
+                              trigger payments.
+                            </p>
+                            <div className="mt-1.5 flex gap-1.5">
+                              <Button
+                                size="sm"
+                                disabled={busy === t.ticketId}
+                                className="h-6 gap-1 border-red-500/50 bg-red-500/20 px-2 text-[10px] text-red-300 hover:bg-red-500/30"
+                                onClick={() => respond(t.ticketId, 'approve')}
+                              >
+                                <Globe className="h-3 w-3" />
+                                Confirm &amp; run
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busy === t.ticketId}
+                                className="h-6 gap-1 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
+                                onClick={() => respond(t.ticketId, 'reject')}
+                              >
+                                <OctagonX className="h-3 w-3" />
+                                Block
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>

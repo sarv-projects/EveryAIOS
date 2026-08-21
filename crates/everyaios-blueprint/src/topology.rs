@@ -44,10 +44,7 @@ impl AgentRole {
 pub enum Topology {
     /// A shared turn loop with a moderator; every role sees the shared
     /// transcript and speaks in turn.
-    GroupChat {
-        moderator: String,
-        max_rounds: u32,
-    },
+    GroupChat { moderator: String, max_rounds: u32 },
     /// A chain: each agent passes control + context to the next via message.
     Handoff { chain: Vec<String> },
     /// Sequential workers over a batch (composes from batch mode).
@@ -94,7 +91,9 @@ impl MultiAgentPlan {
             .filter(|r| !r.read_only)
             .filter(|r| match &self.topology {
                 Topology::GroupChat { moderator, .. } => r.name != *moderator,
-                Topology::Handoff { .. } | Topology::Sequential { .. } | Topology::Concurrent { .. } => true,
+                Topology::Handoff { .. }
+                | Topology::Sequential { .. }
+                | Topology::Concurrent { .. } => true,
             })
             .collect()
     }

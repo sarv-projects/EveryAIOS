@@ -14,10 +14,16 @@
 
 pub mod browser;
 pub mod discovery;
+pub mod pairing;
 pub mod transport;
 
 pub use browser::{
-    install_chrome_for_testing, locate_system_browser, spawn_browser, BrowserChild, LaunchOptions,
+    default_profile_dir, install_chrome_for_testing, locate_system_browser, spawn_browser,
+    BrowserChild, LaunchOptions,
+};
+pub use pairing::{
+    assert_attach_allowed, chrome_default_user_data_dirs, chrome_major_version,
+    is_default_chrome_profile, is_everyaios_isolated_profile, ProfilePairing, ProfilePairingStore,
 };
 pub use discovery::{
     assert_loopback, connect_to_browser, discover_electron_apps, electron_from_json,

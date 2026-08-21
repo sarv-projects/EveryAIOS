@@ -67,6 +67,21 @@ export const ASYMMETRIC_TIERS = {
   writers: 3,
 } as const;
 
+/**
+ * Deterministic task classification used when the caller did not explicitly
+ * select a tier. It is deliberately conservative: ambiguous prompts stay in
+ * the normal chat tier instead of silently receiving broad tool access.
+ */
+export function classifyTask(text: string): TaskKind {
+  const normalized = text.toLowerCase();
+  if (/\b(screenshot|image|photo|picture|visual|vision)\b/.test(normalized)) return "vision";
+  if (/\b(debug|refactor|implement|code|compile|test|file|repo|repository|patch)\b/.test(normalized)) return "coding";
+  if (/\b(research|compare|analy[sz]e|investigate|deep dive|sources|citations)\b/.test(normalized)) return "deep";
+  if (/\b(search|find|lookup|browse|fetch|navigate|open)\b/.test(normalized)) return "tools";
+  if (normalized.trim().length < 48) return "quick";
+  return "chat";
+}
+
 /** Pick a (provider, model) for a task (A6 → A7 planner/subagent feed). */
 export function selectModelForTask(opts: RouterOptions): ModelSelection {
   // 1. Explicit lock.

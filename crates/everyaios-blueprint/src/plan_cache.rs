@@ -76,12 +76,7 @@ impl PlanCache {
     }
 
     /// Best-matching cached plan at/above `min_similarity` and `min_version`.
-    pub fn lookup(
-        &self,
-        goal: &str,
-        min_similarity: f64,
-        min_version: u32,
-    ) -> Option<&Blueprint> {
+    pub fn lookup(&self, goal: &str, min_similarity: f64, min_version: u32) -> Option<&Blueprint> {
         let q = shingles(&normalize(goal));
         let mut best: Option<(f64, &PlanEntry)> = None;
         for e in &self.entries {
@@ -155,8 +150,8 @@ impl PlanCache {
 /// dropped so "and/the" noise doesn't sink the similarity).
 fn normalize(s: &str) -> Vec<String> {
     const STOPWORDS: &[&str] = &[
-        "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it",
-        "of", "on", "or", "that", "the", "this", "to", "was", "with",
+        "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of",
+        "on", "or", "that", "the", "this", "to", "was", "with",
     ];
     s.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
@@ -234,19 +229,21 @@ mod tests {
     fn unrelated_goal_misses_cache() {
         let mut cache = PlanCache::new(1);
         cache.store(bp("audit q3 expenses"), 1);
-        assert!(
-            cache
-                .lookup("rename all photos by date", DEFAULT_SIMILARITY, 1)
-                .is_none()
-        );
+        assert!(cache
+            .lookup("rename all photos by date", DEFAULT_SIMILARITY, 1)
+            .is_none());
     }
 
     #[test]
     fn version_invalidation_blocks_stale_plans() {
         let mut cache = PlanCache::new(1);
         cache.store(bp("audit q3 expenses"), 1);
-        assert!(cache.lookup("audit q3 expenses", DEFAULT_SIMILARITY, 2).is_none());
-        assert!(cache.lookup("audit q3 expenses", DEFAULT_SIMILARITY, 1).is_some());
+        assert!(cache
+            .lookup("audit q3 expenses", DEFAULT_SIMILARITY, 2)
+            .is_none());
+        assert!(cache
+            .lookup("audit q3 expenses", DEFAULT_SIMILARITY, 1)
+            .is_some());
     }
 
     #[test]
@@ -271,7 +268,9 @@ mod tests {
 
         let back = PlanCache::load(&path).unwrap();
         assert_eq!(back.version(), 7);
-        assert!(back.lookup("audit q3 expenses", DEFAULT_SIMILARITY, 1).is_some());
+        assert!(back
+            .lookup("audit q3 expenses", DEFAULT_SIMILARITY, 1)
+            .is_some());
         std::fs::remove_dir_all(&dir).ok();
     }
 

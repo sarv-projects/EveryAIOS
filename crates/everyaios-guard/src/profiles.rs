@@ -133,24 +133,48 @@ mod tests {
 
     #[test]
     fn strict_blocks_destructive_without_ask() {
-        assert_eq!(gate(Profile::Strict, Hook::DestructiveCommand), GateAction::Block);
-        assert_eq!(gate(Profile::Standard, Hook::DestructiveCommand), GateAction::Block);
-        assert_eq!(gate(Profile::Minimal, Hook::DestructiveCommand), GateAction::Ask);
+        assert_eq!(
+            gate(Profile::Strict, Hook::DestructiveCommand),
+            GateAction::Block
+        );
+        assert_eq!(
+            gate(Profile::Standard, Hook::DestructiveCommand),
+            GateAction::Block
+        );
+        assert_eq!(
+            gate(Profile::Minimal, Hook::DestructiveCommand),
+            GateAction::Ask
+        );
     }
 
     #[test]
     fn sensitive_file_escalates() {
-        assert_eq!(gate(Profile::Minimal, Hook::SensitiveFile), GateAction::Allow);
-        assert_eq!(gate(Profile::Standard, Hook::SensitiveFile), GateAction::Ask);
-        assert_eq!(gate(Profile::Strict, Hook::SensitiveFile), GateAction::Block);
+        assert_eq!(
+            gate(Profile::Minimal, Hook::SensitiveFile),
+            GateAction::Allow
+        );
+        assert_eq!(
+            gate(Profile::Standard, Hook::SensitiveFile),
+            GateAction::Ask
+        );
+        assert_eq!(
+            gate(Profile::Strict, Hook::SensitiveFile),
+            GateAction::Block
+        );
     }
 
     #[test]
     fn approval_threshold_orders() {
         // Strict demands human approval from Medium upward; Minimal only for
         // Critical. So threshold: Strict < Standard < Minimal.
-        assert!(Profile::Strict.human_approval_threshold() < Profile::Standard.human_approval_threshold());
-        assert!(Profile::Standard.human_approval_threshold() < Profile::Minimal.human_approval_threshold());
+        assert!(
+            Profile::Strict.human_approval_threshold()
+                < Profile::Standard.human_approval_threshold()
+        );
+        assert!(
+            Profile::Standard.human_approval_threshold()
+                < Profile::Minimal.human_approval_threshold()
+        );
     }
 
     #[test]

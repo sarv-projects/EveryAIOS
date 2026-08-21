@@ -19,7 +19,8 @@ pub fn guard() -> &'static Guard {
 /// returns a clone (the cache owns the canonical instance).
 pub fn guard_extra(patterns: &'static [&'static str]) -> Guard {
     use std::sync::OnceLock;
-    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<usize, Guard>>> = OnceLock::new();
+    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<usize, Guard>>> =
+        OnceLock::new();
     let ptr = patterns.as_ptr() as usize;
     let cache = CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
     let mut guard = cache.lock().unwrap_or_else(|p| p.into_inner());
@@ -106,7 +107,11 @@ pub struct PreExecScan {
 
 impl PreExecScan {
     pub fn new(target: ScanTarget, text: String, pattern_indices: Vec<usize>) -> Self {
-        Self { target, text, pattern_indices }
+        Self {
+            target,
+            text,
+            pattern_indices,
+        }
     }
 
     /// Categories of the matched patterns.
@@ -192,6 +197,9 @@ mod tests {
         let hits = scan_shell("rm -rf ~");
         assert!(!hits.is_empty());
         let cats = guard().categories(&hits);
-        assert!(cats.contains(&BlocklistCategory::HomeWipe) || cats.contains(&BlocklistCategory::DestructiveDelete));
+        assert!(
+            cats.contains(&BlocklistCategory::HomeWipe)
+                || cats.contains(&BlocklistCategory::DestructiveDelete)
+        );
     }
 }

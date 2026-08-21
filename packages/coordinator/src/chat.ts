@@ -25,6 +25,16 @@ import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
 import { StreamSession } from "@personal-ai/core-ai";
 import { chunkText, estimateTokens } from "@personal-ai/core-files";
 import { buildDesktopSystemPrompt, CACHE_BOUNDARY, type PersonaId } from "./prompt";
+import {
+  listedToolsToOpenAI,
+  resolveActiveTools,
+  sortToolsStable,
+  ToolExecutor,
+  type ListedTool,
+  type OpenAIFunctionTool,
+} from "./tools";
+import { classifyTask, selectModelForTask, type TaskKind } from "./router";
+export { evaluateGuard, useTicket, guardGate } from "./guard";
 
 /** Minimal B1-base turn parameters (P1.5 owns full system-prompt assembly). */
 export interface ChatStreamParams {
@@ -45,6 +55,8 @@ export interface ChatStreamParams {
   sourceLabels?: string[];
   /** P1.5 — user-attached documents (J6 <user_document> wrapping). */
   userDocuments?: Array<{ title: string; content: string }>;
+  /** P5/P6 project-scope isolation key (H2). */
+  projectId?: string;
 }
 
 /** Events the coordinator forwards to the UI as `chat/<type>` notifications. */
@@ -53,8 +65,14 @@ export type ChatEvent =
   | { type: "batch"; streamId: string; text: string; tokenCount: number }
   | { type: "reasoning"; streamId: string; text: string }
   | { type: "stage"; streamId: string; stage: string }
-  | { type: "tool_call"; streamId: string; toolId: string }
-  | { type: "tool_result"; streamId: string; toolId: string }
+  | {
+      type: "tool_call";
+      streamId: string;
+      toolId: string;
+      args?: Record<string, unknown>;
+      risk?: string;
+    }
+  | { type: "tool_result"; streamId: string; toolId: string; result?: unknown }
   | {
       type: "done";
       streamId: string;
@@ -63,7 +81,15 @@ export type ChatEvent =
       totalTokens: number;
       usage?: { promptTokens: number; completionTokens: number };
     }
-  | { type: "error"; streamId: string; code: string; message: string }
+  | {
+      type: "error";
+      streamId: string;
+      code: string;
+      message: string;
+      retryable?: boolean;
+      toolId?: string;
+      args?: Record<string, unknown>;
+    }
   | { type: "cancelled"; streamId: string }
   | {
       type: "memory_extracted";
@@ -84,15 +110,30 @@ export type ChatEvent =
       notifications: number;
     };
 
+/** One chat-completions message, including native tool-result turns. */
+export interface ProviderMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content?: string | null;
+  tool_calls?: unknown[];
+  tool_call_id?: string;
+  name?: string;
+}
+
 /** Provider request the bridge turns into a provider stream. */
 export interface ProviderRequest {
   provider: string;
   model: string;
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  messages: ProviderMessage[];
   /** Stream identity for bridge queue routing (set by the run loop). */
   streamId?: string;
   /** Session identity — the broker's ledger + J11 budget key (Rust). */
   sessionId?: string;
+  /**
+   * OpenAI function defs serialized once from the Rust ToolRegistry
+   * (`listedToolsToOpenAI`). Forwarded as the broker `tools` body.
+   */
+  tools?: OpenAIFunctionTool[];
+  tool_choice?: "auto" | "none" | "required" | Record<string, unknown>;
 }
 
 /**
@@ -141,6 +182,13 @@ export interface ProviderChunk {
   delta?: string;
   finish?: string;
   usage?: { promptTokens?: number; completionTokens?: number };
+  /** Native or extracted tool call (S0.3). */
+  toolCall?: {
+    id?: string;
+    name?: string;
+    args?: Record<string, unknown>;
+    arguments?: string;
+  };
   /** Present when the provider stream ended (generator may close). */
   ended?: boolean;
 }
@@ -177,6 +225,9 @@ export class FrameProviderBridge implements ProviderBridge {
     if (chunk.delta !== undefined) {
       q.push({ type: "text", text: chunk.delta });
     }
+    if (chunk.toolCall) {
+      q.push(toolCallChunk(chunk.toolCall));
+    }
     if (chunk.usage) {
       q.push({
         type: "done",
@@ -204,19 +255,55 @@ export class FrameProviderBridge implements ProviderBridge {
       // the provider call (the broker holds the keys — the sidecar never
       // does). A refusal (e.g. J11 budget) throws here and surfaces as a
       // chat/error through the engine.
-      await this.requestFn("provider/stream", {
+      const payload: Record<string, unknown> = {
         provider: req.provider,
         model: req.model,
         sessionId: req.sessionId,
         streamId: key,
         messages: req.messages,
-      });
+      };
+      if (req.tools !== undefined) payload.tools = req.tools;
+      if (req.tool_choice !== undefined) payload.tool_choice = req.tool_choice;
+      await this.requestFn("provider/stream", payload);
+      const useTools = !!(req.tools && req.tools.length > 0);
+      if (!useTools) {
+        for (;;) {
+          if (signal.aborted) return;
+          const chunk = await q.next();
+          if (chunk === undefined) return;
+          yield chunk;
+          if (chunk.type === "done") return;
+        }
+      }
+      const buffered: StreamChunk[] = [];
+      let sawTool = false;
       for (;;) {
         if (signal.aborted) return;
         const chunk = await q.next();
-        if (chunk === undefined) return;
+        if (chunk === undefined) break;
+        if (chunk.type === "tool_call") sawTool = true;
+        buffered.push(chunk);
+        if (chunk.type === "done") break;
+      }
+      // B5 fallback: local JSON-mode text that Rust did not already promote
+      // to a toolCall chunk (Rust stream_provider does this first).
+      if (!sawTool) {
+        const text = buffered
+          .filter((c): c is Extract<StreamChunk, { type: "text" }> => c.type === "text")
+          .map((c) => c.text)
+          .join("");
+        const calls = extractJsonToolCalls(text);
+        if (calls.length > 0) {
+          for (const c of calls) {
+            yield { type: "tool_call", id: c.id, args: c.args };
+          }
+          const done = buffered.find((c) => c.type === "done");
+          if (done) yield done;
+          return;
+        }
+      }
+      for (const chunk of buffered) {
         yield chunk;
-        if (chunk.type === "done") return;
       }
     } finally {
       q.close();
@@ -263,11 +350,23 @@ export async function runChatStream(
 ): Promise<void> {
   const { sessionId, streamId, text } = params;
   const surface = params.surface ?? "chat";
-  const provider = params.provider ?? "nvidia";
-  const model = params.model ?? "meta/llama";
+  // P1.9 (A6/A7): explicit provider/model lock wins; otherwise the
+  // task→model router picks after tool resolution (below).
+  let provider = params.provider;
+  let model = params.model;
 
   const controller = new AbortController();
   active.set(streamId, controller);
+  if (request) {
+    void request("execution/begin", {
+      trigger: surface === "automation" ? "scheduler" : "chat",
+      sessionId,
+      objective: text,
+      contextSnapshot: { sessionId, streamId },
+    }).catch(() => {
+      /* kernel optional */
+    });
+  }
 
   // StreamSession (core-ai A-10): TTFT + 33ms batch flush. Checkpoints are
   // persistence-relevant (P2+) and not forwarded on the wire yet.
@@ -288,6 +387,69 @@ export async function runChatStream(
         break;
     }
   }, { batchIntervalMs });
+
+  const toolExecutor = request ? new ToolExecutor(request) : undefined;
+  let openaiTools: OpenAIFunctionTool[] | undefined;
+  let catalogIndex: string[] = [];
+  const riskById = new Map<string, string>();
+  if (toolExecutor) {
+    try {
+      const listed: ListedTool[] = sortToolsStable(await toolExecutor.listTools());
+      catalogIndex = listed.map((t) => t.id);
+      const active = resolveActiveTools(listed, text);
+      openaiTools = listedToolsToOpenAI(active);
+      for (const t of listed) riskById.set(t.id, t.risk);
+    } catch {
+      /* tool/list missing — native defs omitted; text-only turn still runs */
+    }
+  }
+
+  // P1.9: when the client left provider/model unset, route via the task→model
+  // router. A tools-capable tier is required when the turn resolved native
+  // tools; otherwise a plain chat tier (cheapest ≥16K ctx) wins.
+  if (provider === undefined || model === undefined) {
+    const task: TaskKind = openaiTools && openaiTools.length > 0 ? "tools" : classifyTask(text);
+    const sel = selectModelForTask({
+      task,
+      ...(provider !== undefined ? { provider } : {}),
+      ...(model !== undefined ? { model } : {}),
+    });
+    provider = sel.provider;
+    model = sel.model;
+    emit({ type: "stage", streamId, stage: `routed:${sel.provider}/${sel.model} · ${sel.reason}` });
+  }
+  // Narrow to `string` for the provider closure (fallback is unreachable in
+  // practice — the router always returns a provider/model).
+  const finalProvider = provider ?? "nvidia";
+  const finalModel = model ?? "meta/llama";
+
+  // P1.3 (A9) — semantic/result cache on read-only turns only. A turn that
+  // resolved no tools cannot mutate state, so a cached response is safe to
+  // serve. Mutation turns (tools resolved) bypass the cache entirely.
+  const readOnlyTurn = !openaiTools || openaiTools.length === 0;
+  if (request && readOnlyTurn) {
+    try {
+      const cached = (await request("memory/cache_get", { prompt: text })) as {
+        hit?: boolean;
+        response?: string;
+      };
+      if (cached?.hit && typeof cached.response === "string") {
+        emit({ type: "stage", streamId, stage: "cache:hit:semantic" });
+        emit({ type: "batch", streamId, text: cached.response, tokenCount: estimateTokens(cached.response) });
+        emit({
+          type: "done",
+          streamId,
+          turnId: `${sessionId}:${++turnCounter}`,
+          fullText: cached.response,
+          totalTokens: estimateTokens(cached.response),
+        });
+        active.delete(streamId);
+        return;
+      }
+    } catch {
+      /* cache miss / handler absent — fall through to a live turn */
+    }
+  }
 
   const engine = new ConversationEngine({
     // P1.5 — full 12-segment cache-affine pipeline (core-ai system-prompt.ts
@@ -323,18 +485,56 @@ export async function runChatStream(
           /* memory/plan is best-effort — a missing handler never blocks the turn */
         }
       }
+      // H2 capability index: names only, below the cache boundary so the
+      // stable prefix stays byte-identical as the catalog grows. Full
+      // schemas are the resolved subset on ProviderRequest.tools.
+      if (catalogIndex.length > 0) {
+        system = injectBelowBoundary(
+          system,
+          `<tool_index>\n${catalogIndex.join("\n")}\n</tool_index>`,
+        );
+      }
       return `${system}\n\n<user>\n${input.text}\n</user>`;
     },
-    streamProvider: async function* (prompt, signal) {
+    streamProvider: async function* (prompt, signal, extras) {
+      const messages: ProviderMessage[] = [
+        { role: "system", content: prompt },
+        { role: "user", content: text },
+      ];
+      const previous = extras?.previousToolResults ?? [];
+      for (let i = 0; i < previous.length; i++) {
+        const r = previous[i]!;
+        const callId = `call_${i}_${r.toolId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+        messages.push({
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: callId,
+              type: "function",
+              function: {
+                name: r.toolId,
+                arguments: JSON.stringify(r.args ?? {}),
+              },
+            },
+          ],
+        });
+        messages.push({
+          role: "tool",
+          tool_call_id: callId,
+          content:
+            typeof r.result === "string" ? r.result : JSON.stringify(r.result ?? null),
+        });
+      }
       const req: ProviderRequest = {
-        provider,
-        model,
+        provider: finalProvider,
+        model: finalModel,
         streamId,
         sessionId,
-        messages: [
-          { role: "system", content: prompt },
-          { role: "user", content: text },
-        ],
+        messages,
+        ...(openaiTools && openaiTools.length > 0
+          ? { tools: openaiTools, tool_choice: "auto" as const }
+          : {}),
       };
       for await (const chunk of bridge.streamChat(req, signal)) {
         if (signal.aborted) return;
@@ -345,6 +545,32 @@ export async function runChatStream(
     // the loop contract real today.
     persistTurn: async (input) =>
       `${input.sessionId ?? "sess"}:${++turnCounter}`,
+    ...(toolExecutor
+      ? {
+          executeTool: async (toolId: string, args: Record<string, unknown>) => {
+            const ctx: { sessionId: string; agentId?: string } = { sessionId };
+            if (params.agentId !== undefined) ctx.agentId = params.agentId;
+            emit({ type: "stage", streamId, stage: `tool:${toolId}:running` });
+            try {
+              const result = await toolExecutor.executeTool(toolId, args, ctx);
+              emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
+              return result;
+            } catch (toolErr) {
+              const message = toolErr instanceof Error ? toolErr.message : String(toolErr);
+              emit({
+                type: "error",
+                streamId,
+                code: "tool_failed",
+                message,
+                retryable: true,
+                toolId,
+                args,
+              });
+              throw toolErr;
+            }
+          },
+        }
+      : {}),
     // P5.1 core-memory import: the sidecar extracts declarative fact
     // candidates from the turn and emits them (the UI/audit show them; the
     // Rust store persists them on the `memory/write` dispatch, which lands
@@ -357,9 +583,18 @@ export async function runChatStream(
         // relay answers `memory/write`; a missing/refusing handler is
         // tolerated so the stream never blocks on memory.
         if (request) {
-          void request("memory/write", { sessionId, facts }).catch(() => {
-            /* memory persistence is best-effort */
-          });
+          const writeBody: Record<string, unknown> = {
+            sessionId,
+            facts,
+            source: "chat",
+            sourceId: sessionId,
+          };
+          if (params.projectId !== undefined) writeBody.projectId = params.projectId;
+          void request("memory/write", writeBody)
+            .then(() => request("memory/tick", { text: response }).catch(() => undefined))
+            .catch(() => {
+              /* memory persistence is best-effort */
+            });
         }
       }
     },
@@ -387,11 +622,19 @@ export async function runChatStream(
         case "reasoning":
           emit({ type: "reasoning", streamId, text: ev.text });
           break;
-        case "tool_call":
-          emit({ type: "tool_call", streamId, toolId: ev.toolId });
+        case "tool_call": {
+          const risk = riskById.get(ev.toolId);
+          emit({
+            type: "tool_call",
+            streamId,
+            toolId: ev.toolId,
+            args: ev.args,
+            ...(risk !== undefined ? { risk } : {}),
+          });
           break;
+        }
         case "tool_result":
-          emit({ type: "tool_result", streamId, toolId: ev.toolId });
+          emit({ type: "tool_result", streamId, toolId: ev.toolId, result: ev.result });
           break;
         case "risk_assessment":
           // Surfaced as a stage chip; payload-level risk UI lands in P11.
@@ -435,6 +678,18 @@ export async function runChatStream(
         totalTokens: batcher.getTokenCount(),
         ...(usage ? { usage } : {}),
       });
+      // P1.3 (A9) — store a successful read-only turn's response so the next
+      // identical prompt is served from the semantic cache (never mutation
+      // turns). Best-effort: a missing handler never blocks the done event.
+      if (request && readOnlyTurn && fullText.length > 0) {
+        void request("memory/cache_put", {
+          prompt: text,
+          response: fullText,
+          readOnly: true,
+        }).catch(() => {
+          /* cache write is best-effort */
+        });
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -453,6 +708,142 @@ export async function runChatStream(
 /** J11 budget-kill detection: the broker's "stopped: $X limit" message. */
 function isBudgetError(message: string): boolean {
   return message.includes("stopped:") && message.includes("limit");
+}
+
+function toolCallChunk(tc: NonNullable<ProviderChunk["toolCall"]>): StreamChunk {
+  const id = tc.id ?? tc.name ?? "";
+  let args: Record<string, unknown> = tc.args ?? {};
+  if (tc.arguments !== undefined) {
+    try {
+      const parsed: unknown = JSON.parse(tc.arguments);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        args = parsed as Record<string, unknown>;
+      }
+    } catch {
+      args = { _raw: tc.arguments };
+    }
+  }
+  return { type: "tool_call", id, args };
+}
+
+/**
+ * B5 / local JSON-mode: pull tool calls out of grammar-enforced JSON text.
+ * Mirrors `everyaios_vault::extract_json_tool_calls`.
+ */
+export function extractJsonToolCalls(
+  text: string,
+): Array<{ id: string; args: Record<string, unknown> }> {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const unfenced = trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(unfenced);
+  } catch {
+    const start = unfenced.indexOf("{");
+    const end = unfenced.lastIndexOf("}");
+    if (start < 0 || end <= start) return [];
+    try {
+      parsed = JSON.parse(unfenced.slice(start, end + 1));
+    } catch {
+      // Fence/brace repair (mirrors everyaios-memory::repair_tool_json).
+      const repaired = unfenced
+        .replace(/,\s*([}\]])/g, "$1")
+        .replace(/'/g, unfenced.includes('"') ? "'" : '"');
+      try {
+        parsed = JSON.parse(repaired.slice(
+          repaired.indexOf("{"),
+          repaired.lastIndexOf("}") + 1,
+        ));
+      } catch {
+        return [];
+      }
+    }
+  }
+  return toolCallsFromValue(parsed);
+}
+
+function toolCallsFromValue(
+  v: unknown,
+): Array<{ id: string; args: Record<string, unknown> }> {
+  if (!v || typeof v !== "object") return [];
+  const o = v as Record<string, unknown>;
+  if (Array.isArray(o.tool_calls)) {
+    return o.tool_calls.flatMap(toolCallsFromValue);
+  }
+  const fn = o.function;
+  const fnName =
+    fn && typeof fn === "object" && !Array.isArray(fn)
+      ? (fn as { name?: unknown }).name
+      : undefined;
+  const name =
+    (typeof o.tool === "string" && o.tool) ||
+    (typeof o.name === "string" && o.name) ||
+    (typeof fnName === "string" ? fnName : "");
+  if (!name) return [];
+  const fnArgs =
+    fn && typeof fn === "object" && !Array.isArray(fn)
+      ? (fn as { arguments?: unknown }).arguments
+      : undefined;
+  const raw = o.args ?? o.arguments ?? fnArgs;
+  let args: Record<string, unknown> = {};
+  if (typeof raw === "string") {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        args = parsed as Record<string, unknown>;
+      } else {
+        args = { _raw: raw };
+      }
+    } catch {
+      args = { _raw: raw };
+    }
+  } else if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    args = raw as Record<string, unknown>;
+  }
+  return [{ id: name, args }];
+}
+
+export interface ToolRetryParams {
+  sessionId: string;
+  streamId: string;
+  toolId: string;
+  args: Record<string, unknown>;
+  agentId?: string;
+}
+
+/** S0.5 — re-run one tool through the same Guard-2 exec→commit path. */
+export async function runToolRetry(
+  params: ToolRetryParams,
+  emit: (e: ChatEvent) => void,
+  request: (method: string, params: unknown) => Promise<unknown>,
+): Promise<void> {
+  const { sessionId, streamId, toolId, args } = params;
+  emit({ type: "tool_call", streamId, toolId, args });
+  emit({ type: "stage", streamId, stage: `tool:${toolId}:running` });
+  try {
+    const ex = new ToolExecutor(request);
+    const ctx: { sessionId: string; agentId?: string } = { sessionId };
+    if (params.agentId !== undefined) ctx.agentId = params.agentId;
+    const result = await ex.executeTool(toolId, args, ctx);
+    emit({ type: "tool_result", streamId, toolId, result });
+    emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    emit({ type: "tool_result", streamId, toolId, result: { error: message } });
+    emit({
+      type: "error",
+      streamId,
+      code: "tool_failed",
+      message,
+      retryable: true,
+      toolId,
+      args,
+    });
+  }
 }
 
 /**

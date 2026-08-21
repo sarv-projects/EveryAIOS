@@ -341,6 +341,12 @@ export default function ChatPanel() {
           <div className="flex-1" />
           <EmptyState onPick={(p) => setComposerValue(p)} />
           <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-2">
+            {store.streamStats.tokensPerSec > 0 && (
+              <div className="mx-auto mb-1 w-full max-w-3xl px-4 font-mono text-[9px] text-muted-foreground">
+                {store.streamStats.tokensPerSec.toFixed(1)} tok/s · ctx {store.streamStats.ctxPct}%
+                {store.streamStats.activeKey ? ` · ${store.streamStats.activeKey}` : ''}
+              </div>
+            )}
             <ChatComposer
               centered
               budget={

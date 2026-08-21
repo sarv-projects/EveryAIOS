@@ -215,19 +215,14 @@ mod tests {
 
     // ---- gated live oracle (needs LibreOffice) ------------------------------
     // Run with `EVERYAIOS_LIVE_TEST=1 cargo test -p everyaios-office --lib \
-    //   conformance::tests::live_oracle_opens_clean_docx -- --ignored`
+    //   conformance::tests::live_oracle_opens_clean -- --ignored`
     #[ignore = "live: needs LibreOffice (soffice) on PATH"]
     #[test]
     fn live_oracle_opens_clean_docx() {
-        if std::env::var("EVERYAIOS_LIVE_TEST").as_deref() != Ok("1") {
-            eprintln!("skipped: set EVERYAIOS_LIVE_TEST=1 to run the live oracle test");
+        if !oracle_available() {
             return;
         }
         let oracle = LibreOfficeOracle::new();
-        if !oracle.available() {
-            eprintln!("skipped: LibreOffice (soffice) not found");
-            return;
-        }
         // Write a valid docx to a temp file and assert it opens clean.
         let path =
             std::env::temp_dir().join(format!("everyaios-oracle-{}.docx", std::process::id()));
@@ -235,5 +230,42 @@ mod tests {
         oracle.check_opens(&path).expect("valid docx opens clean");
         let _ = std::fs::remove_file(&path);
         eprintln!("LIVE PASS: LibreOffice oracle opened a clean docx");
+    }
+
+    /// The real conformance guarantee (P4.5 CI gate): our surgical docx patch
+    /// round-trips through LibreOffice headless without a repair warning.
+    #[ignore = "live: needs LibreOffice (soffice) on PATH"]
+    #[test]
+    fn live_oracle_opens_clean_after_docx_patch() {
+        if !oracle_available() {
+            return;
+        }
+        let oracle = LibreOfficeOracle::new();
+        let mut engine = crate::docx::DocxEngine::open(crate::zip::tests::sample_docx()).unwrap();
+        engine.patch_block("p1", "Hello, conformance oracle!").unwrap();
+        let patched = engine.save().unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "everyaios-oracle-patched-{}.docx",
+            std::process::id()
+        ));
+        std::fs::write(&path, patched).unwrap();
+        oracle
+            .check_opens(&path)
+            .expect("patched docx opens clean in LibreOffice");
+        let _ = std::fs::remove_file(&path);
+        eprintln!("LIVE PASS: LibreOffice oracle opened a patched docx clean");
+    }
+
+    fn oracle_available() -> bool {
+        if std::env::var("EVERYAIOS_LIVE_TEST").as_deref() != Ok("1") {
+            eprintln!("skipped: set EVERYAIOS_LIVE_TEST=1 to run the live oracle test");
+            return false;
+        }
+        let oracle = LibreOfficeOracle::new();
+        if !oracle.available() {
+            eprintln!("skipped: LibreOffice (soffice) not found");
+            return false;
+        }
+        true
     }
 }

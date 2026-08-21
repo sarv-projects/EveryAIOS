@@ -16,6 +16,8 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::mpsc::{self, Receiver};
+use std::time::Duration;
 
 use everyaios_guard::{
     AuthorizationTicket, DecisionPackage, Estop, GuardReceipt, Operation, PermissionsPolicy,
@@ -59,14 +61,16 @@ pub struct PendingGuardCard {
     pub operation: String,
     pub paths: Vec<String>,
     pub risk: String,
+    pub risk_tier: String,
     pub approval_source: String,
+    /// Card-bound nonce required by the human approval command.
+    pub approval_nonce: String,
     pub expires_at_ms: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decision: Option<DecisionPackage>,
 }
 
 /// The executor's pre-flight state (estop + policy + profile + tickets).
-#[derive(Debug)]
 pub struct GuardService {
     tickets: TicketStore,
     policy: PermissionsPolicy,
@@ -76,6 +80,17 @@ pub struct GuardService {
     decisions: HashMap<String, DecisionPackage>,
     /// Monotonic ticket-id source.
     counter: u64,
+    /// H4: waiters blocked on Ask (ACP prompt).
+    waiters: HashMap<String, mpsc::Sender<bool>>,
+    outcomes: HashMap<String, bool>,
+}
+
+impl std::fmt::Debug for GuardService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GuardService")
+            .field("counter", &self.counter)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for GuardService {
@@ -87,6 +102,8 @@ impl Default for GuardService {
             profile: Profile::Standard,
             decisions: HashMap::new(),
             counter: 0,
+            waiters: HashMap::new(),
+            outcomes: HashMap::new(),
         }
     }
 }
@@ -159,7 +176,11 @@ impl GuardService {
             };
         }
 
-        let ask = policy_action == PolicyAction::Ask || needs_human || low_confidence;
+        let tier =
+            everyaios_guard::RiskTier::from_risk_and_op(decision.risk, operation.name(), false);
+        // R4 is deny-by-default: even a policy Allow still asks (explicit).
+        let r4_ask = tier == everyaios_guard::RiskTier::R4;
+        let ask = policy_action == PolicyAction::Ask || needs_human || low_confidence || r4_ask;
         self.counter += 1;
         let ticket_id = format!("tkt:{}", self.counter);
         let ticket = AuthorizationTicket {
@@ -173,6 +194,7 @@ impl GuardService {
             expires_at_ms: now_ms() + 60_000,
             single_use: true,
             approval_source: everyaios_guard::ApprovalSource::Policy,
+            approval_nonce: everyaios_guard::ticket::new_approval_nonce(),
             risk: decision.risk,
             audit_seq,
             state: if ask {
@@ -180,6 +202,10 @@ impl GuardService {
             } else {
                 everyaios_guard::TicketState::Approved
             },
+            bindings: Vec::new(),
+            execution_id: String::new(),
+            action_id: tool_id.to_string(),
+            idempotency_key: format!("{session_id}:{tool_id}:{args_hash}"),
         };
         self.tickets.mint(ticket);
         self.decisions.insert(ticket_id.clone(), decision);
@@ -204,12 +230,90 @@ impl GuardService {
             .map_err(|e| e.to_string())
     }
 
+    pub fn set_ticket_bindings(
+        &mut self,
+        ticket_id: &str,
+        bindings: Vec<everyaios_guard::ResourceBinding>,
+    ) -> bool {
+        self.tickets.set_bindings(ticket_id, bindings)
+    }
+
+    pub fn set_ticket_execution(&mut self, ticket_id: &str, execution_id: &str) -> bool {
+        self.tickets.set_execution(ticket_id, execution_id)
+    }
+
+    pub fn ticket_bindings(&self, ticket_id: &str) -> Vec<everyaios_guard::ResourceBinding> {
+        self.tickets
+            .get(ticket_id)
+            .map(|t| t.bindings.clone())
+            .unwrap_or_default()
+    }
+
+    /// Return the card-bound approval nonce without exposing the ticket
+    /// itself. UI surfaces use this only to construct the approval card;
+    /// approval still requires the nonce to be presented back to GuardService.
+    pub fn approval_nonce(&self, ticket_id: &str) -> Option<&str> {
+        self.tickets.approval_nonce(ticket_id)
+    }
+
     pub fn approve(&mut self, ticket_id: &str) -> bool {
-        self.tickets.approve(ticket_id)
+        let ok = self.tickets.approve(ticket_id);
+        if ok {
+            self.signal_ticket(ticket_id, true);
+        }
+        ok
+    }
+
+    /// Human-facing approval path; the nonce is checked by the ticket store
+    /// before the waiter is released.
+    pub fn approve_with_nonce(&mut self, ticket_id: &str, nonce: &str) -> bool {
+        let ok = self.tickets.approve_with_nonce(ticket_id, nonce);
+        if ok {
+            self.signal_ticket(ticket_id, true);
+        }
+        ok
     }
 
     pub fn reject(&mut self, ticket_id: &str) -> bool {
-        self.tickets.reject(ticket_id)
+        let ok = self.tickets.reject(ticket_id);
+        if ok {
+            self.signal_ticket(ticket_id, false);
+        }
+        ok
+    }
+
+    /// Human-facing rejection path; the nonce is checked by the ticket store.
+    pub fn reject_with_nonce(&mut self, ticket_id: &str, nonce: &str) -> bool {
+        let ok = self.tickets.reject_with_nonce(ticket_id, nonce);
+        if ok {
+            self.signal_ticket(ticket_id, false);
+        }
+        ok
+    }
+
+    fn signal_ticket(&mut self, ticket_id: &str, approved: bool) {
+        self.outcomes.insert(ticket_id.to_string(), approved);
+        if let Some(tx) = self.waiters.remove(ticket_id) {
+            let _ = tx.send(approved);
+        }
+    }
+
+    /// Watch an Ask ticket. If a human already decided, the receiver is
+    /// pre-loaded. ACP `acp_prompt` blocks on this instead of deny-and-reprompt.
+    pub fn watch_ticket(&mut self, ticket_id: &str) -> Receiver<bool> {
+        if let Some(&v) = self.outcomes.get(ticket_id) {
+            let (tx, rx) = mpsc::channel();
+            let _ = tx.send(v);
+            return rx;
+        }
+        let (tx, rx) = mpsc::channel();
+        self.waiters.insert(ticket_id.to_string(), tx);
+        rx
+    }
+
+    pub fn wait_ticket(&mut self, ticket_id: &str, timeout: Duration) -> bool {
+        let rx = self.watch_ticket(ticket_id);
+        rx.recv_timeout(timeout).unwrap_or(false)
     }
 
     pub fn pending(&self) -> Vec<PendingGuardCard> {
@@ -224,7 +328,11 @@ impl GuardService {
                 operation: t.operation.clone(),
                 paths: t.paths.clone(),
                 risk: format!("{:?}", t.risk).to_lowercase(),
+                risk_tier: everyaios_guard::RiskTier::from_risk_and_op(t.risk, &t.operation, false)
+                    .as_str()
+                    .to_string(),
                 approval_source: format!("{:?}", t.approval_source).to_lowercase(),
+                approval_nonce: t.approval_nonce.clone(),
                 expires_at_ms: t.expires_at_ms,
                 decision: self.decisions.get(&t.ticket_id).cloned(),
             })
@@ -294,11 +402,15 @@ impl GuardService {
             }
             "guard/approve" => {
                 let id = str_param(params, "ticketId").ok_or("guard/approve requires ticketId")?;
-                Ok(json!({ "approved": self.approve(id) }))
+                let nonce = str_param(params, "approvalNonce")
+                    .ok_or("guard/approve requires approvalNonce")?;
+                Ok(json!({ "approved": self.approve_with_nonce(id, nonce) }))
             }
             "guard/reject" => {
                 let id = str_param(params, "ticketId").ok_or("guard/reject requires ticketId")?;
-                Ok(json!({ "rejected": self.reject(id) }))
+                let nonce = str_param(params, "approvalNonce")
+                    .ok_or("guard/reject requires approvalNonce")?;
+                Ok(json!({ "rejected": self.reject_with_nonce(id, nonce) }))
             }
             "guard/estop" => {
                 self.estop.pull();
@@ -334,6 +446,17 @@ impl GuardService {
                     "profile": self.profile().as_str(),
                     "estopPulled": self.estop.is_pulled(),
                 }))
+            }
+            "guard/ticket_status" => {
+                let id =
+                    str_param(params, "ticketId").ok_or("guard/ticket_status requires ticketId")?;
+                match self.tickets.get(id) {
+                    Some(t) => Ok(json!({
+                        "ticketId": t.ticket_id,
+                        "state": format!("{:?}", t.state).to_lowercase(),
+                    })),
+                    None => Ok(json!({ "ticketId": id, "state": "unknown" })),
+                }
             }
             _ => Err(format!("method not found: {method}")),
         }
@@ -456,7 +579,10 @@ mod tests {
             0,
         );
         // Generic write defaults to always_ask policy → Ask, still.
-        assert!(matches!(d, GuardDecision::Ask { .. }), "generic write defaults to always_ask policy; got {d:?}");
+        assert!(
+            matches!(d, GuardDecision::Ask { .. }),
+            "generic write defaults to always_ask policy; got {d:?}"
+        );
     }
 
     #[test]
@@ -500,22 +626,34 @@ mod tests {
             "h",
             0,
         );
-        assert!(matches!(d, GuardDecision::Ask { .. }), "low confidence must force Ask; got {d:?}");
+        assert!(
+            matches!(d, GuardDecision::Ask { .. }),
+            "low confidence must force Ask; got {d:?}"
+        );
     }
 
     #[test]
     fn sidecar_surface_rejects_control_plane_ops() {
         let mut g = GuardService::new();
         // The sidecar may evaluate + use + read…
-        assert!(g.handle_sidecar("guard/evaluate", &json!({
-            "operation": "delete", "argsHash": "h", "decision": { "risk": "high" }
-        })).is_ok());
+        assert!(g
+            .handle_sidecar(
+                "guard/evaluate",
+                &json!({
+                    "operation": "delete", "argsHash": "h", "decision": { "risk": "high" }
+                })
+            )
+            .is_ok());
         assert!(g.handle_sidecar("guard/estop_status", &json!({})).is_ok());
         // …but may NOT approve/reset/estop/profile.
-        assert!(g.handle_sidecar("guard/approve", &json!({ "ticketId": "tkt:1" })).is_err());
+        assert!(g
+            .handle_sidecar("guard/approve", &json!({ "ticketId": "tkt:1" }))
+            .is_err());
         assert!(g.handle_sidecar("guard/reset", &json!({})).is_err());
         assert!(g.handle_sidecar("guard/estop", &json!({})).is_err());
-        assert!(g.handle_sidecar("guard/profile", &json!({ "profile": "minimal" })).is_err());
+        assert!(g
+            .handle_sidecar("guard/profile", &json!({ "profile": "minimal" }))
+            .is_err());
         // The control-plane handle still allows them (the UI path).
         assert!(g.handle("guard/estop", &json!({})).is_ok());
     }
@@ -540,9 +678,7 @@ mod tests {
     #[test]
     fn policy_block_refuses_outright() {
         let mut g = GuardService::new();
-        g.policy = PermissionsPolicy::parse(
-            "[permissions]\nterminal_shell = \"block\"\n",
-        );
+        g.policy = PermissionsPolicy::parse("[permissions]\nterminal_shell = \"block\"\n");
         let d = g.evaluate(
             "s1",
             "a1",
@@ -572,11 +708,23 @@ mod tests {
         assert_eq!(out["action"], "ask");
 
         // A pending ticket must not be consumable until approved.
-        assert!(g.handle("guard/use", &json!({ "ticketId": ticket_id, "argsHash": "h1" })).is_err());
-        g.handle("guard/approve", &json!({ "ticketId": ticket_id }))
-            .unwrap();
+        assert!(g
+            .handle(
+                "guard/use",
+                &json!({ "ticketId": ticket_id, "argsHash": "h1" })
+            )
+            .is_err());
+        let approval_nonce = g.pending()[0].approval_nonce.clone();
+        g.handle(
+            "guard/approve",
+            &json!({ "ticketId": ticket_id, "approvalNonce": approval_nonce }),
+        )
+        .unwrap();
         let used = g
-            .handle("guard/use", &json!({ "ticketId": ticket_id, "argsHash": "h1" }))
+            .handle(
+                "guard/use",
+                &json!({ "ticketId": ticket_id, "argsHash": "h1" }),
+            )
             .unwrap();
         assert_eq!(used["consumed"], true);
 
@@ -589,5 +737,31 @@ mod tests {
             )
             .unwrap();
         assert_eq!(blocked["action"], "block");
+    }
+
+    #[test]
+    fn ask_wait_unblocks_on_approve() {
+        use std::sync::{Arc, Mutex};
+        let g = Arc::new(Mutex::new(GuardService::new()));
+        let d = g.lock().unwrap().evaluate(
+            "s1",
+            "a1",
+            "fs.delete",
+            Operation::DeleteFiles,
+            decision(RiskLevel::High, &["/w/x"]),
+            "h",
+            0,
+        );
+        let GuardDecision::Ask { ticket_id } = d else {
+            panic!("expected Ask");
+        };
+        let rx = g.lock().unwrap().watch_ticket(&ticket_id);
+        let g2 = Arc::clone(&g);
+        let tid = ticket_id.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(30));
+            assert!(g2.lock().unwrap().approve(&tid));
+        });
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), true);
     }
 }

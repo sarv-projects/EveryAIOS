@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
+  Bell,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -74,6 +75,8 @@ export function StatusBar() {
   const autoRoute = useAppStore((s) => s.autoRoute)
   const liveBudget = useAppStore((s) => s.liveBudget)
   const devMode = useAppStore((s) => s.devMode)
+  const monitorBadge = useAppStore((s) => s.monitorBadge)
+  const clearMonitorBadge = useAppStore((s) => s.clearMonitorBadge)
 
   const agent = AGENT_MAP[selectedAgentId]
   const model = MODEL_MAP[selectedModelId]
@@ -157,7 +160,7 @@ export function StatusBar() {
             100% Private (On-Device)
           </span>
         )}
-        <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.23</span>
+        <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.24</span>
       </footer>
     )
   }
@@ -176,6 +179,18 @@ export function StatusBar() {
         )}>
           {agentPaused ? 'paused' : 'live'}
         </span>
+        {monitorBadge.count > 0 && (
+          <button
+            type="button"
+            onClick={() => clearMonitorBadge()}
+            className="ml-1 inline-flex items-center gap-0.5 rounded-full border border-orange-500/40 bg-orange-500/15 px-1.5 py-0 text-[9px] text-orange-200"
+            title={monitorBadge.last ?? 'Monitor'}
+          >
+            <Bell className="h-2.5 w-2.5" />
+            {monitorBadge.count}
+            {monitorBadge.stopped ? ' · stopped' : ''}
+          </button>
+        )}
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/80">
           {active?.status === 'action-required' ? 'awaiting approval' : active?.status === 'running' ? 'regenerating chart' : 'idle'}
@@ -248,7 +263,7 @@ export function StatusBar() {
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/70">audit · append</span>
         <span className="text-muted-foreground/40">·</span>
-        <span className="text-muted-foreground/50">EveryAIOS v3.23</span>
+        <span className="text-muted-foreground/50">EveryAIOS v3.24</span>
       </div>
     </footer>
   )

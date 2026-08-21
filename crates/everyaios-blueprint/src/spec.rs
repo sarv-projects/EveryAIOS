@@ -97,7 +97,10 @@ impl TaskSpec {
                     }
                 }
                 Section::Acceptance => {
-                    if let Some(item) = line.strip_prefix("- [ ]").or_else(|| line.strip_prefix("-")) {
+                    if let Some(item) = line
+                        .strip_prefix("- [ ]")
+                        .or_else(|| line.strip_prefix("-"))
+                    {
                         acceptance.push(item.trim().to_string());
                     }
                 }

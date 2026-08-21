@@ -150,6 +150,29 @@ const SPAM_MARKERS: &[&str] = &[
     "promoted",
 ];
 
+/// A minimal bundled filter list (the deterministic default when no user list
+/// is loaded). Covers the highest-volume trackers; the full brave `adblock`
+/// crate + EasyList are the documented swap-in (doc 64 §4).
+const DEFAULT_FILTER_LIST: &str = "\
+||doubleclick.net^\n\
+||google-analytics.com^\n\
+||googletagmanager.com^\n\
+||googlesyndication.com^\n\
+||facebook.com/tr^\n\
+||amazon-adsystem.com^\n\
+||scorecardresearch.com^\n\
+||taboola.com^\n\
+||outbrain.com^\n\
+||quantserve.com^\n";
+
+/// Build the deterministic default [`FilterSet`] (the G9 read-cleaner's
+/// fallback when no user-supplied EasyList is loaded).
+pub fn default_filter_set() -> FilterSet {
+    let mut f = FilterSet::new();
+    f.add_filter_list(DEFAULT_FILTER_LIST);
+    f
+}
+
 /// Clean markdown by: (1) dropping `[text](url)` / `![alt](url)` links whose
 /// URL is blocked, (2) dropping lines that are pure consent/ad spam (including
 /// lines that reduce to nothing after their ads are stripped). Returns the
@@ -172,10 +195,13 @@ pub fn clean_markdown(filters: &FilterSet, page_url: &str, markdown: &str) -> Cl
         });
         let trimmed = stripped.trim();
         if trimmed.is_empty() {
-            // A non-empty source line that reduced to nothing was all ads.
+            // A non-empty source line that reduced to nothing was all ads;
+            // a genuinely blank source line is preserved (paragraph breaks).
             if !line.trim().is_empty() {
                 removed_lines += 1;
+                continue;
             }
+            kept.push(String::new());
             continue;
         }
         let lower = trimmed.to_lowercase();

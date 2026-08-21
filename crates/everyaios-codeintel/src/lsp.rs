@@ -208,7 +208,10 @@ mod tests {
     #[test]
     fn malformed_header_errors() {
         let mut buf = b"Bad-Header: 5\r\n\r\n{}".to_vec();
-        assert!(matches!(decode_messages(&mut buf), Err(FramingError::MalformedHeader)));
+        assert!(matches!(
+            decode_messages(&mut buf),
+            Err(FramingError::MalformedHeader)
+        ));
     }
 
     #[test]
@@ -219,8 +222,14 @@ mod tests {
                 value: "**fn**".into(),
             },
             range: Some(Range {
-                start: Position { line: 1, character: 2 },
-                end: Position { line: 1, character: 5 },
+                start: Position {
+                    line: 1,
+                    character: 2,
+                },
+                end: Position {
+                    line: 1,
+                    character: 5,
+                },
             }),
         };
         let json = serde_json::to_string(&h).unwrap();
@@ -230,7 +239,11 @@ mod tests {
 
     #[test]
     fn request_and_response_roundtrip() {
-        let req = LspRequest::new(1, "textDocument/hover", serde_json::json!({"uri": "file:///a"}));
+        let req = LspRequest::new(
+            1,
+            "textDocument/hover",
+            serde_json::json!({"uri": "file:///a"}),
+        );
         let json = serde_json::to_string(&req).unwrap();
         let back: LspRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(back.method, "textDocument/hover");

@@ -20,7 +20,9 @@
 import { StreamSession } from "@personal-ai/core-ai";
 import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
 import { estimateTokens } from "@personal-ai/core-files";
-import type { ChatEvent, ProviderBridge, ProviderRequest } from "./chat";
+import type { ChatEvent, ProviderBridge, ProviderMessage, ProviderRequest } from "./chat";
+import { listedToolsToOpenAI, resolveActiveTools, ToolExecutor, type ListedTool } from "./tools";
+export { evaluateGuard, useTicket, guardGate } from "./guard";
 
 /**
  * One task of a plan the coordinator executes. Mirrors the Rust
@@ -34,6 +36,45 @@ export interface PlanTask {
   verify?: string[];
   /** Task ids that must be done first. */
   dependsOn?: string[];
+  /**
+   * Allow-list of Rust ToolRegistry ids this task may call. Serialized into
+   * the provider `tools` body; each model `tool_call` runs through ToolExecutor
+   * (one Guard-2 ticket per call).
+   */
+  tools?: string[];
+}
+
+/**
+ * Codex/Claude plan mode: decompose a goal into ordered tasks *without
+ * executing*. Numbered lists, bullets, and "then"/";" splits become
+ * multiple tasks; a short one-liner stays a single reviewable task.
+ */
+export function draftPlanTasks(goal: string): PlanTask[] {
+  const text = goal.trim();
+  if (!text) return [];
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const itemized = lines
+    .map((l) => l.replace(/^\s*(?:[-*]|\d+[.)]|#{1,6})\s+/, "").trim())
+    .filter((l) => l.length > 0);
+  if (lines.length >= 2 && itemized.length >= 2) {
+    return itemized.map((g, i) => ({
+      id: `t${i + 1}`,
+      goal: g,
+      ...(i > 0 ? { dependsOn: [`t${i}`] } : {}),
+    }));
+  }
+  const parts = text
+    .split(/\s*(?:;|\bthen\b|\band then\b)\s+/i)
+    .map((p) => p.replace(/^\s*(?:and\s+)?/i, "").trim())
+    .filter((p) => p.length >= 8);
+  if (parts.length >= 2) {
+    return parts.map((g, i) => ({
+      id: `t${i + 1}`,
+      goal: g.replace(/[.]+$/, ""),
+      ...(i > 0 ? { dependsOn: [`t${i}`] } : {}),
+    }));
+  }
+  return [{ id: "t1", goal: text }];
 }
 
 export interface PlanExecutionParams {
@@ -68,6 +109,8 @@ export type PlanEvent =
       planId: string;
       tasksDone: number;
       error?: string;
+      /** S0.7 EV1 verification report (when eval/verify is available). */
+      verification?: { verified?: boolean; status?: string };
     };
 
 /** The choice the user made on the MCQ card (matches McqOption). */
@@ -152,6 +195,16 @@ export async function runPlanExecution(
     } catch {
       /* best-effort */
     }
+    try {
+      await request("execution/begin", {
+        trigger: "plan",
+        sessionId,
+        objective: planId,
+        contextSnapshot: { sessionId, planId, streamId },
+      });
+    } catch {
+      /* kernel optional */
+    }
 
     const order = topologicalOrder(tasks);
     let tasksDone = 0;
@@ -193,7 +246,15 @@ export async function runPlanExecution(
 
       // The model's turn for this task — streams through the same provider
       // bridge as chat (ttft/batch/done surface the turn in the transcript).
-      const turn = await runTaskTurn(task, controller, params, bridge, emitChat, batchIntervalMs);
+      const turn = await runTaskTurn(
+        task,
+        controller,
+        params,
+        bridge,
+        emitChat,
+        request,
+        batchIntervalMs,
+      );
       if (controller.signal.aborted) break;
       if (turn.err) {
         emitPlan({ type: "plan_done", streamId, planId, tasksDone, error: turn.err });
@@ -236,7 +297,25 @@ export async function runPlanExecution(
     if (controller.signal.aborted) {
       emitPlan({ type: "plan_done", streamId, planId, tasksDone, error: "cancelled" });
     } else {
-      emitPlan({ type: "plan_done", streamId, planId, tasksDone });
+      let verification: { verified?: boolean; status?: string } | undefined;
+      try {
+        const checks = tasks.flatMap((t) => t.verify ?? []);
+        const report = (await request("eval/verify", {
+          taskId: planId,
+          goal: tasks.map((t) => t.goal).join("; "),
+          verify: checks,
+        })) as { verified?: boolean; status?: string };
+        verification = report;
+      } catch {
+        /* eval/verify is best-effort — missing handler never blocks plan_done */
+      }
+      emitPlan({
+        type: "plan_done",
+        streamId,
+        planId,
+        tasksDone,
+        ...(verification ? { verification } : {}),
+      });
     }
   } finally {
     try {
@@ -332,9 +411,8 @@ async function waitForChoice(
 
 /**
  * The model's turn for one task: one provider stream with the task goal as
- * the user message, batched at `batchIntervalMs` (same surface as chat).
- * Returns the tools the task performed (declared on the task for now — the
- * tool-executor wiring that parses model tool calls lands with it).
+ * the user message. Native tool_call chunks run through ToolExecutor
+ * (one Guard-2 ticket each) and their results feed a verify follow-up.
  */
 async function runTaskTurn(
   task: PlanTask,
@@ -342,6 +420,7 @@ async function runTaskTurn(
   params: PlanExecutionParams,
   bridge: ProviderBridge,
   emitChat: (e: ChatEvent) => void,
+  request: PlanRequest,
   batchIntervalMs: number,
 ): Promise<{ err?: string; tools: string[] }> {
   const { sessionId, planId, streamId } = params;
@@ -372,6 +451,38 @@ async function runTaskTurn(
     .filter(Boolean)
     .join("\n");
 
+  const executor = new ToolExecutor(request);
+  let listed: ListedTool[] = [];
+  try {
+    listed = await executor.listTools();
+  } catch {
+    /* headless */
+  }
+  const allowIds = taskTools(task);
+  const scoped =
+    allowIds.length > 0
+      ? listed.filter((t) => allowIds.includes(t.id))
+      : listed;
+  const openaiTools =
+    scoped.length > 0
+      ? listedToolsToOpenAI(resolveActiveTools(scoped, task.goal))
+      : allowIds.length > 0
+        ? listedToolsToOpenAI(
+            resolveActiveTools(
+              allowIds.map((id) => ({
+                id,
+                family: "",
+                description: id,
+                readOnly: false,
+                operation: "",
+                risk: "",
+                argsSchema: { type: "object", properties: {} },
+              })),
+              task.goal,
+            ),
+          )
+        : [];
+
   const req: ProviderRequest = {
     provider,
     model,
@@ -381,32 +492,106 @@ async function runTaskTurn(
       { role: "system", content: system },
       { role: "user", content: task.goal },
     ],
+    ...(openaiTools.length > 0
+      ? { tools: openaiTools, tool_choice: "auto" as const }
+      : {}),
   };
 
+  const called: Array<{ toolId: string; args: Record<string, unknown> }> = [];
   try {
     for await (const chunk of bridge.streamChat(req, controller.signal)) {
       if (controller.signal.aborted) return { tools: [] };
       if (chunk.type === "text") {
         batcher.pushToken(chunk.text);
+      } else if (chunk.type === "tool_call") {
+        if (allowIds.length === 0 || allowIds.includes(chunk.id)) {
+          called.push({ toolId: chunk.id, args: chunk.args ?? {} });
+        }
       } else if (chunk.type === "done") {
         break;
       }
     }
+
+    const executed: string[] = [];
+    const results: unknown[] = [];
+    for (const tc of called) {
+      if (controller.signal.aborted) break;
+      emitChat({ type: "tool_call", streamId, toolId: tc.toolId, args: tc.args });
+      emitChat({ type: "stage", streamId, stage: `tool:${tc.toolId}:running` });
+      try {
+        const ctx: { sessionId: string; agentId?: string } = { sessionId };
+        const result = await executor.executeTool(tc.toolId, tc.args, ctx);
+        results.push(result);
+        executed.push(tc.toolId);
+        emitChat({ type: "tool_result", streamId, toolId: tc.toolId, result });
+        emitChat({ type: "stage", streamId, stage: `tool:${tc.toolId}:done` });
+      } catch (toolErr) {
+        const message = toolErr instanceof Error ? toolErr.message : String(toolErr);
+        results.push({ error: message });
+        executed.push(tc.toolId);
+        emitChat({
+          type: "tool_result",
+          streamId,
+          toolId: tc.toolId,
+          result: { error: message },
+        });
+        emitChat({
+          type: "error",
+          streamId,
+          code: "tool_failed",
+          message,
+          retryable: true,
+          toolId: tc.toolId,
+          args: tc.args,
+        });
+      }
+    }
+
+    // Feed tool results into the task's verify checks via a follow-up turn.
+    if (
+      task.verify &&
+      task.verify.length > 0 &&
+      results.length > 0 &&
+      !controller.signal.aborted
+    ) {
+      const verifyMessages: ProviderMessage[] = [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: [
+            `Goal: ${task.goal}`,
+            `Tool results:\n${JSON.stringify(results)}`,
+            `Verification (must satisfy): ${task.verify.join("; ")}`,
+            "Report which checks passed or failed. Do not claim unverified completion.",
+          ].join("\n"),
+        },
+      ];
+      const verifyReq: ProviderRequest = {
+        provider,
+        model,
+        streamId,
+        sessionId,
+        messages: verifyMessages,
+      };
+      for await (const chunk of bridge.streamChat(verifyReq, controller.signal)) {
+        if (controller.signal.aborted) break;
+        if (chunk.type === "text") batcher.pushToken(chunk.text);
+        else if (chunk.type === "done") break;
+      }
+    }
+
     batcher.complete();
+    return { tools: executed };
   } catch (err) {
     return { tools: [], err: err instanceof Error ? err.message : String(err) };
   } finally {
     batcher.destroy();
   }
-
-  return { tools: taskTools(task) };
 }
 
-/** Deterministic tool list a task performs (declared on the task for now). */
+/** Allow-list declared on the task (empty = any registry tool the model calls). */
 function taskTools(task: PlanTask): string[] {
-  // Plan tasks declare their tool calls via a `tools` list when present;
-  // otherwise nothing is observed (the LLM turn itself charged the budget).
-  return [];
+  return task.tools ?? [];
 }
 
 /**

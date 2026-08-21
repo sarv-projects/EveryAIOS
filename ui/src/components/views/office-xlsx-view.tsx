@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Check, ChevronsUpDown, FileSpreadsheet, Loader2, ListFilter, RefreshCw, ShieldAlert, Sigma, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,9 @@ import { OfficeRibbon } from './office-ribbon'
 import {
   cellDisplay,
   colLetter,
+  demoRow,
   newBatch,
+  type CellValue,
   parseRangeRef,
   scalar,
   xlsxBatchCommit,
@@ -29,56 +31,6 @@ import {
 import { guardRespond } from '@/lib/guard'
 
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F']
-const ROWS = 15
-
-type Cell = { v?: string; bold?: boolean; header?: boolean; edit?: boolean; formula?: boolean }
-
-// row index 0 = header row (1-based -> 1)
-const GRID: Record<string, Cell> = {
-  A1: { v: 'Quarter', header: true },
-  B1: { v: 'Revenue', header: true },
-  C1: { v: 'Cost', header: true },
-  D1: { v: 'Profit', header: true },
-  E1: { v: 'Margin', header: true },
-  F1: { v: 'YoY %', header: true },
-  A2: { v: 'Q1 2026' },
-  B2: { v: '$1.20M' },
-  C2: { v: '$0.48M' },
-  D2: { v: '$0.72M' },
-  E2: { v: '60%' },
-  F2: { v: '+12%' },
-  A3: { v: 'Q2 2026' },
-  B3: { v: '$1.35M' },
-  C3: { v: '$0.52M' },
-  D3: { v: '$0.83M' },
-  E3: { v: '61%' },
-  F3: { v: '+14%' },
-  A4: { v: 'Q3 2026' },
-  B4: { v: '$1.80M' },
-  C4: { v: '$0.61M' },
-  D4: { v: '$1.19M' },
-  E4: { v: '66%' },
-  F4: { v: '+20%', bold: true },
-  A5: { v: 'Q4 2026 (proj)' },
-  B5: { v: '$2.10M' },
-  C5: { v: '$0.70M' },
-  D5: { v: '$1.40M' },
-  E5: { v: '67%' },
-  F5: { v: '+17%' },
-  A6: { v: 'Total' },
-  B6: { v: '$6.45M' },
-  C6: { v: '$2.31M' },
-  D6: { v: '$4.14M' },
-  E6: { v: '64%' },
-  F6: { v: '+15%' },
-  // B7:B12 being edited
-  B7: { edit: true },
-  B8: { edit: true },
-  B9: { edit: true },
-  B10: { edit: true },
-  B11: { edit: true },
-  B12: { edit: true },
-}
 
 const CHART_BARS = [60, 67.5, 90, 105]
 
@@ -93,6 +45,7 @@ export default function OfficeXlsxView() {
     address: string
     value: string
     ticketId: string
+    approvalNonce: string
   } | null>(null)
   const [committing, setCommitting] = useState(false)
 
@@ -113,18 +66,64 @@ export default function OfficeXlsxView() {
     summary: string
     batch: WorkbookBatch
     ticketId: string
+    approvalNonce: string
   } | null>(null)
+
+  // P4.2 — virtualized 100K+ row grid (overscan windowing). Only the visible
+  // slice (+overscan) is in the DOM; spacer rows fake the full scroll height.
+  // Live mode caches fetched windows so scrolling advances the Rust window.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportH, setViewportH] = useState(600)
+  const rowCache = useRef<Map<number, CellValue[]>>(new Map())
+  const loadedRef = useRef(0)
+  const fetchingRef = useRef(false)
 
   const open = async (path: string) => {
     try {
       setError(null)
-      setPayload(await xlsxOpen(path, null, 0, 500))
+      const p = await xlsxOpen(path, null, 0, 500)
+      rowCache.current = new Map()
+      const start = p.offset + 1
+      p.rows.forEach((row, i) => rowCache.current.set(start + i, row))
+      loadedRef.current = p.offset + p.rows.length
+      setPayload(p)
       setRecalc(null)
       setSelected(null)
+      setScrollTop(0)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open workbook')
     }
   }
+
+  // Advance the Rust window when the user scrolls near the loaded edge.
+  const fetchMore = async () => {
+    if (!payload || fetchingRef.current) return
+    if (loadedRef.current >= payload.total_rows) return
+    fetchingRef.current = true
+    try {
+      const p = await xlsxOpen(payload.path, payload.sheet, loadedRef.current, 500)
+      const start = p.offset + 1
+      p.rows.forEach((row, i) => rowCache.current.set(start + i, row))
+      loadedRef.current = p.offset + p.rows.length
+      // Refresh total_rows in case the backend refined it.
+      setPayload((prev) => (prev ? { ...prev, total_rows: p.total_rows } : prev))
+    } catch {
+      /* window advance is best-effort — the visible slice still renders */
+    } finally {
+      fetchingRef.current = false
+    }
+  }
+
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setScrollTop(el.scrollTop)
+    setViewportH(el.clientHeight)
+    if (payload && el.scrollTop + el.clientHeight >= el.scrollHeight - 44) {
+      void fetchMore()
+    }
+  }, [payload])
 
   const runRecalc = async () => {
     if (!payload || recalcing) return
@@ -138,14 +137,14 @@ export default function OfficeXlsxView() {
     }
   }
 
+  // P4.2 — cells for a 0-based row (cached live window, or the 100K demo).
+  const rowCells = (r: number): CellValue[] =>
+    payload ? (rowCache.current.get(r + 1) ?? []) : demoRow(r)
+
   // Seed the draft with the displayed value when a cell is selected.
   const selectCell = (r: number, c: number) => {
     setSelected({ r, c })
-    const v =
-      computed(r, c) ??
-      (payload
-        ? cellDisplay(payload.rows[r - payload.offset - 1]?.[c - 1])
-        : GRID[`${colLetter(c)}${r}`]?.v ?? '')
+    const v = computed(r, c) ?? cellDisplay(rowCells(r - 1)[c - 1])
     setDraft(v)
   }
 
@@ -157,9 +156,9 @@ export default function OfficeXlsxView() {
     try {
       const req = await xlsxEditRequest(payload.path, payload.sheet, address, draft)
       if (req.action === 'allow') {
-        await commitEdit(address, draft, req.ticketId, false)
+        await commitEdit(address, draft, req.ticketId, req.approvalNonce, false)
       } else {
-        setProposal({ address, value: draft, ticketId: req.ticketId })
+        setProposal({ address, value: draft, ticketId: req.ticketId, approvalNonce: req.approvalNonce })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Edit failed')
@@ -170,6 +169,7 @@ export default function OfficeXlsxView() {
     address: string,
     value: string,
     ticketId: string,
+    approvalNonce: string,
     approve: boolean,
   ) => {
     if (!payload || committing) return
@@ -177,7 +177,7 @@ export default function OfficeXlsxView() {
     try {
       // `ask` tickets need the human approval first (audit receipt); `allow`
       // tickets are already approved. Either way the commit consumes it.
-      if (approve) await guardRespond(ticketId, 'approve')
+      if (approve) await guardRespond(ticketId, 'approve', approvalNonce)
       await xlsxEditCommit(payload.path, payload.sheet, address, value, ticketId)
       setProposal(null)
       setDraft(value)
@@ -197,20 +197,25 @@ export default function OfficeXlsxView() {
     try {
       const req = await xlsxBatchRequest(payload.path, payload.sheet, batch)
       if (req.action === 'allow') {
-        await commitBatch(batch, req.ticketId, false)
+        await commitBatch(batch, req.ticketId, req.approvalNonce, false)
       } else {
-        setBatchProposal({ summary: batch.summary, batch, ticketId: req.ticketId })
+        setBatchProposal({ summary: batch.summary, batch, ticketId: req.ticketId, approvalNonce: req.approvalNonce })
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Bulk edit failed')
     }
   }
 
-  const commitBatch = async (batch: WorkbookBatch, ticketId: string, approve: boolean) => {
+  const commitBatch = async (
+    batch: WorkbookBatch,
+    ticketId: string,
+    approvalNonce: string,
+    approve: boolean,
+  ) => {
     if (!payload || committing) return
     setCommitting(true)
     try {
-      if (approve) await guardRespond(ticketId, 'approve')
+      if (approve) await guardRespond(ticketId, 'approve', approvalNonce)
       await xlsxBatchCommit(payload.path, payload.sheet, batch, ticketId)
       setBatchProposal(null)
       setPivotRows(null)
@@ -298,11 +303,15 @@ export default function OfficeXlsxView() {
 
   const selRef = selected ? `${colLetter(selected.c)}${selected.r}` : 'B4'
   const selValue = selected
-    ? (computed(selected.r, selected.c) ??
-      (payload
-        ? cellDisplay(payload.rows[selected.r - payload.offset - 1]?.[selected.c - 1])
-        : GRID[selRef]?.v ?? ''))
+    ? computed(selected.r, selected.c) ?? cellDisplay(rowCells(selected.r - 1)[selected.c - 1])
     : ''
+
+  // P4.2 — overscan window over the full row space (100K demo / live sheet).
+  const ROW_HEIGHT = 22
+  const OVERSCAN = 12
+  const totalRows = payload ? payload.total_rows : 100_000
+  const startRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportH) / ROW_HEIGHT) + OVERSCAN)
 
   return (
     <div className="flex h-full w-full flex-col bg-card">
@@ -415,7 +424,7 @@ export default function OfficeXlsxView() {
             size="sm"
             disabled={committing}
             className="h-6 gap-1 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
-            onClick={() => commitEdit(proposal.address, proposal.value, proposal.ticketId, true)}
+            onClick={() => commitEdit(proposal.address, proposal.value, proposal.ticketId, proposal.approvalNonce, true)}
           >
             <Check className="h-3 w-3" />
             Approve &amp; run
@@ -426,7 +435,7 @@ export default function OfficeXlsxView() {
             disabled={committing}
             className="h-6 gap-1 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
             onClick={() => {
-              if (proposal.ticketId) void guardRespond(proposal.ticketId, 'reject')
+              if (proposal.ticketId) void guardRespond(proposal.ticketId, 'reject', proposal.approvalNonce)
               setProposal(null)
             }}
           >
@@ -578,7 +587,7 @@ export default function OfficeXlsxView() {
             size="sm"
             disabled={committing}
             className="h-6 gap-1 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
-            onClick={() => commitBatch(batchProposal.batch, batchProposal.ticketId, true)}
+            onClick={() => commitBatch(batchProposal.batch, batchProposal.ticketId, batchProposal.approvalNonce, true)}
           >
             <Check className="h-3 w-3" />
             Approve &amp; run
@@ -589,7 +598,7 @@ export default function OfficeXlsxView() {
             disabled={committing}
             className="h-6 gap-1 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
             onClick={() => {
-              if (batchProposal.ticketId) void guardRespond(batchProposal.ticketId, 'reject')
+              if (batchProposal.ticketId) void guardRespond(batchProposal.ticketId, 'reject', batchProposal.approvalNonce)
               setBatchProposal(null)
             }}
           >
@@ -599,7 +608,7 @@ export default function OfficeXlsxView() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto scroll-thin">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto scroll-thin">
         <table className="border-collapse font-mono text-[11px]">
           <thead>
             <tr>
@@ -615,80 +624,44 @@ export default function OfficeXlsxView() {
             </tr>
           </thead>
           <tbody>
-            {payload ? (
-              payload.rows.map((row, i) => {
-                const r = payload.offset + i + 1
-                return (
-                  <tr key={r}>
-                    <td className="sticky left-0 z-10 w-8 border border-border bg-zinc-900 px-2 py-0.5 text-right text-[9px] text-muted-foreground">
-                      {r}
-                    </td>
-                    {columns.map((c, ci) => {
-                      const recalcVal = computed(r, ci + 1)
-                      const isSel = selected?.r === r && selected?.c === ci + 1
-                      const changed =
-                        recalcVal != null && recalcVal !== cellDisplay(row[ci])
-                      return (
-                        <td
-                          key={c}
-                          onClick={() => selectCell(r, ci + 1)}
-                          className={cn(
-                            'min-w-[88px] cursor-cell border px-2 py-0.5 text-foreground transition-colors hover:bg-orange-500/5',
-                            isSel && 'ring-1 ring-inset ring-orange-500',
-                            changed && 'cell-flash bg-emerald-500/10 text-emerald-300',
-                          )}
-                        >
-                          {recalcVal ?? cellDisplay(row[ci])}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })
-            ) : (
-              Array.from({ length: ROWS }, (_, r) => r + 1).map((r) => (
-                <tr key={r}>
+            {startRow > 0 && (
+              <tr style={{ height: startRow * ROW_HEIGHT }}>
+                <td colSpan={colCount + 1} className="border-0 p-0" />
+              </tr>
+            )}
+            {Array.from({ length: endRow - startRow }, (_, i) => startRow + i).map((r) => {
+              const cells = rowCells(r)
+              const r1 = r + 1
+              return (
+                <tr key={r} style={{ height: ROW_HEIGHT }}>
                   <td className="sticky left-0 z-10 w-8 border border-border bg-zinc-900 px-2 py-0.5 text-right text-[9px] text-muted-foreground">
-                    {r}
+                    {r1}
                   </td>
-                  {COLS.map((c) => {
-                    const cell = GRID[`${c}${r}`]
-                    const isSel = selected?.r === r && selected?.c === COLS.indexOf(c) + 1
-                    const edit = cell?.edit
+                  {columns.map((c, ci) => {
+                    const recalcVal = computed(r1, ci + 1)
+                    const isSel = selected?.r === r1 && selected?.c === ci + 1
+                    const changed = recalcVal != null && recalcVal !== cellDisplay(cells[ci])
                     return (
                       <td
                         key={c}
-                        onClick={() => selectCell(r, COLS.indexOf(c) + 1)}
+                        onClick={() => selectCell(r1, ci + 1)}
                         className={cn(
-                          'min-w-[88px] cursor-cell border px-2 py-0.5',
-                          cell?.header
-                            ? 'border-border bg-zinc-800 font-semibold text-foreground'
-                            : edit
-                              ? 'border-orange-500 bg-orange-500/5'
-                              : 'border-border text-foreground',
+                          'min-w-[88px] cursor-cell border px-2 py-0.5 text-foreground transition-colors hover:bg-orange-500/5',
                           isSel && 'ring-1 ring-inset ring-orange-500',
+                          changed && 'cell-flash bg-emerald-500/10 text-emerald-300',
                         )}
                       >
-                        {edit ? (
-                          <span className="flex items-center gap-1">
-                            <span className="live-dot h-1 w-1 rounded-full bg-orange-500" />
-                            <span className="text-muted-foreground/40">_</span>
-                          </span>
-                        ) : (
-                          <span
-                            className={cn(
-                              cell?.bold && 'font-semibold text-orange-300',
-                              cell?.v?.startsWith('+') && 'text-emerald-300',
-                            )}
-                          >
-                            {cell?.v ?? ''}
-                          </span>
-                        )}
+                        {recalcVal ?? cellDisplay(cells[ci])}
                       </td>
                     )
                   })}
                 </tr>
-              ))
+              )
+            })}
+            {endRow < totalRows && (
+              <tr style={{ height: (totalRows - endRow) * ROW_HEIGHT }}>
+                <td colSpan={colCount + 1} className="border-0 p-0" />
+              </tr>
             )}
           </tbody>
         </table>

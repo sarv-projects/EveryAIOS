@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { OfficeOpenBar } from './office-open-bar'
+import ChatOverlay from './chat-overlay'
 import { pdfOpen, pdfBytes, type PdfPayload } from '@/lib/office'
 
 const PdfCanvas = lazy(() => import('./pdf-canvas'))
@@ -19,15 +20,24 @@ const FORM_FIELDS = [
   { label: 'Contract Value:', value: '$ 1,800,000.00 USD', top: 42, highlight: true },
 ]
 
+// P4.7 — demo document text for the chat overlay when no PDF is open.
+const DEMO_DOC_TEXT = [
+  'Master Services Agreement between Acme Holdings, Inc. and EveryAIOS, LLC, effective 2026-10-01.',
+  '4.2 Payment Schedule: invoices are issued monthly and due net-thirty (30) days from issuance.',
+  '4.3 Late Payment: any payment not received within fifteen (15) days of the due date accrues interest at 1.5% per month.',
+  'Contract value is $1,800,000.00 USD, payable in twelve installments.',
+].join('\n')
+
 export default function OfficePdfView() {
   const [page, setPage] = useState(2)
   const [zoom, setZoom] = useState(100)
   const [payload, setPayload] = useState<PdfPayload | null>(null)
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const scopedView = useAppStore((s) => s.scopedView)
   const setScopedView = useAppStore((s) => s.setScopedView)
-  const scoped = scopedView === 'office-pdf'
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  // P4.7 — document text injected as the chat-overlay's `<user_document>`.
+  const docContext = payload ? payload.texts.join('\n') : DEMO_DOC_TEXT
 
   const open = async (path: string) => {
     try {
@@ -47,7 +57,7 @@ export default function OfficePdfView() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-zinc-900">
+    <div className="relative flex h-full w-full flex-col bg-zinc-900">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-red-400" />
@@ -71,19 +81,22 @@ export default function OfficePdfView() {
         <Badge variant="secondary" className="text-[10px]">
           lopdf
         </Badge>
-        {/* Study mode — scope the chat to this PDF (side-by-side explain) */}
+        {/* P4.7 — chat overlay: scope + inject this PDF's text as context */}
         <Button
           size="sm"
-          variant={scoped ? 'default' : 'outline'}
-          onClick={() => setScopedView(scoped ? undefined : 'office-pdf')}
+          variant={overlayOpen ? 'default' : 'outline'}
+          onClick={() => {
+            setOverlayOpen((v) => !v)
+            if (!overlayOpen) setScopedView('office-pdf')
+          }}
           className={cn(
             'h-6 gap-1 px-2 text-[10px]',
-            scoped && 'bg-orange-500 text-white hover:bg-orange-600'
+            overlayOpen && 'bg-orange-500 text-white hover:bg-orange-600'
           )}
-          title="Ask the chat about this PDF — answers are scoped to the document"
+          title="Ask the chat about this PDF — the document text is injected as context"
         >
           <ScanSearch className="h-3 w-3" />
-          {scoped ? 'Scoped — chat explains this PDF' : 'Scope chat to this PDF'}
+          {overlayOpen ? 'Close chat' : 'Ask about this PDF'}
         </Button>
       </header>
 
@@ -227,6 +240,14 @@ export default function OfficePdfView() {
           </button>
         </div>
       </footer>
+
+      {overlayOpen && (
+        <ChatOverlay
+          title={payload?.path ?? 'contract.pdf'}
+          context={docContext}
+          onClose={() => setOverlayOpen(false)}
+        />
+      )}
     </div>
   )
 }

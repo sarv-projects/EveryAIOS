@@ -40,17 +40,28 @@ impl ManifestBody {
 }
 
 /// Verify a signed manifest against a trusted public key (base64).
-pub fn verify_manifest(signed: &SignedManifest, public_key_b64: &str) -> Result<ManifestBody, ManifestError> {
+pub fn verify_manifest(
+    signed: &SignedManifest,
+    public_key_b64: &str,
+) -> Result<ManifestBody, ManifestError> {
     let pk_bytes = B64
         .decode(public_key_b64)
         .map_err(|_| ManifestError::BadKey)?;
     let pk = VerifyingKey::from_bytes(
-        pk_bytes.as_slice().try_into().map_err(|_| ManifestError::BadKey)?,
+        pk_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| ManifestError::BadKey)?,
     )?;
     let sig_bytes = B64
         .decode(&signed.signature_b64)
         .map_err(|_| ManifestError::BadSignature)?;
-    let sig = Signature::from_bytes(sig_bytes.as_slice().try_into().map_err(|_| ManifestError::BadSignature)?);
+    let sig = Signature::from_bytes(
+        sig_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| ManifestError::BadSignature)?,
+    );
     pk.verify(signed.body.as_bytes(), &sig)?;
     let body: ManifestBody =
         serde_json::from_str(&signed.body).map_err(|_| ManifestError::MalformedBody)?;

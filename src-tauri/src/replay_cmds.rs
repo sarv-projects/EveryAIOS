@@ -65,28 +65,13 @@ pub fn watch_events(
         .map_err(|e| e.to_string())
 }
 
-/// Stop button (P3.1): JSON-RPC `agent/stop` over the unix control channel.
-/// The coordinator/sidecar consumes it and kills the agent loop.
-#[cfg(unix)]
+/// Stop button (P3.1): cancel in-flight streams for the session.
 #[tauri::command]
-pub fn agent_stop(session_id: String) -> Result<(), String> {
-    let cfg = everyaios_core::Config::load().unwrap_or_default();
-    let sock = cfg.resolved_socket_path();
-    let msg = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "agent/stop",
-        "params": { "sessionId": session_id },
-    });
-    let payload = serde_json::to_vec(&msg).map_err(|e| e.to_string())?;
-    everyaios_ipc::socket::request(&sock, &payload).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-#[tauri::command]
-pub fn agent_stop(_session_id: String) -> Result<(), String> {
-    Err("agent/stop requires the unix control channel".into())
+pub fn agent_stop(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<serde_json::Value, String> {
+    crate::control::stop_session(&app, &session_id).map(|ids| serde_json::json!({ "cancelled": ids }))
 }
 
 fn base64_encode(bytes: &[u8]) -> String {

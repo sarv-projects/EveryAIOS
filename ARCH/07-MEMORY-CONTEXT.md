@@ -20,7 +20,7 @@ Every memory row carries `scope(user, agent, session, project)` — **multi-scop
 2. **Hallucination Risk Compass (risk-compass, built in core-engine):** post-generation score = retrieval-confidence × source-coverage ÷ hedging-density (length-normalized). High-risk bands → auto-flag or silent self-check loop (one cheap re-ask grounded on the retrieved blocks only).
 3. **Phantom Thread (warm set):** `RwLock<Vec<Fact>>` top-5 for the current (project, session) — swapped on workspace change **with 0ms TTFT**; injection budget fixed (05 §5.1: 600 tokens). Leakage floor = scope filter at write and read.
 4. **Temporal Graph Anticipation:** weekly-rhythm tracker on engagement logs → morning briefs + proactive pre-indexing ("Monday 9am: rent agreement" → open pre-warmed). Beats recency baselines >15pts (built, tested).
-5. **Spreading Activation (SYNAPSE):** entity graph (LadybugDB — adjacency, versioned edges; graphiti-style temporal edges) + activation spread with per-hop decay + **lateral inhibition**; re-ranks FTS5+vector results → the agent grasps multi-hop relations vector search misses. *(Note: Kuzu was abandoned Oct 2025; LadybugDB is the active community fork preserving the same embedded Cypher API + adding built-in vector indices.)*
+5. **Spreading Activation (SYNAPSE):** the Rust-native entity graph (adjacency, versioned edges; Graphiti-style temporal edges) + activation spread with per-hop decay + **lateral inhibition**; re-ranks FTS5+vector results → the agent grasps multi-hop relations vector search misses. LadybugDB is an optional/deferred backend with a compatible schema, not the canonical storage dependency.
 6. **Crystallization** (05 Rule 3 / v2.0 built): workflows → deterministic loops, 0 tokens.
 7. **Knowledge Graph + conflict resolution** (built): entity extraction → LLM refinement → edge writes; conflicts resolved by recency + confidence + user-pin.
 
@@ -40,7 +40,7 @@ This is the layer mem0 showed delivering **+29.6 temporal / +23.1 multi-hop** ov
 
 ## 7.4 Agent-managed paging (Letta pattern — for long autonomous runs)
 
-For deep multi-hour sessions: the agent gets three memory surfaces — **core** (always in context, ≤600 tok), **archival** (LadybugDB/SQLite, searchable), **recall** (episodic events, queryable). The agent itself decides what to page in/out via `memory` tools (read/write/search/forget), with the context planner (05 §5.2) enforcing budgets. Memory writes are queued to **turn boundaries** to protect the prefix cache (05 §5.5).
+For deep multi-hour sessions: the agent gets three memory surfaces — **core** (always in context, ≤600 tok), **archival** (Rust-native graph/SQLite, searchable; LadybugDB optional), **recall** (episodic events, queryable). The agent itself decides what to page in/out via `memory` tools (read/write/search/forget), with the context planner (05 §5.2) enforcing budgets. Memory writes are queued to **turn boundaries** to protect the prefix cache (05 §5.5).
 
 ## 7.5 Injection & integrity
 
@@ -54,7 +54,7 @@ For deep multi-hour sessions: the agent gets three memory surfaces — **core** 
 
 **Solution:** File-system event hooks (Rust `notify` crate) trigger **transactional tombstone writes** on rename/delete:
 1. `notify` emits `Rename(old, new)` or `Remove(path)` event.
-2. Memory coordinator atomically: (a) marks all FTS5 rows with `source_path = old` as tombstoned, (b) updates or removes corresponding sqlite-vec vectors, (c) emits a LadybugDB `DELETE EDGE WHERE source_file = $path` + `DELETE NODE WHERE origin = $path` (or re-paths on rename).
+2. Memory coordinator atomically: (a) marks all FTS5 rows with `source_path = old` as tombstoned, (b) updates or removes corresponding sqlite-vec vectors, (c) removes or re-paths corresponding edges and nodes in the Rust-native graph store (LadybugDB-compatible schema; optional backend).
 3. Tombstoned entries are excluded from all retrieval queries immediately; physically purged on next compaction cycle.
 4. **Rename = re-path, not delete+re-index** — preserves graph edges and vector associations while updating the path reference (zero re-embedding cost).
 
@@ -66,7 +66,7 @@ This prevents the #1 cause of agent hallucination in file-heavy workspaces.
 |---|---|---|
 | 7 algos + KG + conflict + decay | `@personal-ai/core-memory` | **Built** (tested) |
 | FTS5+vec hybrid + embeddings + chunking | `@personal-ai/core-files` | **Built** |
-| LadybugDB graph store (new backend, Kuzu community fork) | coordinator `memory/graph.ts` | New (replaces/parallels in-memory KG) |
+| Rust-native graph store (LadybugDB-compatible optional backend) | coordinator `memory/graph.ts` | Canonical graph surface; optional backend swap-in |
 | Multi-signal fusion + paging + scopes | coordinator `memory/fusion.ts` | New (SOTA layer) |
 | Warm-set + injection | coordinator + 05 budgets | New wiring |
 
@@ -79,11 +79,11 @@ From `NVIDIA-NeMo/labs-OO-Agents` `nooa-memory` (source-read this pass, Apache 2
 1. **Retention decay (ACT-R-style):** `retention = f(time_since_last_access, stability)` with `stability = decay_half_life_hours × (1 + log1p(strength))` — accessed memories decay much more slowly; fully recent ≈ 1.0. Our decay (algorithm 10) gains the log-strength half-life term.
 2. **Importance floor:** memories with `importance ≥ 8.0` are **never auto-forgotten** (protected type). → a hard `protect` bit in our schema.
 3. **Associative recall = semantic + keyword + recency + graph** in one query (already our C3 fusion — NOOA proves the same shape).
-4. **Typed relational edges:** `supports` / `contradicts` / `derived-from` on the memory graph (we only version temporal edges in LadybugDB). Contradiction edges feed our KG conflict resolution + risk compass.
+4. **Typed relational edges:** `supports` / `contradicts` / `derived-from` on the canonical Rust-native memory graph; temporal edge versioning is backend-neutral. Contradiction edges feed our KG conflict resolution + risk compass.
 5. **Spontaneous recall channel:** a pre-turn hook derives *queries from recent events* and injects matching memories as a dynamic context block — distinct from Phantom Thread (activity-aware preload of a fixed warm set). Both run: Phantom = workspace switch; spontaneous = event-driven query derivation.
 6. **References re-read fresh at recall:** stored entries may point at live files/objects instead of pasted values (pass-by-reference — see 05 §5.9) — token-minimizing by construction.
 
-**Status:** 🟡 new (algorithm #32). Wire into coordinator `memory/fusion.ts`; LadybugDB edges gain `relation_type` column.
+**Status:** 🟡 new (algorithm #32). Wire into coordinator `memory/fusion.ts`; the Rust-native graph schema carries `relation_type` (LadybugDB remains an optional implementation backend).
 
 ---
 

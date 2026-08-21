@@ -55,7 +55,8 @@ export interface SchedulerJob {
     | { type: "cron"; expr: string }
     | { type: "interval"; secs: number }
     | { type: "event"; kind: string; filter: string }
-    | { type: "webhook"; path: string; schema: string[] };
+    | { type: "webhook"; path: string; schema: string[] }
+    | { type: "window"; window: "morning" | "afternoon" | "evening"; utcOffsetMinutes?: number };
   steps: unknown[];
   policy: {
     suppressOnBattery: boolean;
@@ -65,7 +66,7 @@ export interface SchedulerJob {
   enabled: boolean;
   state:
     | { state: "idle" }
-    | { state: "running"; leaseExpiresAt: number }
+    | { state: "running"; leaseExpiresAt: number; fence?: string }
     | { state: "paused"; resumeDeadline?: number }
     | { state: "failed"; retries: number; nextRetryAt?: number };
   checkpoint: number;
@@ -120,6 +121,7 @@ export function startScheduler(
   let stopped = false;
   let webhookPort = 0;
   const running = new Set<string>();
+  const fences = new Map<string, string>();
 
   async function tickOnce(now?: number): Promise<string[]> {
     if (stopped) return [];
@@ -135,7 +137,10 @@ export function startScheduler(
       running.add(jobId);
       executed.push(jobId);
       // Fire-and-forget per job — a slow job must not block the ticker.
-      void runJob(job, ts).finally(() => running.delete(jobId));
+      void runJob(job, ts).finally(() => {
+        running.delete(jobId);
+        fences.delete(jobId);
+      });
     }
     return executed;
   }
@@ -146,10 +151,12 @@ export function startScheduler(
       const start = (await request("scheduler/lease_start", {
         id: job.id,
         now,
-      })) as { ok: boolean; resumed: boolean; checkpoint: number };
+      })) as { ok: boolean; resumed: boolean; checkpoint: number; fence?: string };
       if (!start.ok) return;
       started = true;
       const checkpoint = start.checkpoint;
+      if (typeof start.fence === "string") fences.set(job.id, start.fence);
+      const fence = start.fence;
 
       // Reawaken the job's session through the chat engine — context intact
       // (doc 67 §2: the same conversation, its history still there).
@@ -210,6 +217,7 @@ export function startScheduler(
         id: job.id,
         ok: !failed,
         now: Math.floor(Date.now() / 1000),
+        ...(fence !== undefined ? { fence } : {}),
       });
     } catch {
       if (started) {
@@ -218,6 +226,7 @@ export function startScheduler(
             id: job.id,
             ok: false,
             now: Math.floor(Date.now() / 1000),
+            ...(fences.get(job.id) ? { fence: fences.get(job.id) } : {}),
           });
         } catch {
           /* lease may already be gone — fine */
@@ -234,6 +243,7 @@ export function startScheduler(
         void request("scheduler/lease_heartbeat", {
           id: jobId,
           now: Math.floor(Date.now() / 1000),
+          ...(fences.get(jobId) ? { fence: fences.get(jobId) } : {}),
         }).catch(() => {});
       }
     }, DEFAULT_HEARTBEAT_MS);

@@ -19,6 +19,7 @@ import {
   respondToBreak,
   runPlanExecution,
   topologicalOrder,
+  draftPlanTasks,
   type PlanEvent,
   type PlanExecutionParams,
   type PlanRequest,
@@ -78,6 +79,39 @@ function scriptedBreaker(opts: {
         return Promise.resolve({ ok: false, interrupt, breakId: id });
       }
       return Promise.resolve({ ok: true });
+    }
+    if (method === "tool/list") {
+      return Promise.resolve({
+        tools: [
+          {
+            id: "search.query",
+            family: "search",
+            description: "search",
+            readOnly: true,
+            operation: "external_network",
+            risk: "medium",
+            argsSchema: { type: "object", properties: { query: { type: "string" } } },
+          },
+        ],
+      });
+    }
+    if (method === "tool/exec") {
+      return Promise.resolve({ action: "allow", ticketId: "tkt:plan", argsHash: "h" });
+    }
+    if (method === "tool/commit") {
+      return Promise.resolve({ ok: true, content: "ok-result" });
+    }
+    if (method === "eval/verify") {
+      return Promise.resolve({ verified: false, status: "unverifiable" });
+    }
+    if (method === "execution/begin") {
+      return Promise.resolve({ id: "ex:plan" });
+    }
+    if (method === "guard/evaluate") {
+      return Promise.resolve({ action: "allow", ticketId: "tkt:plan" });
+    }
+    if (method === "guard/use") {
+      return Promise.resolve({ consumed: true });
     }
     return Promise.reject(new Error(`unexpected method ${method}`));
   };
@@ -139,6 +173,24 @@ describe("plan executor — topological order", () => {
       { id: "a", goal: "x".repeat(200), verify: ["y".repeat(100)] },
     ]);
     expect(n).toBeGreaterThan(0);
+  });
+});
+
+describe("draftPlanTasks — plan mode is read-only decompose", () => {
+  test("splits numbered and then-clauses into ordered tasks", () => {
+    const a = draftPlanTasks("1. Read the spec\n2. Patch the vault\n3. Run tests");
+    expect(a.map((t) => t.id)).toEqual(["t1", "t2", "t3"]);
+    expect(a[1]!.dependsOn).toEqual(["t1"]);
+    expect(a[2]!.goal).toContain("tests");
+    const b = draftPlanTasks("read the file then write the patch then run tests");
+    expect(b.length).toBe(3);
+    expect(b[0]!.goal.toLowerCase()).toContain("read");
+  });
+
+  test("a short one-liner stays a single reviewable task", () => {
+    const t = draftPlanTasks("fix the typo");
+    expect(t).toHaveLength(1);
+    expect(t[0]!.goal).toBe("fix the typo");
   });
 });
 
@@ -297,6 +349,51 @@ describe("plan executor — circuit-break interrupt emit (P6.3)", () => {
 
   test("responding to an unknown break returns false", () => {
     expect(respondToBreak("ghost", "skip")).toBe(false);
+  });
+});
+
+describe("plan executor — S0.4 tool tickets", () => {
+  test("model tool_call runs through ToolExecutor and charges a breaker step", async () => {
+    const { events, plan, chat } = collector<PlanEvent | ChatEvent>();
+    const { request, calls } = scriptedBreaker({ okSteps: 99 });
+    let round = 0;
+    const bridge: ProviderBridge = {
+      async *streamChat(req, signal) {
+        if (signal.aborted) return;
+        if (req.tools && req.tools.length > 0 && round === 0) {
+          round += 1;
+          yield { type: "tool_call", id: "search.query", args: { query: "q" } };
+          yield { type: "done" };
+          return;
+        }
+        yield { type: "text", text: "verified" };
+        yield { type: "done" };
+      },
+    };
+    const params: PlanExecutionParams = {
+      ...PARAMS,
+      tasks: [
+        {
+          id: "a",
+          goal: "search then confirm",
+          tools: ["search.query"],
+          verify: ["results are non-empty"],
+        },
+      ],
+    };
+    await runPlanExecution(params, plan, chat, bridge, request);
+
+    const methods = calls.map((c) => c.method);
+    expect(methods).toContain("tool/list");
+    expect(methods).toContain("tool/exec");
+    expect(methods).toContain("tool/commit");
+    const toolSteps = calls.filter((c) => c.method === "plan/step" && c.params.kind === "tool_call");
+    expect(toolSteps).toHaveLength(1);
+    expect(toolSteps[0]!.params.toolCall).toBe("search.query");
+    expect(events.some((e) => e.type === "tool_call" && (e as ChatEvent & { toolId?: string }).toolId === "search.query")).toBe(true);
+    expect(events.some((e) => e.type === "tool_result")).toBe(true);
+    const done = events.find((e) => e.type === "plan_done") as Extract<PlanEvent, { type: "plan_done" }>;
+    expect(done.tasksDone).toBe(1);
   });
 });
 

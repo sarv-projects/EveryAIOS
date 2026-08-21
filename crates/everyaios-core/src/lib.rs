@@ -13,48 +13,97 @@
 
 use std::path::PathBuf;
 
+pub mod adapter;
+pub mod automation_runtime;
 pub mod blueprint;
+pub mod capability_manifest;
 pub mod challenge;
 pub mod chat;
 pub mod config;
+pub mod connector_hub;
+pub mod email;
+pub mod eval_service;
+pub mod execution;
+pub mod export;
+pub mod forge;
 pub mod guard_service;
 pub mod hwfit;
 pub mod local;
 pub mod memory_service;
+pub mod messaging;
 pub mod orphan;
 pub mod plan_service;
 pub mod provider_ref;
-pub mod scheduler_service;
 pub mod providers;
+pub mod reader;
+pub mod scheduler_service;
+pub mod self_audit;
 pub mod sidecar_link;
 pub mod supervisor;
+pub mod telemetry;
+pub mod tools;
 pub mod tracing;
+pub mod vault_key;
 pub mod version;
+pub mod widgets;
+pub mod worker_pool;
+pub mod wsl;
 
+pub use adapter::{exact_command_consent, is_install_script, Stage0Adapter};
+pub use automation_runtime::{
+    AutomationError, AutomationRunResult, AutomationRuntime, AutomationStepResult, ConnectorEngine,
+    SearchEngine,
+};
 pub use blueprint::{load_all as load_blueprints, load_blueprint, AgentBlueprint, BlueprintError};
+pub use capability_manifest::{generate_manifest, CapabilityManifest};
 pub use challenge::{
     create_task, parse_grounding_choice, poll_task, solve_captcha, ByoProvider, ByoSolverError,
     ChallengeHandler, ChallengeKind, ChallengeResolution, GroundingChoice, GroundingOption,
     HumanChallenge, SolverHttp, UreqHttp, VisualGroundingRequest,
 };
-pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent};
+pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
 pub use config::{Config, ConfigError};
+pub use eval_service::EvalService;
+pub use execution::{Execution, ExecutionKernel, ExecutionPhase, ExecutionTrigger};
+pub use export::{
+    render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
+    MemoryMirror, ObsidianNote, WipeScope,
+};
+pub use guard_service::{GuardDecision, GuardService, PendingGuardCard};
 pub use hwfit::{
     detect as detect_hardware, recommend, score_model, GpuClass, HardwareProfile,
     LocalModelCandidate, ModelFit,
 };
 pub use local::{LocalConfig, LocalError, LocalManager, LocalModelInfo};
-pub use guard_service::{GuardDecision, GuardService, PendingGuardCard};
-pub use plan_service::PlanService;
-pub use scheduler_service::SchedulerService;
 pub use memory_service::{FactStatus, MemoryService, StoredFact};
+pub use messaging::{MessageReminder, ReminderQueue};
+pub use plan_service::PlanService;
 pub use provider_ref::{
     classify_category, ingest_provider_reference, parse_provider_reference, AuthClass,
     IngestReport, ProviderEntry,
 };
 pub use providers::{KeyPool, ProviderConfig, ProviderKey, ProvidersError, ProvidersFile};
+pub use reader::{
+    extract_text, ReaderChunk, ReaderDocument, ReaderError, ReaderFormat, ReaderHit, ReaderIndex,
+};
+pub use scheduler_service::SchedulerService;
 pub use sidecar_link::{Inbound, LinkError, SidecarLink, WriterHandle};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};
+pub use telemetry::{Telemetry, TelemetryEventKind, TelemetryMode, TelemetrySample};
+pub use tools::{canonical_args_hash, ToolRegistry, ToolService};
+pub use vault_key::{
+    gate_mode, keyfile_path, needs_passphrase_gate, resolve_vault_key, setup_vault_passphrase,
+    unlock_vault_passphrase, ResolvedVaultKey, VaultKeyError, VaultKeyOrigin,
+};
+pub use widgets::{
+    LookupWidget, MathWidget, StockQuote, StockWidget, WeatherSnapshot, WeatherWidget, WidgetCard,
+    WidgetError,
+};
+pub use wsl::{
+    detect_environment, detect_environment_from_env, translate_linux_to_windows,
+    translate_windows_drive_to_linux, translate_windows_to_linux, ExecEnvironment, WslFrame,
+    WslPath, WslRunner, WSL_LEGACY_PREFIX, WSL_UNC_PREFIX,
+};
 
 /// Default data directory: `~/.everyaios` (overridable via `EVERYAIOS_HOME`).
 pub fn default_data_dir() -> PathBuf {
@@ -82,8 +131,8 @@ pub fn boot(args: &[String]) -> Result<String, Box<dyn std::error::Error>> {
         .map(|w| std::path::PathBuf::from(&w[1]))
         .unwrap_or(cfg.vault_path.clone());
 
-    let key = default_vault_key();
-    let vault = everyaios_vault::Vault::open(&vault_path, &key)?;
+    let resolved = resolve_vault_key(&cfg.data_dir)?;
+    let vault = everyaios_vault::Vault::open(&vault_path, &resolved.key)?;
     let status = vault.status();
 
     Ok(format!(
@@ -123,11 +172,19 @@ pub fn start_supervisor_with_link(
     (ProcessSupervisor::new_with_link(binary_path, Some(tx)), rx)
 }
 
-/// P0.1 placeholder key derivation. **Not for production** — replaced by the
-/// P1.1 key-management design (user passphrase + keyfile + KDF).
+/// Resolve the SQLCipher key (env → keyfile → first-boot generated).
+/// Never returns the old hardcoded placeholder.
 pub fn default_vault_key() -> String {
-    std::env::var("EVERYAIOS_VAULT_KEY")
-        .unwrap_or_else(|_| "everyaios-core-dev-key-do-not-use".into())
+    resolve_vault_key(&default_data_dir())
+        .map(|r| r.key)
+        .unwrap_or_else(|_| {
+            // Last resort for in-memory test vaults that have no data dir.
+            // Still not the well-known placeholder.
+            use rand::RngCore;
+            let mut b = [0u8; 32];
+            rand::thread_rng().fill_bytes(&mut b);
+            b.iter().map(|x| format!("{x:02x}")).collect()
+        })
 }
 
 #[cfg(test)]

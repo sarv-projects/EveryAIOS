@@ -101,7 +101,7 @@ pub fn xlsx_edit_request(
         .guard_service
         .lock()
         .map_err(|e| e.to_string())?;
-    match guard.evaluate(
+    let verdict = guard.evaluate(
         "office",
         "everyaios",
         "office.xlsx_edit",
@@ -109,19 +109,28 @@ pub fn xlsx_edit_request(
         decision,
         &args_hash,
         0,
-    ) {
-        GuardDecision::Allow { ticket_id } => Ok(serde_json::json!({
-            "action": "allow",
-            "address": address,
-            "value": value,
-            "ticketId": ticket_id,
-        })),
-        GuardDecision::Ask { ticket_id } => Ok(serde_json::json!({
-            "action": "ask",
-            "address": address,
-            "value": value,
-            "ticketId": ticket_id,
-        })),
+    );
+    match verdict {
+        GuardDecision::Allow { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            Ok(serde_json::json!({
+                "action": "allow",
+                "address": address,
+                "value": value,
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+            }))
+        }
+        GuardDecision::Ask { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            Ok(serde_json::json!({
+                "action": "ask",
+                "address": address,
+                "value": value,
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+            }))
+        }
         GuardDecision::Block { reason } => Err(format!("edit blocked: {reason}")),
     }
 }
@@ -154,6 +163,7 @@ pub fn xlsx_edit_commit(
         .map_err(|e| format!("edit ticket not consumable: {e}"))?;
     drop(guard);
 
+    crate::control::snapshot_file(&*state, "office", &path);
     let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
     let mut batch = WorkbookCommandBatch::new(0, format!("Set {address} to {value}"));
     batch.operations.push(XlsxOp::SetCell {
@@ -164,10 +174,22 @@ pub fn xlsx_edit_commit(
     let outcome = apply_batch(&bytes, &batch, &sheet).map_err(|e| e.to_string())?;
     atomic_write(&path, &outcome.bytes).map_err(|e| e.to_string())?;
 
+    let audit_seq = crate::control::record_mutation(
+        &*state,
+        "office.xlsx_edit",
+        serde_json::json!({
+            "path": path,
+            "sheet": sheet,
+            "address": address,
+            "ticketId": ticket_id,
+        }),
+    );
+
     Ok(serde_json::json!({
         "address": address,
         "sheet": sheet,
         "changedParts": outcome.changed_parts,
+        "auditSeq": audit_seq,
     }))
 }
 
@@ -190,7 +212,7 @@ pub fn xlsx_batch_request(
         .guard_service
         .lock()
         .map_err(|e| e.to_string())?;
-    match guard.evaluate(
+    let verdict = guard.evaluate(
         "office",
         "everyaios",
         "office.xlsx_batch",
@@ -198,17 +220,26 @@ pub fn xlsx_batch_request(
         decision,
         &args_hash,
         0,
-    ) {
-        GuardDecision::Allow { ticket_id } => Ok(serde_json::json!({
-            "action": "allow",
-            "summary": batch.summary,
-            "ticketId": ticket_id,
-        })),
-        GuardDecision::Ask { ticket_id } => Ok(serde_json::json!({
-            "action": "ask",
-            "summary": batch.summary,
-            "ticketId": ticket_id,
-        })),
+    );
+    match verdict {
+        GuardDecision::Allow { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            Ok(serde_json::json!({
+                "action": "allow",
+                "summary": batch.summary,
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+            }))
+        }
+        GuardDecision::Ask { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            Ok(serde_json::json!({
+                "action": "ask",
+                "summary": batch.summary,
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+            }))
+        }
         GuardDecision::Block { reason } => Err(format!("batch blocked: {reason}")),
     }
 }
@@ -233,14 +264,27 @@ pub fn xlsx_batch_commit(
         .map_err(|e| format!("batch ticket not consumable: {e}"))?;
     drop(guard);
 
+    crate::control::snapshot_file(&*state, "office", &path);
     let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
     let outcome = apply_batch(&bytes, &batch, &sheet).map_err(|e| e.to_string())?;
     atomic_write(&path, &outcome.bytes).map_err(|e| e.to_string())?;
+
+    let audit_seq = crate::control::record_mutation(
+        &*state,
+        "office.xlsx_batch",
+        serde_json::json!({
+            "path": path,
+            "sheet": sheet,
+            "summary": batch.summary,
+            "ticketId": ticket_id,
+        }),
+    );
 
     Ok(serde_json::json!({
         "summary": batch.summary,
         "sheet": sheet,
         "changedParts": outcome.changed_parts,
+        "auditSeq": audit_seq,
     }))
 }
 

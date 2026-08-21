@@ -230,6 +230,7 @@ pub fn ollama_chat_stream(
                 delta: Some(msg.to_string()),
                 finish: None,
                 usage: None,
+                tool_calls: Vec::new(),
             });
         }
         if v.get("done").and_then(|d| d.as_bool()).unwrap_or(false) {
@@ -247,6 +248,7 @@ pub fn ollama_chat_stream(
                     delta: None,
                     finish: None,
                     usage: Some(usage),
+                    tool_calls: Vec::new(),
                 });
             }
             break;

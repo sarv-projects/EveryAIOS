@@ -35,7 +35,7 @@ use everyaios_acp::{
     PermissionDecision, Platform, PolicyVerdict, ProcessTransport, RegistryClient,
     RegistryPolicy, ToolCall, ToolKind,
 };
-use everyaios_core::GuardDecision;
+use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
 use everyaios_guard::{DecisionPackage, Operation, RiskLevel};
 use serde::Serialize;
 use tauri::State;
@@ -239,6 +239,24 @@ pub fn acp_install_request(
         .unwrap_or_else(|| everyaios_core::default_data_dir().join("agents").join(&agent_id))
         .to_string_lossy()
         .into_owned()]);
+    let exact_command: Vec<String> = match &spec.kind {
+        everyaios_acp::InstallKind::Npx { package, .. } => {
+            vec!["npx".into(), "-y".into(), package.clone()]
+        }
+        everyaios_acp::InstallKind::Uvx { package, .. } => {
+            vec!["uvx".into(), package.clone()]
+        }
+        everyaios_acp::InstallKind::Binary { archive, sha256, .. } => {
+            vec![
+                "everyaios-installer".into(),
+                "download".into(),
+                archive.clone(),
+                format!("sha256:{sha256}"),
+            ]
+        }
+    };
+    everyaios_core::exact_command_consent(&exact_command).map_err(|e| e.to_string())?;
+
     decision = match &spec.kind {
         everyaios_acp::InstallKind::Npx { package, .. } => decision
             .with_script(
@@ -285,12 +303,18 @@ pub fn acp_install_request(
             // Auto-allowed still carries a (pre-approved) single-use ticket —
             // the executor consumes it in `acp_install_commit` either way.
             "ticketId": ticket_id,
+            "exactCommand": exact_command,
+            "consentRequired": true,
+            "preferNative": matches!(spec.kind, everyaios_acp::InstallKind::Binary { .. }),
         })),
         GuardDecision::Ask { ticket_id } => Ok(serde_json::json!({
             "action": "ask",
             "agentId": agent_id,
             "version": spec.version,
             "ticketId": ticket_id,
+            "exactCommand": exact_command,
+            "consentRequired": true,
+            "preferNative": matches!(spec.kind, everyaios_acp::InstallKind::Binary { .. }),
         })),
         GuardDecision::Block { reason } => Err(format!("install blocked: {reason}")),
     }
@@ -320,12 +344,22 @@ pub fn acp_install_commit(
     drop(guard);
 
     let outcome = installer().install(&spec).map_err(|e| e.to_string())?;
+    let audit_seq = crate::control::record_mutation(
+        &*state,
+        "acp.install",
+        serde_json::json!({
+            "agentId": outcome.agent_id,
+            "version": outcome.version,
+            "ticketId": ticket_id,
+        }),
+    );
     Ok(serde_json::json!({
         "agentId": outcome.agent_id,
         "version": outcome.version,
         "kind": outcome.kind,
         "binaryPath": outcome.binary_path.map(|p| p.to_string_lossy().into_owned()),
         "env": outcome.env,
+        "auditSeq": audit_seq,
         // The agent's own auth (subscription OAuth / API key) is surfaced from
         // the ACP `initialize` handshake's `authMethods` on first launch.
         "auth": "surfaced at launch via ACP authMethods",
@@ -524,6 +558,34 @@ pub fn acp_prompt(
     let agent_id = entry.agent_id.clone();
     let session_id = entry.session.session_id().unwrap_or("acp").to_string();
     let guard = Arc::clone(&state.guard_service);
+    drop(sessions);
+
+    let exec_id = {
+        let relay = state.chat_relay.lock().ok();
+        relay.as_ref().and_then(|g| g.as_ref()).map(|r| {
+            let kernel = r.executions();
+            let mut k = kernel.lock().unwrap_or_else(|e| e.into_inner());
+            let ex = k.begin(
+                ExecutionTrigger::Acp,
+                &session_id,
+                &text,
+                None,
+                String::new(),
+                serde_json::json!({ "handle": handle, "agentId": agent_id }).to_string(),
+                vec![],
+            );
+            let _ = k.transition(&ex.id, ExecutionPhase::Running);
+            ex.id
+        })
+    };
+
+    let mut sessions = state
+        .acp_sessions
+        .lock()
+        .map_err(|e| e.to_string())?;
+    let entry = sessions
+        .get_mut(&handle)
+        .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
 
     let mut pending_tickets: Vec<String> = Vec::new();
     let outcome = entry
@@ -550,17 +612,57 @@ pub fn acp_prompt(
                 &args_hash,
                 0,
             ) {
-                GuardDecision::Allow { .. } => PermissionDecision::allow(),
+                GuardDecision::Allow { ticket_id } => {
+                    // S0.6: file/terminal (brokered) ops always consume the
+                    // minted ticket. Uncontrolled ACP surface is labeled
+                    // elsewhere; it never gets a ticketless write.
+                    if is_brokered_op(&op) {
+                        match g.use_ticket(&ticket_id, &args_hash) {
+                            Ok(()) => PermissionDecision::allow(),
+                            Err(_) => PermissionDecision::deny(),
+                        }
+                    } else {
+                        let _ = g.use_ticket(&ticket_id, &args_hash);
+                        PermissionDecision::allow()
+                    }
+                }
                 GuardDecision::Block { .. } => PermissionDecision::deny(),
                 GuardDecision::Ask { ticket_id } => {
-                    pending_tickets.push(ticket_id);
-                    // Do not auto-allow; the ticket renders on the Guard-2
-                    // card and the user can approve + re-prompt.
-                    PermissionDecision::deny()
+                    pending_tickets.push(ticket_id.clone());
+                    let rx = g.watch_ticket(&ticket_id);
+                    drop(g);
+                    let approved = rx
+                        .recv_timeout(std::time::Duration::from_secs(300))
+                        .unwrap_or(false);
+                    let mut g = guard.lock().expect("guard_service poisoned");
+                    if approved {
+                        match g.use_ticket(&ticket_id, &args_hash) {
+                            Ok(()) => PermissionDecision::allow(),
+                            Err(_) => PermissionDecision::deny(),
+                        }
+                    } else {
+                        PermissionDecision::deny()
+                    }
                 }
             }
         })
         .map_err(|e| e.to_string())?;
+    drop(sessions);
+
+    if let Some(ref eid) = exec_id {
+        if let Ok(relay) = state.chat_relay.lock() {
+            if let Some(r) = relay.as_ref() {
+                let kernel = r.executions();
+                let mut k = kernel.lock().unwrap_or_else(|e| e.into_inner());
+                if pending_tickets.is_empty() {
+                    let _ = k.transition(eid, ExecutionPhase::Verifying);
+                    let _ = k.transition(eid, ExecutionPhase::Completed);
+                } else {
+                    let _ = k.transition(eid, ExecutionPhase::WaitingApproval);
+                }
+            }
+        }
+    }
 
     Ok(serde_json::json!({
         "handle": handle,
@@ -568,6 +670,7 @@ pub fn acp_prompt(
         "updateCount": outcome.updates.len(),
         "permissionCount": outcome.permissions.len(),
         "pendingTickets": pending_tickets,
+        "executionId": exec_id,
     }))
 }
 
@@ -615,6 +718,19 @@ pub fn acp_sessions(state: State<'_, AppState>) -> Result<Vec<AcpHandleInfo>, St
 
 /// Map an ACP tool call onto a Guard-2 operation + risk tier so it routes
 /// through the same policy engine as native tools (F9 shared taxonomy).
+/// S0.6 containment: EveryAIOS-implemented file/terminal ops are *brokered*
+/// (must consume a Rust ticket). Other kinds are still ticketed on Allow
+/// but labeled uncontrolled for ACP-native tools we do not execute.
+fn is_brokered_op(op: &Operation) -> bool {
+    matches!(
+        op,
+        Operation::DeleteFiles
+            | Operation::GenericWrite
+            | Operation::MultiFileEdit { .. }
+            | Operation::TerminalShell { .. }
+    )
+}
+
 fn map_tool_call(tc: &ToolCall) -> (Operation, RiskLevel) {
     match tc.kind {
         Some(ToolKind::Delete) => (Operation::DeleteFiles, RiskLevel::High),
@@ -686,6 +802,17 @@ mod tests {
         };
         let (_, risk) = map_tool_call(&tc);
         assert_eq!(risk, RiskLevel::Low);
+        let (op, _) = map_tool_call(&tc);
+        assert!(!is_brokered_op(&op) || matches!(op, Operation::GenericWrite));
+    }
+
+    #[test]
+    fn file_and_terminal_ops_are_brokered() {
+        assert!(is_brokered_op(&Operation::DeleteFiles));
+        assert!(is_brokered_op(&Operation::TerminalShell {
+            destructive: false
+        }));
+        assert!(is_brokered_op(&Operation::GenericWrite));
     }
 
     #[test]

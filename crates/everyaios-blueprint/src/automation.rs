@@ -72,7 +72,12 @@ impl Automation {
     pub fn privileged_steps(&self) -> Vec<&AutomationStep> {
         self.steps
             .iter()
-            .filter(|s| matches!(s, AutomationStep::Email { .. } | AutomationStep::Calendar { .. }))
+            .filter(|s| {
+                matches!(
+                    s,
+                    AutomationStep::Email { .. } | AutomationStep::Calendar { .. }
+                )
+            })
             .collect()
     }
 }
@@ -83,14 +88,20 @@ mod tests {
 
     #[test]
     fn automation_roundtrips_serde() {
-        let a = Automation::new("a1", "Morning brief", Trigger::Schedule { cron: "0 8 * * *".into() })
-            .step(AutomationStep::OnlineSearch {
-                query: "latest AI news".into(),
-            })
-            .step(AutomationStep::RunCode {
-                language: "js".into(),
-                code: "return 42".into(),
-            });
+        let a = Automation::new(
+            "a1",
+            "Morning brief",
+            Trigger::Schedule {
+                cron: "0 8 * * *".into(),
+            },
+        )
+        .step(AutomationStep::OnlineSearch {
+            query: "latest AI news".into(),
+        })
+        .step(AutomationStep::RunCode {
+            language: "js".into(),
+            code: "return 42".into(),
+        });
         let json = serde_json::to_string(&a).unwrap();
         let back: Automation = serde_json::from_str(&json).unwrap();
         assert_eq!(back, a);

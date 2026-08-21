@@ -191,9 +191,10 @@ fn parse_blueprint_body(md: &str) -> Result<Blueprint, MdError> {
         }
         if let Some(rest) = line.strip_prefix("**Status:**") {
             let b = current.as_mut().ok_or(MdError::MissingTaskId)?;
-            b.status = Some(TaskStatus::parse(rest.trim()).ok_or_else(|| {
-                MdError::InvalidStatus(rest.trim().to_string())
-            })?);
+            b.status = Some(
+                TaskStatus::parse(rest.trim())
+                    .ok_or_else(|| MdError::InvalidStatus(rest.trim().to_string()))?,
+            );
             continue;
         }
         if line.starts_with("## ") {
@@ -347,8 +348,8 @@ fn parse_check(line: &str) -> Result<OutcomeCheck, MdError> {
         let path = parts.next().unwrap_or("").trim();
         let alg = parts.next().unwrap_or("");
         let expected = parts.next().unwrap_or("").trim();
-        let algorithm = parse_algorithm(alg)
-            .ok_or_else(|| MdError::MalformedVerifyLine(line.to_string()))?;
+        let algorithm =
+            parse_algorithm(alg).ok_or_else(|| MdError::MalformedVerifyLine(line.to_string()))?;
         if path.is_empty() || expected.is_empty() {
             return Err(MdError::MalformedVerifyLine(line.to_string()));
         }
@@ -378,7 +379,10 @@ fn parse_algorithm(s: &str) -> Option<HashAlgorithm> {
 
 fn frontmatter_to_markdown(cfg: &AgentConfig) -> String {
     let mut out = String::from("---\n");
-    out.push_str(&format!("permissionMode: {}\n", permission_mode_str(cfg.permission_mode)));
+    out.push_str(&format!(
+        "permissionMode: {}\n",
+        permission_mode_str(cfg.permission_mode)
+    ));
     if let Some(color) = &cfg.color {
         out.push_str(&format!("color: {color}\n"));
     }
@@ -504,7 +508,8 @@ mod tests {
 
     #[test]
     fn malformed_verify_line_errors() {
-        let md = "# Blueprint: b\n**Goal:** g\n## Tasks\n### a\n**Goal:** ga\n## Verify\nbogus line\n";
+        let md =
+            "# Blueprint: b\n**Goal:** g\n## Tasks\n### a\n**Goal:** ga\n## Verify\nbogus line\n";
         assert!(matches!(
             Blueprint::from_markdown(md),
             Err(MdError::MalformedVerifyLine(_))

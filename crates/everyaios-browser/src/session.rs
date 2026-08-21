@@ -28,6 +28,8 @@ pub enum SessionBridgeError {
     Cdp(#[from] CdpError),
     #[error("session vault: {0}")]
     Session(#[from] SessionError),
+    #[error("attach refused: {0}")]
+    Attach(String),
 }
 
 /// Parse one CDP cookie object (`Network.getCookies` / `Browser.getAllCookies`
@@ -162,17 +164,24 @@ pub fn inject_session<C: CdpSession>(
     Ok(())
 }
 
-/// Capture path 2 (E13 session inheritance): attach to the user's already-
-/// running Chrome via its debug port (no re-login) and pull every cookie from
-/// the browser's default profile (`Storage.getCookies` — the browser-target
-/// storage domain method; the older `Browser.getCookies` is deprecated/
-/// unavailable in current Chrome). Returns `(site, cookies)` buckets — one
-/// per distinct host — ready to seal. Fails closed on any non-loopback
-/// endpoint (the discovery guard).
+/// Capture path 2 (E13 session inheritance): attach to an *already-running*
+/// Chrome via its debug port and pull cookies (`Storage.getCookies`).
+///
+/// Hardening (Chrome 136+ / E13):
+/// - EveryAIOS-owned isolated profiles attach without pairing.
+/// - Default Chrome/Chromium profiles are **refused** (CDP is inert on
+///   Chrome 136+ default user-data-dir; we never fall back to raw-cookie
+///   extraction to "make it work").
+/// - Any other user-launched profile requires a one-time
+///   [`ProfilePairingStore`] entry (`paired = true`).
 pub fn inherit_cookies_from_chrome(
     port: u16,
+    user_data_dir: Option<&std::path::Path>,
+    paired: bool,
 ) -> Result<Vec<(String, Vec<Cookie>)>, SessionBridgeError> {
     let endpoint = everyaios_cdp::probe_browser(port)?;
+    everyaios_cdp::assert_attach_allowed(&endpoint.version, user_data_dir, paired)
+        .map_err(|e| SessionBridgeError::Attach(e.to_string()))?;
     let client = everyaios_cdp::connect_to_browser(&endpoint)?;
     let out = client.call("Storage.getCookies", json!({}))?;
     let list = out

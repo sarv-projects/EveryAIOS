@@ -1,0 +1,179 @@
+//! H4 — unix control-channel dispatcher. `agent/stop`, `agent/undo`,
+//! `agent/interrupt-response` mutate live AppState (chat cancel / cockpit
+//! undo / plan respond). Tauri commands call the same helpers.
+
+use serde_json::{json, Value};
+use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
+
+use crate::AppState;
+
+#[derive(Debug, Clone)]
+pub struct FileUndo {
+    pub session_id: String,
+    pub path: PathBuf,
+    pub before: Option<Vec<u8>>,
+}
+
+pub fn dispatch(app: &AppHandle, method: &str, params: &Value) -> Value {
+    match method {
+        "agent/stop" => {
+            let session = params
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            match stop_session(app, session) {
+                Ok(ids) => json!({ "ok": true, "cancelled": ids }),
+                Err(e) => json!({ "ok": false, "error": e }),
+            }
+        }
+        "agent/undo" => {
+            let session = params
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            match undo_session(app, session) {
+                Ok(()) => json!({ "ok": true }),
+                Err(e) => json!({ "ok": false, "error": e }),
+            }
+        }
+        "agent/interrupt-response" => {
+            let break_id = params
+                .get("breakId")
+                .or_else(|| params.get("interruptId"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let choice = params
+                .get("chosen")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    params.get("choice").and_then(|v| {
+                        v.as_str()
+                            .map(str::to_string)
+                            .or_else(|| v.as_u64().map(|n| n.to_string()))
+                    })
+                })
+                .unwrap_or_default();
+            match interrupt_response(app, break_id, &choice) {
+                Ok(()) => json!({ "ok": true }),
+                Err(e) => json!({ "ok": false, "error": e }),
+            }
+        }
+        _ => json!({ "ok": false, "error": format!("method not found: {method}") }),
+    }
+}
+
+pub fn stop_session(app: &AppHandle, session_id: &str) -> Result<Vec<String>, String> {
+    let state = app.state::<AppState>();
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let Some(relay) = relay.as_ref() else {
+        return Ok(Vec::new());
+    };
+    relay.cancel_session(session_id).map_err(|e| e.to_string())
+}
+
+pub fn undo_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut restored = Vec::new();
+    {
+        let mut stack = state.file_undos.lock().map_err(|e| e.to_string())?;
+        if let Some(idx) = stack
+            .iter()
+            .rposition(|e| session_id.is_empty() || e.session_id == session_id)
+        {
+            let e = stack.remove(idx);
+            match e.before {
+                Some(bytes) => {
+                    if let Some(parent) = e.path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    std::fs::write(&e.path, bytes).map_err(|err| err.to_string())?;
+                }
+                None => {
+                    let _ = std::fs::remove_file(&e.path);
+                }
+            }
+            restored.push(e.path.display().to_string());
+        }
+    }
+    if let Ok(relay) = state.chat_relay.lock() {
+        if let Some(r) = relay.as_ref() {
+            if let Ok(mut tools) = r.tools().lock() {
+                if let Ok(p) = tools.revert_last(session_id) {
+                    restored.push(p);
+                }
+            }
+        }
+    }
+    state
+        .cockpit
+        .lock()
+        .map_err(|e| e.to_string())?
+        .undo(session_id);
+    let seq = record_mutation(
+        &state,
+        "agent.undo",
+        json!({ "sessionId": session_id, "restored": restored }),
+    );
+    if restored.is_empty() {
+        return Err("nothing to undo".into());
+    }
+    let _ = seq;
+    Ok(())
+}
+
+pub fn snapshot_file(state: &AppState, session_id: &str, path: &str) {
+    let p = PathBuf::from(path);
+    let before = std::fs::read(&p).ok();
+    if let Ok(mut stack) = state.file_undos.lock() {
+        stack.push(FileUndo {
+            session_id: session_id.to_string(),
+            path: p,
+            before,
+        });
+    }
+}
+
+pub fn interrupt_response(app: &AppHandle, break_id: &str, choice: &str) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    {
+        let mut cockpit = state.cockpit.lock().map_err(|e| e.to_string())?;
+        let _ = cockpit.respond_interrupt(break_id, choice.parse().unwrap_or(0));
+    }
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    if let Some(relay) = relay.as_ref() {
+        relay
+            .respond_plan(break_id, choice)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+pub fn record_mutation(state: &AppState, kind: &str, payload: Value) -> u64 {
+    let seq = {
+        let mut chain = state.audit.lock().unwrap_or_else(|e| e.into_inner());
+        let seq = (chain.len() as u64) + 1;
+        let event = everyaios_audit::AuditEvent {
+            seq,
+            ts_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+            kind: kind.into(),
+            payload: payload.clone(),
+            trace_id: String::new(),
+            span_id: String::new(),
+        };
+        chain.push(event);
+        seq
+    };
+    if let Ok(mut log) = state.audit_log.lock() {
+        if let Some(w) = log.as_mut() {
+            if let Ok(s) = w.write(kind, payload) {
+                return s;
+            }
+        }
+    }
+    seq
+}

@@ -10,6 +10,7 @@
 //! ([`keyring`]), CRUD, routing/cooldown state, per-key budgets, and the
 //! credential broker ([`broker`]) that executes provider HTTP calls.
 
+pub mod auth_bridge;
 pub mod broker;
 pub mod keyring;
 pub mod ledger;
@@ -17,13 +18,17 @@ pub mod local;
 pub mod oauth;
 pub mod session;
 pub mod session_budget;
+pub mod tier;
 
-pub use broker::{usage_tokens, Broker, BrokerError, ChatStreamEvent};
+pub use broker::{
+    assemble_tool_calls, extract_json_tool_calls, usage_tokens, Broker, BrokerError,
+    ChatStreamEvent, ToolCallDelta,
+};
 pub use keyring::{
     KeyEntry, KeyInfo, KeyRing, KeyRingError, KeySpec, KeyStatus, RoutingPolicy, SelectedKey,
     COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, MAX_429_SWITCHES,
 };
-pub use ledger::{default_pricing, Pricing, Usage, UsageRow};
+pub use ledger::{default_pricing, Pricing, SessionTotal, Usage, UsageRow};
 pub use local::{Grammar, LocalEndpoint, LocalRuntime, DEFAULT_NUM_CTX, MIN_WARN_NUM_CTX};
 pub use oauth::{
     DeviceCodeStart, DevicePoll, OAuthAccountInfo, OAuthError, OAuthManager, PkceStart,
@@ -33,12 +38,16 @@ pub use session::{
     SessionUse, SessionVault, StorageItem, StorageKind, TrustLevel,
 };
 pub use session_budget::{SessionBudget, DEFAULT_SESSION_BUDGET_USD};
+pub use tier::{
+    escalate_by_floor, mode_weights, parse_auto_model, score, shortest_path_chain, RoutingStrategy,
+    TaskClass, TierConfig, TierDecision, TierMode, TierRole,
+};
 
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
 
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 const INIT_SQL: &str = r#"
 PRAGMA journal_mode=WAL;
@@ -200,6 +209,13 @@ CREATE TABLE IF NOT EXISTS session_uses (
     ts            INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_session_uses_session ON session_uses(session_id);
+
+-- H4 leftover: UI sessions persist inside SQLCipher (Codex/Claude JSONL analog).
+CREATE TABLE IF NOT EXISTS ui_sessions (
+    id         TEXT PRIMARY KEY,
+    payload    TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 "#;
 
 /// An open SQLCipher vault handle. Not `Clone` — ownership is the point.
@@ -269,6 +285,42 @@ impl Vault {
             "INSERT INTO key_pool (provider, key_id, created_at) VALUES (?1, ?2, ?3)",
             rusqlite::params![provider, key_id, now_ms()],
         )?;
+        Ok(())
+    }
+
+    /// Persist one UI session JSON blob (encrypted at rest).
+    pub fn put_ui_session(&self, id: &str, payload: &str) -> Result<(), VaultError> {
+        self.conn.execute(
+            "INSERT INTO ui_sessions (id, payload, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+            rusqlite::params![id, payload, now_ms()],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_ui_session(&self, id: &str) -> Result<Option<String>, VaultError> {
+        let row = self
+            .conn
+            .query_row("SELECT payload FROM ui_sessions WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        Ok(row)
+    }
+
+    pub fn list_ui_sessions(&self) -> Result<Vec<(String, String)>, VaultError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, payload FROM ui_sessions ORDER BY updated_at DESC")?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn delete_ui_session(&self, id: &str) -> Result<(), VaultError> {
+        self.conn
+            .execute("DELETE FROM ui_sessions WHERE id = ?1", [id])?;
         Ok(())
     }
 
@@ -342,6 +394,33 @@ impl Vault {
             .query_row("SELECT COUNT(*) FROM token_usage", [], |r| r.get(0))?;
         Ok(n as u64)
     }
+
+    /// Per-session cost/token breakdown for the analytics table (P5.9) — the
+    /// `token_usage` ledger grouped by session, most-expensive first.
+    pub fn session_totals(&self) -> Result<Vec<SessionTotal>, VaultError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session,
+                    COALESCE(SUM(in_tokens), 0),
+                    COALESCE(SUM(out_tokens), 0),
+                    COALESCE(SUM(cost), 0.0)
+             FROM token_usage
+             GROUP BY session
+             ORDER BY SUM(cost) DESC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(SessionTotal {
+                session: r.get(0)?,
+                tokens_in: r.get::<_, i64>(1)?.max(0) as u64,
+                tokens_out: r.get::<_, i64>(2)?.max(0) as u64,
+                cost: r.get(3)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
 }
 
 fn now_ms() -> i64 {
@@ -372,7 +451,7 @@ mod tests {
 
         {
             let vault = Vault::open(&path, "test-key").expect("open");
-            assert!(vault.status().contains("schema v5"));
+            assert!(vault.status().contains("schema v6"));
             vault.register_key("anthropic", "key-1").unwrap();
             vault.register_key("anthropic", "key-2").unwrap();
             vault.register_key("openai", "key-3").unwrap();
@@ -401,13 +480,18 @@ mod tests {
             vault.list_keys("deepseek").unwrap(),
             vec!["dsk-1".to_string()]
         );
+        vault
+            .put_ui_session("s1", r#"{"id":"s1","title":"hi"}"#)
+            .unwrap();
+        let list = vault.list_ui_sessions().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].0, "s1");
     }
 
     #[test]
     fn stale_v1_schema_gets_bumped_to_v5_on_open() {
         // A P0.1-era DB has schema_version=1 and no key_ring/token_usage.
-        // Opening it with the v5 code must create the new tables AND bump the
-        // recorded version so status() never reports a stale version.
+        // Opening it must create the new tables AND bump the recorded version.
         let dir =
             std::env::temp_dir().join(format!("everyaios-vault-migrate-{}", std::process::id()));
         let path = dir.join("vault.db");
@@ -428,7 +512,7 @@ mod tests {
         // Reopen: version row must be bumped to the current schema.
         {
             let vault = Vault::open(&path, "test-key").expect("reopen");
-            assert!(vault.status().contains("schema v5"));
+            assert!(vault.status().contains("schema v6"));
             assert!(vault.ledger_count().unwrap() == 0);
         }
 
@@ -483,6 +567,16 @@ mod tests {
         assert!((vault.session_spend("s-1").unwrap() - 0.0020).abs() < 1e-12);
         assert!((vault.session_spend("s-2").unwrap() - 0.01).abs() < 1e-12);
         assert_eq!(vault.session_spend("s-none").unwrap(), 0.0);
+
+        // P5.9 — per-session totals aggregate the ledger by session.
+        let totals = vault.session_totals().unwrap();
+        assert_eq!(totals.len(), 2);
+        // Most-expensive session first (s-2 = $0.01 > s-1 = $0.002).
+        assert_eq!(totals[0].session, "s-2");
+        assert!((totals[0].cost - 0.01).abs() < 1e-12);
+        assert_eq!(totals[1].session, "s-1");
+        assert_eq!(totals[1].tokens_in, 100);
+        assert!((totals[1].cost - 0.0020).abs() < 1e-12);
     }
 
     #[test]

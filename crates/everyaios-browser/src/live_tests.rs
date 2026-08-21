@@ -364,7 +364,8 @@ fn live_session_inheritance_pulls_cookies_from_chrome_debug_port() {
         .expect("set cookie");
 
     // E13: inherit via the discovered debug port on a fresh connection.
-    let buckets = crate::session::inherit_cookies_from_chrome(port).expect("inherit cookies");
+    let buckets = crate::session::inherit_cookies_from_chrome(port, Some(&user_data_dir), true)
+        .expect("inherit cookies");
     let found = buckets.iter().any(|(site, cookies)| {
         site == "example.com" && cookies.iter().any(|c| c.name == "inherit-test")
     });

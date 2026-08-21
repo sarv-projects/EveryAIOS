@@ -13,9 +13,11 @@ import {
   cancelChatStream,
   extractFacts,
   fileToFacts,
+  extractJsonToolCalls,
   FrameProviderBridge,
   injectBelowBoundary,
   runChatStream,
+  runToolRetry,
   type ChatEvent,
   type ChatStreamParams,
   type ProviderBridge,
@@ -287,7 +289,7 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     let systemPrompt = "";
     const bridge: ProviderBridge = {
       async *streamChat(req) {
-        systemPrompt = req.messages[0]!.content;
+        systemPrompt = req.messages[0]!.content ?? "";
         yield { type: "text", text: "ok" };
         yield { type: "done", usage: { promptTokens: 1, completionTokens: 1 } };
       },
@@ -314,6 +316,38 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     expect(events.some((e) => e.type === "error")).toBe(false);
   });
 
+  test("H2: tool_index is injected below the cache boundary; tools body is the resolved subset", async () => {
+    const { emit } = collector();
+    let systemPrompt = "";
+    let toolsBody: unknown;
+    const request = async (method: string) => {
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "tool/list") {
+        return {
+          tools: [
+            { id: "z_last", family: "x", description: "zzz", readOnly: true, operation: "write", risk: "low", argsSchema: {} },
+            { id: "file_ops.read", family: "fileops", description: "Read a file", readOnly: true, operation: "write", risk: "low", argsSchema: {} },
+          ],
+        };
+      }
+      return {};
+    };
+    const bridge: ProviderBridge = {
+      async *streamChat(req) {
+        systemPrompt = req.messages[0]!.content ?? "";
+        toolsBody = req.tools;
+        yield { type: "text", text: "ok" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    expect(systemPrompt).toContain("<tool_index>");
+    expect(systemPrompt.indexOf(CACHE_BOUNDARY)).toBeLessThan(systemPrompt.indexOf("<tool_index>"));
+    expect(systemPrompt).toContain("file_ops.read");
+    const names = (toolsBody as Array<{ function: { name: string } }>).map((t) => t.function.name);
+    expect(names).toEqual(["file_ops.read", "z_last"]);
+  });
+
   test("mobile credit hooks are stripped from the desktop loop", async () => {
     // A-10/C-3/C-4: creditAware / shouldContinueStreaming are mobile-credit
     // concepts. The desktop loop must never USE them — the check strips
@@ -325,5 +359,292 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
       .replace(/\/\/[^\n]*/g, "");
     expect(withoutComments).not.toContain("creditAware");
     expect(withoutComments).not.toContain("shouldContinueStreaming");
+  });
+
+  test("S0.2: provider tool_call is executed via request(tool/exec→tool/commit)", async () => {
+    const { events, emit } = collector();
+    const calls: string[] = [];
+    const request = async (method: string, params: unknown) => {
+      calls.push(method);
+      const p = params as Record<string, unknown>;
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "memory/write") return {};
+      if (method === "tool/exec") {
+        return {
+          action: "allow",
+          ticketId: "tkt:1",
+          argsHash: "abc",
+        };
+      }
+      if (method === "tool/commit") {
+        expect(p.toolId).toBe("search_web");
+        expect(p.ticketId).toBe("tkt:1");
+        return { ok: true, content: "file-body" };
+      }
+      return {};
+    };
+    let round = 0;
+    const bridge: ProviderBridge = {
+      async *streamChat(_req, signal) {
+        if (signal.aborted) return;
+        if (round === 0) {
+          round += 1;
+          yield {
+            type: "tool_call",
+            id: "search_web",
+            args: { query: "q" },
+          };
+          yield { type: "done" };
+          return;
+        }
+        yield { type: "text", text: "used the file" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    expect(calls).toContain("tool/exec");
+    expect(calls).toContain("tool/commit");
+    expect(events.some((e) => e.type === "tool_call" && e.toolId === "search_web")).toBe(true);
+    expect(events.some((e) => e.type === "tool_result" && e.toolId === "search_web")).toBe(true);
+    const done = events.find((e) => e.type === "done") as { fullText?: string } | undefined;
+    expect(done?.fullText).toContain("used the file");
+  });
+
+  test("S0.7 E2E: tool_call → ask ticket → approve → commit → tool_result + auditSeq", async () => {
+    const { events, emit } = collector();
+    const calls: string[] = [];
+    const request = async (method: string, params: unknown) => {
+      calls.push(method);
+      const p = params as Record<string, unknown>;
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "tool/list") {
+        return { tools: [{ id: "file_ops.delete", readOnly: false, risk: "high", argsSchema: {} }] };
+      }
+      if (method === "tool/exec") {
+        return { action: "ask", ticketId: "tkt:human", argsHash: "h" };
+      }
+      if (method === "guard/ticket_status") {
+        expect(p.ticketId).toBe("tkt:human");
+        return { state: "approved" };
+      }
+      if (method === "tool/commit") {
+        expect(p.ticketId).toBe("tkt:human");
+        expect(p.toolId).toBe("file_ops.delete");
+        return { ok: true, content: "deleted", auditSeq: 42, ticketId: "tkt:human" };
+      }
+      return {};
+    };
+    let round = 0;
+    const bridge: ProviderBridge = {
+      async *streamChat(_req, signal) {
+        if (signal.aborted) return;
+        if (round === 0) {
+          round += 1;
+          yield { type: "tool_call", id: "file_ops.delete", args: { path: "x.txt" } };
+          yield { type: "done" };
+          return;
+        }
+        yield { type: "text", text: "removed the file" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    expect(calls).toContain("tool/exec");
+    expect(calls).toContain("guard/ticket_status");
+    expect(calls).toContain("tool/commit");
+    expect(events.some((e) => e.type === "tool_call" && e.toolId === "file_ops.delete")).toBe(true);
+    const result = events.find((e) => e.type === "tool_result") as
+      | { result?: { auditSeq?: number } }
+      | undefined;
+    expect(result).toBeDefined();
+    expect(events.some((e) => e.type === "error")).toBe(false);
+    const done = events.find((e) => e.type === "done") as { fullText?: string } | undefined;
+    expect(done?.fullText).toContain("removed the file");
+  });
+
+  test("S0.3: tool/list is serialized once onto ProviderRequest.tools", async () => {
+    const { emit } = collector();
+    const bodies: Array<Record<string, unknown>> = [];
+    const request = async (method: string) => {
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "tool/list") {
+        return {
+          tools: [
+            {
+              id: "file_ops.read",
+              family: "fileops",
+              description: "Read a file",
+              readOnly: true,
+              operation: "write",
+              risk: "low",
+              argsSchema: {
+                type: "object",
+                properties: { path: { type: "string" } },
+                required: ["path"],
+              },
+            },
+          ],
+        };
+      }
+      if (method === "tool/exec") {
+        return { action: "allow", ticketId: "tkt:r", argsHash: "h" };
+      }
+      if (method === "tool/commit") {
+        return { ok: true, content: "ok" };
+      }
+      return {};
+    };
+    const bridge: ProviderBridge = {
+      async *streamChat(req, signal) {
+        if (signal.aborted) return;
+        bodies.push(req as unknown as Record<string, unknown>);
+        yield { type: "text", text: "hi" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    expect(bodies.length).toBeGreaterThan(0);
+    const tools = bodies[0]!.tools as Array<{ type: string; function: { name: string } }>;
+    expect(tools).toBeDefined();
+    expect(tools.some((t) => t.type === "function" && t.function.name === "file_ops.read")).toBe(
+      true,
+    );
+    expect(bodies[0]!.tool_choice).toBe("auto");
+  });
+
+  test("S0.3: registry tool id (file_ops.read) is not denied by the mobile catalog", async () => {
+    const { events, emit } = collector();
+    const request = async (method: string) => {
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "tool/list") {
+        return {
+          tools: [
+            {
+              id: "file_ops.read",
+              family: "fileops",
+              description: "Read",
+              readOnly: true,
+              operation: "write",
+              risk: "low",
+              argsSchema: { type: "object" },
+            },
+          ],
+        };
+      }
+      if (method === "tool/exec") {
+        return { action: "allow", ticketId: "tkt:f", argsHash: "h" };
+      }
+      if (method === "tool/commit") {
+        return { ok: true, content: "file-body" };
+      }
+      return {};
+    };
+    let round = 0;
+    const bridge: ProviderBridge = {
+      async *streamChat(_req, signal) {
+        if (signal.aborted) return;
+        if (round === 0) {
+          round += 1;
+          yield { type: "tool_call", id: "file_ops.read", args: { path: "a.txt" } };
+          yield { type: "done" };
+          return;
+        }
+        yield { type: "text", text: "read it" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    expect(events.some((e) => e.type === "tool_call" && e.toolId === "file_ops.read")).toBe(true);
+    expect(events.some((e) => e.type === "tool_result" && e.toolId === "file_ops.read")).toBe(true);
+    expect(events.some((e) => e.type === "error")).toBe(false);
+  });
+
+  test("S0.3: JSON-mode local tool call is extracted and executed", async () => {
+    const { events, emit } = collector();
+    const request = async (method: string) => {
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "tool/list") {
+        return {
+          tools: [
+            {
+              id: "search.query",
+              family: "search",
+              description: "search",
+              readOnly: true,
+              operation: "external_network",
+              risk: "medium",
+              argsSchema: { type: "object" },
+            },
+          ],
+        };
+      }
+      if (method === "tool/exec") {
+        return { action: "allow", ticketId: "tkt:s", argsHash: "h" };
+      }
+      if (method === "tool/commit") {
+        return { ok: true, content: "hits" };
+      }
+      return {};
+    };
+    let round = 0;
+    const captured: unknown[] = [];
+    const frame = new FrameProviderBridge(async (method, params) => {
+      captured.push({ method, params });
+    });
+    const wrapping: ProviderBridge = {
+      async *streamChat(req, signal) {
+        if (signal.aborted) return;
+        if (round === 0) {
+          round += 1;
+          const gen = frame.streamChat(req, signal);
+          queueMicrotask(() => {
+            const sid = req.streamId ?? "default";
+            frame.handleChunk({
+              streamId: sid,
+              delta: '{"tool":"search.query","args":{"query":"q"}}',
+            });
+            frame.handleChunk({ streamId: sid, ended: true });
+          });
+          yield* gen;
+          return;
+        }
+        yield { type: "text", text: "found it" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream({ ...PARAMS, streamId: "st-json" }, emit, wrapping, 10, request);
+    expect(events.some((e) => e.type === "tool_call" && e.toolId === "search.query")).toBe(true);
+    expect(events.some((e) => e.type === "tool_result" && e.toolId === "search.query")).toBe(true);
+  });
+
+  test("S0.5: runToolRetry re-enters exec→commit", async () => {
+    const { events, emit } = collector();
+    const methods: string[] = [];
+    const request = async (method: string) => {
+      methods.push(method);
+      if (method === "tool/exec") {
+        return { action: "allow", ticketId: "tkt:retry", argsHash: "h" };
+      }
+      if (method === "tool/commit") return { ok: true, content: "retried" };
+      return {};
+    };
+    await runToolRetry(
+      { sessionId: "s1", streamId: "st-1", toolId: "search.query", args: { query: "q" } },
+      emit,
+      request,
+    );
+    expect(methods).toContain("tool/exec");
+    expect(methods).toContain("tool/commit");
+    expect(methods).toContain("guard/evaluate");
+    expect(events.some((e) => e.type === "tool_result")).toBe(true);
+  });
+});
+
+describe("extractJsonToolCalls", () => {
+  test("parses B5 {tool,args} and ignores unrelated JSON", () => {
+    expect(extractJsonToolCalls('{"tool":"weather","args":{"city":"X"}}')).toEqual([
+      { id: "weather", args: { city: "X" } },
+    ]);
+    expect(extractJsonToolCalls('{"city":"X"}')).toEqual([]);
   });
 });
