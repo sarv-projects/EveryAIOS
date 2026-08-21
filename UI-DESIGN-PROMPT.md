@@ -63,7 +63,7 @@ Purposeful, swift, never bouncy. **No horizontal slides** — surfaces replace w
 
 ### 3.1 Title bar (36px, native-drag)
 
-Traffic lights → **brand mark** (orange sparkles tile) + `EveryAIOS` + `v3.36` badge → workspace breadcrumb (`everyaios / work ∨`, hover-dropdown) → active session title + status dot + label → center **command-palette launcher** (`Search sessions, files, commands… ⌘K · ⌘/ help`) → right cluster: Guard chip (`🛡 Guard · L2` in power / `Safe & Private` in casual) · spend chip (`$1.84 / $5.00`, power only) · token chip (`184K tok`, power only) · theme toggle · 🔔 notifications popover (badge = unread) · sidebar toggle (⌘B) · avatar.
+Traffic lights → **brand mark** (orange sparkles tile) + `EveryAIOS` + `v3.37` badge → workspace breadcrumb (`everyaios / work ∨`, hover-dropdown) → active session title + status dot + label → center **command-palette launcher** (`Search sessions, files, commands… ⌘K · ⌘/ help`) → right cluster: Guard chip (`🛡 Guard · L2` in power / `Safe & Private` in casual) · spend chip (`$1.84 / $5.00`, power only) · token chip (`184K tok`, power only) · theme toggle · 🔔 notifications popover (badge = unread) · sidebar toggle (⌘B) · avatar.
 
 ### 3.2 Left sidebar
 
@@ -83,7 +83,7 @@ Either the **Chat** (empty-state / conversation) or one of six panels with a 220
 
 ### 3.5 Status bar (24px)
 
-**Casual:** one discreet pill — `● Preview · demo data` (amber, plain-browser) / `● Ready · Local` or `● Processing…` (emerald/orange live-dot) + `🛡 100% Private (On-Device)` + `EveryAIOS v3.36`.
+**Casual:** one discreet pill — `● Preview · demo data` (amber, plain-browser) / `● Ready · Local` or `● Processing…` (emerald/orange live-dot) + `🛡 100% Private (On-Device)` + `EveryAIOS v3.37`.
 **Dev mode (Settings → General → Developer Mode):** the full 12-badge telemetry strip — agent health (mark + latency + model + `auto` routing badge, hover = uptime/tasks/error-rate tooltip) · `sidecar online` · `core rust` · `db 3/14MB` · `mcp 127.0.0.1:9200` · `browser chrome (system)` · `cache 94%` · `guard · L2` · `vault · 7 keys` · `audit · append` · version.
 
 ---

@@ -25,6 +25,8 @@ export type ViewId =
   | 'storage'
   | 'timeline'
   | 'trajectory'
+  | 'blueprint'
+  | 'local-server'
 
 export type ChatMode = 'normal' | 'plan' | 'research' | 'quick' | 'code'
 

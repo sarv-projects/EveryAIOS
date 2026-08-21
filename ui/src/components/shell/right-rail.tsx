@@ -63,6 +63,8 @@ import DiffView from '@/components/views/diff-view'
 import AuditView from '@/components/views/audit-view'
 import StorageView from '@/components/views/storage-view'
 import TrajectoryView from '@/components/views/trajectory-view'
+import BlueprintView from '@/components/views/blueprint-view'
+import LocalServerView from '@/components/views/local-server-view'
 import { SessionTimeline } from '@/components/chat/session-timeline'
 
 // Map viewport IDs to the task kind that determines which agent handles them
@@ -126,6 +128,8 @@ const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   storage: { label: 'Storage', icon: HardDrive },
   timeline: { label: 'Timeline', icon: Activity },
   trajectory: { label: 'Trajectory', icon: ScanSearch },
+  blueprint: { label: 'Blueprint', icon: FileText },
+  'local-server': { label: 'Local Server', icon: FileText },
 }
 
 function ViewportContent({ view }: { view: ViewId }) {
@@ -144,6 +148,8 @@ function ViewportContent({ view }: { view: ViewId }) {
     case 'storage': return <StorageView />
     case 'timeline': return <SessionTimeline />
     case 'trajectory': return <TrajectoryView />
+    case 'blueprint': return <BlueprintView />
+    case 'local-server': return <LocalServerView />
     default: return null
   }
 }

@@ -36,6 +36,7 @@ pub mod plan_service;
 pub mod provider_ref;
 pub mod providers;
 pub mod reader;
+pub mod rss_measure;
 pub mod scheduler_service;
 pub mod self_audit;
 pub mod sidecar_link;
@@ -86,6 +87,7 @@ pub use providers::{KeyPool, ProviderConfig, ProviderKey, ProvidersError, Provid
 pub use reader::{
     extract_text, ReaderChunk, ReaderDocument, ReaderError, ReaderFormat, ReaderHit, ReaderIndex,
 };
+pub use rss_measure::{measure_self, measure_tree, snapshot, RssSnapshot};
 pub use scheduler_service::SchedulerService;
 pub use sidecar_link::{Inbound, LinkError, SidecarLink, WriterHandle};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};

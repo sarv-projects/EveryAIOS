@@ -17,6 +17,7 @@ members = [
     "everyaios-blueprint",
     "everyaios-codeintel",
     "everyaios-acp",
+    "everyaios-search",
 ]
 
 [workspace.package]
