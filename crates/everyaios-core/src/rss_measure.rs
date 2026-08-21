@@ -11,7 +11,7 @@
 //! - [`RssSnapshot`] — a serializable snapshot for publishing in docs.
 
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// One RSS measurement (bytes).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

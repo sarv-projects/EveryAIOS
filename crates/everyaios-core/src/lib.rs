@@ -29,6 +29,7 @@ pub mod forge;
 pub mod guard_service;
 pub mod hwfit;
 pub mod local;
+pub mod connectors;
 pub mod memory_service;
 pub mod messaging;
 pub mod orphan;

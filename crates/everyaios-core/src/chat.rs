@@ -1117,6 +1117,13 @@ fn stream_provider(
         broker = broker.with_local(p, ep.clone());
     }
 
+    // P3.3 (J14): propagate distributed trace context across the broker
+    // boundary so provider HTTP requests carry the traceparent header.
+    let trace_ctx = crate::tracing::TraceContext::new_root(true);
+    let mut trace_headers = std::collections::HashMap::new();
+    trace_ctx.inject_headers(&mut trace_headers);
+    broker = broker.with_extra_headers(trace_headers);
+
     // S0.3: forward tools + tool_choice so hosted providers get native
     // function defs and local ollama/llamafile derive JSON-mode grammar
     // (grammar_from_body) from the same body.

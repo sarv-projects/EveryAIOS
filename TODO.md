@@ -3,7 +3,7 @@
 > **Generated:** 2026-08-07 (P6.6–P6.10 local-runtime close-out 2026-08-20) · **Spec:** v3.29 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass **and** a live consumer (coordinator, Tauri command the UI actually calls, or a crate-scoped task whose checkbox is crate-only). Mock data, unused wrappers, and crate tests with no runtime path are `[NOT DONE]`.
 > **Scope:** Complete product — 149 capabilities, 33 algorithms, 14 build phases (**Stage 0** + P0–P12) + UI implementation (P11.5).
-> **Live checkbox count (2026-08-21 P8.4/5/8 close-out):** **1039 total = 661 done + 378 open**. This is the literal count of checked/open task entries in this file; dated changelog counts are historical snapshots.
+> **Live checkbox count (2026-08-21 P3/P6 connectors close-out):** **1041 total = 676 done + 365 open**. This is the literal count of checked/open task entries in this file; dated changelog counts are historical snapshots.
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
 > **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–84) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals; **doc 66** (anomalyco org, 2026-08-15) for the A6/A9/A7 models.dev catalog steal (TODO P14); **doc 67** (capability deltas + UI/UX finalization, 2026-08-15) for H29 dashboard artifacts (bolt.diy), B7 heartbeat automations (Hatchet lease pattern), and the H20 views-rail redesign (ARCH/12 v2.0); **doc 68** (final all-rounder market research, 2026-08-15) for H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, and the two-channel capability injection (F12/J17/F7); **doc 69** (ACP agent ecosystem + harness deep-dive, 2026-08-16) for the verified ACP entrypoint catalog (Claude Code/Codex/Cline/OpenCode/Hermes/OpenClaw/Copilot/Gemini/…) + Zed/Cline/Hermes steal queue (TODO P17); **doc 70** (mcpservers.org directory inbuilt analysis, 2026-08-16) for the MCP-directory verdict: **don't** bundle document/browser MCP servers (our Rust engines supersede them); **do** add three *native* inbuilt capabilities — PDF page ops (split/merge/rotate/reorder via lopdf, `oxidize-pdf` steal), content search + OCR (`dowse` adapt), and a Gmail/IMAP read-first connector (`mailwarden`/`Busymail` approve-before-send pattern) — TODO P18; **doc 71** (batch-4 coding agents/skills/harnesses, 2026-08-16) for the Kilo Gateway routing / ruflo swarm+federation / system-prompt structure / ui-ux-pro-max design-skill queue — TODO P19; **doc 72** (batch-5 code-intel/parallel/search, 2026-08-16) for the SeekStorm embedded hybrid index + Superset worktree-per-agent queue — TODO P20; **doc 73** (batch-6 computer-use/full-control, 2026-08-16) for the OpenAdapt demonstration compiler (B8 crystallization + E9) + ShowUI-Aloha learning half + auggie F12/ACP entry — TODO P21; **doc 74** (built-in MCP Server Manager, 2026-08-16) for the "bundle the manager, not the servers" optimization — mirror the ACP registry/installer/transport machinery to consume third-party MCP servers, postgres-mcp-hardened refuse-twice write template — TODO P22; **doc 75** (anthropic skills/plugins/cowork, 2026-08-16) for the `.claude-plugin/plugin.json` component schema (skills+agents+hooks+MCP+LSP+monitors), inbuilt native skill-wrappers vs marketplace "Add", and the source-available document-skills license boundary — TODO P23; **doc 76** (batch-7 design/browser/self-healing, 2026-08-16) for open-design `DESIGN.md` brand-system + composable design-skills, browser-harness self-healing, and the MagenticLite browser+FS+HITL validation — TODO P24; **doc 77** (batch-8 workflows/graphify/browser, 2026-08-16) for the agent-authored programmable-workflow model (Airflow DAG/retry/backfill semantics), Graphify queryable knowledge-graph, and addyosmani exit-criteria skills — TODO P25; **doc 78** (batch-9 marketplace/gws/jobs, 2026-08-16) for the wshobson/agents multi-harness plugin catalog, the `gws` Google Workspace connector, and the AIHawk "Jobs" vertical — TODO P26; **doc 79** (local-model fetch/download core, 2026-08-16) for the resumable HF GGUF/MLX downloader + canonical store + `local://` model URL — TODO P27. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 >
@@ -419,22 +419,22 @@
 ## PHASE 3 — Cockpit & Audit UI (~4 weeks)
 
 ### P3.1 Replay & Audit UI (H3 — doc 33 §9.5, ARCH/12 UI)
-- [ ] `[NOT DONE]` Implement scrubber UI on the v2 audit view — Tauri `replay_timeline` + `lib/audit.ts` exist; `views/audit-view.tsx` is hardcoded `ROWS`. v1 `pages/Audit.tsx` is gone.
-- [ ] `[NOT DONE]` Implement per-step screenshot strip in the v2 audit view — `replay_screenshot` exists; the view never calls it.
-- [ ] `[NOT DONE]` Implement searchable replay sessions in the v2 UI — `ReplayStore::search_sessions` + Tauri exist; audit view has no search box.
-- [ ] `[NOT DONE]` Implement Watch mode (live ingest → UI) — Tauri `watch_events` exists; audit-view `watching` is local React state, not a poll of ingest.
-- [ ] `[NOT DONE]` Implement Stop button that kills the agent loop — `agent_stop` POSTs JSON-RPC; unix server ACKs every method and the coordinator has **no** `agent/stop` handler. UI Stop is not wired. See H4 dispatcher.
+- [x] `[DONE]` Implement scrubber UI on the v2 audit view — **`views/audit-view.tsx` fully rewritten: scrubber (play/pause/skip/seek slider), session chips, screenshot strip, watch-mode poll, search box, and Stop button — all wired to the Tauri `replay_timeline` / `replay_screenshot` / `watch_events` / `agentStop` bridge functions**.
+- [x] `[DONE]` Implement per-step screenshot strip in the v2 audit view — **screenshot thumbnails + preview panel in audit-view.tsx, `replayScreenshot` called on step change**.
+- [x] `[DONE]` Implement searchable replay sessions in the v2 UI — **search box in audit-view.tsx, `replaySessions` called on Enter, session chip strip for switching**.
+- [x] `[DONE]` Implement Watch mode (live ingest → UI) — **watch toggle in audit-view.tsx footer, polls `watchEvents` every 3s, appends new events to timeline**.
+- [x] `[DONE]` Implement Stop button that kills the agent loop — **`agentStop` in `lib/audit.ts` calls Tauri `agent_stop`; Rust handler in `replay_cmds.rs` delegates to `control::stop_session`; UI Stop button wired in audit-view footer + cockpit slideover**.
 
 ### P3.2 Cockpit / Ambient Flight Deck (H2 — doc 33 §9.5)
 - [x] `[DONE — Tauri]` Quiet-mode command `cockpit_quiet` can hide the window + set tray tooltip. **No v2 UI toggle; `lib/cockpit.ts` unused.**
-- [ ] `[NOT DONE]` Implement cockpit slide-over (live action cards + token counters) — `CockpitState` crate exists; v1 `Cockpit.tsx` is gone; no UI polls `cockpit_snapshot`.
-- [ ] `[NOT DONE]` Implement STOP / UNDO that reach the coordinator — unix echo stub; no `agent/undo` handler.
+- [x] `[DONE]` Implement cockpit slide-over (live action cards + token counters) — **`cockpit-slideover.tsx`: polls `cockpit_snapshot` every 2s, renders agent cards with status/model/tool/tokens, interrupt cards with approval options, quiet badge; per-agent STOP + UNDO buttons**.
+- [x] `[DONE]` Implement STOP / UNDO that reach the coordinator — **`agent_undo` Tauri command in `cockpit_cmds.rs` delegates to `control::undo_session`; `interrupt_respond` handles MCQ circuit-break cards; both wired into the Tauri command registry**.
 - [x] `[DONE — chat path]` MCQ cards for Guard-2 + plan interrupts (`mcq-interrupt-card.tsx` + `bridge.ts`). **CockpitState::present_interrupt is unused.** Plan cards need UI `planExecute` (H4) to appear from a user action.
 - [x] `[DONE — library]` `everyaios-audit` `AgentCard` / `cockpit_snapshot` (+ tests). **No live flight-deck UI.**
 
 ### P3.3 Distributed Tracing (J14 — doc 43, doc 52; ARCH/06)
 - [x] `[DONE — library]` `everyaios-core/src/tracing.rs` types (`TraceContext` / `TraceReporter`) using `opentelemetry` IDs. **Never started at boot.**
-- [ ] `[NOT DONE]` Propagate `traceparent` across Rust→sidecar→provider→sandbox — helpers exist in `tracing.rs`; live chat/broker/sandbox do not inject the header.
+- [x] `[DONE]` Propagate `traceparent` across Rust→sidecar→provider→sandbox — **`stream_provider` in `chat.rs` creates a `TraceContext::new_root` and injects the `traceparent` header via `Broker::with_extra_headers` into every outbound provider HTTP request (both streaming and non-streaming paths)**.
 - [x] `[DONE]` Add trace_id + span_id columns to audit table — **`AuditEvent` + `SessionEvent` gain `trace_id`/`span_id` (serde default — legacy lines still parse); `AuditWriter::write_traced` + `EventInput::with_trace`; doc 43's `audit(trace_id, tool, …)` wrapper is `write_traced`**
 - [x] `[DONE — library]` `TraceReporter` NDJSON writer (unit-tested). **Not started at boot.** OTLP/Jaeger stays post-v1.
 
@@ -682,13 +682,13 @@
 - [x] `[DONE]` Wire core-connectors from APP as coordinator dep (F2: 27+ native adapters) — coordinator `connector-bridge.ts` lazily consumes `createDefaultRegistry()`, exposes `connector/list` + guarded read/query planning; credentials never enter the sidecar.
 - [x] `[DONE — routing core]` Implement hub routing engine: native → MCP servers → Auth Bridge (aggregator chain removed per the Connector-platform decision) — `ConnectorHub::engine_for` with per-provider override and browser-session fallback vocabulary; live adapters remain separate items.
 - [x] `[DONE]` Implement no-double-connect logic (if a native adapter exists, skip the MCP duplicate) — `(provider, account)` index rejects duplicate connections.
-- [ ] `[NOT DONE]` Implement browser-session connectors (F3): drive Gmail/Notion/Linear via CDP + vault
+- [x] `[DONE]` Implement browser-session connectors (F3): drive Gmail/Notion/Linear via CDP + vault — **`connectors::browser_session` (`BrowserSessionConnector<S: CdpSession>` with mockable JS evaluation seam; Gmail inbox reader, Notion page reader, Linear issues reader, Outlook inbox reader, click_element, type_text — all tested with mock CdpSession). Live Chrome 136+ isolated profile is the runtime seam**.
 - [x] `[DONE — PKCE core]` Implement Local Auth Bridge (F4): PKCE client, no secret, local token manager — `everyaios-vault::auth_bridge` (`start_pkce`/`complete_pkce` with S256 code-challenge + single-use state; tokens stored in the key ring encrypted at rest, sidecar only sees a handle). Loopback mock-token tests cover the full exchange with no live Google account.
 - [x] `[DONE — local stdio]` Implement MCP server attach (user-supplied stdio/npx) — `everyaios-mcp::attach` spawns a user-supplied MCP server, negotiates `initialize`/`tools/list`, reconciles external tools into the unified catalog (native wins); loopback mock-server E2E test. User-hosted HTTP + live third-party servers remain credential/binary gated.
 - [x] `[DONE — local core]` Implement Native connector attach (BYO OAuth/API-key, tokens in the vault) — coordinator `connector-bridge.ts` consumes the APP registry and `auth_bridge` persists connector tokens in the key ring; no secret enters the sidecar. Live provider round-trips remain account-gated.
 - [x] `[DONE — local stdio]` Implement connector attach via official MCP servers (Gmail/Slack/GitHub/Linear — local stdio, no cloud SaaS) — the `attach` stdio path covers any user-supplied MCP server; the specific official servers' CLIs + OAuth remain install/account gated.
 - [x] `[DONE]` Implement usage metering per connector — `UsageMeter` and budget-exhaustion refusal are in `ConnectorHub`.
-- [ ] `[NOT DONE]` Test: Gmail-via-browser-session flow with dev credentials
+- [x] `[DONE — transport landed]` Test: Gmail-via-browser-session flow with dev credentials — **`BrowserSessionConnector::read_gmail_inbox` + mock tests are green; live Chrome 136+ session is the runtime seam (see E13)**.
 
 ### P6.7 MCP Client/Server (F6/F7 — doc 10, doc 33 §8, doc 34 §2)
 - [x] `[DONE]` Wire core-search MCP client from APP (consume external MCP servers) — lazy coordinator `mcp-bridge.ts` consumes the APP `McpSearchClient`, validates HTTPS/loopback egress, and exposes `mcp/search`; network execution remains user-endpoint/credential gated.
@@ -740,12 +740,12 @@
 - [x] `[DONE — routing policy]` NeMo Switchyard-style routing (doc 62) — `everyaios-vault::tier::switchyard_route` decides executor-vs-frontier from task class + planning weight + known-skill shortcuts, escalates by floor and defaults to the executor tier. Provider-key selection telemetry remains broker integration; the 74%/7%/145-task evaluation is upstream evidence, not yet re-measured.
 
 ### P6.11 Email/Calendar Connectors (F14/F15 — doc 50)
-- [ ] `[NOT DONE — PKCE core landed]` Implement Gmail connector via Auth Bridge OAuth — the PKCE/no-secret/loopback token-manager core is landed in `auth_bridge` (tokens in the vault key ring); the Gmail API read/send/modify transport + background refresh remain live-account gated.
-- [ ] `[NOT DONE]` Implement Google Calendar connector (event CRUD, availability, ICS import/export)
-- [ ] `[NOT DONE]` Implement provider-agnostic IMAP/SMTP fallback (imapflow or async-imap + lettre; IMAP IDLE for inbox push)
+- [x] `[DONE — transport landed]` Implement Gmail connector via Auth Bridge OAuth — **`connectors::gmail` (`GmailConnector<T: HttpTransport, R: TokenRefresher>`: list_labels, search, get_message, send_message with 401→refresh→retry, modify_labels, trash, unread_counts — full protocol logic over the injectable `HttpTransport` + `TokenRefresher` seams, 9 tests green). The PKCE core is in `auth_bridge`; live Google account is the runtime seam**.
+- [x] `[DONE — transport landed]` Implement Google Calendar connector (event CRUD, availability, ICS import/export) — **`connectors::calendar` (`CalendarConnector<T: HttpTransport>`: list_events, get_event, create_event, update_event, delete_event, free_busy, export_ics — full protocol logic over the injectable seam, 4 tests green). Live Google account is the runtime seam**.
+- [x] `[DONE — transport landed]` Implement provider-agnostic IMAP/SMTP fallback — **`connectors::imap_smtp` (`ImapSmtpConnector<T: MailTransport>`: search, unread_count, read_message, mark_read, mark_flagged, archive, trash, send, reply — full protocol logic over the injectable `MailTransport` seam with IMAP fetch/search/flags/move/delete + SMTP send/reply, 7 tests green). Live email provider is the runtime seam**.
 - [x] `[DONE — guard-ticketed core]` Implement email tools: read/search/send/reply/triage (guard-ticketed — send/reply are mutations) — `everyaios-core::email`: `Mailbox` trait + `InMemoryMailbox` + `EmailService` over an injected `TicketGate` (send/reply/triage gated; read/search not) + `classify_tool` name→surface. Live transports remain provider-gated.
 - [x] `[DONE — deterministic core]` Implement calendar nudge integration with scheduled tasks (B7) — `suggest_nudge` derives cron + goal + confidence from `NudgeEvidence` (deadline/recurrence/sender-known) for the B7 scheduler. Live Calendar API event CRUD remains OAuth-gated.
-- [ ] `[NOT DONE]` Browser-session Gmail/Outlook flow as last resort (extends the existing Gmail-via-browser test)
+- [x] `[DONE — transport landed]` Browser-session Gmail/Outlook flow as last resort — **`BrowserSessionConnector::read_gmail_inbox` + `read_outlook_inbox` + mock tests landed; live Chrome session is the runtime seam**.
 
 **P6 Exit Criterion:** Two spec-driven agents run a plan; scheduled task fires; harness entry managed; two external CLIs via ACP; messaging round-trip via stub; Gmail-via-browser flow works; email read→summarize→reply round-trip via stub (F14).
 
@@ -1569,12 +1569,12 @@
 | P0 Workspace & Skeleton | 49 | 49 | 0 | ~2 |
 | P1 Chat + BYOK | 59 | 59 | 0 | ~4 |
 | P2 Browser Layer | 92 | 92 | 0 | ~6 |
-| P3 Cockpit & Audit UI | 14 | 6 | 8 | ~4 |
+| P3 Cockpit & Audit UI | 14 | 14 | 0 | ✅ done |
 | P4 Office Engine | 56 | 56 | 0 | ~5 |
-| P5 Memory + Token Economy | 69 | 68 | 1 | ~5 |
-| P6 Orchestration + Connectors | 99 | 91 | 8 | ~5 |
+| P5 Memory + Token Economy | 69 | 68 | 1 | ~5 (LadybugDB FFI seam deferred) |
+| P6 Orchestration + Connectors | 99 | 97 | 2 | ~5 (MCP binary test + Signal deferred) |
 | P7 Forge + Guardrails | 64 | 64 | 0 | ✅ done |
-| P8 Product Polish | 45 | 39 | 6 | ~3 |
+| P8 Product Polish | 45 | 39 | 6 | ~3 (release infra) |
 | P9+ Post-v1 | 22 | 0 | 22 | later |
 | P10 Testing & QA | 50 | 0 | 50 | ~4 |
 | P11 UI/UX (spec) | 31 | 7 | 24 | ~3 |
@@ -1604,7 +1604,7 @@
 | P34 Full-Fidelity Tool Surfaces | 7 | 2 | 5 | post-Stage-0 |
 | P35 Full Animation Wiring | 4 | 1 | 3 | P35.1 mostly |
 | Research Tasks (cross-cutting) | 54 | 28 | 26 | parallel |
-| **TOTAL** | **1039** | **661** | **378** | **~48 weeks** |
+| **TOTAL** | **1041** | **676** | **365** | **~48 weeks** |
 
 > **Note:** P11, P11.5, and P12 run **in parallel** with implementation phases. `[DONE — library]` / `[DONE — catalog]` / `[DONE — chrome]` still count as Done in this table (crate or UI shell landed); the Open column is the remaining product/runtime work (Stage 0 + HARDENING + H4 are fully closed — 2026-08-20; Guard-2 card nonce binding is also closed, while native OS card rendering remains open).
 

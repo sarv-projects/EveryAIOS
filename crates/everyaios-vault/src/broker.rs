@@ -85,6 +85,10 @@ pub struct Broker<'a> {
     /// runtime — no KeyRing selection, no auth header; usage still lands in
     /// the ledger + session budget (tokens count, $ is 0).
     local_endpoints: HashMap<String, LocalEndpoint>,
+    /// P3.3 (J14): extra headers injected into every outbound HTTP request.
+    /// Used for distributed-trace linkage (`traceparent`) and any future
+    /// cross-boundary propagation.
+    extra_headers: HashMap<String, String>,
 }
 
 impl<'a> Broker<'a> {
@@ -108,6 +112,7 @@ impl<'a> Broker<'a> {
             budget: SessionBudget::default_budget(),
             oauth: None,
             local_endpoints: HashMap::new(),
+            extra_headers: HashMap::new(),
         }
     }
 
@@ -174,6 +179,15 @@ impl<'a> Broker<'a> {
         self
     }
 
+    /// P3.3 (J14): inject extra headers (e.g. `traceparent`) into every
+    /// outbound HTTP request from this broker instance. The caller builds
+    /// the header map (e.g. via `TraceContext::inject_headers`) and passes
+    /// it here; the broker is decoupled from the tracing crate.
+    pub fn with_extra_headers(mut self, headers: HashMap<String, String>) -> Self {
+        self.extra_headers.extend(headers);
+        self
+    }
+
     /// The key ring (for key-management surfaces + tests).
     pub fn ring(&self) -> &KeyRing<'a> {
         &self.ring
@@ -202,12 +216,14 @@ impl<'a> Broker<'a> {
             body,
             |url, key, body| {
                 let (name, value) = authorization(&key.provider, &key.value);
-                map_ureq_result(
-                    ureq::post(url)
-                        .set("Content-Type", "application/json")
-                        .set(name, &value)
-                        .send_json(body),
-                )
+                let mut req = ureq::post(url)
+                    .set("Content-Type", "application/json")
+                    .set(name, &value);
+                // P3.3 (J14): propagate extra headers (traceparent, etc.).
+                for (hname, hval) in &self.extra_headers {
+                    req = req.set(hname, hval);
+                }
+                map_ureq_result(req.send_json(body))
             },
             // Cache-aware usage from the response's `usage` object (A9).
             |resp: &serde_json::Value| {
@@ -244,11 +260,14 @@ impl<'a> Broker<'a> {
             body,
             |url, key, body| {
                 let (name, value) = authorization(&key.provider, &key.value);
-                match ureq::post(url)
+                let mut req = ureq::post(url)
                     .set("Content-Type", "application/json")
-                    .set(name, &value)
-                    .send_json(body)
-                {
+                    .set(name, &value);
+                // P3.3 (J14): propagate extra headers (traceparent, etc.).
+                for (hname, hval) in &self.extra_headers {
+                    req = req.set(hname, hval);
+                }
+                match req.send_json(body) {
                     Ok(resp) => Ok(parse_sse(BufReader::new(resp.into_reader()))),
                     Err(ureq::Error::Status(429, _)) => Err(BrokerError::RateLimited),
                     Err(ureq::Error::Status(code, resp)) => {

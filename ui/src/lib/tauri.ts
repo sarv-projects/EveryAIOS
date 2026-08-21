@@ -142,3 +142,92 @@ export async function onChatEvent(
 ): Promise<() => void> {
   return listen<ChatWireEvent>("chat-event", (event) => cb(event.payload));
 }
+
+// ---------------------------------------------------------------------------
+// P3.2 — cockpit / ambient flight-deck (H2, doc 33 §9.5).
+// ---------------------------------------------------------------------------
+
+/** One live agent card (mirrors `everyaios_audit::cockpit::AgentCard`). */
+export interface AgentCard {
+  agent_id: string;
+  display_name: string;
+  model: string;
+  status: string; // Running | Done | Waiting | Idle
+  last_tool: string;
+  last_summary: string;
+  last_ts_ms: number;
+  tokens_in: number;
+  tokens_out: number;
+}
+
+/** An open interrupt the user must answer. */
+export interface InterruptCard {
+  agent_id: string;
+  kind: string; // approval | mcq | stop
+  prompt: string;
+  options: string[];
+}
+
+/** Full cockpit snapshot (mirrors `CockpitState`). */
+export interface CockpitState {
+  agents: AgentCard[];
+  interrupts: InterruptCard[];
+  quiet: boolean;
+}
+
+/** Poll the live cockpit state (agent cards + interrupts + quiet flag). */
+export async function cockpitSnapshot(): Promise<CockpitState> {
+  if (!inTauri()) return demoCockpit();
+  return invoke<CockpitState>("cockpit_snapshot");
+}
+
+/** STOP: kill the agent loop (control-channel `agent/stop`). */
+export async function agentStop(sessionId: string): Promise<void> {
+  if (!inTauri()) return;
+  return invoke<void>("agent_stop", { sessionId });
+}
+
+/** UNDO: request revert of the last action (control-channel `agent/undo`). */
+export async function agentUndo(sessionId: string): Promise<void> {
+  if (!inTauri()) return;
+  return invoke<void>("agent_undo", { sessionId });
+}
+
+function demoCockpit(): CockpitState {
+  const now = Date.now();
+  return {
+    agents: [
+      {
+        agent_id: "agent-1",
+        display_name: "Default Agent",
+        model: "claude-sonnet-4",
+        status: "Running",
+        last_tool: "file.open",
+        last_summary: "Opened Q3-Financials.xlsx",
+        last_ts_ms: now - 2_000,
+        tokens_in: 12_400,
+        tokens_out: 3_200,
+      },
+      {
+        agent_id: "agent-2",
+        display_name: "Research Sub-Agent",
+        model: "gpt-4o",
+        status: "Waiting",
+        last_tool: "browser.search",
+        last_summary: "Searching competitor pricing…",
+        last_ts_ms: now - 8_000,
+        tokens_in: 4_100,
+        tokens_out: 980,
+      },
+    ],
+    interrupts: [
+      {
+        agent_id: "agent-1",
+        kind: "approval",
+        prompt: "Allow shell.exec `npm test`?",
+        options: ["Allow", "Deny"],
+      },
+    ],
+    quiet: false,
+  };
+}

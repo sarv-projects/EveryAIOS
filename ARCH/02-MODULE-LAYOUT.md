@@ -60,6 +60,7 @@ desktop_app/
 | Blueprint/spec loader | `core-agents` (registry) | `.md` parser → AgentConfig[]; continuous re-write of status blocks |
 | Memory + RAG | `core-memory`, `core-files` (7 algos, hybrid search, embeddings) | multi-signal retrieval fusion (mem0 pattern), procedural memory, Letta-style paging hooks |
 | Connector hub | `core-connectors` (orchestrator, 27+ adapters, composio) | routing engine per doc 13; usage meters; Auth Bridge |
+| **P6 connector transports** | `everyaios-core::connectors` (gmail, calendar, imap_smtp, browser_session) | injectable `HttpTransport`/`CdpSession`/`MailTransport` seams; Gmail API read/send/modify with 401→refresh→retry, Calendar CRUD + ICS export, IMAP/SMTP fallback, browser-session Gmail/Notion/Linear/Outlook DOM reading — 24 tests green |
 | Search/research | `core-search` (cascade, bm25, research-tiers) | deep-research tree runner (doc 07); **tiered cascade + SQLite result cache (G8, Algorithm #33, doc 52)** — cached instant tier → WebSurfx → SearXNG → fallback; parallel top-N fetch cascade |
 | Automations | `core-automations` (workflow engine, crystallization) | scheduler UI, nudge sentinels |
 | Providers/BYOK | `core-providers`, `core-ai` (clients, router, vault) | **key-ring client** (03): multiple keys/provider, fallback rotation |
