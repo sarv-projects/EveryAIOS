@@ -34,7 +34,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "msi", "dmg"],
+    "targets": ["nsis", "msi", "dmg", "appimage", "deb", "rpm"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,6 +42,53 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "category": "DeveloperTool"
+    "category": "DeveloperTool",
+    "shortDescription": "EveryAIOS — agentic desktop OS shell",
+    "longDescription": "A local-first, BYOK, open-source desktop workspace where your chat, browser, files, documents, code, automations, agents, and connected accounts live in one safe continuity.",
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English"],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      },
+      "wix": {
+        "language": "en-US"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "rpm": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "macOS": {
+      "dmg": {
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        }
+      },
+      "minimumSystemVersion": "10.15"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUxNTg2MjM4OUE2QjM5NUEKUldSYU9XdWFPR0pZVWFyU0wyM1VQaE9FSW5GdmRIRmx5WllSTW1XcG9hM2tLREEzVTQwRmdRWWgK",
+      "endpoints": [
+        "https://releases.everyaios.dev/{{target}}/{{arch}}/{{current_version}}",
+        "https://github.com/sarv-projects/EveryAIOS/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

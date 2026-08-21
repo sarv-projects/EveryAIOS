@@ -139,17 +139,21 @@ export function TitleBar() {
       <div className="flex items-center gap-1.5 pr-1">
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-[10.5px] font-mono">
+            <button
+              type="button"
+              onClick={() => useAppStore.getState().setCenterScreen('guard')}
+              className="no-drag flex h-6 items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 font-mono text-[10.5px] hover:bg-emerald-500/20"
+            >
               <ShieldCheck className="h-3 w-3 text-emerald-400" />
               {powerMode ? (
-                <span className="text-emerald-300">Guard · L2</span>
+                <span className="text-emerald-300">Guard · Standard</span>
               ) : (
-                <span className="text-emerald-300">Safe &amp; Private</span>
+                <span className="text-emerald-300">Guard · Standard</span>
               )}
-            </div>
+            </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            {powerMode ? 'Trust Level: 75/100 · Write tier' : '100% local-first — your data, keys and files never leave your device'}
+            Guard control center — approvals, tickets, policies. Not a sidebar destination.
           </TooltipContent>
         </Tooltip>
 

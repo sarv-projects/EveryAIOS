@@ -77,7 +77,7 @@ The compaction layer tracks a `prefix_dirty` flag: set by key rotation (03), mid
 
 ## 5.6 Cost ledger & dashboard
 
-One append-only table `token_usage(ts, session, provider, model, key_id, in, out, cache_read, cache_write, cost, tool)` shared by: per-key budgets (03), session efficiency projections (BrowserOS `session_efficiency_stats`, doc 33 §9.4 — insert-once, estimator v1), and the UI's live token/cost stream. Zero extra model calls for analytics (doc 32's telemetry pillar).
+One append-only table `token_usage(ts, session, provider, model, key_id, in, out, cache_read, cache_write, cost, tool)` shared by: per-key budgets (03), session efficiency projections (BrowserOS `session_efficiency_stats`, doc 33 §9.4 — insert-once, estimator v1), and the UI's live token/cost stream. Zero extra model calls for analytics (doc 32's telemetry pillar). **v3.39:** those rows also feed `ProviderObservation` → A7 `RouteDecision` (not yet implemented; `router.ts` remains capability-filter + cost-sort).
 
 ## 5.7 Failure discipline (the "no failures" goal)
 

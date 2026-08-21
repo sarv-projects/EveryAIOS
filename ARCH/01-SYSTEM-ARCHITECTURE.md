@@ -67,6 +67,8 @@ flowchart TD
 - Browser tabs are ownership-isolated: `mine | user | other-agent` (BrowserOS model, doc 33 §6).
 - Audit is append-only and replayable.
 
+**v3.39 resource record:** a live-registry hit is not a capability. MCP servers, ACP agents, model runners, browser children, sandboxes, and workers materialize as a durable `ManagedResource` (validate → install → inventory → enable → start → health → use → observe → update/rollback/remove). Install ≠ enable ≠ running ≠ healthy. Office and vault providers are *not* this type. Effects still require a ticket.
+
 ---
 
 ## 1.7 Data Layer Concurrency (SQLite WAL)

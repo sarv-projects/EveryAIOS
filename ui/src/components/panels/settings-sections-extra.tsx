@@ -44,7 +44,7 @@ export function PrivacySection() {
 // === Keyboard ===
 const SHORTCUTS = [
   { action: 'Open command palette', keys: ['Cmd', 'K'] },
-  { action: 'New session', keys: ['Cmd', 'N'] },
+  { action: 'New work', keys: ['Cmd', 'N'] },
   { action: 'Toggle pause', keys: ['Cmd', '.'] },
   { action: 'Switch to chat', keys: ['Cmd', '1'] },
   { action: 'Switch to automations', keys: ['Cmd', '2'] },

@@ -124,6 +124,7 @@ export default function MemoryPanel() {
         </div>
         <Tabs value={tab} onValueChange={setTab} className="mt-3">
           <TabsList className="h-7">
+            <TabsTrigger value="wiki" className="text-xs">Repo wiki</TabsTrigger>
             <TabsTrigger value="knowledge" className="text-xs">Knowledge</TabsTrigger>
             <TabsTrigger value="episodic" className="text-xs">Episodic</TabsTrigger>
             <TabsTrigger value="semantic" className="text-xs">Semantic</TabsTrigger>
@@ -195,6 +196,29 @@ export default function MemoryPanel() {
             transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
             className="space-y-3 p-4"
           >
+          {tab === 'wiki' && (
+            <section className="space-y-2">
+              <p className="text-[11px] text-muted-foreground">
+                Generated project wiki for the agent. Empty until you generate from a folder.
+              </p>
+              {['~/Desktop', 'this workspace'].map((name) => (
+                <div key={name} className="flex items-center justify-between rounded-md border border-border/50 bg-background/30 px-3 py-2">
+                  <span className="font-mono text-[11px]">{name}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[10px]"
+                    onClick={() => notify('Generate wiki — retrieval exists; this write is not ticketed yet')}
+                  >
+                    Generate
+                  </Button>
+                </div>
+              ))}
+              <div className="rounded-md border border-dashed border-border/60 px-3 py-10 text-center text-[11px] text-muted-foreground">
+                Select a wiki from the list, or generate one.
+              </div>
+            </section>
+          )}
           {tab === 'episodic' && <EpisodicTab />}
           {tab === 'semantic' && <SemanticTab />}
           {tab === 'graph' && <GraphTab />}

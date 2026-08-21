@@ -25,6 +25,9 @@ Thumbs.db
 *.db-shm
 *.db-wal
 
+# P8.8 auto-updater signing keys (private key + password must never be committed)
+.tauri/
+
 # Uploaded screenshots (not project assets)
 *.png
 !icons/*.png

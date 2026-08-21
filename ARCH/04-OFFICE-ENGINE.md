@@ -21,7 +21,7 @@ open ZIP → parse structure (parts index, content types, rels)
 
 ### Word (.docx, and .doc via conversion fallback)
 - **Edit:** block-patch engine (GenOffice doc 28 §1: `text-patch.ts` — minimal `w:t` prefix/suffix patches, `patch.ts` orchestrator, `parse/scan.ts` block tree). The LLM edits rendered plain text; the engine maps back to the minimal run patches. Headers/footers/tables/sections are separate blocks.
-- **Read/ingest:** existing `core-files` OOXML extractors + markitdown-class conversion for RAG.
+- **Read/ingest:** existing `core-files` OOXML extractors + markitdown-class conversion for RAG. **v3.39 `DocumentAsset`:** every ingest records source_uri, converter + versions, source_hash, extracted_hash. Ingest ≠ mutate ≠ render.
 - **Render:** webview rendering from the block tree (styled paragraphs, tables, images) — no external engine.
 - **.doc (legacy binary):** read-only via conversion (headless soffice or textract) + "edit as new .docx" (documented limitation; edits always produce modern OOXML).
 

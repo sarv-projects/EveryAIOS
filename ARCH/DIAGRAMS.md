@@ -1,6 +1,6 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-08-09 · **Spec version:** v3.16 · **Diagrams:** 24
+> **Generated:** 2026-08-09 · **Spec version:** v3.41 · **Diagrams:** 25
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
 > **Surgical hierarchy (doc 52 §1):** the harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12) — Aider-class precision editors included in the harness list. Storage-intelligence flows (D9–D12) and the tiered search cascade (G8) are described in docs 49/52.
 
@@ -1027,4 +1027,33 @@ After iterating through all flows, the following cross-cutting invariants hold a
 
 10. **Intelligent context selection** — diagram 23 (RepoMap) shows how the agent selects relevant codebase context without loading everything, feeding only the most relevant symbols into the LLM within a token budget.
 
-11. **Vision fallback for computer-use** — diagram 24 shows the dual-path: CDP 37-tool catalog for structured apps (DOM available) vs OmniParser+VLM screenshot loop for native desktop apps (no DOM).
+11. **Vision fallback for computer-use** — diagram 24 shows the dual-path: CDP 37-tool catalog for structured apps (DOM available) vs OmniParser+VLM screenshot loop for native desktop apps (no DOM). Pixel path = E9 ⚪ post-v1.
+
+12. **Registry hit ≠ capability** — diagram 25: MCP/ACP/model/browser/sandbox/worker become a `ManagedResource` record before they can run. Office and vault providers are not this type. Effects still take a ticket (diagrams 2/6).
+
+---
+
+## 25. ManagedResource lifecycle (v3.39 — processes only)
+
+```mermaid
+flowchart TD
+    R[Live registry / local discovery] --> Rec[ResourceRecord]
+    Rec --> V[Validate]
+    V --> I[Install / prepare]
+    I --> Inv[Capability inventory]
+    Inv --> E[Enable]
+    E --> S[Start]
+    S --> H{Health}
+    H -->|healthy| U[Use]
+    U --> O[Observe]
+    O --> H
+    H -->|degraded| Retry[Retry / drain]
+    Retry --> S
+    O --> Upd[Version / update / rollback]
+    Upd --> Rec
+    H -->|remove| X[Stop / uninstall]
+    U --> T[One ticket → executor → event log]
+```
+
+Kinds: model runner · MCP server · ACP agent · browser child · sandbox · worker.  
+**Not kinds:** Office (ticketed mutation engine) · Providers (vault credentials) · Coolify-style deployments.

@@ -7,6 +7,7 @@ import {
   type AgentRuntime,
   type TaskKind,
 } from './agents'
+import type { ComposerRole, PermissionMode, TaskIntent } from './ui-prefs'
 
 // === Types ============================================================
 
@@ -497,6 +498,61 @@ const writePowerMode = (v: boolean) => {
   }
 }
 
+export const SETTINGS_SECTION_IDS = [
+  'general',
+  'appearance',
+  'notifications',
+  'voice',
+  'mobile',
+  'agents',
+  'local',
+  'apikeys',
+  'experts',
+  'launch',
+  'chat',
+  'permissions',
+  'browser',
+  'indexing',
+  'mcp',
+  'marketplace',
+  'skills',
+  'commands',
+  'hooks',
+  'worktree',
+  'rules',
+  'memory',
+  'cloud',
+  'import',
+  'usage',
+  'resources',
+  'beta',
+  'privacy',
+  'keyboard',
+  'advanced',
+  'about',
+] as const
+export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
+
+const PERMISSION_KEY = 'everyaios.settings.permissionMode'
+const readPermission = (): PermissionMode => {
+  if (typeof window === 'undefined') return 'ask'
+  try {
+    const v = window.localStorage.getItem(PERMISSION_KEY)
+    if (v === 'sandbox' || v === 'ask' || v === 'auto' || v === 'full') return v
+  } catch {
+    /* ignore */
+  }
+  return 'ask'
+}
+const writePermission = (v: PermissionMode) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PERMISSION_KEY, v)
+  } catch {
+    /* ignore */
+  }
+}
+
 // === Zustand store ============================================================
 
 interface AppState {
@@ -572,8 +628,29 @@ interface AppState {
   setRouting: (task: TaskKind, agentId: string) => void
 
   // Left-panel mode (which sub-screen is showing in the center for non-chat panels)
-  centerScreen: 'chat' | 'automations' | 'memory' | 'guard' | 'connectors' | 'analytics' | 'settings'
+  centerScreen:
+    | 'home'
+    | 'chat'
+    | 'activity'
+    | 'projects'
+    | 'files'
+    | 'automations'
+    | 'memory'
+    | 'guard'
+    | 'connectors'
+    | 'analytics'
+    | 'settings'
   setCenterScreen: (s: AppState['centerScreen']) => void
+  settingsSection: SettingsSectionId
+  setSettingsSection: (s: SettingsSectionId) => void
+  permissionMode: PermissionMode
+  setPermissionMode: (m: PermissionMode) => void
+  composerRole: ComposerRole
+  setComposerRole: (r: ComposerRole) => void
+  taskIntent: TaskIntent
+  setTaskIntent: (t: TaskIntent) => void
+  taskFolder?: string
+  setTaskFolder: (folder?: string) => void
 
   // Office flyout state
   officeFlyoutOpen: boolean
@@ -589,7 +666,9 @@ interface AppState {
 
   // Toast trigger helper (kept simple)
   lastToast?: string
-  notify: (msg: string) => void
+  lastToastKind?: 'default' | 'error'
+  notify: (msg: string, kind?: 'default' | 'error') => void
+  notifyMcpError: (msg: string) => void
 
   // Live data (bridge) — empty/demo values until the shell answers
   liveAgents: AgentRuntime[]
@@ -631,7 +710,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const id = `s-${Date.now()}`
     const fresh: Session = {
       id,
-      title: 'New chat',
+      title: 'New work',
       status: 'idle',
       preview: 'What would you like to do?',
       updatedAt: new Date().toISOString(),
@@ -808,8 +887,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   setRouting: (task, agentId) =>
     set((s) => ({ routing: { ...s.routing, [task]: agentId } })),
 
-  centerScreen: 'chat',
+  centerScreen: 'home',
   setCenterScreen: (s) => set({ centerScreen: s }),
+  settingsSection: 'agents',
+  setSettingsSection: (s) => set({ settingsSection: s }),
+  permissionMode: readPermission(),
+  setPermissionMode: (m) => {
+    writePermission(m)
+    set({ permissionMode: m })
+  },
+  composerRole: 'agent',
+  setComposerRole: (r) => set({ composerRole: r }),
+  taskIntent: 'work',
+  setTaskIntent: (t) => set({ taskIntent: t }),
+  taskFolder: undefined,
+  setTaskFolder: (folder) => set({ taskFolder: folder }),
 
   officeFlyoutOpen: false,
   setOfficeFlyoutOpen: (v) => set({ officeFlyoutOpen: v }),
@@ -821,7 +913,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleAgentPause: () => set((s) => ({ agentPaused: !s.agentPaused })),
 
   lastToast: undefined,
-  notify: (msg) => set({ lastToast: msg }),
+  lastToastKind: 'default',
+  notify: (msg, kind = 'default') => set({ lastToast: msg, lastToastKind: kind }),
+  notifyMcpError: (msg) => set({ lastToast: msg, lastToastKind: 'error' }),
 
   liveAgents: [],
   setLiveAgents: (a) => set({ liveAgents: a }),

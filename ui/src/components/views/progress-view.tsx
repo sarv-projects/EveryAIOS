@@ -109,7 +109,7 @@ export default function ProgressView() {
     <div className="flex h-full w-full flex-col">
       <header className="border-b border-border px-4 py-2.5">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">Progress</h2>
+          <h2 className="text-sm font-semibold text-foreground">Summary</h2>
           <Badge variant="outline" className="text-[10px]">
             {EVENTS.filter((e) => e.status === 'done').length}/{EVENTS.length} done
           </Badge>
@@ -203,6 +203,20 @@ export default function ProgressView() {
                 </div>
               )
             })}
+          </div>
+        </div>
+        <div className="space-y-2 border-t border-border px-4 py-3">
+          <div>
+            <div className="text-xs font-medium">Progress</div>
+            <p className="text-[10px] text-muted-foreground">Tasks and todos for this session land here as they run.</p>
+          </div>
+          <div>
+            <div className="text-xs font-medium">Artifacts</div>
+            <p className="text-[10px] text-muted-foreground">No artifacts yet.</p>
+          </div>
+          <div>
+            <div className="text-xs font-medium">References</div>
+            <p className="text-[10px] text-muted-foreground">No references yet.</p>
           </div>
         </div>
       </ScrollArea>

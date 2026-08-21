@@ -43,6 +43,9 @@ const TRIGGER_ICON: Record<
 }
 
 const TEMPLATES = [
+  { name: 'Daily Brief', desc: 'Concise morning brief on workdays', trigger: '0 8 * * 1-5', runs: 0 },
+  { name: 'Weekly Review', desc: 'Progress, risks, and next steps each week', trigger: '0 17 * * 5', runs: 0 },
+  { name: 'Project Monitor', desc: 'Track repo changes, issues, and updates', trigger: 'interval 3600', runs: 0 },
   { name: 'CI Fixer', desc: 'Watch for red builds and open a fixing session', trigger: 'on ci_build_fail', runs: 142 },
   { name: 'Weekly Deps', desc: 'Scan dependencies every Monday, patch CVEs', trigger: '0 6 * * 1', runs: 12 },
   { name: 'Security Scan', desc: 'Nightly surface scan of the workspace', trigger: '0 2 * * *', runs: 89 },

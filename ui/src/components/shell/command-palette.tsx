@@ -34,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useAppStore, type ViewId } from '@/lib/store'
+import { useAppStore, type ViewId, type SettingsSectionId } from '@/lib/store'
 import { AGENTS, getModelsForAgent, MODEL_MAP, type AgentRuntime } from '@/lib/agents'
 import { useTheme } from '@/components/theme-provider'
 import { cn } from '@/lib/utils'
@@ -57,6 +57,8 @@ export function CommandPalette() {
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  const setSettingsSection = useAppStore((s) => s.setSettingsSection)
+  const newSession = useAppStore((s) => s.newSession)
   const notify = useAppStore((s) => s.notify)
   const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
   const setSelectedModel = useAppStore((s) => s.setSelectedModel)
@@ -87,12 +89,12 @@ export function CommandPalette() {
     return [
       {
         id: 'new-session',
-        label: 'New session',
+        label: 'New work',
         icon: Plus,
         group: 'actions',
         shortcut: '⌘N',
         onSelect: () => {
-          notify('New session created')
+          newSession()
           setOpen(false)
         },
       },
@@ -140,10 +142,50 @@ export function CommandPalette() {
         },
       },
       {
-        id: 'nav-guard',
-        label: 'Open Guard',
-        icon: ShieldCheck,
+        id: 'nav-home',
+        label: 'Home',
+        icon: Sparkles,
         group: 'navigate',
+        onSelect: () => {
+          setCenterScreen('home')
+          setOpen(false)
+        },
+      },
+      {
+        id: 'nav-activity',
+        label: 'Activity',
+        icon: Clock,
+        group: 'navigate',
+        onSelect: () => {
+          setCenterScreen('activity')
+          setOpen(false)
+        },
+      },
+      {
+        id: 'nav-projects',
+        label: 'Projects',
+        icon: Folder,
+        group: 'navigate',
+        onSelect: () => {
+          setCenterScreen('projects')
+          setOpen(false)
+        },
+      },
+      {
+        id: 'nav-files',
+        label: 'Files',
+        icon: FileText,
+        group: 'navigate',
+        onSelect: () => {
+          setCenterScreen('files')
+          setOpen(false)
+        },
+      },
+      {
+        id: 'nav-guard',
+        label: 'Guard (control center)',
+        icon: ShieldCheck,
+        group: 'settings',
         onSelect: () => {
           setCenterScreen('guard')
           setOpen(false)
@@ -151,9 +193,9 @@ export function CommandPalette() {
       },
       {
         id: 'nav-connectors',
-        label: 'Open Connectors',
+        label: 'Connectors',
         icon: Plug,
-        group: 'navigate',
+        group: 'settings',
         onSelect: () => {
           setCenterScreen('connectors')
           setOpen(false)
@@ -161,19 +203,20 @@ export function CommandPalette() {
       },
       {
         id: 'nav-memory',
-        label: 'Open Memory',
+        label: 'Memory',
         icon: Brain,
-        group: 'navigate',
+        group: 'settings',
         onSelect: () => {
-          setCenterScreen('memory')
+          setSettingsSection('memory')
+          setCenterScreen('settings')
           setOpen(false)
         },
       },
       {
         id: 'nav-analytics',
-        label: 'Open Analytics',
+        label: 'Analytics',
         icon: BarChart3,
-        group: 'navigate',
+        group: 'settings',
         onSelect: () => {
           setCenterScreen('analytics')
           setOpen(false)
@@ -189,6 +232,33 @@ export function CommandPalette() {
           setOpen(false)
         },
       },
+      ...([
+        ['chat', 'Chat & Auto-run'],
+        ['permissions', 'Permissions'],
+        ['browser', 'Browser & Network'],
+        ['indexing', 'Indexing & LSP'],
+        ['voice', 'Voice'],
+        ['mobile', 'Mobile'],
+        ['mcp', 'MCP'],
+        ['marketplace', 'Marketplace'],
+        ['skills', 'Skills'],
+        ['hooks', 'Hooks'],
+        ['launch', 'Launch CLI'],
+        ['local', 'Local models'],
+        ['import', 'Import & migrate'],
+        ['rules', 'Rules & memory'],
+      ] as [SettingsSectionId, string][]).map(([id, label]) => ({
+        id: `settings-${id}`,
+        label: `Settings · ${label}`,
+        icon: Settings,
+        group: 'settings' as const,
+        keywords: `settings ${label} ${id}`,
+        onSelect: () => {
+          setSettingsSection(id)
+          setCenterScreen('settings')
+          setOpen(false)
+        },
+      })),
       // === Agent runtime switching ===
       ...AGENTS.filter((a) => a.status === 'installed' || a.status === 'updating').map((a) => ({
         id: `agent-${a.id}`,
@@ -233,7 +303,7 @@ export function CommandPalette() {
         },
       },
     ]
-  }, [sessions, theme, toggle, setActiveSession, setActiveView, setCenterScreen, setOpen, notify, setSelectedAgent, setSelectedModel, setAutoRoute, autoRoute, selectedAgentId])
+  }, [sessions, theme, toggle, setActiveSession, setActiveView, setCenterScreen, setSettingsSection, newSession, setOpen, notify, setSelectedAgent, setSelectedModel, setAutoRoute, autoRoute, selectedAgentId])
 
   const filtered = React.useMemo(() => {
     if (!query) return items

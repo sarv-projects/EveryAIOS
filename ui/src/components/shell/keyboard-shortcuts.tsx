@@ -16,7 +16,7 @@ const SHORTCUTS = [
     { keys: '⌘ B', action: 'Toggle sidebar' },
     { keys: '⌘ .', action: 'Casual ⇄ power mode' },
     { keys: '⌘ \\', action: 'Toggle viewport' },
-    { keys: '⌘ N', action: 'New session' },
+    { keys: '⌘ N', action: 'New work' },
     { keys: '⌘ 1–5', action: 'Switch to session 1–5' },
   ]},
   { group: 'Views', items: [

@@ -20,6 +20,7 @@ mod office_cmds;
 mod replay_cmds;
 mod scheduler_cmds;
 mod storage_cmds;
+mod sync_cmds;
 mod trajectory_cmds;
 
 use everyaios_core::GuardService;
@@ -387,12 +388,23 @@ fn session_delete(state: State<'_, AppState>, session_id: String) -> Result<(), 
 }
 
 /// Locate the coordinator sidecar binary. `EVERYAIOS_COORDINATOR_BIN` wins;
-/// otherwise the standard build output path is probed from the workspace.
-fn locate_coordinator_bin() -> Option<PathBuf> {
+/// otherwise the packaged resource dir (`bin/coordinator` — P8.8 installers
+/// ship the sidecar as a bundle resource) is probed, then the standard
+/// workspace build output paths.
+fn locate_coordinator_bin(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(p) = std::env::var("EVERYAIOS_COORDINATOR_BIN") {
         let p = PathBuf::from(p);
         if p.is_file() {
             return Some(p);
+        }
+    }
+    // Packaged app: the sidecar is a bundle resource (`bin/coordinator`).
+    if let Ok(res) = app.path().resource_dir() {
+        for rel in ["bin/coordinator", "bin/coordinator.exe", "coordinator", "coordinator.exe"] {
+            let p = res.join(rel);
+            if p.is_file() {
+                return Some(p);
+            }
         }
     }
     let cwd = std::env::current_dir().ok()?;
@@ -418,7 +430,7 @@ fn locate_coordinator_bin() -> Option<PathBuf> {
 /// app runs fine without the sidecar; chat simply reports "sidecar not
 /// connected".
 fn pre_spawn_coordinator(app: AppHandle) {
-    let Some(bin) = locate_coordinator_bin() else {
+    let Some(bin) = locate_coordinator_bin(&app) else {
         eprintln!("everyaios-desktop: coordinator binary not found — pre-spawn skipped");
         return;
     };
@@ -672,8 +684,16 @@ pub fn run() {
             storage_cmds::storage_large_files,
             storage_cmds::storage_duplicates,
             storage_cmds::storage_cleanup_proposals,
-            storage_cmds::storage_battery
+            storage_cmds::storage_battery,
+            // P8.9 sync: encrypted bundle export/import (file/LAN seam).
+            sync_cmds::sync_export_bundle,
+            sync_cmds::sync_import_bundle,
+            sync_cmds::sync_keypair_generate,
+            sync_cmds::sync_public_key
         ])
+        // P8.8: auto-updater (checks + downloads against the configured
+        // endpoints; signing key is the release secret).
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray
             // support the app should still start (just without a tray icon).

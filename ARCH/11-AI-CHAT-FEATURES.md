@@ -128,13 +128,14 @@ After applying COPY (A-1…A-16, B-1…B-17), CONVERT (C-1…C-11), REJECT (R-1�
 - StreamSession batching/checkpoints/cancel + budget-aware streaming (05)
 - Tiered compaction + Reasonix ratios + Hermes trajectory-anchor + BrowserOS fail-open summarizer (05)
 - Frozen-snapshot MEMORY.md/USER.md + SOUL.md personality + agent-created skills (B-1/2/3)
-- Fresh-context subagents with DELEGATE_BLOCKED_TOOLS + live logs (B-4/10)
+- Fresh-context subagents with DELEGATE_BLOCKED_TOOLS + live logs (B-4/10); **v3.39:** derived child permissions (default-deny task/todo) + inbuilt abort/termination events (goal/timeout/max-turns/aborted/error). ACP covers external agents. **v3.40 Scout:** read-only research child; clone deps into managed cache, never write the workspace.
 - pi length-guard + model-swap hook (B-5/6) + trivial-prompt skip (B-7) + injection scan (B-16)
+- Event-sourced session: append-only log is source of truth; model messages are a projection; fork = lineage at a completed turn (not only UI bubble clone)
 
 **UI (desktop webview, ports C-1):**
 - Streaming chat + stage chips + TTFT + risk chip + token/cost streamer (H1/H9)
 - Reasoning blocks (B-11), resumable streams (B-12), artifacts/Generative UI (B-13, A-16)
-- Message branching, pinning, searchable history via `chat_search_index` (A-14/B-14)
+- Message branching, pinning, searchable history via `chat_search_index` (A-14/B-14); kernel fork lineage is the H3/session contract, not only the composer ⑂ control
 - Chat overlay on office docs/reader (ARCH 04 §overlay) + cockpit + audit/replay UI (H2/H3)
 - Voice input post-v1 (H15)
 

@@ -4,7 +4,7 @@
 
 **Question (user):** *"get the core for any model downloads from HuggingFace, from LM Studio itself — the entire core of model fetch, details, download, and where to store the model; it becomes part of the local model URL so multiple models appear under a Local → dropdown."*
 
-**One-line result:** our A5/P1.8 currently **detects + lists** installed runtimes (ollama/llamafile) but has **no first-party model downloader or unified local registry**. The missing core is a **resumable HF-Hub GGUF/MLX downloader** + a **canonical storage layout** + a **stable `local://` model URL** that resolves to a runtime — the exact machinery LM Studio ships, reimplemented on our Rust stack. → **TODO P27**.
+**One-line result:** A5/P1.8 **detects + lists** installed runtimes (ollama/llamafile). Discover **UI** lists **live Hugging Face Hub GGUF** (no hardcoded model names). Still missing: **resumable HF downloader** + **canonical store** + **`local://` broker resolve** + GGUF runtime bind. → **TODO P27** (UI checkbox done; five backend checkboxes open). **Do not bake Hub repo ids into source.**
 
 ---
 

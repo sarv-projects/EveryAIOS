@@ -1,18 +1,42 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
+  Bell,
+  BookOpen,
+  Boxes,
+  Cloud,
+  Command,
+  Cpu,
+  Download,
+  FolderTree,
+  Gauge,
+  Globe,
+  HardDrive,
   Info,
   Keyboard,
+  KeyRound,
+  MessageSquare,
+  Mic,
+  Package,
   Palette,
+  Plug,
+  ScanSearch,
   Settings as SettingsIcon,
   Shield,
+  ShieldCheck,
   SlidersHorizontal,
-  Boxes,
-  KeyRound,
+  Smartphone,
+  Sparkles,
+  Store,
+  Terminal,
+  Users,
+  Wrench,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAppStore, type SettingsSectionId } from '@/lib/store'
+import { Input } from '@/components/ui/input'
 import {
   AppearanceSection,
   GeneralSection,
@@ -25,30 +49,180 @@ import {
   PrivacySection,
 } from './settings-sections-extra'
 import AgentsModelsSection from './agents-models-section'
+import LocalModelsPanel from './local-models-panel'
+import MemoryPanel from './memory-panel'
+import {
+  BetaSection,
+  BrowserNetworkSection,
+  ChatAutoRunSection,
+  CloudEnvSection,
+  CommandsSection,
+  ExpertsSection,
+  HooksSection,
+  ImportSection,
+  IndexingSection,
+  LaunchCliSection,
+  MarketplaceSection,
+  McpMarketSection,
+  MobileSection,
+  NotificationsSection,
+  PermissionsSection,
+  ResourcesSection,
+  RulesSection,
+  SkillsSection,
+  UsageSection,
+  VoiceSection,
+  WorktreeSection,
+} from './settings-sections-studio'
 
-type SectionId =
-  | 'general'
-  | 'appearance'
-  | 'agents'
-  | 'apikeys'
-  | 'privacy'
-  | 'keyboard'
-  | 'advanced'
-  | 'about'
+type SectionId = SettingsSectionId
 
-const NAV: { id: SectionId; label: string; icon: typeof SettingsIcon }[] = [
-  { id: 'general', label: 'General', icon: SettingsIcon },
-  { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'agents', label: 'Agents & Models', icon: Boxes },
-  { id: 'apikeys', label: 'API Keys (BYOK)', icon: KeyRound },
-  { id: 'privacy', label: 'Privacy', icon: Shield },
-  { id: 'keyboard', label: 'Keyboard', icon: Keyboard },
-  { id: 'advanced', label: 'Advanced', icon: SlidersHorizontal },
-  { id: 'about', label: 'About', icon: Info },
+const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: typeof SettingsIcon }[] }[] = [
+  {
+    title: 'Workspace',
+    items: [
+      { id: 'general', label: 'General', icon: SettingsIcon },
+      { id: 'appearance', label: 'Appearance', icon: Palette },
+      { id: 'notifications', label: 'Notifications', icon: Bell },
+      { id: 'privacy', label: 'Privacy', icon: Shield },
+      { id: 'keyboard', label: 'Keyboard', icon: Keyboard },
+      { id: 'voice', label: 'Voice', icon: Mic },
+      { id: 'mobile', label: 'Mobile', icon: Smartphone },
+    ],
+  },
+  {
+    title: 'Intelligence',
+    items: [
+      { id: 'agents', label: 'Agents & Models', icon: Boxes },
+      { id: 'local', label: 'Local models', icon: Cpu },
+      { id: 'apikeys', label: 'Providers / BYOK', icon: KeyRound },
+      { id: 'experts', label: 'Experts', icon: Users },
+      { id: 'chat', label: 'Chat & Auto-run', icon: MessageSquare },
+      { id: 'skills', label: 'Skills', icon: Sparkles },
+      { id: 'rules', label: 'Rules', icon: BookOpen },
+      { id: 'memory', label: 'Memory', icon: Sparkles },
+    ],
+  },
+  {
+    title: 'Connections',
+    items: [
+      { id: 'mcp', label: 'MCP', icon: Plug },
+      { id: 'marketplace', label: 'Marketplace', icon: Store },
+    ],
+  },
+  {
+    title: 'Runtime',
+    items: [
+      { id: 'launch', label: 'Launch CLI', icon: Terminal },
+      { id: 'worktree', label: 'Worktree', icon: FolderTree },
+      { id: 'resources', label: 'Resources', icon: HardDrive },
+      { id: 'cloud', label: 'Cloud env', icon: Cloud },
+    ],
+  },
+  {
+    title: 'Security',
+    items: [
+      { id: 'permissions', label: 'Permissions', icon: ShieldCheck },
+      { id: 'browser', label: 'Browser & Network', icon: Globe },
+      { id: 'indexing', label: 'Indexing & LSP', icon: ScanSearch },
+      { id: 'hooks', label: 'Hooks', icon: Wrench },
+      { id: 'commands', label: 'Commands', icon: Command },
+    ],
+  },
+  {
+    title: 'Developer',
+    items: [
+      { id: 'import', label: 'Import & migrate', icon: Download },
+      { id: 'usage', label: 'Usage', icon: Gauge },
+      { id: 'beta', label: 'Beta', icon: Package },
+      { id: 'advanced', label: 'Advanced', icon: SlidersHorizontal },
+      { id: 'about', label: 'About', icon: Info },
+    ],
+  },
 ]
 
+function SectionBody({ section }: { section: SectionId }) {
+  switch (section) {
+    case 'general':
+      return <GeneralSection />
+    case 'appearance':
+      return <AppearanceSection />
+    case 'notifications':
+      return <NotificationsSection />
+    case 'voice':
+      return <VoiceSection />
+    case 'mobile':
+      return <MobileSection />
+    case 'agents':
+      return <AgentsModelsSection />
+    case 'local':
+      return <LocalModelsPanel />
+    case 'apikeys':
+      return <ModelsSection />
+    case 'experts':
+      return <ExpertsSection />
+    case 'launch':
+      return <LaunchCliSection />
+    case 'chat':
+      return <ChatAutoRunSection />
+    case 'permissions':
+      return <PermissionsSection />
+    case 'browser':
+      return <BrowserNetworkSection />
+    case 'indexing':
+      return <IndexingSection />
+    case 'mcp':
+      return <McpMarketSection />
+    case 'marketplace':
+      return <MarketplaceSection />
+    case 'skills':
+      return <SkillsSection />
+    case 'commands':
+      return <CommandsSection />
+    case 'hooks':
+      return <HooksSection />
+    case 'worktree':
+      return <WorktreeSection />
+    case 'rules':
+      return <RulesSection />
+    case 'memory':
+      return <MemoryPanel />
+    case 'cloud':
+      return <CloudEnvSection />
+    case 'import':
+      return <ImportSection />
+    case 'usage':
+      return <UsageSection />
+    case 'resources':
+      return <ResourcesSection />
+    case 'beta':
+      return <BetaSection />
+    case 'privacy':
+      return <PrivacySection />
+    case 'keyboard':
+      return <KeyboardSection />
+    case 'advanced':
+      return <AdvancedSection />
+    case 'about':
+      return <AboutSection />
+    default:
+      return null
+  }
+}
+
 export default function SettingsPanel() {
-  const [section, setSection] = useState<SectionId>('agents')
+  const section = useAppStore((s) => s.settingsSection)
+  const setSection = useAppStore((s) => s.setSettingsSection)
+  const [q, setQ] = useState('')
+
+  const groups = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return NAV_GROUPS
+    return NAV_GROUPS.map((g) => ({
+      ...g,
+      items: g.items.filter((n) => n.label.toLowerCase().includes(needle) || n.id.includes(needle)),
+    })).filter((g) => g.items.length > 0)
+  }, [q])
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -60,34 +234,47 @@ export default function SettingsPanel() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Section nav */}
-        <aside className="w-52 shrink-0 border-r border-border bg-card p-2">
-          <nav className="space-y-0.5">
-            {NAV.map((n) => {
-              const Icon = n.icon
-              const isActive = section === n.id
-              return (
-                <button
-                  key={n.id}
-                  onClick={() => setSection(n.id)}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
-                    isActive
-                      ? 'bg-orange-500/15 text-orange-300'
-                      : 'text-foreground/70 hover:bg-accent hover:text-foreground',
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{n.label}</span>
-                </button>
-              )
-            })}
+        <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card p-2">
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Ctrl+F to search"
+            className="mb-2 h-7 text-[11px]"
+          />
+          <nav className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto">
+            {groups.map((g) => (
+              <div key={g.title}>
+                <div className="px-2 pb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                  {g.title}
+                </div>
+                <div className="space-y-0.5">
+                  {g.items.map((n) => {
+                    const Icon = n.icon
+                    const isActive = section === n.id
+                    return (
+                      <button
+                        key={n.id}
+                        onClick={() => setSection(n.id)}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
+                          isActive
+                            ? 'bg-orange-500/15 text-orange-300'
+                            : 'text-foreground/70 hover:bg-accent hover:text-foreground',
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{n.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </aside>
 
-        {/* Active section content — crossfade on nav switch */}
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-4xl p-4">
+          <div className={cn('mx-auto p-4', section === 'local' ? 'max-w-6xl' : 'max-w-4xl')}>
             <AnimatePresence mode="wait">
               <motion.div
                 key={section}
@@ -96,14 +283,7 @@ export default function SettingsPanel() {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
               >
-                {section === 'general' && <GeneralSection />}
-                {section === 'appearance' && <AppearanceSection />}
-                {section === 'agents' && <AgentsModelsSection />}
-                {section === 'apikeys' && <ModelsSection />}
-                {section === 'privacy' && <PrivacySection />}
-                {section === 'keyboard' && <KeyboardSection />}
-                {section === 'advanced' && <AdvancedSection />}
-                {section === 'about' && <AboutSection />}
+                <SectionBody section={section} />
               </motion.div>
             </AnimatePresence>
           </div>

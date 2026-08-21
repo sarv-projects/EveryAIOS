@@ -1,6 +1,7 @@
 # EveryAIOS — Production UI Design Specification
 
 > **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). Every screen, tab, dropdown, panel and animation below exists in code today — this is a specification of the shipped surface, not a wishlist.
+> **v3.41 (2026-08-21):** Settings grouped+searchable, composer permission + Agent/Experts/Spec, empty-chat folder chips, Spec Q&A letters, Summary Artifacts/References, Repo wiki tab, Launch CLI — **chrome + localStorage**. Executor/Tauri wiring of those prefs is open (TODO P37).
 
 ---
 
@@ -9,8 +10,8 @@
 EveryAIOS is a single-window **agent workspace cockpit**. One session, one ticket, one event log, one timeline: you describe work in the center chat, and the right viewport is the *live window into the real tool* — a browser navigating, a spreadsheet recalculating, code being diffed, a PDF being signed. Multiple agent runtimes (Claude Code, Codex CLI, Grok Build, Gemini CLI, Aider, OpenCode, and the inbuilt EveryAIOS orchestrator) share the same session, the same approval model, and the same viewport. The user never chases tabs across apps; the cockpit is one surface that shows whatever is happening right now.
 
 Two modes serve two audiences (progressive disclosure, B9/P31):
-- **Casual (default)** — a 56px rail, a chat, consumer-language prompts. One toggle (⌘.) reveals the full cockpit.
-- **Power** — the full 248px sidebar, the right activity rail, and all six advanced panels.
+- **Casual (default)** — a 240px **work** sidebar (Search · New work · Home · Activity · Projects · Files · Automations · Recent-as-work-state). Home is a launchpad (“What would you like to get done?”), not a metrics dashboard. Guard/Memory/Connectors/Skills/Marketplace live in Settings (Control Center) or the title-bar Guard chip. Right rail stays hidden until Pro.
+- **Power** — the same work sidebar + the right activity rail and tool viewports. The monster architecture stays in **Settings → Control Center** groups (Workspace · Intelligence · Connections · Runtime · Security · Developer).
 
 Everything below is what a power user sees; the casual differences are called out inline.
 
@@ -63,17 +64,17 @@ Purposeful, swift, never bouncy. **No horizontal slides** — surfaces replace w
 
 ### 3.1 Title bar (36px, native-drag)
 
-Traffic lights → **brand mark** (orange sparkles tile) + `EveryAIOS` + `v3.38` badge → workspace breadcrumb (`everyaios / work ∨`, hover-dropdown) → active session title + status dot + label → center **command-palette launcher** (`Search sessions, files, commands… ⌘K · ⌘/ help`) → right cluster: Guard chip (`🛡 Guard · L2` in power / `Safe & Private` in casual) · spend chip (`$1.84 / $5.00`, power only) · token chip (`184K tok`, power only) · theme toggle · 🔔 notifications popover (badge = unread) · sidebar toggle (⌘B) · avatar.
+Traffic lights → **brand mark** (orange sparkles tile) + `EveryAIOS` + `v3.41` badge → workspace breadcrumb (`everyaios / work ∨`, hover-dropdown) → active session title + status dot + label → center **command-palette launcher** (`Search sessions, files, commands… ⌘K · ⌘/ help`) → right cluster: Guard chip (`🛡 Guard · Standard` — click opens Guard control center; **not** a sidebar item) · spend chip (`$1.84 / $5.00`, power only) · token chip (`184K tok`, power only) · theme toggle · 🔔 notifications popover (badge = unread) · sidebar toggle (⌘B) · avatar.
 
 ### 3.2 Left sidebar
 
-**Power (248px):** workspace selector → search field + orange `+ New session` → nav (Automations ⌘A · Guard ⌘G · Connectors · Memory ⌘M · Analytics) → **RECENT** session list (title, preview, mono meta `time · $cost · tokens`, status icon + dot, per-session agent mark, pin) with filter + sort dropdowns → footer (Settings · Downloads · Help).
-**Casual (56px):** agent-switcher dropdown (all runtimes, checkmark on active) → `+ New chat` → recent sessions as status-icon dots → footer (⚙ Settings · `›` power toggle).
-Session list status icons: 🟠 action-required · 🔵 running · 🟢 completed · 🔴 failed · ⚪ paused · 🟣 scheduled · ⚫ idle.
+**Work-first (240px; collapse to 48px):** Search · **＋ New work** · Home · Activity · Projects · Files · Automations · Recent as a **work queue** (waiting / running / completed / scheduled — not a transcript dump) · Settings · Help · Account. **Not** in the sidebar: Memory, Guard, Connectors, Skills, Marketplace, Analytics.
+**Pro** adds the right activity rail only. Architecture lives in Settings (Control Center groups).
+Session list status: 🟠 waiting for approval · 🔵 running · 🟢 completed · 🔴 failed · ⚪ paused · 🟣 scheduled · ★ pinned.
 
 ### 3.3 Center column
 
-Either the **Chat** (empty-state / conversation) or one of six panels with a 220ms fade-slide crossfade: **Automations · Memory · Guard · Connectors · Analytics · Settings**. All panels are self-contained screens (see §5).
+**Home** (default) is a calm launchpad: greeting + “What would you like to get done?” + one composer + **outcome examples** (Clean up Downloads, get ready for a meeting, research + deck, organize files) — **not** Code / Research / Browse / Work-mode chips. Continue working lists live jobs. Chat empty state is the same question + outcome prompts; folder attach is Pro-only. Other center screens: Chat (a piece of work) · Activity · Projects · Files · Automations · Settings · Guard (title chip).
 
 ### 3.4 Right rail + viewport
 
@@ -83,7 +84,7 @@ Either the **Chat** (empty-state / conversation) or one of six panels with a 220
 
 ### 3.5 Status bar (24px)
 
-**Casual:** one discreet pill — `● Preview · demo data` (amber, plain-browser) / `● Ready · Local` or `● Processing…` (emerald/orange live-dot) + `🛡 100% Private (On-Device)` + `EveryAIOS v3.38`.
+**Casual:** one discreet pill — `● Preview · demo data` (amber, plain-browser) / `● Ready · Local` or `● Processing…` (emerald/orange live-dot) + `🛡 100% Private (On-Device)` + `EveryAIOS v3.41`.
 **Dev mode (Settings → General → Developer Mode):** the full 12-badge telemetry strip — agent health (mark + latency + model + `auto` routing badge, hover = uptime/tasks/error-rate tooltip) · `sidecar online` · `core rust` · `db 3/14MB` · `mcp 127.0.0.1:9200` · `browser chrome (system)` · `cache 94%` · `guard · L2` · `vault · 7 keys` · `audit · append` · version.
 
 ---
@@ -182,7 +183,23 @@ Header + range pills (`Today · 7d · 30d · All time`) — switching crossfades
 
 ### 5.6 Settings
 
-Left nav (General · Appearance · Agents & Models · API Keys · Privacy · Keyboard · Advanced · About) — section content **crossfades**. All controls are live (theme segmented buttons, font-scale slider, mode Simple⇄Pro switch, Developer Mode toggle, BYOK provider rows with Health/Priority/Remove, model catalog table with multi-select **Compare** dialog, task→runtime routing table with live selects, shortcut bindings with Edit, experimental feature switches, data-path input, log-level select, about card with version).
+Left nav is **grouped + searchable** (Ctrl+F). Groups:
+
+- **Workspace** — General (proxy, tray, archive, keymap, markdown open) · Appearance · Notifications (chat/task/wiki, banner, sound, per-event preview) · Voice (device, external-mic auto-send, noise, terms, history, realtime, speed, voiceprint) · Mobile (QR, install, device control, keep awake) · Keyboard · Privacy
+- **Agents & models** — Agents & Models · Local models · Providers/BYOK + custom provider form (name, base URL, key, OpenAI/Anthropic format) · Experts/subagents + empty custom Import/New · Launch CLI copy-cards · Chat & Auto-run (Sandbox / Ask / Auto-approve / Run everything + local ctx)
+- **Permissions & tools** — Permissions · Browser & Network (Browse tab, protection, local/web links, HTTP/2, proxy, required domains, diagnostic) · Indexing & LSP (grep index, hierarchical ignore, symlink skip, LSP + worktree caps) · MCP directory + empty attach · Marketplace categories · Skills search · Commands · Hooks (PreToolUse deny-only) · Worktree disk cap · Rules (AGENTS.md / CLAUDE.md) · Cloud env
+- **System** — Import & migrate · Usage zeros · Resources · Beta · Advanced · About
+
+Section content **crossfades**. Prefs persist in `localStorage`. Honest amber notes where the executor/Tauri is not wired. **Do not clone competitor product names** (Quest, Trae, Qoder, CUE as a brand) — EveryAIOS chrome only.
+
+Composer: permission chip + Agent / Experts / Spec (with hints) + runtime picker (Auto when auto-route). Empty chat: Work/Code/Design intent, Desktop/Documents/Open folder/WSL/No project chips. Spec Q&A uses lettered MCQ cards. Right **Summary** view = progress timeline + empty Artifacts/References. Memory has a **Repo wiki** tab. Automations templates include Daily Brief / Weekly Review / Project Monitor. MCP disconnect uses a destructive toast.
+
+**Local models** (LM Studio 0.4.21 interaction, EveryAIOS chrome): three tabs.
+- **Discover** — live Hugging Face Hub GGUF search (no hardcoded model list). Sort: Most downloads / Most likes / Recently updated. Left list = Hub `id` + downloads/likes + Vision/Tool/Reasoning from Hub tags. Right = Hub row + live `/tree/main` GGUF files. **Your first model** = first Hub hit, not a baked name. Download control visible; weight fetch is P27 (not wired). Footer: installed count from `local_models`.
+- **My models** — installed ollama/llamafile + registry rows; click loads into the native picker.
+- **Hardware** — CPU name/cores; RAM + VRAM; GPU; Offload KV cache; resource monitor (disk free, recommended quant); model-loading guardrails; start local LLM on login.
+
+Composer agent picker: **Local** group (fits / too big / &lt;15K ctx) + **Discover · download · hardware** jump into this settings section.
 
 ---
 
@@ -266,7 +283,7 @@ Everything is explorable in a plain browser (`npm run dev` — `inTauri()` is fa
 
 ## 10. Keyboard shortcuts
 
-⌘K palette · ⌘N new session · ⌘Enter send · ⌘⇧P progress/pause · ⌘⇧E folder · Ctrl+` shell · ⌘⇧B browse · ⌘⇧C code · ⌘⇧O office flyout · ⌘⇧D diff · ⌘\\ viewport toggle · ⌘⇧F fullscreen · ⌘B sidebar · ⌘. power toggle · ⌘⇧1/2/3 agent switch · ⌘F search-in-chat · Esc stop/close · ⌘? shortcuts overlay.
+⌘K palette · ⌘N new work · ⌘Enter send · ⌘⇧P progress/pause · ⌘⇧E folder · Ctrl+` shell · ⌘⇧B browse · ⌘⇧C code · ⌘⇧O office flyout · ⌘⇧D diff · ⌘\\ viewport toggle · ⌘⇧F fullscreen · ⌘B sidebar · ⌘. power toggle · ⌘⇧1/2/3 agent switch · ⌘F search-in-chat · Esc stop/close · ⌘? shortcuts overlay.
 
 ---
 

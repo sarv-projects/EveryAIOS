@@ -1,0 +1,167 @@
+# EveryAIOS — release build matrix (P8.8).
+#
+# Builds the Tauri installers for all 3 desktop platforms on a version tag
+# (`v*`) or manual dispatch, publishes them as a GitHub release (draft), and
+# uploads the tauri-plugin-updater artifacts (signatures + latest.json) the
+# app's configured endpoints consume.
+#
+# Required repo secrets (without them the workflow fails honestly — updater
+# artifacts cannot be signed without the private key):
+#   TAURI_SIGNING_PRIVATE_KEY         — the minisign private key in base64
+#                                       (the same one .tauri/ holds locally;
+#                                       base64 -d the .key file if re-adding)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — the key's passphrase ('' if none)
+#   APP_CLONE_TOKEN                  — fine-grained PAT with read access to
+#                                       sarv-projects/APP (coordinator sidecar
+#                                       deps). Without it the sidecar steps are
+#                                       skipped and the installer ships without
+#                                       the coordinator (honest: chat is
+#                                       "sidecar not connected").
+#
+# The sidecar (packages/coordinator) is compiled with bun and shipped inside
+# the bundle as a resource (`bin/coordinator`), injected at build time via
+# TAURI_CONFIG so local `tauri build` (without the sidecar) keeps working.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux (deb + rpm + AppImage)
+            args: --bundles deb,rpm,appimage
+          - os: windows-latest
+            name: windows (NSIS + MSI)
+            args: --bundles nsis,msi
+          - os: macos-latest
+            name: macOS (app + dmg)
+            args: --bundles dmg
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop_app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: desktop_app
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop_app/crates, desktop_app/src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop_app/ui/package-lock.json
+
+      - name: Install Linux packaging deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf rpm libssl-dev
+
+      - name: Install OpenSSL (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install openssl:x64-windows-static-md
+          echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $env:GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+          $libs = "-Clink-arg=advapi32.lib -Clink-arg=user32.lib -Clink-arg=crypt32.lib -Clink-arg=gdi32.lib"
+          echo "RUSTFLAGS=$libs" >> $env:GITHUB_ENV
+
+      - name: Setup bun + pnpm
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Check out APP (core packages) — needs APP_CLONE_TOKEN
+        if: env.APP_CLONE_TOKEN != ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        uses: actions/checkout@v4
+        with:
+          repository: sarv-projects/APP
+          path: APP
+          token: ${{ secrets.APP_CLONE_TOKEN }}
+
+      - name: Install workspace deps
+        if: env.APP_CLONE_TOKEN != ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        run: |
+          pnpm install
+          (cd ui && npm ci)
+
+      - name: Build coordinator sidecar (bun --compile)
+        if: env.APP_CLONE_TOKEN != ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        run: pnpm --filter @everyaios/coordinator build
+
+      # Inject the compiled sidecar into the bundle as a resource
+      # (`bin/coordinator(.exe)`) via TAURI_CONFIG. The shell's
+      # `locate_coordinator_bin` probes the resource dir first, so the
+      # packaged app spawns the sidecar from the bundle — no external path.
+      - name: Inject sidecar as bundle resource
+        if: env.APP_CLONE_TOKEN != ''
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            SRC="packages/coordinator/dist/coordinator.exe"
+            DST="bin/coordinator.exe"
+          else
+            SRC="packages/coordinator/dist/coordinator"
+            DST="bin/coordinator"
+          fi
+          echo "TAURI_CONFIG={\"bundle\":{\"resources\":{\"$SRC\":\"$DST\"}}}" >> $GITHUB_ENV
+
+      - name: Tauri build + publish to GitHub release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing: only the release-private key can sign artifacts.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS code-signing (optional; unsigned builds otherwise).
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: ${{ matrix.args }}
+          tagName: v__VERSION__
+          releaseName: 'EveryAIOS v__VERSION__'
+          releaseBody: |
+            **EveryAIOS v__VERSION__** — local-first, BYOK, on-device agentic workspace.
+
+            Installers for all platforms + the auto-updater manifest are attached
+            to this release. The updater signs with the release private key
+            (TAURI_SIGNING_PRIVATE_KEY); verify the pubkey in
+            `src-tauri/tauri.conf.json` before trusting an update.
+          releaseDraft: true
+          prerelease: false

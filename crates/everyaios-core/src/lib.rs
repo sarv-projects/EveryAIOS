@@ -42,6 +42,7 @@ pub mod scheduler_service;
 pub mod self_audit;
 pub mod sidecar_link;
 pub mod supervisor;
+pub mod sync;
 pub mod telemetry;
 pub mod tools;
 pub mod tracing;
@@ -92,6 +93,11 @@ pub use rss_measure::{measure_self, measure_tree, snapshot, RssSnapshot};
 pub use scheduler_service::SchedulerService;
 pub use sidecar_link::{Inbound, LinkError, SidecarLink, WriterHandle};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};
+pub use sync::{
+    export_bundle, import_bundle, open, reconcile, seal, AeadBox, ChaChaBox, KeyExchange,
+    KeyPair, SharedSession, SyncConflict, SyncDiff, SyncEnvelope, SyncError, SyncHello, SyncItem,
+    SyncScope, SyncSet, SyncSession, SyncTransport, SYNC_MAGIC, SYNC_VERSION,
+};
 pub use telemetry::{Telemetry, TelemetryEventKind, TelemetryMode, TelemetrySample};
 pub use tools::{canonical_args_hash, ToolRegistry, ToolService};
 pub use vault_key::{

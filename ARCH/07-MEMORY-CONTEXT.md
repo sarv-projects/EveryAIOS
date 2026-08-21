@@ -38,6 +38,8 @@ query → intent classifier (memory vs fact vs event vs document)
 ```
 This is the layer mem0 showed delivering **+29.6 temporal / +23.1 multi-hop** over plain RAG (doc 34 §2) — on top of the vectorless default (FTS5-only fast path when embeddings are off).
 
+**v3.39 (named fields, not a new memory product):** graph edges carry EXTRACTED vs INFERRED + source span (C6); a session **fork** is lineage, not one global chronological log (C2); memory tools include `maintain()` (analyze references / update graph / decay), not only store/retrieve; fusion work is **abortable** when the owning turn dies (C3). The append-only event log is the session source of truth; model history is a projection.
+
 ## 7.4 Agent-managed paging (Letta pattern — for long autonomous runs)
 
 For deep multi-hour sessions: the agent gets three memory surfaces — **core** (always in context, ≤600 tok), **archival** (Rust-native graph/SQLite, searchable; LadybugDB optional), **recall** (episodic events, queryable). The agent itself decides what to page in/out via `memory` tools (read/write/search/forget), with the context planner (05 §5.2) enforcing budgets. Memory writes are queued to **turn boundaries** to protect the prefix cache (05 §5.5).

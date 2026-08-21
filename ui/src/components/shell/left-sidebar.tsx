@@ -2,388 +2,288 @@
 
 import * as React from 'react'
 import {
-  Activity,
-  BarChart3,
-  Brain,
+  CheckCircle2,
   ChevronDown,
-  ChevronRight,
+  Circle,
   Clock,
   Cog,
-  Download,
+  FileText,
+  Folder,
   HelpCircle,
-  Plug,
+  Home,
   Plus,
   Search,
-  ShieldCheck,
   Sparkles,
-  MoreHorizontal,
-  Hash,
-  Folder,
-  Filter,
-  Pin,
-  Circle,
-  CheckCircle2,
+  Star,
+  Zap,
   AlertCircle,
   Pause,
-  Timer,
-  RotateCw,
-  Trash2,
 } from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { useAppStore, type SessionStatus } from '@/lib/store'
-import { AGENT_MAP, AGENTS } from '@/lib/agents'
+import { useAppStore, type Session, type SessionStatus } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { motion, AnimatePresence } from 'framer-motion'
-
-// Map session.agent names to agent catalog IDs for sidebar marks
-const SESSION_AGENT_MAP: Record<string, string> = {
-  analyst: 'everyaios-native',
-  browser: 'grok-build',
-  coder: 'claude-code',
-}
 
 const statusMeta: Record<
   SessionStatus,
-  { color: string; ring: string; Icon: typeof Circle }
+  { color: string; ring: string; Icon: typeof Circle; label: string }
 > = {
-  idle: { color: 'text-zinc-500', ring: 'bg-zinc-500', Icon: Circle },
-  running: { color: 'text-blue-400', ring: 'bg-blue-500', Icon: Activity },
-  'action-required': { color: 'text-orange-400', ring: 'bg-orange-500', Icon: AlertCircle },
-  completed: { color: 'text-emerald-400', ring: 'bg-emerald-500', Icon: CheckCircle2 },
-  failed: { color: 'text-red-400', ring: 'bg-red-500', Icon: AlertCircle },
-  paused: { color: 'text-zinc-400', ring: 'bg-zinc-400', Icon: Pause },
-  scheduled: { color: 'text-violet-400', ring: 'bg-violet-500', Icon: Clock },
+  idle: { color: 'text-zinc-500', ring: 'bg-zinc-500', Icon: Circle, label: 'Idle' },
+  running: { color: 'text-blue-400', ring: 'bg-blue-500', Icon: Circle, label: 'Running' },
+  'action-required': { color: 'text-orange-400', ring: 'bg-orange-500', Icon: AlertCircle, label: 'Waiting for approval' },
+  completed: { color: 'text-emerald-400', ring: 'bg-emerald-500', Icon: CheckCircle2, label: 'Completed' },
+  failed: { color: 'text-red-400', ring: 'bg-red-500', Icon: AlertCircle, label: 'Failed' },
+  paused: { color: 'text-zinc-400', ring: 'bg-zinc-400', Icon: Pause, label: 'Paused' },
+  scheduled: { color: 'text-violet-400', ring: 'bg-violet-500', Icon: Star, label: 'Scheduled' },
 }
 
-interface NavItemProps {
+function NavItem({
+  icon: Icon,
+  label,
+  active,
+  badge,
+  collapsed,
+  onClick,
+}: {
   icon: React.ElementType
   label: string
-  shortcut?: string
   active?: boolean
   badge?: string
-  onClick?: () => void
   collapsed?: boolean
-  danger?: boolean
-}
-
-function NavItem({ icon: Icon, label, shortcut, active, badge, onClick, collapsed, danger }: NavItemProps) {
+  onClick?: () => void
+}) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
+          type="button"
           onClick={onClick}
           className={cn(
-            'group w-full flex items-center gap-2 rounded-md text-[12.5px] transition-colors relative',
-            collapsed ? 'h-9 w-9 justify-center mx-auto' : 'px-2 h-8',
+            'group relative flex w-full items-center gap-2 rounded-md text-[12.5px] transition-colors',
+            collapsed ? 'mx-auto h-9 w-9 justify-center' : 'h-8 px-2',
             active
               ? 'bg-accent text-foreground'
-              : danger
-                ? 'text-red-400/80 hover:bg-red-500/10 hover:text-red-400'
-                : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+              : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
           )}
         >
           <Icon className={cn('h-4 w-4 shrink-0', active && 'text-orange-500')} />
-          {!collapsed && <span className="flex-1 text-left truncate">{label}</span>}
+          {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
           {!collapsed && badge && (
-            <span className="text-[10px] font-mono text-muted-foreground/70">{badge}</span>
-          )}
-          {!collapsed && shortcut && (
-            <kbd className="text-[10px] text-muted-foreground/40 font-mono opacity-0 group-hover:opacity-100">
-              {shortcut}
-            </kbd>
+            <span className="font-mono text-[10px] text-muted-foreground/70">{badge}</span>
           )}
           {active && !collapsed && (
-            <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-orange-500" />
+            <span className="absolute bottom-1.5 left-0 top-1.5 w-0.5 rounded-r bg-orange-500" />
           )}
         </button>
       </TooltipTrigger>
       <TooltipContent side="right" sideOffset={8}>
         {label}
-        {shortcut && <span className="ml-2 text-muted-foreground">{shortcut}</span>}
       </TooltipContent>
     </Tooltip>
   )
 }
 
-// === Power mode — full 248px nav (existing behavior) =========================
+function Label({ children, collapsed }: { children: React.ReactNode; collapsed?: boolean }) {
+  if (collapsed) return null
+  return (
+    <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+      {children}
+    </div>
+  )
+}
 
-function PowerSidebar() {
+function WorkRow({ session, collapsed, active }: { session: Session; collapsed?: boolean; active?: boolean }) {
+  const setActiveSession = useAppStore((s) => s.setActiveSession)
+  const meta = statusMeta[session.status]
+  const Icon = session.pinned ? Star : meta.Icon
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={() => setActiveSession(session.id)}
+          className={cn(
+            'relative w-full rounded-md text-left transition-colors',
+            collapsed ? 'mx-auto grid h-8 w-8 place-items-center' : 'px-2 py-1.5',
+            active ? 'bg-accent' : 'hover:bg-accent/50',
+          )}
+        >
+          {collapsed ? (
+            <>
+              <Icon className={cn('h-4 w-4', meta.color)} />
+              <span className={cn('absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-sidebar', meta.ring)} />
+            </>
+          ) : (
+            <span className="flex items-start gap-2">
+              <Icon className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', meta.color)} />
+              <span className="min-w-0">
+                <span className="block truncate text-[12.5px] text-foreground">{session.title}</span>
+                <span className="block truncate text-[10.5px] text-muted-foreground">{meta.label}</span>
+              </span>
+            </span>
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{session.title}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+export function LeftSidebar() {
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const sessions = useAppStore((s) => s.sessions)
   const activeId = useAppStore((s) => s.activeSessionId)
-  const setActiveSession = useAppStore((s) => s.setActiveSession)
   const newSession = useAppStore((s) => s.newSession)
-  const deleteSession = useAppStore((s) => s.deleteSession)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const centerScreen = useAppStore((s) => s.centerScreen)
+  const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
   const notify = useAppStore((s) => s.notify)
+  const setSettingsSection = useAppStore((s) => s.setSettingsSection)
+  const automations = sessions.filter((s) => s.status === 'scheduled').length
 
-  const [filterOpen, setFilterOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
-
-  const filteredSessions = React.useMemo(() => {
-    if (!query) return sessions
-    return sessions.filter((s) =>
-      s.title.toLowerCase().includes(query.toLowerCase())
-    )
+  const recent = React.useMemo(() => {
+    const list = query
+      ? sessions.filter((s) => s.title.toLowerCase().includes(query.toLowerCase()))
+      : sessions
+    return list.slice(0, 8)
   }, [sessions, query])
 
   return (
     <aside
       className={cn(
-        'shrink-0 border-r border-border bg-sidebar flex flex-col transition-[width] duration-200 no-select',
-        collapsed ? 'w-12' : 'w-60'
+        'flex shrink-0 flex-col border-r border-border bg-sidebar no-select transition-[width] duration-200',
+        collapsed ? 'w-12' : 'w-60',
       )}
     >
-      {/* Workspace selector */}
-      <div className={cn('p-2 border-b border-border', collapsed && 'px-1')}>
+      <div className={cn('border-b border-border p-2', collapsed && 'px-1')}>
         {collapsed ? (
-          <div className="grid h-8 w-8 mx-auto place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30">
+          <div className="mx-auto grid h-8 w-8 place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30">
             <Sparkles className="h-4 w-4 text-orange-500" />
           </div>
         ) : (
-          <button className="w-full flex items-center gap-2 rounded-md px-2 h-8 hover:bg-accent transition-colors group">
+          <button type="button" className="flex h-8 w-full items-center gap-2 rounded-md px-2 hover:bg-accent">
             <div className="grid h-5 w-5 place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30">
               <Sparkles className="h-3 w-3 text-orange-500" />
             </div>
-            <span className="text-[12.5px] font-semibold truncate flex-1 text-left">
-              EveryAIOS Workspace
-            </span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            <span className="flex-1 text-left text-[12.5px] font-semibold">EveryAIOS</span>
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         )}
       </div>
 
-      {/* Search + new session */}
-      <div className={cn('p-2 space-y-1.5 border-b border-border', collapsed && 'px-1')}>
+      <div className={cn('space-y-1.5 border-b border-border p-2', collapsed && 'px-1')}>
         {collapsed ? (
           <>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button className="grid h-8 w-8 mx-auto place-items-center rounded-md hover:bg-accent">
+                <button type="button" onClick={() => setPaletteOpen(true)} className="mx-auto grid h-8 w-8 place-items-center rounded-md hover:bg-accent">
                   <Search className="h-4 w-4" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Search (Cmd+K)</TooltipContent>
+              <TooltipContent side="right">Search (⌘K)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
+                  type="button"
                   onClick={newSession}
-                  className="grid h-8 w-8 mx-auto place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30 hover:bg-orange-500/25"
+                  className="mx-auto grid h-8 w-8 place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30 hover:bg-orange-500/25"
                 >
                   <Plus className="h-4 w-4 text-orange-500" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">New session (Cmd+N)</TooltipContent>
+              <TooltipContent side="right">New work (⌘N)</TooltipContent>
             </Tooltip>
           </>
         ) : (
           <>
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search sessions…"
-                className="w-full h-7 pl-7 pr-2 text-[12px] rounded-md bg-background/60 border border-border focus:outline-none focus:ring-1 focus:ring-orange-500/40 placeholder:text-muted-foreground/60"
+                onFocus={() => setPaletteOpen(true)}
+                placeholder="Search"
+                className="h-7 w-full rounded-md border border-border bg-background/60 pl-7 pr-2 text-[12px] placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-orange-500/40"
               />
             </div>
-            <Button
-              size="sm"
-              className="w-full h-7 text-[12px] bg-orange-500 hover:bg-orange-600 text-white"
+            <button
+              type="button"
               onClick={newSession}
+              className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md bg-orange-500 text-[12px] text-white hover:bg-orange-600"
             >
-              <Plus className="h-3.5 w-3.5 mr-1.5" /> New session
-            </Button>
+              <Plus className="h-3.5 w-3.5" /> New work
+            </button>
           </>
         )}
       </div>
 
-      {/* Nav items */}
-      <nav className="p-2 space-y-0.5 border-b border-border">
+      <nav className="border-b border-border p-2">
+        <Label collapsed={collapsed}>Home</Label>
+        <NavItem
+          icon={Home}
+          label="Home"
+          collapsed={collapsed}
+          active={centerScreen === 'home'}
+          onClick={() => setCenterScreen('home')}
+        />
         <NavItem
           icon={Clock}
-          label="Automations"
-          shortcut="⌘A"
+          label="Activity"
           collapsed={collapsed}
+          active={centerScreen === 'activity'}
+          onClick={() => setCenterScreen('activity')}
+        />
+        <Label collapsed={collapsed}>Work</Label>
+        <NavItem
+          icon={Folder}
+          label="Projects"
+          collapsed={collapsed}
+          active={centerScreen === 'projects'}
+          onClick={() => setCenterScreen('projects')}
+        />
+        <NavItem
+          icon={FileText}
+          label="Files"
+          collapsed={collapsed}
+          active={centerScreen === 'files'}
+          onClick={() => setCenterScreen('files')}
+        />
+        <NavItem
+          icon={Zap}
+          label="Automations"
+          collapsed={collapsed}
+          badge={automations ? String(automations) : undefined}
           active={centerScreen === 'automations'}
           onClick={() => setCenterScreen('automations')}
-          badge="4"
-        />
-        <NavItem
-          icon={ShieldCheck}
-          label="Guard"
-          shortcut="⌘G"
-          collapsed={collapsed}
-          active={centerScreen === 'guard'}
-          onClick={() => setCenterScreen('guard')}
-        />
-        <NavItem
-          icon={Plug}
-          label="Connectors"
-          collapsed={collapsed}
-          active={centerScreen === 'connectors'}
-          onClick={() => setCenterScreen('connectors')}
-          badge="9"
-        />
-        <NavItem
-          icon={Brain}
-          label="Memory"
-          shortcut="⌘M"
-          collapsed={collapsed}
-          active={centerScreen === 'memory'}
-          onClick={() => setCenterScreen('memory')}
-        />
-        <NavItem
-          icon={BarChart3}
-          label="Analytics"
-          collapsed={collapsed}
-          active={centerScreen === 'analytics'}
-          onClick={() => setCenterScreen('analytics')}
         />
       </nav>
 
-      {/* Sessions list */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {!collapsed && (
-          <div className="flex items-center justify-between px-3 py-2">
-            <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2">
+          {!collapsed && (
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
               Recent
             </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setFilterOpen((v) => !v)}
-                className="grid h-5 w-5 place-items-center rounded hover:bg-accent text-muted-foreground hover:text-foreground"
-              >
-                <Filter className="h-3 w-3" />
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="grid h-5 w-5 place-items-center rounded hover:bg-accent text-muted-foreground hover:text-foreground">
-                    <MoreHorizontal className="h-3 w-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" sideOffset={4}>
-                  <DropdownMenuLabel className="text-[11px]">Sort by</DropdownMenuLabel>
-                  <DropdownMenuItem className="text-xs">Last updated</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs">Date created</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs">Cost (high → low)</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs">Tokens used</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-xs">Group by folder</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs">Show archived</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto scroll-thin px-2 pb-2 space-y-0.5">
-          {filteredSessions.map((session) => {
-            const meta = statusMeta[session.status]
-            const Icon = meta.Icon
-            const isActive = session.id === activeId && centerScreen === 'chat'
-            return (
-              <button
-                key={session.id}
-                onClick={() => setActiveSession(session.id)}
-                className={cn(
-                  'group w-full text-left rounded-md transition-all relative',
-                  collapsed ? 'p-1.5 mx-auto' : 'p-2',
-                  isActive
-                    ? 'bg-accent border-glow'
-                    : 'hover:bg-accent/50 hover-lift'
-                )}
-              >
-                {isActive && !collapsed && (
-                  <span className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r bg-orange-500" />
-                )}
-                {collapsed ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="relative grid h-8 w-8 mx-auto place-items-center rounded-md">
-                        <Icon className={cn('h-4 w-4', meta.color)} />
-                        <span className={cn('absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full', meta.ring)} />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{session.title}</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <div className="space-y-1">
-                    <div className="flex items-start gap-2">
-                      <Icon className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', meta.color)} />
-                      <span className="text-[12px] font-medium leading-tight line-clamp-2 flex-1">
-                        {session.title}
-                      </span>
-                      {/* Agent mark for this session */}
-                      {session.agent && (() => {
-                        const aId = SESSION_AGENT_MAP[session.agent] ?? session.agent
-                        const a = AGENT_MAP[aId]
-                        return a ? (
-                          <span className={cn('shrink-0 flex h-4 w-4 items-center justify-center rounded text-[7px] font-bold', a.accent)}>{a.mark}</span>
-                        ) : null
-                      })()}
-                      {session.pinned && (
-                        <Pin className="h-3 w-3 text-orange-500/80 shrink-0" fill="currentColor" />
-                      )}
-                      <span
-                        role="button"
-                        title="Delete chat (pauses its scheduled jobs)"
-                        className="ml-auto hidden shrink-0 rounded p-0.5 text-muted-foreground/50 hover:bg-rose-500/15 hover:text-rose-300 group-hover:inline-flex"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void deleteSession(session.id)
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground/70 line-clamp-1 pl-5">
-                      {session.preview}
-                    </p>
-                    <div className="flex items-center gap-2 pl-5 text-[10px] text-muted-foreground/60 font-mono">
-                      <span>{session.updatedAt.includes('T')
-                        ? new Date(session.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-                        : session.updatedAt}
-                      </span>
-                      {session.spent !== undefined && (
-                        <>
-                          <span>·</span>
-                          <span className="text-orange-400/80">${session.spent.toFixed(2)}</span>
-                        </>
-                      )}
-                      {session.tokens !== undefined && (
-                        <>
-                          <span>·</span>
-                          <span>{Math.round(session.tokens / 1000)}K</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </button>
-            )
-          })}
+          )}
+        </div>
+        <div className="scroll-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1 pb-2">
+          {recent.map((s) => (
+            <WorkRow
+              key={s.id}
+              session={s}
+              collapsed={collapsed}
+              active={s.id === activeId && centerScreen === 'chat'}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Footer */}
-      <div className={cn('border-t border-border p-2 flex items-center gap-1', collapsed && 'flex-col')}>
+      <div className={cn('flex flex-col gap-0.5 border-t border-border p-2', collapsed && 'items-center')}>
         <NavItem
           icon={Cog}
           label="Settings"
@@ -392,149 +292,26 @@ function PowerSidebar() {
           onClick={() => setCenterScreen('settings')}
         />
         <NavItem
-          icon={Download}
-          label="Downloads"
-          collapsed={collapsed}
-          onClick={() => notify('Downloads: 3 files')}
-        />
-        <NavItem
           icon={HelpCircle}
           label="Help"
           collapsed={collapsed}
           onClick={() => notify('Opening docs in browser…')}
         />
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={() => {
+              setSettingsSection('general')
+              setCenterScreen('settings')
+            }}
+            className="mt-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
+          >
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-zinc-700 text-[10px] font-medium">S</span>
+            <span className="min-w-0 flex-1 truncate text-[12px]">Sarvesh</span>
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        )}
       </div>
     </aside>
   )
-}
-
-// === Casual mode — 56px rail (default) =======================================
-
-function CasualRail() {
-  const sessions = useAppStore((s) => s.sessions)
-  const activeId = useAppStore((s) => s.activeSessionId)
-  const setActiveSession = useAppStore((s) => s.setActiveSession)
-  const newSession = useAppStore((s) => s.newSession)
-  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
-  const togglePowerMode = useAppStore((s) => s.togglePowerMode)
-  const selectedAgentId = useAppStore((s) => s.selectedAgentId)
-  const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
-
-  const agent = AGENT_MAP[selectedAgentId]
-
-  return (
-    <aside className="shrink-0 w-12 border-r border-border bg-sidebar flex flex-col no-select">
-      {/* Agent switcher (compact) */}
-      <div className="p-1.5 border-b border-border">
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <button className="w-9 h-9 mx-auto grid place-items-center rounded-md hover:bg-accent transition-colors">
-                  <span className={cn('h-6 w-6 rounded-md text-[9px] font-bold flex items-center justify-center ring-1 ring-border', agent?.accent)}>
-                    {agent?.mark ?? 'E'}
-                  </span>
-                </button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="right">Switch agent — {agent?.name ?? 'EveryAIOS'}</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent side="right" align="start" sideOffset={8} className="w-56">
-            <DropdownMenuLabel className="text-[11px]">Agent</DropdownMenuLabel>
-            {AGENTS.map((a) => (
-              <DropdownMenuItem
-                key={a.id}
-                onClick={() => setSelectedAgent(a.id)}
-                className={cn('text-xs', a.id === selectedAgentId && 'text-orange-500')}
-              >
-                <span className={cn('h-4 w-4 rounded text-[7px] font-bold flex items-center justify-center', a.accent)}>{a.mark}</span>
-                <span className="flex-1">{a.name}</span>
-                {a.id === selectedAgentId && <CheckCircle2 className="h-3.5 w-3.5" />}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-xs text-muted-foreground" onClick={() => setCenterScreen('settings')}>
-              <Cog className="h-3.5 w-3.5 mr-1" /> Configure agents…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* New chat */}
-      <div className="p-1.5 border-b border-border">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={newSession}
-              className="grid h-9 w-9 mx-auto place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30 hover:bg-orange-500/25"
-            >
-              <Plus className="h-4 w-4 text-orange-500" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right">New chat (Cmd+N)</TooltipContent>
-        </Tooltip>
-      </div>
-
-      {/* Recent sessions (collapsed) */}
-      <div className="flex-1 overflow-y-auto scroll-thin p-1.5 space-y-1">
-        {sessions.slice(0, 8).map((session) => {
-          const meta = statusMeta[session.status]
-          const Icon = meta.Icon
-          const isActive = session.id === activeId
-          return (
-            <Tooltip key={session.id}>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => setActiveSession(session.id)}
-                  className={cn(
-                    'relative grid h-8 w-8 mx-auto place-items-center rounded-md transition-colors',
-                    isActive ? 'bg-accent ring-1 ring-border' : 'hover:bg-accent/60'
-                  )}
-                >
-                  <Icon className={cn('h-4 w-4', meta.color)} />
-                  <span className={cn('absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-sidebar', meta.ring)} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">{session.title}</TooltipContent>
-            </Tooltip>
-          )
-        })}
-      </div>
-
-      {/* Footer: settings + power toggle */}
-      <div className="p-1.5 border-t border-border space-y-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => setCenterScreen('settings')}
-              className="grid h-8 w-8 mx-auto place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            >
-              <Cog className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Settings</TooltipContent>
-        </Tooltip>
-
-        {/* Power toggle — reveals the full cockpit */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={togglePowerMode}
-              className="grid h-8 w-8 mx-auto place-items-center rounded-md text-orange-500 hover:bg-orange-500/15 transition-colors"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right">More — advanced panels (⌘.)</TooltipContent>
-        </Tooltip>
-      </div>
-    </aside>
-  )
-}
-
-// === Progressive disclosure switch (B9/P31) ==================================
-
-export function LeftSidebar() {
-  const powerMode = useAppStore((s) => s.powerMode)
-  return powerMode ? <PowerSidebar /> : <CasualRail />
 }

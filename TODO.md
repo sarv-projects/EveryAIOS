@@ -1,9 +1,9 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (P6.6–P6.10 local-runtime close-out 2026-08-20) · **Spec:** v3.29 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (v3.41 inspiration-UI chrome 2026-08-21) · **Spec:** v3.41 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass **and** a live consumer (coordinator, Tauri command the UI actually calls, or a crate-scoped task whose checkbox is crate-only). Mock data, unused wrappers, and crate tests with no runtime path are `[NOT DONE]`.
 > **Scope:** Complete product — 149 capabilities, 33 algorithms, 14 build phases (**Stage 0** + P0–P12) + UI implementation (P11.5).
-> **Live checkbox count (2026-08-21 P3/P6 connectors close-out):** **1041 total = 676 done + 365 open**. This is the literal count of checked/open task entries in this file; dated changelog counts are historical snapshots.
+> **Live checkbox count (2026-08-21 v3.42):** **1091 total = 686 done + 405 open**. (P32.8 casual center. P32.7 work-first sidebar. P37 = 8 chrome + 8 wiring. E9 still required/not built.)
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
 > **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–84) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals; **doc 66** (anomalyco org, 2026-08-15) for the A6/A9/A7 models.dev catalog steal (TODO P14); **doc 67** (capability deltas + UI/UX finalization, 2026-08-15) for H29 dashboard artifacts (bolt.diy), B7 heartbeat automations (Hatchet lease pattern), and the H20 views-rail redesign (ARCH/12 v2.0); **doc 68** (final all-rounder market research, 2026-08-15) for H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, and the two-channel capability injection (F12/J17/F7); **doc 69** (ACP agent ecosystem + harness deep-dive, 2026-08-16) for the verified ACP entrypoint catalog (Claude Code/Codex/Cline/OpenCode/Hermes/OpenClaw/Copilot/Gemini/…) + Zed/Cline/Hermes steal queue (TODO P17); **doc 70** (mcpservers.org directory inbuilt analysis, 2026-08-16) for the MCP-directory verdict: **don't** bundle document/browser MCP servers (our Rust engines supersede them); **do** add three *native* inbuilt capabilities — PDF page ops (split/merge/rotate/reorder via lopdf, `oxidize-pdf` steal), content search + OCR (`dowse` adapt), and a Gmail/IMAP read-first connector (`mailwarden`/`Busymail` approve-before-send pattern) — TODO P18; **doc 71** (batch-4 coding agents/skills/harnesses, 2026-08-16) for the Kilo Gateway routing / ruflo swarm+federation / system-prompt structure / ui-ux-pro-max design-skill queue — TODO P19; **doc 72** (batch-5 code-intel/parallel/search, 2026-08-16) for the SeekStorm embedded hybrid index + Superset worktree-per-agent queue — TODO P20; **doc 73** (batch-6 computer-use/full-control, 2026-08-16) for the OpenAdapt demonstration compiler (B8 crystallization + E9) + ShowUI-Aloha learning half + auggie F12/ACP entry — TODO P21; **doc 74** (built-in MCP Server Manager, 2026-08-16) for the "bundle the manager, not the servers" optimization — mirror the ACP registry/installer/transport machinery to consume third-party MCP servers, postgres-mcp-hardened refuse-twice write template — TODO P22; **doc 75** (anthropic skills/plugins/cowork, 2026-08-16) for the `.claude-plugin/plugin.json` component schema (skills+agents+hooks+MCP+LSP+monitors), inbuilt native skill-wrappers vs marketplace "Add", and the source-available document-skills license boundary — TODO P23; **doc 76** (batch-7 design/browser/self-healing, 2026-08-16) for open-design `DESIGN.md` brand-system + composable design-skills, browser-harness self-healing, and the MagenticLite browser+FS+HITL validation — TODO P24; **doc 77** (batch-8 workflows/graphify/browser, 2026-08-16) for the agent-authored programmable-workflow model (Airflow DAG/retry/backfill semantics), Graphify queryable knowledge-graph, and addyosmani exit-criteria skills — TODO P25; **doc 78** (batch-9 marketplace/gws/jobs, 2026-08-16) for the wshobson/agents multi-harness plugin catalog, the `gws` Google Workspace connector, and the AIHawk "Jobs" vertical — TODO P26; **doc 79** (local-model fetch/download core, 2026-08-16) for the resumable HF GGUF/MLX downloader + canonical store + `local://` model URL — TODO P27. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 >
@@ -119,6 +119,15 @@
 - [x] `[DONE]` **Generated capability status manifest** (H3, process). `generate_manifest(commit)` builds `{commit, generatedAtMs, version, testCommand, testCount, benchmarkRunId, capabilities[{id,family,riskTier,readOnly,runtimeWired}], executionKernel, connectivityModes}` from the live `ToolRegistry` (not a hand count). JSON-RPC `capability/manifest`. Test: `manifest_lists_runtime_wired_tools`. Does not rewrite `ARCH/09-FEATURE-MATRIX.md` — that file stays documentation; runtime status is this manifest.
 - [x] `[DONE]` **Named risk tiers R0–R4** (H3/guard). `RiskTier` on every `RegisteredTool` (`stamp_tier`) and on `PendingGuardCard.risk_tier`; Guard panel shows the tier. Mapping: R0 read · R1 reversible write · R2 network/external (including read-only search) · R3 delete/destructive · R4 install/credential/estop. R4 forces Ask even when policy Allow. Tests: `r0_to_r4_mapping` + `risk_tiers_on_catalog`.
 - [x] `[DONE]` **Stage-0 adapter contract + exact-command install consent** (H3/Stage 0 + F8/P22). (a) `Stage0Adapter` trait `describe → prepare → authorize → execute → observe → receipt` + `NoopAdapter` pipeline test + `hash_preconditions`; live `ToolService` commit is the same sequence (ticket → dispatch → audit receipt + idempotency). (b) SEP-1024: `exact_command_consent` refuses `curl|sh` / `wget|bash`; `acp_install_request` returns `exactCommand` + `consentRequired` + `preferNative`; picker `window.confirm`s the exact argv before commit. Tests: `adapter_pipeline_runs` + `curl_pipe_sh_is_refused`. Ownership markers / SBOM / OCI-WASM default still open (F8 remaining).
+
+### v3.39 named types (ExecutionKernel fields — no new matrix IDs)
+
+> Complements the landed H3 `Execution` record. Disk persistence remains §10. These fields are `[NOT DONE]` until a live consumer writes them.
+
+- [ ] `[NOT DONE]` **Immutable `config_hash` / runtime manifest per run** — bind model/provider/permissions/tools/environment to the Execution (scheduler already snapshots context+policy; chat turns must too).
+- [ ] `[NOT DONE]` **Pending Guard-2 approval inside the checkpoint** — a HITL wait is resumable state, not only an in-memory ticket.
+- [ ] `[NOT DONE]` **Never-started vs started-unknown repair** — crash between intent and effect: missing-start may retry; started-without-result is `uncertain` and must not blindly replay a mutating op.
+- [ ] `[NOT DONE]` **Event-sourced session SoT** — append-only event log is the source of truth; model message history is a projection; fork = lineage at a completed-turn boundary (not only H1 bubble clone).
 
 ---
 
@@ -272,6 +281,7 @@
 - [x] `[DONE]` OAuth Tauri/UI callback wiring — `oauth_cmds.rs`: `oauth_status/accounts/start_pkce/start_device/poll_device/revoke`. PKCE binds `127.0.0.1:0` and completes on loopback. Connectors panel: ChatGPT Pro PKCE + Copilot/Qwen device-code. Still gated by `EVERYAIOS_OAUTH=1`.
 
 ### P1.8 Local Models (A5 — ARCH/09 A5: doc 34 §2 + doc 33 §7.4; B5 → SPEC B5 + v2.0 §P3; doc 41 REFERENCE rows)
+> Discover / Hardware **screens** (live Hugging Face Hub, no hardcoded repo ids) live under **P27 first checkbox**. Weight download / `local://` / GGUF serve stay P27 `[NOT DONE]`.
 - [x] `[DONE]` Implement Ollama detection + managed spawn from everyaios-core — **`crates/everyaios-core/src/local.rs`** `LocalManager`: probe `GET {OLLAMA_HOST|config}/api/tags` (3× retry — a fresh server is slow), `ensure_ollama()` spawns `ollama serve` detached (setsid) + waits ≤20s; `list_ollama_models()` parses `/api/tags` + per-model `/api/show` → effective ctx = min(forced num_ctx, model max); `[local]` section in everyaios.toml (ollama_host/ollama_bin/llamafile_bin/llamafile_port/num_ctx). ChatRelay gained `register_local_defaults()` + `with_local()`; src-tauri registers them at relay connect; broker routes `ollama`/`llamafile` keylessly (no KeyRing) — 9 new core tests green (mock ollama server, shared OnceLock — flake-free)
 - [x] `[DONE]` Implement llamafile single-binary launch — **doc 34 §2** (Mozilla-Ocho/llamafile — weights + server in one binary, zero install): `find_llamafile()` (config → `EVERYAIOS_LLAMAFILE` → `<data_dir>/bin/*.llamafile`), `ensure_llamafile()` spawns `--host 127.0.0.1 --port 11435 --ctx-size 16384 --nobrowser` + `/health` wait (≤60s, first-run unpack); broker llamafile path hits `/v1/chat/completions` (OpenAI SSE, `grammar` field)
 - [x] `[DONE]` Implement context-window warning UI (≤15-20K) — local picker sets `localCtxWindow`; composer banner if ≤20K (hard floor 15K). `chat_stream` already receives picker provider/model (H4).
@@ -914,9 +924,17 @@
 
 ## PHASE 9+ — Post-v1 (later)
 
-### P9.1 Computer-Use Pixels (E9 — v2.0 §P8, doc 09, doc 48 computer-use deep-dive, doc 52)
-- [ ] `[NOT DONE]` Implement GUI control via visual grounding (screenshot → click coordinates)
-- [ ] `[NOT DONE]` Dual-guard gated (always requires explicit permission)
+### P9.1 Desktop Computer-Use (E9 — ChatGPT + Claude parity, **required / not a cut**)
+> **User contract:** EveryAIOS does what ChatGPT Desktop Computer Use and Claude Computer Use do on the desktop — native windows, not only the browser. Best of *all* stacks below, not one pick. Dual-guard on every effect. **Not built.**
+
+- [ ] `[NOT DONE]` **See (ChatGPT / winappCli):** per-HWND `Windows.Graphics.Capture` even when occluded; PrintWindow fallback; screen-DC for popups; Claude-class region zoom; live screenshot in the right viewport + overlay “using this window / Esc”.
+- [ ] `[NOT DONE]` **Read (ChatGPT `sky` / sbroenne / CursorTouch):** UIA tree with indexes + click-by-name; DPI/multi-monitor; `list_apps` / `list_windows` / `launch_app` / `activate_window`.
+- [ ] `[NOT DONE]` **Act (winappCli / deploymenttheory):** UIA Invoke/SetValue **first**, then SendInput click/type/scroll/drag; observe → **one** action → re-observe (ChatGPT `guidance.md`).
+- [ ] `[NOT DONE]` **Vision fallback (JeenyJAI / AtomicBot):** OCR word boxes + screenshot coords when UIA is empty (canvas/games/custom controls).
+- [ ] `[NOT DONE]` **Verify (sandraschi):** assert/retry/locator cascade after each act; halt-over-guess.
+- [ ] `[NOT DONE]` **Layer-1 first (iyulab):** files/shell/Office engines when an API exists; browsers stay E1–E17 CDP — do not pixel-drive Chrome if CDP works.
+- [ ] `[NOT DONE]` **Guard-2 (ChatGPT confirmations + deploymenttheory):** app allow-list; confirm delete/money/install/CAPTCHA/transmit; hard deny Terminal/Run/Win-key/lock/UAC/password-managers/EveryAIOS UI; kill switch + Merkle audit; emergency stop / safe zone / rate limit.
+- [ ] `[NOT DONE]` **macOS twin:** Screen Recording + Accessibility (same surface as ChatGPT Mac Computer Use).
 
 ### P9.2 WASM Fuel-Metered Sandbox (I3 — doc 09)
 - [ ] `[NOT DONE]` Implement wasmtime integration with fuel budgets + epoch interruption
@@ -1448,12 +1466,69 @@
 ---
 
 ## P27 — Local Model Fetch / Download Core Queue (doc 79, 2026-08-16)
-> **Verdict recorded:** A5/P1.8 currently detects+lists installed runtimes but has no first-party downloader or unified local registry. Build the LM-Studio-style HF download core + `local://` URL.
+> **Verdict recorded:** A5/P1.8 detects+lists installed runtimes. Discover **UI** lists Hugging Face Hub live. **No hardcoded model names.** Downloader / store / `local://` broker / runtime bind / process probe are **not built**. Do not bake Gemma/Qwen/any repo id into source.
 
-- [ ] `[NOT DONE]` **HF downloader (doc 79 §3.2):** `everyaios-core::model_fetch` — resumable HTTP Range download + `X-Linked-Etag`/`X-Repo-Commit` resume + sha256 verify (`.gguf.sha256` / LFS `oid sha256:`) + byte progress events + disk preflight (extend `hwfit` with disk + quant recommendation).
-- [ ] `[NOT DONE]` **Local store + registry (doc 79 §3.3):** `<data_dir>/models/{source}/{publisher}/{model}/{quant}-{sha8}.gguf` layout + `index.json` registry merged into `everyaios-catalog` (A6/P14).
-- [ ] `[NOT DONE]` **`local://` model URL + broker resolution (doc 79 §3.4):** stable runtime-agnostic id (`local://hf/{pub}/{model}:{quant}` / `local://ollama/{model}:{tag}` / `local://llamafile/{name}`) → broker → runtime/endpoint; the model picker groups all local models under a **"Local" dropdown** (installed + downloadable + `hwfit` fit badge).
-- [ ] `[NOT DONE]` **Runtime binding (doc 79 §3.5):** downloaded GGUF → managed llamafile/llama.cpp serve, or ollama `create` (Modelfile), or MLX (Rapid-MLX, doc 61).
+- [x] `[DONE — UI only]` **Discover / My models / Hardware screens** (`ui/src/components/panels/local-models-panel.tsx` + `ui/src/lib/local-models.ts`). Catalog = live `GET https://huggingface.co/api/models?filter=gguf` (search + sort downloads/likes/lastModified) + live `/tree/main` for GGUF files. Zero named models in source. Installed list = existing `local_models` / hwfit badges. Hardware panel reads existing `local_hardware` (`ram_bytes` / `cpu_cores` / `gpu`). Download button does **not** fetch weights — notifies P27 open. Prefs (KV-offload/guardrails/start-on-login) = `localStorage` only. Settings nav **Local models**. Picker **Discover** jump. ⚠️ `tsc --noEmit` green; **not** live-clicked in Tauri this environment (Hub needs network).
+- [ ] `[NOT DONE]` **HF downloader (exact):** resumable HTTP `Range` + `X-Linked-Etag`/`X-Repo-Commit`; `*.gguf.part` resume; sha256 from `.gguf.sha256` **and** LFS `oid sha256:`; byte progress events to UI; disk preflight before start; quant recommendation from **live** RAM + Hub file list (not a baked filename list). **No staff-picks array.** Wire the Discover Download button. Do not hardcode repo ids.
+- [ ] `[NOT DONE]` **Local store + registry (exact):** `<data_dir>/models/hf/{publisher}/{model}/{quant}-{sha8}.gguf` + `index.json` (id, path, sha256, size, ctx, quant, source). Merge into `everyaios-catalog` (A6/P14). Show real disk used on My models.
+- [ ] `[NOT DONE]` **`local://` URL + broker (exact):** mint `local://hf/{pub}/{model}:{quant}` / `local://ollama/{model}:{tag}` / `local://llamafile/{name}` from registry + installed runtimes — **derived**, not a hardcoded catalog. Broker resolves id → runtime/endpoint. Picker Local group = installed **and** Hub-available (still live Hub).
+- [ ] `[NOT DONE]` **Runtime binding (exact):** downloaded GGUF → managed llama.cpp/llamafile serve, or `ollama create` from GGUF, or MLX on Mac. Login “start local LLM service” must actually spawn. Guardrails toggle must call `disqualify_unfit` only when on.
+- [ ] `[NOT DONE]` **Hardware probes + process probe (exact):** CPU name, available RAM, VRAM, disk free, KV-cache offload applied at load — not UI-only. Discover LM Studio / llama.cpp *processes* + probe OpenAI-compatible localhost + TTL cache + dedup (Ollama+llamafile spawn/list already live).
+
+---
+
+## P37 — Inspiration UI chrome (Cursor / Qoder / Ollama / TRAE / ZCode / Cowork layout reference — 2026-08-21)
+
+> Screenshots are **how it looks**, not a brand to paste. EveryAIOS chrome only. Prefs = `localStorage`. Do not mark executor/Tauri items done. `tsc --noEmit` green; **not** live-clicked in Tauri.
+
+- [x] `[DONE — chrome]` **Settings grouped nav + search** — Workspace / Agents & models / Permissions & tools / System. New sections: Notifications, Voice, Mobile, Chat & Auto-run, Permissions, Browser & Network, Indexing & LSP, MCP, Marketplace, Skills, Commands, Hooks, Worktree, Rules, Cloud env, Import, Usage, Resources, Beta, Launch CLI. `settings-panel.tsx` + `settings-sections-studio.tsx`.
+- [x] `[DONE — chrome]` **Voice + Mobile rows from the screens** — device, external-mic auto-send, noise, terms, history, realtime, speed, voiceprint; QR, install, device control, keep awake. VAD/pairing **not** built.
+- [x] `[DONE — chrome]` **Browser & Network + Code intelligence rows** — Browse tab, protection, local/web links, HTTP/2, required domains, diagnostic; grep index, hierarchical ignore, symlink skip, LSP + worktree caps.
+- [x] `[DONE — chrome]` **Composer chips** — permission (Sandbox/Ask/Auto/Run everything) + Agent/Experts/Spec with hints. Picker Auto label when auto-route on.
+- [x] `[DONE — chrome]` **Empty chat** — Work/Code/Design intent, Desktop/Documents/Open folder/WSL/No project. Not a third app.
+- [x] `[DONE — chrome]` **Spec Q&A letters** on MCQ interrupt (A/B/C…) + Spec markdown empty cards. Continue/Stop already existed.
+- [x] `[DONE — chrome]` **Summary view** Artifacts/References empty blocks. Memory **Repo wiki** tab. Automations Daily Brief / Weekly Review / Project Monitor. Destructive MCP toast. Custom provider form. Launch CLI copy cards (ACP ids from our catalog, not a third-party CLI paste).
+- [x] `[DONE — chrome]` **Experts list** + empty custom Import/New. Skills search empty (no baked skill names).
+- [ ] `[NOT DONE]` Auto-run / Full access honored at Guard-2 ticket mint (today Ask still wins for mutations).
+- [ ] `[NOT DONE]` Voice VAD + STT + DJI/USB auto-send pipeline (P9.3).
+- [ ] `[NOT DONE]` Mobile QR pairing live (P9.4).
+- [ ] `[NOT DONE]` MCP directory Install actually `attach`s a user-supplied server (P6.6/P22).
+- [ ] `[NOT DONE]` Worktree disk cap enforcer (P20 / P7.8).
+- [ ] `[NOT DONE]` Migration parsers (Claude / Codex / OpenCode / Qwen / Cursor / VS Code) — scan UI toasts a real miss today.
+- [ ] `[NOT DONE]` Live resource sample + AI diagnose (`rss_measure` exists; panel is chrome).
+- [ ] `[NOT DONE]` Ticketed write of AGENTS.md/CLAUDE.md + live folder inventory on Cowork-style chips.
+
+---
+
+## P36 — v3.39 Kernel Contracts (named types/fields on existing rows — no new matrix IDs)
+
+> Spec v3.39. A live-registry hit is not a capability. Implement **after** engine-attach / ExecutionKernel disk / K1 / P27, smallest first. ExecutionKernel field checkboxes live under HARDENING H3 (v3.39 named types). **E9 is required (ChatGPT+Claude parity), not a cut — still `[NOT DONE]`.**
+
+- [ ] `[NOT DONE]` **`ManagedResource` type (kernel / J7/J10/J15/J17)** — trait over LocalManager, MCP attach, ACP installer, browser spawn, sandbox, WorkerPool. Lifecycle: discover → validate → install → configure → start → health → use → observe → update/rollback/remove. **Not** Office, **not** vault Providers, **not** deployments.
+- [ ] `[NOT DONE]` **`RouteDecision` + `ProviderObservation` (A7/H9)** — structs feeding the existing scorer vocabulary; no new OmniRoute public strategies. Honesty: `router.ts` is capability-filter + cost-sort only.
+- [ ] `[NOT DONE]` **`MCPServerRecord` (F6/F8)** — canonical id/registry/version/transport/provenance/digest/capabilities/trust/`enabled_consumers[]`/health/`config_hash` + per-consumer enable; lifecycle rides `ManagedResource`.
+- [ ] `[NOT DONE]` **`DocumentAsset` provenance (D5)** — source_uri, media_type, converter + versions, source_hash, extracted_hash. Ingest ≠ mutate ≠ render.
+- [ ] `[NOT DONE]` **C6 edge confidence + source span** — EXTRACTED vs INFERRED + file/line on graph edges (temporal windows already exist).
+- [ ] `[NOT DONE]` **B3 derived child permissions** — parent ∩ deny ∩ explicit grants; task/todo default-deny (Kilo pattern). Do not blindly inherit the parent's tool universe.
+- [ ] `[NOT DONE]` **B3 inbuilt subagent abort/termination events** — goal / timeout / max-turns / aborted / error (Gemini `LocalAgentExecutor` pattern). ACP already covers external agents.
+- [ ] `[NOT DONE]` **C2/C7 branch/lineage memory** — a session fork is not one global chronological log.
+- [ ] `[NOT DONE]` **C `maintain()`-class tools** — analyze references / update graph / decay, not only store/retrieve.
+- [ ] `[NOT DONE]` **C3 abortable retrieval** — cancel in-flight fuse when the owning turn dies.
+- [ ] `[NOT DONE]` **E14/I2 learned browser helpers as persistent skills** — `agent-workspace/` helpers that survive runs (P24/browser-harness), not one-shot scripts.
+- [ ] `[NOT DONE]` **E10 acquisition adapter** — agent never chooses HTTP vs CDP vs stealth; the engine does. Cloud browser is not bundled.
+
+### v3.40 capability expansions (existing rows — live-verified 2026-08-21)
+
+- [ ] `[NOT DONE]` **F6/F7 MCP resources + elicitation + sampling** — resources = C10 over the wire; elicitation / MRTR `InputRequired` → Guard-2; sampling → broker only; roots = path floor.
+- [ ] `[NOT DONE]` **I6 executor hooks** — `PreToolUse` (deny-only, never skip ticket) · `PostToolUse`/`PostToolUseFailure` · `PostToolBatch` · turn/session. Distinct from J18 profiles. Capability-scoped + audited.
+- [ ] `[NOT DONE]` **B3 Scout child** — read-only; clone dependency into managed cache; never write the user workspace (OpenCode).
+- [ ] `[NOT DONE]` **Code view = CodeMirror 6** over real disk (P1/H5 lock — not Monaco, not an IDE rebuild).
+- [ ] `[NOT DONE]` **D4 `annotationStorage` persist** — form-fill survives save/reopen.
+- [ ] `[NOT DONE]` **I8/K2 atomic commit** — one verified surgical edit = one git commit.
+- [ ] `[NOT DONE]` **E2 diagnostic reads** — console / network / perf on the existing CDP session.
+- [ ] `[NOT DONE]` **E5 optional HAR** beside NDJSON for `has_gap`.
+- [ ] `[NOT DONE]` **D10 persistent hash cache** + delta re-scan (fclones `--cache`).
+- [ ] `[NOT DONE]` **G7 USN journal (Windows) + FTS5 trigram** — incremental index that scales.
 
 ---
 
@@ -1528,6 +1603,8 @@
 - [ ] `[NOT DONE]` **P32.4 — Honest-limitation surfacing:** when the agent cannot do something, say so plainly and offer the nearest alternative; surface "learning/improving" framing where real. → §9.1 honest framing as a UI rule
 - [ ] `[NOT DONE]` **P32.5 — Keyboard-first audit:** sweep every action for a shortcut; add missing ones (panel nav, mode, views); keep `⌘.` mode toggle listed in the shortcuts overlay. → `keyboard-shortcuts.tsx` + UI-DESIGN-PROMPT shortcut table
 - [ ] `[NOT DONE]` **P32.6 — Fewest-questions context inheritance:** first-run + casual: pre-fill folder/session context so the first ask needs no setup (ARCH/12 §4.0 onboarding kept enforced). → onboarding + session creation
+- [x] `[DONE — chrome]` **P32.8 — Casual center is one ask, not subsystems:** Home/empty chat no longer show Work/Code/Design, Research, Browse, WSL, or agent/model chips. Outcome example pills fill the composer. Spec top (v3.42) states coworker + 4 casual / 3 power examples.
+- [x] `[DONE — chrome]` **P32.7 — Work-first sidebar + Home launchpad:** primary nav is Home · Activity · Projects · Files · Automations (+ Search · New work · Recent-as-work-state). Memory/Guard/Connectors/Skills/Marketplace off the sidebar. Title-bar `Guard · Standard` opens the control center. Settings grouped as Control Center (Workspace/Intelligence/Connections/Runtime/Security/Developer). Composer: “Tell EveryAIOS what you need…”. Home greeting + continue-working cards. ⚠️ `tsc` to verify; not live-clicked in Tauri.
 
 ## P33 — Multi-View Right Panel + Office/PDF/Google (doc 84 + VS Code logic + LibreOffice/LOKit + Google Workspace; user directive 2026-08-17)
 > **Goal:** maintain the current **VS Code-style tabbed panel** contract (defaults Terminal · Folder · Browser, `+` add view, close ×, reorder, per-session persistence), browser with internal page tabs, office files as tabs, PDF study-mode chat scoping, and an "open-perfectly" renderer tier (LibreOffice/LOKit) + Google Docs/Sheets access. Research basis: doc 84 (casual/power UX), VS Code custom-layout docs, LibreOffice LOKit tiled rendering, Google Drive/Sheets API. ARCH/12 v3.3 + UI-DESIGN-PROMPT are canonical.
@@ -1564,7 +1641,7 @@
 | Phase | Tasks | Done | Open | Weeks |
 |---|---|---|---|---|
 | **Stage 0 Guard-Gated Tool Executor** | **29** | **29** | **0** | **~3** |
-| **HARDENING H1–H3** | **26** | **26** | **0** | landed |
+| **HARDENING H1–H3** | **30** | **26** | **4** | v3.39 ExecutionKernel fields open |
 | **H4 Honesty leftovers (was missing)** | **10** | **10** | **0** | now |
 | P0 Workspace & Skeleton | 49 | 49 | 0 | ~2 |
 | P1 Chat + BYOK | 59 | 59 | 0 | ~4 |
@@ -1575,7 +1652,7 @@
 | P6 Orchestration + Connectors | 99 | 97 | 2 | ~5 (MCP binary test + Signal deferred) |
 | P7 Forge + Guardrails | 64 | 64 | 0 | ✅ done |
 | P8 Product Polish | 45 | 39 | 6 | ~3 (release infra) |
-| P9+ Post-v1 | 22 | 0 | 22 | later |
+| P9 Desktop Computer-Use + remaining (E9 required) | 28 | 0 | 28 | E9 not a cut |
 | P10 Testing & QA | 50 | 0 | 50 | ~4 |
 | P11 UI/UX (spec) | 31 | 7 | 24 | ~3 |
 | P11.5 UI Implementation | 75 | 24 | 51 | ~4 (parallel) |
@@ -1594,17 +1671,20 @@
 | P24 Batch-7 Design/Browser/Self-Heal Queue (doc 76) | 3 | 0 | 3 | ~1 (parallel) |
 | P25 Batch-8 Workflows/Graphify/Browser Queue (doc 77) | 4 | 0 | 4 | ~1 (parallel) |
 | P26 Batch-9 Marketplace/GWS/Jobs Queue (doc 78) | 3 | 0 | 3 | ~1 (parallel) |
-| P27 Local Model Fetch/Download Core Queue (doc 79) | 4 | 0 | 4 | ~1 (parallel) |
+| P27 Local Model Fetch/Download Core Queue (doc 79) | 6 | 1 | 5 | UI live Hub; backend open |
 | P28 Post-v1 Strategic Pillar (docs 80–82; gated on Stage 0) | 13 | 1 | 12 | post-Stage-0 |
 | P29 Native Sidecar Migration (gated Stage 0 + P8 RSS) | 11 | 0 | 11 | post-Stage-0 |
 | P30 Competitor Batch Steal Queue (doc 83) | 16 | 0 | 16 | post-Stage-0 |
 | P31 Custom Agent Builder + Simplified UI (B9) | 10 | 1 | 9 | post-Stage-0 |
-| P32 Casual vs Power User UX Queue (doc 84) | 6 | 0 | 6 | post-Stage-0 |
+| P32 Casual vs Power User UX Queue (doc 84) | 8 | 2 | 6 | P32.7–8 chrome |
 | P33 Multi-View Right Panel + Office/PDF/Google | 8 | 3 | 5 | post-Stage-0 |
 | P34 Full-Fidelity Tool Surfaces | 7 | 2 | 5 | post-Stage-0 |
 | P35 Full Animation Wiring | 4 | 1 | 3 | P35.1 mostly |
+| P36 v3.39 Kernel Contracts | 12 | 0 | 12 | after P27/K1 |
+| v3.40 capability expansions | 10 | 0 | 10 | compose existing rows |
+| P37 Inspiration UI chrome | 16 | 8 | 8 | layout reference; executor open |
 | Research Tasks (cross-cutting) | 54 | 28 | 26 | parallel |
-| **TOTAL** | **1041** | **676** | **365** | **~48 weeks** |
+| **TOTAL** | **1091** | **686** | **405** | **~48 weeks** |
 
 > **Note:** P11, P11.5, and P12 run **in parallel** with implementation phases. `[DONE — library]` / `[DONE — catalog]` / `[DONE — chrome]` still count as Done in this table (crate or UI shell landed); the Open column is the remaining product/runtime work (Stage 0 + HARDENING + H4 are fully closed — 2026-08-20; Guard-2 card nonce binding is also closed, while native OS card rendering remains open).
 

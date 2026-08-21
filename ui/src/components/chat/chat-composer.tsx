@@ -18,12 +18,13 @@ import {
   RotateCcw,
   ScrollText,
   Sparkles,
+  Users,
   Wrench,
   Zap,
   Volume2,
-  VolumeX,
   type LucideIcon,
 } from 'lucide-react'
+import type { ComposerRole, PermissionMode } from '@/lib/ui-prefs'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -91,6 +92,94 @@ function HintRow({ item }: { item: HintItem }) {
       <span className={cn('font-mono text-[11px]', item.color ?? 'text-orange-300')}>{item.cmd}</span>
       <span className="ml-auto truncate text-[10px] text-muted-foreground">{item.desc}</span>
     </button>
+  )
+}
+
+const PERMISSION_LABEL: Record<PermissionMode, string> = {
+  sandbox: 'Sandbox',
+  ask: 'Ask',
+  auto: 'Auto-approve',
+  full: 'Run everything',
+}
+
+function PermissionChip({ compact }: { compact?: boolean }) {
+  const mode = useAppStore((s) => s.permissionMode)
+  const setMode = useAppStore((s) => s.setPermissionMode)
+  const notify = useAppStore((s) => s.notify)
+  return (
+    <select
+      value={mode}
+      onChange={(e) => {
+        const next = e.target.value as PermissionMode
+        setMode(next)
+        if (next === 'full') {
+          notify('Run everything skips Guard-2 in the UI only — the executor still asks until this mode is wired')
+        }
+      }}
+      title="Permission / auto-run"
+      className={cn(
+        'rounded-md border border-border bg-background/40 font-mono text-[10px] text-foreground',
+        compact ? 'h-6 max-w-[7.5rem] px-1' : 'h-6 px-1.5',
+      )}
+    >
+      {(Object.keys(PERMISSION_LABEL) as PermissionMode[]).map((id) => (
+        <option key={id} value={id}>
+          {PERMISSION_LABEL[id]}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+const ROLE_META: { id: ComposerRole; label: string; icon: LucideIcon; hint: string }[] = [
+  { id: 'agent', label: 'Agent', icon: Sparkles, hint: 'One agent plans and executes with tools' },
+  { id: 'experts', label: 'Experts', icon: Users, hint: 'Specialist subagents in parallel (depth ≤2)' },
+  { id: 'spec', label: 'Spec', icon: FileText, hint: 'Plan first — Q&A cards, then a markdown spec' },
+]
+
+function RoleChip({ compact }: { compact?: boolean }) {
+  const role = useAppStore((s) => s.composerRole)
+  const setRole = useAppStore((s) => s.setComposerRole)
+  const setComposerMode = useAppStore((s) => s.setComposerMode)
+  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  const setSettingsSection = useAppStore((s) => s.setSettingsSection)
+  return (
+    <div className="flex overflow-hidden rounded-md border border-border bg-background/40">
+      {ROLE_META.map((r) => (
+        <button
+          key={r.id}
+          type="button"
+          title={r.hint}
+          onClick={() => {
+            setRole(r.id)
+            if (r.id === 'spec') setComposerMode('plan')
+            if (r.id === 'experts') {
+              setSettingsSection('experts')
+            }
+          }}
+          className={cn(
+            'flex h-6 items-center gap-1 px-1.5 text-[10px]',
+            role === r.id ? 'bg-orange-500/15 text-orange-300' : 'text-muted-foreground hover:text-foreground',
+            compact && 'px-1',
+          )}
+        >
+          <r.icon className="h-3 w-3" />
+          {!compact && <span className="hidden sm:inline">{r.label}</span>}
+        </button>
+      ))}
+      {role === 'experts' && !compact && (
+        <button
+          type="button"
+          className="h-6 px-1.5 text-[9px] text-orange-300/80 hover:text-orange-200"
+          onClick={() => {
+            setSettingsSection('experts')
+            setCenterScreen('settings')
+          }}
+        >
+          manage
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -183,6 +272,12 @@ export default function ChatComposer({ budget, centered }: Props) {
 
   const send = () => {
     if (!canSend) return
+    const st = useAppStore.getState()
+    if (st.centerScreen === 'home') {
+      const cur = st.sessions.find((x) => x.id === st.activeSessionId)
+      if (cur && cur.messages.length > 0) st.newSession()
+      st.setCenterScreen('chat')
+    }
     const text = composerValue
     void sendUserMessage(text)
   }
@@ -229,6 +324,8 @@ export default function ChatComposer({ budget, centered }: Props) {
             ))}
           </ToggleGroup>
 
+          <PermissionChip />
+          <RoleChip />
           <AgentModelPicker />
 
           <select
@@ -317,14 +414,15 @@ export default function ChatComposer({ budget, centered }: Props) {
               send()
             }
           }}
-          placeholder={powerMode ? 'Message the agent — use / for commands, ! for macros, @ to mention' : 'Ask anything, drop files, or type /…'}
+          placeholder={powerMode ? 'Tell EveryAIOS what you need — / commands, @ files' : 'Tell EveryAIOS what you need…'}
           className="max-h-36 min-h-[28px] flex-1 resize-none border-0 bg-transparent px-1 py-1 text-[12px] leading-relaxed shadow-none focus-visible:ring-0"
           rows={1}
         />
         <div className="flex shrink-0 items-center gap-0.5">
           <IconBtn icon={Mic} label="Voice input" onClick={() => notify('Voice input — coming soon')} />
-          <IconBtn icon={Volume2} label="TTS toggle" onClick={() => notify('TTS toggled')} />
-          <IconBtn icon={VolumeX} label="Mute" hidden onClick={() => notify('Speaker off')} />
+          {powerMode && (
+            <IconBtn icon={Volume2} label="TTS toggle" onClick={() => notify('TTS toggled')} />
+          )}
           <Button
             size="icon"
             className="h-7 w-7 shrink-0 rounded-md bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-40"

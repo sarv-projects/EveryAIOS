@@ -1,10 +1,12 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-> **Version:** 3.3 (2026-08-19)
+> **Version:** 3.4 (2026-08-21)
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
 > **Principle:** ONE project, ONE session, ONE ticket, ONE timeline. Chat + live progress stay in the center; the **right activity rail** selects the active lens while the viewport supports multiple open, reorderable tabs. Only one view is rendered at a time inside that viewport; the product is not split into separate Chat/Cowork/Code applications.
 > **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H25 — H20 redefined doc 67), ARCH/DIAGRAMS #7 (MCQ interrupt), doc 67 §6 (finalization record)
 > **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, full screen/panel/tab/overlay inventory, motion + mock-data tables) that supersedes this doc's visual details. The cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
+>
+> **v3.4 (2026-08-21):** settings + composer chrome expanded from inspiration **screenshots as layout reference** (Cursor auto-run / browser+network / LSP; Qoder voice+mobile+wiki+schedule+Spec Q&A; Ollama launch cards; TRAE Work/Code/Design + permission modes; ZCode skills/hooks/migrate; Cowork folder chips). EveryAIOS naming only. Canonical pixels stay in `UI-DESIGN-PROMPT.md` §5.6.
 >
 > **v3.3 (2026-08-19):** resolved the layout identity split: the activity rail remains the navigation lens, while the right viewport is a persistent multi-view tab container; only the active tab renders at once. Updated H20, the diagrams, and the index to use this single contract. Cache/server status and deferred-runtime boundaries remain explicit.
 >

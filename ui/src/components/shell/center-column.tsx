@@ -9,6 +9,8 @@ import GuardPanel from '@/components/panels/guard-panel'
 import ConnectorsPanel from '@/components/panels/connectors-panel'
 import AnalyticsPanel from '@/components/panels/analytics-panel'
 import SettingsPanel from '@/components/panels/settings-panel'
+import HomeLaunchpad, { ActivityPanel, ProjectsPanel } from '@/components/panels/home-launchpad'
+import FolderView from '@/components/views/folder-view'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export function CenterColumn() {
@@ -25,7 +27,15 @@ export function CenterColumn() {
           transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
           className="flex-1 min-h-0 flex"
         >
+          {centerScreen === 'home' && <HomeLaunchpad />}
           {centerScreen === 'chat' && <ChatPanel />}
+          {centerScreen === 'activity' && <ActivityPanel />}
+          {centerScreen === 'projects' && <ProjectsPanel />}
+          {centerScreen === 'files' && (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <FolderView />
+            </div>
+          )}
           {centerScreen === 'automations' && (
             <div className="flex-1 min-h-0 overflow-y-auto scroll-thin">
               <AutomationsPanel />

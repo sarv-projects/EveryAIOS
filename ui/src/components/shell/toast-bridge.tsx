@@ -10,15 +10,22 @@ import { useToast } from '@/hooks/use-toast'
  */
 export function ToastBridge() {
   const lastToast = useAppStore((s) => s.lastToast)
+  const lastToastKind = useAppStore((s) => s.lastToastKind)
   const { toast } = useToast()
   const prev = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     if (lastToast && lastToast !== prev.current) {
       prev.current = lastToast
-      toast({ title: lastToast, duration: 2500 })
+      const isError = lastToastKind === 'error'
+      toast({
+        title: isError ? 'MCP / connector' : lastToast,
+        description: isError ? lastToast : undefined,
+        variant: isError ? 'destructive' : 'default',
+        duration: isError ? 6000 : 2500,
+      })
     }
-  }, [lastToast, toast])
+  }, [lastToast, lastToastKind, toast])
 
   return null
 }

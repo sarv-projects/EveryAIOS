@@ -136,7 +136,7 @@ export default function ChatPanel() {
   const activeSession = store.sessions.find((s) => s.id === store.activeSessionId)
   const messages = activeSession?.messages ?? []
   const isEmpty = messages.length === 0
-  const { agentPaused, toggleAgentPause, notify, setComposerValue, selectedAgentId, selectedModelId } = store
+  const { agentPaused, toggleAgentPause, notify, setComposerValue, selectedAgentId, selectedModelId, powerMode } = store
   const scopedView = useAppStore((s) => s.scopedView)
   const setScopedView = useAppStore((s) => s.setScopedView)
   const nowDoing = activeSession ? deriveNowDoing(activeSession) : null
@@ -196,11 +196,11 @@ export default function ChatPanel() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <h2 className="truncate text-[13px] font-semibold text-foreground">
-              {activeSession?.title ?? 'New session'}
+              {activeSession?.title ?? 'New work'}
             </h2>
             {activeSession?.pinned && <Pin className="h-3 w-3 shrink-0 text-orange-400" />}
             {/* Agent + model chip in header */}
-            {agent && (
+            {powerMode && agent && (
               <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/40 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground transition-colors hover:border-orange-500/30 hover:bg-orange-500/5">
                 <span className={cn('h-3.5 w-3.5 rounded text-[7px] font-bold flex items-center justify-center', agent.accent)}>{agent.mark}</span>
                 <span className="text-foreground/80">{agent.name}</span>
@@ -435,6 +435,10 @@ export default function ChatPanel() {
 
 function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
   const powerMode = useAppStore((s) => s.powerMode)
+  const taskFolder = useAppStore((s) => s.taskFolder)
+  const setTaskFolder = useAppStore((s) => s.setTaskFolder)
+  const notify = useAppStore((s) => s.notify)
+  const composerRole = useAppStore((s) => s.composerRole)
   const prompts = powerMode ? EXAMPLE_PROMPTS : CASUAL_PROMPTS
   // P6.4 (B7, doc 67 §3): session-open proactivity hook — nudge sentinels
   // surface 1–3 repeating-pattern schedule suggestions in the composer.
@@ -455,14 +459,68 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
       </div>
       <div className="space-y-1">
         <h3 className="text-sm font-semibold text-foreground">
-          {powerMode ? 'What should we do next?' : 'What would you like to do?'}
+          What would you like to get done?
         </h3>
         <p className="max-w-sm text-[11px] text-muted-foreground">
-          {powerMode
-            ? 'Ask the agent to refresh documents, run scrapers, refactor code, or run an automation. Try one of these to get going.'
-            : 'Drop a file, ask a question, or try one of these.'}
+          Drop a file or just say it in plain language. You don’t pick a mode first.
         </p>
       </div>
+      {powerMode && (
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {['Desktop', 'Documents'].map((name) => {
+          const path = name === 'Desktop' ? '~/Desktop' : '~/Documents'
+          const on = taskFolder === path
+          return (
+            <button
+              key={name}
+              type="button"
+              onClick={() => setTaskFolder(on ? undefined : path)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]',
+                on
+                  ? 'border-orange-500/50 bg-orange-500/15 text-orange-200'
+                  : 'border-border bg-card/40 text-muted-foreground hover:border-orange-500/40 hover:text-foreground',
+              )}
+            >
+              <Folder className="h-3 w-3 text-orange-300" />
+              {name}
+            </button>
+          )
+        })}
+        <button
+          type="button"
+          onClick={() => notify('Pick folder — native dialog needs Tauri; chrome only')}
+          className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2.5 py-1 text-[11px] text-muted-foreground hover:border-orange-500/40 hover:text-foreground"
+        >
+          <Folder className="h-3 w-3" />
+          Open folder
+        </button>
+      </div>
+      )}
+      {powerMode && taskFolder && (
+        <div className="max-w-md rounded-md border border-border/50 bg-card/40 px-3 py-2 text-left">
+          <div className="font-mono text-[10px] text-orange-300">{taskFolder}</div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Live file inventory and AGENTS.md load when a workspace is attached.
+          </p>
+        </div>
+      )}
+      {powerMode && composerRole === 'spec' && (
+        <div className="grid w-full max-w-2xl gap-2 text-left sm:grid-cols-2">
+          <div className="rounded-md border border-border/50 bg-card/40 p-3">
+            <div className="text-[11px] font-medium">Spec Q&amp;A</div>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Plan mode first. Clarifying questions land here as cards. None yet — send a goal.
+            </p>
+          </div>
+          <div className="rounded-md border border-border/50 bg-card/40 p-3">
+            <div className="text-[11px] font-medium">Spec markdown</div>
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+              # Goal{'\n'}Describe the outcome. Build/Goal chip in the composer follows Plan mode.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap justify-center gap-1.5">
         {prompts.map((p) => {
           const Icon = p.icon

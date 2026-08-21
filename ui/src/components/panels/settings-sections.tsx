@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { Row, SectionShell } from './settings-shared'
+import { CustomProvidersBlock, GeneralExtras } from './settings-sections-studio'
 
 // === General ===
 export function GeneralSection() {
@@ -62,6 +63,7 @@ export function GeneralSection() {
       <Row label="Anonymous telemetry" desc="Crash + usage stats, never content">
         <Switch checked={telemetry} onCheckedChange={setTelemetry} />
       </Row>
+      <GeneralExtras />
     </SectionShell>
   )
 }
@@ -198,6 +200,7 @@ export function ModelsSection() {
           </li>
         ))}
       </ul>
+      <CustomProvidersBlock />
     </SectionShell>
   )
 }

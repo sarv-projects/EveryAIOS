@@ -64,15 +64,16 @@ function McqOptions({
 }) {
   return (
     <div className="space-y-1.5">
-      {options.map((o) => {
+      {options.map((o, i) => {
         const isSel = selected === o.value
+        const letter = String.fromCharCode(65 + i)
         return (
           <button
             key={o.value}
             type="button"
             onClick={() => onSelect(o.value)}
             className={cn(
-              'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
+              'flex w-full items-start gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
               isSel
                 ? 'border-orange-500/60 bg-orange-500/10'
                 : 'border-border bg-background/40 hover:border-orange-500/30 hover:bg-accent/40'
@@ -80,13 +81,13 @@ function McqOptions({
           >
             <span
               className={cn(
-                'flex h-4 w-4 items-center justify-center rounded-full border',
-                isSel ? 'border-orange-500 bg-orange-500 text-white' : 'border-muted-foreground/40'
+                'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border font-mono text-[9px]',
+                isSel ? 'border-orange-500 bg-orange-500 text-white' : 'border-muted-foreground/40 text-muted-foreground'
               )}
             >
-              {isSel && <Check className="h-2.5 w-2.5" />}
+              {letter}
             </span>
-            <span className="font-mono text-[11px] text-foreground">{o.label}</span>
+            <span className="text-[11px] leading-relaxed text-foreground">{o.label}</span>
           </button>
         )
       })}
@@ -132,12 +133,14 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <h4 className="truncate text-sm font-medium text-foreground">{mcq.title}</h4>
+            <h4 className="truncate text-sm font-medium text-foreground">
+              {mcq.kind === 'mcq' ? 'Questions' : mcq.title}
+            </h4>
             <Badge
               variant="outline"
               className="border-orange-500/40 bg-orange-500/10 text-[9px] text-orange-300"
             >
-              Action required
+              {mcq.kind === 'mcq' ? 'Spec Q&A' : 'Action required'}
             </Badge>
           </div>
           <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">

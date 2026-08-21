@@ -213,7 +213,9 @@ export default function AgentModelPicker({ compact }: Props) {
             <div className="flex items-center justify-between border-b border-border bg-zinc-900/60 px-3 py-1.5">
               <div className="flex items-center gap-1.5">
                 <Cpu className="h-3 w-3 text-orange-400" />
-                <span className="text-[11px] font-semibold text-foreground">Agent runtime & model</span>
+                <span className="text-[11px] font-semibold text-foreground">
+                  {autoRoute ? 'Auto · agent runtime & model' : 'Agent runtime & model'}
+                </span>
               </div>
               <button
                 type="button"
@@ -350,11 +352,25 @@ export default function AgentModelPicker({ compact }: Props) {
                   })}
                 </div>
 
-                {localRows.length > 0 && (
-                  <div className="mt-2 border-t border-border/60 pt-2">
-                    <div className="mb-1 px-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-                      Local (LM Studio-style)
+                <div className="mt-2 border-t border-border/60 pt-2">
+                    <div className="mb-1 flex items-center justify-between px-1">
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                        Local
+                      </div>
+                      <button
+                        type="button"
+                        className="font-mono text-[9px] text-orange-300 underline-offset-2 hover:underline"
+                        onClick={() => {
+                          setOpen(false)
+                          useAppStore.getState().setSettingsSection('local')
+                          setCenterScreen('settings')
+                        }}
+                      >
+                        Discover · download · hardware
+                      </button>
                     </div>
+                {localRows.length > 0 && (
+                  <>
                     <div className="space-y-1">
                       {localRows.map((row) => {
                         const isActive = selectedModelId === row.name && useAppStore.getState().localRuntime === row.runtime
@@ -403,8 +419,22 @@ export default function AgentModelPicker({ compact }: Props) {
                         )
                       })}
                     </div>
-                  </div>
+                  </>
                 )}
+                    {localRows.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(false)
+                          useAppStore.getState().setSettingsSection('local')
+                          setCenterScreen('settings')
+                        }}
+                        className="w-full rounded-md border border-dashed border-border/60 px-2 py-2 text-left font-mono text-[10px] text-muted-foreground hover:border-orange-500/40 hover:text-orange-300"
+                      >
+                        No local models yet — open Discover (search, downloads, quant, GPU offload).
+                      </button>
+                    )}
+                </div>
 
                 {/* Auto-route toggle */}
                 <div className="mt-3 flex items-center justify-between rounded-md border border-border/60 bg-background/40 px-2 py-1.5">

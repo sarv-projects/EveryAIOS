@@ -2,6 +2,8 @@
 
 > **The user requirement, verbatim:** *"guardrails are very, very important. research on that."* Synthesized from: v2.0 §P8 (Trust Ladder + dual-guard, built in core-tools), doc 03 §8, ZeroClaw security-first (doc 30 §1), BrowserOS ownership + guards/effects pipeline (doc 33 §4.3, §6.3), Hermes prompt-injection scan + FTS5 trust scoring (doc 16), ECC AgentShield + plan-before-build (doc 09), OpenFang WASM metering (doc 09), microsandbox (doc 23), cyber-agent red-team corpus (doc 26 — use their attack patterns as our test suite).
 
+**v3.39:** a `ManagedResource` may be discovered, installed, and healthy without permission to mutate anything. Start/health is process lifecycle. **Every real effect still requires a ticket.** Installing an MCP server is not executing a tool.
+
 ## 6.1 Defense in depth (every path, every layer)
 
 ```

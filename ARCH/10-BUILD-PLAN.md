@@ -1,6 +1,8 @@
 # 10 — Build Plan (phases with exit criteria)
 
 > Sequencing merges v2.0 §5 phases with the research M0–M9 (RESEARCH spec §5) and the Rust-layer reality (browser/script/guard/audit are new and Rust). Each phase has an **exit criterion that can be verified by a test**, honoring the "no failures / edge cases" goal (each phase adds an edge-case hardening pass + the conformance/adversarial test suites). P10 (testing/QA), P11 (UI/UX) and P12 (market/GTM) run **in parallel** with P0–P8 (see TODO.md P10–P12 for the full task breakdown).
+>
+> **v3.39 kernel contracts (TODO P36 + P27 probe + ExecutionKernel fields) are not a new build phase.** They are named types/fields on existing rows. Sequence: remaining Stage-0 engine attach → ExecutionKernel disk + K1 receipts → P27 (HF/`local://` + LM Studio/llama.cpp process probe) → then P36 smallest-first (`DocumentAsset` → `config_hash` → C6 edges → B3 child perms → `MCPServerRecord` → `RouteDecision` → `ManagedResource` trait). **v3.40** adds protocol/capability text on existing rows (MCP resources/elicitation/sampling, I6 executor hooks, Scout child, CodeMirror 6, F12 honesty, D4 persist, I8 atomic commit, E2 diagnostics, E5 HAR, D10/G7 incremental) — same sequence, no extra phase. Do not pause P0–P8 for a resource-kernel rewrite. **E9 is required ChatGPT+Claude desktop parity (P9.1) — not built, not a cut.**
 
 ## P0 — Workspace & skeleton (≈2 wks)
 - Rust workspace (`crates/*`), TS workspace (`packages/coordinator` + `ui`), pnpm linking to `@personal-ai/core-*`, CI (cargo test, vitest, tauri build matrix).
@@ -50,8 +52,8 @@
 - Reader/office/blueprint/analytics UI pass; **widget cards (H17 — weather/stock/math inline)**; personality; tray daemon; telemetry opt-in; packaging (Win/macOS/Linux installers); idle-RSS perf pass (**measure & publish real numbers** — <30MB idle / <80MB warm are targets to verify, not promises); docs.
 - **Exit:** Windows beta build installs and runs; **eval: verifier rejects a plausible-but-unsupported completion (anti-"sounds finished" regression)**; **idle/warm RSS measured & published with the coordinator running** (<30MB idle / <80MB warm are targets to verify, not promises — the Bun sidecar alone is ~93MB, J16); telemetry off-by-default verified (no requests without opt-in); all UIs functional.
 
-## P9+ — Post-v1 (not in scope order)
-Computer-use pixels (E9), WASM fuel sandbox (I3), voice input (H15, offline STT/wake-word ext — doc 50), remote session handoff (H18), local OpenAI-compatible server (A8), HTML→video reports, magic completion (H16), connector sync→RAG (MCP/native), AutomationBench eval harness, community skills marketplace, self-hosted MCP/native connector-hub server (doc 13 opt-in), **image generation (A10), clipboard tool (H26), voice output TTS (H28)** — the docs 49–50 + 63 gap-pass additions (143 rows at that pass; **current matrix = 149 rows**, see ARCH/09). F14/F15 moved to P6, H25/H27 moved to P11 (matching TODO).
+## P9 — Desktop computer-use (E9) + remaining post-v1
+**E9 is required product surface** (ChatGPT Desktop + Claude Computer Use parity — native windows, see-pane, Guard-2). It is **not built**; it is not a scope cut. Other P9+ items stay sequenced: WASM fuel sandbox (I3), voice input (H15), remote session handoff (H18), local OpenAI-compatible server (A8), HTML→video, magic completion (H16), connector sync→RAG, AutomationBench, community skills marketplace, self-hosted MCP hub, **image generation (A10), clipboard (H26), voice TTS (H28)**.
 
 ## P10 — End-to-end testing & QA (≈4 wks, parallel)
 - Integration suites (12 E2E flows: install→BYOK→chat→tool; memory persistence; browser pipeline; office pipeline; sub-agents; crystallization; connector hub; ACP harness; scheduled headless; messaging stub; extension ABI; MCP server).
