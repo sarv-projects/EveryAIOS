@@ -1,6 +1,6 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-08-09 · **Spec version:** v3.41 · **Diagrams:** 25
+> **Generated:** 2026-08-09 · **Spec version:** v3.44 · **Diagrams:** 25
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
 > **Surgical hierarchy (doc 52 §1):** the harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12) — Aider-class precision editors included in the harness list. Storage-intelligence flows (D9–D12) and the tiered search cascade (G8) are described in docs 49/52.
 

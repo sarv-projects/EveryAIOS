@@ -38,7 +38,7 @@ dual-guard (Guard-1/Guard-2) + evidence evaluation — never by trust in the mod
 | Path | What lives there |
 |---|---|
 | `DESKTOP-APP-SPEC.md` | Complete product specification (capability matrix, build phases, K-Pillar) |
-| `TODO.md` | Master implementation checklist (Stage 0 + HARDENING + P0.1 → P12, **1091 = 686 done + 405 open**; P3 = 14/14 COMPLETE; P6 = 97 done + 2 open; P7 = 64/64 COMPLETE; P8 = 39 done + 6 open; P27 Discover UI-only; P36 = 0/12; v3.40 expansions = 0/10; **P32.7 work-first sidebar chrome; P37 = 8 chrome done + 8 wiring open**) |
+| `TODO.md` | Master implementation checklist (Stage 0 + HARDENING + P0.1 → P12, **1091 = 722 done + 369 open**; P3 = 14/14 COMPLETE; P6 = 97 done + 2 open; P7 = 64/64 COMPLETE; P8 = 45 done + 0 open — P8.8 packaging/updater/CI + P8.9 E2E sync landed; P4 Office = 56/56 landed ⏸ ON HOLD (2026-08-22); P10 = 1/49; P27 Discover UI-only; P36 = 0/12; v3.40 expansions = 0/10; **P32.7 work-first sidebar chrome; P37 = 8 chrome done + 8 wiring open**) |
 | `ARCH/` | Architecture docs 00–12 + diagrams |
 | `RESEARCH/desktop_app/` | Source research notes (docs 01–84, 282 repos) |
 | `crates/` | Rust core: `everyaios-core`, `guard`, `audit`, `vault`, `browser`, `office`, `memory`, `eval`, `blueprint`, `acp`, … |

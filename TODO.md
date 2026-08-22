@@ -1,6 +1,6 @@
 # EveryAIOS — Master Implementation TODO
 
-> **Generated:** 2026-08-07 (v3.41 inspiration-UI chrome 2026-08-21) · **Spec:** v3.41 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
+> **Generated:** 2026-08-07 (v3.41 inspiration-UI chrome 2026-08-21) · **Spec:** v3.44 · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass **and** a live consumer (coordinator, Tauri command the UI actually calls, or a crate-scoped task whose checkbox is crate-only). Mock data, unused wrappers, and crate tests with no runtime path are `[NOT DONE]`.
 > **Scope:** Complete product — 149 capabilities, 33 algorithms, 14 build phases (**Stage 0** + P0–P12) + UI implementation (P11.5).
 > **Live checkbox count (2026-08-22 v3.44):** **1091 total = 722 done + 369 open**. (P32.8 casual center. P32.7 work-first sidebar. P37 = 8 chrome + 8 wiring. E9 still required/not built. v3.39 ExecutionKernel fields closed. P8.8 packaging/updater verified landed. P8.9 E2E sync — protocol + live TCP transport (LAN/Tailscale, 47615) landed + wired to Tauri/UI. Research tasks 26-study batch closed: P7.2/3 skill+grantr, P8.1/2 reader+widgets, P1.2/4 litellm+retry, P2.2/5 a11y+smolagents, P5.1/6.1/6.2/6.5/7.1/7.7 forge+scheduler+crystallization+ECC, P8.4 G8+cascade+DeepResearch, AG-UI/LibreChat/TTS deferred-studied.)
@@ -452,7 +452,9 @@
 
 ---
 
-## PHASE 4 — Office Engine (~5 weeks)
+## PHASE 4 — Office Engine (~5 weeks) — ⏸ **ON HOLD (user directive 2026-08-22)**
+
+> **Frozen.** The D1–D8 office engine + D9–D12 storage intelligence are **landed and stay landed** (P4.1–P4.8, 56/56, tested — incl. the LibreOffice conformance oracle in CI). **No further Office work** — no new Office UI, no LOKit/Google-Docs tier, no perfectness-gap surfacing, no H5 pdf.js/notes-panel follow-up — until the hold is lifted. The checkboxes below record the landed state; the engine stays as-built.
 
 ### P4.1 Word Block-Patch Engine (D1 — doc 28 GenOffice, doc 04)
 - [x] `[DONE]` Implement ZIP open + parts index parser — **`crates/everyaios-office` (new crate) `zip.rs`: `OoxmlArchive::open/read_part/parts` + `parts.rs`: `PartsIndex::parse` — `[Content_Types].xml` defaults+overrides + `word/_rels/document.xml.rels` header/footer discovery**
@@ -1607,25 +1609,25 @@
 - [x] `[DONE — chrome]` **P32.7 — Work-first sidebar + Home launchpad:** primary nav is Home · Activity · Projects · Files · Automations (+ Search · New work · Recent-as-work-state). Memory/Guard/Connectors/Skills/Marketplace off the sidebar. Title-bar `Guard · Standard` opens the control center. Settings grouped as Control Center (Workspace/Intelligence/Connections/Runtime/Security/Developer). Composer: “Tell EveryAIOS what you need…”. Home greeting + continue-working cards. ⚠️ `tsc` to verify; not live-clicked in Tauri.
 
 ## P33 — Multi-View Right Panel + Office/PDF/Google (doc 84 + VS Code logic + LibreOffice/LOKit + Google Workspace; user directive 2026-08-17)
-> **Goal:** maintain the current **VS Code-style tabbed panel** contract (defaults Terminal · Folder · Browser, `+` add view, close ×, reorder, per-session persistence), browser with internal page tabs, office files as tabs, PDF study-mode chat scoping, and an "open-perfectly" renderer tier (LibreOffice/LOKit) + Google Docs/Sheets access. Research basis: doc 84 (casual/power UX), VS Code custom-layout docs, LibreOffice LOKit tiled rendering, Google Drive/Sheets API. ARCH/12 v3.3 + UI-DESIGN-PROMPT are canonical.
+> **Goal:** maintain the current **VS Code-style tabbed panel** contract (defaults Terminal · Folder · Browser, `+` add view, close ×, reorder, per-session persistence), browser with internal page tabs, office files as tabs, PDF study-mode chat scoping, and an "open-perfectly" renderer tier (LibreOffice/LOKit) + Google Docs/Sheets access. Research basis: doc 84 (casual/power UX), VS Code custom-layout docs, LibreOffice LOKit tiled rendering, Google Drive/Sheets API. ARCH/12 v3.3 + UI-DESIGN-PROMPT are canonical. **⏸ Office rows frozen (2026-08-22 hold):** P33.3/P33.5/P33.6 (office files as tabs, LOKit tier, Google Docs/Sheets) do not proceed until the Office hold is lifted; the panel/browser/PDF rows below are unaffected.
 - [x] `[DONE]` **P33.1 — Multi-view tabbed right panel:** tab strip (open views) + `+` add-view picker + close ×; defaults Terminal · Folder · Browser (+ active office file); rail icon and artifact click open as tabs. **Landed in `ui/src`: store `openViews`/`addView`/`closeView` + `RightViewport` tab strip + `+` dropdown.**
 - [x] `[DONE — chrome]` Browse-view internal tab strip (mock pages). **Not a CDP browser.**
 - [x] `[DONE — chip]` PDF scope chip + `scopedView` in the store.
 - [ ] `[NOT DONE]` Ground answers in the scoped PDF — `sendUserMessage` does not attach/extract the document.
-- [ ] `[NOT DONE]` **P33.3 — Office files as tabs (auto-open):** opening `Q3.xlsx`/`exec-summary.docx`/`contract.pdf`/`deck.pptx` from an artifact card or the W-flyout adds a matching tab; reuses the W-flyout to pick among open office docs. → office flyout + artifact-card click
-- [ ] `[NOT DONE]` **P33.5 — LibreOffice/LOKit "open-perfectly" tier:** `everyaios-office` drives LibreOffice headless + LOKit tiled rendering for Word/PPT/PDF/mixed-format fidelity — *both* agentic mutation and normal human reading (read-only = same renderer, no mutation path); Sheets stay IronCalc/calamine, PDFs lopdf/pdf.js; LOKit = fallback/perfect-fidelity tier. → ARCH/04 + doc 29
-- [ ] `[NOT DONE]` **P33.6 — Google Docs/Sheets access:** normal reading = open in the authenticated browser view (system Chrome session, no re-login); agentic = Drive/Sheets API (gws connector F14/F15, P18) → export OOXML → office engine → mutate → optional write-back. → F14/F15/P18 + browser view
+- [ ] `[NOT DONE]` **P33.3 — Office files as tabs (auto-open) — ⏸ frozen by Office hold (2026-08-22):** opening `Q3.xlsx`/`exec-summary.docx`/`contract.pdf`/`deck.pptx` from an artifact card or the W-flyout adds a matching tab; reuses the W-flyout to pick among open office docs. → office flyout + artifact-card click
+- [ ] `[NOT DONE]` **P33.5 — LibreOffice/LOKit "open-perfectly" tier — ⏸ frozen by Office hold (2026-08-22):** `everyaios-office` drives LibreOffice headless + LOKit tiled rendering for Word/PPT/PDF/mixed-format fidelity — *both* agentic mutation and normal human reading (read-only = same renderer, no mutation path); Sheets stay IronCalc/calamine, PDFs lopdf/pdf.js; LOKit = fallback/perfect-fidelity tier. → ARCH/04 + doc 29
+- [ ] `[NOT DONE]` **P33.6 — Google Docs/Sheets access — ⏸ frozen by Office hold (2026-08-22):** normal reading = open in the authenticated browser view (system Chrome session, no re-login); agentic = Drive/Sheets API (gws connector F14/F15, P18) → export OOXML → office engine → mutate → optional write-back. → F14/F15/P18 + browser view
 - [ ] `[NOT DONE]` **P33.7 — Tab persistence + drag-reorder:** `openViews`/`activeView`/`splitRatio` saved per sessionId (Cursor layout-reset bug not copied); tabs reorder by drag. → right-rail + store
 
 ## P34 — Full-Fidelity Tool Surfaces (ARCH/12 v3.1; user directive 2026-08-17)
-> **Goal:** the right panel is the **live window into the real tool** — every view reproduces the official product's full surface (all buttons, all toolbars, all modes), nothing held back. Word/Excel/PowerPoint = complete Microsoft ribbon + Copilot; PDF = full viewer (nav/zoom/search/annotate/forms/sign/redact/thumbnails); Browser = full Chrome-style chrome incl. built-in AI Mode/Gemini sidebar. Agent drives the same surface the user sees; takeover (H21) makes controls live. ARCH/12 §4.1c + UI-DESIGN-PROMPT updated.
+> **Goal:** the right panel is the **live window into the real tool** — every view reproduces the official product's full surface (all buttons, all toolbars, all modes), nothing held back. Word/Excel/PowerPoint = complete Microsoft ribbon + Copilot; PDF = full viewer (nav/zoom/search/annotate/forms/sign/redact/thumbnails); Browser = full Chrome-style chrome incl. built-in AI Mode/Gemini sidebar. Agent drives the same surface the user sees; takeover (H21) makes controls live. ARCH/12 §4.1c + UI-DESIGN-PROMPT updated. **⏸ Office rows frozen (2026-08-22 hold):** P34.2–P34.5 (Word/Excel/PPT/PDF full surfaces) and the office half of P34.7 do not proceed until the Office hold is lifted; the landed P34.1 ribbon + Chrome chrome stay.
 - [x] `[DONE]` **P34.1 — Office ribbon component:** reusable full-fidelity ribbon (tab strip File·Home·Insert·…·Copilot + per-tab groups/buttons), used by Excel. **Landed in `ui/src` (`office-ribbon.tsx` + wired into `office-xlsx-view.tsx`).**
 - [x] `[DONE — mock chrome]` Full Chrome-style chrome in `browse-view.tsx` (bookmarks/puzzle/AI sidebar). **Not Chrome 141+; not CDP.**
-- [ ] `[NOT DONE]` **P34.2 — Word full surface:** full ribbon + canvas (ruler, Print/Web/Read views, zoom, status bar Page x/y · Words); Copilot summarize/rewrite/draft-with-references. → office-docx-view + OfficeRibbon('Word')
-- [ ] `[NOT DONE]` **P34.3 — Excel full surface:** full ribbon (landed) + Name box + formula bar + status bar (Average/Count/Sum), freeze panes, autofilter, conditional formatting. → office-xlsx-view
-- [ ] `[NOT DONE]` **P34.4 — PowerPoint full surface:** full ribbon + Slide/Outline/Notes/Sorter panes + transitions/animations strip + presenter notes (P4.7b). → office-pptx-view + OfficeRibbon('PowerPoint')
-- [ ] `[NOT DONE]` **P34.5 — PDF full viewer:** page nav/zoom/fit · search · highlight/comment/annotate/draw/stamps · form fill · sign · redact · thumbnails/outline/annotations sidebar · reader + night mode. → office-pdf-view
-- [ ] `[NOT DONE]` **P34.7 — Fidelity rule + takeover wiring:** every surface read-only while the agent works, writable on takeover (H21); a control exists iff the real product has it. → office views + browse + H21
+- [ ] `[NOT DONE]` **P34.2 — Word full surface — ⏸ frozen by Office hold (2026-08-22):** full ribbon + canvas (ruler, Print/Web/Read views, zoom, status bar Page x/y · Words); Copilot summarize/rewrite/draft-with-references. → office-docx-view + OfficeRibbon('Word')
+- [ ] `[NOT DONE]` **P34.3 — Excel full surface — ⏸ frozen by Office hold (2026-08-22):** full ribbon (landed) + Name box + formula bar + status bar (Average/Count/Sum), freeze panes, autofilter, conditional formatting. → office-xlsx-view
+- [ ] `[NOT DONE]` **P34.4 — PowerPoint full surface — ⏸ frozen by Office hold (2026-08-22):** full ribbon + Slide/Outline/Notes/Sorter panes + transitions/animations strip + presenter notes (P4.7b). → office-pptx-view + OfficeRibbon('PowerPoint')
+- [ ] `[NOT DONE]` **P34.5 — PDF full viewer — ⏸ frozen by Office hold (2026-08-22):** page nav/zoom/fit · search · highlight/comment/annotate/draw/stamps · form fill · sign · redact · thumbnails/outline/annotations sidebar · reader + night mode. → office-pdf-view
+- [ ] `[NOT DONE]` **P34.7 — Fidelity rule + takeover wiring — ⏸ office half frozen by Office hold (2026-08-22):** every surface read-only while the agent works, writable on takeover (H21); a control exists iff the real product has it. → office views + browse + H21
 
 ## P35 — Full Animation Wiring (design-doc motion table; user directive 2026-08-17)
 > **Goal:** every row in UI-DESIGN-PROMPT §9 (Animation inventory — formerly "Interaction Details & Micro-Animations") is a live implementation — no specced animation left as dead CSS. All utilities in `globals.css` are now consumed by components.
@@ -1636,7 +1638,7 @@
 
 ## SUMMARY
 
-> Counts are live checkbox totals from this file, recomputed **2026-08-20 honesty pass** (every `- [x]` / `- [ ]` bullet, incl. `[DONE — library]`). `Done` means verified live **or** a crate-scoped task. Mock UI and unwired libraries are **Open**.
+> Counts are live checkbox totals from this file, recomputed **2026-08-22 doc-reconciliation pass** (every `- [x]` / `- [ ]` bullet, incl. `[DONE — library]`). `Done` means verified live **or** a crate-scoped task. Mock UI and unwired libraries are **Open**.
 
 | Phase | Tasks | Done | Open | Weeks |
 |---|---|---|---|---|
@@ -1647,13 +1649,13 @@
 | P1 Chat + BYOK | 59 | 59 | 0 | ~4 |
 | P2 Browser Layer | 92 | 92 | 0 | ~6 |
 | P3 Cockpit & Audit UI | 14 | 14 | 0 | ✅ done |
-| P4 Office Engine | 56 | 56 | 0 | ~5 |
+| P4 Office Engine | 56 | 56 | 0 | ~5 (⏸ **ON HOLD 2026-08-22** — engine landed; no further Office work until lifted) |
 | P5 Memory + Token Economy | 69 | 68 | 1 | ~5 (LadybugDB FFI seam deferred) |
 | P6 Orchestration + Connectors | 99 | 97 | 2 | ~5 (MCP binary test + Signal deferred) |
 | P7 Forge + Guardrails | 64 | 64 | 0 | ✅ done |
-| P8 Product Polish | 45 | 39 | 6 | ~3 (release infra) |
+| P8 Product Polish | 45 | 45 | 0 | ✅ done (P8.8 packaging/updater/CI + P8.9 E2E sync landed 2026-08-22) |
 | P9 Desktop Computer-Use + remaining (E9 required) | 28 | 0 | 28 | E9 not a cut |
-| P10 Testing & QA | 50 | 0 | 50 | ~4 |
+| P10 Testing & QA | 50 | 1 | 49 | ~4 (P10.2 security/adversarial first task landed) |
 | P11 UI/UX (spec) | 31 | 7 | 24 | ~3 |
 | P11.5 UI Implementation | 75 | 24 | 51 | ~4 (parallel) |
 | P12 Market Research & GTM | 47 | 0 | 47 | ~4 (parallel) |
@@ -1683,8 +1685,8 @@
 | P36 v3.39 Kernel Contracts | 12 | 0 | 12 | after P27/K1 |
 | v3.40 capability expansions | 10 | 0 | 10 | compose existing rows |
 | P37 Inspiration UI chrome | 16 | 8 | 8 | layout reference; executor open |
-| Research Tasks (cross-cutting) | 54 | 28 | 26 | parallel |
-| **TOTAL** | **1091** | **686** | **405** | **~48 weeks** |
+| Research Tasks (cross-cutting) | 54 | 54 | 0 | ✅ done (26-study batch closed 2026-08-22) |
+| **TOTAL** | **1091** | **722** | **369** | **~48 weeks** |
 
 > **Note:** P11, P11.5, and P12 run **in parallel** with implementation phases. `[DONE — library]` / `[DONE — catalog]` / `[DONE — chrome]` still count as Done in this table (crate or UI shell landed); the Open column is the remaining product/runtime work (Stage 0 + HARDENING + H4 are fully closed — 2026-08-20; Guard-2 card nonce binding is also closed, while native OS card rendering remains open).
 
