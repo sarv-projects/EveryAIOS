@@ -22,6 +22,7 @@ mod scheduler_cmds;
 mod storage_cmds;
 mod sync_cmds;
 mod trajectory_cmds;
+mod updater_cmds;
 
 use everyaios_core::GuardService;
 use everyaios_guard::prescan::{guard as compiled_guard, Guard};
@@ -685,11 +686,20 @@ pub fn run() {
             storage_cmds::storage_duplicates,
             storage_cmds::storage_cleanup_proposals,
             storage_cmds::storage_battery,
-            // P8.9 sync: encrypted bundle export/import (file/LAN seam).
+            // P8.9 sync: encrypted bundle export/import + live TCP transport
+            // (direct ip:port — LAN + Tailscale; explicit trigger, default 47615).
             sync_cmds::sync_export_bundle,
             sync_cmds::sync_import_bundle,
             sync_cmds::sync_keypair_generate,
-            sync_cmds::sync_public_key
+            sync_cmds::sync_public_key,
+            sync_cmds::sync_serve_start,
+            sync_cmds::sync_serve_stop,
+            sync_cmds::sync_serve_status,
+            sync_cmds::sync_peer_sync,
+            sync_cmds::sync_fingerprint,
+            // P8.8: auto-updater check + install/relaunch.
+            updater_cmds::updater_check,
+            updater_cmds::updater_install
         ])
         // P8.8: auto-updater (checks + downloads against the configured
         // endpoints; signing key is the release secret).

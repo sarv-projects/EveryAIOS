@@ -43,6 +43,7 @@ pub mod self_audit;
 pub mod sidecar_link;
 pub mod supervisor;
 pub mod sync;
+pub mod sync_transport;
 pub mod telemetry;
 pub mod tools;
 pub mod tracing;
@@ -67,7 +68,11 @@ pub use challenge::{
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
 pub use config::{Config, ConfigError};
 pub use eval_service::EvalService;
-pub use execution::{Execution, ExecutionKernel, ExecutionPhase, ExecutionTrigger};
+pub use execution::{
+    Execution, ExecutionKernel, ExecutionPhase, ExecutionTrigger,
+    RuntimeManifest, PendingApproval, RepairClassification, RepairPlanItem,
+    ProjectedMessage, ForkLineage,
+};
 pub use export::{
     render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
     MemoryMirror, ObsidianNote, WipeScope,

@@ -4,7 +4,7 @@
 //! failure produces a named [`RepairFinding`] the coordinator can act on
 //! (resume from checkpoint, replay idempotent ops, or ask the user).
 
-use crate::session_log::{EventType, SessionEvent};
+use crate::session_log::{EventType, SessionEvent, IdempotencyClass};
 use std::collections::HashSet;
 
 /// The seven validation phases (doc 46).
@@ -243,6 +243,65 @@ pub fn replayable_tools(events: &[SessionEvent]) -> Vec<String> {
     v
 }
 
+/// v3.39 — classification of an incomplete tool start into a repair plan.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StartedUnknownItem {
+    pub seq: u64,
+    pub tool: String,
+    pub args_hash: String,
+    /// NeverStarted = no dispatch evidence (ToolStarted only, no execution).
+    /// StartedUnknown = dispatch happened but completion is missing.
+    pub classification: StartedUnknownClassification,
+    /// True when the tool is a mutation and started-unknown (needs user
+    /// confirmation before replay).
+    pub needs_confirmation: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartedUnknownClassification {
+    /// ToolStarted found but no dispatch evidence (no audit row for this
+    /// tool+args_hash). Safe to re-run.
+    NeverStarted,
+    /// ToolStarted found AND an audit row (or other dispatch evidence)
+    /// exists but ToolCompleted is missing. Outcome is uncertain — must
+    /// not blindly replay a mutation.
+    StartedUnknown,
+}
+
+/// v3.39 — classify incomplete tool starts into a repair plan.
+///
+/// `dispatch_evidence` is a set of `(tool, args_hash)` pairs from the
+/// audit log that prove dispatch actually happened (e.g. tool.exec rows
+/// in `audit.ndjson`). An incomplete tool with no audit evidence is
+/// `NeverStarted`; one with evidence is `StartedUnknown`.
+pub fn started_unknown_repair(
+    incomplete: &[SessionEvent],
+    dispatch_evidence: &HashSet<(String, String)>,
+) -> Vec<StartedUnknownItem> {
+    incomplete
+        .iter()
+        .map(|ev| {
+            let has_dispatch = dispatch_evidence.contains(&(ev.tool.clone(), ev.args_hash.clone()));
+            let is_mutation = matches!(
+                crate::session_log::classify_tool(&ev.tool),
+                IdempotencyClass::UnsafeRetry | IdempotencyClass::SameKey
+            );
+            let classification = if has_dispatch {
+                StartedUnknownClassification::StartedUnknown
+            } else {
+                StartedUnknownClassification::NeverStarted
+            };
+            StartedUnknownItem {
+                seq: ev.seq,
+                tool: ev.tool.clone(),
+                args_hash: ev.args_hash.clone(),
+                classification,
+                needs_confirmation: is_mutation && has_dispatch,
+            }
+        })
+        .collect()
+}
+
 /// The 7 phases in order (for the repair UI / audit trail).
 pub const PHASES: [Phase; 7] = [
     Phase::Parse,
@@ -341,5 +400,50 @@ mod tests {
         ];
         let r = validate_session(&log);
         assert!(r.findings.iter().any(|f| f.phase == Phase::Ordering));
+    }
+
+    #[test]
+    fn started_unknown_repair_classifies_correctly() {
+        // Two incomplete tools: one safe (browser.read) and one mutation (file.write).
+        let incomplete = vec![
+            ev(3, 102, EventType::ToolStarted, "browser.read", "h_read", "s1", "a1"),
+            ev(4, 103, EventType::ToolStarted, "file.write", "h_write", "s1", "a1"),
+        ];
+        // Only file.write has dispatch evidence.
+        let mut dispatch = HashSet::new();
+        dispatch.insert(("file.write".into(), "h_write".into()));
+        let plan = started_unknown_repair(&incomplete, &dispatch);
+        assert_eq!(plan.len(), 2);
+        // browser.read: no dispatch → NeverStarted, no confirmation needed.
+        assert_eq!(plan[0].classification, StartedUnknownClassification::NeverStarted);
+        assert!(!plan[0].needs_confirmation);
+        // file.write: has dispatch → StartedUnknown, mutation → needs confirmation.
+        assert_eq!(plan[1].classification, StartedUnknownClassification::StartedUnknown);
+        assert!(plan[1].needs_confirmation);
+    }
+
+    #[test]
+    fn started_unknown_empty_dispatch_all_never_started() {
+        let incomplete = vec![
+            ev(3, 102, EventType::ToolStarted, "browser.act", "h1", "s1", "a1"),
+        ];
+        let dispatch = HashSet::new();
+        let plan = started_unknown_repair(&incomplete, &dispatch);
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].classification, StartedUnknownClassification::NeverStarted);
+        assert!(!plan[0].needs_confirmation);
+    }
+
+    #[test]
+    fn started_unknown_safe_tool_with_dispatch_not_needing_confirmation() {
+        let incomplete = vec![
+            ev(3, 102, EventType::ToolStarted, "browser.read", "h1", "s1", "a1"),
+        ];
+        let mut dispatch = HashSet::new();
+        dispatch.insert(("browser.read".into(), "h1".into()));
+        let plan = started_unknown_repair(&incomplete, &dispatch);
+        assert_eq!(plan[0].classification, StartedUnknownClassification::StartedUnknown);
+        // Safe tool (read-only) → no confirmation even with dispatch evidence.
+        assert!(!plan[0].needs_confirmation);
     }
 }

@@ -1,21 +1,27 @@
 //! P8.9 — E2E-encrypted sync Tauri commands (C8 — v2.0 §P8, ARCH/06).
 //!
 //! The protocol framing lives in `everyaios-core::sync` (envelope + AEAD +
-//! X25519 key exchange + three-way reconcile, all tested). This module wires
-//! it to the UI with two durable pieces:
+//! X25519 key exchange + three-way reconcile, all tested) and the live
+//! TCP transport in `everyaios-core::sync_transport` (direct `ip:port` —
+//! covers LAN and Tailscale tailnets alike; both are plain TCP). This module
+//! wires all of it to the UI with two durable pieces:
 //!
 //! - a **device identity** (X25519 keypair) persisted in the data dir,
 //!   wrapped with the vault key so it never sits in plaintext on disk;
 //! - an encrypted **bundle** export/import — the file-based sync surface
-//!   (USB / LAN share / own-server drop folder). The live network transport
-//!   (LAN broadcast / Tailscale / relay) stays the runtime seam, exactly like
-//!   the G8 cascade and the WSL IPC framing.
+//!   (USB / LAN share / own-server drop folder) — plus the live network
+//!   seam (`sync_serve_*` / `sync_peer_sync`) via the transport crate.
 //!
 //! Security model: sync is opt-in. The bundle/session key is 256-bit and
 //! never leaves the device except as a peer's X25519 public key; a tampered
-//! bundle fails the MAC before any plaintext is returned.
+//! bundle fails the MAC before any plaintext is returned. Raw X25519 without
+//! an out-of-band check is MITM-able on a hostile LAN; on Tailscale/WireGuard
+//! the tunnel is the mitigation — the UI should surface `fingerprint` for
+//! manual compare.
 
+use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tauri::State;
 
@@ -24,8 +30,16 @@ use crate::AppState;
 use everyaios_core::sync::{
     self, ChaChaBox, KeyPair, SyncScope, SyncSession, SyncSet,
 };
+use everyaios_core::sync_transport::{fingerprint as fp_hex, sync_with_peer, SyncServer};
 
 use base64::Engine as _;
+
+const DEFAULT_SYNC_PORT: u16 = 47615;
+
+static SYNC_SERVER: OnceLock<Mutex<Option<SyncServer>>> = OnceLock::new();
+fn server_slot() -> &'static Mutex<Option<SyncServer>> {
+    SYNC_SERVER.get_or_init(|| Mutex::new(None))
+}
 
 /// The persisted device identity + sync mirror, stored under the data dir.
 /// The secret key is wrapped with the vault key (never plaintext on disk).
@@ -181,4 +195,93 @@ pub fn sync_import_bundle(
         "conflicts": diff.conflicts.len(),
         "live": session.set.live_count(),
     }))
+}
+
+/// P8.9 — start the live TCP sync server on `0.0.0.0:{port}` (default
+/// `47615`). Explicit trigger — no auto-sync. Covers LAN and Tailscale
+/// tailnets (both are plain IP to the socket). Returns the bound addr.
+#[tauri::command]
+pub fn sync_serve_start(
+    state: State<'_, AppState>,
+    port: Option<u16>,
+) -> Result<serde_json::Value, String> {
+    let port = port.unwrap_or(DEFAULT_SYNC_PORT);
+    let bind: SocketAddr = format!("0.0.0.0:{port}")
+        .parse::<SocketAddr>()
+        .map_err(|e: std::net::AddrParseError| e.to_string())?;
+    let mut slot = server_slot().lock().map_err(|e| e.to_string())?;
+    if slot.is_some() {
+        return Err("sync server already running — stop first".to_string());
+    }
+    let session = Arc::new(Mutex::new(load_or_create_state(&state)));
+    let session_c = Arc::clone(&session);
+    let on_synced: Arc<dyn Fn(&SyncSession) + Send + Sync> =
+        Arc::new(|s: &SyncSession| persist_state(s));
+    let server = SyncServer::start(bind, session_c, Some(on_synced)).map_err(|e| e.to_string())?;
+    let addr = server.addr.to_string();
+    *slot = Some(server);
+    Ok(serde_json::json!({ "ok": true, "addr": addr, "port": port }))
+}
+
+/// P8.9 — stop the live TCP sync server if running.
+#[tauri::command]
+pub fn sync_serve_stop() -> Result<serde_json::Value, String> {
+    let mut slot = server_slot().lock().map_err(|e| e.to_string())?;
+    match slot.take() {
+        Some(srv) => {
+            srv.stop();
+            Ok(serde_json::json!({ "ok": true, "stopped": true }))
+        }
+        None => Err("sync server not running".to_string()),
+    }
+}
+
+/// P8.9 — status of the live TCP sync server (addr + outcomes so far).
+#[tauri::command]
+pub fn sync_serve_status() -> Result<serde_json::Value, String> {
+    let slot = server_slot().lock().map_err(|e| e.to_string())?;
+    match slot.as_ref() {
+        Some(srv) => Ok(serde_json::json!({
+            "ok": true,
+            "serving": true,
+            "addr": srv.addr.to_string(),
+            "outcomes": srv.outcomes(),
+        })),
+        None => Ok(serde_json::json!({ "ok": true, "serving": false })),
+    }
+}
+
+/// P8.9 — one-shot sync against a peer `target` (`ip:port`, e.g.
+/// `192.168.1.42:47615` or a Tailscale `100.x.y.z:47615`). Explicit trigger
+/// (no auto-sync). Mutates the local mirror and persists it.
+#[tauri::command]
+pub fn sync_peer_sync(
+    state: State<'_, AppState>,
+    target: String,
+) -> Result<serde_json::Value, String> {
+    let addr: SocketAddr = target
+        .parse::<SocketAddr>()
+        .map_err(|e: std::net::AddrParseError| format!("invalid target {target}: {e}"))?;
+    let mut session = load_or_create_state(&state);
+    let outcome = sync_with_peer(addr, &mut session).map_err(|e| e.to_string())?;
+    persist_state(&session);
+    Ok(serde_json::json!({
+        "ok": true,
+        "peerDevice": outcome.peer_device,
+        "peerFingerprint": outcome.peer_fingerprint,
+        "applied": outcome.applied,
+        "pushed": outcome.pushed,
+        "conflicts": outcome.conflicts,
+        "live": session.set.live_count(),
+    }))
+}
+
+/// P8.9 — fingerprint helper for out-of-band pubkey compare (SHA-256 hex,
+/// first 16 chars). `publicKey` is base64 as returned by `sync_public_key`.
+#[tauri::command]
+pub fn sync_fingerprint(public_key: String) -> Result<serde_json::Value, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(public_key.trim())
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "ok": true, "fingerprint": fp_hex(&bytes) }))
 }

@@ -4,7 +4,85 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+
+/// v3.39 — immutable runtime manifest binding model / provider / permissions /
+/// tools / environment to an execution. Computed once at `bind_runtime` time
+/// and stored as a SHA-256 `config_hash` so any drift is detectable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RuntimeManifest {
+    pub model: String,
+    pub provider: String,
+    pub permissions: Vec<String>,
+    pub tools: Vec<String>,
+    pub env_summary: Value,
+}
+
+impl RuntimeManifest {
+    pub fn compute_hash(&self) -> String {
+        let canon = serde_json::to_vec(self).unwrap_or_default();
+        let mut h = Sha256::new();
+        h.update(&canon);
+        h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+    }
+}
+
+/// v3.39 — resumable HITL approval waiting inside a checkpoint. When an
+/// execution pauses at `WaitingApproval` the approval request is captured
+/// here so a crash between mint and resolve is recoverable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PendingApproval {
+    pub ticket_id: String,
+    pub tool_id: String,
+    pub args_hash: String,
+    pub requested_at_ms: u64,
+    pub risk_tier: String,
+}
+
+/// v3.39 — classification of an incomplete tool for repair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RepairClassification {
+    /// No dispatch evidence found; safe to retry.
+    NeverStarted,
+    /// Dispatch evidence exists but no completion; must confirm before retry.
+    StartedUnknown,
+}
+
+/// v3.39 — one item in a repair plan for incomplete tools.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepairPlanItem {
+    pub seq: u64,
+    pub tool: String,
+    pub args_hash: String,
+    pub classification: RepairClassification,
+    /// True when the tool is a mutating op and started-unknown.
+    pub needs_confirmation: bool,
+}
+
+/// v3.39 — projected message derived from the append-only event log. The
+/// message history is a *view*, not the source of truth.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectedMessage {
+    pub turn: u64,
+    pub role: String,
+    pub content: String,
+    pub ts_ms: u64,
+    pub tool_call_count: u32,
+}
+
+/// v3.39 — lineage record for a forked session. A fork happens at a
+/// completed-turn boundary; the fork inherits the event log up to that
+/// point and diverges with a new session id.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForkLineage {
+    pub source_session: String,
+    pub fork_at_turn: u64,
+    pub fork_at_event_seq: u64,
+    pub new_session_id: String,
+    pub created_at_ms: u64,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -91,6 +169,19 @@ pub struct Execution {
     pub receipt: Option<Value>,
     pub idempotency_key: String,
     pub created_at_ms: u64,
+    /// v3.39 — immutable SHA-256 of the RuntimeManifest, bound once via
+    /// `execution/bind_runtime`. Empty string means not yet bound.
+    #[serde(default)]
+    pub config_hash: String,
+    /// v3.39 — the full manifest stored alongside the hash for inspection.
+    /// None until `bind_runtime` is called.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_manifest: Option<RuntimeManifest>,
+    /// v3.39 — resumable HITL approval waiting inside the checkpoint.
+    /// Present only when the execution is in `WaitingApproval` and a crash
+    /// would otherwise lose the pending request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_approval: Option<PendingApproval>,
 }
 
 impl Execution {
@@ -121,7 +212,59 @@ impl Execution {
             receipt: None,
             idempotency_key: format!("exec:{id}"),
             created_at_ms: now_ms(),
+            config_hash: String::new(),
+            runtime_manifest: None,
+            pending_approval: None,
         }
+    }
+
+    /// v3.39 — bind the runtime manifest, compute and store the immutable
+    /// config_hash. Once set, any drift in model/provider/tools/permissions
+    /// is detectable by comparing the stored hash against a re-computation.
+    pub fn bind_runtime(&mut self, manifest: RuntimeManifest) -> String {
+        let hash = manifest.compute_hash();
+        self.config_hash = hash.clone();
+        self.runtime_manifest = Some(manifest);
+        hash
+    }
+
+    /// v3.39 — record a pending Guard-2 approval inside the checkpoint so
+    /// a crash between mint and resolve is recoverable. Returns Err if the
+    /// execution is not in WaitingApproval phase.
+    pub fn record_pending_approval(&mut self, approval: PendingApproval) -> Result<(), String> {
+        if self.state != ExecutionPhase::WaitingApproval {
+            return Err(format!(
+                "cannot record pending approval in state {:?} (must be WaitingApproval)",
+                self.state
+            ));
+        }
+        self.approval_refs.push(approval.ticket_id.clone());
+        self.pending_approval = Some(approval);
+        Ok(())
+    }
+
+    /// v3.39 — resolve (approve or reject) a pending approval. Clears the
+    /// pending field and transitions back to Running on approval, or Failed
+    /// on rejection. Returns the approval for the caller to forward.
+    pub fn resolve_pending_approval(
+        &mut self,
+        approved: bool,
+    ) -> Result<PendingApproval, String> {
+        let approval = self
+            .pending_approval
+            .take()
+            .ok_or("no pending approval to resolve")?;
+        let next = if approved {
+            ExecutionPhase::Running
+        } else {
+            ExecutionPhase::Failed
+        };
+        if !self.state.can_transition(next) {
+            return Err(format!("illegal transition {:?} → {next:?}", self.state));
+        }
+        self.state = next;
+        self.event_stream.push(format!("{next:?}"));
+        Ok(approval)
     }
 }
 
@@ -311,8 +454,108 @@ impl ExecutionKernel {
                 let list: Vec<&Execution> = self.executions.values().collect();
                 Ok(json!({ "executions": list, "count": list.len() }))
             }
+            // v3.39 — bind an immutable runtime manifest and store the config_hash.
+            "execution/bind_runtime" => {
+                let id = params
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/bind_runtime requires id")?;
+                let ex = self
+                    .get_mut(id)
+                    .ok_or_else(|| format!("unknown execution {id}"))?;
+                let manifest = RuntimeManifest {
+                    model: params
+                        .get("model")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    provider: params
+                        .get("provider")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    permissions: params
+                        .get("permissions")
+                        .and_then(Value::as_array)
+                        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                        .unwrap_or_default(),
+                    tools: params
+                        .get("tools")
+                        .and_then(Value::as_array)
+                        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                        .unwrap_or_default(),
+                    env_summary: params.get("env").cloned().unwrap_or(Value::Null),
+                };
+                let hash = ex.bind_runtime(manifest);
+                Ok(json!({ "id": id, "configHash": hash }))
+            }
+            // v3.39 — record a pending HITL approval inside the execution checkpoint.
+            "execution/record_approval" => {
+                let id = params
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/record_approval requires id")?;
+                let ticket_id = params
+                    .get("ticketId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let tool_id = params
+                    .get("toolId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let args_hash = params
+                    .get("argsHash")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let risk_tier = params
+                    .get("riskTier")
+                    .and_then(Value::as_str)
+                    .unwrap_or("R1")
+                    .to_string();
+                let ex = self
+                    .get_mut(id)
+                    .ok_or_else(|| format!("unknown execution {id}"))?;
+                let approval = PendingApproval {
+                    ticket_id,
+                    tool_id,
+                    args_hash,
+                    requested_at_ms: now_ms(),
+                    risk_tier,
+                };
+                ex.record_pending_approval(approval)?;
+                let ex = self.get(id).unwrap();
+                Ok(json!({ "id": id, "state": ex.state, "pendingApproval": ex.pending_approval }))
+            }
+            // v3.39 — resolve (approve/reject) a pending HITL approval.
+            "execution/resolve_approval" => {
+                let id = params
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/resolve_approval requires id")?;
+                let approved = params
+                    .get("approved")
+                    .and_then(Value::as_bool)
+                    .ok_or("execution/resolve_approval requires approved (bool)")?;
+                let ex = self
+                    .get_mut(id)
+                    .ok_or_else(|| format!("unknown execution {id}"))?;
+                let approval = ex.resolve_pending_approval(approved)?;
+                Ok(json!({
+                    "id": id,
+                    "state": ex.state,
+                    "resolvedApproval": approval,
+                    "approved": approved,
+                }))
+            }
             _ => Err(format!("method not found: {method}")),
         }
+    }
+
+    fn get_mut(&mut self, id: &str) -> Option<&mut Execution> {
+        self.executions.get_mut(id)
     }
 }
 
@@ -376,5 +619,115 @@ mod tests {
         assert!(k.transition(&chat.id, ExecutionPhase::Running).is_err());
         let list = k.handle("execution/list", &json!({})).unwrap();
         assert_eq!(list["count"], 2);
+    }
+
+    #[test]
+    fn runtime_manifest_bind_and_hash() {
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Chat,
+            "s1",
+            "test",
+            None,
+            "policy-v1".into(),
+            "{}".into(),
+            vec![],
+        );
+        assert_eq!(ex.config_hash, "");
+        let r = k
+            .handle(
+                "execution/bind_runtime",
+                &json!({
+                    "id": ex.id,
+                    "model": "gpt-4o",
+                    "provider": "openai",
+                    "permissions": ["file_ops.read"],
+                    "tools": ["browser.snapshot"],
+                    "env": {}
+                }),
+            )
+            .unwrap();
+        assert!(!r["configHash"].as_str().unwrap().is_empty());
+        let stored = k.get(&ex.id).unwrap();
+        assert_eq!(stored.config_hash, r["configHash"]);
+        assert_eq!(stored.runtime_manifest.as_ref().unwrap().model, "gpt-4o");
+    }
+
+    #[test]
+    fn runtime_manifest_deterministic() {
+        let m1 = RuntimeManifest { model: "a".into(), provider: "p".into(), permissions: vec![], tools: vec![], env_summary: Value::Null };
+        let m2 = RuntimeManifest { model: "a".into(), provider: "p".into(), permissions: vec![], tools: vec![], env_summary: Value::Null };
+        assert_eq!(m1.compute_hash(), m2.compute_hash());
+        let m3 = RuntimeManifest { model: "b".into(), provider: "p".into(), permissions: vec![], tools: vec![], env_summary: Value::Null };
+        assert_ne!(m1.compute_hash(), m3.compute_hash());
+    }
+
+    #[test]
+    fn pending_approval_record_and_resolve() {
+        let mut ex = Execution::new("ex:1".into(), ExecutionTrigger::Chat, "s".into(), "t".into());
+        // Cannot record in non-WaitingApproval state.
+        assert!(ex.record_pending_approval(PendingApproval {
+            ticket_id: "t1".into(),
+            tool_id: "browser.act".into(),
+            args_hash: "h1".into(),
+            requested_at_ms: 100,
+            risk_tier: "R2".into(),
+        }).is_err());
+        ex.state = ExecutionPhase::WaitingApproval;
+        ex.record_pending_approval(PendingApproval {
+            ticket_id: "t1".into(),
+            tool_id: "browser.act".into(),
+            args_hash: "h1".into(),
+            requested_at_ms: 100,
+            risk_tier: "R2".into(),
+        }).unwrap();
+        assert_eq!(ex.approval_refs.len(), 1);
+        assert!(ex.pending_approval.is_some());
+        // Approve → Running.
+        let resolved = ex.resolve_pending_approval(true).unwrap();
+        assert_eq!(resolved.ticket_id, "t1");
+        assert_eq!(ex.state, ExecutionPhase::Running);
+        assert!(ex.pending_approval.is_none());
+    }
+
+    #[test]
+    fn pending_approval_reject_transitions_to_failed() {
+        let mut ex = Execution::new("ex:2".into(), ExecutionTrigger::Plan, "s".into(), "t".into());
+        ex.state = ExecutionPhase::WaitingApproval;
+        ex.record_pending_approval(PendingApproval {
+            ticket_id: "t2".into(),
+            tool_id: "file.write".into(),
+            args_hash: "h2".into(),
+            requested_at_ms: 200,
+            risk_tier: "R3".into(),
+        }).unwrap();
+        let resolved = ex.resolve_pending_approval(false).unwrap();
+        assert_eq!(resolved.ticket_id, "t2");
+        assert_eq!(ex.state, ExecutionPhase::Failed);
+    }
+
+    #[test]
+    fn pending_approval_nothing_to_resolve_errors() {
+        let mut ex = Execution::new("ex:3".into(), ExecutionTrigger::Chat, "s".into(), "t".into());
+        ex.state = ExecutionPhase::WaitingApproval;
+        assert!(ex.resolve_pending_approval(true).is_err());
+    }
+
+    #[test]
+    fn approval_survives_serialization_roundtrip() {
+        let mut ex = Execution::new("ex:4".into(), ExecutionTrigger::Chat, "s".into(), "t".into());
+        ex.state = ExecutionPhase::WaitingApproval;
+        ex.record_pending_approval(PendingApproval {
+            ticket_id: "t4".into(),
+            tool_id: "browser.act".into(),
+            args_hash: "h4".into(),
+            requested_at_ms: 300,
+            risk_tier: "R2".into(),
+        }).unwrap();
+        let j = serde_json::to_string(&ex).unwrap();
+        let restored: Execution = serde_json::from_str(&j).unwrap();
+        assert!(restored.pending_approval.is_some());
+        assert_eq!(restored.pending_approval.unwrap().ticket_id, "t4");
+        assert_eq!(restored.config_hash, "");
     }
 }

@@ -24,6 +24,7 @@ import {
   Plug,
   ScanSearch,
   Settings as SettingsIcon,
+  RefreshCw,
   Shield,
   ShieldCheck,
   SlidersHorizontal,
@@ -47,6 +48,7 @@ import {
   AdvancedSection,
   KeyboardSection,
   PrivacySection,
+  SyncSection,
 } from './settings-sections-extra'
 import AgentsModelsSection from './agents-models-section'
 import LocalModelsPanel from './local-models-panel'
@@ -108,6 +110,7 @@ const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: 
     items: [
       { id: 'mcp', label: 'MCP', icon: Plug },
       { id: 'marketplace', label: 'Marketplace', icon: Store },
+      { id: 'sync', label: 'Sync', icon: RefreshCw },
     ],
   },
   {
@@ -199,6 +202,8 @@ function SectionBody({ section }: { section: SectionId }) {
       return <BetaSection />
     case 'privacy':
       return <PrivacySection />
+    case 'sync':
+      return <SyncSection />
     case 'keyboard':
       return <KeyboardSection />
     case 'advanced':

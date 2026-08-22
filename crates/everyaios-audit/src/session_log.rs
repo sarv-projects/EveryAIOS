@@ -320,6 +320,159 @@ impl SessionLog {
         }
         Ok(incomplete)
     }
+
+    /// v3.39 — project the message history from the append-only event log.
+    /// Each `UserMessageAdded` + `ModelTurnCompleted` pair becomes one
+    /// `ProjectedMessage`. Tool calls within a turn are counted but do not
+    /// produce separate projected messages. The result is a *view* — the
+    /// event log is the source of truth.
+    pub fn project_messages(&self) -> Result<Vec<ProjectedMessage>, SessionLogError> {
+        let events = self.events()?;
+        let mut messages = Vec::new();
+        let mut turn = 0u64;
+        let mut tool_count = 0u32;
+        let mut current_content = String::new();
+        let mut current_ts = 0u64;
+        let mut current_role = String::new();
+        let mut in_turn = false;
+
+        for ev in &events {
+            match ev.event_type {
+                EventType::UserMessageAdded => {
+                    turn += 1;
+                    current_role = "user".into();
+                    current_content = ev
+                        .result_meta
+                        .get("content")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    current_ts = ev.ts_ms;
+                    tool_count = 0;
+                    in_turn = true;
+                }
+                EventType::ToolStarted if in_turn => {
+                    tool_count += 1;
+                }
+                EventType::ModelTurnCompleted if in_turn => {
+                    let content = ev
+                        .result_meta
+                        .get("content")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    messages.push(ProjectedMessage {
+                        turn,
+                        role: current_role.clone(),
+                        content: current_content.clone(),
+                        ts_ms: current_ts,
+                        tool_call_count: tool_count,
+                    });
+                    messages.push(ProjectedMessage {
+                        turn,
+                        role: "assistant".into(),
+                        content,
+                        ts_ms: ev.ts_ms,
+                        tool_call_count: 0,
+                    });
+                    in_turn = false;
+                    tool_count = 0;
+                }
+                _ => {}
+            }
+        }
+        Ok(messages)
+    }
+
+    /// v3.39 — fork the session at a completed-turn boundary. Returns a
+    /// `ForkLineage` record and copies events up to (and including) the
+    /// `ModelTurnCompleted` at `fork_at_turn` into a new session log file.
+    ///
+    /// The forked log is a snapshot — it does NOT diverge from the source.
+    /// The caller owns the divergence (new events go to the new log).
+    pub fn fork_at_turn(
+        &self,
+        fork_at_turn: u64,
+        new_session_id: &str,
+    ) -> Result<ForkLineage, SessionLogError> {
+        if new_session_id.trim().is_empty()
+            || new_session_id.contains('/')
+            || new_session_id.contains("..")
+        {
+            return Err(SessionLogError::InvalidSessionId(
+                new_session_id.to_string(),
+            ));
+        }
+        let events = self.events()?;
+        let mut current_turn = 0u64;
+        let mut fork_seq = 0u64;
+        let mut forked_events = Vec::new();
+
+        for ev in &events {
+            match ev.event_type {
+                EventType::UserMessageAdded => {
+                    current_turn += 1;
+                    if current_turn == fork_at_turn {
+                        forked_events.push(ev.clone());
+                    }
+                }
+                EventType::ModelTurnCompleted if current_turn == fork_at_turn => {
+                    fork_seq = ev.seq;
+                    forked_events.push(ev.clone());
+                    break;
+                }
+                _ if current_turn == fork_at_turn => {
+                    forked_events.push(ev.clone());
+                }
+                _ => {}
+            }
+        }
+
+        if fork_seq == 0 {
+            return Err(SessionLogError::InvalidSessionId(format!(
+                "turn {fork_at_turn} not found or not completed"
+            )));
+        }
+
+        // Write the forked events to a new session log.
+        // self.path is base_dir/sessions/<id>.ndjson; we need base_dir (two
+        // levels up: file → sessions/ → base_dir).
+        let base = self
+            .path
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or_else(|| {
+                SessionLogError::Io(io::Error::other(
+                    "cannot determine base directory",
+                ))
+            })?;
+        let mut new_log = SessionLog::open(base, new_session_id)?;
+        for ev in forked_events {
+            new_log.append(EventInput {
+                event_type: ev.event_type,
+                session: new_session_id.to_string(),
+                agent: ev.agent,
+                tool: ev.tool,
+                args_hash: ev.args_hash,
+                result_meta: ev.result_meta,
+                trace_id: ev.trace_id,
+                span_id: ev.span_id,
+            })?;
+        }
+
+        Ok(ForkLineage {
+            source_session: self
+                .path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string(),
+            fork_at_turn,
+            fork_at_event_seq: fork_seq,
+            new_session_id: new_session_id.to_string(),
+            created_at_ms: now_ms(),
+        })
+    }
 }
 
 /// §4.3 — idempotency classes (declared per operation in the tool manifest).
@@ -373,6 +526,29 @@ pub fn classify_tool(tool: &str) -> IdempotencyClass {
         "connector.send_email" | "payment.charge" | "messaging.send" => IdempotencyClass::SameKey,
         _ => IdempotencyClass::ConfirmAfterUncertain,
     }
+}
+
+/// v3.39 — one projected message derived from the event log. The message
+/// history is a *view* over the append-only log, not the source of truth.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectedMessage {
+    pub turn: u64,
+    pub role: String,
+    pub content: String,
+    pub ts_ms: u64,
+    pub tool_call_count: u32,
+}
+
+/// v3.39 — lineage record for a forked session. A fork happens at a
+/// completed-turn boundary; the fork inherits the event log up to that
+/// point and diverges with a new session id.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForkLineage {
+    pub source_session: String,
+    pub fork_at_turn: u64,
+    pub fork_at_event_seq: u64,
+    pub new_session_id: String,
+    pub created_at_ms: u64,
 }
 
 /// In-process same_key dedupe: the broker records the result of the first
@@ -679,6 +855,93 @@ mod tests {
         assert_eq!(ids.len(), 2);
         assert!(ids.contains(&"sess-a".to_string()));
         assert!(ids.contains(&"sess-b".to_string()));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn project_messages_derives_view_from_event_log() {
+        let dir = tmp_dir("project");
+        let mut log = SessionLog::open(&dir, "proj-sess").unwrap();
+        // Turn 1: user message + tool call + assistant reply.
+        log.append(EventInput::new(EventType::UserMessageAdded, "proj-sess", "agent"))
+            .unwrap();
+        let mut tool_started = EventInput::new(EventType::ToolStarted, "proj-sess", "agent");
+        tool_started.tool = "browser.read".into();
+        tool_started.args_hash = "h1".into();
+        log.append(tool_started).unwrap();
+        let mut tool_done = EventInput::new(EventType::ToolCompleted, "proj-sess", "agent");
+        tool_done.tool = "browser.read".into();
+        tool_done.args_hash = "h1".into();
+        log.append(tool_done).unwrap();
+        let mut reply = EventInput::new(EventType::ModelTurnCompleted, "proj-sess", "agent");
+        reply.result_meta = serde_json::json!({"content": "hello there"});
+        log.append(reply).unwrap();
+        // Turn 2: user message + assistant reply (no tools).
+        log.append(EventInput::new(EventType::UserMessageAdded, "proj-sess", "agent"))
+            .unwrap();
+        let mut reply2 = EventInput::new(EventType::ModelTurnCompleted, "proj-sess", "agent");
+        reply2.result_meta = serde_json::json!({"content": "second reply"});
+        log.append(reply2).unwrap();
+
+        let projected = log.project_messages().unwrap();
+        assert_eq!(projected.len(), 4);
+        // Turn 1 user message.
+        assert_eq!(projected[0].turn, 1);
+        assert_eq!(projected[0].role, "user");
+        assert_eq!(projected[0].tool_call_count, 1);
+        // Turn 1 assistant reply.
+        assert_eq!(projected[1].turn, 1);
+        assert_eq!(projected[1].role, "assistant");
+        assert_eq!(projected[1].content, "hello there");
+        // Turn 2 user message.
+        assert_eq!(projected[2].turn, 2);
+        assert_eq!(projected[2].role, "user");
+        assert_eq!(projected[2].tool_call_count, 0);
+        // Turn 2 assistant reply.
+        assert_eq!(projected[3].turn, 2);
+        assert_eq!(projected[3].role, "assistant");
+        assert_eq!(projected[3].content, "second reply");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fork_at_turn_copies_events_to_new_session() {
+        let dir = tmp_dir("fork");
+        let mut log = SessionLog::open(&dir, "src-sess").unwrap();
+        // Turn 1: user + assistant.
+        log.append(EventInput::new(EventType::UserMessageAdded, "src-sess", "a"))
+            .unwrap();
+        log.append(EventInput::new(EventType::ModelTurnCompleted, "src-sess", "a"))
+            .unwrap();
+        // Turn 2: user + assistant.
+        log.append(EventInput::new(EventType::UserMessageAdded, "src-sess", "a"))
+            .unwrap();
+        log.append(EventInput::new(EventType::ModelTurnCompleted, "src-sess", "a"))
+            .unwrap();
+        // Fork at turn 1.
+        let lineage = log.fork_at_turn(1, "fork-sess").unwrap();
+        assert_eq!(lineage.source_session, "src-sess");
+        assert_eq!(lineage.fork_at_turn, 1);
+        assert_eq!(lineage.new_session_id, "fork-sess");
+        // The forked log has events for turn 1 only.
+        let forked = SessionLog::open(&dir, "fork-sess").unwrap();
+        let events = forked.events().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].event_type, EventType::UserMessageAdded);
+        assert_eq!(events[0].session, "fork-sess");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fork_at_turn_rejects_bad_session_id() {
+        let dir = tmp_dir("fork-bad");
+        let mut log = SessionLog::open(&dir, "src").unwrap();
+        log.append(EventInput::new(EventType::UserMessageAdded, "src", "a"))
+            .unwrap();
+        log.append(EventInput::new(EventType::ModelTurnCompleted, "src", "a"))
+            .unwrap();
+        assert!(log.fork_at_turn(1, "../escape").is_err());
+        assert!(log.fork_at_turn(1, "a/b").is_err());
         let _ = fs::remove_dir_all(&dir);
     }
 }

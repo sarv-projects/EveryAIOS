@@ -19,6 +19,9 @@ pub mod repair;
 pub mod replay;
 pub mod session_log;
 
+pub use repair::{StartedUnknownClassification, StartedUnknownItem, started_unknown_repair};
+pub use session_log::{ProjectedMessage, ForkLineage};
+
 /// One audit event. `kind` is a stable dotted name (e.g. `browser.act`,
 /// `guard.blocked`, `vault.rotate`); `payload` is schema-per-kind.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

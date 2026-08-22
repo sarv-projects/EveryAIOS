@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ExternalLink, Github } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,7 @@ import {
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { LinkChip, Row, SectionShell } from './settings-shared'
+import { inTauri } from '@/lib/tauri'
 
 // === Privacy ===
 export function PrivacySection() {
@@ -132,7 +133,50 @@ export function AdvancedSection() {
 }
 
 // === About ===
+type UpdaterState =
+  | { phase: 'idle' }
+  | { phase: 'checking' }
+  | { phase: 'up-to-date' }
+  | { phase: 'available'; version: string; notes: string | null }
+  | { phase: 'installing' }
+  | { phase: 'error'; message: string }
+
 export function AboutSection() {
+  const [updater, setUpdater] = useState<UpdaterState>({ phase: 'idle' })
+
+  async function checkForUpdates() {
+    if (!inTauri()) {
+      setUpdater({ phase: 'error', message: 'updates require the desktop shell' })
+      return
+    }
+    setUpdater({ phase: 'checking' })
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<{ available: boolean; version?: string; notes?: string | null }>(
+        'updater_check',
+      )
+      if (r.available && r.version) {
+        setUpdater({ phase: 'available', version: r.version, notes: r.notes ?? null })
+      } else {
+        setUpdater({ phase: 'up-to-date' })
+      }
+    } catch (e) {
+      setUpdater({ phase: 'error', message: String(e) })
+    }
+  }
+
+  async function installUpdate() {
+    if (!inTauri()) return
+    setUpdater({ phase: 'installing' })
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      // On success the process relaunches, so this normally never resolves.
+      await invoke('updater_install')
+    } catch (e) {
+      setUpdater({ phase: 'error', message: String(e) })
+    }
+  }
+
   return (
     <SectionShell title="About" desc="Version, license and links">
       <div className="rounded-lg border border-border bg-background/30 p-4">
@@ -143,14 +187,176 @@ export function AboutSection() {
         <div className="mt-2 text-xs text-muted-foreground">
           Agentic OS desktop runtime. Self-hosted, local-first.
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <LinkChip icon={<ExternalLink className="h-3 w-3" />} label="Docs" />
           <LinkChip icon={<Github className="h-3 w-3" />} label="GitHub" />
           <LinkChip icon={<ExternalLink className="h-3 w-3" />} label="Issues" />
         </div>
+        {/* P8.8 auto-updater surface */}
+        <div className="mt-3 border-t border-border/40 pt-3">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={updater.phase === 'checking' || updater.phase === 'installing'} onClick={checkForUpdates}>
+              {updater.phase === 'checking'
+                ? 'Checking…'
+                : updater.phase === 'installing'
+                  ? 'Installing…'
+                  : 'Check for updates'}
+            </Button>
+            {updater.phase === 'up-to-date' && (
+              <span className="text-xs text-muted-foreground">Up to date</span>
+            )}
+            {(updater.phase === 'idle' || updater.phase === 'error') && (
+              <span className="text-[10px] text-muted-foreground">Signed with the release key; verified before install</span>
+            )}
+          </div>
+          {updater.phase === 'available' && (
+            <div className="mt-2 rounded-md border border-border bg-background/50 p-2 text-xs">
+              <span className="font-mono text-orange-300">v{updater.version}</span> available
+              {updater.notes && (
+                <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-muted-foreground">{updater.notes}</p>
+              )}
+              <Button size="sm" className="mt-2" onClick={installUpdate}>
+                Download &amp; relaunch
+              </Button>
+            </div>
+          )}
+          {updater.phase === 'error' && (
+            <p className="mt-1 text-xs text-red-400">{updater.message}</p>
+          )}
+        </div>
         <div className="mt-4 border-t border-border/40 pt-3 text-[10px] text-muted-foreground">
           Licensed under the EveryAIOS Community License (ECL-1.0).
         </div>
+      </div>
+    </SectionShell>
+  )
+}
+
+// === Sync (P8.9) ===
+type SyncDevice = { deviceId: string; publicKey: string; fingerprint: string; items: number }
+type ServeStatus = { serving: boolean; addr?: string; outcomes?: { peer_device: string; peer_fingerprint: string; applied: number; pushed: number; conflicts: number }[] }
+
+export function SyncSection() {
+  const notify = useAppStore((s) => s.notify)
+  const [device, setDevice] = useState<SyncDevice | null>(null)
+  const [serve, setServe] = useState<ServeStatus>({ serving: false })
+  const [port, setPort] = useState('47615')
+  const [target, setTarget] = useState('192.168.1.42:47615')
+  const [busy, setBusy] = useState(false)
+  const [last, setLast] = useState<string | null>(null)
+
+  async function refreshDevice() {
+    if (!inTauri()) return
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<{ deviceId: string; publicKey: string; items: number }>('sync_public_key')
+      const f = await invoke<{ fingerprint: string }>('sync_fingerprint', { publicKey: r.publicKey })
+      setDevice({ deviceId: r.deviceId, publicKey: r.publicKey, fingerprint: f.fingerprint, items: r.items })
+    } catch (e) {
+      notify(String(e))
+    }
+  }
+  async function refreshServe() {
+    if (!inTauri()) return
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<ServeStatus & { ok: boolean }>('sync_serve_status')
+      setServe({ serving: r.serving, addr: r.addr, outcomes: (r as unknown as { outcomes?: ServeStatus['outcomes'] }).outcomes })
+    } catch { /* ignore */ }
+  }
+  useEffect(() => {
+    refreshDevice()
+    refreshServe()
+  }, [])
+  useEffect(() => {
+    if (!serve.serving) return
+    const id = setInterval(refreshServe, 2500)
+    return () => clearInterval(id)
+  }, [serve.serving])
+
+  async function handleStart() {
+    if (!inTauri()) { notify('requires desktop shell'); return }
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const p = port ? parseInt(port, 10) : 47615
+      const r = await invoke<{ addr: string }>('sync_serve_start', { port: p })
+      setLast(`serving on ${r.addr}`)
+      await refreshServe()
+    } catch (e) { notify(String(e)) } finally { setBusy(false) }
+  }
+  async function handleStop() {
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      await invoke('sync_serve_stop')
+      setLast('server stopped')
+      setServe({ serving: false })
+    } catch (e) { notify(String(e)) } finally { setBusy(false) }
+  }
+  async function handlePeerSync() {
+    if (!target.trim()) { notify('enter target ip:port'); return }
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<{ peerDevice: string; peerFingerprint: string; applied: number; pushed: number; conflicts: number; live: number }>('sync_peer_sync', { target: target.trim() })
+      setLast(`peer ${r.peerDevice} (${r.peerFingerprint}) — applied ${r.applied}, pushed ${r.pushed}, conflicts ${r.conflicts}, live ${r.live}`)
+      await refreshDevice()
+      await refreshServe()
+    } catch (e) { notify(String(e)) } finally { setBusy(false) }
+  }
+  async function handleRotate() {
+    if (!inTauri()) return
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      await invoke('sync_keypair_generate')
+      await refreshDevice()
+      setLast('keypair rotated — old bundles unreadable')
+    } catch (e) { notify(String(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <SectionShell title="Sync" desc="E2E-encrypted mirror — bundle + live TCP (LAN / Tailscale, port 47615, explicit trigger)">
+      <div className="space-y-3">
+        <Row label="Device" desc={device ? `${device.deviceId} · ${device.items} items` : 'loading…'}>
+          <span className="max-w-[260px] truncate font-mono text-[10px] text-muted-foreground" title={device?.publicKey}>{device?.fingerprint ?? '—'}</span>
+        </Row>
+        {device && (
+          <div className="rounded-md border border-border/50 bg-background/30 p-2">
+            <div className="font-mono text-[10px] leading-relaxed text-muted-foreground break-all">{device.publicKey}</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">Fingerprint (SHA-256 first 16 hex) — compare out-of-band before trusting a peer. Raw X25519 is MITM-able on hostile LANs; Tailscale/WireGuard is the mitigation.</div>
+          </div>
+        )}
+        <Row label="Live server" desc={serve.serving ? `serving on ${serve.addr}` : 'stopped — start to accept LAN/Tailscale peers'}>
+          <div className="flex items-center gap-2">
+            <Input value={port} onChange={(e) => setPort(e.target.value)} placeholder="47615" className="h-7 w-24 font-mono text-xs" />
+            {!serve.serving ? (
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handleStart}>Start</Button>
+            ) : (
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handleStop}>Stop</Button>
+            )}
+          </div>
+        </Row>
+        {serve.outcomes && serve.outcomes.length > 0 && (
+          <div className="rounded-md border border-border/50 bg-background/30 p-2 text-xs">
+            <div className="mb-1 font-medium">Recent peers ({serve.outcomes.length})</div>
+            {serve.outcomes.slice(-5).map((o, i) => (
+              <div key={i} className="font-mono text-[11px] text-muted-foreground">{o.peer_device} {o.peer_fingerprint} — +{o.applied} / push {o.pushed} / conflicts {o.conflicts}</div>
+            ))}
+          </div>
+        )}
+        <Row label="Sync with peer" desc="Direct TCP to ip:port — LAN or Tailscale 100.x.y.z (explicit trigger, no auto-sync)">
+          <div className="flex items-center gap-2">
+            <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="192.168.1.42:47615" className="h-7 w-56 font-mono text-xs" />
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handlePeerSync}>Sync</Button>
+          </div>
+        </Row>
+        <Row label="Keypair" desc="Rotate re-keys the mirror (old bundles become unreadable)">
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handleRotate}>Rotate</Button>
+        </Row>
+        {last && <p className="text-xs text-muted-foreground">{last}</p>}
+        <p className="text-[10px] text-muted-foreground">Bundles: export/import via the file seam remains (USB / LAN share). Live transport is TCP-only, default 47615, no discovery.</p>
       </div>
     </SectionShell>
   )

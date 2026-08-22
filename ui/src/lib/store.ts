@@ -527,6 +527,7 @@ export const SETTINGS_SECTION_IDS = [
   'resources',
   'beta',
   'privacy',
+  'sync',
   'keyboard',
   'advanced',
   'about',
