@@ -62,6 +62,7 @@ pub mod fusion;
 pub mod ghost;
 pub mod graph;
 pub mod janus;
+pub mod lazy_graph;
 pub mod paging;
 pub mod planner;
 pub mod reference;
@@ -88,7 +89,11 @@ pub use fusion::{
     ContentType, Signal,
 };
 pub use ghost::{FsEvent, GhostIndex};
-pub use graph::{Edge, EdgeType, GraphStore, Node, NodeKind, DEFAULT_MAX_DEPTH, DEFAULT_TOP_K};
+pub use graph::{Edge, EdgeType, GraphBackend, GraphStore, Node, NodeKind, DEFAULT_MAX_DEPTH, DEFAULT_TOP_K};
+pub use lazy_graph::{
+    extract_concepts, lexical_similarity, LazyConceptGraph, LazyGraphRag, RelevanceAssessor,
+    RetrieveOptions, RetrievedChunk, RetrievalReport, SimilarityScorer,
+};
 pub use paging::{MemoryEntry, PagedMemory, Surface, CORE_BUDGET_TOKENS};
 pub use classify::{classify, plan_execution, parallel_groups, ExecutionPlan, Intent, IntentKind};
 pub use fsrs::{

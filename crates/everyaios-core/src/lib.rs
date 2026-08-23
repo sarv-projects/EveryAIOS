@@ -32,6 +32,7 @@ pub mod local;
 pub mod connectors;
 pub mod memory_service;
 pub mod messaging;
+pub mod models;
 pub mod orphan;
 pub mod plan_service;
 pub mod provider_ref;

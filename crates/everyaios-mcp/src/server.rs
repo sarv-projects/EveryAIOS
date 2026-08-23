@@ -1,12 +1,14 @@
 //! P6.7 — the MCP server side (F6/F7, doc 34 §2, doc 61 §7).
 //!
 //! This is the *protocol layer*, transport-agnostic: the 2026-07-28
-//! stateless Streamable HTTP shape (no `initialize`/`session`), cacheable
-//! tool lists (`ttlMs`), and MRTR (multi-round-trip) continuation for
-//! long-running ops that must not hold a stream open. The concrete HTTP /
-//! stdio transport binds to these types; the catalog reconciliation merges
-//! external MCP tools into the unified registry (dedupe by name, native
-//! wins).
+//! stateless Streamable HTTP shape, cacheable tool lists (`ttlMs`), and MRTR
+//! (multi-round-trip) continuation for long-running ops that must not hold a
+//! stream open. `initialize` is answered as a *compat handshake* for real
+//! clients (the official MCP Inspector CLI, Claude/Codex-style hosts) — no
+//! session state is ever created, the server stays stateless. The concrete
+//! HTTP / stdio transport binds to these types; the catalog reconciliation
+//! merges external MCP tools into the unified registry (dedupe by name,
+//! native wins).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -91,8 +93,12 @@ impl ToolCatalog {
 }
 
 /// The JSON-RPC `tools/list` response with a cache TTL (2026-07-28 stateless
-/// spec — clients cache the list and only refetch after `ttl_ms`).
+/// spec — clients cache the list and only refetch after `ttl_ms`). Field
+/// names are camelCase: the MCP wire protocol is camelCase, and real clients
+/// (the Inspector CLI, Claude/Codex hosts) key on `inputSchema` /
+/// `readOnlyHint` / `openWorldHint` — snake_case entries are dropped.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolListResponse {
     pub tools: Vec<ToolListEntry>,
     /// Cacheable tool list: clients may reuse until this TTL expires.
@@ -105,8 +111,11 @@ pub struct ToolListResponse {
 pub struct ToolListEntry {
     pub name: String,
     pub description: String,
+    #[serde(rename = "inputSchema")]
     pub input_schema: serde_json::Value,
+    #[serde(rename = "readOnlyHint")]
     pub read_only: bool,
+    #[serde(rename = "openWorldHint")]
     pub open_world: bool,
 }
 
@@ -261,14 +270,47 @@ impl<H: ToolCallHandler> McpServer<H> {
     }
 
     /// Handle one JSON-RPC request and return one JSON-RPC response.
+    ///
+    /// Notifications (no `id` field — e.g. `notifications/initialized`) get
+    /// an empty response: JSON-RPC notifications are never answered, and a
+    /// response to one would confuse a real client's message routing.
     pub fn handle_json(&mut self, body: &str) -> String {
         let request: Value = match serde_json::from_str(body) {
             Ok(v) => v,
             Err(e) => return rpc_error(Value::Null, -32700, &e.to_string()),
         };
+        if request.get("id").is_none() {
+            return String::new();
+        }
         let id = request.get("id").cloned().unwrap_or(Value::Null);
         let method = request.get("method").and_then(Value::as_str).unwrap_or("");
         match method {
+            "initialize" => {
+                // Compat handshake for real clients (the Inspector CLI,
+                // Claude/Codex-style hosts). Echo the client's requested
+                // protocol version (always one it supports) so negotiation
+                // succeeds; no session/capability state is created.
+                let requested = request
+                    .get("params")
+                    .and_then(|p| p.get("protocolVersion"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("2026-07-28");
+                serde_json::to_string(&rpc_ok(
+                    id,
+                    serde_json::json!({
+                        "protocolVersion": requested,
+                        "capabilities": { "tools": {} },
+                        "serverInfo": {
+                            "name": "everyaios-mcp",
+                            "version": env!("CARGO_PKG_VERSION")
+                        },
+                        "instructions": "EveryAIOS native tool catalog (37 browser + 5 storage). Stateless: no session is created."
+                    }),
+                ))
+                .unwrap_or_else(|_| rpc_error(Value::Null, -32603, "serialization failed"))
+            }
+            "ping" => serde_json::to_string(&rpc_ok(id, serde_json::json!({})))
+                .unwrap_or_else(|_| rpc_error(Value::Null, -32603, "serialization failed")),
             "tools/list" => serde_json::to_string(&rpc_ok(id, tool_list(&self.catalog, 300_000)))
                 .unwrap_or_else(|_| rpc_error(Value::Null, -32603, "serialization failed")),
             "tools/call" => {
@@ -311,8 +353,11 @@ impl<H: ToolCallHandler> McpServer<H> {
             if line.trim().is_empty() {
                 continue;
             }
-            writeln!(writer, "{}", self.handle_json(&line))?;
-            writer.flush()?;
+            let response = self.handle_json(&line);
+            if !response.is_empty() {
+                writeln!(writer, "{response}")?;
+                writer.flush()?;
+            }
         }
         Ok(())
     }

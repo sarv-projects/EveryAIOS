@@ -1,0 +1,28 @@
+[package]
+name = "everyaios-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "E9 desktop computer-use — see/read/act/verify over native windows (X11 live, Win UIA+SendInput+PrintWindow, macOS AX+ScreenCapture), OCR vision fallback, layer-1-first router, Guard-2 policy"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+image = { workspace = true }
+everyaios-audit = { path = "../everyaios-audit" }
+everyaios-guard = { path = "../everyaios-guard" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.13", features = ["xtest"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Com",
+] }

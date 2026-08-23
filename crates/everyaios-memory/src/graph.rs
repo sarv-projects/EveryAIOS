@@ -7,6 +7,12 @@
 //! store is an in-memory adjacency list; LadybugDB (embedded graph, Kuzu fork —
 //! validated doc 54) remains the swap-in backend for the same schema when the
 //! C++ FFI is wired.
+//!
+//! **LadybugDB seam (P5.2):** [`GraphBackend`] is the trait a LadybugDB FFI
+//! binding would implement; [`GraphStore`] implements it natively, so the
+//! swap-in point is explicit and the rest of the crate never touches a
+//! concrete store. The C++ FFI itself stays a validated follow-up (doc 54)
+//! until the native lib is needed.
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -91,6 +97,26 @@ impl Edge {
     fn is_active_at(&self, valid_at: u64, recorded_at: u64) -> bool {
         self.is_valid_at(valid_at) && self.recorded_at <= recorded_at
     }
+}
+
+/// The storage contract a LadybugDB FFI binding would implement (P5.2 seam).
+/// [`GraphStore`] implements this natively — the same schema (nodes + typed
+/// edges), so a future backend is a drop-in, never a rewrite.
+pub trait GraphBackend {
+    fn add_node(&mut self, id: &str, kind: NodeKind, label: &str);
+    fn add_edge(
+        &mut self,
+        src: &str,
+        dst: &str,
+        ty: EdgeType,
+        weight: f64,
+        at_time: u64,
+    ) -> usize;
+    fn node_count(&self) -> usize;
+    fn edge_count(&self) -> usize;
+    fn neighbors(&self, id: &str, at_time: u64) -> Vec<(String, EdgeType, f64)>;
+    /// Depth-capped neighborhood from one seed (d=2, top-k=15 convention).
+    fn query_depth(&self, source: &str, max_depth: usize, at_time: u64) -> Vec<(String, usize)>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -306,7 +332,7 @@ impl GraphStore {
     }
 
     /// Depth-capped BFS over active edges (default d=2).
-    pub fn query_depth(
+    pub    fn query_depth(
         &self,
         source: &str,
         max_depth: usize,
@@ -336,9 +362,61 @@ impl GraphStore {
     }
 }
 
+/// Native implementation of the [`GraphBackend`] seam — a LadybugDB FFI
+/// binding would implement the same trait over the same schema (P5.2).
+impl GraphBackend for GraphStore {
+    fn add_node(&mut self, id: &str, kind: NodeKind, label: &str) {
+        GraphStore::add_node(self, id, kind, label);
+    }
+
+    fn add_edge(
+        &mut self,
+        src: &str,
+        dst: &str,
+        ty: EdgeType,
+        weight: f64,
+        at_time: u64,
+    ) -> usize {
+        GraphStore::add_edge(self, src, dst, ty, weight, at_time)
+    }
+
+    fn node_count(&self) -> usize {
+        GraphStore::node_count(self)
+    }
+
+    fn edge_count(&self) -> usize {
+        GraphStore::edge_count(self)
+    }
+
+    fn neighbors(&self, id: &str, at_time: u64) -> Vec<(String, EdgeType, f64)> {
+        GraphStore::neighbors(self, id, at_time)
+    }
+
+    fn query_depth(&self, source: &str, max_depth: usize, at_time: u64) -> Vec<(String, usize)> {
+        GraphStore::query_depth(self, source, max_depth, at_time)
+    }
+}
+
 #[cfg(test)]
+
 mod tests {
     use super::*;
+
+    #[test]
+    fn graph_backend_seam_is_implemented_by_native_store() {
+        // P5.2 — the LadybugDB swap-in point: everything routes through the
+        // trait, so a future FFI backend is a drop-in, never a rewrite.
+        let mut backend: Box<dyn GraphBackend> = Box::new(GraphStore::new());
+        backend.add_node("rust", NodeKind::Entity, "Rust");
+        backend.add_node("memory", NodeKind::Entity, "Memory");
+        backend.add_edge("rust", "memory", EdgeType::DerivedFrom, 0.5, 0);
+        assert_eq!(backend.node_count(), 2);
+        assert_eq!(backend.edge_count(), 1);
+        let n = backend.neighbors("rust", 0);
+        assert_eq!(n.len(), 1);
+        let depth = backend.query_depth("rust", 2, 0);
+        assert_eq!(depth, vec![("memory".to_string(), 1)]);
+    }
 
     #[test]
     fn schema_and_typed_edges() {

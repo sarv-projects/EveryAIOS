@@ -18,6 +18,7 @@ members = [
     "everyaios-codeintel",
     "everyaios-acp",
     "everyaios-search",
+    "everyaios-desktop",
 ]
 
 [workspace.package]
@@ -54,3 +55,4 @@ roxmltree = "0.20"
 flate2 = "1"
 crc32fast = "1"
 tar = "0.4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
