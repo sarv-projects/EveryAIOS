@@ -38,7 +38,7 @@ dual-guard (Guard-1/Guard-2) + evidence evaluation — never by trust in the mod
 | Path | What lives there |
 |---|---|
 | `DESKTOP-APP-SPEC.md` | Complete product specification (capability matrix, build phases, K-Pillar) |
-| `TODO.md` | Master implementation checklist (Stage 0 + HARDENING + P0.1 → P12, **1103 = 722 done + 381 open**; P3 = 14/14 COMPLETE; P6 = 97 done + 2 open; P7 = 64/64 COMPLETE; P8 = 45 done + 0 open — P8.8 packaging/updater/CI + P8.9 E2E sync landed; P4 Office = 56/56 landed ⏸ ON HOLD (2026-08-22); P10 = 1/49; P27 Discover UI-only; P36 = 0/12; v3.40 expansions = 0/10; **P38 Dynamic Chief = 0/7 (spec v3.45, mechanism corrected v3.46); P39 Performance & Footprint = 0/5 (spec v3.46); architecture frozen v3.47; spec v3.48 de-statused (contract-only — status lives in TODO); spec v3.49 — version metadata moved to SPEC-CHANGELOG, +14 detailed use cases up top, §4.0 subsystem map (per-module interfaces); P32.7 work-first sidebar chrome; P37 = 8 chrome done + 8 wiring open**) |
+| `TODO.md` | Master implementation checklist (Stage 0 + HARDENING + P0.1 → P12, **1106 = 722 done + 384 open**; P5 = 68 done + 4 open incl. P5.12 LazyGraphRAG mode; spec v3.48 de-statused (contract-only — status lives in TODO); spec v3.49 — version metadata moved to SPEC-CHANGELOG, +14 use cases, §4.0 subsystem map; spec v3.50 — deep re-audit; spec v3.51 — Algorithm Index 33→34 (FSRS #34), in-repo homes corrected, P5.12 added) |
 | `ARCH/` | Architecture docs 00–12 + diagrams |
 | `RESEARCH/desktop_app/` | Source research notes (docs 01–84, 282 repos) |
 | `crates/` | Rust core: `everyaios-core`, `guard`, `audit`, `vault`, `browser`, `office`, `memory`, `eval`, `blueprint`, `acp`, … |

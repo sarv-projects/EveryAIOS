@@ -87,7 +87,7 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 
 ## ⛭ THE FINAL APP — the complete product (every capability below, all together)
 
-> **Capstone vision.** This is what the finished EveryAIOS is — the state reached when **every row in §0 (A–J + EV), the 10 pillars (§3), and the post-v1 K-pillar (§10) are built, integrated, secured, and release-verified.** This section is the whole product in one view; the live build queue is `TODO.md`.
+> **Capstone vision.** This is what the finished EveryAIOS is — the state reached when **every row in §0 (A–J, the 149-row matrix + 33-algorithm index, plus the cross-cutting EV evidence subsystem), the 10 pillars (§3), and the post-v1 K-pillar (§10) are built, integrated, secured, and release-verified.** This section is the whole product in one view; the live build queue is `TODO.md`.
 
 **The final app in one sentence:** a single local-first, BYOK, open-source desktop workspace where your **chat, browser, files, documents, code, automations, agents, and connected accounts** live in one safe continuity — the LLM is the CPU, every real effect (file, browser, shell, provider, connector, office, agent) crosses **one ticket model → one executor → one event log → one progress timeline**, and every capability is spec-driven from Markdown and verified by a deterministic dual-guard (Guard-1/Guard-2) + evidence evaluation (EV1 — now runtime-wired at plan completion via `eval/verify`; per-effect verified receipts remain K1 §10) — never by trust in the model.
 
@@ -114,7 +114,7 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 ## 0. MASTER CAPABILITY & ALGORITHM INDEX (the contract — exhaustive, nothing cut)
 
 > **This index is the contract.** New capabilities are added *here first*, then to `ARCH/09`. Nothing is dropped from this list without a written decision in `ARCH/09`. This file carries the *contract* only: build/implementation status of every row lives in `TODO.md` (master queue) and the landing log lives in `SPEC-CHANGELOG.md`.
-> **Scope (counted from this file's rows):** 149 rows · 33 algorithms. (ARCH/09 mirrors this index; the two are reconciled on change.)
+> **Scope (counted from this file's rows):** 149 rows · 34 algorithms (index gains #34 — FSRS was implemented but unnumbered; v3.51). (ARCH/09 mirrors this index; the two are reconciled on change.)
 
 ### A. Model & BYOK layer
 | ID | Capability |
@@ -151,14 +151,14 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 | C3 | Multi-signal retrieval — FTS5+vec+graph+temporal fusion + cross-encoder rerank (OpenWebUI steal); **v3.39:** retrieval work is abortable (cancel in-flight fuse when the owning turn dies) |
 | C4 | Vectorless default — FTS5/BM25 without embeddings (98% savings pattern) |
 | C5 | Embeddings (optional) — on-device bge-micro/gte-small, int8/vec0 |
-| C6 | Knowledge graph store — Rust-native embedded graph (LadybugDB = optional/deferred Kuzu-fork backend, C++, ACID, Cypher, vector+FTS), temporal edges; **v3.39:** every edge carries EXTRACTED vs INFERRED + source span (file/line) |
+| C6 | Knowledge graph store — Rust-native embedded graph (LadybugDB = optional/deferred Kuzu-fork backend, C++, ACID, Cypher, vector+FTS), temporal edges; **v3.39:** every edge carries EXTRACTED vs INFERRED + source span (file/line); **v3.51:** optional **lazy concept-graph mode** (LazyGraphRAG pattern — Microsoft Research, verified from the MSR blog) — build the concept graph at *query* time (NLP noun-phrase concepts + co-occurrences; iterative-deepening best-first/breadth-first search with one relevance-test budget knob), zero up-front LLM summarization → indexing cost ≈ plain vector RAG (~0.1% of full GraphRAG's LLM index cost) with global-query-quality answers at a fraction of the query cost; the load-bearing LLM refinement of #8 becomes query-scoped — a natural fit for the local-first token budget |
 | C7 | Memory injection — warm set ~0ms TTFT (target), scope-leakage floors, budgets |
 | C8 | Sync/export/wipe — E2E-encrypted sync (opt-in, LAN/Tailscale transport), export, per-scope wipe; **doc 61:** Obsidian-compatible `.md` memory mirror (`[[wiki-link]]`s) + 20-min auto-fetch cadence (OpenHuman pattern — a view/export surface, not a second store) |
 | C9 | **Taste profile** — auto-learned coding-preference profile (style/patterns/frameworks/naming) with confidence scores 0–1; shareable markdown (`~/.everyaios/taste/` + per-repo `.everyaios-taste/`); stable-prefix symbolic prior at generation; learns from accept/reject/edit via correction-detector + audit (Command Code taste-1 pattern — proprietary, pattern only) |
 | C10 | **Pass-by-reference context** — files/datasets/tool results as live handles + bounded previews; agent queries/slices via sandboxed script-eval (E4) instead of loading payloads into context (NOOA pattern, doc 39) |
 | C11 | Temporal knowledge-graph semantics — Graphiti-pattern bi-temporal entity/fact tracking with validity windows over the canonical Rust-native graph store |
-| C12 | Cognee-pattern full-stack memory API — KG + vectors + sessions over the canonical Rust-owned SQLite/graph surfaces; **not a second database**. **doc 61:** every memory asset also exports to `~/.everyaios/memory/**/*.md` (readable/git-versioned — OpenHuman validation; preserves doc-60 "one memory model") |
-| C13 | **Spaced-repetition reinforcement (FSRS)** — use the permissive `open-spaced-repetition/fsrs-rs` (NOT Anki's AGPL-3.0 `rslib/src/scheduler/fsrs` — license boundary) into `everyaios-memory`: retention-target scheduling, reschedule-on-review, simulator; user-facing "reinforce what I learned" review prompts at optimal intervals (doc 63 §2.2) |
+| C12 | Cognee-pattern full-stack memory API — KG + vectors + sessions over the canonical Rust-owned SQLite/graph surfaces; **not a second database**. **doc 61:** every memory asset also exports to `~/.everyaios/memory/**/*.md` (readable/git-versioned — OpenHuman validation; preserves doc-60 "one memory model"). **v3.51:** note-object memory (A-MEM pattern — NeurIPS 2025, 1K+ citations): agent-constructed atomic notes + typed link generation + evolution (link/merge/archive) on write — a third memory *shape* (facts/vectors + KG + evolving notes) over the same store with the same export; no second database |
+| C13 | **Spaced-repetition reinforcement (FSRS)** — use the permissive `open-spaced-repetition/fsrs-rs` (NOT Anki's AGPL-3.0 `rslib/src/scheduler/fsrs` — license boundary) into `everyaios-memory`: retention-target scheduling, reschedule-on-review, simulator; user-facing "reinforce what I learned" review prompts at optimal intervals (doc 63 §2.2); numbered **Algorithm #34** in the index (v3.51); **v3.51:** FSRS-7 upstream line (2025) is *not* yet in permissive `fsrs-rs` v6.x — tracked as an adopt-when-shipped watch item, FSRS-6 lands as built (P5.11) |
 
 ### D. Office & files (user-critical) — ⏸ **ON HOLD (2026-08-22 user directive; see TODO)**
 > **Office is frozen by directive.** The D1–D8 engine + D9–D12 storage intelligence are in-scope as specified below; **no further Office work** — no new Office UI, no LOKit/Google-Docs tier, no perfectness-gap follow-ups — until the hold is lifted.
@@ -208,7 +208,7 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 | F5 | Composio/Zapier/Nango — **REMOVED by Connector-platform decision (2026-08-16)** (cloud SaaS holding OAuth tokens server-side contradicts the local-vault promise; superseded by official MCP servers + Native) |
 | F6 | MCP client (consume) — connect external MCP servers, reconcile; **doc 61:** cacheable tool lists (`ttlMs`) + MRTR long-running-ops (2026-07-28 spec); **doc 62:** managed live-data MCP (MongoDB/Postgres/SQLite) = consume-path only — query/inspect/update live operational data (F15 already = Calendar, no new row); **v3.39 `MCPServerRecord`:** one canonical record (id, registry, version, transport, provenance, digest, capabilities, trust, enabled_consumers[], health, config_hash) + per-consumer enable; lifecycle rides `ManagedResource`; **v3.40 protocol primitives (MCP spec, live-verified):** consume **tools + resources + prompts**; as client offer **roots + elicitation + sampling**. Resources are the wire form of C10 (uri + mime + bounded preview, never dump the blob). Elicitation / 2026-07-28 `InputRequired` (MRTR) → Guard-2 card (accept/decline/cancel). Sampling (`sampling/createMessage`) → credential broker only, same budgets/tickets as chat. Roots = workspace path floor. **v3.46 (transport, P39):** the loopback HTTP transport carries **keep-alive + connection pooling**; MRTR (multi-round-trip continuation, 2026-07-28 spec) covers long-running ops — SSE is the alternative stream-holding transport, deliberately not primary (stateless MRTR chosen; revisit only if profiling shows a need). |
 | F7 | MCP server (serve) — our tools to Claude Code/Codex/Cursor/... via one endpoint; **doc 61:** cacheable tool lists (`ttlMs`) + MRTR (2026-07-28 spec); **two-channel injection — Channel B (doc 68 §4):** serve Office surgical editor + IronCalc, browser 37-tool catalog + Session Vault, search cascade (G8), memory retrieval (C-series), storage intelligence as MCP tools — any MCP-consuming agent gets our full capability set; **v3.40:** also expose C10 handles as MCP **resources** (same catalog, resource uri) so hosted agents can pass-by-reference instead of stuffing files into prompts |
-| F8 | Harness installer — plan-before-touch install into the **F12 harness set (9 CLIs — list lives in F12)**, ownership markers (doc 33 §8 harness-integrations pattern); **registry-fed discovery from the official ACP agent registry** (doc 57 §2 — CDN catalog + local cache + version pinning + curated allow-list); consumes the official `quarantine.json` block list alongside the catalog |
+| F8 | Harness installer — plan-before-touch install into the **F12 harness set (10 named CLIs — list lives in F12; Cursor caveated as IDE, not a stdio CLI)**, ownership markers (doc 33 §8 harness-integrations pattern); **registry-fed discovery from the official ACP agent registry** (doc 57 §2 — CDN catalog + local cache + version pinning + curated allow-list); consumes the official `quarantine.json` block list alongside the catalog |
 | F9 | Unified Tool Registry — one normalized ToolDefinition + permission classes; **adopts the ACP tool-kind taxonomy** (read/edit/delete/move/search/execute/think/fetch/other, doc 45 §4.3) |
 | F10 | WSL/POSIX bridge — `wsl.exe` runners, `\\wsl.localhost\` paths, loopback IPC, native Linux exec |
 | F11 | Port/network hooks — async loopback listeners, inbound/outbound monitor, webhook ingress — gated; **browser network containment (doc 55/06 §6.15)**: WebRTC disable + worker fail-closed under allowlist, SSRF-defaults (loopback/RFC1918 blocked), `file://` blocked |
@@ -296,7 +296,7 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 | J10 | Watchdog — connect/idle timeouts re-armed per byte |
 | J11 | **Hard $ budget per session** — default $2.00/agent, configurable; enforce via core-providers `live-pricing` + sqlite counters; kill sidecar on exceed; surface "stopped: $X limit" to UI; reasonix token discipline as upstream brake; **doc 62:** per-task budgets are mandatory (50–150× cost variance easy→hard); add the `lower_cost` profile (cost_gate/thinking_budget 1K/context_budget 8K/max_iterations 6 — OpenCastor shape) |
 | J12 | **Orphan-prevention on Rust death** — Linux `prctl(PR_SET_PDEATHSIG, SIGTERM)` (code-verified in supervisor.rs); Windows Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`; macOS process group via `posix_spawn`; belt+suspenders parent-PID polling every 5s in sidecar (Mitigates TC-1.1 landmine, doc 43) |
-| J13 | **Sidecar heap safety** — `--max-old-space-size=512`; self-restart at 80% heap used; controlled by ProcessSupervisor from last Hermes checkpoint (20snap/500MB); 30min session → forced rotation (Mitigates TC-4.2 landmine, doc 43) |
+| J13 | **Sidecar heap safety** — 512MB heap budget with self-restart at 80% heap used (enforced by `coordinator/heap.ts`; the `--max-old-space-size=512` V8 flag is the Node-lineage default form — the shipped binary is Bun-compiled (`bun build --compile` + `--smol` in dev)); controlled by ProcessSupervisor from last Hermes checkpoint (20snap/500MB); 30min session → forced rotation (Mitigates TC-4.2 landmine, doc 43) |
 | J14 | **Distributed tracing** — OpenTelemetry Rust↔Node with shared `trace_id`; audit table gains `trace_id` + `span_id` columns (Agno-validated pattern, Mitigates TC-2.3 landmine, doc 43); agent-session observability references: agentlens (local coding-agent traces), agentsight (eBPF system-level) (doc 52) |
 | J15 | **Length-prefixed IPC framing** — `[u32 LE length][bytes payload]`; bounded channels (capacity=16) with backpressure; truncation tag → `ref:` handle (Mitigates TC-2.2 landmine, doc 43) |
 | J16 | **Process lifecycle hardening** — UNIX-domain socket preferred over TCP for sidecar (zero port collision); pre-spawn `coordinator` at Tauri boot (hidden, ~200ms perceived cold start; the Bun-compiled sidecar binary is ~93MB); keep sidecar warm 5min idle before kill; **battery-aware scheduling**: suppress heavy background indexing/embedding on battery power (detect via OS power APIs), defer to AC power or >5min idle (Mitigates TC-1.2/1.3/1.4 landmines, doc 43) |
@@ -306,9 +306,9 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 | J20 | AgentShield config scanning — scan everyaios.toml/blueprints/MCP for injection |
 | J21 | **Escalation rules & decision packages** — `permissions.toml` policy layer (delete=always_ask, multi_file_edit=ask_if_gt_5, external_network=ask_if_new_domain, terminal_shell=ask_if_destructive), `min_confidence_for_auto` threshold, structured **decision package** (goal + proposed diff + risk + affected paths) passed up the chain and rendered as Guard-2 cards; approvals/denials feed correction-detector + taste profile (doc 52 §2); **ticket contract formalized (doc 53 §3)** — ticket_id/agent_id/session_id/tool_id/operation/args-hash/paths/expiry/single-use/approval-source/risk/audit-seq, card-bound approval nonce, and TOCTOU bindings enforced by everyaios-guard; `tool/exec`/`tool/commit` re-verify canonical paths, resource identity, resolved network policy, executable digest, and preconditions immediately before mutation |
 
-### ALGORITHM INDEX (all 33 algorithms — the contract)
+### ALGORITHM INDEX (all 34 algorithms — the contract)
 
-> **Implementation homes:** the C-series memory algorithms (1–4, 6, 8–11) are implemented natively in Rust in `everyaios-memory`; the remaining algorithms (5, 7, 12–17) live in the `APP/packages/core-*` modules. Implementation/build status of every algorithm is tracked in `TODO.md`.
+> **Implementation homes (code-verified 2026-08-23, expanded v3.51):** the Where column is the authoritative home per algorithm. **Native in-repo Rust cores** exist for: #3 (`everyaios-memory::ghost`), #4 (`::graph` + `::actr`), #6 and #8 (entity/episodic graph store + typed edges + provenance — `::graph`; extraction/LLM-refinement/conflict = lineage, per the Where cell), #10 & #32 (`::actr`), #11 (`everyaios-core::memory_service` + `::graph`), #13 (`::embedding` — quantization int8/vec0 + NN-index math; the ONNX model is a caller-provided `Embedder`, weights never in-repo), #15 (`everyaios-core` supervisor breaker + `everyaios-blueprint::iteration` per-plan breaker), #16 (`::usage`), #18 (`::fusion`, weighted RRF), #19 (`::rerank`), #20 (`::paging`), #21 (`::compaction`), #29 (chunk-min merge inside `::fusion`), #34 FSRS (`::fsrs` + `::reinforce`). **Lineage-only (no in-repo core yet — mobile engine packages `@personal-ai/core-*` under `../APP/packages/*`, imported as workspace deps — §5 module map):** #1, #2, #5, #7, #9, #12, #14, #17, #22. #23–33 anchor to their capability-row contracts (the Where cell names the row/ID). Implementation/build status of every algorithm is tracked in `TODO.md`.
 
 | # | Algorithm | Where |
 |---|---|---|
@@ -332,7 +332,7 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 | 18 | Multi-signal retrieval fusion (mem0 SOTA: semantic + BM25 + entity-graph fused score; +29.6 temporal / +23.1 multi-hop claims) | C3 |
 | 19 | Cross-encoder hybrid rerank (OpenWebUI chunk-merge + rerank steal) | C3 |
 | 20 | Agent-managed context paging (Letta pattern: core/archival/recall) | C2 |
-| 21 | Compaction pipeline — Reasonix ratio knobs (snip 0.6 → soft 0.5 → force 0.9) + byte-stable prefix, over the tiered-compaction/context-compressor base | 05 / core-ai/context |
+| 21 | Compaction pipeline — Reasonix ratio knobs (snip 0.6 → soft 0.5 → force 0.9) + byte-stable prefix, over the tiered-compaction/context-compressor base; **v3.51 REF (search-verified, not yet adopted):** Agent Context Optimization (Acon, arXiv 2510.00615) — summary-compression of long-horizon histories/observations with an optimality guarantee, the 2025–26 state of the art for agent-turn compression | 05 / core-ai/context |
 | 22 | Lossless prompt compaction — multi-agent logs → dense anchors + frozen-snapshot MEMORY.md | 05 |
 | 23 | Key-ring rotation/failover (cooldown ×2^failures, cap 5min; max 3 switches/call) | A2/A3 |
 | 24 | Session rotation across accounts (429/blocked/expired → next authorized account) | E11 |
@@ -345,6 +345,7 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 | 31 | Taste preference learning — Generate → Observe → Extract → Learn → Apply; confidence-scored symbolic rules injected as stable-prefix prior (Command Code taste-1 pattern) | C9 |
 | 32 | ACT-R activation + spontaneous recall — retention decay (half-life × log1p(strength)), importance ≥8 never auto-forgotten, associative recall (semantic+keyword+recency+graph), typed relational edges (supports/contradicts/derived-from), pre-turn spontaneous context block (NOOA nooa-memory) | C10/07 |
 | 33 | Search tier escalation & cache — respond from cache when fresh (5-min TTL) → escalate on miss/failure/slow (WebSurfx → SearXNG → fallback); idempotent parallel fetch (doc 52 §4) | G8 |
+| 34 | **FSRS spaced-repetition scheduling (C13)** — stability/difficulty memory state, retention-target next-interval + reschedule-on-review, workload simulator; "reinforce what I learned" due-review queue at optimal intervals (permissive `open-spaced-repetition/fsrs-rs` — NOT Anki AGPL `rslib`) | everyaios-memory::fsrs + ::reinforce |
 
 ---
 
@@ -463,7 +464,7 @@ Open-source licenses: app MIT/Apache-2.0; bundled engines keep their own license
 flowchart TD
     UI["**TAURI WINDOW (Rust)** — lean native webview<br/>Chat · Reader · Workspace (Editor/Files/Terminal/Git) · Office · Connector Hub · Permission cards · Cockpit/Replay · Tray"]
     CORE["**RUST CORE — 17 crates** (everyaios-*)<br/>core · ipc · guard · audit · vault · cdp · browser · script<br/>mcp · office · storage · memory · eval · blueprint · codeintel · acp · search<br/>CDP driver + tiered engines (Chrome/Edge → Obscura/Lightpanda)<br/>rquickjs run sandbox · Guard1/Guard2 · append-only audit<br/>key-ring vault + Session Vault (SQLCipher) · MCP server"]
-    SIDE["**NODE SIDECAR** — coordinator (reuses core-*)"]
+    SIDE["**BUN SIDECAR** — coordinator (reuses the core-* lineage packages)"]
     BROWSER["**BROWSER child(s)** — tiered · CDP loopback"]
     SANDBOX["**EXECUTION SANDBOX** — Docker/WSL/MicroVM + WSL bridge"]
     DB[("**RUST-OWNED stores** — vault.db (SQLCipher) · audit log · memory.db<br/>sqlite-vec + FTS5 + Rust-native graph store (LadybugDB optional)")]
@@ -519,7 +520,7 @@ flowchart TD
 
 ## 4.0 Subsystem Map — modules, responsibilities & interfaces
 
-The runtime is exactly **three processes** — the Tauri window (UI), the Rust core (17 crates, one orchestrator binary), and the Node coordinator sidecar — plus spawned children (browser, ACP agents, MCP servers, sandbox). Every crate is a library; `everyaios-core` is the only binary-plus-library. The table is the complete module contract: what each module owns, its public interface, and its boundaries. (Section 5 gives implementation homes per capability row; this section is the reverse map — per module.)
+The runtime is exactly **three processes** — the Tauri window (UI), the Rust core (17 crates, one orchestrator binary), and the Bun-compiled coordinator sidecar — plus spawned children (browser, ACP agents, MCP servers, sandbox). Every crate is a library; `everyaios-core` is the only binary-plus-library. The table is the complete module contract: what each module owns, its public interface, and its boundaries. (Section 5 gives implementation homes per capability row; this section is the reverse map — per module.)
 
 ### The wire (who talks to whom)
 
@@ -554,7 +555,7 @@ The runtime is exactly **three processes** — the Tauri window (UI), the Rust c
 
 | Process | Responsibility | Public contract | Boundaries |
 |---|---|---|---|
-| **Coordinator sidecar** (Node, `packages/coordinator`) | Chat loop, plan draft<>execution, routing/caching, guard-tool flows, scheduler, MCP bridge, connector bridge | `chat`, `plan`, `router`, `guard`, `tools`, `catalog`, `scheduler`, `mcp-bridge`, `connector-bridge`, `frame`, `heap` (payload budgets), `orphan`, `index` | Proposes only. Every mutation request goes to core as a proposal; never opens the vault; state = checkpoints + app.db.
+| **Coordinator sidecar** (Bun-compiled, `packages/coordinator`) | Chat loop, plan draft<>execution, routing/caching, guard-tool flows, scheduler, MCP bridge, connector bridge | `chat`, `plan`, `router`, `guard`, `tools`, `catalog`, `scheduler`, `mcp-bridge`, `connector-bridge`, `frame`, `heap` (payload budgets), `orphan`, `index` | Proposes only. Every mutation request goes to core as a proposal; never opens the vault; state = checkpoints + app.db.
 | **UI** (Tauri v2 + React, `ui/`) | The cockpit: one surface for work, ties shell around all subsystems | `lib/bridge`+`tauri` (IPC), `lib/store` (state/defaults), `lib/guard`, `lib/acp`, `lib/mcp`, `lib/oauth`, `lib/office`, `lib/spreadsheet`, `lib/scheduler`, `lib/spend`, `lib/audit`, `lib/trajectory`; shell: `vault-gate`, `command-palette`, `title-bar`, `left-sidebar`, `right-rail`, `status-bar`, `notifications`, `cockpit-slideover`; views: chat, browse, code, office (docx/xlsx/pptx/pdf + ribbon), plan/progress, trajectory, audit, storage, shell (terminal), diff | Presentation + gestures only; a compromise here cannot mint tickets, read keys, or change the ledger.
 
 **Cross-cutting contracts (referenced by every module):** `Execution` (one ticket → one executor → one event), `AuditEvent` (append-only), and the IPC frame (16MiB cap + ref: handles). Everything else on the wire is proposal/evidence traffic.
@@ -637,7 +638,7 @@ flowchart LR
     BUDGET -->|"ok"| CALL["provider call"]
 ```
 
-### 4.2.4 Browser loop (E1–E14)
+### 4.2.4 Browser loop (E1–E17)
 ```mermaid
 flowchart TD
     NAV["navigate"] --> SNAP["a11y snapshot — interactive pruning, stable ref=eN"]
@@ -804,6 +805,10 @@ flowchart LR
 | **P7** (~4wk) | Forge (I1/I2/I4/I5) + **code-intel (I11 LSP / SCIP / repo-map, doc 63 §2.1)** + **Extension ABI (I6)** + guardrails hardening (J2/J3/J6/**J21**) + retest suite | agent-writes-a-skill-survives-restart; **plugin manifest schema rejects bad bundles; capability allow-list blocks unlisted exec (Zed test vectors); lazy activation = registered-but-not-loaded until first use**; **LSP hover/references/rename-with-preview round-trip; SCIP symbol query on a fixture repo**; 100% red-team corpus blocked (deny-filter; hard floors are structural, not regex); path-floor fuzz = 0 |
 | **P8** (~3wk) | Product polish — **verified-completion eval subsystem (EV1, doc 63 §2.3)**, widget cards (H17), workspace UI, tray, telemetry, packaging, idle-RSS perf, **tiered search cascade (G8)** | Windows beta installs; **eval: 30-task adversarial suite — verifier rejects a plausible-but-unsupported completion (the anti-"sounds finished" regression)**; **measure & publish real idle/warm RSS with the coordinator running** (<30MB idle / <80MB warm are targets to *verify*, not promises — the Bun-compiled sidecar alone is ~93MB, J16); telemetry off-by-default; **G8: cached query <10ms, 50-page parallel fetch completes** |
 | **P9** | **E9 desktop computer-use (required ChatGPT+Claude parity)** + WASM sandbox (I3), connector sync→RAG, HTML→video, remote handoff (H18), local OpenAI server (A8), AutomationBench, CLI, **image generation (A10)**, **clipboard (H26)**, **voice TTS (H28)** | — |
+| **Stage 0** (landed 2026-08-20) | Ticketed tool executor — S0.1–S0.7 (guard surface split, executor seams, idempotency, Stage-0 adapter contract) | every real mutation mints/consumes a single-use authorization ticket; E2E Stage-0 suite green; the marketing gate for the "trusted action loop" claim |
+| **P10** (~4wk, parallel) | End-to-end testing & QA across P0–P9 (doc 26 red-team for P10.2) | full workspace test gates green (Rust suite + coordinator + TS); red-team suite blocked |
+| **P11** (~3wk, parallel) | UI/UX design & optimization (ARCH/12 + UI-DESIGN-PROMPT) | UI audit pass vs ARCH/12; tsc clean |
+| **P12** (~4wk, parallel) | Market research & go-to-market (live research) | GTM doc produced; every marketing claim gated on its §8/§10 Gate evidence |
 
 
 
