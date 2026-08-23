@@ -226,8 +226,10 @@ pub struct Vault {
 impl Vault {
     /// Open (or create) an encrypted database at `path`.
     ///
-    /// `key` is the raw encryption key. **P0.1 placeholder**: production
-    /// key management (KDF from passphrase/keyfile) is designed in P1.1.
+    /// `key` is the raw encryption key. Production key management lives in
+    /// `everyaios-core::vault_key` (H4/R7: env → keyfile → passphrase+Argon2id,
+    /// `NeedsSetup` unless `EVERYAIOS_ALLOW_GENERATED_KEY` — never a silent
+    /// generated key); this crate only stores/uses the derived SQLCipher key.
     pub fn open(path: &Path, key: &str) -> Result<Self, VaultError> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(VaultError::Io)?;
