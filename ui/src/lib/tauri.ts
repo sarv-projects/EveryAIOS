@@ -12,6 +12,10 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+export { listen };
+
+export type UnlistenFn = () => void;
+
 /** True when running inside the Tauri webview (v2 sets this global). */
 export function inTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

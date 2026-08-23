@@ -25,7 +25,7 @@ pub struct WindowInfo {
 }
 
 /// How a window capture was produced (honesty: never claim a method we didn't use).
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum SeeMethod {
     /// Windows.Graphics.Capture per-HWND — captures occluded windows.
     /// WGC is a WinRT interop seam on this build (see `capabilities()`).
@@ -39,6 +39,7 @@ pub enum SeeMethod {
     /// `screencapture -l <windowid>` (macOS).
     MacScreenCapture,
     /// No capture backend available — honest failure.
+    #[default]
     Unsupported,
 }
 
@@ -82,6 +83,25 @@ impl Region {
             && py >= self.y
             && px < self.x + self.width as i32
             && py < self.y + self.height as i32
+    }
+
+    /// True if this region covers the entire given size (origin 0,0).
+    pub fn is_full(&self, w: u32, h: u32) -> bool {
+        self.x == 0 && self.y == 0 && self.width == w && self.height == h
+    }
+
+    /// Clamp this region to a window of the given size (never overflows).
+    pub fn clamp_to(&self, w: u32, h: u32) -> Region {
+        let x0 = self.x.max(0);
+        let y0 = self.y.max(0);
+        let x1 = (x0 + self.width as i32).min(w as i32);
+        let y1 = (y0 + self.height as i32).min(h as i32);
+        Region {
+            x: x0,
+            y: y0,
+            width: (x1 - x0).max(0) as u32,
+            height: (y1 - y0).max(0) as u32,
+        }
     }
 
     /// Clamp an inner region to this region (never overflows).

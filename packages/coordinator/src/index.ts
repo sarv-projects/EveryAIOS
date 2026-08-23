@@ -19,6 +19,7 @@
  */
 
 import { FrameDecoder, encodeJson, notify } from "./frame";
+import { dispatchAguiLine } from "./agui";
 import { startHeapMonitor } from "./heap";
 import { startOrphanWatch } from "./orphan";
 import {
@@ -226,6 +227,19 @@ export function handleRequest(req: Request): Response | null {
       };
       void runToolRetry(retry, emitChatEvent, sendRequest);
       response = ok(id, { accepted: true });
+      break;
+    }
+
+    case "agui/event": {
+      // P11.5.11 — UI → coordinator AG-UI events (e.g. `interrupt_resolved`
+      // answering an outstanding AG-UI interrupt). Dispatch to registered
+      // handlers; unhandled lines are tolerated (no error to the UI).
+      const p = (req.params ?? {}) as { line?: string; envelope?: unknown };
+      const line = p.line ?? (p.envelope !== undefined ? JSON.stringify(p.envelope) : "");
+      if (line) {
+        dispatchAguiLine(line);
+      }
+      response = null; // notification semantics: nothing to reply
       break;
     }
 

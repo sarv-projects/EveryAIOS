@@ -195,10 +195,11 @@ impl DesktopEngine {
                 window_id: window.id,
             };
             let verdict = self.verifier.verify(window.id, locator, &obs);
+            let halted = matches!(&verdict, VerifyOutcome::Halt { .. });
             outcome.verification = Some(verdict);
-            if matches!(verdict, VerifyOutcome::Halt { .. }) {
+            if halted {
                 outcome.ok = false;
-                outcome.error = Some(format!("verify halt: {verdict:?}"));
+                outcome.error = Some(format!("verify halt: {:?}", outcome.verification));
             }
         }
         Ok(outcome)

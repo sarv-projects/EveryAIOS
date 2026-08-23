@@ -1340,6 +1340,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "everyaios-codeintel"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "everyaios-core"
 version = "0.1.0"
 dependencies = [
@@ -1379,6 +1391,8 @@ dependencies = [
  "everyaios-acp",
  "everyaios-audit",
  "everyaios-browser",
+ "everyaios-cdp",
+ "everyaios-codeintel",
  "everyaios-core",
  "everyaios-guard",
  "everyaios-ipc",

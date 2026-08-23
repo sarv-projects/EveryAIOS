@@ -1,38 +1,40 @@
 //! X11 backend (Linux) — live-tested under Xvfb in the E2E suite.
 //!
-//! - **See:** `GetImage` on the window drawable → PNG.
+//! - **See:** `GetImage` (Z_PIXMAP) on the window drawable → PNG.
 //! - **Read:** EWMH `_NET_CLIENT_LIST` + `_NET_WM_NAME` + geometry; no UIA
 //!   equivalent on bare X11 (AT-SPI is a follow-on) — `read_tree` returns
 //!   `None` and the vision fallback (OCR) takes over.
-//! - **Act:** XTEST fake input (button / motion / key), ASCII keysyms,
-//!   `set_input_focus` + raise for activation, PATH resolve for launch.
+//! - **Act:** XTEST fake input (button / motion / key), keysym lookup via
+//!   `GetKeyboardMapping`, `set_input_focus` + raise for activation, PATH
+//!   resolve for launch.
 //! - **DPI:** `Xft.dpi` root property (default 96 → scale 1.0).
 
 use std::process::Command;
 
-use x11rb::connection::Connection;
+use x11rb::connection::{Connection, RequestConnection};
+use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::protocol::xproto::{
-    AtomEnum, ChangeWindowAttributesAux, ConfigureWindowAux, EventMask, GetImageType, ImageFormat,
-    InputFocus, KeyPressEvent, StackMode, Window, CURRENT_TIME,
+    AtomEnum, ConfigureWindowAux, ImageFormat, InputFocus, StackMode, Window, BUTTON_PRESS_EVENT,
+    BUTTON_RELEASE_EVENT, KEY_PRESS_EVENT, KEY_RELEASE_EVENT, MOTION_NOTIFY_EVENT,
 };
 use x11rb::protocol::xtest;
 use x11rb::rust_connection::RustConnection;
 
-use crate::types::{ActKind, ReadResult, ReadNode, Region, SeeMethod, SeeResult, WindowInfo};
+use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
 use crate::DesktopError;
 
 pub struct X11Backend {
     conn: RustConnection,
-    screen: usize,
     root: Window,
 }
 
-/// Translate a byte-string property into a String.
 fn prop_string(conn: &RustConnection, window: Window, atom: u32) -> Option<String> {
     let reply = conn
         .get_property(false, window, atom, AtomEnum::ANY, 0, 4096)
+        .ok()?
+        .reply()
         .ok()?;
-    let bytes = reply.value8()?;
+    let bytes: Vec<u8> = reply.value8()?.collect();
     let text = String::from_utf8_lossy(&bytes).to_string();
     if text.is_empty() {
         None
@@ -43,15 +45,11 @@ fn prop_string(conn: &RustConnection, window: Window, atom: u32) -> Option<Strin
 
 impl X11Backend {
     pub fn connect() -> Result<Self, DesktopError> {
-        let (conn, screen) = x11rb::connect(None).map_err(|e| {
+        let (conn, screen_num) = x11rb::connect(None).map_err(|e| {
             DesktopError::Platform(format!("X11 connect failed (DISPLAY set?): {e}"))
         })?;
-        let root = conn.setup().roots[screen].root;
-        Ok(Self {
-            conn,
-            screen,
-            root,
-        })
+        let root = conn.setup().roots[screen_num].root;
+        Ok(Self { conn, root })
     }
 
     pub fn is_available() -> bool {
@@ -61,22 +59,23 @@ impl X11Backend {
     fn atom(&self, name: &[u8]) -> Option<u32> {
         self.conn
             .intern_atom(false, name)
+            .ok()?
+            .reply()
             .ok()
             .map(|r| r.atom)
     }
 
     fn window_app(&self, window: Window) -> String {
-        // Best effort: _NET_WM_PID → /proc/<pid>/comm
         if let Some(pid_atom) = self.atom(b"_NET_WM_PID") {
-            if let Ok(reply) = self
+            if let Some(reply) = self
                 .conn
                 .get_property(false, window, pid_atom, AtomEnum::ANY, 0, 1)
+                .ok()
+                .and_then(|c| c.reply().ok())
             {
-                if let Some(v) = reply.value32() {
-                    if let Some(pid) = v.first().copied() {
-                        if let Ok(comm) = std::fs::read_to_string(format!("/proc/{pid}/comm")) {
-                            return comm.trim().to_string();
-                        }
+                if let Some(pid) = reply.value32().and_then(|mut v| v.next()) {
+                    if let Ok(comm) = std::fs::read_to_string(format!("/proc/{pid}/comm")) {
+                        return comm.trim().to_string();
                     }
                 }
             }
@@ -85,29 +84,28 @@ impl X11Backend {
     }
 
     fn window_geometry(&self, window: Window) -> Option<(i32, i32, u32, u32)> {
-        let geo = self.conn.get_geometry(window).ok()?;
-        // Translate to root coordinates.
+        let geo = self.conn.get_geometry(window).ok()?.reply().ok()?;
         let tr = self
             .conn
             .translate_coordinates(window, self.root, 0, 0)
+            .ok()?
+            .reply()
             .ok()?;
         Some((
-            tr.dst_x,
-            tr.dst_y,
+            i32::from(tr.dst_x),
+            i32::from(tr.dst_y),
             u32::from(geo.width),
             u32::from(geo.height),
         ))
     }
 
     fn window_title(&self, window: Window) -> String {
-        let net_wm_name = self.atom(b"_NET_WM_NAME");
-        let wm_name = self.atom(b"WM_NAME");
-        if let Some(a) = net_wm_name {
+        if let Some(a) = self.atom(b"_NET_WM_NAME") {
             if let Some(t) = prop_string(&self.conn, window, a) {
                 return t;
             }
         }
-        if let Some(a) = wm_name {
+        if let Some(a) = self.atom(b"WM_NAME") {
             if let Some(t) = prop_string(&self.conn, window, a) {
                 return t;
             }
@@ -115,39 +113,89 @@ impl X11Backend {
         String::new()
     }
 
-    /// Enumerate top-level windows via EWMH.
     pub fn list_windows(&self) -> Result<Vec<WindowInfo>, DesktopError> {
-        let client_list = self
-            .atom(b"_NET_CLIENT_LIST")
-            .ok_or_else(|| DesktopError::Platform("no _NET_CLIENT_LIST (is a WM running?)".into()))?;
+        // Prefer the EWMH client list (set by a WM); fall back to a raw
+        // XQueryTree walk of mapped top-level windows when no WM is running
+        // (headless Xvfb, minimal sessions).
+        if let Some(ewmh) = self.list_windows_ewmh() {
+            return Ok(ewmh);
+        }
+        self.list_windows_query_tree()
+    }
+
+    fn list_windows_ewmh(&self) -> Option<Vec<WindowInfo>> {
+        let client_list = self.atom(b"_NET_CLIENT_LIST")?;
         let reply = self
             .conn
             .get_property(false, self.root, client_list, AtomEnum::ANY, 0, 4096)
-            .map_err(|e| DesktopError::Platform(format!("_NET_CLIENT_LIST read: {e}")))?;
+            .ok()?
+            .reply()
+            .ok()?;
         let mut out = Vec::new();
-        if let Some(windows) = reply.value32() {
-            for w in windows {
-                let window = Window::from(*w);
-                let title = self.window_title(window);
-                let app = self.window_app(window);
-                if title.is_empty() && app == "unknown" {
-                    continue;
+        for w in reply.value32()? {
+            let window = Window::from(w);
+            if let Some(info) = self.window_info(window) {
+                out.push(info);
+            }
+        }
+        Some(out)
+    }
+
+    fn list_windows_query_tree(&self) -> Result<Vec<WindowInfo>, DesktopError> {
+        let mut out = Vec::new();
+        let mut stack = vec![self.root];
+        // Only direct children of the root are top-level candidates; children
+        // of other windows are reparented frames we must not double-count.
+        let mut seen = std::collections::HashSet::new();
+        while let Some(window) = stack.pop() {
+            if !seen.insert(window) {
+                continue;
+            }
+            let Some(reply) = self.conn.query_tree(window).ok().and_then(|c| c.reply().ok()) else {
+                continue;
+            };
+            let children: Vec<Window> = reply.children;
+            if window == self.root {
+                // Root children: mapped + viewable → top-level window.
+                for child in children {
+                    let mapped = self
+                        .conn
+                        .get_window_attributes(child)
+                        .ok()
+                        .and_then(|c| c.reply().ok())
+                        .map(|a| a.map_state == x11rb::protocol::xproto::MapState::VIEWABLE)
+                        .unwrap_or(false);
+                    if mapped {
+                        if let Some(info) = self.window_info(child) {
+                            out.push(info);
+                        }
+                    }
                 }
-                if let Some((x, y, width, height)) = self.window_geometry(window) {
-                    out.push(WindowInfo {
-                        id: u64::from(window),
-                        title,
-                        app,
-                        x,
-                        y,
-                        width,
-                        height,
-                        has_a11y_tree: false,
-                    });
-                }
+            } else {
+                // Reparented frame — descend to find the client window.
+                stack.extend(children);
             }
         }
         Ok(out)
+    }
+
+    fn window_info(&self, window: Window) -> Option<WindowInfo> {
+        let title = self.window_title(window);
+        let app = self.window_app(window);
+        if title.is_empty() && app == "unknown" {
+            return None;
+        }
+        let (x, y, width, height) = self.window_geometry(window)?;
+        Some(WindowInfo {
+            id: u64::from(window),
+            title,
+            app,
+            x,
+            y,
+            width,
+            height,
+            has_a11y_tree: false,
+        })
     }
 
     pub fn read(&self, window: &WindowInfo) -> Result<ReadResult, DesktopError> {
@@ -162,15 +210,15 @@ impl X11Backend {
 
     fn dpi_scale(&self) -> f64 {
         if let Some(a) = self.atom(b"Xft.dpi") {
-            if let Ok(reply) = self
+            if let Some(reply) = self
                 .conn
                 .get_property(false, self.root, a, AtomEnum::ANY, 0, 1)
+                .ok()
+                .and_then(|c| c.reply().ok())
             {
-                if let Some(v) = reply.value32() {
-                    if let Some(dpi) = v.first().copied() {
-                        if dpi > 0 {
-                            return f64::from(dpi) / 96.0;
-                        }
+                if let Some(dpi) = reply.value32().and_then(|mut v| v.next()) {
+                    if dpi > 0 {
+                        return f64::from(dpi) / 96.0;
                     }
                 }
             }
@@ -178,49 +226,52 @@ impl X11Backend {
         1.0
     }
 
-    /// Capture a window (or sub-region) as PNG via XGetImage.
     pub fn see(&self, window: &WindowInfo, region: Region) -> Result<SeeResult, DesktopError> {
         let win = Window::from(window.id as u32);
-        let (gx, gy, gw, gh) = self.window_geometry(win).ok_or_else(|| {
-            DesktopError::Platform(format!("window {} gone", window.id))
-        })?;
-        // Clamp the requested region into the window.
-        let full = Region {
-            x: gx,
-            y: gy,
+        let (gx, gy, gw, gh) = self
+            .window_geometry(win)
+            .ok_or_else(|| DesktopError::Platform(format!("window {} gone", window.id)))?;
+        // `region` is window-relative; `get_image` offsets are window-relative
+        // too (NOT screen coords — screen-relative would mis-capture windows
+        // that are not at the origin). Clamp to the window's own bounds.
+        let bounds = Region {
+            x: 0,
+            y: 0,
             width: gw,
             height: gh,
         };
-        let abs = Region {
-            x: gx + region.x,
-            y: gy + region.y,
-            width: region.width,
-            height: region.height,
-        };
-        let r = full
-            .intersect(&abs)
+        let r = bounds
+            .intersect(&region)
             .ok_or_else(|| DesktopError::InvalidRegion("requested region outside window".into()))?;
+        let x = r.x.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+        let y = r.y.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+        let width = r.width.min(u16::MAX as u32) as u16;
+        let height = r.height.min(u16::MAX as u32) as u16;
+        let _ = (gx, gy); // screen origin is caller knowledge, not used here
         let img = self
             .conn
-            .get_image(ImageFormat::ZPixmap, win, r.x, r.y, r.width, r.height, !0)
-            .map_err(|e| DesktopError::Platform(format!("GetImage: {e}")))?;
-        let depth = img.depth;
-        let bpp = if depth == 24 { 4 } else { 4 }; // ZPixmap 24/32 → 4 bytes/px
-        let bytes_per_row = (r.width as usize) * bpp;
+            .get_image(ImageFormat::Z_PIXMAP, win, x, y, width, height, !0)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .ok_or_else(|| DesktopError::Platform("GetImage failed".into()))?;
+        let bpp = 4; // ZPixmap 24/32-depth windows → 4 bytes/pixel
+        let bytes_per_row = (width as usize) * bpp;
         let data = &img.data;
-        // Build an RGBA buffer: X stores BGR(A) little-endian.
-        let mut rgba = Vec::with_capacity((r.width as usize) * (r.height as usize) * 4);
-        for row in 0..r.height as usize {
+        let mut rgba = Vec::with_capacity((width as usize) * (height as usize) * 4);
+        for row in 0..height as usize {
             let start = row * bytes_per_row;
-            for col in 0..r.width as usize {
+            for col in 0..width as usize {
                 let i = start + col * bpp;
+                if i + 2 >= data.len() {
+                    continue;
+                }
                 let b = data[i];
                 let g = data[i + 1];
                 let rp = data[i + 2];
                 rgba.extend_from_slice(&[rp, g, b, 255]);
             }
         }
-        let buf = image::RgbaImage::from_raw(r.width, r.height, rgba)
+        let buf = image::RgbaImage::from_raw(u32::from(width), u32::from(height), rgba)
             .ok_or_else(|| DesktopError::Platform("image buffer malformed".into()))?;
         let mut png: Vec<u8> = Vec::new();
         let mut cursor = std::io::Cursor::new(&mut png);
@@ -230,8 +281,8 @@ impl X11Backend {
         Ok(SeeResult {
             window_id: window.id,
             png,
-            width: r.width,
-            height: r.height,
+            width: u32::from(width),
+            height: u32::from(height),
             method: SeeMethod::X11GetImage,
             region: r,
             scale: self.dpi_scale(),
@@ -248,39 +299,64 @@ impl X11Backend {
             .is_some()
     }
 
-    fn fake_button(&self, detail: u8, press: bool, x: i16, y: i16) -> Result<(), DesktopError> {
-        let event = if press { 4 } else { 5 }; // ButtonPress / ButtonRelease
-        xtest::fake_input(
-            &self.conn,
-            event,
-            detail,
-            CURRENT_TIME,
-            self.root,
-            x,
-            y,
-        )
-        .map_err(|e| DesktopError::Platform(format!("xtest button: {e}")))
+    fn fake_button(&self, button: u8, press: bool, x: i16, y: i16) -> Result<(), DesktopError> {
+        let event = if press {
+            BUTTON_PRESS_EVENT
+        } else {
+            BUTTON_RELEASE_EVENT
+        };
+        xtest::fake_input(&self.conn, event, button, 0, self.root, x, y, 0)
+            .map_err(|e| DesktopError::Platform(format!("xtest button: {e}")))?;
+        self.conn.flush().map_err(|e| DesktopError::Platform(format!("flush: {e}")))
     }
 
     fn fake_motion(&self, x: i16, y: i16) -> Result<(), DesktopError> {
-        xtest::fake_input(&self.conn, 2 /* MotionNotify */, 0, CURRENT_TIME, self.root, x, y)
-            .map_err(|e| DesktopError::Platform(format!("xtest motion: {e}")))
+        xtest::fake_input(&self.conn, MOTION_NOTIFY_EVENT, 0, 0, self.root, x, y, 0)
+            .map_err(|e| DesktopError::Platform(format!("xtest motion: {e}")))?;
+        self.conn.flush().map_err(|e| DesktopError::Platform(format!("flush: {e}")))
     }
 
-    fn fake_key(&self, keysym: u32, press: bool) -> Result<(), DesktopError> {
-        let keycode = x11rb::keysym::keysym_to_keycode(&self.conn, keysym)
-            .map_err(|e| DesktopError::Platform(format!("keysym→keycode: {e}")))?;
-        let event = if press { 2 } else { 3 }; // KeyPress / KeyRelease
-        xtest::fake_input(
-            &self.conn,
-            event,
-            u8::from(keycode),
-            CURRENT_TIME,
-            self.root,
-            0,
-            0,
-        )
-        .map_err(|e| DesktopError::Platform(format!("xtest key: {e}")))
+    /// Resolve a keysym → (keycode, needs_shift) via GetKeyboardMapping.
+    fn keysym_to_keycode(&self, keysym: u32) -> Option<(u8, bool)> {
+        let setup = self.conn.setup();
+        let min = setup.min_keycode;
+        let count = setup.max_keycode - min;
+        let reply = self.conn.get_keyboard_mapping(min, count).ok()?.reply().ok()?;
+        let per = reply.keysyms_per_keycode as usize;
+        let min = min as usize;
+        for (i, chunk) in reply.keysyms.chunks(per).enumerate() {
+            let keycode = (min + i) as u8;
+            for (idx, ks) in chunk.iter().enumerate() {
+                if *ks == keysym {
+                    return Some((keycode, idx >= 1));
+                }
+            }
+        }
+        None
+    }
+
+    fn fake_key(&self, keysym: u32) -> Result<(), DesktopError> {
+        let (keycode, needs_shift) = self
+            .keysym_to_keycode(keysym)
+            .ok_or_else(|| DesktopError::Platform(format!("no keycode for keysym 0x{keysym:x}")))?;
+        if needs_shift {
+            // Shift_L = 0xffe1
+            if let Some((shift_code, _)) = self.keysym_to_keycode(0xffe1) {
+                xtest::fake_input(&self.conn, KEY_PRESS_EVENT, shift_code, 0, self.root, 0, 0, 0)
+                    .map_err(|e| DesktopError::Platform(format!("xtest shift: {e}")))?;
+            }
+        }
+        xtest::fake_input(&self.conn, KEY_PRESS_EVENT, keycode, 0, self.root, 0, 0, 0)
+            .map_err(|e| DesktopError::Platform(format!("xtest key: {e}")))?;
+        xtest::fake_input(&self.conn, KEY_RELEASE_EVENT, keycode, 0, self.root, 0, 0, 0)
+            .map_err(|e| DesktopError::Platform(format!("xtest key: {e}")))?;
+        if needs_shift {
+            if let Some((shift_code, _)) = self.keysym_to_keycode(0xffe1) {
+                xtest::fake_input(&self.conn, KEY_RELEASE_EVENT, shift_code, 0, self.root, 0, 0, 0)
+                    .map_err(|e| DesktopError::Platform(format!("xtest shift: {e}")))?;
+            }
+        }
+        self.conn.flush().map_err(|e| DesktopError::Platform(format!("flush: {e}")))
     }
 
     fn named_key_to_keysym(key: &str) -> Option<u32> {
@@ -312,9 +388,8 @@ impl X11Backend {
             "f11" => Some(0xffc8),
             "f12" => Some(0xffc9),
             _ => {
-                // Single printable ASCII char.
                 let b = key.as_bytes();
-                if b.len() == 1 && b[0].is_ascii_graphic() || b.len() == 1 && b[0] == b' ' {
+                if b.len() == 1 {
                     Some(u32::from(b[0]))
                 } else {
                     None
@@ -324,19 +399,8 @@ impl X11Backend {
     }
 
     fn type_char(&self, c: char) -> Result<(), DesktopError> {
-        let keysym = if c.is_ascii() {
-            u32::from(c as u8)
-        } else {
-            // Non-ASCII: try the keysym unicode mapping if available.
-            x11rb::keysym::unicode_to_keysym(c).unwrap_or(0)
-        };
-        if keysym == 0 {
-            return Err(DesktopError::Platform(format!(
-                "no keysym for character {c:?}"
-            )));
-        }
-        self.fake_key(keysym, true)?;
-        self.fake_key(keysym, false)
+        let keysym = c as u32; // ASCII/Latin-1 keysyms equal the codepoint
+        self.fake_key(keysym)
     }
 
     pub fn act(&self, window: &WindowInfo, act: &ActKind) -> Result<(), DesktopError> {
@@ -361,8 +425,9 @@ impl X11Backend {
                 let (up, down) = (4u8, 5u8);
                 let n = delta.abs().min(50);
                 for _ in 0..n {
-                    self.fake_button(if *delta > 0 { up } else { down }, true, sx as i16, sy as i16)?;
-                    self.fake_button(if *delta > 0 { up } else { down }, false, sx as i16, sy as i16)?;
+                    let btn = if *delta > 0 { up } else { down };
+                    self.fake_button(btn, true, sx as i16, sy as i16)?;
+                    self.fake_button(btn, false, sx as i16, sy as i16)?;
                 }
                 Ok(())
             }
@@ -371,7 +436,6 @@ impl X11Backend {
                 let (x1, y1) = (wx + to.0, wy + to.1);
                 self.fake_motion(x0 as i16, y0 as i16)?;
                 self.fake_button(1, true, x0 as i16, y0 as i16)?;
-                // A few intermediate steps so the target sees motion events.
                 for i in 1..=8 {
                     let t = i as f64 / 8.0;
                     let mx = (x0 as f64 + (x1 - x0) as f64 * t) as i16;
@@ -383,15 +447,12 @@ impl X11Backend {
             ActKind::Press { key } => {
                 let ks = Self::named_key_to_keysym(key)
                     .ok_or_else(|| DesktopError::Platform(format!("unknown key {key}")))?;
-                self.fake_key(ks, true)?;
-                self.fake_key(ks, false)
+                self.fake_key(ks)
             }
             ActKind::Type { text } => {
                 for c in text.chars() {
                     if c == '\n' {
-                        let ks = Self::named_key_to_keysym("enter").unwrap();
-                        self.fake_key(ks, true)?;
-                        self.fake_key(ks, false)?;
+                        self.fake_key(0xff0d)?;
                     } else {
                         self.type_char(c)?;
                     }
@@ -400,30 +461,21 @@ impl X11Backend {
             }
             ActKind::ActivateWindow { window_id } => {
                 let w = Window::from(*window_id as u32);
-                let _ = self.conn.configure_window(
-                    w,
-                    &ConfigureWindowAux::new().stack_mode(StackMode::Above),
-                );
+                let _ = self
+                    .conn
+                    .configure_window(w, &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE));
                 self.conn
-                    .set_input_focus(
-                        InputFocus::Window(w),
-                        x11rb::protocol::xproto::RevertTo::Parent,
-                        CURRENT_TIME,
-                    )
-                    .map_err(|e| DesktopError::Platform(format!("set_input_focus: {e}")))
+                    .set_input_focus(InputFocus::PARENT, w, 0u32)
+                    .map_err(|e| DesktopError::Platform(format!("set_input_focus: {e}")))?;
+                self.conn.flush().map_err(|e| DesktopError::Platform(format!("flush: {e}")))
             }
-            ActKind::ClickByName { name } => {
-                // No UIA on X11 — the caller should resolve the name via OCR
-                // first; reaching here with a raw name is a policy bug.
-                Err(DesktopError::Platform(format!(
-                    "ClickByName has no X11 surface (OCR must resolve \"{name}\" first)"
-                )))
-            }
+            ActKind::ClickByName { name } => Err(DesktopError::Platform(format!(
+                "ClickByName has no X11 surface (OCR must resolve \"{name}\" first)"
+            ))),
             ActKind::SetValue { name, .. } => Err(DesktopError::Platform(format!(
                 "SetValue has no X11 surface (name \"{name}\")"
             ))),
             ActKind::LaunchApp { app } => {
-                // Resolve on PATH and spawn detached.
                 let resolved = Command::new("sh")
                     .arg("-c")
                     .arg(format!("command -v {app}"))
@@ -433,30 +485,13 @@ impl X11Backend {
                 if path.is_empty() {
                     return Err(DesktopError::Platform(format!("{app} not on PATH")));
                 }
-                let mut child = Command::new("sh")
+                Command::new("sh")
                     .arg("-c")
                     .arg(format!("{path} >/dev/null 2>&1 &"))
                     .spawn()
                     .map_err(|e| DesktopError::Platform(format!("launch {app}: {e}")))?;
-                let _ = child.wait();
                 Ok(())
             }
         }
     }
-}
-
-/// Keep the compiler honest: KeyPressEvent import is unused in this module
-/// (kept for the future `--sync` keyboard path); reference it to avoid churn.
-#[allow(dead_code)]
-fn _unused(_e: &KeyPressEvent) {}
-
-/// Suppress unused warnings for event-mask aux (used by future pointer grab).
-#[allow(dead_code)]
-fn _aux() -> ChangeWindowAttributesAux {
-    ChangeWindowAttributesAux::new().event_mask(EventMask::NO_EVENT)
-}
-
-#[allow(dead_code)]
-fn _image_type() -> GetImageType {
-    GetImageType::ZPixmap
 }

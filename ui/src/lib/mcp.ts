@@ -28,6 +28,39 @@ export async function mcpCatalog(): Promise<McpCatalog> {
   return invoke<McpCatalog>("mcp_catalog");
 }
 
+/** P11.5.8 — one known/attached MCP server row. */
+export interface McpServerRow {
+  name: string;
+  status: "connected" | "disconnected";
+  transport: "stdio" | "http" | "native";
+  tools: number;
+  desc: string;
+}
+
+/** P11.5.8 — the installed/user MCP servers list (replaces hardcoded rows). */
+export async function mcpServers(): Promise<McpServerRow[]> {
+  if (!inTauri()) return demoServers();
+  return invoke<McpServerRow[]>("mcp_servers");
+}
+
+/** P11.5.8 — attach a user-supplied stdio MCP server + reconcile its tools. */
+export async function mcpAttach(
+  name: string,
+  command: string,
+  args: string[],
+): Promise<{ name: string; tools: string[]; desc: string }> {
+  if (!inTauri()) return { name, tools: ["mcp_tool_1"], desc: "demo attach" };
+  return invoke("mcp_attach", { name, command, args });
+}
+
+function demoServers(): McpServerRow[] {
+  return [
+    { name: "EveryAIOS native (built-in)", status: "connected", transport: "native", tools: 42, desc: "37 browser + 5 storage tools" },
+    { name: "GitHub MCP", status: "connected", transport: "stdio", tools: 18, desc: "Repo, issues, PRs" },
+    { name: "Filesystem MCP", status: "connected", transport: "stdio", tools: 7, desc: "Read/write local files" },
+  ];
+}
+
 function demoCatalog(): McpCatalog {
   const samples: ToolInfo[] = [
     { name: "click", kind: "edit", read_only: false, open_world: false, profile: "core", description: "Click an element by ref", args: 1 },

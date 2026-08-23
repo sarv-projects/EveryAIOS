@@ -78,6 +78,7 @@ const STATUS_META: Record<
   completed: { label: 'Done', cls: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' },
   failed: { label: 'Failed', cls: 'border-rose-500/40 bg-rose-500/10 text-rose-300' },
   scheduled: { label: 'Scheduled', cls: 'border-sky-500/40 bg-sky-500/10 text-sky-300', icon: Clock },
+  reconnecting: { label: 'Reconnecting', cls: 'border-amber-500/40 bg-amber-500/10 text-amber-300', icon: RotateCw },
   idle: { label: 'Idle', cls: 'border-border bg-muted text-muted-foreground' },
 }
 
@@ -214,6 +215,19 @@ export default function ChatPanel() {
           )}
         </div>
         {activeSession && <StatusBadge status={activeSession.status} />}
+        {/* P11.5.12 — reconnect chip: shown while the stream is interrupted
+            (dropped IPC), dismissible; auto-resume replays from the last
+            token (lib/resumable StreamRegistry cursor). */}
+        {store.reconnect.show && (
+          <button
+            onClick={() => store.setReconnect({ show: false, lastToken: '', tokens: 0 })}
+            className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] text-amber-300 transition-colors hover:bg-amber-500/20"
+            title="Dismiss (the stream auto-resumes from the last token when the link returns)"
+          >
+            <RotateCw className="h-3 w-3 animate-spin" />
+            <span>🔄 Reconnecting… ({store.reconnect.tokens} tokens)</span>
+          </button>
+        )}
         {/* Study-mode scope chip — chat answers are scoped to this document */}
         {scopedView && (
           <div className="flex items-center gap-1 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 font-mono text-[10px] text-orange-300">

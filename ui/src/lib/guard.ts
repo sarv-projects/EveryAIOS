@@ -76,6 +76,59 @@ export async function guardReceipts(): Promise<GuardReceipt[]> {
   return invoke<GuardReceipt[]>("guard_receipts");
 }
 
+/** P11.5.7 — one recent-actions row (from the J5 audit store). */
+export interface RecentAction {
+  action: string
+  target: string
+  scope: string
+  time: string
+  status: 'ok' | 'warn' | 'err' | 'pending'
+}
+
+/** P11.5.7 — the recent-actions log (replaces the hardcoded ACTIONS array). */
+export async function guardActivity(limit?: number): Promise<RecentAction[]> {
+  if (!inTauri()) return demoActivity()
+  return invoke<RecentAction[]>('guard_activity', { limit })
+}
+
+/** P11.5.7 — one permissions-matrix cell (capability × scope). */
+export interface MatrixCell {
+  capability: string
+  scope: string
+  decision: 'allow' | 'ask' | 'block' | 'off'
+}
+
+/** P11.5.7 — the live 5×5 matrix from permissions.toml. */
+export async function guardPermissionsMatrix(): Promise<MatrixCell[]> {
+  if (!inTauri()) return demoMatrix()
+  return invoke<MatrixCell[]>('guard_permissions_matrix')
+}
+
+function demoActivity(): RecentAction[] {
+  return [
+    { action: 'Read', target: 'src/utils.ts', scope: 'workspace read', time: '09:15:02', status: 'ok' },
+    { action: 'Write', target: 'src/api/handler.ts', scope: 'workspace write', time: '09:15:04', status: 'ok' },
+    { action: 'Browser', target: 'gmail.com (read-only)', scope: 'browser (owned tabs)', time: '09:14:50', status: 'ok' },
+    { action: 'Execute', target: 'npm run deploy', scope: 'shell (restricted)', time: '09:15:08', status: 'pending' },
+    { action: 'Blocked', target: 'rm -rf /', scope: 'Guard-1 regex', time: '09:15:09', status: 'err' },
+  ]
+}
+
+function demoMatrix(): MatrixCell[] {
+  const grid: Record<string, Record<string, MatrixCell['decision']>> = {
+    read: { workspace: 'allow', home: 'ask', shell: 'allow', external: 'ask', browser: 'allow' },
+    write: { workspace: 'allow', home: 'block', shell: 'ask', external: 'ask', browser: 'ask' },
+    execute: { workspace: 'allow', home: 'block', shell: 'allow', external: 'ask', browser: 'block' },
+    network: { workspace: 'ask', home: 'block', shell: 'block', external: 'ask', browser: 'ask' },
+    browser: { workspace: 'allow', home: 'ask', shell: 'allow', external: 'ask', browser: 'allow' },
+  }
+  const caps = ['read', 'write', 'execute', 'network', 'browser']
+  const scopes = ['workspace', 'home', 'shell', 'external', 'browser']
+  const out: MatrixCell[] = []
+  for (const c of caps) for (const s of scopes) out.push({ capability: c, scope: s, decision: grid[c][s] })
+  return out
+}
+
 /** The policy + profile + estop summary. */
 export async function guardPolicy(): Promise<GuardPolicy> {
   if (!inTauri()) {

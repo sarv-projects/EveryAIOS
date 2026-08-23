@@ -10,15 +10,22 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod acp_cmds;
+mod browser_cmds;
 mod cockpit_cmds;
+mod codeintel_cmds;
 mod control;
+mod fs_cmds;
+mod git_cmds;
 mod guard_cmds;
+mod lsp_cmds;
+mod memory_cmds;
 mod local_cmds;
 mod mcp_cmds;
 mod oauth_cmds;
 mod office_cmds;
 mod replay_cmds;
 mod scheduler_cmds;
+mod shell_cmds;
 mod storage_cmds;
 mod sync_cmds;
 mod trajectory_cmds;
@@ -64,6 +71,15 @@ pub struct AppState {
     pub file_undos: Mutex<Vec<control::FileUndo>>,
     /// J16: whether the device is on battery (heavy storage scans defer).
     pub battery: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// P11.5.3: the live CDP browser session for the browse view (None until
+    /// `browser_start`). Dropping it kills the Chrome child.
+    pub browser: Mutex<Option<browser_cmds::LiveBrowser>>,
+    /// P11.5.3: live shell processes keyed by session id (shell view).
+    pub shells: Mutex<std::collections::HashMap<String, shell_cmds::ShellHandle>>,
+    /// P11.5.8: attached user-supplied MCP servers (rows for the Connectors
+    /// panel) + the live child handles (dropping the map kills the child).
+    pub mcp_servers: Mutex<std::collections::HashMap<String, mcp_cmds::McpServerRow>>,
+    pub mcp_live: Mutex<std::collections::HashMap<String, everyaios_mcp::attach::AttachedServer>>,
 }
 
 /// Monotonic stream-id source for `chat_stream` calls.
@@ -71,6 +87,38 @@ static STREAM_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Event name the UI listens to for chat stream updates.
 pub const CHAT_EVENT: &str = "chat-event";
+
+/// P11.5.11 — AG-UI live transport event (raw encoded envelope line in
+/// `{ "line": … }`). Emitted for every `agui/event` notification the
+/// coordinator pushes.
+pub const AGUI_EVENT: &str = "agui-event";
+
+/// P11.5.11 — send one AG-UI event from the UI into the coordinator (e.g.
+/// `interrupt_resolved` answering an outstanding AG-UI interrupt). The line
+/// is forwarded as an `agui/event` notification over the sidecar link.
+#[tauri::command]
+fn agui_send(state: State<'_, AppState>, line: String) -> Result<(), String> {
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected — coordinator link not established".to_string())?;
+    relay
+        .send_agui(&line)
+        .map_err(|e| format!("agui_send failed: {e}"))
+}
+
+/// P11.5.11 — ack that the UI is listening for `agui-event`. The sink is
+/// attached at boot (`connect_chat_relay`); this returns once the relay is
+/// live so the UI knows the AG-UI transport is ready end-to-end.
+#[tauri::command]
+fn agui_listen(state: State<'_, AppState>) -> Result<(), String> {
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    match relay.as_ref() {
+        Some(r) if r.agui().is_attached() => Ok(()),
+        Some(_) => Err("agui sink not attached".to_string()),
+        None => Err("sidecar not connected".to_string()),
+    }
+}
 
 /// Wire a live coordinator link into the chat relay and store it in state.
 /// The relay's consumer loop forwards every `chat/*` notification from the
@@ -98,6 +146,14 @@ fn connect_chat_relay(
             let _ = handle.emit(CHAT_EVENT, ev);
         },
     );
+    // P11.5.11 — AG-UI live transport: `agui/event` notifications from the
+    // coordinator reach the UI as `agui-event` emits (raw encoded line).
+    {
+        let h = app.clone();
+        relay.with_agui(move |line| {
+            let _ = h.emit(AGUI_EVENT, serde_json::json!({ "line": line }));
+        });
+    }
     let policy_path = everyaios_core::default_data_dir().join("permissions.toml");
     relay.with_policy(&policy_path);
     // P1.8 (A5): register keyless local endpoints so a sidecar
@@ -593,6 +649,10 @@ pub fn run() {
             audit_log: Mutex::new(audit_log),
             file_undos: Mutex::new(Vec::new()),
             battery: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            browser: Mutex::new(None),
+            shells: Mutex::new(std::collections::HashMap::new()),
+            mcp_servers: Mutex::new(std::collections::HashMap::new()),
+            mcp_live: Mutex::new(std::collections::HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             version,
@@ -615,6 +675,8 @@ pub fn run() {
             local_cmds::local_ensure,
             local_cmds::local_hardware,
             chat_stream,
+            agui_send,
+            agui_listen,
             chat_cancel,
             chat_tool_retry,
             plan_execute,
@@ -633,6 +695,8 @@ pub fn run() {
             guard_cmds::guard_receipts,
             guard_cmds::guard_policy,
             guard_cmds::guard_estop,
+            guard_cmds::guard_activity,
+            guard_cmds::guard_permissions_matrix,
             cockpit_cmds::cockpit_snapshot,
             cockpit_cmds::cockpit_activity,
             cockpit_cmds::cockpit_tokens,
@@ -648,6 +712,8 @@ pub fn run() {
             xlsx_cmds::xlsx_batch_commit,
             xlsx_cmds::xlsx_pivot,
             mcp_cmds::mcp_catalog,
+            mcp_cmds::mcp_servers,
+            mcp_cmds::mcp_attach,
             office_cmds::docx_open,
             office_cmds::pptx_open,
             office_cmds::pdf_open,
@@ -699,7 +765,40 @@ pub fn run() {
             sync_cmds::sync_fingerprint,
             // P8.8: auto-updater check + install/relaunch.
             updater_cmds::updater_check,
-            updater_cmds::updater_install
+            updater_cmds::updater_install,
+            // P11.5.3: real FS / shell / CDP-browser / memory views.
+            fs_cmds::fs_home,
+            fs_cmds::fs_list_dir,
+            fs_cmds::fs_read_file,
+            fs_cmds::fs_write_file,
+            fs_cmds::fs_undo_list,
+            shell_cmds::shell_spawn,
+            shell_cmds::shell_write,
+            shell_cmds::shell_kill,
+            shell_cmds::shell_status,
+            browser_cmds::browser_start,
+            browser_cmds::browser_navigate,
+            browser_cmds::browser_snapshot,
+            browser_cmds::browser_read,
+            browser_cmds::browser_click,
+            browser_cmds::browser_type,
+            browser_cmds::browser_stop,
+            browser_cmds::browser_status,
+            memory_cmds::memory_request,
+            memory_cmds::memory_read,
+            // P11.5.3 IDE: git SCM + LSP diagnostics.
+            git_cmds::git_status,
+            git_cmds::git_log,
+            git_cmds::git_diff,
+            git_cmds::git_stage_all,
+            git_cmds::git_commit,
+            git_cmds::git_root,
+            lsp_cmds::lsp_diagnostics,
+            // P11.5.9: repo-map / file-outline / MODEL_ALIASES / ai! markers.
+            codeintel_cmds::repomap_build,
+            codeintel_cmds::file_outline,
+            codeintel_cmds::model_aliases_resolve,
+            codeintel_cmds::ai_markers_scan
         ])
         // P8.8: auto-updater (checks + downloads against the configured
         // endpoints; signing key is the release secret).

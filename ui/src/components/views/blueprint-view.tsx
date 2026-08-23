@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useAppStore } from '@/lib/store'
 import {
   CheckCircle2,
   Circle,
@@ -91,8 +92,24 @@ function isReady(task: BlueprintTask, all: BlueprintTask[]): boolean {
 }
 
 export default function BlueprintView() {
+  // P11.2 — live execution status: when a real plan is pending (plan mode
+  // approve → planExecute), the view renders the real task list instead of
+  // the demo; statuses follow the store (running = the plan is executing).
+  const pendingPlan = useAppStore((s) => s.pendingPlan)
+  const liveTasks = useMemo<BlueprintTask[] | null>(() => {
+    if (!pendingPlan) return null
+    const firstPending = pendingPlan.tasks.find((t) => !t.dependsOn?.length)
+    return pendingPlan.tasks.map((t, i) => ({
+      id: t.id,
+      goal: t.goal,
+      status: firstPending && t.id === firstPending.id ? ('running' as const) : ('pending' as const),
+      deps: t.dependsOn ?? [],
+    }))
+  }, [pendingPlan])
+
   const [tasks, setTasks] = useState<BlueprintTask[]>(DEMO_TASKS)
   const [draft, setDraft] = useState('')
+  const shown = liveTasks ?? tasks
 
   const addTask = () => {
     if (!draft.trim()) return
@@ -129,8 +146,8 @@ export default function BlueprintView() {
     )
   }
 
-  const doneCount = tasks.filter((t) => t.status === 'done').length
-  const progress = Math.round((doneCount / Math.max(tasks.length, 1)) * 100)
+  const doneCount = shown.filter((t) => t.status === 'done').length
+  const progress = Math.round((doneCount / Math.max(shown.length, 1)) * 100)
 
   return (
     <div className="fade-up flex h-full flex-col gap-3 p-3">
@@ -138,7 +155,7 @@ export default function BlueprintView() {
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground">Blueprint</h3>
           <Badge variant="secondary" className="text-[9px]">
-            {doneCount}/{tasks.length} done
+            {doneCount}/{shown.length} done
           </Badge>
         </div>
         <div className="flex items-center gap-2">
@@ -160,11 +177,11 @@ export default function BlueprintView() {
           # spec.md — verify-gated blueprint tasks
         </div>
         <div className="space-y-2">
-          {tasks.map((task) => {
+          {shown.map((task) => {
             const meta = STATUS_META[task.status]
             const Icon = meta.icon
             const ready =
-              task.status === 'pending' && isReady(task, tasks)
+              task.status === 'pending' && isReady(task, shown)
             return (
               <div
                 key={task.id}

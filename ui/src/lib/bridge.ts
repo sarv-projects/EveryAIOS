@@ -396,6 +396,21 @@ export async function sendUserMessage(
       ...(context ? { userDocuments: [context] } : {}),
     });
   } catch (err) {
+    // P11.5.12 — a dropped IPC mid-stream surfaces the reconnect chip instead
+    // of a hard failure; the coordinator's StreamRegistry holds the last-token
+    // cursor so a resume replays byte-continuously (the chip auto-clears when
+    // the next batch lands via streamAppend).
+    const stNow = useAppStore.getState();
+    const activeSess = stNow.sessions.find((s) => s.id === stNow.activeSessionId);
+    const running = activeSess?.status === "running";
+    if (running) {
+      stNow.setReconnect({
+        show: true,
+        lastToken: stNow.streamStats.tokensThisTurn > 0 ? "…" : "",
+        tokens: stNow.streamStats.tokensThisTurn,
+      });
+      return;
+    }
     st.streamFail(err instanceof Error ? err.message : "Failed to reach the agent");
   }
 }

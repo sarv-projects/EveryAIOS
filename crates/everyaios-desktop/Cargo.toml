@@ -11,8 +11,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 image = { workspace = true }
-everyaios-audit = { path = "../everyaios-audit" }
-everyaios-guard = { path = "../everyaios-guard" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["xtest"] }
@@ -25,4 +23,5 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Com",
+    "Win32_Storage_Xps",
 ] }

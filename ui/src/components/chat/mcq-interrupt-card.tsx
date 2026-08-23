@@ -142,6 +142,20 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
             >
               {mcq.kind === 'mcq' ? 'Spec Q&A' : 'Action required'}
             </Badge>
+            {/* P11.2 — urgency level: drives badge tint; high = orange pulse. */}
+            {mcq.urgency && mcq.urgency !== 'low' && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  'text-[9px]',
+                  mcq.urgency === 'high'
+                    ? 'live-dot border-rose-500/50 bg-rose-500/10 text-rose-400'
+                    : 'border-amber-500/50 bg-amber-500/10 text-amber-400'
+                )}
+              >
+                {mcq.urgency === 'high' ? 'High priority' : 'Medium priority'}
+              </Badge>
+            )}
           </div>
           <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
             {mcq.description}

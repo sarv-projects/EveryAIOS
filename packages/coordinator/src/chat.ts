@@ -25,6 +25,7 @@ import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
 import { StreamSession } from "@personal-ai/core-ai";
 import { chunkText, estimateTokens } from "@personal-ai/core-files";
 import { buildDesktopSystemPrompt, CACHE_BOUNDARY, type PersonaId } from "./prompt";
+import { notifyAgui } from "./agui";
 import {
   listedToolsToOpenAI,
   resolveActiveTools,
@@ -604,6 +605,7 @@ export async function runChatStream(
 
   let turnId = "";
   let fullText = "";
+  let aguiArtifactCounter = 0;
   let usage: { promptTokens: number; completionTokens: number } | undefined;
 
   try {
@@ -631,10 +633,25 @@ export async function runChatStream(
             args: ev.args,
             ...(risk !== undefined ? { risk } : {}),
           });
+          // P11.5.11 — AG-UI live transport: every tool call also rides the
+          // AG-UI channel as `tool_call_created` (the UI's generative surface
+          // consumes these without a second protocol).
+          notifyAgui("tool_call_created", streamId, {
+            call_id: ev.toolId,
+            name: ev.toolId,
+            args: (ev.args ?? {}) as Record<string, unknown>,
+            state: "running",
+          });
           break;
         }
         case "tool_result":
           emit({ type: "tool_result", streamId, toolId: ev.toolId, result: ev.result });
+          notifyAgui("tool_call_result", streamId, {
+            call_id: ev.toolId,
+            name: ev.toolId,
+            args: {},
+            state: "done",
+          });
           break;
         case "risk_assessment":
           // Surfaced as a stage chip; payload-level risk UI lands in P11.
@@ -645,10 +662,26 @@ export async function runChatStream(
           break;
         case "done":
           turnId = ev.turnId;
+          notifyAgui("done", streamId, { turn_id: ev.turnId, session_id: sessionId });
           break;
+        case "artifact_generated": {
+          // P11.5.11 — artifacts ride the AG-UI channel as `artifact_created`
+          // (the UI's make-live + version-selector surface consumes them).
+          notifyAgui("artifact_created", streamId, {
+            artifact_id: `art-${streamId}-${++aguiArtifactCounter}`,
+            version: 1,
+            kind: ev.artifact.format === "mermaid" ? "mermaid" : "markdown",
+            payload: {
+              title: ev.artifact.title,
+              format: ev.artifact.format,
+              uri: ev.artifact.uri ?? null,
+              preview: ev.artifact.preview ?? null,
+            },
+          });
+          break;
+        }
         case "trajectory":
-        case "artifact_generated":
-          // Trajectory → audit (P2); artifacts → H1 cards (later).
+          // Trajectory → audit (P2).
           break;
         case "error":
           if (controller.signal.aborted) {

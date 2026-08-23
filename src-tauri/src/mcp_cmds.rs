@@ -52,3 +52,89 @@ pub fn mcp_catalog() -> McpCatalog {
             .collect(),
     }
 }
+
+/// P11.5.8 — one known/attached MCP server row for the Connectors panel.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerRow {
+    pub name: String,
+    pub status: String, // connected | disconnected
+    pub transport: String, // stdio | http
+    pub tools: usize,
+    pub desc: String,
+}
+
+/// P11.5.8 — the installed/user MCP servers list: the built-in catalog
+/// (native, always connected) + user-attached stdio servers tracked in the
+/// shell. Replaces the hardcoded `MCP_SERVERS` rows in connectors-panel.tsx.
+#[tauri::command]
+pub fn mcp_servers(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<Vec<McpServerRow>, String> {
+    let catalog = mcp_catalog();
+    let mut rows = vec![McpServerRow {
+        name: "EveryAIOS native (built-in)".into(),
+        status: "connected".into(),
+        transport: "native".into(),
+        tools: catalog.total,
+        desc: format!("{} browser + {} storage tools", catalog.browser, catalog.storage),
+    }];
+    let attached = state
+        .mcp_servers
+        .lock()
+        .map_err(|e| e.to_string())?;
+    for (name, info) in attached.iter() {
+        rows.push(McpServerRow {
+            name: name.clone(),
+            status: "connected".into(),
+            transport: info.transport.clone(),
+            tools: info.tools,
+            desc: info.desc.clone(),
+        });
+    }
+    Ok(rows)
+}
+
+/// P11.5.8 — attach a user-supplied MCP server (stdio) and reconcile its
+/// tools into the unified catalog (native wins on name collisions). The
+/// exact-command consent is a Guard-2 card in the UI before this is called.
+#[tauri::command]
+pub fn mcp_attach(
+    state: tauri::State<'_, crate::AppState>,
+    name: String,
+    command: String,
+    args: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    use everyaios_mcp::attach::AttachedServer;
+    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let server = AttachedServer::spawn(&command, &arg_refs).map_err(|e| e.to_string())?;
+    let tools = server.tools.clone();
+    let desc = format!("user-supplied: {} {}", command, args.join(" "));
+    // Keep the child alive for the session (the live map owns it; dropping
+    // the map entry on shutdown kills the child).
+    let mut live = state
+        .mcp_live
+        .lock()
+        .map_err(|e| e.to_string())?;
+    live.insert(name.clone(), server);
+    drop(live);
+    let mut attached = state
+        .mcp_servers
+        .lock()
+        .map_err(|e| e.to_string())?;
+    attached.insert(
+        name.clone(),
+        McpServerRow {
+            name: name.clone(),
+            status: "connected".into(),
+            transport: "stdio".into(),
+            tools: tools.len(),
+            desc: desc.clone(),
+        },
+    );
+    Ok(serde_json::json!({
+        "name": name,
+        "tools": tools,
+        "desc": desc,
+    }))
+}

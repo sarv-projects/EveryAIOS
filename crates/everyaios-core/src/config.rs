@@ -26,6 +26,11 @@ pub struct Config {
     /// P1.8 (A5): local model runtimes (ollama / llamafile).
     #[serde(default)]
     pub local: LocalConfig,
+    /// P11.5.9 — MODEL_ALIASES: short names → full `provider/model` paths
+    /// (e.g. `claude = "anthropic/claude-sonnet-4"`). The coordinator resolves
+    /// these before the router so users type short names everywhere.
+    #[serde(default)]
+    pub model_aliases: std::collections::HashMap<String, String>,
 }
 
 impl Default for Config {
@@ -38,7 +43,27 @@ impl Default for Config {
             browser_binary: None,
             socket_path: None,
             local: LocalConfig::default(),
+            model_aliases: std::collections::HashMap::new(),
         }
+    }
+}
+
+impl Config {
+    /// P11.5.9 — resolve a model reference that may be a short alias.
+    /// Returns `(provider, model)`; an unknown alias resolves to
+    /// `(default_provider, ref)` (bare model name). Mirrors the coordinator's
+    /// `resolveModelAlias`.
+    pub fn resolve_model_alias(&self, reference: &str, default_provider: &str) -> (String, String) {
+        if let Some(full) = self.model_aliases.get(reference) {
+            match full.split_once('/') {
+                Some((p, m)) => return (p.to_string(), m.to_string()),
+                None => return (full.clone(), full.clone()),
+            }
+        }
+        if let Some((p, m)) = reference.split_once('/') {
+            return (p.to_string(), m.to_string());
+        }
+        (default_provider.to_string(), reference.to_string())
     }
 }
 

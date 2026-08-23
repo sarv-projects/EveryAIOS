@@ -847,8 +847,10 @@ name = "everyaios-codeintel"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.19",
 ]
 
@@ -888,8 +890,6 @@ dependencies = [
 name = "everyaios-desktop"
 version = "0.1.0"
 dependencies = [
- "everyaios-audit",
- "everyaios-guard",
  "image",
  "serde",
  "serde_json",

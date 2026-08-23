@@ -2,6 +2,7 @@
 // Left = which job · center = talk + now-doing + approve · right = one lens.
 // Never 9 peer tabs; never Chat/Cowork/Code as three apps.
 
+import { useEffect } from "react";
 import { TitleBar } from "@/components/shell/title-bar";
 import { LeftSidebar } from "@/components/shell/left-sidebar";
 import { CenterColumn } from "@/components/shell/center-column";
@@ -12,8 +13,15 @@ import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { ToastBridge } from "@/components/shell/toast-bridge";
 import { useAppStore } from "@/lib/store";
 import VaultGate from "@/components/shell/vault-gate";
+import { OnboardingModal } from "@/components/onboarding-modal";
+import { startPerfMeasurement } from "@/lib/perf";
 
 export default function App() {
+  // P11.4 — kick off LCP/TTI measurement at boot.
+  useEffect(() => {
+    startPerfMeasurement();
+  }, []);
+
   // Progressive disclosure (B9/P31): casual users get chat only; the activity
   // rail + right viewport reveal when the power toggle is flipped.
   const powerMode = useAppStore((s) => s.powerMode);
@@ -32,6 +40,8 @@ export default function App() {
       <StatusBar />
       <CommandPalette />
       <ToastBridge />
+      {/* P11.2 — first-launch onboarding (welcome → key → chat → success). */}
+      <OnboardingModal />
     </div>
     </VaultGate>
   );

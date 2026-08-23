@@ -18,6 +18,7 @@ import {
   Zap,
   AlertCircle,
   Pause,
+  RefreshCw,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -38,6 +39,7 @@ const statusMeta: Record<
   failed: { color: 'text-red-400', ring: 'bg-red-500', Icon: AlertCircle, label: 'Failed' },
   paused: { color: 'text-zinc-400', ring: 'bg-zinc-400', Icon: Pause, label: 'Paused' },
   scheduled: { color: 'text-violet-400', ring: 'bg-violet-500', Icon: Star, label: 'Scheduled' },
+  reconnecting: { color: 'text-amber-400', ring: 'bg-amber-500', Icon: RefreshCw, label: 'Reconnecting' },
 }
 
 function NavItem({
@@ -95,7 +97,17 @@ function Label({ children, collapsed }: { children: React.ReactNode; collapsed?:
   )
 }
 
-function WorkRow({ session, collapsed, active }: { session: Session; collapsed?: boolean; active?: boolean }) {
+function WorkRow({
+  session,
+  collapsed,
+  active,
+  depth = 0,
+}: {
+  session: Session
+  collapsed?: boolean
+  active?: boolean
+  depth?: number
+}) {
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const meta = statusMeta[session.status]
   const Icon = session.pinned ? Star : meta.Icon
@@ -105,11 +117,13 @@ function WorkRow({ session, collapsed, active }: { session: Session; collapsed?:
         <button
           type="button"
           onClick={() => setActiveSession(session.id)}
+          aria-label={session.title}
           className={cn(
             'relative w-full rounded-md text-left transition-colors',
             collapsed ? 'mx-auto grid h-8 w-8 place-items-center' : 'px-2 py-1.5',
             active ? 'bg-accent' : 'hover:bg-accent/50',
           )}
+          style={!collapsed && depth > 0 ? { paddingLeft: depth * 14 + 8 } : undefined}
         >
           {collapsed ? (
             <>
@@ -118,6 +132,12 @@ function WorkRow({ session, collapsed, active }: { session: Session; collapsed?:
             </>
           ) : (
             <span className="flex items-start gap-2">
+              {depth > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="mt-1.5 h-2 w-2 shrink-0 rounded-[2px] border border-muted-foreground/40"
+                />
+              )}
               <Icon className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', meta.color)} />
               <span className="min-w-0">
                 <span className="block truncate text-[12.5px] text-foreground">{session.title}</span>
@@ -272,14 +292,23 @@ export function LeftSidebar() {
           )}
         </div>
         <div className="scroll-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1 pb-2">
-          {recent.map((s) => (
-            <WorkRow
-              key={s.id}
-              session={s}
-              collapsed={collapsed}
-              active={s.id === activeId && centerScreen === 'chat'}
-            />
-          ))}
+          {recent
+            // P11.5.1 — child sessions (forks) indent under their parent.
+            .filter((s) => !s.parentId)
+            .map((s) => (
+              <div key={s.id}>
+                <WorkRow session={s} collapsed={collapsed} active={activeId === s.id} />
+                {recent
+                  .filter((c) => c.parentId === s.id)
+                  .map((c) => (
+                    <WorkRow key={c.id} session={c} collapsed={collapsed} active={activeId === c.id} depth={1} />
+                  ))}
+              </div>
+            ))}
+          {recent.filter((s) => !s.parentId).length === 0 &&
+            recent.filter((s) => s.parentId).map((s) => (
+              <WorkRow key={s.id} session={s} collapsed={collapsed} active={activeId === s.id} depth={1} />
+            ))}
         </div>
       </div>
 

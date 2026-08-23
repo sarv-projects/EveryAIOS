@@ -9,7 +9,6 @@
 //! effect rides the same dual-guard as every other effect in the product.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -156,7 +155,7 @@ impl AuditSink for NoopSink {
 
 /// App allow-list: default-deny for unlisted apps in strict mode; in standard
 /// mode unlisted apps are Confirm(Routine) — never silently allowed.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppPolicy {
     /// Allowed app names / process names (case-insensitive).
     pub allow_list: Vec<String>,
@@ -164,16 +163,6 @@ pub struct AppPolicy {
     pub strict: bool,
     /// Custom safe zones (screen rects never acted on), e.g. the taskbar.
     pub safe_zones: Vec<Region>,
-}
-
-impl Default for AppPolicy {
-    fn default() -> Self {
-        Self {
-            allow_list: vec![],
-            strict: false,
-            safe_zones: vec![],
-        }
-    }
 }
 
 impl AppPolicy {
@@ -368,7 +357,7 @@ impl DesktopGuard {
             "decision": decision.as_str(),
             "class": match decision {
                 GateDecision::Confirm(c) => format!("{c:?}"),
-                _ => "routine",
+                _ => "routine".to_string(),
             },
         });
         self.sink.write("desktop.guard2", payload);
@@ -431,8 +420,13 @@ mod tests {
     }
 
     #[test]
-    fn risky_action_confirms_even_when_allow_listed() {
-        let g = gate_allow();
+    fn risky_action_reaches_the_human_gate_even_when_allow_listed() {
+        // The policy classifies Delete as Confirm; the HUMAN gate then decides.
+        let g = DesktopGuard::new(
+            AppPolicy::default().allow("notepad"),
+            Box::new(ConfirmAllGate),
+            Box::new(NoopSink),
+        );
         let d = g
             .preflight(
                 "notepad",
@@ -443,17 +437,33 @@ mod tests {
             )
             .unwrap();
         assert_eq!(d, GateDecision::Confirm(ConfirmClass::Delete));
+        // With an approving human gate the same action is allowed (audited).
+        let g2 = gate_allow();
+        let d2 = g2
+            .preflight(
+                "notepad",
+                &ActKind::ClickByName {
+                    name: "Delete".into(),
+                },
+                None,
+            )
+            .unwrap();
+        assert_eq!(d2, GateDecision::Allow);
     }
 
     #[test]
     fn unlisted_app_confirms_or_denies_by_mode() {
-        // standard: unlisted + routine → Confirm
-        let g = gate_allow();
+        // standard: unlisted + routine → Confirm reaches the human gate.
+        let g = DesktopGuard::new(
+            AppPolicy::default(),
+            Box::new(ConfirmAllGate),
+            Box::new(NoopSink),
+        );
         let d = g
             .preflight("random-app", &ActKind::Click { x: 5, y: 5 }, None)
             .unwrap();
         assert_eq!(d, GateDecision::Confirm(ConfirmClass::Routine));
-        // strict: unlisted → Deny
+        // strict: unlisted → Deny before any human gate.
         let strict = DesktopGuard::new(
             AppPolicy {
                 strict: true,

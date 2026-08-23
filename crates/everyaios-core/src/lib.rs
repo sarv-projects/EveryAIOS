@@ -14,6 +14,9 @@
 use std::path::PathBuf;
 
 pub mod adapter;
+pub mod agui;
+pub mod ai_marker;
+pub mod watcher_glue;
 pub mod automation_runtime;
 pub mod blueprint;
 pub mod capability_manifest;

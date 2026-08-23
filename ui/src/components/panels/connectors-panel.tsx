@@ -10,7 +10,13 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type Connector } from '@/lib/store'
 import { useAppStore } from '@/lib/store'
-import { mcpCatalog, type McpCatalog } from '@/lib/mcp'
+import {
+  mcpAttach,
+  mcpCatalog,
+  mcpServers,
+  type McpCatalog,
+  type McpServerRow,
+} from '@/lib/mcp'
 import { cn } from '@/lib/utils'
 import {
   oauthAccounts,
@@ -67,19 +73,6 @@ const NATIVE_SAMPLES: (Connector & { lastUsed?: string })[] = [
   { id: 'n10', name: 'Trello', category: 'native', status: 'disconnected', tools: 6, type: 'apiKey' },
 ]
 
-const MCP_SERVERS: {
-  name: string
-  status: 'connected' | 'disconnected'
-  transport: 'stdio' | 'http'
-  tools: number
-  desc: string
-}[] = [
-  { name: 'GitHub MCP', status: 'connected', transport: 'http', tools: 18, desc: 'Repo, issues, PRs' },
-  { name: 'Filesystem MCP', status: 'connected', transport: 'stdio', tools: 7, desc: 'Read/write local files' },
-  { name: 'Slack MCP', status: 'disconnected', transport: 'stdio', tools: 14, desc: 'Messages, channels' },
-  { name: 'Postgres MCP', status: 'disconnected', transport: 'http', tools: 11, desc: 'Query + introspect' },
-]
-
 const AUTH_LABEL: Record<NonNullable<Connector['type']>, string> = {
   oauth: 'OAuth',
   apiKey: 'API key',
@@ -120,11 +113,54 @@ export default function ConnectorsPanel() {
     }
   }, [])
 
-  const [mcpList, setMcpList] = useState(MCP_SERVERS)
-  const connectMcp = (name: string) =>
-    setMcpList((prev) =>
-      prev.map((s) => (s.name === name ? { ...s, status: 'connected' as const } : s)),
-    )
+  // P11.5.8 — the MCP servers list is live from Rust (`mcp_servers`: the
+  // built-in catalog + user-attached stdio servers); demo fallback in preview.
+  const [mcpList, setMcpList] = useState<McpServerRow[]>([])
+  const [attachOpen, setAttachOpen] = useState(false)
+  const [attachName, setAttachName] = useState('')
+  const [attachCmd, setAttachCmd] = useState('')
+  const [attachArgs, setAttachArgs] = useState('')
+  const [attachBusy, setAttachBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    mcpServers()
+      .then((rows) => alive && setMcpList(rows))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const refreshMcp = async () => {
+    try {
+      setMcpList(await mcpServers())
+    } catch {
+      /* shell not ready */
+    }
+  }
+
+  const attachMcp = async () => {
+    if (!attachName.trim() || !attachCmd.trim()) {
+      notify('MCP attach: name and command are required')
+      return
+    }
+    setAttachBusy(true)
+    try {
+      const args = attachArgs.split(/\s+/).filter(Boolean)
+      const res = await mcpAttach(attachName.trim(), attachCmd.trim(), args)
+      notify(`MCP: attached “${res.name}” (${res.tools.length} tools reconciled)`)
+      setAttachOpen(false)
+      setAttachName('')
+      setAttachCmd('')
+      setAttachArgs('')
+      await refreshMcp()
+    } catch (e) {
+      notify(`MCP attach failed: ${String(e)}`)
+    } finally {
+      setAttachBusy(false)
+    }
+  }
 
   const startOauth = async (provider: string, kind: 'pkce' | 'device') => {
     try {
@@ -284,7 +320,53 @@ export default function ConnectorsPanel() {
                 <Server className="h-3.5 w-3.5 text-orange-400" />
                 <span className="text-xs font-medium text-foreground">MCP servers</span>
                 <Badge variant="secondary" className="text-[9px]">model-context-protocol</Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto h-6 border-orange-500/40 px-2 text-[9px] text-orange-300 hover:bg-orange-500/10"
+                  onClick={() => setAttachOpen((v) => !v)}
+                >
+                  <Plus className="h-3 w-3" />
+                  attach
+                </Button>
               </div>
+
+              {attachOpen && (
+                <div className="mb-3 space-y-1.5 rounded-md border border-border/60 bg-background/40 p-2.5">
+                  <input
+                    value={attachName}
+                    onChange={(e) => setAttachName(e.target.value)}
+                    placeholder="Server name (e.g. My Postgres MCP)"
+                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-orange-500/50"
+                  />
+                  <input
+                    value={attachCmd}
+                    onChange={(e) => setAttachCmd(e.target.value)}
+                    placeholder="Command (e.g. npx)"
+                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-orange-500/50"
+                  />
+                  <input
+                    value={attachArgs}
+                    onChange={(e) => setAttachArgs(e.target.value)}
+                    placeholder="Args (space-separated, e.g. -y @modelcontextprotocol/server-filesystem ~)"
+                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-orange-500/50"
+                  />
+                  <div className="flex justify-end gap-1.5">
+                    <Button
+                      size="sm"
+                      className="h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400"
+                      disabled={attachBusy}
+                      onClick={() => void attachMcp()}
+                    >
+                      {attachBusy ? 'Attaching…' : 'Attach server'}
+                    </Button>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground/70">
+                    Spawns a user-supplied MCP server over stdio and reconciles its tools into the unified catalog (native wins).
+                  </p>
+                </div>
+              )}
+
               <ul className="space-y-1.5">
                 {mcpList.map((s, i) => {
                   const connected = s.status === 'connected'
@@ -334,7 +416,7 @@ export default function ConnectorsPanel() {
                           size="sm"
                           variant="outline"
                           className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10"
-                          onClick={() => connectMcp(s.name)}
+                          onClick={() => notify(`Connect ${s.name} — use the attach form above`)}
                         >
                           Connect
                         </Button>
@@ -342,6 +424,11 @@ export default function ConnectorsPanel() {
                     </li>
                   )
                 })}
+                {mcpList.length === 0 && (
+                  <li className="rounded-md border border-dashed border-border/60 px-3 py-3 text-center font-mono text-[10px] text-muted-foreground">
+                    No servers attached yet — use “attach” to spawn a user-supplied MCP server.
+                  </li>
+                )}
               </ul>
             </section>
           )}

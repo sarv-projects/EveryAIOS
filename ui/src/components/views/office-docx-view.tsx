@@ -10,6 +10,8 @@ import { docxOpen, demoDocx, type DocxPayload } from '@/lib/office'
 export default function OfficeDocxView() {
   const [payload, setPayload] = useState<DocxPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // P11.2 — office editor UX: track-changes-style display of AI edits.
+  const [trackChanges, setTrackChanges] = useState(true)
 
   const open = async (path: string) => {
     try {
@@ -47,6 +49,19 @@ export default function OfficeDocxView() {
             </Badge>
           )}
         </div>
+        {/* P11.2 — track-changes toggle: highlights the agent's edits like
+            Word track changes (modified blocks get a border + badge). */}
+        <button
+          onClick={() => setTrackChanges(!trackChanges)}
+          aria-pressed={trackChanges}
+          className={`rounded border px-2 py-0.5 text-[10px] transition-colors ${
+            trackChanges
+              ? 'border-orange-500/40 bg-orange-500/10 text-orange-300'
+              : 'border-border text-muted-foreground'
+          }`}
+        >
+          {trackChanges ? 'Track changes on' : 'Track changes off'}
+        </button>
         <Badge variant="secondary" className="text-[10px]">
           block-patch
         </Badge>
@@ -113,9 +128,20 @@ export default function OfficeDocxView() {
             <h2 className="pt-2 text-lg font-semibold text-orange-300">
               3. Key Drivers · §3.2
             </h2>
-            <div className="rounded border-l-2 border-orange-500 bg-orange-500/5 px-3 py-2">
-              <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-orange-300">
-                Agent editing · typing
+            <div
+              className={
+                trackChanges
+                  ? 'rounded border-l-2 border-orange-500 bg-orange-500/5 px-3 py-2'
+                  : 'rounded px-3 py-2'
+              }
+            >
+              <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-orange-300">
+                <span>{trackChanges ? 'Agent editing · typing' : 'Inserted text'}</span>
+                {trackChanges && (
+                  <Badge variant="outline" className="border-orange-500/40 bg-orange-500/10 text-[9px] text-orange-300">
+                    modified
+                  </Badge>
+                )}
               </div>
               <p className="overflow-hidden whitespace-nowrap text-sm leading-relaxed text-foreground">
                 <span

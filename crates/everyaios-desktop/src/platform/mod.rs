@@ -13,10 +13,13 @@ pub mod win;
 #[cfg(target_os = "macos")]
 pub mod macos;
 
-use crate::types::{ActKind, ReadResult, Region, SeeResult, WindowInfo};
+use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
 use crate::{Capabilities, DesktopError};
 
 /// A live desktop backend for the current platform.
+/// `X11` carries a live connection (large variant) — boxed is overkill since
+/// the enum is never stored in arrays or copied.
+#[allow(clippy::large_enum_variant)]
 pub enum PlatformBackend {
     #[cfg(target_os = "linux")]
     X11(crate::platform::linux::X11Backend),
@@ -33,21 +36,22 @@ impl PlatformBackend {
         #[cfg(target_os = "linux")]
         {
             if crate::platform::linux::X11Backend::is_available() {
-                return Ok(PlatformBackend::X11(
+                Ok(PlatformBackend::X11(
                     crate::platform::linux::X11Backend::connect()?,
-                ));
+                ))
+            } else {
+                Err(DesktopError::Unsupported(
+                    "no X11 DISPLAY available — E9 needs a desktop session".into(),
+                ))
             }
-            return Err(DesktopError::Unsupported(
-                "no X11 DISPLAY available — E9 needs a desktop session".into(),
-            ));
         }
         #[cfg(windows)]
         {
-            return Ok(PlatformBackend::Win);
+            Ok(PlatformBackend::Win)
         }
         #[cfg(target_os = "macos")]
         {
-            return Ok(PlatformBackend::Mac);
+            Ok(PlatformBackend::Mac)
         }
         #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
         {
@@ -86,7 +90,7 @@ impl PlatformBackend {
             #[cfg(target_os = "linux")]
             PlatformBackend::X11(b) => b.see(window, region),
             #[cfg(windows)]
-            PlatformBackend::Win => crate::platform::win::WinBackend::see(window),
+            PlatformBackend::Win => crate::platform::win::WinBackend::see(window, region),
             #[cfg(target_os = "macos")]
             PlatformBackend::Mac => crate::platform::macos::MacBackend::see(window),
             PlatformBackend::Unsupported => Err(DesktopError::Unsupported("no backend".into())),
@@ -107,6 +111,7 @@ impl PlatformBackend {
 
     /// Honest per-platform capability surface.
     pub fn capabilities(&self) -> Capabilities {
+        let ocr_available = crate::ocr::TesseractCli::default().available();
         match self {
             #[cfg(target_os = "linux")]
             PlatformBackend::X11(_) => Capabilities {
@@ -115,7 +120,7 @@ impl PlatformBackend {
                 uia_tree: false,
                 invoke_set_value: false,
                 send_input: true,
-                ocr: crate::ocr::TesseractCli::default().available(),
+                ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
             },
@@ -127,7 +132,7 @@ impl PlatformBackend {
                 uia_tree: true,
                 invoke_set_value: true,
                 send_input: true,
-                ocr: crate::ocr::TesseractCli::default().available(),
+                ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
             },
@@ -138,7 +143,7 @@ impl PlatformBackend {
                 uia_tree: false,
                 invoke_set_value: false,
                 send_input: true,
-                ocr: crate::ocr::TesseractCli::default().available(),
+                ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
             },

@@ -33,6 +33,9 @@ export default defineConfig({
       output: {
         manualChunks: {
           // Heavy vendors split out of the app chunk (Tauri caches them).
+          // Monaco is ~5MB ESM; its own chunk keeps the app chunk small and
+          // lets Tauri cache the editor separately.
+          monaco: ["monaco-editor", "@monaco-editor/react"],
           charts: ["recharts"],
           motion: ["framer-motion"],
           radix: [

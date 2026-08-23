@@ -407,6 +407,8 @@ Unified timeline of all agent actions:
 - Read-only by default, toggle to editable for takeover
 - File tree panel (togglable) for multi-file navigation
 
+**P41.1 (landed 2026-08-23) — `view.code` is now the IDE workbench (`ide-workbench.tsx`), the VS Code-style surface over real backends:** activity bar (Explorer · SCM · Problems · rail views) · Explorer over the real disk (`fs_cmds`) · SCM over real git (`git_cmds`: status/stage/commit) · Problems over real LSP diagnostics (`lsp_cmds` → `everyaios-codeintel::lsp_runner` `publishDiagnostics`) · Monaco editor tabs (MIT — VS Code's own editor component; CodeMirror-6 lock superseded) with offline `?worker` bundling · bottom panel · status bar. **Still open:** P41.2 worktree-first parallelism, P41.3 ticketed writes (Guard-2), P41.4 receipts-in-editor — the workbench renders the VS Code interaction model; the Rust editor core (floem-editor-core/gpui) stays the documented future native-path reserve.
+
 ### 4.6 Browse View (view.browser)
 
 ```

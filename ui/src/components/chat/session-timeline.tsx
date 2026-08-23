@@ -20,9 +20,9 @@ import {
   Zap,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore, type Session } from '@/lib/store'
 import { AGENT_MAP, MODEL_MAP } from '@/lib/agents'
+import { useVirtualList } from '@/lib/ux'
 import { cn } from '@/lib/utils'
 
 // Timeline event types for a session
@@ -119,6 +119,14 @@ export function SessionTimeline() {
   const totalTokens = events.reduce((sum, e) => sum + (e.meta?.tokens ?? 0), 0)
   const totalCost = events.reduce((sum, e) => sum + (e.meta?.cost ?? 0), 0)
 
+  // P11.4 — virtual scrolling for long timelines: only the windowed slice is
+  // mounted; spacers keep the scrollbar honest (row height ~56px).
+  const { visible, totalHeight, startOffset, onScroll, scrollRef } = useVirtualList({
+    items: events,
+    rowHeight: 56,
+    overscan: 6,
+  })
+
   return (
     <div className="h-full w-full flex flex-col bg-card/60 backdrop-blur-sm">
       {/* Header */}
@@ -140,13 +148,14 @@ export function SessionTimeline() {
         </div>
       </div>
 
-      {/* Timeline */}
-      <ScrollArea className="flex-1">
-        <div className="px-4 py-3">
-          {events.map((event, i) => {
+      {/* Timeline — P11.4 virtualized scroll container */}
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
+        <div className="px-4 py-3" style={{ height: totalHeight, position: 'relative' }}>
+          <div style={{ transform: `translateY(${startOffset}px)` }}>
+          {visible.map((event, i) => {
             const Icon = typeIcon[event.type]
             const accent = typeAccent[event.type]
-            const isLast = i === events.length - 1
+            const isLast = i === visible.length - 1
             const isActive = event.status === 'active'
 
             return (
@@ -216,8 +225,9 @@ export function SessionTimeline() {
               </div>
             )
           })}
+          </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Footer summary */}
       <div className="shrink-0 px-4 py-2 border-t border-border bg-sidebar/40 flex items-center justify-between text-[10.5px] font-mono">

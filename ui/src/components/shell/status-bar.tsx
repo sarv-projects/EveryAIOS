@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useAppStore } from '@/lib/store'
+import * as perfLib from '@/lib/perf'
 import { AGENT_MAP, MODEL_MAP, AGENTS } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
@@ -77,6 +78,7 @@ export function StatusBar() {
   const devMode = useAppStore((s) => s.devMode)
   const monitorBadge = useAppStore((s) => s.monitorBadge)
   const clearMonitorBadge = useAppStore((s) => s.clearMonitorBadge)
+  const { usePerfSnapshot } = perfLib
 
   const agent = AGENT_MAP[selectedAgentId]
   const model = MODEL_MAP[selectedModelId]
@@ -136,6 +138,12 @@ export function StatusBar() {
     },
   ]
 
+  // P11.5.4 — per-session takeover indicator (the active session's pause).
+  const pausedSessions = useAppStore((s) => s.pausedSessions)
+  const activePaused = !!pausedSessions[activeId]
+  // P11.4 — LCP / TTI readout (dev mode) + discreet cold-start chip (casual).
+  const perf = usePerfSnapshot()
+
   // Casual default: hide the debug telemetry strip. Show a single discreet
   // state pill + privacy reassurance; Settings → General → "Developer Mode"
   // restores the full 12-badge telemetry (devMode).
@@ -145,10 +153,20 @@ export function StatusBar() {
     return (
       <footer className="shrink-0 h-6 border-t border-border bg-sidebar/80 backdrop-blur-xl flex items-center text-[10.5px] font-mono no-select">
         <div className="flex items-center gap-1.5 px-3">
-          <span className={cn('h-1.5 w-1.5 rounded-full', preview ? 'bg-amber-400' : busy ? 'bg-orange-500 live-dot' : 'bg-emerald-400')} />
-          <span className="text-muted-foreground">{preview ? 'Preview · demo data' : busy ? 'Processing…' : 'Ready · Local'}</span>
+          <span className={cn(
+            'h-1.5 w-1.5 rounded-full',
+            preview ? 'bg-amber-400' : activePaused ? 'bg-yellow-400' : busy ? 'bg-orange-500 live-dot' : 'bg-emerald-400'
+          )} />
+          <span className="text-muted-foreground">
+            {preview ? 'Preview · demo data' : activePaused ? '⏸ Paused' : busy ? 'Processing…' : '● Live · Local'}
+          </span>
         </div>
         <div className="flex-1" />
+        {perf.coldStartMs != null && perf.coldStartMs < 2000 && (
+          <span className="px-3 text-muted-foreground/50" title="Cold start (P11.4)">
+            boot {perf.coldStartMs}ms
+          </span>
+        )}
         {preview ? (
           <span className="flex items-center gap-1.5 px-3 text-muted-foreground/70">
             <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
@@ -171,14 +189,24 @@ export function StatusBar() {
       <div className="flex items-center gap-1.5 px-2 border-r border-border/60 h-full">
         <span className={cn(
           'h-1.5 w-1.5 rounded-full',
-          agentPaused ? 'bg-zinc-500' : 'bg-orange-500 live-dot'
+          agentPaused || activePaused ? 'bg-yellow-400' : 'bg-orange-500 live-dot'
         )} />
         <span className={cn(
           'text-muted-foreground',
-          agentPaused ? '' : 'text-orange-400'
+          agentPaused || activePaused ? '' : 'text-orange-400'
         )}>
-          {agentPaused ? 'paused' : 'live'}
+          {agentPaused || activePaused ? 'paused' : 'live'}
         </span>
+        {perf.lcpMs != null && perf.ttiMs != null && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-muted-foreground/50" title="P11.4 — LCP / TTI">
+                {perf.lcpMs}ms · {perf.ttiMs}ms
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>LCP (target &lt;1s) · TTI (target &lt;2s)</TooltipContent>
+          </Tooltip>
+        )}
         {monitorBadge.count > 0 && (
           <button
             type="button"

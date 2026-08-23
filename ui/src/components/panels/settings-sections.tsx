@@ -1,9 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, HeartPulse, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useTheme } from '@/components/theme-provider'
+import { useLocale } from '@/lib/i18n'
+import { usePref } from '@/lib/ui-prefs'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -70,15 +73,29 @@ export function GeneralSection() {
 
 // === Appearance ===
 export function AppearanceSection() {
-  const [theme, setTheme] = useState('dark')
-  const [scale, setScale] = useState(14)
-  const [density, setDensity] = useState('comfortable')
+  // P11.3 — live appearance controls. Theme + font scale + high contrast are
+  // applied to <html> and persisted; the language switcher drives the i18n
+  // layer (English default; ar/he enable RTL layout automatically).
+  const { theme, setTheme } = useTheme()
+  const { locale, setLocale, t } = useLocale()
+  const [scale, setScale] = usePref<'sm' | 'md' | 'lg'>('fontScale', 'md')
+  const [highContrast, setHighContrast] = usePref<boolean>('highContrast', false)
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.remove('font-scale-sm', 'font-scale-md', 'font-scale-lg')
+    root.classList.add(`font-scale-${scale}`)
+  }, [scale])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('high-contrast', highContrast)
+  }, [highContrast])
 
   return (
-    <SectionShell title="Appearance" desc="Theme, font scale and density">
+    <SectionShell title="Appearance" desc="Theme, text size, contrast and language (P11.3)">
       <Row label="Theme">
         <div className="flex gap-1.5">
-          {['light', 'dark', 'system'].map((t) => (
+          {(['light', 'dark'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTheme(t)}
@@ -94,21 +111,41 @@ export function AppearanceSection() {
           ))}
         </div>
       </Row>
-      <Row label="Font scale">
+      <Row label="Text size">
         <div className="flex w-56 items-center gap-3">
-          <Slider value={[scale]} min={11} max={18} step={1} onValueChange={(v) => setScale(v[0])} />
-          <span className="w-12 font-mono text-xs text-orange-300">{scale}px</span>
+          <Slider
+            value={[scale === 'sm' ? 0 : scale === 'lg' ? 2 : 1]}
+            min={0}
+            max={2}
+            step={1}
+            onValueChange={(v) => setScale(v[0] === 0 ? 'sm' : v[0] === 2 ? 'lg' : 'md')}
+          />
+          <span className="w-16 font-mono text-xs text-orange-300">
+            {scale === 'sm' ? 'Small' : scale === 'lg' ? 'Large' : 'Default'}
+          </span>
         </div>
+        <p className="text-[10px] text-muted-foreground">
+          Scaled from the system text-size preference.
+        </p>
       </Row>
-      <Row label="Density">
-        <Select value={density} onValueChange={setDensity}>
+      <Row label="High contrast">
+        <Switch checked={highContrast} onCheckedChange={setHighContrast} />
+        <p className="text-[10px] text-muted-foreground">
+          WCAG 2.1 AA-boosted surfaces for low-vision users.
+        </p>
+      </Row>
+      <Row label="Language">
+        <Select value={locale} onValueChange={(v) => setLocale(v as 'en' | 'ar' | 'he')}>
           <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="compact">Compact</SelectItem>
-            <SelectItem value="comfortable">Comfortable</SelectItem>
-            <SelectItem value="spacious">Spacious</SelectItem>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="ar">العربية (RTL)</SelectItem>
+            <SelectItem value="he">עברית (RTL)</SelectItem>
           </SelectContent>
         </Select>
+        <p className="text-[10px] text-muted-foreground">
+          {t('settings.language')} — Arabic/Hebrew flip the layout to RTL.
+        </p>
       </Row>
     </SectionShell>
   )

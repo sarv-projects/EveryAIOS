@@ -9,47 +9,28 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import {
+  guardActivity,
   guardEstop,
+  guardPermissionsMatrix,
   guardPolicy,
   guardRespond,
   guardTickets,
   type GuardPolicy,
   type GuardTicket,
+  type MatrixCell,
+  type RecentAction,
 } from '@/lib/guard'
 
 const TRUST_LEVELS = ['Read', 'Write', 'Execute', 'Autonomous']
 const TRUST_SCORE = 75
 const CURRENT_LEVEL = 1 // Write
 
-const ACTIONS: {
-  action: string
-  target: string
-  scope: string
-  time: string
-  status: 'ok' | 'warn' | 'err' | 'pending'
-}[] = [
-  { action: 'Read', target: 'src/utils.ts', scope: 'workspace read', time: '09:15:02', status: 'ok' },
-  { action: 'Write', target: 'src/api/handler.ts', scope: 'workspace write', time: '09:15:04', status: 'ok' },
-  { action: 'Browser', target: 'gmail.com (read-only)', scope: 'browser (owned tabs)', time: '09:14:50', status: 'ok' },
-  { action: 'Execute', target: 'npm run deploy', scope: 'shell (restricted)', time: '09:15:08', status: 'pending' },
-  { action: 'External API', target: 'api.openai.com (gpt-4o)', scope: 'external api (with approval)', time: '09:14:45', status: 'ok' },
-  { action: 'Blocked', target: 'rm -rf /', scope: 'Guard-1 regex', time: '09:15:09', status: 'err' },
-  { action: 'Network', target: 'untrusted-host.io', scope: 'egress (restricted)', time: '09:14:32', status: 'warn' },
-]
+// P11.5.7 — the capability×scope grid labels (rows/columns of the live
+// matrix; the DECISIONS come from `guard_permissions_matrix`, not here).
+const CAPABILITIES = ['read', 'write', 'execute', 'network', 'browser']
+const SCOPES = ['workspace', 'home', 'shell', 'external', 'browser']
 
-const CAPABILITIES = ['Read', 'Write', 'Execute', 'Network', 'Browser']
-const SCOPES = ['Workspace', 'Home dir', 'Shell', 'External API', 'Browser']
-
-// Cell states: 'allow' | 'ask' | 'block' | 'off'
 type Cell = 'allow' | 'ask' | 'block' | 'off'
-
-const MATRIX: Cell[][] = [
-  ['allow', 'ask', 'allow', 'ask', 'allow'],
-  ['allow', 'block', 'ask', 'ask', 'ask'],
-  ['allow', 'block', 'allow', 'ask', 'block'],
-  ['ask', 'block', 'block', 'ask', 'ask'],
-  ['allow', 'ask', 'allow', 'ask', 'allow'],
-]
 
 const CELL_TONE: Record<Cell, string> = {
   allow: 'bg-emerald-500/70 text-emerald-50',
@@ -65,6 +46,16 @@ const CELL_LABEL: Record<Cell, string> = {
   off: 'off',
 }
 
+// P11.5.7 — preview-mode fallback rows (the live bridge replaces these in the
+// Tauri shell; kept so the panel stays explorable without the backend).
+const demoActivityRows: RecentAction[] = [
+  { action: 'ToolCompleted', target: 'fs_write_file · src/api.ts', scope: 'session demo-1', time: '09:15:02', status: 'ok' },
+  { action: 'ToolCompleted', target: 'browser.read · gmail.com', scope: 'session demo-1', time: '09:14:50', status: 'ok' },
+  { action: 'ToolStarted', target: 'shell.exec · npm run build', scope: 'session demo-1', time: '09:15:08', status: 'pending' },
+  { action: 'PermissionGranted', target: 'write src/api.ts', scope: 'session demo-1', time: '09:15:04', status: 'ok' },
+  { action: 'ToolCompleted', target: 'provider/stream · openai', scope: 'session demo-1', time: '09:14:45', status: 'ok' },
+]
+
 const ACTION_TONE = {
   ok: { icon: Check, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
   warn: { icon: AlertTriangle, color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
@@ -75,19 +66,30 @@ const ACTION_TONE = {
 export default function GuardPanel() {
   const [tickets, setTickets] = useState<GuardTicket[]>([])
   const [policy, setPolicy] = useState<GuardPolicy | null>(null)
+  // P11.5.7 — live recent-actions log + permissions matrix (demo fallback
+  // in plain-browser preview so the panel stays explorable).
+  const [activity, setActivity] = useState<RecentAction[]>([])
+  const [matrix, setMatrix] = useState<MatrixCell[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
 
-  // Live bridge (P7.5/J21): poll pending tickets + policy while in the shell;
-  // in preview the bridge returns demo data so the card stays explorable.
+  // Live bridge (P7.5/J21 + P11.5.7): poll pending tickets + policy + the
+  // activity log + permissions matrix while in the shell.
   useEffect(() => {
     let alive = true
     const refresh = async () => {
       try {
-        const [t, p] = await Promise.all([guardTickets(), guardPolicy()])
+        const [t, p, a, m] = await Promise.all([
+          guardTickets(),
+          guardPolicy(),
+          guardActivity(12),
+          guardPermissionsMatrix(),
+        ])
         if (!alive) return
         setTickets(t)
         setPolicy(p)
+        setActivity(a)
+        setMatrix(m)
       } catch {
         /* shell not ready */
       }
@@ -331,7 +333,7 @@ export default function GuardPanel() {
               <span className="font-mono text-[10px] text-muted-foreground">last 24h</span>
             </div>
             <ul className="space-y-1.5">
-              {ACTIONS.map((a, i) => {
+              {(activity.length > 0 ? activity : demoActivityRows).map((a, i) => {
                 const tone = ACTION_TONE[a.status]
                 const Icon = tone.icon
                 return (
@@ -404,13 +406,18 @@ export default function GuardPanel() {
                   {SCOPES.map((scope, r) => (
                     <tr key={scope}>
                       <td className="px-1 py-1 text-right font-medium text-muted-foreground">{scope}</td>
-                      {MATRIX[r].map((cell, c) => (
-                        <td key={c}>
-                          <div className={cn('flex h-7 items-center justify-center rounded font-mono text-[9px] uppercase', CELL_TONE[cell])}>
-                            {CELL_LABEL[cell]}
-                          </div>
-                        </td>
-                      ))}
+                      {CAPABILITIES.map((cap, c) => {
+                        const cell = matrix.find(
+                          (m) => m.capability === cap && m.scope === SCOPES[r],
+                        )?.decision ?? 'off'
+                        return (
+                          <td key={c}>
+                            <div className={cn('flex h-7 items-center justify-center rounded font-mono text-[9px] uppercase', CELL_TONE[cell])}>
+                              {CELL_LABEL[cell]}
+                            </div>
+                          </td>
+                        )
+                      })}
                     </tr>
                   ))}
                 </tbody>

@@ -230,8 +230,10 @@ mod tests {
                    5\t1\t0\t0\t0\t0\t10\t20\t30\t10\t92\tHello\n\
                    5\t1\t0\t0\t0\t1\t50\t20\t30\t10\t-1\tignored\n";
         let words = TesseractCli::parse_tsv(tsv);
-        assert_eq!(words.len(), 1);
+        // Both word rows parse (confidence filtering happens in OcrEngine::ocr).
+        assert_eq!(words.len(), 2);
         assert_eq!(words[0].text, "Hello");
+        assert_eq!(words[1].text, "ignored");
         assert_eq!((words[0].x, words[0].y, words[0].width, words[0].height), (10, 20, 30, 10));
     }
 

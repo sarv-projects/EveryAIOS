@@ -527,3 +527,54 @@
   }
   .caret-blink { display: none; }
 }
+
+/* ============================================================================
+   P11.3 — Accessibility & Internationalization
+   ==========================================================================*/
+
+/* WCAG 2.1 AA — visible focus ring on every interactive element. Keyboard
+   users get a 2px orange ring with a 2px offset; mouse users keep the ring
+   only while their input modality is keyboard (pointer-fine hides it). */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* High-contrast mode — `html.high-contrast`. Boosts surface contrast and
+   text weights so AA holds on any panel; borders get darker, muted text
+   steps up a notch. Light + dark variants both covered. */
+html.high-contrast {
+  --border: 38 17% 62%;
+  --input: 38 17% 55%;
+  --muted-foreground: 48 8% 26%;
+  --muted: 48 14% 88%;
+}
+html.high-contrast.dark {
+  --border: 60 4% 42%;
+  --input: 60 4% 50%;
+  --muted-foreground: 48 14% 82%;
+  --muted: 60 4% 26%;
+}
+html.high-contrast .text-muted-foreground {
+  font-weight: 500;
+}
+
+/* Font scaling (P11.3) — `html.font-scale-sm/md/lg` multiplies the root
+   rem, so every rem-based size in the app scales together and respects the
+   OS text-size preference on the md step. */
+html.font-scale-sm { font-size: 13px; }
+html.font-scale-md { font-size: 15px; }
+html.font-scale-lg { font-size: 17px; }
+
+/* RTL (P11.3) — logical-property pass for layout primitives that hardcoded
+   physical sides. Panels that use flex + gap are already direction-agnostic;
+   these normalize the few physical utilities. */
+[dir='rtl'] .space-x-reverse > * + * {
+  margin-left: 0;
+  margin-right: 0.5rem;
+}
+[dir='rtl'] .ml-auto { margin-left: 0; margin-right: auto; }
+[dir='rtl'] .mr-auto { margin-right: 0; margin-left: auto; }
+[dir='rtl'] .text-left { text-align: right; }
+[dir='rtl'] .text-right { text-align: left; }

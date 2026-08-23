@@ -28,6 +28,8 @@ export type ViewId =
   | 'trajectory'
   | 'blueprint'
   | 'local-server'
+  | 'kanban'
+  | 'generative'
 
 export type ChatMode = 'normal' | 'plan' | 'research' | 'quick' | 'code'
 
@@ -39,6 +41,7 @@ export type SessionStatus =
   | 'failed'
   | 'paused'
   | 'scheduled'
+  | 'reconnecting'
 
 export interface ToolCallRecord {
   id: string
@@ -92,6 +95,8 @@ export interface MCQInterrupt {
   budget?: { used: number; cap: number }
   /** Guard-2 permission cards must echo this nonce when approving/rejecting. */
   approvalNonce?: string
+  /** P11.2 — urgency level drives the card's badge + default selection. */
+  urgency?: 'low' | 'medium' | 'high'
 }
 
 export interface StreamStats {
@@ -132,6 +137,24 @@ export interface Automation {
   success: number
   failed: number
   lastRun?: string
+}
+
+/** P11.5.3 — per-session layout snapshot (persisted per sessionId). */
+export interface SessionLayout {
+  view?: ViewId
+  officeDoc?: string
+  railCollapsed?: boolean
+  splitRatio?: number
+  composerMode?: ChatMode
+}
+
+/** P11.5.3 — a real pending patch (agent file mutation w/ undo snapshot). */
+export interface PendingPatch {
+  id: string
+  sessionId: string
+  path: string
+  beforeBytes: number
+  applied?: boolean
 }
 
 export interface Connector {
@@ -619,6 +642,9 @@ interface AppState {
   localCtxWindow?: number
   setLocalRuntime: (runtime?: string, ctx?: number) => void
   streamStats: StreamStats
+  // P11.5.12 — reconnect chip state (dropped IPC stream → auto-resume).
+  reconnect: { show: boolean; lastToken: string; tokens: number }
+  setReconnect: (r: { show: boolean; lastToken: string; tokens: number }) => void
   noteStreamTick: (tokenCount: number) => void
   forkFromMessage: (messageId: string) => void
 
@@ -701,12 +727,48 @@ interface AppState {
   setPendingPlan: (
     p: { planId: string; tasks: { id: string; goal: string; dependsOn?: string[] }[] } | undefined,
   ) => void
+
+  // P11.2 — onboarding (first launch → add key → first chat → success)
+  onboardingDone: boolean
+  setOnboardingDone: (v: boolean) => void
+
+  // P11.5.3 — per-session layout persistence
+  sessionLayouts: Record<string, SessionLayout>
+  saveSessionLayout: (sessionId: string, partial: Partial<SessionLayout>) => void
+  restoreSessionLayout: (sessionId: string) => void
+
+  // P11.5.4 — takeover / resume (per-session pause + describe-changes draft)
+  pausedSessions: Record<string, boolean>
+  setSessionPaused: (sessionId: string, paused: boolean) => void
+
+  // P11.5.3 — real pending patches (fed by fs_undo_list)
+  pendingPatches: PendingPatch[]
+  setPendingPatches: (patches: PendingPatch[]) => void
+
+  // P11.5.5 — NL automation draft text
+  nlAutomationDraft?: string
+  setNlAutomationDraft: (v?: string) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   sessions: mockSessions,
   activeSessionId: 's1',
-  setActiveSession: (id) => set({ activeSessionId: id, centerScreen: 'chat' }),
+  setActiveSession: (id) => {
+    // P11.5.3 — persist the outgoing session's layout, restore the incoming.
+    const st = get()
+    if (st.activeSessionId !== id) {
+      st.saveSessionLayout(st.activeSessionId, {
+        view: st.activeView,
+        railCollapsed: st.railCollapsed,
+        composerMode: st.composerMode,
+        officeDoc: st.sessions.find((x) => x.id === st.activeSessionId)?.officeDoc,
+      })
+      set({ activeSessionId: id, centerScreen: 'chat' })
+      st.restoreSessionLayout(id)
+    } else {
+      set({ activeSessionId: id, centerScreen: 'chat' })
+    }
+  },
   newSession: () => {
     const id = `s-${Date.now()}`
     const fresh: Session = {
@@ -762,15 +824,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   activeView: 'office-xlsx',
-  setActiveView: (v) =>
+  setActiveView: (v) => {
     set((s) => ({
       activeView: v,
       railCollapsed: false,
       openViews: s.openViews.includes(v) ? s.openViews : [...s.openViews, v],
-    })),
+    }))
+    // P11.5.3 — persist the layout as it changes.
+    get().saveSessionLayout(get().activeSessionId, { view: v, railCollapsed: false })
+  },
   railCollapsed: false,
-  toggleRail: () => set((s) => ({ railCollapsed: !s.railCollapsed })),
-  setRailCollapsed: (v) => set({ railCollapsed: v }),
+  toggleRail: () => {
+    set((s) => ({ railCollapsed: !s.railCollapsed }))
+    get().saveSessionLayout(get().activeSessionId, { railCollapsed: get().railCollapsed })
+  },
+  setRailCollapsed: (v) => {
+    set({ railCollapsed: v })
+    get().saveSessionLayout(get().activeSessionId, { railCollapsed: v })
+  },
 
   openViews: ['office-xlsx', 'folder', 'shell', 'browse'],
   addView: (v) =>
@@ -838,6 +909,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   localCtxWindow: undefined,
   setLocalRuntime: (runtime, ctx) => set({ localRuntime: runtime, localCtxWindow: ctx }),
   streamStats: { tokensPerSec: 0, ctxPct: 0, tokensThisTurn: 0 },
+  // P11.5.12 — reconnect chip state: set when the IPC stream drops, cleared
+  // when the stream resumes or the user dismisses the chip.
+  reconnect: { show: false, lastToken: '', tokens: 0 },
+  setReconnect: (r) => set({ reconnect: r }),
   noteStreamTick: (tokenCount) => {
     const now = Date.now()
     if (streamT0 === 0) streamT0 = now
@@ -1226,6 +1301,88 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   pendingPlan: undefined,
   setPendingPlan: (p) => set({ pendingPlan: p }),
+
+  // P11.2 — onboarding. Persisted so the flow only shows on first launch.
+  onboardingDone: (() => {
+    if (typeof window === 'undefined') return true
+    try {
+      return window.localStorage.getItem('everyaios.settings.onboardingDone') === '1'
+    } catch {
+      return true
+    }
+  })(),
+  setOnboardingDone: (v) => {
+    try {
+      window.localStorage.setItem('everyaios.settings.onboardingDone', v ? '1' : '0')
+    } catch {
+      /* storage may be unavailable */
+    }
+    set({ onboardingDone: v })
+  },
+
+  // P11.5.3 — per-session layout persistence. Save on session switch/view
+  // change; restore on session activation (rail/view/composer back to where
+  // the user left them; new sessions stay rail-collapsed until a tool needs
+  // a view — the Cursor reset bug we do not copy).
+  sessionLayouts: {},
+  saveSessionLayout: (sessionId, partial) => {
+    set((s) => {
+      const next = { ...(s.sessionLayouts[sessionId] ?? {}), ...partial }
+      try {
+        window.localStorage.setItem(
+          `everyaios.layout.${sessionId}`,
+          JSON.stringify(next),
+        )
+      } catch {
+        /* ignore */
+      }
+      return { sessionLayouts: { ...s.sessionLayouts, [sessionId]: next } }
+    })
+  },
+  restoreSessionLayout: (sessionId) => {
+    let saved: SessionLayout | undefined
+    try {
+      const raw = window.localStorage.getItem(`everyaios.layout.${sessionId}`)
+      if (raw) saved = JSON.parse(raw) as SessionLayout
+    } catch {
+      /* ignore */
+    }
+    if (!saved) return
+    set((s) => ({
+      activeView: saved.view ?? s.activeView,
+      railCollapsed: saved.railCollapsed ?? s.railCollapsed,
+      composerMode: saved.composerMode ?? s.composerMode,
+      sessions: s.sessions.map((x) =>
+        x.id === sessionId
+          ? {
+              ...x,
+              view: saved.view ?? x.view,
+              officeDoc: saved.officeDoc ?? x.officeDoc,
+              railCollapsed: saved.railCollapsed ?? x.railCollapsed,
+            }
+          : x,
+      ),
+    }))
+  },
+
+  // P11.5.4 — per-session takeover pause. The agent loop is paused (editable
+  // panels) until the user resumes with a describe-changes note.
+  pausedSessions: {},
+  setSessionPaused: (sessionId, paused) =>
+    set((s) => ({
+      pausedSessions: { ...s.pausedSessions, [sessionId]: paused },
+      sessions: s.sessions.map((x) =>
+        x.id === sessionId ? { ...x, status: paused ? 'paused' : 'idle' } : x,
+      ),
+    })),
+
+  // P11.5.3 — real pending patches from `fs_undo_list` (diff view source).
+  pendingPatches: [],
+  setPendingPatches: (patches) => set({ pendingPatches: patches }),
+
+  // P11.5.5 — NL automation draft text.
+  nlAutomationDraft: undefined,
+  setNlAutomationDraft: (v) => set({ nlAutomationDraft: v }),
 }))
 
 /** Vault-backed persist (Codex JSONL / Claude transcripts analog). Preview

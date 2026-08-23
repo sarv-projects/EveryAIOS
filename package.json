@@ -12,5 +12,11 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^19.0.0",
+      "@types/react-dom": "^19.0.0"
+    }
   }
 }

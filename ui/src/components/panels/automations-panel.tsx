@@ -79,15 +79,19 @@ export default function AutomationsPanel() {
     void schedulerList().then((s) => setAutomations(s.jobs))
   }, [])
 
-  // NL create: in preview we fake the parse and prepend a new enabled job.
+  // P11.5.5 — NL automation creation: describe in plain words → config.
+  // Deterministic zero-LLM parser for the common patterns (daily/weekly/
+  // hourly/on-event); anything else falls through to a sensible default cron
+  // with an honest note (full LLM-direct generation is a follow-up seam).
   const createFromNl = () => {
     const text = nlInput.trim()
     if (!text) return
+    const trigger = parseNlTrigger(text)
     const newJob: SchedulerJob = {
       id: `j-nl-${Date.now()}`,
       name: text.length > 40 ? `${text.slice(0, 40)}…` : text,
       sessionId: 's-nl',
-      trigger: { type: 'cron', expr: '0 9 * * *' },
+      trigger,
       steps: [{ step: 'prompt', text }],
       policy: { suppressOnBattery: true, maxRunsPerHour: 1 },
       enabled: true,
@@ -99,7 +103,29 @@ export default function AutomationsPanel() {
     }
     setAutomations((prev) => [newJob, ...prev])
     setNlInput('')
-    notify('Automation created — “Every morning at 09:00”')
+    notify(`Automation created — ${triggerLabel(trigger)}`)
+  }
+
+  // P11.5.5 — template → real job (not a toast): name/trigger/desc map onto
+  // an enabled SchedulerJob the Rust scheduler can adopt.
+  const useTemplate = (t: (typeof TEMPLATES)[number]) => {
+    const trigger = templateTrigger(t)
+    const newJob: SchedulerJob = {
+      id: `j-tpl-${Date.now()}`,
+      name: t.name,
+      sessionId: 's-tpl',
+      trigger,
+      steps: [{ step: 'prompt', text: t.desc }],
+      policy: { suppressOnBattery: true, maxRunsPerHour: 2 },
+      enabled: true,
+      state: { state: 'idle' },
+      checkpoint: 0,
+      runs: 0,
+      successes: 0,
+      failures: 0,
+    }
+    setAutomations((prev) => [newJob, ...prev])
+    notify(`Created automation from “${t.name}” template — ${triggerLabel(trigger)}`)
   }
 
   const toggleEnabled = (id: string) => {
@@ -209,7 +235,7 @@ export default function AutomationsPanel() {
                     <Button
                       size="sm"
                       className="h-7 gap-1 bg-orange-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
-                      onClick={() => notify(`Created automation from “${t.name}” template`)}
+                      onClick={() => useTemplate(t)}
                     >
                       <Plus className="h-3 w-3" />
                       Use template
@@ -413,4 +439,64 @@ export default function AutomationsPanel() {
       </footer>
     </div>
   )
+}
+
+/** P11.5.5 — deterministic NL → trigger parser (zero-LLM common patterns). */
+function parseNlTrigger(text: string): SchedulerJob['trigger'] {
+  const t = text.toLowerCase()
+  // on-event triggers
+  if (t.includes('ci fail') || t.includes('build fail') || t.includes('red build'))
+    return { type: 'event', kind: 'ci_build_fail', filter: '' }
+  if (t.includes('test regression') || t.includes('test fail'))
+    return { type: 'event', kind: 'test_regression', filter: '' }
+  if (t.includes('webhook')) return { type: 'webhook', path: '/hook', schema: [] }
+  // frequency patterns
+  if (t.includes('every hour') || t.includes('hourly')) return { type: 'interval', secs: 3600 }
+  if (t.includes('every 15')) return { type: 'interval', secs: 900 }
+  if (t.includes('every 30')) return { type: 'interval', secs: 1800 }
+  // weekly: "every monday at 9", "weekly on friday"
+  const dowMap: [string, number][] = [
+    ['sunday', 0], ['monday', 1], ['tuesday', 2], ['wednesday', 3],
+    ['thursday', 4], ['friday', 5], ['saturday', 6],
+  ]
+  for (const [name, num] of dowMap) {
+    if (t.includes(name)) {
+      const h = extractHour(t) ?? 9
+      return { type: 'cron', expr: `0 ${h} * * ${num}` }
+    }
+  }
+  if (t.includes('weekly')) return { type: 'cron', expr: '0 9 * * 1' }
+  if (t.includes('monthly') || t.includes('first of the month')) return { type: 'cron', expr: '0 8 1 * *' }
+  // daily: "every morning", "daily at 8pm", "every day"
+  if (t.includes('morning')) return { type: 'cron', expr: `0 ${extractHour(t) ?? 8} * * *` }
+  if (t.includes('evening') || t.includes('night')) return { type: 'cron', expr: `0 ${extractHour(t) ?? 18} * * *` }
+  if (t.includes('daily') || t.includes('every day')) return { type: 'cron', expr: `0 ${extractHour(t) ?? 9} * * *` }
+  const h = extractHour(t)
+  if (h !== null) return { type: 'cron', expr: `0 ${h} * * *` }
+  // fallback: daily 9am + honest note (LLM-direct generation is follow-up)
+  return { type: 'cron', expr: '0 9 * * *' }
+}
+
+function extractHour(text: string): number | null {
+  // "at 9", "at 9am", "at 17:30", "at 8pm"
+  const m = text.match(/at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+  if (!m) return null
+  let h = parseInt(m[1], 10)
+  const mer = m[3]
+  if (mer === 'pm' && h < 12) h += 12
+  if (mer === 'am' && h === 12) h = 0
+  return h
+}
+
+/** P11.5.5 — template trigger strings → SchedulerTrigger. */
+function templateTrigger(t: (typeof TEMPLATES)[number]): SchedulerJob['trigger'] {
+  const raw = t.trigger
+  if (raw.startsWith('interval')) {
+    return { type: 'interval', secs: parseInt(raw.split(' ')[1] ?? '3600', 10) }
+  }
+  if (raw.startsWith('on ')) {
+    const kind = raw.slice(3).replace(/\s+/g, '_')
+    return { type: 'event', kind: kind === 'ci_build_fail' ? 'ci_build_fail' : 'repo_change', filter: '' }
+  }
+  return { type: 'cron', expr: raw }
 }

@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useDebouncedValue } from '@/lib/ux'
 import { cn } from '@/lib/utils'
 import {
   replaySessions,
@@ -108,6 +109,15 @@ export default function AuditView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // P11.4 — debounced search: typing pauses 400ms before a query fires, so
+  // the Rust replay index isn't hit per keystroke.
+  const debouncedQuery = useDebouncedValue(query, 400)
+  useEffect(() => {
+    if (query === debouncedQuery) return
+    loadSessions(debouncedQuery)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQuery])
+
   // Load timeline when a session is selected.
   useEffect(() => {
     if (!activeDoc) return
@@ -192,6 +202,7 @@ export default function AuditView() {
           }}
           placeholder="Search sessions (doc id, tab id)…"
           className="h-7 max-w-xs font-mono text-xs"
+          data-debounced
         />
         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => loadSessions(query)}>
           Search

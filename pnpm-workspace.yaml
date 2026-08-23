@@ -16,3 +16,10 @@ allowBuilds:
   esbuild: true
   onnxruntime-node: true
   workerd: true
+
+# Force one React types version across the workspace — @personal-ai/app-mobile
+# (RN 0.76) hoists @types/react@18 to the store root, which mixes two React
+# type identities into the ui program (tsc errors in shadcn components).
+overrides:
+  "@types/react": "^19.0.0"
+  "@types/react-dom": "^19.0.0"

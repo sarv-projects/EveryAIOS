@@ -221,6 +221,8 @@ pub struct ChatRelay<W, R> {
     /// H3 data egress engine.
     egress: Arc<Mutex<everyaios_guard::EgressEngine>>,
     on_event: Arc<Mutex<EventSink>>,
+    /// P11.5.11 — AG-UI live transport: forwards `agui/event` lines to the UI.
+    agui: crate::agui::AguiRelay,
 }
 
 impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
@@ -269,6 +271,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
             egress,
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
+            agui: crate::agui::AguiRelay::new(),
         }
     }
 
@@ -340,6 +343,28 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         &self.link
     }
 
+    /// Attach the AG-UI UI sink (P11.5.11). The shell calls this at boot so
+    /// `agui/event` notifications from the coordinator reach the UI as
+    /// `agui-event` emits. Returns the relay (the shell's `agui_send` command
+    /// uses it to push UI→coordinator events into the sidecar link).
+    pub fn with_agui(&self, sink: impl Fn(String) + Send + 'static) -> crate::agui::AguiRelay {
+        self.agui.attach(sink);
+        self.agui.clone()
+    }
+
+    /// The AG-UI relay handle (Tauri `agui_send`/`agui_stream` commands).
+    pub fn agui(&self) -> crate::agui::AguiRelay {
+        self.agui.clone()
+    }
+
+    /// Push a UI→coordinator AG-UI event into the sidecar link as an
+    /// `agui/event` notification (e.g. `interrupt_resolved`).
+    pub fn send_agui(&self, line: &str) -> Result<(), crate::sidecar_link::LinkError> {
+        self.link
+            .writer()
+            .notify("agui/event", serde_json::json!({ "line": line }))
+    }
+
     /// Start the long-lived consumer loop (call ONCE per link). Handles
     /// `provider/stream` requests (broker in Rust) and forwards `chat/*`
     /// notifications to `on_event`, including the post-turn budget kill.
@@ -359,6 +384,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let evals = Arc::clone(&self.evals);
         let executions = Arc::clone(&self.executions);
         let egress = Arc::clone(&self.egress);
+        let agui = self.agui.clone();
 
         std::thread::spawn(move || loop {
             let inbound = receiver.lock().unwrap_or_else(|e| e.into_inner()).recv();
@@ -685,6 +711,15 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 stream_id,
                             },
                         ),
+                        // P11.5.11 — AG-UI live transport: forward the raw
+                        // encoded envelope line to the UI (`agui-event` emit).
+                        "agui/event" => {
+                            if let Some(line) = params.get("line").and_then(|l| l.as_str()) {
+                                agui.forward(line);
+                            } else if let Some(raw) = params.get("envelope") {
+                                agui.forward(&serde_json::to_string(raw).unwrap_or_default());
+                            }
+                        }
                         "chat/tool_result" => emit(
                             &on_event,
                             ChatWireEvent::ToolResult {

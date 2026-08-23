@@ -1,0 +1,95 @@
+//! Mock ACP agent — a *real spawned process* that speaks the ACP v1 protocol
+//! (newline-delimited JSON-RPC over stdio) so live E2E tests can exercise the
+//! full spawn → initialize → session/new path without any credentials.
+//!
+//! Behavior (mirrors the official `@agentclientprotocol/claude-agent-acp`
+//! surface for the handshake subset):
+//! - `initialize` → `{ protocolVersion: 1, agentCapabilities, agentInfo,
+//!   authMethods: [] }`
+//! - `session/new` → `{ sessionId: "mock-session-<n>" }`
+//! - `session/prompt` → a `session/update` notification with the echo text
+//!   (so prompt-driven E2E is possible too)
+//! - anything else → JSON-RPC method-not-found error
+//!
+//! Reads until EOF (the client's shutdown kills us), so a hanging test can
+//! never leak the process — stdin EOF ends the loop.
+
+use std::io::{self, BufRead, Write};
+use std::process::exit;
+
+fn main() {
+    let stdin = io::stdin();
+    let mut stdout = io::stdout();
+    let mut session_counter = 0u64;
+
+    for line in stdin.lock().lines() {
+        let Ok(line) = line else { break };
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(req) = serde_json::from_str::<serde_json::Value>(line) else {
+            let _ = writeln!(stdout, "{{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{{\"code\":-32700,\"message\":\"parse error\"}}}}");
+            let _ = stdout.flush();
+            continue;
+        };
+        let method = req["method"].as_str().unwrap_or("");
+        let id = req["id"].clone();
+
+        match method {
+            "initialize" => {
+                let resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "protocolVersion": 1,
+                        "agentCapabilities": { "loadSession": true },
+                        "agentInfo": { "name": "mock-acp", "title": "Mock ACP Agent", "version": "0.0.1" },
+                        "authMethods": []
+                    }
+                });
+                let _ = writeln!(stdout, "{resp}");
+            }
+            "session/new" => {
+                session_counter += 1;
+                let resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": { "sessionId": format!("mock-session-{session_counter}") }
+                });
+                let _ = writeln!(stdout, "{resp}");
+            }
+            "session/prompt" => {
+                let text = req["params"]["text"].as_str().unwrap_or("");
+                // Notification: params IS the SessionUpdate shape (camelCase).
+                let notif = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "session/update",
+                    "params": {
+                        "sessionId": "mock-session",
+                        "sessionUpdate": "agent_message_chunk",
+                        "title": "message",
+                        "content": [{ "type": "text", "text": format!("echo: {text}") }]
+                    }
+                });
+                let _ = writeln!(stdout, "{notif}");
+                let resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": { "stopReason": "end_turn" }
+                });
+                let _ = writeln!(stdout, "{resp}");
+            }
+            _ => {
+                let resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": { "code": -32601, "message": format!("method not found: {method}") }
+                });
+                let _ = writeln!(stdout, "{resp}");
+            }
+        }
+        let _ = stdout.flush();
+    }
+    exit(0);
+}

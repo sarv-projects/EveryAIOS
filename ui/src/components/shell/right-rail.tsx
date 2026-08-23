@@ -6,6 +6,7 @@ import {
   Terminal,
   Globe,
   Code2,
+  Sparkles,
   Activity,
   Plus,
   Maximize2,
@@ -19,6 +20,7 @@ import {
   Presentation,
   File,
   HardDrive,
+  GitBranch,
   GitCompare,
   ShieldCheck,
   History,
@@ -54,12 +56,15 @@ import FolderView from '@/components/views/folder-view'
 import ShellView from '@/components/views/shell-view'
 import BrowseView from '@/components/views/browse-view'
 import CodeView from '@/components/views/code-view'
+import { IdeWorkbench } from '@/components/views/ide/ide-workbench'
 import XlsxView from '@/components/views/office-xlsx-view'
 import DocxView from '@/components/views/office-docx-view'
 import PptxView from '@/components/views/office-pptx-view'
 import PdfView from '@/components/views/office-pdf-view'
 import ProgressView from '@/components/views/progress-view'
 import DiffView from '@/components/views/diff-view'
+import KanbanView from '@/components/views/kanban-view'
+import GenerativeView from '@/components/views/generative-view'
 import AuditView from '@/components/views/audit-view'
 import StorageView from '@/components/views/storage-view'
 import TrajectoryView from '@/components/views/trajectory-view'
@@ -130,6 +135,8 @@ const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   trajectory: { label: 'Trajectory', icon: ScanSearch },
   blueprint: { label: 'Blueprint', icon: FileText },
   'local-server': { label: 'Local Server', icon: FileText },
+  kanban: { label: 'Kanban', icon: GitBranch },
+  generative: { label: 'Generative UI', icon: Sparkles },
 }
 
 function ViewportContent({ view }: { view: ViewId }) {
@@ -137,7 +144,7 @@ function ViewportContent({ view }: { view: ViewId }) {
     case 'folder': return <FolderView />
     case 'shell': return <ShellView />
     case 'browse': return <BrowseView />
-    case 'code': return <CodeView />
+    case 'code': return <IdeWorkbench />
     case 'office-xlsx': return <XlsxView />
     case 'office-docx': return <DocxView />
     case 'office-pptx': return <PptxView />
@@ -150,6 +157,8 @@ function ViewportContent({ view }: { view: ViewId }) {
     case 'trajectory': return <TrajectoryView />
     case 'blueprint': return <BlueprintView />
     case 'local-server': return <LocalServerView />
+    case 'kanban': return <KanbanView />
+    case 'generative': return <GenerativeView />
     default: return null
   }
 }
