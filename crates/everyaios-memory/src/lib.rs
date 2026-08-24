@@ -48,10 +48,12 @@
 //!   hit/miss ledger with cost at configured prices (the per-key cost
 //!   display + cache-hit-rate queries).
 
+pub mod abort;
 pub mod actr;
 #[cfg(test)]
 mod bench;
 pub mod bm25;
+pub mod branch;
 pub mod cache;
 pub mod classify;
 pub mod cognee;
@@ -63,6 +65,7 @@ pub mod ghost;
 pub mod graph;
 pub mod janus;
 pub mod lazy_graph;
+pub mod maintain;
 pub mod paging;
 pub mod planner;
 pub mod reference;

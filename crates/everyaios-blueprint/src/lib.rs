@@ -26,6 +26,7 @@ pub mod blueprint;
 pub mod checkpoint;
 pub mod crystallize;
 pub mod frontmatter;
+pub mod helpers;
 pub mod iteration;
 pub mod md;
 pub mod persona;

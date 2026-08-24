@@ -11,7 +11,7 @@ use std::process::Command;
 use super::conformance::find_soffice;
 
 /// A legacy binary Office format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LegacyKind {
     Doc,
     Xls,

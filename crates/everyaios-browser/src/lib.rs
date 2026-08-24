@@ -16,12 +16,15 @@
 //! - Session/vault/replay glue: `session`, `ownership` (tab ownership),
 //!   `replay` (injected recorder), `read` (page text), `humanize`, `tiers`.
 
+pub mod acquisition;
 pub mod actions;
 pub mod ax;
 pub mod capture;
 pub mod content;
+pub mod diagnostics;
 pub mod diff;
 pub mod electron;
+pub mod har;
 pub mod humanize;
 pub mod locator;
 pub mod ownership;

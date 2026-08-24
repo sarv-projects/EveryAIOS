@@ -21,10 +21,13 @@ pub mod cleanup;
 pub mod dedup;
 pub mod events;
 pub mod finder;
+pub mod hash_cache;
 pub mod health;
 pub mod search;
 pub mod snapshot;
 pub mod treemap;
+pub mod trigram;
+pub mod usn;
 pub mod walk;
 
 pub use cleanup::{

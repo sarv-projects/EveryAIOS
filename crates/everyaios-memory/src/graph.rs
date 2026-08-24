@@ -73,18 +73,46 @@ pub enum EdgeType {
     DerivedFrom,
 }
 
+/// P36 (C6) — how the edge came to be. `Extracted` = read directly from a
+/// source (user document, code, tool output); `Inferred` = derived by a
+/// model/pipeline. Inference is always weaker and is surfaced in the span.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeConfidence {
+    Extracted,
+    Inferred,
+}
+
+/// P36 (C6) — provenance span on an edge: where the fact came from
+/// (file + line when known). Temporal windows already exist on `Edge`;
+/// this adds the source anchor.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SourceSpan {
+    pub file: Option<String>,
+    pub line: Option<u32>,
+}
+
+impl SourceSpan {
+    pub fn file_line(file: &str, line: u32) -> Self {
+        Self { file: Some(file.to_string()), line: Some(line) }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Edge {
     pub src: String,
     pub dst: String,
     pub ty: EdgeType,
     pub weight: f64,
-    /// Temporal edge-versioning (graphiti pattern): the half-open window
+    /// Temporal valid window (graphiti pattern): the half-open window
     /// `[valid_from, valid_to]` during which this edge version is active.
     pub valid_from: u64,
     pub valid_to: u64,
     /// Transaction time (bi-temporal): when this edge fact was recorded.
     pub recorded_at: u64,
+    /// P36 (C6): EXTRACTED vs INFERRED provenance.
+    pub confidence: EdgeConfidence,
+    /// P36 (C6): source file/line anchor.
+    pub source_span: SourceSpan,
 }
 
 impl Edge {
@@ -228,6 +256,46 @@ impl GraphStore {
             valid_from: at_time,
             valid_to: OPEN,
             recorded_at: 0,
+            confidence: EdgeConfidence::Extracted,
+            source_span: SourceSpan::default(),
+        });
+        self.out_index.entry(src.to_string()).or_default().push(ei);
+        self.in_index.entry(dst.to_string()).or_default().push(ei);
+        ei
+    }
+
+    /// P36 (C6) — add an edge with explicit confidence + source span. Plain
+    /// [`Self::add_edge`] stays the convenience path and records the edge as
+    /// `Extracted` with no span.
+    pub fn add_edge_with_evidence(
+        &mut self,
+        src: &str,
+        dst: &str,
+        ty: EdgeType,
+        weight: f64,
+        at_time: u64,
+        confidence: EdgeConfidence,
+        source_span: SourceSpan,
+    ) -> usize {
+        if let Some(idxs) = self.out_index.get(src) {
+            for &ei in idxs {
+                let e = &mut self.edges[ei];
+                if e.dst == dst && e.ty == ty && e.is_valid_at(at_time) {
+                    e.valid_to = at_time.saturating_sub(1).max(e.valid_from);
+                }
+            }
+        }
+        let ei = self.edges.len();
+        self.edges.push(Edge {
+            src: src.to_string(),
+            dst: dst.to_string(),
+            ty,
+            weight,
+            valid_from: at_time,
+            valid_to: OPEN,
+            recorded_at: 0,
+            confidence,
+            source_span,
         });
         self.out_index.entry(src.to_string()).or_default().push(ei);
         self.in_index.entry(dst.to_string()).or_default().push(ei);

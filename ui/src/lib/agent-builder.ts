@@ -1,0 +1,260 @@
+// === P31 — Custom agent builder (B9) ==========================================
+// Mirrors the Rust everyaios-agents crate surface: bundle manifest, the 8
+// wizard templates, engine binding, model pin, per-agent scopes.
+// The Rust registry (AgentRegistry) is the durable store; this module is the
+// browser-side builder state + template catalog + TOML export.
+
+export type EngineBinding =
+  | { kind: 'inbuilt' }
+  | { kind: 'acp'; cli: string }
+  | { kind: 'model-only' }
+
+export interface ModelPin {
+  provider?: string
+  model?: string
+}
+
+export interface ToolScope {
+  allow: string[]
+  deny: string[]
+}
+
+export interface AgentBundle {
+  schemaVersion: number
+  name: string
+  emoji: string
+  description: string
+  persona?: string
+  systemPrompt?: string
+  engine: EngineBinding
+  model: ModelPin
+  mcpServers: string[]
+  connectors: string[]
+  skills: string[]
+  tools: ToolScope
+  blueprints: string[]
+  automations: string[]
+}
+
+export const BUNDLE_SCHEMA_VERSION = 1
+
+export type AgentTemplateId =
+  | 'general'
+  | 'coder'
+  | 'researcher'
+  | 'email-triager'
+  | 'data-analyst'
+  | 'writer'
+  | 'meeting-notes'
+  | 'browser-operator'
+
+export interface AgentTemplate {
+  id: AgentTemplateId
+  label: string
+  emoji: string
+  description: string
+  preset: Omit<AgentBundle, 'name' | 'schemaVersion' | 'emoji'>
+}
+
+export const AGENT_TEMPLATES: AgentTemplate[] = [
+  {
+    id: 'general',
+    label: 'General',
+    emoji: '🤖',
+    description: 'A helpful general-purpose assistant.',
+    preset: {
+      description: 'A helpful general-purpose assistant.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: [],
+      connectors: [],
+      skills: [],
+      tools: { allow: [], deny: [] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+  {
+    id: 'coder',
+    label: 'Coder',
+    emoji: '👨‍💻',
+    description: 'Writes and fixes code with editor + terminal access.',
+    preset: {
+      description: 'Writes and fixes code with editor + terminal access.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: ['filesystem'],
+      connectors: [],
+      skills: [],
+      tools: { allow: ['fs.read', 'fs.write', 'shell', 'search'], deny: [] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+  {
+    id: 'researcher',
+    label: 'Researcher',
+    emoji: '🔬',
+    description: 'Deep web + document research with citation cards.',
+    preset: {
+      description: 'Deep web + document research with citation cards.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: [],
+      connectors: [],
+      skills: [],
+      tools: { allow: ['search', 'memory.read'], deny: ['fs.write', 'shell'] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+  {
+    id: 'email-triager',
+    label: 'Email Triager',
+    emoji: '📬',
+    description: 'Triage your inbox: summarize, draft, never send without approval.',
+    preset: {
+      description: 'Triage your inbox: summarize, draft, never send without approval.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: [],
+      connectors: ['gmail'],
+      skills: [],
+      tools: { allow: ['email.read', 'email.draft'], deny: [] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+  {
+    id: 'data-analyst',
+    label: 'Data Analyst',
+    emoji: '📊',
+    description: 'Sum, pivot, and chart spreadsheets; never invents numbers.',
+    preset: {
+      description: 'Sum, pivot, and chart spreadsheets; never invents numbers.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: [],
+      connectors: [],
+      skills: ['spreadsheet'],
+      tools: { allow: ['office.read', 'office.write'], deny: ['shell'] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+  {
+    id: 'writer',
+    label: 'Writer',
+    emoji: '✍️',
+    description: 'Long-form writing and rewriting with your style memory.',
+    preset: {
+      description: 'Long-form writing and rewriting with your style memory.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: [],
+      connectors: [],
+      skills: [],
+      tools: { allow: ['fs.read', 'fs.write'], deny: ['shell'] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+  {
+    id: 'meeting-notes',
+    label: 'Meeting Notes',
+    emoji: '📝',
+    description: 'Turns transcripts into structured notes + action items.',
+    preset: {
+      description: 'Turns transcripts into structured notes + action items.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: [],
+      connectors: [],
+      skills: [],
+      tools: { allow: ['office.write'], deny: [] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+  {
+    id: 'browser-operator',
+    label: 'Browser Operator',
+    emoji: '🌐',
+    description: 'Drives the browser: navigate, snapshot, act, verify.',
+    preset: {
+      description: 'Drives the browser: navigate, snapshot, act, verify.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: [],
+      connectors: [],
+      skills: [],
+      tools: { allow: ['browser.navigate', 'browser.act', 'browser.snapshot'], deny: [] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+]
+
+export function templateById(id: string): AgentTemplate {
+  return AGENT_TEMPLATES.find((t) => t.id === id) ?? AGENT_TEMPLATES[0]
+}
+
+/** Deterministic id from a display name (mirrors the Rust slug()). */
+export function slug(name: string): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]/g, '-')
+  return base.replace(/^-+|-+$/g, '') || 'agent'
+}
+
+/** Start a bundle from a template + the wizard's chosen name. */
+export function bundleFromTemplate(templateId: string, name: string, emoji: string): AgentBundle {
+  const t = templateById(templateId)
+  return {
+    schemaVersion: BUNDLE_SCHEMA_VERSION,
+    name,
+    emoji,
+    ...t.preset,
+  }
+}
+
+function q(s: string): string {
+  return JSON.stringify(s)
+}
+
+function arr(a: string[]): string {
+  return `[${a.map((x) => q(x)).join(', ')}]`
+}
+
+/**
+ * The bundle → agent.toml export. Order matters for diff-friendliness:
+ * identity → brain → capabilities → workflows, exactly like the Rust write.
+ */
+export function bundleToToml(b: AgentBundle): string {
+  const L: string[] = []
+  L.push(`schema_version = ${b.schemaVersion}`)
+  L.push(`name = ${q(b.name)}`)
+  L.push(`emoji = ${q(b.emoji)}`)
+  L.push(`description = ${q(b.description)}`)
+  if (b.persona) L.push(`persona = ${q(b.persona)}`)
+  if (b.systemPrompt) L.push(`system_prompt = ${q(b.systemPrompt)}`)
+  const engine = b.engine.kind === 'acp' ? `{ kind = "acp", cli = ${q(b.engine.cli)} }` : `{ kind = ${q(b.engine.kind)} }`
+  L.push(`engine = ${engine}`)
+  if (b.model.provider || b.model.model) {
+    L.push(`[model]`)
+    if (b.model.provider) L.push(`provider = ${q(b.model.provider)}`)
+    if (b.model.model) L.push(`model = ${q(b.model.model)}`)
+  }
+  L.push(`mcp_servers = ${arr(b.mcpServers)}`)
+  L.push(`connectors = ${arr(b.connectors)}`)
+  L.push(`skills = ${arr(b.skills)}`)
+  L.push(`blueprints = ${arr(b.blueprints)}`)
+  L.push(`automations = ${arr(b.automations)}`)
+  L.push(`[tools]`)
+  L.push(`allow = ${arr(b.tools.allow)}`)
+  L.push(`deny = ${arr(b.tools.deny)}`)
+  return L.join('\n')
+}
+
+/** Export the bundle as agent.toml (share = the file, future K6). */
+export function exportBundle(b: AgentBundle): { name: string; content: string } {
+  return { name: `${slug(b.name)}.agent.toml`, content: bundleToToml(b) }
+}

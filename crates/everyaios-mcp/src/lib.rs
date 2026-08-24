@@ -14,6 +14,8 @@
 use serde::{Deserialize, Serialize};
 
 pub mod attach;
+pub mod protocol;
+pub mod record;
 pub mod server;
 
 pub use attach::{AttachError, AttachRequest, AttachedServer};

@@ -99,6 +99,85 @@ impl SubAgentSpec {
     }
 }
 
+/// P36 (B3) — derived child permissions (Kilo default-deny pattern).
+///
+/// A child never blindly inherits the parent's tool universe: its toolset is
+/// `parent grants ∩ (not parent denies) ∩ explicit grants`, and task/todo
+/// bookkeeping tools are **default-deny** unless the parent explicitly grants
+/// them. `explicit_grants` is the only way a default-denied tool appears.
+pub fn derive_child_permissions(
+    parent_grants: &[String],
+    parent_denies: &[String],
+    explicit_grants: &[String],
+) -> Vec<String> {
+    let mut out: Vec<String> = parent_grants
+        .iter()
+        .filter(|t| !parent_denies.contains(t))
+        .filter(|t| !DELEGATE_BLOCKED_TOOLS.contains(&t.as_str()))
+        .filter(|t| !DEFAULT_DENY_TASK_TOOLS.contains(&t.as_str()) || explicit_grants.contains(t))
+        .cloned()
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Kilo-style default-deny task bookkeeping: a child may not mutate the plan
+/// ledger unless the parent hands it the tool explicitly.
+pub const DEFAULT_DENY_TASK_TOOLS: [&str; 2] = ["task", "todo"];
+
+/// P36 (B3) — why an inbuilt sub-agent stopped. Surface these as
+/// termination events on the audit timeline (Gemini `LocalAgentExecutor`
+/// pattern). External agents already have ACP `session/update` events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TerminationReason {
+    /// The goal/spec was met (normal completion).
+    GoalMet,
+    /// The per-agent timeout fired.
+    Timeout,
+    /// The max-turns iteration budget was exhausted.
+    MaxTurns,
+    /// Aborted by the parent/user.
+    Aborted,
+    /// The run failed (tool error, engine error).
+    Error,
+}
+
+/// P36 (B3) — one termination event; every exit lands one of these.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TerminationEvent {
+    pub task_id: String,
+    pub reason: TerminationReason,
+    pub detail: Option<String>,
+    pub at_step: u32,
+}
+
+/// P36 (B3) — the Scout child: a read-only sub-agent that clones its input
+/// into a **managed cache** and never writes the user workspace. `read_only`
+/// is enforced structurally — the struct has no write surface at all.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScoutSpec {
+    pub spec: TaskSpec,
+    /// Where the clone lands (managed cache dir, never the user workspace).
+    pub cache_root: String,
+    pub model: String,
+    #[serde(default)]
+    pub depth: u32,
+}
+
+impl ScoutSpec {
+    pub fn new(spec: TaskSpec, cache_root: impl Into<String>, model: impl Into<String>) -> Self {
+        Self { spec, cache_root: cache_root.into(), model: model.into(), depth: 0 }
+    }
+
+    /// Scouts are structurally read-only: the returned read set is the only
+    /// surface. There is no write method on this type.
+    pub const fn read_only(&self) -> bool {
+        true
+    }
+}
+
 /// What the parent receives when a sub-agent finishes — summary + status +
 /// artifacts. Structurally summary-only: there is no transcript field.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

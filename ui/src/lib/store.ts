@@ -666,6 +666,7 @@ interface AppState {
     | 'guard'
     | 'connectors'
     | 'analytics'
+    | 'agents'
     | 'settings'
   setCenterScreen: (s: AppState['centerScreen']) => void
   settingsSection: SettingsSectionId

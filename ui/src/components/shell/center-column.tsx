@@ -8,6 +8,7 @@ import MemoryPanel from '@/components/panels/memory-panel'
 import GuardPanel from '@/components/panels/guard-panel'
 import ConnectorsPanel from '@/components/panels/connectors-panel'
 import AnalyticsPanel from '@/components/panels/analytics-panel'
+import AgentBuilderPanel from '@/components/panels/agent-builder-panel'
 import SettingsPanel from '@/components/panels/settings-panel'
 import HomeLaunchpad, { ActivityPanel, ProjectsPanel } from '@/components/panels/home-launchpad'
 import FolderView from '@/components/views/folder-view'
@@ -54,6 +55,11 @@ export function CenterColumn() {
           {centerScreen === 'connectors' && (
             <div className="flex-1 min-h-0 overflow-y-auto scroll-thin">
               <ConnectorsPanel />
+            </div>
+          )}
+          {centerScreen === 'agents' && (
+            <div className="flex-1 min-h-0 overflow-y-auto scroll-thin">
+              <AgentBuilderPanel />
             </div>
           )}
           {centerScreen === 'analytics' && (

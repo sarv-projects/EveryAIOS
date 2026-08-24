@@ -17,6 +17,7 @@ members = [
     "everyaios-blueprint",
     "everyaios-codeintel",
     "everyaios-acp",
+    "everyaios-agents",
     "everyaios-search",
     "everyaios-desktop",
 ]

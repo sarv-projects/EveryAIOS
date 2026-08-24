@@ -1,0 +1,13 @@
+[package]
+name = "everyaios-agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "P31 — custom agent bundles: agent.toml manifest, registry, templates, per-agent scoping, engine binding, workflow attachment."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }

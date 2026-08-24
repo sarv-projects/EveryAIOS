@@ -65,6 +65,7 @@ pub mod docx;
 pub mod legacy;
 pub mod pdf;
 pub mod pptx;
+pub mod provenance;
 pub mod rollback;
 pub mod xlsx;
 pub mod xml;
