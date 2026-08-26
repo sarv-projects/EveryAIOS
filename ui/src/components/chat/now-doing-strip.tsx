@@ -25,6 +25,12 @@ export default function NowDoingStrip({
 }: Props) {
   const setActiveView = useAppStore((s) => s.setActiveView)
   const agentPaused = useAppStore((s) => s.agentPaused)
+  const permissionMode = useAppStore((s) => s.permissionMode)
+  const autonomyMark =
+    permissionMode === 'sandbox' ? '🛡 Sandbox'
+      : permissionMode === 'ask' ? '👀 Ask'
+        : permissionMode === 'auto' ? '⚡ Auto'
+          : '🚀 Maximum'
 
   // Live elapsed ticker (1s) so the banner feels like a real running job.
   const [tick, setTick] = useState(0)
@@ -78,6 +84,12 @@ export default function NowDoingStrip({
             {stepLabel}
           </span>
         )}
+        <span
+          className="shrink-0 rounded border border-border bg-background/40 px-1 font-mono text-[9px] text-muted-foreground"
+          title="Autonomy level for this turn (H34)"
+        >
+          {autonomyMark}
+        </span>
       </div>
       {sub && (
         <span className="hidden truncate font-mono text-[10px] text-muted-foreground/70 sm:inline">

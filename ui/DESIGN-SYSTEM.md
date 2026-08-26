@@ -6,7 +6,7 @@
 > live inside it — every token, component, layout and state, keyed to the
 > code that implements it. Any designer can turn it into Figma frames 1:1.
 >
-> **Status:** current as of the P11 push (2026-08-23).
+> **Status:** current as of spec v3.57 (2026-08-26) — three-control composer + honest office viewers.
 
 ## 1. Tokens (code: `src/globals.css` `:root` / `.dark`)
 
@@ -42,7 +42,7 @@ JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
 | EmptyState | `ui/empty-state.tsx` | icon + title + desc + action (P11.2) |
 | ErrorState (5 kinds) | `ui/error-state.tsx` | network / keyRevoked / provider5xx / budget / unknown |
 | LoadingState (5 kinds) | `ui/loading-state.tsx` | ttft / compaction / tool / agent / generic |
-| MessageBubble, ChatComposer, MCQ card | `chat/*` | + urgency badges (P11.2) |
+| MessageBubble, ChatComposer, MCQ card | `chat/*` | Composer: Work Mode ▾ (Auto/Plan/Build/Research) · Agent ▾ · Autonomy ▾ (Sandbox/Ask/Auto/Maximum). Casual chips `[🤖 Auto] [🛡 Ask]`. Now-doing strip shows the live autonomy level. |
 | OnboardingModal | `onboarding-modal.tsx` | 4 steps, non-dismissible, skip allowed |
 | Folder/Shell/Browse/Code/Diff views | `views/*` | real backends (fs/shell/CDP/undo-list) |
 | Cockpit slideover | `shell/cockpit-slideover.tsx` | animated open/close, per-agent pause/resume |
@@ -63,7 +63,7 @@ markdown); LCP/TTI measured in `lib/perf.ts` and surfaced in the status bar.
 
 ## 6. Layouts index (all screens)
 
-Chat · Home launchpad · Automations (+ templates + NL create) · Guard ·
-Connectors · Memory (5 tabs, live RPC) · Analytics · Settings (9 sections) ·
+Chat · Home launchpad · Automations (+ templates + NL create + Tasks rail) · Guard (v1 webview+nonce) ·
+Connectors (live OAuth + P42 not-attached) · Memory (5 tabs, live RPC) · Analytics · Settings ·
 Folder · Shell · Browse · Code · Diff · Audit · Storage · Blueprint ·
-Trajectory · Office (Sheets/Word/Slides/PDF).
+Trajectory · Office honest viewers (Sheets/Word/Slides/PDF + LO fallback + file switcher).

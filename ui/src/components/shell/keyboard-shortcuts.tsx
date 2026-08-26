@@ -45,6 +45,8 @@ const SHORTCUTS = [
     { keys: 'Enter', action: 'Send message' },
     { keys: '⇧ Enter', action: 'New line' },
     { keys: 'Esc', action: 'Clear input' },
+    { keys: '⌥ M', action: 'Cycle work mode (Auto · Plan · Build · Research)' },
+    { keys: '⌥ U', action: 'Cycle autonomy (Sandbox · Ask · Auto · Maximum)' },
   ]},
 ]
 
@@ -115,6 +117,25 @@ export function KeyboardShortcuts() {
       if (e.altKey && e.code === 'Space') {
         e.preventDefault()
         setAiPointerOpen(true)
+        return
+      }
+      // Alt+M — cycle Work Mode (v3.57). OpenCode uses Tab for Plan/Build;
+      // we keep Tab for focus and put the cycle on Alt+M.
+      if (e.altKey && !e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault()
+        const order = ['auto', 'plan', 'build', 'research'] as const
+        const st = useAppStore.getState()
+        const i = order.indexOf(st.composerMode)
+        st.setComposerMode(order[(i + 1) % order.length]!)
+        return
+      }
+      // Alt+U — cycle Autonomy (H34)
+      if (e.altKey && !e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'u') {
+        e.preventDefault()
+        const order = ['sandbox', 'ask', 'auto', 'full'] as const
+        const st = useAppStore.getState()
+        const i = order.indexOf(st.permissionMode)
+        st.setPermissionMode(order[(i + 1) % order.length]!)
         return
       }
       // Cmd/Ctrl + Shift + P — progress view

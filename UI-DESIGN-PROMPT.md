@@ -1,7 +1,7 @@
 # EveryAIOS — Production UI Design Specification
 
-> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). Every screen, tab, dropdown, panel and animation below exists in code today — this is a specification of the shipped surface, not a wishlist.
-> **v3.41 (2026-08-21):** Settings grouped+searchable, composer permission + Agent/Experts/Spec, empty-chat folder chips, Spec Q&A letters, Summary Artifacts/References, Repo wiki tab, Launch CLI — **chrome + localStorage**. Executor/Tauri wiring of those prefs is open (TODO P37).
+> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). The `ui/` tree is the **mock of the finished product** — explorable in a plain browser (`npm run dev`) with demo fallbacks, and live-wired inside Tauri. This file describes that mock as it should look at the end state (spec v3.57), not a wishlist of unbuilt chrome.
+> **v3.57 (2026-08-26):** composer is **three independent controls** — **Agent ▾ (WHO)** · **Work Mode ▾ (WHAT: 🤖 Auto · 📐 Plan · 🔨 Build · 🔎 Research)** · **Autonomy ▾ (HOW MUCH: 🛡 Sandbox · 👀 Ask · ⚡ Auto · 🚀 Maximum)**. Default chips `[🤖 Auto] [🛡 Ask]`. Code/browser/Office/terminal are capabilities *inside Build*, never extra modes (OpenCode Plan/Build + Cowork Chat/Cowork + Hermes sandbox/ask — we did not copy their chrome). Office views are **honest engines** (block list / formula bar / slides+notes / pdf.js+ops), not Microsoft ribbon clones. Guard-2 v1 = webview + nonce. P42 Graph/Workspace rows stay **not attached**. Version badge in the title/status bars is `v3.57`.
 
 ---
 
@@ -64,7 +64,7 @@ Purposeful, swift, never bouncy. **No horizontal slides** — surfaces replace w
 
 ### 3.1 Title bar (36px, native-drag)
 
-Traffic lights → **brand mark** (orange sparkles tile) + `EveryAIOS` + `v3.41` badge → workspace breadcrumb (`everyaios / work ∨`, hover-dropdown) → active session title + status dot + label → center **command-palette launcher** (`Search sessions, files, commands… ⌘K · ⌘/ help`) → right cluster: Guard chip (`🛡 Guard · Standard` — click opens Guard control center; **not** a sidebar item) · spend chip (`$1.84 / $5.00`, power only) · token chip (`184K tok`, power only) · theme toggle · 🔔 notifications popover (badge = unread) · sidebar toggle (⌘B) · avatar.
+Traffic lights → **brand mark** (orange sparkles tile) + `EveryAIOS` + `v3.57` badge → workspace breadcrumb (`everyaios / work ∨`, hover-dropdown) → active session title + status dot + label → center **command-palette launcher** (`Search sessions, files, commands… ⌘K · ⌘/ help`) → right cluster: Guard chip (`🛡 Guard · Standard` — click opens Guard control center; **not** a sidebar item) · spend chip (`$1.84 / $5.00`, power only) · token chip (`184K tok`, power only) · theme toggle · 🔔 notifications popover (badge = unread) · sidebar toggle (⌘B) · avatar.
 
 ### 3.2 Left sidebar
 
@@ -84,7 +84,7 @@ Session list status: 🟠 waiting for approval · 🔵 running · 🟢 completed
 
 ### 3.5 Status bar (24px)
 
-**Casual:** one discreet pill — `● Preview · demo data` (amber, plain-browser) / `● Ready · Local` or `● Processing…` (emerald/orange live-dot) + `🛡 100% Private (On-Device)` + `EveryAIOS v3.41`.
+**Casual:** one discreet pill — `● Preview · demo data` (amber, plain-browser) / `● Ready · Local` or `● Processing…` (emerald/orange live-dot) + `🛡 100% Private (On-Device)` + `EveryAIOS v3.57`.
 **Dev mode (Settings → General → Developer Mode):** the full 12-badge telemetry strip — agent health (mark + latency + model + `auto` routing badge, hover = uptime/tasks/error-rate tooltip) · `sidecar online` · `core rust` · `db 3/14MB` · `mcp 127.0.0.1:9200` · `browser chrome (system)` · `cache 94%` · `guard · L2` · `vault · 7 keys` · `audit · append` · version.
 
 ---
@@ -97,7 +97,7 @@ Agent mark (selected runtime) + session title + pinned marker + **agent·model c
 
 ### 4.2 Now-doing strip
 
-`⚡ {step i/N} {label} · {detail} · {elapsed}s elapsed · {tokens}K tokens this turn` — a never-unmounting live banner under the header while a turn runs; live elapsed ticker (1s), breathing orange icon, click → opens Progress view. **Never unmounts** when the viewport collapses.
+`⚡ {step i/N} {label} · {detail} · {elapsed}s elapsed · {tokens}K tokens this turn` + a live **Autonomy chip** (`🛡 Sandbox` / `👀 Ask` / `⚡ Auto` / `🚀 Maximum`) so the H34 level is visible while the agent runs. Never-unmounting live banner under the header; live elapsed ticker (1s), breathing orange icon, click → opens Progress view. **Never unmounts** when the viewport collapses.
 
 ### 4.3 Messages
 
@@ -162,6 +162,7 @@ Header: `🧠 Memory` + `N items` + `+ Add knowledge`. **Five real tabs** (conte
 ### 5.3 Guard (H8/J1–J21)
 
 Header + `Trust Ladder` badge + `Guard-1 regex · Guard-2 cleanup`. Sections:
+- **Honesty badge:** `v1: webview + nonce` (no OS-native dialog). Preview rows tagged `preview`.
 - **Pending approvals** (live from `guardTickets` bridge, polls 3s; preview = demo tickets): operation + risk badge + paths + goal, `Approve` / `Reject` buttons.
 - **Profile / estop strip:** `profile {profile} · auto ≥ {min}%` + `Pull estop` (red, toggles to `Estop is pulled — reset`).
 - **Trust meter:** `75/100` + 4 zones (Read ✓ · Write **current** · Execute · Autonomous) + gradient fill bar.
@@ -172,7 +173,8 @@ Header + `Trust Ladder` badge + `Guard-1 regex · Guard-2 cleanup`. Sections:
 ### 5.4 Connectors (F1–F15)
 
 Header + stats strip (Connected 5 · Available 12 · Tools 94 · MCP servers 3). **Three real tabs**:
-- **Native** — 10-connector grid (logo tile, name, category + auth badges, `N tools`, last-used, `Connected`/`Connect` — Connect toasts the OAuth flow).
+- **Native** — live vault OAuth accounts when the shell is up (`oauth_accounts`); empty vault shows an honest empty state (no fake “connected” rows). Plain-browser preview uses `NATIVE_SAMPLES` only.
+- **Planned (P42)** — Google Workspace + Microsoft 365/Graph cards, status `disconnected` / badge `not attached`. Crate engines exist; live OAuth attach is the follow-on.
 - **MCP Servers** — server rows (GitHub · Filesystem · Slack · Postgres: transport HTTP/stdio, desc, tools) — `Connect` flips the row to connected live.
 - **Tool Catalog** — the real `everyaios-mcp` registry (total/browser/storage/read-only stats; every tool: name, kind badge, profile, args, `ro`/`open` flags).
 Footer: `OAuth tokens stored in your local vault (SQLCipher). The agent never sees raw tokens.`
@@ -186,7 +188,7 @@ Header + range pills (`Today · 7d · 30d · All time`) — switching crossfades
 Left nav is **grouped + searchable** (Ctrl+F). Groups:
 
 - **Workspace** — General (proxy, tray, archive, keymap, markdown open) · Appearance · Notifications (chat/task/wiki, banner, sound, per-event preview) · Voice (device, external-mic auto-send, noise, terms, history, realtime, speed, voiceprint) · Mobile (QR, install, device control, keep awake) · Keyboard · Privacy
-- **Agents & models** — Agents & Models · Local models · Providers/BYOK + custom provider form (name, base URL, key, OpenAI/Anthropic format) · Experts/subagents + empty custom Import/New · Launch CLI copy-cards · Chat & Auto-run (Sandbox / Ask / Auto-approve / Run everything + local ctx)
+- **Agents & models** — Agents & Models · Local models · Providers/BYOK (`vault_keys_list`/`add`/`remove`) + custom provider form · Experts/subagents · Launch CLI copy-cards · Chat & Auto-run (**H34: 🛡 Sandbox · 👀 Ask · ⚡ Auto · 🚀 Maximum** + local ctx)
 - **Permissions & tools** — Permissions · Browser & Network (Browse tab, protection, local/web links, HTTP/2, proxy, required domains, diagnostic) · Indexing & LSP (grep index, hierarchical ignore, symlink skip, LSP + worktree caps) · MCP directory + empty attach · Marketplace categories · Skills search · Commands · Hooks (PreToolUse deny-only) · Worktree disk cap · Rules (AGENTS.md / CLAUDE.md) · Cloud env
 - **System** — Import & migrate · Usage zeros · Resources · Beta · Advanced · About
 
@@ -211,10 +213,10 @@ Every view is a full-fidelity surface with per-view header actions (wired — se
 2. **Shell** — dark terminal with scanlines; `$` prompts + PASS/compile output + blinking caret; **Read-only ⇄ Interactive** toggle (orange when writable, "▸ Toggle active" hint); collapsible command History sidebar. Actions: `+ New terminal` · `History`.
 3. **Browse** — full Chrome-style chrome: internal page tabs (+ new tab), bookmarks bar, back/forward/reload, padlock+URL pill, extension tiles, **AI Mode** toggle (Gemini-style sidebar: key takeaway + grounded query box), star, extensions menu, `● Live` badge, DOM **Inspector** sidebar (accessibility snapshot). Body: scraped product grid with prices; footer: `Lightpanda → Chrome escalation · 23/47 crawled · cookies from vault`. Actions: `+ New tab` · `Inspector`.
 4. **Code** — file tabs (modified dot), branch bar (`main +5 −0 · Refactor: extract getUsers()`), diff-gutter syntax table (green add rows), blinking caret, footer `Ln 4, Col 1 · TypeScript · UTF-8 · Modified`. Actions: `+ New file` · `Diff`.
-5. **Office · Excel** — Microsoft ribbon (File…View + Copilot on Home, tab-switchable), formula bar (cell ref + Σ + formula), virtualized grid (100K+ rows, header fill, active cell 2px orange, edited cells orange triangle), sheet tabs, live `Zero-LLM op` deterministic badge, `Recalculate` (runs the demo IronCalc recalc with cell-flash), bulk-edit + fill + sort + shift + pivot toolbar (Guard-2 ticket flow: propose → approve → commit, animated). Actions: `Recalculate`.
-6. **Office · Word** — WYSIWYG paper with shadow, headings/table, `Page 1/3 · 847 words` footer, orange live cursor. Actions: `Word count`.
-7. **Office · PowerPoint** — slide canvas + thumbnail strip, modified-element orange outlines, `Slide 3/5` footer. Actions: `Presenter view`.
-8. **Office · PDF** — pdf.js canvas (warm paper), page nav ◀▶, zoom −/+, **study-mode** chip (scopes the chat to this doc). Actions: `Search in PDF`.
+5. **Office · Excel (honest viewer)** — compact ribbon groups that call the **IronCalc / surgical-patch engine** (not a Microsoft ribbon clone, not Copilot). Formula bar, windowed grid, sheet tabs, **Avg/Count/Sum** status, Guard-2 ticketed cell + bulk fill/sort/shift + pivot. Read-only while the agent is running; pause to take over. `Open in LibreOffice` + error-banner LO fallback. File switcher for a second workbook of the same kind.
+6. **Office · Word (honest viewer)** — block list + selected-block `docx_patch` + track-changes display (`docx_tracks`). Not ruler/print/read/Copilot panes. Same lock + LO fallback + file switcher.
+7. **Office · PowerPoint (honest viewer)** — live slide rail from `pptx_open` + speaker notes from `pptx_notes`. Demo rail only when no deck is open. Same lock + LO fallback + file switcher.
+8. **Office · PDF (honest viewer)** — pdf.js canvas, find-in-text, text-snippet thumbs, `pdf_page_op` Annotate / Redact / Fill-form / Rotate, study-mode chat scope. Same lock + LO fallback + file switcher.
 9. **Progress** — unified action timeline (timestamps, colored type icons, expandable detail with +/− diff lines), filter pills (All · File · Edit · Browser · Shell · Code · Office · Export), `N/8 done` counter, live-pulsing active dot. Actions: `Timeline` · `Export log`.
 10. **Diff** — side-by-side old/new columns (red − / green +), line numbers, **minimap** with accept/revert chips. Actions: `Accept all` · `Revert all`.
 11. **Audit & Replay** — append-only event table (timestamp · actor agent/user/system · action · target · status), **scrubber** (draggable, orange gradient fill), play/pause/skip transport, `Frame 7/10 · Speed 1.0× · Buffered 100%`, `Watch live` toggle, tamper-evident footer. Actions: `Live`.
@@ -229,7 +231,7 @@ Every view is a full-fidelity surface with per-view header actions (wired — se
 - **Command palette (⌘K)** — `scale-in-palette` dialog, grouped results (Actions · Sessions · Views · Navigate · Settings) with hints + shortcuts, ↑↓/↵/esc navigation, orange selection bar, footer key hints. Includes new-session, theme toggle, every session, every view, all six panels, agent switching (⌘⇧1–3), model switching, auto-route toggle.
 - **Notifications (🔔)** — `fade-up slide-in-right` popover: seeded 8-item activity feed (cost / guard / success / agent / warning / git / info / error kinds, each with tinted icon tile + source chip + relative time), unread orange highlight, `Mark all read`, `Notification settings`, `View all activity`.
 - **Agent picker, office flyout, add-view dropdown** — §3.4 / §4.8.
-- **Keyboard shortcuts overlay (⌘?)** — full-screen, categorized key-pill grid, closes on esc/outside.
+- **Keyboard shortcuts overlay (⌘?)** — full-screen, categorized key-pill grid, closes on esc/outside. Chat: `⌥ M` cycles Work Mode (Auto · Plan · Build · Research); `⌥ U` cycles Autonomy (Sandbox · Ask · Auto · Maximum). We do **not** steal OpenCode’s Tab-for-Plan/Build — Tab stays focus.
 
 ---
 
@@ -247,7 +249,7 @@ Everything is explorable in a plain browser (`npm run dev` — `inTauri()` is fa
 | Analytics | 30-day spend curve, tokens-by-model, cost donut, 10-session table, leaderboards |
 | Notifications | 8 seeded items across 8 kinds |
 | Browse | 6 products, 2 tabs, bookmarks, extensions, AI-mode summary, inspector DOM |
-| Office | Q3-Financials.xlsx grid + recalc diff, exec-summary.docx, quarterly-deck.pptx, invoice-8402.pdf (real pdf.js render) |
+| Office | Q3-Financials.xlsx grid + recalc + Avg/Count/Sum, exec-summary.docx blocks/tracks, quarterly-deck.pptx slides+notes, invoice-8402.pdf (pdf.js + annotate/redact/fill) |
 | Agent picker | 7 runtimes × their model sets, install + connect flows |
 
 ---
@@ -283,7 +285,23 @@ Everything is explorable in a plain browser (`npm run dev` — `inTauri()` is fa
 
 ## 10. Keyboard shortcuts
 
-⌘K palette · ⌘N new work · ⌘Enter send · ⌘⇧P progress/pause · ⌘⇧E folder · Ctrl+` shell · ⌘⇧B browse · ⌘⇧C code · ⌘⇧O office flyout · ⌘⇧D diff · ⌘\\ viewport toggle · ⌘⇧F fullscreen · ⌘B sidebar · ⌘. power toggle · ⌘⇧1/2/3 agent switch · ⌘F search-in-chat · Esc stop/close · ⌘? shortcuts overlay.
+⌘K palette · ⌘N new work · ⌘Enter send · ⌘⇧P progress/pause · ⌘⇧E folder · Ctrl+` shell · ⌘⇧B browse · ⌘⇧C code · ⌘⇧O office flyout · ⌘⇧D diff · ⌘\\ viewport toggle · ⌘⇧F fullscreen · ⌘B sidebar · ⌘. power toggle · ⌘⇧1/2/3 agent switch · ⌘F search-in-chat · Esc stop/close · ⌘? shortcuts overlay · **⌥M cycle Work Mode** · **⌥U cycle Autonomy**.
+
+---
+
+## 13. Competitive lineage (what we steal as *behavior*, never as chrome)
+
+Researched 2026-08-26 against live docs (OpenCode, OpenChamber, Claude Cowork, Hermes Desktop, OpenClaw task-ledger). **Do not clone competitor product names or ribbons.**
+
+| Product | What they do | What we show |
+|---|---|---|
+| **OpenCode** | Two primary agents **Plan / Build** (Tab to cycle). Desktop tabs for parallel sessions. Agent picker + permissions. | **Work Mode** Auto/Plan/Build/Research as an independent WHAT control. Tab stays focus; **⌥M** cycles. Sessions live in the left work queue. |
+| **Claude Cowork** | Home \| Code top toggle; Chat and Cowork share one home; composer **Ask for approvals** dropdown; task view is chat + Progress rail. | Casual Home launchpad (“What would you like to get done?”). Autonomy **Ask** is the default, not a hidden setting. Now-doing + Progress view is the task rail. |
+| **Hermes Desktop** | Chat + file browser + preview rail; provider/model settings; sandbox backends (local/docker/ssh…); skills store. | Agent ▾ is H32 (inbuilt + ACP). Autonomy Sandbox is *policy*, not a Docker picker (backends stay Settings). Skills live in Memory / Settings, not a cloned store. |
+| **OpenClaw** | Detached task ledger: queued → running → terminal; push completion. | Automations + Tasks rail (`task_ledger`). Status dots on the work queue. |
+| **Cursor / Claude Code desktop** | Parallel sessions sidebar, drag-drop panes, verbose/normal/summary. | Left recents-as-work-queue + right multi-view tabs. We do **not** rebuild an IDE (I12 is the Code rail). |
+
+The mock must always be able to answer: **who** is running (Agent), **what** kind of work (Mode), **how much** they may do without asking (Autonomy) — three questions, three controls, never mixed into one pill row.
 
 ---
 

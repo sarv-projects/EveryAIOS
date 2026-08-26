@@ -87,7 +87,7 @@ export function TitleBar() {
           EveryAIOS
         </span>
         <Badge variant="secondary" className="h-4 text-[10px] px-1 py-0 font-mono">
-          v3.22
+          v3.57
         </Badge>
       </div>
 

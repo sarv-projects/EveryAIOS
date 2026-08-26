@@ -6,10 +6,8 @@ import {
   AtSign,
   Boxes,
   Brain,
-  CheckSquare,
   CircleDollarSign,
   FileText,
-  FlaskConical,
   Gauge,
   Hash,
   Mic,
@@ -19,7 +17,6 @@ import {
   ScrollText,
   Sparkles,
   Users,
-  Wrench,
   Zap,
   Volume2,
   type LucideIcon,
@@ -27,12 +24,6 @@ import {
 import type { ComposerRole, PermissionMode } from '@/lib/ui-prefs'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useAppStore, type ChatMode } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import AgentModelPicker from './agent-model-picker'
@@ -40,17 +31,17 @@ import { sendUserMessage } from '@/lib/bridge'
 import { getModelsForAgent } from '@/lib/agents'
 import { PERSONA_PRESETS, SOUL_PRESETS } from '@/lib/personas'
 
-const MODES: { id: ChatMode; label: string; hint: string; icon: LucideIcon }[] = [
-  { id: 'normal', label: 'Normal', hint: 'Balanced agent mode — default', icon: Sparkles },
-  { id: 'plan', label: 'Plan', hint: 'Plan first, do later — only produces a plan', icon: CheckSquare },
-  { id: 'research', label: 'Research', hint: 'Read-only — no writes, only read + cite', icon: FlaskConical },
-  { id: 'quick', label: 'Quick', hint: 'Fast single-turn — no agent loop', icon: Zap },
-  { id: 'code', label: 'Code', hint: 'Coder agent — diff-first, no chit-chat', icon: Wrench },
+/** v3.57 Work Mode — WHAT. Code/browser/Office/terminal are capabilities inside Build. */
+const WORK_MODES: { id: ChatMode; emoji: string; label: string; hint: string }[] = [
+  { id: 'auto', emoji: '🤖', label: 'Auto', hint: 'Agent chooses and may switch Plan → Build → Research as the work evolves' },
+  { id: 'plan', emoji: '📐', label: 'Plan', hint: 'Analyze and propose — no mutations until you approve' },
+  { id: 'build', emoji: '🔨', label: 'Build', hint: 'Execute and verify — files, browser, Office, terminal live here' },
+  { id: 'research', emoji: '🔎', label: 'Research', hint: 'Investigate and cite — read-only, then you can switch to Build' },
 ]
 
 const SLASH_COMMANDS = [
   { cmd: '/help', desc: 'Show all commands' },
-  { cmd: '/mode', desc: 'Switch composer mode' },
+  { cmd: '/mode', desc: 'Cycle work mode (Auto · Plan · Build · Research)' },
   { cmd: '/model', desc: 'Switch underlying model' },
   { cmd: '/undo', desc: 'Roll back last turn' },
   { cmd: '/clear', desc: 'Clear session messages' },
@@ -95,36 +86,60 @@ function HintRow({ item }: { item: HintItem }) {
   )
 }
 
-const PERMISSION_LABEL: Record<PermissionMode, string> = {
-  sandbox: 'Sandbox',
-  ask: 'Ask',
-  auto: 'Auto-approve',
-  full: 'Run everything',
-}
+const AUTONOMY: { id: PermissionMode; emoji: string; label: string; hint: string }[] = [
+  { id: 'sandbox', emoji: '🛡', label: 'Sandbox', hint: 'Plan + read-only. Every mutation is denied.' },
+  { id: 'ask', emoji: '👀', label: 'Ask', hint: 'Default. Safe reads auto-allow; mutations show a Guard-2 card.' },
+  { id: 'auto', emoji: '⚡', label: 'Auto', hint: 'Low-risk workspace writes auto-allow. Destructive / money / secrets still ask.' },
+  { id: 'full', emoji: '🚀', label: 'Maximum', hint: 'Maximum autonomy within hard floors — never skips destructive/secret/financial denies.' },
+]
 
-function PermissionChip({ compact }: { compact?: boolean }) {
-  const mode = useAppStore((s) => s.permissionMode)
-  const setMode = useAppStore((s) => s.setPermissionMode)
-  const notify = useAppStore((s) => s.notify)
+function WorkModeChip({ compact }: { compact?: boolean }) {
+  const mode = useAppStore((s) => s.composerMode)
+  const setMode = useAppStore((s) => s.setComposerMode)
   return (
     <select
+      aria-label="Work mode"
       value={mode}
-      onChange={(e) => {
-        const next = e.target.value as PermissionMode
-        setMode(next)
-        if (next === 'full') {
-          notify('Run everything skips Guard-2 in the UI only — the executor still asks until this mode is wired')
-        }
-      }}
-      title="Permission / auto-run"
+      onChange={(e) => setMode(e.target.value as ChatMode)}
+      title={WORK_MODES.find((m) => m.id === mode)?.hint ?? 'Work mode (WHAT)'}
       className={cn(
         'rounded-md border border-border bg-background/40 font-mono text-[10px] text-foreground',
         compact ? 'h-6 max-w-[7.5rem] px-1' : 'h-6 px-1.5',
       )}
     >
-      {(Object.keys(PERMISSION_LABEL) as PermissionMode[]).map((id) => (
-        <option key={id} value={id}>
-          {PERMISSION_LABEL[id]}
+      {WORK_MODES.map((m) => (
+        <option key={m.id} value={m.id} title={m.hint}>
+          {m.emoji} {m.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function AutonomyChip({ compact }: { compact?: boolean }) {
+  const mode = useAppStore((s) => s.permissionMode)
+  const setMode = useAppStore((s) => s.setPermissionMode)
+  const notify = useAppStore((s) => s.notify)
+  return (
+    <select
+      aria-label="Autonomy"
+      value={mode}
+      onChange={(e) => {
+        const next = e.target.value as PermissionMode
+        setMode(next)
+        if (next === 'full') {
+          notify('Maximum still honors hard floors — destructive, secrets, money, and Guard-2 R4 never auto-run')
+        }
+      }}
+      title={AUTONOMY.find((m) => m.id === mode)?.hint ?? 'Autonomy (HOW MUCH)'}
+      className={cn(
+        'rounded-md border border-border bg-background/40 font-mono text-[10px] text-foreground',
+        compact ? 'h-6 max-w-[7.5rem] px-1' : 'h-6 px-1.5',
+      )}
+    >
+      {AUTONOMY.map((m) => (
+        <option key={m.id} value={m.id} title={m.hint}>
+          {m.emoji} {m.label}
         </option>
       ))}
     </select>
@@ -209,8 +224,6 @@ interface Props {
 export default function ChatComposer({ budget, centered }: Props) {
   const composerValue = useAppStore((s) => s.composerValue)
   const setComposerValue = useAppStore((s) => s.setComposerValue)
-  const composerMode = useAppStore((s) => s.composerMode)
-  const setComposerMode = useAppStore((s) => s.setComposerMode)
   const notify = useAppStore((s) => s.notify)
   const powerMode = useAppStore((s) => s.powerMode)
   const activeSession = useAppStore((s) =>
@@ -297,100 +310,86 @@ export default function ChatComposer({ budget, centered }: Props) {
         </HintPopover>
       )}
 
-      {/* mode + agent + budget row (casual hides it — auto-detect instead) */}
-      {powerMode && (
-        <div className="mb-1.5 flex items-center gap-1.5">
-          <ToggleGroup
-            type="single"
-            value={composerMode}
-            onValueChange={(v) => v && setComposerMode(v as ChatMode)}
-            variant="outline"
-            size="sm"
-            className="h-6 shrink-0 overflow-hidden rounded-md border-border bg-background/40"
-          >
-            {MODES.map((m) => (
-              <Tooltip key={m.id}>
-                <TooltipTrigger asChild>
-                  <ToggleGroupItem
-                    value={m.id}
-                    className="h-6 gap-1 px-1.5 text-[10px] data-[state=on]:border-orange-500/60 data-[state=on]:bg-orange-500/10 data-[state=on]:text-orange-300"
-                  >
-                    <m.icon className="h-3 w-3" />
-                    <span className="hidden sm:inline">{m.label}</span>
-                  </ToggleGroupItem>
-                </TooltipTrigger>
-                <TooltipContent side="top">{m.hint}</TooltipContent>
-              </Tooltip>
-            ))}
-          </ToggleGroup>
-
-          <PermissionChip />
-          <RoleChip />
-          <AgentModelPicker />
-
-          <select
-            value={personaId}
-            onChange={(e) => setPersonaId(e.target.value)}
-            className="h-6 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
-            title="Persona (SOUL.md tone)"
-          >
-            {Object.keys(PERSONA_PRESETS).map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
-          </select>
-          <select
-            value={soulId}
-            onChange={(e) => setSoulId(e.target.value)}
-            className="h-6 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
-            title="SOUL.md identity"
-          >
-            {Object.keys(SOUL_PRESETS).map((id) => (
-              <option key={id} value={id}>
-                soul:{id}
-              </option>
-            ))}
-          </select>
-
-          <div className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-            <span className="flex items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5">
-              <CircleDollarSign className="h-3 w-3 text-emerald-400" />
-              <span className="text-foreground">${spent.toFixed(2)}</span>
-              <span className="hidden text-muted-foreground/60 md:inline">/ ${cap.toFixed(2)} cap</span>
-            </span>
-            <span className="hidden items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 lg:flex">
-              <Zap className="h-3 w-3 text-orange-400" />
-              <span className="text-foreground">{(tokens / 1000).toFixed(0)}K</span>
-              <span className="text-muted-foreground/60">tok</span>
-            </span>
-            <span
-              className={cn(
-                'hidden items-center gap-1 rounded-md border px-1.5 py-0.5 transition-colors md:flex',
-                ctxTone,
-              )}
-              title={`Context used: ${tokens.toLocaleString()} / ${ctxWindow.toLocaleString()} tok (${ctxPct}%)`}
+      {/* v3.57 — three independent controls: Work Mode (WHAT) · Agent (WHO) · Autonomy (HOW MUCH).
+          Casual / collapsed: [🤖 Auto] [🛡 Ask]. Power reveals Agent ▾ + budget. */}
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        <span className="hidden font-mono text-[9px] uppercase tracking-wide text-muted-foreground/70 sm:inline">
+          {powerMode ? 'Mode' : ''}
+        </span>
+        <WorkModeChip compact={!powerMode} />
+        <AutonomyChip compact={!powerMode} />
+        {powerMode && (
+          <>
+            <RoleChip />
+            <AgentModelPicker />
+            <select
+              value={personaId}
+              onChange={(e) => setPersonaId(e.target.value)}
+              className="h-6 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
+              title="Persona (SOUL.md tone)"
             >
-              <Gauge className="h-3 w-3" />
-              <span>{ctxPct}%</span>
-              <span className="text-muted-foreground/60">ctx</span>
-            </span>
-            <span
-              className="hidden items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 md:flex"
-              title="Tokens per second this turn"
+              {Object.keys(PERSONA_PRESETS).map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </select>
+            <select
+              value={soulId}
+              onChange={(e) => setSoulId(e.target.value)}
+              className="h-6 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
+              title="SOUL.md identity"
             >
-              <Zap className="h-3 w-3 text-sky-400" />
-              <span className="text-foreground">{streamStats.tokensPerSec.toFixed(1)}</span>
-              <span className="text-muted-foreground/60">tok/s</span>
-            </span>
-            {streamStats.activeKey && (
-              <span className="hidden max-w-[120px] truncate rounded-md border border-border bg-background/40 px-1.5 py-0.5 text-emerald-300 lg:inline">
-                key {streamStats.activeKey}
+              {Object.keys(SOUL_PRESETS).map((id) => (
+                <option key={id} value={id}>
+                  soul:{id}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+
+        <div className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5">
+            <CircleDollarSign className="h-3 w-3 text-emerald-400" />
+            <span className="text-foreground">${spent.toFixed(2)}</span>
+            <span className="hidden text-muted-foreground/60 md:inline">/ ${cap.toFixed(2)} cap</span>
+          </span>
+          {powerMode && (
+            <>
+              <span className="hidden items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 lg:flex">
+                <Zap className="h-3 w-3 text-orange-400" />
+                <span className="text-foreground">{(tokens / 1000).toFixed(0)}K</span>
+                <span className="text-muted-foreground/60">tok</span>
               </span>
-            )}
-          </div>
+              <span
+                className={cn(
+                  'hidden items-center gap-1 rounded-md border px-1.5 py-0.5 transition-colors md:flex',
+                  ctxTone,
+                )}
+                title={`Context used: ${tokens.toLocaleString()} / ${ctxWindow.toLocaleString()} tok (${ctxPct}%)`}
+              >
+                <Gauge className="h-3 w-3" />
+                <span>{ctxPct}%</span>
+                <span className="text-muted-foreground/60">ctx</span>
+              </span>
+              <span
+                className="hidden items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 md:flex"
+                title="Tokens per second this turn"
+              >
+                <Zap className="h-3 w-3 text-sky-400" />
+                <span className="text-foreground">{streamStats.tokensPerSec.toFixed(1)}</span>
+                <span className="text-muted-foreground/60">tok/s</span>
+              </span>
+              {streamStats.activeKey && (
+                <span className="hidden max-w-[120px] truncate rounded-md border border-border bg-background/40 px-1.5 py-0.5 text-emerald-300 lg:inline">
+                  key {streamStats.activeKey}
+                </span>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {localRuntime && (localCtxWindow ?? ctxWindow) <= 20_000 && (
         <div className="mb-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] text-amber-300">

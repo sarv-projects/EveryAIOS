@@ -39,7 +39,14 @@ export type ViewId =
   | 'generative'
   | 'artifact'
 
-export type ChatMode = 'normal' | 'plan' | 'research' | 'quick' | 'code'
+/** v3.57 Work Mode (WHAT) — Code/browser/Office/terminal live *inside* Build. */
+export type ChatMode = 'auto' | 'plan' | 'build' | 'research'
+
+export function normalizeChatMode(m: unknown): ChatMode {
+  if (m === 'plan' || m === 'research' || m === 'build' || m === 'auto') return m
+  if (m === 'code') return 'build'
+  return 'auto'
+}
 
 export type SessionStatus =
   | 'idle'
@@ -1110,8 +1117,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   devMode: false,
   setDevMode: (v) => set({ devMode: v }),
 
-  composerMode: 'normal',
-  setComposerMode: (m) => set({ composerMode: m }),
+  composerMode: 'auto',
+  setComposerMode: (m) => set({ composerMode: normalizeChatMode(m) }),
   composerValue: '',
   setComposerValue: (v) => set({ composerValue: v }),
 
@@ -1649,7 +1656,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({
       activeView: saved.view ?? s.activeView,
       railCollapsed: saved.railCollapsed ?? s.railCollapsed,
-      composerMode: saved.composerMode ?? s.composerMode,
+      composerMode: normalizeChatMode(saved.composerMode ?? s.composerMode),
       openViews: saved.openViews && saved.openViews.length > 0 ? saved.openViews : s.openViews,
       sessions: s.sessions.map((x) =>
         x.id === sessionId

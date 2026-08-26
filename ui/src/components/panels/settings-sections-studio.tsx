@@ -281,26 +281,26 @@ export function ChatAutoRunSection() {
         <div className="text-xs font-medium">Auto-run</div>
         <RadioCard
           selected={permissionMode === 'sandbox'}
-          title="Sandbox"
-          desc="Isolated. High-risk actions blocked. Network and writes stay inside the sandbox."
+          title="🛡 Sandbox"
+          desc="Plan + read-only. Every mutation is denied."
           onSelect={() => setPermissionMode('sandbox')}
         />
         <RadioCard
           selected={permissionMode === 'ask'}
-          title="Ask"
-          desc="Every important action shows a Guard-2 card. Default."
+          title="👀 Ask"
+          desc="Default. Safe reads auto-allow; mutations show a Guard-2 card."
           onSelect={() => setPermissionMode('ask')}
         />
         <RadioCard
           selected={permissionMode === 'auto'}
-          title="Automatic approval"
-          desc="Isolated. The agent may approve routine actions; high-risk still blocked."
+          title="⚡ Auto"
+          desc="Low-risk workspace writes auto-allow. Destructive, secrets, money, and new domains still ask."
           onSelect={() => setPermissionMode('auto')}
         />
         <RadioCard
           selected={permissionMode === 'full'}
-          title="Run everything"
-          desc="Runs on this computer without isolation. Skips safety checks. You asked for this."
+          title="🚀 Maximum"
+          desc="Maximum autonomy within hard floors — never a Guard bypass. Destructive / secret / financial / R4 still ask."
           onSelect={() => setPermissionMode('full')}
         />
       </div>
@@ -334,10 +334,10 @@ export function PermissionsSection() {
       desc="Same four modes as Chat & Auto-run — also available from the composer chip"
     >
       <div className="space-y-1.5">
-        <RadioCard selected={permissionMode === 'ask'} title="Manual approval" desc="Isolated. Important actions wait for you." onSelect={() => setPermissionMode('ask')} />
-        <RadioCard selected={permissionMode === 'auto'} title="Automatic approval" desc="Isolated. The agent may approve routine actions." onSelect={() => setPermissionMode('auto')} />
-        <RadioCard selected={permissionMode === 'sandbox'} title="Sandbox only" desc="High-risk blocked. Writes stay in the worktree." onSelect={() => setPermissionMode('sandbox')} />
-        <RadioCard selected={permissionMode === 'full'} title="Full access" desc="No isolation. Can read and write anything. Stop asking." onSelect={() => setPermissionMode('full')} />
+        <RadioCard selected={permissionMode === 'ask'} title="👀 Ask (default)" desc="Safe reads auto-allow. Mutations show a Guard-2 card." onSelect={() => setPermissionMode('ask')} />
+        <RadioCard selected={permissionMode === 'auto'} title="⚡ Auto" desc="Low-risk workspace writes auto-allow. Hard floors still ask." onSelect={() => setPermissionMode('auto')} />
+        <RadioCard selected={permissionMode === 'sandbox'} title="🛡 Sandbox" desc="Plan + read-only. Every mutation denied." onSelect={() => setPermissionMode('sandbox')} />
+        <RadioCard selected={permissionMode === 'full'} title="🚀 Maximum" desc="Maximum autonomy within hard floors — never a Guard bypass." onSelect={() => setPermissionMode('full')} />
       </div>
       <Row label="Custom configuration" desc="permissions.toml for file, network, security, approvers">
         <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Open permissions.toml — J21 file exists in the crate; editor pane not wired')}>

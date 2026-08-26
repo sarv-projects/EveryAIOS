@@ -180,7 +180,7 @@ export function StatusBar() {
           </span>
         )}
         <CompanionChip />
-        <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.24</span>
+        <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.57</span>
       </footer>
     )
   }
@@ -293,7 +293,7 @@ export function StatusBar() {
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/70">audit · append</span>
         <span className="text-muted-foreground/40">·</span>
-        <span className="text-muted-foreground/50">EveryAIOS v3.24</span>
+        <span className="text-muted-foreground/50">EveryAIOS v3.57</span>
       </div>
     </footer>
   )
