@@ -16,6 +16,7 @@ import {
   type BrowserStatus,
 } from '@/lib/browser'
 import { SkeletonBlock } from '@/components/ui/loading-state'
+import { useAppStore } from '@/lib/store'
 
 /**
  * P11.5.3 — browse view over a real CDP session. Start spawns a headless
@@ -33,6 +34,24 @@ export default function BrowseView() {
   const [inputRef, setInputRef] = useState('')
   const [typeText, setTypeText] = useState('')
   const [history, setHistory] = useState<string[]>([])
+  const browserUrl = useAppStore((s) => s.browserUrl)
+
+  // P33.6 — Google Docs/Sheets read path: a URL routed from an office surface
+  // (or an artifact) lands here and navigates the authenticated browser view.
+  useEffect(() => {
+    if (!browserUrl) return
+    if (status.attached) {
+      void browserNavigate(browserUrl)
+        .then(() => setHistory((h) => [browserUrl, ...h].slice(0, 20)))
+        .catch((e) => setError(String(e)))
+      setUrl(browserUrl)
+    } else {
+      setUrl(browserUrl)
+      setError(null)
+      setStatus((s) => ({ ...s, attached: false }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [browserUrl])
 
   const refresh = useCallback(async () => {
     setLoading(true)

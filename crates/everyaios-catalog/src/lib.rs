@@ -18,5 +18,5 @@ pub use model::ModelEntry;
 pub use pricing::{cost_for, split_input, CostBreakdown};
 pub use routing::{rejection_reasons, RouteFilters};
 pub use gateway::{GatewayError, GatewayRouter, RouteResult, TaskHint};
-pub use sync::{gate_passes, refresh_plan, validate_vendored, GateFinding, Severity, SyncSpec, SYNC_MODULES};
+pub use sync::{gate_passes, merge_refresh, refresh_plan, validate_vendored, GateFinding, RefreshReport, Severity, SyncSpec, SYNC_MODULES};
 pub use tier::{validate_tiers, ProviderOverride, ResolvedModel};

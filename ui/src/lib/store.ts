@@ -671,6 +671,10 @@ interface AppState {
   // Active view (right viewport)
   activeView: ViewId
   setActiveView: (v: ViewId) => void
+  /** P33.6 — pending URL for the browser view (Google Docs/Sheets read path). */
+  browserUrl: string | null
+  /** P33.6 — route a Google Docs/Sheets link into the authenticated browser view. */
+  openInBrowser: (url: string) => void
   railCollapsed: boolean
   toggleRail: () => void
   setRailCollapsed: (v: boolean) => void
@@ -973,6 +977,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
     // P11.5.3 — persist the layout as it changes.
     get().saveSessionLayout(get().activeSessionId, { view: v, railCollapsed: false })
+  },
+  browserUrl: null,
+  openInBrowser: (url) => {
+    set((s) => ({
+      browserUrl: url,
+      activeView: 'browse',
+      railCollapsed: false,
+      openViews: s.openViews.includes('browse') ? s.openViews : [...s.openViews, 'browse'],
+    }))
+    get().saveSessionLayout(get().activeSessionId, { view: 'browse', railCollapsed: false })
   },
   railCollapsed: false,
   toggleRail: () => {

@@ -1334,6 +1334,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "everyaios-catalog"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "everyaios-cdp"
 version = "0.1.0"
 dependencies = [
@@ -1406,6 +1415,7 @@ dependencies = [
  "everyaios-agents",
  "everyaios-audit",
  "everyaios-browser",
+ "everyaios-catalog",
  "everyaios-cdp",
  "everyaios-codeintel",
  "everyaios-core",

@@ -28,6 +28,7 @@ everyaios-vault = { path = "../crates/everyaios-vault" }
 everyaios-audit = { path = "../crates/everyaios-audit" }
 everyaios-guard = { path = "../crates/everyaios-guard" }
 everyaios-office = { path = "../crates/everyaios-office" }
+everyaios-catalog = { path = "../crates/everyaios-catalog" }
 everyaios-acp = { path = "../crates/everyaios-acp" }
 everyaios-mcp = { path = "../crates/everyaios-mcp" }
 everyaios-storage = { path = "../crates/everyaios-storage" }

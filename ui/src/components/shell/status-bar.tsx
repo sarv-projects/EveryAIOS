@@ -26,6 +26,7 @@ import {
 import { useAppStore } from '@/lib/store'
 import * as perfLib from '@/lib/perf'
 import { AGENT_MAP, MODEL_MAP, AGENTS } from '@/lib/agents'
+import { CompanionChip } from './companion-chip'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
 
@@ -178,6 +179,7 @@ export function StatusBar() {
             100% Private (On-Device)
           </span>
         )}
+        <CompanionChip />
         <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.24</span>
       </footer>
     )

@@ -132,6 +132,66 @@ pub const CANONICAL_WRITABLE_FIELDS: &[&str] = &[
     "knowledge_cutoff",
 ];
 
+/// The result of one refresh run: what the gate said and what the merge
+/// accepted. The maintenance loop reports this to the caller (Tauri command
+/// / coordinator) so a failed gate is never silent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefreshReport {
+    pub fetched_providers: usize,
+    pub findings: Vec<GateFinding>,
+    pub accepted: bool,
+    pub accepted_entries: usize,
+    pub rejected_providers: Vec<String>,
+}
+
+/// **P14.5 live refresh — the maintenance loop's merge step (pure + testable).**
+///
+/// `fetched` is the per-provider fetch output from a live sync module
+/// (network is the caller's job — the injected transport seam, same
+/// discipline as the search/registry clients). The gate runs over the
+/// *merged* candidate set before anything is accepted; a gate error rejects
+/// the whole refresh (never a partial baseline).
+///
+/// `known_labs` is the canonical lab-model id set (the same fact the
+/// vendored gate uses — it comes from the baseline, never from the fetch).
+pub fn merge_refresh(
+    baseline: &[ModelEntry],
+    fetched: &[ModelEntry],
+    known_labs: &[&str],
+) -> RefreshReport {
+    let mut merged: Vec<ModelEntry> = baseline.to_vec();
+    let mut rejected_providers = Vec::new();
+    let mut fetched_providers: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+
+    // Per-provider sync (the 30-provider pattern): each fetched row replaces
+    // the baseline row with the same id — a provider's rows never leak into
+    // another provider's namespace.
+    let mut seen = std::collections::HashSet::new();
+    for e in fetched {
+        if e.id.is_empty() {
+            rejected_providers.push("<empty id>".to_string());
+            continue;
+        }
+        if !seen.insert(&e.id) {
+            rejected_providers.push(e.id.clone());
+            continue;
+        }
+        fetched_providers.insert(e.provider());
+        merged.retain(|m| m.id != e.id);
+        merged.push(e.clone());
+    }
+
+    let findings = validate_vendored(&merged, known_labs);
+    let accepted = gate_passes(&findings);
+    RefreshReport {
+        fetched_providers: fetched_providers.len(),
+        findings,
+        accepted,
+        accepted_entries: if accepted { merged.len() } else { baseline.len() },
+        rejected_providers,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,6 +245,53 @@ mod tests {
         let findings = validate_vendored(&entries, &["anthropic/claude-opus-4-6"]);
         assert!(!gate_passes(&findings));
         assert!(findings.iter().any(|f| f.message.contains("base_model")));
+    }
+
+    #[test]
+    fn refresh_merges_fetched_rows_into_baseline() {
+        let baseline = vec![
+            entry("anthropic/claude-opus-4-6", 200_000, 1e-5, 1e-4),
+            entry("openai/gpt-5", 128_000, 1e-5, 1e-4),
+        ];
+        // a refreshed row for an existing id + one brand-new provider row
+        let fetched = vec![
+            entry("anthropic/claude-opus-4-6", 250_000, 1e-5, 9e-5),
+            entry("deepseek/deepseek-v4", 128_000, 1e-6, 1e-5),
+        ];
+        let report = merge_refresh(
+            &baseline,
+            &fetched,
+            &["anthropic/claude-opus-4-6", "openai/gpt-5", "deepseek/deepseek-v4"],
+        );
+        assert!(report.accepted, "{report:?}");
+        assert_eq!(report.fetched_providers, 2);
+        assert_eq!(report.accepted_entries, 3); // 2 baseline + 1 new (1 replaced)
+        assert!(report.rejected_providers.is_empty());
+    }
+
+    #[test]
+    fn refresh_rejects_on_gate_error_never_partial() {
+        let baseline = vec![entry("anthropic/claude-opus-4-6", 200_000, 1e-5, 1e-4)];
+        // a fetched row that breaks the two-tier blocker rule (no base_model,
+        // not a lab) must reject the whole refresh
+        let fetched = vec![entry("bedrock/claude-x", 200_000, 1e-5, 1e-4)];
+        let report = merge_refresh(&baseline, &fetched, &["anthropic/claude-opus-4-6"]);
+        assert!(!report.accepted);
+        assert!(report.findings.iter().any(|f| f.message.contains("base_model")));
+        // the baseline is untouched on rejection
+        assert_eq!(report.accepted_entries, baseline.len());
+    }
+
+    #[test]
+    fn refresh_rejects_duplicate_fetched_rows() {
+        let baseline = vec![entry("a/x", 10_000, 1e-5, 1e-4)];
+        let fetched = vec![
+            entry("a/x", 11_000, 1e-5, 1e-4),
+            entry("a/x", 12_000, 1e-5, 1e-4), // duplicate within one fetch
+        ];
+        let report = merge_refresh(&baseline, &fetched, &["a/x"]);
+        assert_eq!(report.rejected_providers.len(), 1);
+        assert_eq!(report.fetched_providers, 1);
     }
 
     #[test]

@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 mod acp_cmds;
 mod agent_cmds;
 mod browser_cmds;
+mod catalog_cmds;
 mod cockpit_cmds;
 mod codeintel_cmds;
 mod control;
@@ -685,6 +686,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             version,
+            catalog_cmds::catalog_sync_plan,
+            catalog_cmds::catalog_sync_refresh,
             core_boot_report,
             scan_text,
             probe_vault,
