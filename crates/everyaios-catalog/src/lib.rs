@@ -9,12 +9,19 @@ pub mod catalog;
 pub mod gateway;
 pub mod model;
 pub mod pricing;
+pub mod probe;
+pub mod provider;
 pub mod routing;
 pub mod sync;
 pub mod tier;
 
 pub use catalog::ModelCatalog;
 pub use model::ModelEntry;
+pub use probe::{trusted_capabilities, AdvertisedHardCaps, Capability, CapabilityVerdict, ProbeResult, Verdict, VerificationReport};
+pub use provider::{
+    base_registry, normalize, AggregatorKind, Auth, DiscoverySource, ProviderRecord,
+    ProviderRegistry, Transport, ALIASES, OPENAI_COMPATIBLE_PROFILES,
+};
 pub use pricing::{cost_for, split_input, CostBreakdown};
 pub use routing::{rejection_reasons, RouteFilters};
 pub use gateway::{GatewayError, GatewayRouter, RouteResult, TaskHint};
