@@ -19,6 +19,37 @@ use std::time::Duration;
 
 use crate::{all_tools, ArgDef};
 
+/// Is this HTTP `Origin` header value bound to this machine's loopback?
+/// Strips the scheme, isolates the authority, drops the `:port`, and requires
+/// a literal loopback host. A prefix check would wrongly accept lookalikes
+/// like `http://localhost.evil.com` or `http://127.0.0.1.nip.io` (bugfix 10).
+fn origin_is_local(origin: &str) -> bool {
+    let low = origin.trim().to_ascii_lowercase();
+    // Accept only http/https/tauri origins; anything else (ftp, data, bare
+    // text, …) is not a loopback Origin and fails closed.
+    let rest = low
+        .strip_prefix("http://")
+        .or_else(|| low.strip_prefix("https://"))
+        .or_else(|| low.strip_prefix("tauri://"));
+    let Some(rest) = rest else {
+        return false;
+    };
+    // Authority ends at the first `/`, `?` or `#`.
+    let authority = rest
+        .split(|c: char| c == '/' || c == '?' || c == '#')
+        .next()
+        .unwrap_or("");
+    // Host is the authority minus any `:port`. Strip a trailing `:digits`
+    // only (an unbracketed IPv6 authority like `[::1]:7000` keeps its colons).
+    let host = match authority.rsplit_once(':') {
+        Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => h,
+        _ => authority,
+    };
+    // Drop IPv6 brackets if present.
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
+}
+
 /// A tool definition from an *external* MCP server (F6 — consume path).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExternalTool {
@@ -362,79 +393,148 @@ impl<H: ToolCallHandler> McpServer<H> {
         Ok(())
     }
 
-    /// Serve one HTTP request from a loopback TCP stream.
+    /// Serve one HTTP request from a loopback TCP stream, then close the
+    /// connection. Kept for the one-shot supervision model (and tests); the
+    /// keep-alive path is [`Self::serve_http_connection`].
     pub fn serve_http_once(&mut self, stream: &mut TcpStream) -> std::io::Result<()> {
-        stream.set_read_timeout(Some(Duration::from_secs(10)))?;
-        let mut raw = Vec::new();
-        let mut chunk = [0u8; 4096];
-        let header_end;
-        loop {
-            let n = stream.read(&mut chunk)?;
-            if n == 0 {
-                return write_http(stream, 400, "empty request");
-            }
-            raw.extend_from_slice(&chunk[..n]);
-            if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
-                header_end = pos + 4;
-                break;
-            }
-            if raw.len() > 64 * 1024 {
-                return write_http(stream, 413, "headers too large");
-            }
-        }
-        let header = String::from_utf8_lossy(&raw[..header_end]);
-        let mut content_length = 0usize;
-        let mut authorized = self.bearer_token.is_none();
-        let mut origin_ok = true;
-        for line in header.lines().skip(1) {
-            let Some((key, value)) = line.split_once(':') else {
-                continue;
-            };
-            match key.trim().to_ascii_lowercase().as_str() {
-                "content-length" => content_length = value.trim().parse().unwrap_or(usize::MAX),
-                "authorization" => {
-                    authorized = self
-                        .bearer_token
-                        .as_deref()
-                        .map(|token| value.trim() == format!("Bearer {token}"))
-                        .unwrap_or(true);
-                }
-                "origin" => {
-                    let origin = value.trim().to_ascii_lowercase();
-                    origin_ok = origin.starts_with("http://127.0.0.1")
-                        || origin.starts_with("http://localhost")
-                        || origin.starts_with("tauri://localhost");
-                }
-                _ => {}
-            }
-        }
-        if !authorized {
-            return write_http(stream, 401, "unauthorized");
-        }
-        if !origin_ok {
-            return write_http(stream, 403, "origin rejected");
-        }
-        if content_length > self.max_body_bytes {
-            return write_http(stream, 413, "body too large");
-        }
-        while raw.len() - header_end < content_length {
-            let n = stream.read(&mut chunk)?;
-            if n == 0 {
-                break;
-            }
-            raw.extend_from_slice(&chunk[..n]);
-            if raw.len() - header_end > self.max_body_bytes {
-                return write_http(stream, 413, "body too large");
-            }
-        }
-        if raw.len() - header_end < content_length {
-            return write_http(stream, 400, "truncated body");
-        }
-        let body = String::from_utf8_lossy(&raw[header_end..header_end + content_length]);
-        let response = self.handle_json(&body);
-        let bytes = response.as_bytes();
-        write_http_bytes(stream, 200, bytes)
+        let _ = self.serve_http_connection(stream)?;
+        Ok(())
     }
+
+    /// Serve HTTP requests over one loopback connection until the peer closes
+    /// it or requests `Connection: close` (P39.3). Returns the number of
+    /// requests served. Keep-alive lets one agent reuse a single socket for
+    /// repeated tool calls instead of paying a TCP handshake per request;
+    /// each request still goes through the same origin/bearer/body gates.
+    pub fn serve_http_connection(&mut self, stream: &mut TcpStream) -> std::io::Result<u32> {
+        stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+        let mut served = 0u32;
+        loop {
+            let Some(req) = read_http_request(stream, self.max_body_bytes)? else {
+                // Clean EOF between requests (or an error response was
+                // already written) — the connection is done.
+                return Ok(served);
+            };
+            let keep_alive = req.keep_alive;
+            if !self.is_authorized(&req) {
+                write_http_bytes(stream, 401, b"unauthorized", keep_alive)?;
+            } else if !req.origin_ok {
+                write_http_bytes(stream, 403, b"origin rejected", keep_alive)?;
+            } else {
+                let response = self.handle_json(&req.body);
+                write_http_bytes(stream, 200, response.as_bytes(), keep_alive)?;
+            }
+            served += 1;
+            if !keep_alive {
+                return Ok(served);
+            }
+        }
+    }
+
+    /// The bearer check for one parsed request: no token configured on the
+    /// server ⇒ everything is authorized (loopback-only deployments).
+    fn is_authorized(&self, req: &HttpRequest) -> bool {
+        if self.bearer_token.is_none() {
+            return true;
+        }
+        req.authorization
+            .as_deref()
+            .map(|v| {
+                self.bearer_token
+                    .as_deref()
+                    .map(|token| v == format!("Bearer {token}"))
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false)
+    }
+}
+
+/// One parsed loopback HTTP request (headers + body).
+struct HttpRequest {
+    body: String,
+    /// `Connection: keep-alive` requested by the peer.
+    keep_alive: bool,
+    authorization: Option<String>,
+    origin_ok: bool,
+}
+
+/// Read one HTTP request (headers + content-length body) from a loopback
+/// stream. Returns `Ok(None)` on a clean EOF *before any bytes* (peer closed
+/// an idle keep-alive connection) or after an error response has been
+/// written; `Ok(Some(req))` when a complete request was read.
+fn read_http_request(
+    stream: &mut TcpStream,
+    max_body_bytes: usize,
+) -> std::io::Result<Option<HttpRequest>> {
+    let mut raw = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let header_end;
+    loop {
+        let n = stream.read(&mut chunk)?;
+        if n == 0 {
+            if raw.is_empty() {
+                return Ok(None); // clean EOF — peer closed between requests
+            }
+            write_http_bytes(stream, 400, b"truncated request", false)?;
+            return Ok(None);
+        }
+        raw.extend_from_slice(&chunk[..n]);
+        if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+            header_end = pos + 4;
+            break;
+        }
+        if raw.len() > 64 * 1024 {
+            write_http_bytes(stream, 413, b"headers too large", false)?;
+            return Ok(None);
+        }
+    }
+    let header = String::from_utf8_lossy(&raw[..header_end]);
+    let mut content_length = 0usize;
+    let mut keep_alive = false;
+    let mut authorization = None;
+    let mut origin_ok = true;
+    for line in header.lines().skip(1) {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        match key.trim().to_ascii_lowercase().as_str() {
+            "content-length" => content_length = value.trim().parse().unwrap_or(usize::MAX),
+            "connection" => {
+                keep_alive = value.trim().eq_ignore_ascii_case("keep-alive");
+            }
+            "authorization" => authorization = Some(value.trim().to_string()),
+            "origin" => {
+                origin_ok = origin_is_local(value.trim());
+            }
+            _ => {}
+        }
+    }
+    if content_length > max_body_bytes {
+        write_http_bytes(stream, 413, b"body too large", false)?;
+        return Ok(None);
+    }
+    while raw.len() - header_end < content_length {
+        let n = stream.read(&mut chunk)?;
+        if n == 0 {
+            break;
+        }
+        raw.extend_from_slice(&chunk[..n]);
+        if raw.len() - header_end > max_body_bytes {
+            write_http_bytes(stream, 413, b"body too large", false)?;
+            return Ok(None);
+        }
+    }
+    if raw.len() - header_end < content_length {
+        write_http_bytes(stream, 400, b"truncated body", false)?;
+        return Ok(None);
+    }
+    let body = String::from_utf8_lossy(&raw[header_end..header_end + content_length]).to_string();
+    Ok(Some(HttpRequest {
+        body,
+        keep_alive,
+        authorization,
+        origin_ok,
+    }))
 }
 
 fn rpc_ok<T: Serialize>(id: Value, result: T) -> Value {
@@ -446,11 +546,7 @@ fn rpc_error(id: Value, code: i64, message: &str) -> String {
         .to_string()
 }
 
-fn write_http(stream: &mut TcpStream, status: u16, body: &str) -> std::io::Result<()> {
-    write_http_bytes(stream, status, body.as_bytes())
-}
-
-fn write_http_bytes(stream: &mut TcpStream, status: u16, body: &[u8]) -> std::io::Result<()> {
+fn write_http_bytes(stream: &mut TcpStream, status: u16, body: &[u8], keep_alive: bool) -> std::io::Result<()> {
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
@@ -459,7 +555,12 @@ fn write_http_bytes(stream: &mut TcpStream, status: u16, body: &[u8]) -> std::io
         413 => "Payload Too Large",
         _ => "Error",
     };
-    write!(stream, "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len())?;
+    let connection = if keep_alive { "keep-alive" } else { "close" };
+    write!(
+        stream,
+        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: {connection}\r\n\r\n",
+        body.len()
+    )?;
     stream.write_all(body)
 }
 
@@ -533,8 +634,8 @@ mod tests {
         let mut cat = ToolCatalog::new();
         cat.register(ext("linear_search", "linear-mcp"));
         let resp = tool_list(&cat, 300_000);
-        // 42 native + 1 external.
-        assert_eq!(resp.tools.len(), 43);
+        // 51 native (browser 37 + office 4 + memory 3 + search 2 + storage 5) + 1 external.
+        assert_eq!(resp.tools.len(), 52);
         assert_eq!(resp.ttl_ms, 300_000);
         // Sorted; contains both.
         let names: Vec<&str> = resp.tools.iter().map(|t| t.name.as_str()).collect();
@@ -553,8 +654,9 @@ mod tests {
 
         // A genuinely new tool registers.
         assert!(cat.register(ext("gmail_search", "gmail-mcp")));
+
         assert_eq!(cat.origin("gmail_search"), Some("gmail-mcp"));
-        assert_eq!(cat.total(), 43);
+        assert_eq!(cat.total(), 52);
     }
 
     #[test]
@@ -617,5 +719,24 @@ mod tests {
         assert!(!json.contains("initialize"));
         assert!(!json.contains("session"));
         assert!(json.contains("callTool"));
+    }
+
+    #[test]
+    fn origin_check_accepts_only_literal_loopback() {
+        // Bugfix 10 — lookalikes are refused, genuine loopback passes.
+        assert!(origin_is_local("http://localhost:3000"));
+        assert!(origin_is_local("http://127.0.0.1:8080"));
+        assert!(origin_is_local("http://[::1]:7000"));
+        assert!(origin_is_local("http://localhost"));
+        assert!(origin_is_local("tauri://localhost"));
+        // Prefix lookalikes must fail.
+        assert!(!origin_is_local("http://localhost.evil.com"));
+        assert!(!origin_is_local("http://127.0.0.1.nip.io"));
+        assert!(!origin_is_local("http://127.0.0.10:9000"));
+        assert!(!origin_is_local("http://example.com"));
+        // Unknown / malformed — fail closed.
+        assert!(!origin_is_local(""));
+        assert!(!origin_is_local("null"));
+        assert!(!origin_is_local("ftp://localhost"));
     }
 }

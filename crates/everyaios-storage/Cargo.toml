@@ -18,3 +18,16 @@ blake3 = "1"
 twox-hash = "2"
 notify = "6"
 sysinfo = "0.30"
+
+[target.'cfg(windows)'.dependencies]
+# P36 (G7) — the real USN journal reader: CreateFileW/DeviceIoControl and
+# the FSCTL_* journal ioctls live behind this gate.
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    # CreateFileW takes a SECURITY_ATTRIBUTES pointer — the link is
+    # gated behind the Win32_Security feature in windows-sys 0.61.
+    "Win32_Security",
+] }

@@ -29,7 +29,7 @@
 //! ```
 
 use crate::blueprint::{Blueprint, BlueprintTask, TaskStatus, VerifyBlock};
-use crate::frontmatter::{parse_frontmatter, AgentConfig, FrontmatterError, PermissionMode};
+use crate::frontmatter::{parse_frontmatter, AgentConfig, FrontmatterError, Isolation, PermissionMode};
 use crate::spec::TaskSpec;
 use everyaios_eval::{HashAlgorithm, OutcomeCheck};
 use thiserror::Error;
@@ -389,6 +389,17 @@ fn frontmatter_to_markdown(cfg: &AgentConfig) -> String {
     if let Some(max_turns) = cfg.max_turns {
         out.push_str(&format!("maxTurns: {max_turns}\n"));
     }
+    // P19-3 — the doc-75 fields (effort / background / isolation) ride the
+    // same frontmatter so agent files round-trip losslessly.
+    if let Some(effort) = cfg.effort {
+        out.push_str(&format!("effort: {effort}\n"));
+    }
+    if let Some(background) = &cfg.background {
+        out.push_str(&format!("background: {background}\n"));
+    }
+    if cfg.isolation != Isolation::None {
+        out.push_str("isolation: worktree\n");
+    }
     if !cfg.hooks.is_empty() {
         out.push_str("hooks:\n");
         for h in &cfg.hooks {
@@ -469,6 +480,9 @@ mod tests {
                 hooks: vec!["npm test".into()],
                 mcp_servers: vec!["browser".into()],
                 max_turns: Some(50),
+                effort: Some(5),
+                background: None,
+                isolation: Isolation::Worktree,
             }),
             blueprint: bp,
         };

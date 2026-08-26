@@ -13,6 +13,13 @@
 //!   revisions + tombstones (deletes propagate).
 //! - [`reconcile`] — three-way merge producing a [`SyncDiff`] (what this set
 //!   applies, what the peer applies, and genuine conflicts).
+//! - [`resolve_conflicts`] / [`ConflictPolicy`] — F2: the stated rule for
+//!   equal-rev conflicts on a two-writer pair. State scopes (messages,
+//!   memory, connector) converge Last-Write-Wins with a deterministic
+//!   timestamp tie-break; effect-plane records (tickets, receipts, audit)
+//!   are never auto-resolved — they surface as `Manual` conflicts because a
+//!   receipt after reconcile must mean "this node's order", never a silent
+//!   overwrite by a peer.
 //! - [`KeyPair`] / [`KeyExchange`] — X25519 key agreement + an authenticated
 //!   `Hello`/`Confirm` handshake framing (the actual socket exchange is the
 //!   seam).
@@ -64,12 +71,19 @@ impl SyncScope {
 /// One synced record: a stable key within a scope, a monotonic revision, an
 /// optional tombstone, and an opaque payload (the caller serializes messages
 /// / facts / connector state).
+///
+/// `ts_ms` (best-effort wall-clock ms since epoch) is the LWW tie-break input
+/// for equal-revision conflicts (F2). It is `Option` and `#[serde(default)]`
+/// so bundles written before ts tracking stay readable — old items are
+/// treated as older than any timestamped item.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncItem {
     pub scope: SyncScope,
     pub key: String,
     pub rev: u64,
     pub tombstone: bool,
+    #[serde(default)]
+    pub ts_ms: Option<u64>,
     pub payload: Vec<u8>,
 }
 
@@ -80,6 +94,7 @@ impl SyncItem {
             key: key.into(),
             rev,
             tombstone: false,
+            ts_ms: None,
             payload,
         }
     }
@@ -90,6 +105,31 @@ impl SyncItem {
             key: key.into(),
             rev,
             tombstone: true,
+            ts_ms: None,
+            payload: Vec::new(),
+        }
+    }
+
+    /// `live` with a wall-clock timestamp (the LWW tie-break input).
+    pub fn live_at(scope: SyncScope, key: impl Into<String>, rev: u64, ts_ms: u64, payload: Vec<u8>) -> Self {
+        Self {
+            scope,
+            key: key.into(),
+            rev,
+            tombstone: false,
+            ts_ms: Some(ts_ms),
+            payload,
+        }
+    }
+
+    /// `tombstone` with a wall-clock timestamp.
+    pub fn tombstone_at(scope: SyncScope, key: impl Into<String>, rev: u64, ts_ms: u64) -> Self {
+        Self {
+            scope,
+            key: key.into(),
+            rev,
+            tombstone: true,
+            ts_ms: Some(ts_ms),
             payload: Vec::new(),
         }
     }
@@ -153,8 +193,9 @@ impl SyncSet {
 }
 
 /// A genuine conflict: both sides have the same key at the same revision but
-/// different payloads. Resolution is left to the caller (newer rev wins; at
-/// equal rev the caller picks a side or keeps both).
+/// different payloads. Detection is [`reconcile`]'s job; resolution is
+/// [`resolve_conflicts`] + [`ConflictPolicy`] (F2 — state scopes LWW with a
+/// deterministic tie-break; effect-plane records stay Manual).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncConflict {
     pub scope: SyncScope,
@@ -207,6 +248,108 @@ pub fn reconcile(local: &SyncSet, remote: &SyncSet) -> SyncDiff {
         }
     }
     diff
+}
+
+/// F2 — how a genuine equal-rev conflict is resolved. This is the policy that
+/// answers "whose write wins" on a two-writer node pair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictPolicy {
+    /// Never auto-resolve: the conflict is surfaced for the caller/human.
+    ///
+    /// This is the **only** safe policy for effect-plane records (tickets,
+    /// receipts, audit). Tickets are minted and consumed single-node and are
+    /// never replicated through [`SyncSet`] today; if a future scope ever
+    /// syncs effect-like records it must stay Manual — a receipt can never
+    /// be silently overwritten by a peer, and "whose ticket wins" is a
+    /// human/governance decision, not a merge rule.
+    Manual,
+    /// Last-write-wins by `ts_ms`; equal timestamps break deterministically
+    /// (payload byte-order) so **both** nodes compute the same winner and
+    /// converge. The safe policy for state-plane scopes (messages, memory,
+    /// connector state).
+    LastWriteWins,
+    /// Keep both: the peer's payload is applied under a `~conflict`-suffixed
+    /// key so neither side's data is lost. Convergent (symmetric), but the
+    /// caller must surface the suffixed copies to the user.
+    KeepBoth,
+}
+
+impl ConflictPolicy {
+    /// The plane rule, written down (F2): state scopes converge with LWW;
+    /// anything effect-shaped must be reviewed by a human. `Manual` is the
+    /// conservative default for unknown scopes.
+    pub fn for_scope(scope: SyncScope) -> Self {
+        match scope {
+            SyncScope::Messages | SyncScope::Memory | SyncScope::Connector => ConflictPolicy::LastWriteWins,
+        }
+    }
+}
+
+/// The outcome of applying a [`ConflictPolicy`] to a [`SyncDiff`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ResolvedDiff {
+    /// Items `local` applies to converge (includes LWW/KeepBoth winners).
+    pub apply: Vec<SyncItem>,
+    /// Items `remote` applies to converge.
+    pub push: Vec<SyncItem>,
+    /// Conflicts left for the caller (policy = Manual) — never auto-resolved.
+    pub remaining: Vec<SyncConflict>,
+}
+
+/// Apply a conflict policy to a reconciled diff (F2).
+///
+/// `reconcile` only *detects* equal-rev divergent payloads; this resolves
+/// them according to the plane rule. Invariants:
+/// - `Manual` never mutates anything — conflicts are returned in `remaining`.
+/// - LWW and KeepBoth are **symmetric**: both nodes feed in their own local
+///   set and compute the same winner, so the pair converges after one round.
+/// - The LWW tie-break is deterministic by payload byte-order — arbitrary
+///   but stable, so equal timestamps cannot fork the pair.
+pub fn resolve_conflicts(
+    diff: SyncDiff,
+    policy: ConflictPolicy,
+    local: &SyncSet,
+    remote: &SyncSet,
+) -> ResolvedDiff {
+    let mut out = ResolvedDiff {
+        apply: diff.apply,
+        push: diff.push,
+        remaining: Vec::new(),
+    };
+    for c in diff.conflicts {
+        let l = local.get(c.scope, &c.key);
+        let r = remote.get(c.scope, &c.key);
+        match policy {
+            ConflictPolicy::Manual => out.remaining.push(c),
+            ConflictPolicy::LastWriteWins => match (l, r) {
+                (Some(l), Some(r)) => {
+                    let l_ts = l.ts_ms.unwrap_or(0);
+                    let r_ts = r.ts_ms.unwrap_or(0);
+                    // Newer ts wins; equal ts → larger payload wins bytewise
+                    // (symmetric: both nodes pick the same one). Equal
+                    // payloads at equal rev = already converged.
+                    if r_ts > l_ts || (r_ts == l_ts && r.payload > l.payload) {
+                        out.apply.push(r.clone());
+                    } else if l_ts > r_ts || (l_ts == r_ts && l.payload > r.payload) {
+                        out.push.push(l.clone());
+                    }
+                }
+                _ => out.remaining.push(c),
+            },
+            ConflictPolicy::KeepBoth => {
+                if let Some(r) = r {
+                    let mut both = r.clone();
+                    both.key = format!("{}~conflict", c.key);
+                    out.apply.push(both);
+                }
+                // Local keeps its original key; remote applies nothing extra
+                // for this conflict (its own keep-both branch produces the
+                // symmetric suffixed copy on the other side).
+            }
+        }
+    }
+    out
 }
 
 /// Errors from the sync protocol.
@@ -582,13 +725,27 @@ impl SyncSession {
     }
 
     /// Reconcile against a remote set: apply remote-ahead items locally and
-    /// return what the remote should apply (its `push`).
+    /// return what the remote should apply (its `push`). Equal-rev conflicts
+    /// are left untouched for the caller (the raw [`reconcile`] contract).
     pub fn reconcile_with(&mut self, remote: &SyncSet) -> SyncDiff {
         let diff = reconcile(&self.set, remote);
         for item in &diff.apply {
             self.set.upsert(item.clone());
         }
         diff
+    }
+
+    /// F2 — reconcile with an explicit conflict policy: LWW/KeepBoth winners
+    /// are applied locally, `Manual` conflicts stay in `remaining` for the
+    /// caller. Use [`ConflictPolicy::for_scope`] for the state-plane rule;
+    /// effect-plane records must stay `Manual`.
+    pub fn reconcile_with_policy(&mut self, remote: &SyncSet, policy: ConflictPolicy) -> ResolvedDiff {
+        let diff = reconcile(&self.set, remote);
+        let resolved = resolve_conflicts(diff, policy, &self.set, remote);
+        for item in &resolved.apply {
+            self.set.upsert(item.clone());
+        }
+        resolved
     }
 
     /// Export the whole set as an encrypted bundle file.
@@ -808,6 +965,135 @@ mod tests {
         let res = other.import_from(&path);
         assert!(matches!(res, Err(SyncError::Decrypt)));
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn manual_policy_never_auto_resolves() {
+        let local = SyncSet {
+            items: vec![SyncItem::live(SyncScope::Memory, "x", 1, b"left".to_vec())],
+        };
+        let remote = SyncSet {
+            items: vec![SyncItem::live(SyncScope::Memory, "x", 1, b"right".to_vec())],
+        };
+        let diff = reconcile(&local, &remote);
+        let resolved = resolve_conflicts(diff, ConflictPolicy::Manual, &local, &remote);
+        // Nothing mutated, conflict surfaced.
+        assert!(resolved.apply.is_empty());
+        assert!(resolved.push.is_empty());
+        assert_eq!(resolved.remaining.len(), 1);
+        assert_eq!(resolved.remaining[0].key, "x");
+    }
+
+    #[test]
+    fn lww_resolves_by_timestamp() {
+        let local = SyncSet {
+            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 100, b"older".to_vec())],
+        };
+        let remote = SyncSet {
+            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 200, b"newer".to_vec())],
+        };
+        let diff = reconcile(&local, &remote);
+        let resolved = resolve_conflicts(diff, ConflictPolicy::LastWriteWins, &local, &remote);
+        assert!(resolved.remaining.is_empty());
+        assert_eq!(resolved.apply.len(), 1);
+        assert_eq!(resolved.apply[0].payload, b"newer");
+        assert!(resolved.push.is_empty());
+    }
+
+    #[test]
+    fn lww_equal_ts_tiebreak_is_symmetric() {
+        // Both nodes hold the same two payloads at the same rev and ts; the
+        // byte-order tie-break must make both sides converge on the same
+        // winner (no fork, no "whose side wins" asymmetry).
+        let a_payload = b"alpha".to_vec();
+        let b_payload = b"bravo".to_vec();
+
+        // Node A: local = alpha, remote = bravo.
+        let local_a = SyncSet {
+            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 5, a_payload.clone())],
+        };
+        let remote_a = SyncSet {
+            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 5, b_payload.clone())],
+        };
+        let ra = resolve_conflicts(reconcile(&local_a, &remote_a), ConflictPolicy::LastWriteWins, &local_a, &remote_a);
+
+        // Node B: local = bravo, remote = alpha.
+        let local_b = SyncSet {
+            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 5, b_payload.clone())],
+        };
+        let remote_b = SyncSet {
+            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 5, a_payload.clone())],
+        };
+        let rb = resolve_conflicts(reconcile(&local_b, &remote_b), ConflictPolicy::LastWriteWins, &local_b, &remote_b);
+        assert!(ra.remaining.is_empty() && rb.remaining.is_empty());
+
+        // Node A pulls "bravo"; node B already holds "bravo" locally and
+        // pushes it to A — the mechanism differs by side, the winner is the
+        // same (symmetric convergence in one round).
+        assert_eq!(ra.apply.len(), 1);
+        assert_eq!(ra.apply[0].payload, b_payload);
+        assert_eq!(rb.push.len(), 1);
+        assert_eq!(rb.push[0].payload, b_payload);
+
+        // Both end-sets converge on "bravo" for key x.
+        let mut set_a = local_a.clone();
+        for i in &ra.apply {
+            set_a.upsert(i.clone());
+        }
+        let mut set_b = local_b.clone();
+        for i in &rb.apply {
+            set_b.upsert(i.clone());
+        }
+        assert_eq!(set_a.get(SyncScope::Memory, "x").unwrap().payload, b_payload);
+        assert_eq!(set_b.get(SyncScope::Memory, "x").unwrap().payload, b_payload);
+    }
+
+    #[test]
+    fn keep_both_preserves_everything() {
+        let local = SyncSet {
+            items: vec![SyncItem::live(SyncScope::Memory, "x", 1, b"left".to_vec())],
+        };
+        let remote = SyncSet {
+            items: vec![SyncItem::live(SyncScope::Memory, "x", 1, b"right".to_vec())],
+        };
+        let diff = reconcile(&local, &remote);
+        let resolved = resolve_conflicts(diff, ConflictPolicy::KeepBoth, &local, &remote);
+        assert!(resolved.remaining.is_empty());
+        // Local keeps "x"=left, applies the peer's copy under ~conflict.
+        assert_eq!(resolved.apply.len(), 1);
+        assert_eq!(resolved.apply[0].key, "x~conflict");
+        assert_eq!(resolved.apply[0].payload, b"right");
+    }
+
+    #[test]
+    fn session_reconcile_with_policy_applies_winners() {
+        let mut s = SyncSession::new("dev-a", test_key());
+        s.upsert(SyncScope::Memory, "k", 1, b"v1".to_vec());
+
+        let mut remote = SyncSet::new();
+        remote.upsert(SyncItem::live(SyncScope::Memory, "k", 2, b"v2".to_vec()));
+        remote.upsert(SyncItem::live(SyncScope::Memory, "k2", 1, b"new".to_vec()));
+
+        let resolved = s.reconcile_with_policy(&remote, ConflictPolicy::for_scope(SyncScope::Memory));
+        assert!(resolved.remaining.is_empty());
+        assert_eq!(resolved.apply.len(), 2);
+        assert_eq!(s.set.get(SyncScope::Memory, "k").unwrap().rev, 2);
+        assert!(s.set.get(SyncScope::Memory, "k2").is_some());
+    }
+
+    #[test]
+    fn untimestamped_items_are_older_than_timestamped() {
+        // Wire compat: items written before ts tracking (ts_ms = None) must
+        // lose to any timestamped peer at equal rev.
+        let local = SyncSet {
+            items: vec![SyncItem::live(SyncScope::Memory, "x", 1, b"legacy".to_vec())],
+        };
+        let remote = SyncSet {
+            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 10, b"modern".to_vec())],
+        };
+        let resolved = resolve_conflicts(reconcile(&local, &remote), ConflictPolicy::LastWriteWins, &local, &remote);
+        assert_eq!(resolved.apply.len(), 1);
+        assert_eq!(resolved.apply[0].payload, b"modern");
     }
 
     #[test]

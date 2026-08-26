@@ -7,7 +7,8 @@ import { Save } from 'lucide-react'
 // Local Monaco + workers (MIT, offline for Tauri) — must run before the
 // Editor mounts or @monaco-editor/react falls back to a CDN fetch.
 import '@/lib/monaco'
-import { fsWriteFile } from '@/lib/fs'
+import { fsWriteCommit, fsWriteTicket } from '@/lib/fs'
+import { useAppStore } from '@/lib/store'
 import type { OpenFile } from './editor-tabs'
 
 /**
@@ -51,14 +52,33 @@ export function MonacoPane({
     const content = editorRef.current?.getValue() ?? file.content
     setSaving(true)
     try {
-      await fsWriteFile(file.path, content)
+      // P41.3 — everything ticketed: a buffer write mints a Guard-2 ticket
+      // (diff card) and commits only after it's approved. No silent autosaves
+      // into the workspace.
+      const ticket = await fsWriteTicket(file.path, content)
+      if (ticket.action === 'allow') {
+        await fsWriteCommit(file.path, content, ticket.ticketId)
+        onSaved(file.path, content)
+      } else {
+        // The card is pending: park the write; the guard panel commits it on
+        // approval. The buffer stays dirty until then.
+        useAppStore.getState().parkEditorWrite(ticket.ticketId, {
+          path: file.path,
+          content,
+        })
+        useAppStore.getState().setCenterScreen('guard')
+        useAppStore.getState().notify('Guard-2 card created — approve to save')
+        setSaving(false)
+        return
+      }
       setDirty(false)
       onDirty(file.path, false)
-      onSaved(file.path, content)
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 1200)
-    } catch {
-      /* surface via status row? keep silent — the error is in the console */
+    } catch (e) {
+      useAppStore
+        .getState()
+        .notify(`Save blocked: ${e instanceof Error ? e.message : String(e)}`, 'error')
     } finally {
       setSaving(false)
     }

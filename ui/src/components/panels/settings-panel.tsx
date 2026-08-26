@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
+  Activity,
   Bell,
   BookOpen,
   Boxes,
@@ -18,6 +19,7 @@ import {
   Keyboard,
   KeyRound,
   MessageSquare,
+  MessageSquareWarning,
   Mic,
   Package,
   Palette,
@@ -37,6 +39,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore, type SettingsSectionId } from '@/lib/store'
+import { FeedbackSection } from './feedback-panel'
+import { UxMetricsSection } from './usage-metrics-section'
 import { Input } from '@/components/ui/input'
 import {
   AppearanceSection,
@@ -137,6 +141,8 @@ const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: 
     items: [
       { id: 'import', label: 'Import & migrate', icon: Download },
       { id: 'usage', label: 'Usage', icon: Gauge },
+      { id: 'ux', label: 'UX metrics', icon: Activity },
+      { id: 'feedback', label: 'Feedback', icon: MessageSquareWarning },
       { id: 'beta', label: 'Beta', icon: Package },
       { id: 'advanced', label: 'Advanced', icon: SlidersHorizontal },
       { id: 'about', label: 'About', icon: Info },
@@ -196,6 +202,10 @@ function SectionBody({ section }: { section: SectionId }) {
       return <ImportSection />
     case 'usage':
       return <UsageSection />
+    case 'ux':
+      return <UxMetricsSection />
+    case 'feedback':
+      return <FeedbackSection />
     case 'resources':
       return <ResourcesSection />
     case 'beta':

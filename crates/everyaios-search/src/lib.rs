@@ -335,6 +335,29 @@ pub enum Channel {
     Reddit,
 }
 
+fn percent_encode_query(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for b in input.bytes() {
+        let c = b as char;
+        if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
+            out.push(c);
+        } else {
+            out.push('%');
+            out.push(
+                char::from_digit((b >> 4) as u32, 16)
+                    .unwrap()
+                    .to_ascii_uppercase(),
+            );
+            out.push(
+                char::from_digit((b & 0xF) as u32, 16)
+                    .unwrap()
+                    .to_ascii_uppercase(),
+            );
+        }
+    }
+    out
+}
+
 impl Channel {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -345,20 +368,24 @@ impl Channel {
         }
     }
 
-    /// Build the endpoint URL + query for this channel.
+    /// Build the endpoint URL + query for this channel. The user-supplied
+    /// query is percent-encoded before interpolation so a query can never
+    /// inject extra parameters or break the URL shape (bugfix: unsigned
+    /// search URL builders).
     pub fn build_query(&self, query: &str) -> String {
+        let q = percent_encode_query(query);
         match self {
             Channel::Arxiv => {
-                format!("http://export.arxiv.org/api/query?search_query=all:{query}&max_results=5")
+                format!("http://export.arxiv.org/api/query?search_query=all:{q}&max_results=5")
             }
             Channel::Github => {
-                format!("https://api.github.com/search/repositories?q={query}&per_page=5")
+                format!("https://api.github.com/search/repositories?q={q}&per_page=5")
             }
             Channel::Edgar => {
-                format!("https://efts.sec.gov/LATEST/search-index?q={query}")
+                format!("https://efts.sec.gov/LATEST/search-index?q={q}")
             }
             Channel::Reddit => {
-                format!("https://www.reddit.com/search.json?q={query}&limit=5")
+                format!("https://www.reddit.com/search.json?q={q}&limit=5")
             }
         }
     }
@@ -712,17 +739,20 @@ impl RepoWideScan {
     pub fn blast_radius(edges: &[DepEdge], changed: &str) -> Vec<String> {
         let mut affected = std::collections::HashSet::new();
         affected.insert(changed.to_string());
-        let mut changed = true;
-        while changed {
-            changed = false;
+        let mut progress = true;
+        while progress {
+            progress = false;
             for edge in edges {
                 if affected.contains(&edge.to) && affected.insert(edge.from.clone()) {
-                    changed = true;
+                    progress = true;
                 }
             }
         }
-        let changed_str = changed.to_string();
-        affected.into_iter().filter(|c| c != &changed_str).collect()
+        // Bugfix 7 — the boolean above used to shadow the `changed` param, so
+        // the filter compared against the literal "false" and left the changed
+        // crate itself in the result. The changed crate is the *trigger*, not
+        // part of its own blast radius; exclude it by name.
+        affected.into_iter().filter(|c| c != changed).collect()
     }
 }
 
@@ -997,5 +1027,23 @@ mod tests {
         let radius = RepoWideScan::blast_radius(&deps, "memory");
         assert!(radius.contains(&"core".to_string()));
         assert!(radius.contains(&"app".to_string()));
+        // The changed crate itself is not part of its own blast radius.
+        assert!(!radius.contains(&"memory".to_string()));
+    }
+
+    #[test]
+    fn search_urls_percent_encode_the_query() {
+        // Bugfix — a query must be encoded so it can't inject extra params or
+        // a second request into the endpoint URL.
+        let evil = "alpha & from=admin & x";
+        let github = Channel::Github.build_query(evil);
+        assert_eq!(
+            github,
+            "https://api.github.com/search/repositories?q=alpha%20%26%20from%3Dadmin%20%26%20x&per_page=5"
+        );
+        let arxiv = Channel::Arxiv.build_query(evil);
+        assert!(arxiv.contains("search_query=all:alpha%20%26%20from%3Dadmin"));
+        let reddit = Channel::Reddit.build_query(evil);
+        assert!(reddit.contains("q=alpha%20%26%20from%3Dadmin%20%26%20x"));
     }
 }

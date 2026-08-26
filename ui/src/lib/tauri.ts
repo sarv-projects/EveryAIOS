@@ -44,7 +44,8 @@ export interface ChatWireEvent {
     | "budgetExceeded"
     | "interrupt"
     | "planDone"
-    | "monitor";
+    | "monitor"
+    | "verification";
   streamId?: string;
   latencyMs?: number;
   text?: string;
@@ -77,6 +78,11 @@ export interface ChatWireEvent {
   stopped?: boolean;
   current?: string;
   notifications?: number;
+  /** P41.4 — K1 verification receipt (Diff rail). */
+  taskId?: string;
+  checks?: string[];
+  report?: string;
+  passed?: boolean | null;
 }
 
 /** Pause every scheduled job bound to a chat (delete-session cascade). */

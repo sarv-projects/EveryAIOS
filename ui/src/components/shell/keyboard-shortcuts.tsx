@@ -32,6 +32,8 @@ const SHORTCUTS = [
     { keys: '⌘⇧ A', action: 'Automations' },
     { keys: '⌘⇧ G', action: 'Guard' },
     { keys: '⌘⇧ M', action: 'Memory' },
+    { keys: '⌘⇧ R', action: 'Repeat last action (replay card)' },
+    { keys: '⌥ Space', action: 'Quick ask (AIPointer)' },
   ]},
   { group: 'Agent', items: [
     { keys: '⌘⇧ 1', action: 'Switch to Claude Code' },
@@ -62,6 +64,7 @@ export function KeyboardShortcuts() {
   const setActiveView = useAppStore((s) => s.setActiveView)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const toggleAgentPause = useAppStore((s) => s.toggleAgentPause)
+  const setAiPointerOpen = useAppStore((s) => s.setAiPointerOpen)
   const notify = useAppStore((s) => s.notify)
   const newSession = useAppStore((s) => s.newSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
@@ -106,6 +109,12 @@ export function KeyboardShortcuts() {
       if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         e.preventDefault()
         setOverlayOpen((v) => !v)
+        return
+      }
+      // Alt + Space — AIPointer quick ask (P30.12)
+      if (e.altKey && e.code === 'Space') {
+        e.preventDefault()
+        setAiPointerOpen(true)
         return
       }
       // Cmd/Ctrl + Shift + P — progress view
@@ -201,6 +210,7 @@ export function KeyboardShortcuts() {
     notify,
     newSession,
     setActiveSession,
+    setAiPointerOpen,
     sessions,
     activeSessionId,
     overlayOpen,

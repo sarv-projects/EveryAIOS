@@ -516,6 +516,45 @@
   100% { box-shadow: 0 0 0 8px hsl(19 100% 48% / 0); }
 }
 
+/* P35.2 — entrance stagger for list/table surfaces: each item animates
+   `enter-surface` with a per-index delay; `backwards` fill keeps delayed
+   items invisible until their turn (apply `staggerStyle(i)` from lib/stagger). */
+@utility enter-stagger {
+  animation: enter-surface 150ms ease-out backwards;
+}
+
+/* P35.4 — widget/generative surface crossfade (H17/H25): gentle 300ms
+   opacity crossfade for widget cards and generative surfaces, distinct from
+   the 150ms viewport enter-surface. */
+@utility widget-enter {
+  animation: widget-enter 300ms ease-out;
+}
+@keyframes widget-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* P35.3 — press/hover feedback audit: every interactive element gets a
+   consistent 150ms press (scale 0.98) + a visible focus ring. Framer-motion
+   sets its own inline transitions, so animated components are unaffected. */
+button:not(:disabled),
+[role='button']:not(:disabled) {
+  transition:
+    transform 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+button:active:not(:disabled),
+[role='button']:active:not(:disabled) {
+  transform: scale(0.98);
+}
+:focus-visible {
+  outline: 2px solid hsl(19 100% 48% / 0.55);
+  outline-offset: 2px;
+}
+
 /* Reduced motion — design doc §Accessibility */
 @media (prefers-reduced-motion: reduce) {
   *,

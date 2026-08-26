@@ -16,6 +16,7 @@
 pub mod annot;
 pub mod author;
 pub mod form;
+pub mod pages;
 pub mod redact;
 pub mod storage;
 

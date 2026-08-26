@@ -21,6 +21,13 @@ import {
   hintsFor,
   localModelsFor,
 } from "./catalog";
+import {
+  obsKey,
+  routeDecision,
+  scorerScore,
+  type ProviderObservation,
+  type RouteDecision,
+} from "./scorer";
 
 /** Task classes the router understands (A7 tiering inputs). */
 export type TaskKind = "quick" | "chat" | "coding" | "tools" | "vision" | "deep";
@@ -48,6 +55,12 @@ export interface RouterOptions {
   preferPowerful?: boolean;
   /** Restrict to providers in this list (e.g. only local). */
   providers?: string[];
+  /**
+   * P36 — live provider observations (`${provider}:${model}` → observation).
+   * When present, ranking uses the deterministic RouteDecision consensus
+   * scorer instead of raw cost-sort (the Rust `Scorer` port above).
+   */
+  observations?: Record<string, ProviderObservation>;
 }
 
 /** Default capability requirements per task class. */
@@ -131,8 +144,76 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
     };
   }
 
-  // 2. Rank: cheapest wins for subagents; most capable (highest cost proxy,
-  // then largest context) for the planner tier.
+  // 2. Rank. With P36 observations, the deterministic RouteDecision consensus
+  // scorer decides (same algorithm as `everyaios-core::routing::Scorer`);
+  // without observations we fall back to capability-filter + cost-sort.
+  if (opts.observations) {
+    const scored = pass.map((p) => ({
+      p,
+      score: scorerScore(
+        opts.observations![obsKey(p.c.provider, p.c.model)] ?? {
+          provider: p.c.provider,
+          model: p.c.model,
+          ok: false,
+          health: 0,
+          cost: 0,
+          latencyMs: 0,
+        },
+      ),
+    }));
+    const healthy = scored.filter((s) => s.score > 0);
+    if (healthy.length > 0) {
+      if (opts.preferPowerful) {
+        // Planner tier: the consensus score is a *health gate*, not a
+        // capability axis — among healthy candidates the most capable wins
+        // (highest cost proxy, then largest context), matching the no-
+        // observation planner behavior.
+        healthy.sort((a, b) => {
+          const costA = a.p.hints.costScore;
+          const costB = b.p.hints.costScore;
+          if (costA !== costB) return costB - costA;
+          return (b.p.hints.contextWindow ?? 0) - (a.p.hints.contextWindow ?? 0);
+        });
+        const winner = healthy[0]!.p;
+        return {
+          provider: winner.c.provider,
+          model: winner.c.model,
+          contextWindow: winner.hints.contextWindow,
+          reason: `RouteDecision health gate — ${healthy.length}/${scored.length} observed candidate(s) healthy, planner picks most capable · ${describeReason(winner.hints, {
+            needVision,
+            needTools,
+            minContext,
+            preferPowerful: true,
+          })}`,
+        };
+      }
+      // Subagent/cheap tier: rank by the consensus score (cheapest healthy
+      // wins — the scorer already bakes cost-inverse in).
+      const decision = routeDecision(
+        pass.map((p) => p.c),
+        opts.observations,
+      );
+      const winner = pass.find(
+        (p) => p.c.provider === decision.winner.provider && p.c.model === decision.winner.model,
+      );
+      if (winner) {
+        return {
+          provider: winner.c.provider,
+          model: winner.c.model,
+          contextWindow: winner.hints.contextWindow,
+          reason: `${decision.reason} · ${describeReason(winner.hints, {
+            needVision,
+            needTools,
+            minContext,
+            preferPowerful: false,
+          })}`,
+        };
+      }
+    }
+    // No observed candidate is healthy — fall through to the deterministic
+    // cost-sort so the turn still gets a model.
+  }
+
   pass.sort((a, b) => {
     const costA = a.hints.costScore;
     const costB = b.hints.costScore;
@@ -203,3 +284,20 @@ function describeReason(
   bits.push(`ctx=${hints.contextWindow ?? "?"}`);
   return bits.join(" · ");
 }
+
+// ---------------------------------------------------------------------------
+// P36/RouteDecision — the deterministic consensus scorer.
+//
+// The scorer lives in `./scorer` (dependency-free) so the coordinator and the
+// Rust crate (`everyaios-core::routing::Scorer`) can be locked against each
+// other by pure unit tests. Imported above and re-exported for callers of
+// `router.ts`.
+// ---------------------------------------------------------------------------
+
+export {
+  obsKey,
+  routeDecision,
+  scorerScore,
+  type ProviderObservation,
+  type RouteDecision,
+} from "./scorer";

@@ -14,6 +14,7 @@
 
 pub mod browser;
 pub mod discovery;
+pub mod fingerprint;
 pub mod pairing;
 pub mod transport;
 
@@ -21,6 +22,7 @@ pub use browser::{
     default_profile_dir, install_chrome_for_testing, locate_system_browser, spawn_browser,
     BrowserChild, LaunchOptions,
 };
+pub use fingerprint::{defaults as default_fingerprints, FingerprintProfile, RotationSet};
 pub use pairing::{
     assert_attach_allowed, chrome_default_user_data_dirs, chrome_major_version,
     is_default_chrome_profile, is_everyaios_isolated_profile, ProfilePairing, ProfilePairingStore,

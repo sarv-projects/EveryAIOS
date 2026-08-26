@@ -1,5 +1,12 @@
 import { create } from 'zustand'
 import { inTauri } from './tauri'
+import { inheritContext } from './plain-language'
+import {
+  recordSessionCreated,
+  recordToolResult,
+  recordTurnCompleted,
+  recordTurnFailed,
+} from './ux-metrics'
 import {
   AGENT_MAP,
   DEFAULT_ROUTING,
@@ -30,6 +37,7 @@ export type ViewId =
   | 'local-server'
   | 'kanban'
   | 'generative'
+  | 'artifact'
 
 export type ChatMode = 'normal' | 'plan' | 'research' | 'quick' | 'code'
 
@@ -67,12 +75,33 @@ export interface ChatMessage {
   pinned?: boolean
 }
 
+export interface ArtifactActionUi {
+  index: number
+  label: string
+  state: 'pending' | 'running' | 'complete' | 'aborted' | 'failed'
+  formatted?: string
+}
+
+export interface ArtifactServerState {
+  port: number
+  url: string
+  status: 'stopped' | 'serving'
+  /** true when the server is a browser-preview stand-in (no Rust socket). */
+  demo?: boolean
+}
+
 export interface Artifact {
   id: string
   name: string
-  type: 'docx' | 'xlsx' | 'pptx' | 'pdf' | 'code' | 'markdown' | 'image'
+  type: 'docx' | 'xlsx' | 'pptx' | 'pdf' | 'code' | 'markdown' | 'image' | 'webapp'
   preview: string
   view?: ViewId
+  /** Absolute path when this artifact is a real office file. */
+  path?: string
+  /** P15-H29 — bolt.diy-style inline action checklist (auto-expands while running). */
+  actions?: ArtifactActionUi[]
+  /** P15-H29 — live loopback preview server for webapp artifacts. */
+  server?: ArtifactServerState
 }
 
 export interface ProgressStep {
@@ -97,6 +126,18 @@ export interface MCQInterrupt {
   approvalNonce?: string
   /** P11.2 — urgency level drives the card's badge + default selection. */
   urgency?: 'low' | 'medium' | 'high'
+}
+
+export interface VerificationRecord {
+  /** The plan-task id the checks belong to. */
+  taskId: string
+  /** The declared checks (K1). */
+  checks: string[]
+  /** The model's verification report (raw, bounded). */
+  report: string
+  /** true / false / null = ambiguous — never claimed as executed. */
+  passed: boolean | null
+  tsMs: number
 }
 
 export interface StreamStats {
@@ -146,6 +187,23 @@ export interface SessionLayout {
   railCollapsed?: boolean
   splitRatio?: number
   composerMode?: ChatMode
+  /** P33.7 — the open tab set (persisted + restored per session). */
+  openViews?: ViewId[]
+}
+
+/** P30.15 — one dream-diary entry (visible memory consolidation). */
+export interface DiaryEntry {
+  id: string
+  /** UNIX ms of the consolidation run. */
+  atMs: number
+  /** Short plain-language headline ("Consolidated 3 sessions about the Q3 plan"). */
+  headline: string
+  /** Facts folded into long-term memory this run. */
+  foldedFacts: number
+  /** Facts decayed this run (pruned as noise). */
+  decayedFacts: number
+  /** The morning-brief line (rendered in the storage view). */
+  brief: string
 }
 
 /** P11.5.3 — a real pending patch (agent file mutation w/ undo snapshot). */
@@ -478,21 +536,34 @@ export interface LiveBudget {
   cacheHitRate?: number
 }
 
-// The assistant message currently being streamed (module-level, since zustand
-// actions can't hold instance state).
-let activeStreamMsgId: string | null = null
+// The assistant message currently being streamed **(keyed by sessionId, not a
+// global)**. Streaming is routed to the session the turn started on, so a chat
+// switch mid-stream never lands tokens on the wrong transcript (chat-events
+// carry a sessionId; see the bridge). module-level since zustand actions can't
+// hold instance state.
+let activeStreamMsg: Record<string, string> = {} // sessionId -> assistant msg id
 let streamT0 = 0
 let streamTok = 0
+
+/** Resolve the session a stream action targets: explicit id > active session. */
+function streamSessionId(sessionId?: string): string {
+  return sessionId ?? useAppStore.getState().activeSessionId
+}
+
+/** True when `sessionId` has an in-flight assistant turn. */
+function hasActiveStream(sessionId: string): boolean {
+  return !!activeStreamMsg[sessionId]
+}
 
 function patchActiveAssistant(
   set: (partial: object | ((s: { sessions: Session[]; activeSessionId: string }) => object)) => void,
   fn: (m: ChatMessage) => ChatMessage,
+  sessionId?: string,
 ) {
   set((s) => ({
     sessions: s.sessions.map((x) => {
-      if (x.id !== s.activeSessionId) return x
-      const last = x.messages[x.messages.length - 1]
-      const targetId = activeStreamMsgId ?? (last?.role === 'assistant' ? last.id : undefined)
+      if (x.id !== streamSessionId(sessionId)) return x
+      const targetId = activeStreamMsg[x.id] ?? undefined
       if (!targetId) return x
       return {
         ...x,
@@ -547,6 +618,8 @@ export const SETTINGS_SECTION_IDS = [
   'cloud',
   'import',
   'usage',
+  'ux',
+  'feedback',
   'resources',
   'beta',
   'privacy',
@@ -583,6 +656,11 @@ interface AppState {
   // Sessions & navigation
   sessions: Session[]
   activeSessionId: string
+  /** True once the shell has taken ownership of the sessions list (loaded via
+   * `session_list` or a new session was created). Until then the list is the
+   * demo seed and must never be persisted (bugfix 3). */
+  sessionsHydrated: boolean
+  markSessionsHydrated: () => void
   setActiveSession: (id: string) => void
   newSession: () => void
   deleteSession: (id: string) => Promise<void>
@@ -602,10 +680,42 @@ interface AppState {
   openViews: ViewId[]
   addView: (v: ViewId) => void
   closeView: (v: ViewId) => void
+  /** P33.7 — drag-reorder the open tab set. */
+  reorderViews: (from: number, to: number) => void
+  /** Real file path per office view (replaces hardcoded Q3-Financials.xlsx labels). */
+  officePaths: Partial<Record<ViewId, string>>
+  /** P1.7 — opened-file history per office view (most recent first). Opening
+   * a second file of the same kind no longer loses the first: the view's
+   * file switcher lists this history so any prior file can be re-opened. */
+  officeHistory: Partial<Record<ViewId, string[]>>
+  /** Switch the given office view to a previously opened file path. */
+  switchOfficeDoc: (view: ViewId, path: string) => void
+  /** Office hold lift (P33.1) — close one opened file of a kind; falls back
+   * to the most recent remaining file when the active one closes. */
+  closeOfficeDoc: (view: ViewId, path: string) => void
+  /** Infer kind from extension, set path, add the view. */
+  openOfficeDoc: (path: string) => void
 
   // PDF study mode (chat scoped to an open document)
   scopedView?: ViewId
   setScopedView: (v?: ViewId) => void
+  /** P33 scoped-PDF fix — the open document's extracted text (grounding). */
+  scopedDoc?: { title: string; content: string }
+  setScopedDoc: (d?: { title: string; content: string }) => void
+  // P15-H29 — artifact server + inline action checklist.
+  artifactServer: ArtifactServerState | null
+  artifactActions: ArtifactActionUi[]
+  patchArtifactServer: (server: ArtifactServerState | null) => void
+  setArtifactActions: (actions: ArtifactActionUi[]) => void
+
+  // P30.12 — AIPointer quick-ask overlay (hotkey-anchored ask-box).
+  aiPointerOpen: boolean
+  setAiPointerOpen: (v: boolean) => void
+
+  // P30.15 — visible memory consolidation (Dream Diary / morning brief).
+  dreamDiary: DiaryEntry[]
+  pushDiaryEntry: (e: DiaryEntry) => void
+  clearDiary: () => void
 
   // Sidebar collapse
   sidebarCollapsed: boolean
@@ -637,6 +747,9 @@ interface AppState {
   setPersonaId: (id: string) => void
   soulId: string
   setSoulId: (id: string) => void
+  /** P32.2 — the agent's chosen name (name-your-agent ownership moment). */
+  agentName: string
+  setAgentName: (name: string) => void
   /** `ollama` | `llamafile` when the picker selected a local model. */
   localRuntime?: string
   localCtxWindow?: number
@@ -704,12 +817,18 @@ interface AppState {
   liveBudget?: LiveBudget
   setLiveBudget: (b: LiveBudget) => void
 
+  /** Bugfix — the live `chat_stream` id per session, so Stop/Pause can cancel
+   * the real Rust stream (`chat_cancel`) instead of only flipping local state. */
+  liveStreamId: Record<string, string>
+  setLiveStreamId: (sessionId: string, streamId: string) => void
+
   // Chat streaming (bridge) — real turns through the Tauri relay
   pushUserMessage: (text: string) => void
-  streamStart: () => void
-  streamAppend: (text: string, done: boolean) => void
-  streamFail: (msg: string) => void
-  streamBudgetKill: (msg: string) => void
+  streamStart: (sessionId?: string) => void
+  streamAppend: (text: string, done: boolean, sessionId?: string) => void
+  streamFinalize: (fullText: string, sessionId?: string) => void
+  streamFail: (msg: string, sessionId?: string) => void
+  streamBudgetKill: (msg: string, sessionId?: string) => void
   streamStep: (label: string) => void
   streamToolCall: (toolId: string, args?: Record<string, unknown>, risk?: string) => void
   streamToolResult: (toolId: string, result?: unknown, error?: string) => void
@@ -728,6 +847,16 @@ interface AppState {
   setPendingPlan: (
     p: { planId: string; tasks: { id: string; goal: string; dependsOn?: string[] }[] } | undefined,
   ) => void
+
+  // P41.3 — ticketed editor writes: ticketId → { path, content } waiting on
+  // the Guard-2 approval card; the commit runs once the card is approved.
+  pendingEditorWrites: Record<string, { path: string; content: string }>
+  parkEditorWrite: (ticketId: string, w: { path: string; content: string }) => void
+  takeEditorWrite: (ticketId: string) => { path: string; content: string } | undefined
+
+  // P41.4 — K1 verification receipts for the editor's Diff rail.
+  verifications: VerificationRecord[]
+  pushVerification: (v: VerificationRecord) => void
 
   // P11.2 — onboarding (first launch → add key → first chat → success)
   onboardingDone: boolean
@@ -754,6 +883,8 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   sessions: mockSessions,
   activeSessionId: 's1',
+  sessionsHydrated: false,
+  markSessionsHydrated: () => set({ sessionsHydrated: true }),
   setActiveSession: (id) => {
     // P11.5.3 — persist the outgoing session's layout, restore the incoming.
     const st = get()
@@ -772,9 +903,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   newSession: () => {
     const id = `s-${Date.now()}`
+    // P11.6.4 — local UX metric: a user-created session.
+    recordSessionCreated()
+    // A user-created session is a real turn target — once one exists the
+    // store owns live state (bugfix 3): stop persisting the demo seed.
+    if (!get().sessionsHydrated) set({ sessionsHydrated: true })
+    // P32.6 — fewest-questions context inheritance: pre-fill the folder so
+    // the first ask needs no setup (onboarding stays enforced).
+    const inherited = inheritContext()
     const fresh: Session = {
       id,
-      title: 'New work',
+      title: inherited.title ?? 'New work',
       status: 'idle',
       preview: 'What would you like to do?',
       updatedAt: new Date().toISOString(),
@@ -786,6 +925,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeSessionId: id,
       centerScreen: 'chat',
       composerValue: '',
+      ...(inherited.folder ? { taskFolder: inherited.folder } : {}),
     }))
   },
   monitorBadge: { count: 0, stopped: false },
@@ -845,12 +985,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   openViews: ['office-xlsx', 'folder', 'shell', 'browse'],
-  addView: (v) =>
+  addView: (v) => {
     set((s) => ({
       openViews: s.openViews.includes(v) ? s.openViews : [...s.openViews, v],
       activeView: v,
       railCollapsed: false,
-    })),
+    }))
+    // P33.7 — persist the tab set per session.
+    get().saveSessionLayout(get().activeSessionId, { openViews: get().openViews })
+  },
   closeView: (v) =>
     set((s) => {
       const next = s.openViews.filter((x) => x !== v)
@@ -858,9 +1001,82 @@ export const useAppStore = create<AppState>((set, get) => ({
       const active = s.activeView === v ? next[next.length - 1] : s.activeView
       return { openViews: next, activeView: active }
     }),
+  officePaths: {},
+  officeHistory: {},
+  switchOfficeDoc: (view, path) =>
+    set((s) => ({ officePaths: { ...s.officePaths, [view]: path } })),
+  // Office hold lift (P33.1 — office files as tabs): close one opened file of
+  // a kind. If it was the active file, fall back to the most recent remaining
+  // one (the view stays open until its last tab is closed).
+  closeOfficeDoc: (view, path) =>
+    set((s) => {
+      const history = s.officeHistory[view] ?? []
+      const next = history.filter((p) => p !== path)
+      const wasActive = s.officePaths[view] === path
+      const fallback = wasActive ? (next[0] ?? null) : s.officePaths[view]
+      return {
+        officePaths: { ...s.officePaths, [view]: fallback ?? undefined },
+        officeHistory: { ...s.officeHistory, [view]: next },
+      }
+    }),
+  openOfficeDoc: (path) => {
+    const ext = path.split('.').pop()?.toLowerCase() ?? ''
+    const view: ViewId | undefined =
+      ext === 'xlsx' || ext === 'xlsm'
+        ? 'office-xlsx'
+        : ext === 'docx'
+          ? 'office-docx'
+          : ext === 'pptx'
+            ? 'office-pptx'
+            : ext === 'pdf'
+              ? 'office-pdf'
+              : undefined
+    if (!view) return
+    const label = path.split(/[\\/]/).pop() ?? path
+    set((s) => {
+      const history = s.officeHistory[view] ?? []
+      const next = [path, ...history.filter((p) => p !== path)].slice(0, 8)
+      return {
+        officePaths: { ...s.officePaths, [view]: path },
+        officeHistory: { ...s.officeHistory, [view]: next },
+        sessions: s.sessions.map((x) =>
+          x.id === s.activeSessionId ? { ...x, officeDoc: label, view } : x,
+        ),
+      }
+    })
+    get().addView(view)
+  },
+  reorderViews: (from, to) => {
+    set((s) => {
+      if (from === to || from < 0 || to < 0 || from >= s.openViews.length || to >= s.openViews.length) {
+        return s
+      }
+      const next = [...s.openViews]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved!)
+      return { openViews: next }
+    })
+    get().saveSessionLayout(get().activeSessionId, { openViews: get().openViews })
+  },
 
   scopedView: undefined,
   setScopedView: (v) => set({ scopedView: v }),
+  scopedDoc: undefined,
+  setScopedDoc: (d) => set({ scopedDoc: d }),
+
+  // P15-H29 — artifact server + inline action checklist.
+  artifactServer: null as ArtifactServerState | null,
+  artifactActions: [] as ArtifactActionUi[],
+  patchArtifactServer: (server) => set({ artifactServer: server }),
+  setArtifactActions: (actions) => set({ artifactActions: actions }),
+
+  aiPointerOpen: false,
+  setAiPointerOpen: (v) => set({ aiPointerOpen: v }),
+
+  dreamDiary: [],
+  pushDiaryEntry: (e) =>
+    set((s) => ({ dreamDiary: [e, ...s.dreamDiary].slice(0, 30) })),
+  clearDiary: () => set({ dreamDiary: [] }),
 
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
@@ -906,6 +1122,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPersonaId: (id) => set({ personaId: id }),
   soulId: 'default',
   setSoulId: (id) => set({ soulId: id }),
+  agentName: '',
+  setAgentName: (name) => set({ agentName: name }),
   localRuntime: undefined,
   localCtxWindow: undefined,
   setLocalRuntime: (runtime, ctx) => set({ localRuntime: runtime, localCtxWindow: ctx }),
@@ -987,7 +1205,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPaletteOpen: (v) => set({ paletteOpen: v }),
 
   agentPaused: false,
-  toggleAgentPause: () => set((s) => ({ agentPaused: !s.agentPaused })),
+  toggleAgentPause: () => {
+    const s = get()
+    const pausing = !s.agentPaused
+    if (pausing && inTauri()) {
+      const streamId = s.liveStreamId[s.activeSessionId]
+      if (streamId) {
+        void import('./tauri').then(({ chatCancel }) => {
+          void chatCancel(streamId).catch(() => {})
+        })
+      }
+    }
+    set({ agentPaused: pausing })
+  },
 
   lastToast: undefined,
   lastToastKind: 'default',
@@ -998,6 +1228,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLiveAgents: (a) => set({ liveAgents: a }),
   liveBudget: undefined,
   setLiveBudget: (b) => set({ liveBudget: b }),
+
+  liveStreamId: {},
+  setLiveStreamId: (sessionId, streamId) =>
+    set((s) => ({ liveStreamId: { ...s.liveStreamId, [sessionId]: streamId } })),
 
   pushUserMessage: (text) => {
     const id = `u-${Date.now()}`
@@ -1016,10 +1250,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     }))
   },
-  streamStart: () => {
-    if (activeStreamMsgId) return
-    const id = `a-${Date.now()}`
-    activeStreamMsgId = id
+  streamStart: (sessionId?) => {
+    const sid = streamSessionId(sessionId)
+    if (hasActiveStream(sid)) return
+    const id = `a-${Date.now()}-${sid.slice(-6)}`
+    activeStreamMsg[sid] = id
     streamT0 = Date.now()
     streamTok = 0
     const msg: ChatMessage = {
@@ -1030,18 +1265,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set((s) => ({
       sessions: s.sessions.map((x) =>
-        x.id === s.activeSessionId
+        x.id === sid
           ? { ...x, status: 'running', messages: [...x.messages, msg] }
           : x,
       ),
     }))
   },
-  streamAppend: (text, done) => {
-    const msgId = activeStreamMsgId
+  streamAppend: (text, done, sessionId?) => {
+    const sid = streamSessionId(sessionId)
+    const msgId = activeStreamMsg[sid]
     if (!msgId) return
     set((s) => ({
       sessions: s.sessions.map((x) => {
-        if (x.id !== s.activeSessionId) return x
+        if (x.id !== sid) return x
         return {
           ...x,
           status: done ? 'completed' : 'running',
@@ -1052,15 +1288,43 @@ export const useAppStore = create<AppState>((set, get) => ({
       }),
     }))
     if (done) {
-      activeStreamMsgId = null
+      delete activeStreamMsg[sid]
       streamT0 = 0
     }
   },
-  streamFail: (msg) => {
-    const msgId = activeStreamMsgId
+  /** P-bugfix 1: the `done` chat-event carries the *whole* message (fullText)
+   * after `batch` deltas were already appended token-by-token. Appending it
+   * would duplicate the reply, so this **replaces** the streamed content with
+   * the authoritative final text (and clears the in-flight cursor). */
+  streamFinalize: (fullText, sessionId?) => {
+    const sid = streamSessionId(sessionId)
+    const msgId = activeStreamMsg[sid]
+    if (!msgId) return
     set((s) => ({
       sessions: s.sessions.map((x) => {
-        if (x.id !== s.activeSessionId) return x
+        if (x.id !== sid) return x
+        return {
+          ...x,
+          status: 'completed',
+          messages: x.messages.map((m) =>
+            m.id === msgId ? { ...m, content: fullText } : m,
+          ),
+        }
+      }),
+    }))
+    delete activeStreamMsg[sid]
+    streamT0 = 0
+    // P11.6.4 — local UX metric: a completed turn.
+    recordTurnCompleted()
+  },
+  streamFail: (msg, sessionId?) => {
+    const sid = streamSessionId(sessionId)
+    const msgId = activeStreamMsg[sid]
+    // P11.6.4 — local UX metric: a failed turn (only when one was attempted).
+    if (msgId) recordTurnFailed()
+    set((s) => ({
+      sessions: s.sessions.map((x) => {
+        if (x.id !== sid) return x
         return {
           ...x,
           status: 'failed',
@@ -1072,13 +1336,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }),
     }))
-    activeStreamMsgId = null
+    delete activeStreamMsg[sid]
   },
-  streamBudgetKill: (msg) => {
-    const msgId = activeStreamMsgId
+  streamBudgetKill: (msg, sessionId?) => {
+    const sid = streamSessionId(sessionId)
+    const msgId = activeStreamMsg[sid]
     set((s) => ({
       sessions: s.sessions.map((x) => {
-        if (x.id !== s.activeSessionId) return x
+        if (x.id !== sid) return x
         return {
           ...x,
           status: 'failed',
@@ -1090,10 +1355,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }),
     }))
-    activeStreamMsgId = null
+    delete activeStreamMsg[sid]
   },
   streamToolCall: (toolId, args, risk) => {
-    if (!activeStreamMsgId) get().streamStart()
+    if (!hasActiveStream(streamSessionId())) get().streamStart()
     const rec: ToolCallRecord = {
       id: `tc-${Date.now()}-${toolId}`,
       toolId,
@@ -1129,6 +1394,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return { ...m, toolCalls: list }
     })
+    // P11.6.4 — local UX metric: first successful tool result = time-to-value.
+    if (!error) recordToolResult()
   },
   streamToolProgress: (toolId, progress) => {
     patchActiveAssistant(set, (m) => {
@@ -1159,7 +1426,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { chatToolRetry } = await import('./tauri')
       await chatToolRetry({
         sessionId: st.activeSessionId,
-        streamId: activeStreamMsgId ?? recordId,
+        streamId: activeStreamMsg[st.activeSessionId] ?? recordId,
         toolId: rec.toolId,
         args: rec.args ?? {},
       })
@@ -1268,16 +1535,11 @@ export const useAppStore = create<AppState>((set, get) => ({
             const { planRespond } = await import('./tauri')
             await planRespond(id, choice)
           } else {
-            const { guardRespond } = await import('./guard')
-            const permission = get().sessions
-              .flatMap((s) => s.messages)
-              .find((m) => m.mcq?.id === id)?.mcq
-            if (!permission?.approvalNonce) return
-            await guardRespond(
-              id,
-              choice === 'approve' ? 'approve' : 'reject',
-              permission.approvalNonce,
-            )
+            // F1 — approval happens in the dedicated guard window, never in
+            // the main renderer (it displays browser/generative-UI/plugin
+            // content). Open it; the human decides there.
+            const { openGuardWindow } = await import('./guard')
+            await openGuardWindow()
           }
         } catch {
           /* keep card state */
@@ -1293,7 +1555,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           .filter((m) => m.content !== '' || m.mcq !== undefined || m.role !== 'assistant'),
       })),
     }))
-    get().notify(`Guard-2: ${choice === 'approve' ? 'approved' : 'rejected'} #${id.slice(0, 8)}`)
+    // F1 — the main renderer can no longer decide; it only surfaces the
+    // ticket and opens the dedicated approval window where the decision is
+    // recorded (and audit-logged) by the human.
+    get().notify('Guard-2: approval opened in the dedicated window')
   },
 
   acpHandles: {},
@@ -1302,6 +1567,24 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   pendingPlan: undefined,
   setPendingPlan: (p) => set({ pendingPlan: p }),
+
+  pendingEditorWrites: {},
+  parkEditorWrite: (ticketId, w) =>
+    set((s) => ({ pendingEditorWrites: { ...s.pendingEditorWrites, [ticketId]: w } })),
+  takeEditorWrite: (ticketId) => {
+    const w = get().pendingEditorWrites[ticketId]
+    if (!w) return undefined
+    set((s) => {
+      const next = { ...s.pendingEditorWrites }
+      delete next[ticketId]
+      return { pendingEditorWrites: next }
+    })
+    return w
+  },
+
+  verifications: [],
+  pushVerification: (v) =>
+    set((s) => ({ verifications: [...s.verifications.slice(-49), v] })),
 
   // P11.2 — onboarding. Persisted so the flow only shows on first launch.
   onboardingDone: (() => {
@@ -1353,6 +1636,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeView: saved.view ?? s.activeView,
       railCollapsed: saved.railCollapsed ?? s.railCollapsed,
       composerMode: saved.composerMode ?? s.composerMode,
+      openViews: saved.openViews && saved.openViews.length > 0 ? saved.openViews : s.openViews,
       sessions: s.sessions.map((x) =>
         x.id === sessionId
           ? {
@@ -1387,11 +1671,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 }))
 
 /** Vault-backed persist (Codex JSONL / Claude transcripts analog). Preview
- * keeps mockSessions; the shell loads via `session_list` in initBridge. */
+ * keeps mockSessions; the shell loads via `session_list` in initBridge.
+ * Bugfix 3: the store starts on the mock seed, so persistence only engages
+ * after the shell owns the list (`sessionsHydrated`) — otherwise a boot-time
+ * state write would stamp the fake Q3 chats into the real vault. */
 if (typeof window !== 'undefined') {
   let persistTimer: ReturnType<typeof setTimeout> | undefined
   useAppStore.subscribe((s) => {
     if (!inTauri()) return
+    if (!s.sessionsHydrated) return // never persist the demo seed (bugfix 3)
     if (persistTimer) clearTimeout(persistTimer)
     persistTimer = setTimeout(() => {
       void (async () => {

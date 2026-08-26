@@ -143,3 +143,17 @@ export async function acpShutdown(handle: string): Promise<boolean> {
 export async function acpSessions(): Promise<AcpHandleInfo[]> {
   return invoke<AcpHandleInfo[]>("acp_sessions");
 }
+
+/** P38 — the `primary_chief` default (inbuilt | ACP agent id). */
+export async function chiefDefaultGet(): Promise<{
+  primaryChief: string
+  known: string[]
+}> {
+  return invoke<{ primaryChief: string; known: string[] }>("chief_default_get");
+}
+
+/** P38 — set the `primary_chief` default. Unknown ids are refused (fail
+ * closed — never a silent fallback to the inbuilt engine). */
+export async function chiefDefaultSet(primaryChief: string): Promise<string> {
+  return invoke<string>("chief_default_set", { primaryChief });
+}

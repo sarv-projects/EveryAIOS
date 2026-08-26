@@ -36,6 +36,7 @@ use everyaios_acp::{
     RegistryPolicy, ToolCall, ToolKind,
 };
 use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
+use everyaios_core::config::Config;
 use everyaios_guard::{DecisionPackage, Operation, RiskLevel};
 use serde::Serialize;
 use tauri::State;
@@ -44,6 +45,34 @@ use crate::AppState;
 
 /// Monotonic ACP handle-id source (never reuses an id within a process).
 static ACP_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// P38 — read the `primary_chief` default (`inbuilt` | ACP agent id). The
+/// dispatcher resolves: explicit session value → this default → `inbuilt`.
+#[tauri::command]
+pub fn chief_default_get() -> Result<serde_json::Value, String> {
+    let cfg = Config::load().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "primaryChief": cfg.primary_chief,
+        "known": ["inbuilt", "claude-code", "codex"]
+    }))
+}
+
+/// P38 — set the `primary_chief` default. Unknown ids are refused (fail
+/// closed) so a typo never silently falls back to the inbuilt engine.
+#[tauri::command]
+pub fn chief_default_set(primary_chief: String) -> Result<String, String> {
+    let known = ["inbuilt", "claude-code", "codex"];
+    if !known.contains(&primary_chief.as_str()) {
+        return Err(format!(
+            "unknown primary_chief {primary_chief:?} — must be one of {known:?} (fail-closed, no silent fallback)"
+        ));
+    }
+    let path = Config::config_path().map_err(|e| e.to_string())?;
+    let mut cfg = Config::load().map_err(|e| e.to_string())?;
+    cfg.primary_chief = primary_chief.clone();
+    cfg.save(&path).map_err(|e| e.to_string())?;
+    Ok(primary_chief)
+}
 
 /// A live ACP agent session + the id it was launched under.
 pub(crate) struct AcpHandle {

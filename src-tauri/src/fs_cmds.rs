@@ -127,7 +127,7 @@ pub fn fs_read_file(path: String) -> Result<serde_json::Value, String> {
 /// Save. The parent must already exist.
 #[tauri::command]
 pub fn fs_write_file(path: String, content: String) -> Result<serde_json::Value, String> {
-    let p = PathBuf::from(&path);
+    let p = crate::control::floor_user_file(&path)?;
     if let Some(parent) = p.parent() {
         if !parent.as_os_str().is_empty() && !parent.exists() {
             return Err(format!("{path}: parent directory does not exist"));
@@ -135,6 +135,107 @@ pub fn fs_write_file(path: String, content: String) -> Result<serde_json::Value,
     }
     std::fs::write(&p, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
     Ok(serde_json::json!({ "path": path, "bytes": content.len() }))
+}
+
+/// P41.3 — Ticketed editor write, request half: mints a Guard-2 ticket for a
+/// buffer write (I12 — everything ticketed; no silent autosaves). The card
+/// carries a bounded before/after diff preview; the write itself happens ONLY
+/// in [`fs_write_commit`] after `use_ticket` (approval + single-use +
+/// args-hash match). Returns `action: allow` (policy auto-approved) or
+/// `action: ask` (pending card the guard panel renders).
+#[tauri::command]
+pub fn fs_write_ticket(
+    state: State<'_, AppState>,
+    path: String,
+    content: String,
+) -> Result<serde_json::Value, String> {
+    use everyaios_guard::{Operation as GuardOp, RiskLevel};
+    use std::hash::{Hash, Hasher};
+
+    // The before-image (for the diff card); missing file = creation.
+    let path = crate::control::floor_user_file(&path)?.display().to_string();
+    let before = std::fs::read_to_string(&path).unwrap_or_default();
+    let preview = diff_preview(&before, &content);
+
+    let decision = everyaios_guard::DecisionPackage::new(format!(
+        "Write {}",
+        std::path::Path::new(&path).file_name().unwrap_or_default().to_string_lossy()
+    ))
+    .with_risk(RiskLevel::Medium)
+    .with_paths(vec![path.clone()]);
+
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    "editor.file_write".hash(&mut h);
+    path.hash(&mut h);
+    content.hash(&mut h);
+    let args_hash = format!("{:016x}", h.finish());
+
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
+    let verdict = guard.evaluate(
+        "editor",
+        "everyaios",
+        "editor.file_write",
+        GuardOp::GenericWrite,
+        decision,
+        &args_hash,
+        0,
+    );
+    match verdict {
+        everyaios_core::GuardDecision::Allow { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            Ok(serde_json::json!({
+                "action": "allow",
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+                "preview": preview,
+            }))
+        }
+        everyaios_core::GuardDecision::Ask { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            Ok(serde_json::json!({
+                "action": "ask",
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+                "preview": preview,
+            }))
+        }
+        everyaios_core::GuardDecision::Block { reason } => Err(format!("write blocked: {reason}")),
+    }
+}
+
+/// P41.3 — Ticketed editor write, executor half: consumes the (mandatory)
+/// single-use ticket (`use_ticket` — approval + args-hash match), then
+/// writes. No ticket, no write: the editor never silently autosaves into the
+/// workspace.
+#[tauri::command]
+pub fn fs_write_commit(
+    state: State<'_, AppState>,
+    path: String,
+    content: String,
+    ticket_id: String,
+) -> Result<serde_json::Value, String> {
+    use std::hash::{Hash, Hasher};
+
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    "editor.file_write".hash(&mut h);
+    path.hash(&mut h);
+    content.hash(&mut h);
+    let args_hash = format!("{:016x}", h.finish());
+
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
+    guard.use_ticket(&ticket_id, &args_hash).map_err(|e| e.to_string())?;
+    drop(guard); // never hold the guard lock across a disk write
+
+    let p = std::path::PathBuf::from(&path);
+    std::fs::write(&p, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
+    Ok(serde_json::json!({ "path": path, "bytes": content.len(), "ticketId": ticket_id }))
+}
+
+/// A bounded before/after diff preview for the approval card (first 12 lines
+/// each; the full diff renders in the Diff rail).
+fn diff_preview(before: &str, after: &str) -> serde_json::Value {
+    let head = |s: &str| s.lines().take(12).collect::<Vec<_>>().join("\n");
+    serde_json::json!({ "before": head(before), "after": head(after) })
 }
 
 /// List the pending agent undo snapshots (`file_undos`) — the real patch set

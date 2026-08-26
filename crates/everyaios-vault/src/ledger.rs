@@ -212,6 +212,25 @@ pub struct SessionTotal {
     pub cost: f64,
 }
 
+/// One raw `token_usage` ledger row (newest-first) — the **durable
+/// observation feed** for the coordinator's RouteDecision scorer (ARCH/05
+/// seam: `token_usage` → `ProviderObservation`, restart/offline survival).
+/// Latency is not recorded by the broker, so the coordinator hydrates
+/// latency from the live ring where present and treats ledger-only rows as
+/// latency-unknown (0). `cost` is total $ for the call.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentUsage {
+    pub ts_ms: u64,
+    pub provider: String,
+    pub model: String,
+    pub in_tokens: u64,
+    pub out_tokens: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub cost: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

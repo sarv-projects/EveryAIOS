@@ -206,20 +206,36 @@ impl<T: AcpTransport> AcpSession<T> {
         self.authenticated
     }
 
-    /// ACP handshake: `initialize` → version/capability negotiation.
+    /// ACP handshake: `initialize` → version/capability negotiation, with the
+    /// **withhold** client capability set (fs/terminal: false) — the
+    /// Self-contained governance path. Withholding never forces MCP Channel B
+    /// (spec §4.2.5a §3, corrected v3.46); use
+    /// [`Self::initialize_with_caps`] to advertise the mediated surface.
     pub fn initialize(&mut self, client_info: ClientInfo) -> Result<InitializeResult, AcpError> {
+        self.initialize_with_caps(client_info, ClientCapabilities::default())
+    }
+
+    /// ACP handshake with an explicit client capability set (P38
+    /// GovernedSession): pass a capability set with `fs.readTextFile` /
+    /// `writeTextFile` / `terminal` = true to advertise the **Mediated**
+    /// surface (sandbox-aware agents then delegate their file/shell ops to
+    /// us); pass the default (all false) to withhold.
+    pub fn initialize_with_caps(
+        &mut self,
+        client_info: ClientInfo,
+        client_capabilities: ClientCapabilities,
+    ) -> Result<InitializeResult, AcpError> {
         let id = self.next_id;
         self.next_id += 1;
+        let caps = serde_json::to_value(&client_capabilities)
+            .map_err(|e| AcpError::Malformed(e.to_string()))?;
         let req = json!({
             "jsonrpc": "2.0",
             "id": id,
             "method": "initialize",
             "params": {
                 "protocolVersion": PROTOCOL_VERSION,
-                "clientCapabilities": {
-                    "fs": { "readTextFile": false, "writeTextFile": false },
-                    "terminal": false
-                },
+                "clientCapabilities": caps,
                 "clientInfo": client_info,
             }
         });
@@ -572,6 +588,41 @@ mod tests {
         let first: Value = serde_json::from_str(&t.sent[0]).unwrap();
         assert_eq!(first["method"], "initialize");
         assert_eq!(first["params"]["protocolVersion"], 1);
+    }
+
+    #[test]
+    fn initialize_withhold_payload_has_fs_terminal_false() {
+        // P38 GovernedSession: the default (withhold) path sends fs/terminal
+        // false — the Self-contained path, never a Channel-B force.
+        let mut t = MockTransport::new(vec![&result_response(1, init_result())]);
+        let mut s = AcpSession::new(&mut t);
+        s.initialize(client_info()).unwrap();
+        let first: Value = serde_json::from_str(&t.sent[0]).unwrap();
+        let caps = &first["params"]["clientCapabilities"];
+        assert_eq!(caps["fs"]["readTextFile"], false);
+        assert_eq!(caps["fs"]["writeTextFile"], false);
+        assert_eq!(caps["terminal"], false);
+    }
+
+    #[test]
+    fn initialize_mediated_payload_advertises_fs_terminal() {
+        // P38 GovernedSession Mediated: advertising fs/terminal true makes
+        // sandbox-aware agents delegate their file/shell ops to us.
+        let mut t = MockTransport::new(vec![&result_response(1, init_result())]);
+        let mut s = AcpSession::new(&mut t);
+        let caps = ClientCapabilities {
+            fs: FsCapabilities {
+                read_text_file: true,
+                write_text_file: true,
+            },
+            terminal: true,
+        };
+        s.initialize_with_caps(client_info(), caps).unwrap();
+        let first: Value = serde_json::from_str(&t.sent[0]).unwrap();
+        let caps = &first["params"]["clientCapabilities"];
+        assert_eq!(caps["fs"]["readTextFile"], true);
+        assert_eq!(caps["fs"]["writeTextFile"], true);
+        assert_eq!(caps["terminal"], true);
     }
 
     #[test]

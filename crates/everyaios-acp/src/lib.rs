@@ -17,8 +17,10 @@
 //!   install-state persistence).
 
 pub mod a2a;
+pub mod chief;
 pub mod client;
 pub mod frame;
+pub mod harness_config;
 pub mod installer;
 pub mod messages;
 pub mod registry;
@@ -28,8 +30,17 @@ pub mod registry_index;
 pub use a2a::{
     A2aError, AgentCard, AgentCardVerifier, AgentSkill, CardTrust, SignedAgentCard,
 };
+pub use chief::{
+    AcpChief, Approval, ChiefAdapter, ChiefCapabilities, ChiefError, ChiefEvent, DelegateChief,
+    EventStream, GovernedSession, PermissionRequest, SessionHandle, SessionOptions, SessionState,
+    UserMessage, governance_mode,
+};
 pub use client::{AcpError, AcpSession, AcpTransport, ProcessTransport, PromptOutcome};
 pub use frame::{decode_messages, encode_message};
+pub use harness_config::{
+    builtin_writers, ClaudeCodeConfig, CodexConfig, HarnessConfigError, HarnessConfigWriter,
+    OpenCodeConfig, ProviderConfig,
+};
 pub use messages::{
     AgentCapabilities, AgentInfo, AuthMethod, AuthMethodType, AuthenticateParams,
     AuthenticateResult, ClientCapabilities, ClientInfo, ContentBlock, FsCapabilities,

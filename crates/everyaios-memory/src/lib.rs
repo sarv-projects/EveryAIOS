@@ -64,15 +64,19 @@ pub mod fusion;
 pub mod ghost;
 pub mod graph;
 pub mod janus;
+pub mod journey;
 pub mod lazy_graph;
 pub mod maintain;
 pub mod paging;
+pub mod passport;
 pub mod planner;
 pub mod reference;
 pub mod reinforce;
 pub mod repair;
 pub mod rerank;
 pub mod rtk;
+pub mod saved;
+pub mod seek;
 pub mod summary;
 pub mod taste;
 pub mod usage;
@@ -118,8 +122,11 @@ pub use janus::{ast_prune, dedup, regex_collapse, run_janus, PassResult};
 pub use planner::{
     BudgetResult, ContextPlanner, PlannerConfig, PlannerDecision,
 };
+pub use journey::{Journey, JourneyEvent, JourneyKind};
+pub use passport::{ContextPassport, PassportEntry, PassportScope};
 pub use rtk::{compress, kind_for, CommandKind, CompressedOutput};
-pub use usage::{UsageLedger, UsageRecord};
+pub use saved::{MemoryObservation, ObservationSource, SavedVsDiscovered};
+pub use usage::{AgentSessionMetrics, UsageLedger, UsageRecord};
 pub use cache::{ResultCache, SemanticCache};
 pub use embedding::{
     cosine, dot, hamming, l2, quantize_binary, quantize_int8, BinaryVector, Embedder,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Check, HeartPulse, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -177,23 +177,63 @@ function StatusPill({ status }: { status: string }) {
 
 export function ModelsSection() {
   const notify = useAppStore((s) => s.notify)
+  const [keys, setKeys] = useState<Array<{ provider: string; keyId: string; opaqueHandle: string; status: string }>>([])
+  const [provider, setProvider] = useState('openai')
+  const [keyId, setKeyId] = useState('default')
+  const [secret, setSecret] = useState('')
+
+  const reload = useCallback(async () => {
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<{ keys: Array<{ provider: string; keyId: string; opaqueHandle: string; status: string }> }>('vault_keys_list', {})
+      setKeys(r.keys ?? [])
+    } catch {
+      /* vault locked / preview */
+    }
+  }, [])
+
+  useEffect(() => { void reload() }, [reload])
+
   return (
     <SectionShell
       title="API Keys (BYOK)"
-      desc="Bring-your-own-key providers — health checks and priority. The agent runtime + model picker lives under Agents & Models."
+      desc="Bring-your-own-key providers — stored in the local SQLCipher vault (opaque handles only in the UI)."
       action={
         <Button
           size="sm"
           className="h-8 bg-orange-500 text-black hover:bg-orange-400"
-          onClick={() => notify('Add key — paste an API key; it is stored in the local vault (SQLCipher)')}
+          onClick={async () => {
+            try {
+              const { invoke } = await import('@/lib/tauri')
+              await invoke('vault_key_add', { provider, keyId, value: secret })
+              setSecret('')
+              notify(`Stored ${provider}/${keyId} in the vault`)
+              await reload()
+            } catch (e) {
+              notify(String(e), 'error')
+            }
+          }}
         >
           <Plus className="h-3.5 w-3.5" />
           Add key
         </Button>
       }
     >
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        <input className="h-7 w-28 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]" value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="provider" />
+        <input className="h-7 w-24 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]" value={keyId} onChange={(e) => setKeyId(e.target.value)} placeholder="key id" />
+        <input className="h-7 flex-1 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="sk-…" />
+      </div>
       <ul className="space-y-1.5">
-        {PROVIDERS.map((p) => (
+        {(keys.length ? keys.map((k, i) => ({
+          id: k.opaqueHandle,
+          name: `${k.provider} / ${k.keyId}`,
+          model: k.opaqueHandle.slice(0, 12) + '…',
+          status: k.status === 'primary' ? 'healthy' : 'unverified',
+          priority: i + 1,
+          keyId: k.keyId,
+          provider: k.provider,
+        })) : PROVIDERS).map((p) => (
           <li
             key={p.id}
             className="flex items-center gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2"
@@ -229,7 +269,21 @@ export function ModelsSection() {
                 size="sm"
                 variant="ghost"
                 className="h-7 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
-                onClick={() => notify(`Removing ${p.name} key from the vault…`)}
+                onClick={async () => {
+                  const row = p as { provider?: string; keyId?: string; name: string }
+                  if (!row.provider || !row.keyId) {
+                    notify('Select a vault-stored key to remove')
+                    return
+                  }
+                  try {
+                    const { invoke } = await import('@/lib/tauri')
+                    await invoke('vault_key_remove', { provider: row.provider, keyId: row.keyId })
+                    notify(`Removed ${row.provider}/${row.keyId}`)
+                    await reload()
+                  } catch (e) {
+                    notify(String(e), 'error')
+                  }
+                }}
               >
                 <Trash2 className="h-3 w-3" />
               </Button>

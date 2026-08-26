@@ -12,6 +12,7 @@
 
 pub mod auth_bridge;
 pub mod broker;
+pub mod egress;
 pub mod keyring;
 pub mod ledger;
 pub mod local;
@@ -24,11 +25,12 @@ pub use broker::{
     assemble_tool_calls, extract_json_tool_calls, usage_tokens, Broker, BrokerError,
     ChatStreamEvent, ToolCallDelta,
 };
+pub use egress::{EgressFirewall, EgressPolicy, EgressVerdict};
 pub use keyring::{
     KeyEntry, KeyInfo, KeyRing, KeyRingError, KeySpec, KeyStatus, RoutingPolicy, SelectedKey,
     COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, MAX_429_SWITCHES,
 };
-pub use ledger::{default_pricing, Pricing, SessionTotal, Usage, UsageRow};
+pub use ledger::{default_pricing, Pricing, RecentUsage, SessionTotal, Usage, UsageRow};
 pub use local::{Grammar, LocalEndpoint, LocalRuntime, DEFAULT_NUM_CTX, MIN_WARN_NUM_CTX};
 pub use oauth::{
     DeviceCodeStart, DevicePoll, OAuthAccountInfo, OAuthError, OAuthManager, PkceStart,
@@ -397,6 +399,39 @@ impl Vault {
         Ok(n as u64)
     }
 
+    /// Last `limit` ledger rows newest-first — the durable observation feed
+    /// for the coordinator's RouteDecision scorer (ARCH/05 seam:
+    /// `token_usage` → `ProviderObservation`, restart/offline survival).
+    /// Latency is not stored (the broker records only tokens+cost), so the
+    /// coordinator merges these rows into its ring without overwriting the
+    /// live process's latency/health signals.
+    pub fn recent_usage(&self, limit: u64) -> Result<Vec<RecentUsage>, VaultError> {
+        let limit = (limit.min(500) as i64).max(1);
+        let mut stmt = self.conn.prepare(
+            "SELECT ts, provider, model, in_tokens, out_tokens, cache_read, cache_write, cost
+             FROM token_usage
+             ORDER BY id DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit], |r| {
+            Ok(RecentUsage {
+                ts_ms: r.get(0)?,
+                provider: r.get(1)?,
+                model: r.get(2)?,
+                in_tokens: r.get::<_, i64>(3)?.max(0) as u64,
+                out_tokens: r.get::<_, i64>(4)?.max(0) as u64,
+                cache_read: r.get::<_, i64>(5)?.max(0) as u64,
+                cache_write: r.get::<_, i64>(6)?.max(0) as u64,
+                cost: r.get(7)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
     /// Per-session cost/token breakdown for the analytics table (P5.9) — the
     /// `token_usage` ledger grouped by session, most-expensive first.
     pub fn session_totals(&self) -> Result<Vec<SessionTotal>, VaultError> {
@@ -469,6 +504,71 @@ mod tests {
                 vault.list_keys("openai").unwrap(),
                 vec!["key-3".to_string()]
             );
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P10.4 — SQLCipher vault is a portable byte file: the database is
+    /// self-contained (no absolute paths, no host-specific handles), encrypted
+    /// at rest (plaintext markers never appear in the file), and reopens with
+    /// only the key on any OS. This test runs in the CI matrix on all three
+    /// platforms — "copy vault.db between OS" is the same bytes + the same key.
+    #[test]
+    fn portable_encrypted_bytes_reopen_with_only_the_key() {
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-vault-portable-{}",
+            std::process::id()
+        ));
+        let path = dir.join("vault.db");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let secret = "sk-portable-secret-42";
+        {
+            let vault = Vault::open(&path, "test-key").expect("open");
+            vault.register_key("anthropic", secret).unwrap();
+            vault
+                .put_ui_session("portable", r#"{"id":"portable","title":"x"}"#)
+                .unwrap();
+        }
+        // Drop the handle: everything durable is now only the file bytes.
+
+        // 1. The file is encrypted at rest — the secret must never appear
+        //    in plaintext bytes (SQLCipher page encryption).
+        let raw = std::fs::read(&path).unwrap();
+        assert!(!raw.is_empty(), "vault file must exist and be non-empty");
+        let haystack = String::from_utf8_lossy(&raw);
+        assert!(
+            !haystack.contains(secret),
+            "vault file must not contain plaintext key material"
+        );
+        // The standard SQLCipher header magic is not a plain SQLite one; the
+        // schema marker "sqlcipher" may appear in the header bytes — presence
+        // of the KDF salt bytes is what matters, and the encryption assertion
+        // above is the load-bearing one.
+
+        // 2. Reopen from the same bytes with only the key (the cross-OS
+        //    contract: same file + same key, any platform).
+        {
+            let vault = Vault::open(&path, "test-key").expect("reopen portable bytes");
+            assert!(vault.verify_key().unwrap());
+            assert_eq!(
+                vault.list_keys("anthropic").unwrap(),
+                vec![secret.to_string()]
+            );
+            let sessions = vault.list_ui_sessions().unwrap();
+            assert_eq!(sessions.len(), 1);
+            assert_eq!(sessions[0].0, "portable");
+        }
+
+        // 3. Wrong key fails closed. SQLCipher refuses the wrong key at open
+        //    (NotADatabase — the header salt can't decrypt), and even in the
+        //    cases where open succeeds the verify_key probe must return false.
+        let wrong = Vault::open(&path, "wrong-key");
+        match wrong {
+            Err(_) => { /* fail-closed at open: SQLCipher refuses */ }
+            Ok(v) => assert!(!v.verify_key().unwrap(), "wrong key must not verify"),
         }
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -579,6 +679,66 @@ mod tests {
         assert_eq!(totals[1].session, "s-1");
         assert_eq!(totals[1].tokens_in, 100);
         assert!((totals[1].cost - 0.0020).abs() < 1e-12);
+    }
+
+    #[test]
+    fn recent_usage_feeds_the_coordinator_observation_ring() {
+        let vault = Vault::open_in_memory("mem-key").expect("open");
+        // Five calls on one model, plus one call on another provider.
+        for i in 0..5 {
+            vault
+                .record_usage(&UsageRow {
+                    session: "s-1".into(),
+                    provider: "openai".into(),
+                    model: "gpt-4o".into(),
+                    key_id: "k1".into(),
+                    usage: Usage {
+                        prompt: 100 + i,
+                        output: 40,
+                        cache_read: 0,
+                        cache_write: 0,
+                    },
+                    cost: 0.001,
+                    tool: None,
+                })
+                .unwrap();
+        }
+        vault
+            .record_usage(&UsageRow {
+                session: "s-2".into(),
+                provider: "deepseek".into(),
+                model: "deepseek-chat".into(),
+                key_id: "dsk-1".into(),
+                usage: Usage {
+                    prompt: 10,
+                    output: 5,
+                    cache_read: 0,
+                    cache_write: 0,
+                },
+                cost: 0.0001,
+                tool: None,
+            })
+            .unwrap();
+
+        // Newest-first with the requested limit.
+        let rows = vault.recent_usage(3).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].model, "deepseek-chat"); // newest row
+        assert_eq!(rows[1].in_tokens, 104); // newest openai call
+        assert_eq!(rows[0].provider, "deepseek");
+        // Provider/model columns are present — the ring's durable key.
+        assert!(rows.iter().all(|r| !r.provider.is_empty() && !r.model.is_empty()));
+
+        // Limit clamps: 0 → 1, huge → 500.
+        assert_eq!(vault.recent_usage(0).unwrap().len(), 1);
+        assert_eq!(vault.recent_usage(10_000).unwrap().len(), 6);
+
+        // camelCase wire shape (what the coordinator consumes).
+        let v = serde_json::to_value(&rows[0]).unwrap();
+        assert!(v.get("tsMs").is_some());
+        assert!(v.get("inTokens").is_some());
+        assert!(v.get("outTokens").is_some());
+        assert!(v.get("cost").is_some());
     }
 
     #[test]

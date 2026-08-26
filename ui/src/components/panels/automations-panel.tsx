@@ -31,6 +31,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import AutomationEditor from './automation-editor'
+import TasksRail from './tasks-rail'
 
 const TRIGGER_ICON: Record<
   SchedulerJob['trigger']['type'],
@@ -199,6 +200,9 @@ export default function AutomationsPanel() {
             <TabsTrigger value="history" className="text-xs">
               History
             </TabsTrigger>
+            <TabsTrigger value="tasks" className="text-xs">
+              Tasks
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </header>
@@ -213,7 +217,9 @@ export default function AutomationsPanel() {
             transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
             className="space-y-3 p-4"
           >
-          {tab === 'templates' ? (
+          {tab === 'tasks' ? (
+            <TasksRail />
+          ) : tab === 'templates' ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {TEMPLATES.map((t) => (
                 <div
@@ -251,7 +257,38 @@ export default function AutomationsPanel() {
                   <History className="h-3.5 w-3.5 text-orange-400" />
                   <span className="text-xs font-medium text-foreground">Recent runs</span>
                 </div>
-                <span className="font-mono text-[10px] text-muted-foreground">last 7 days</span>
+                <div className="flex items-center gap-3">
+                  {/* P35.1 — the spark-draw consumer: a 7-run success trend
+                      sparkline over RUN_HISTORY (oldest → newest, success up). */}
+                  <svg
+                    viewBox="0 0 64 18"
+                    className="spark-draw h-4 w-16 text-emerald-400"
+                    aria-label="Success trend over the last 7 runs"
+                  >
+                    {RUN_HISTORY.slice()
+                      .reverse()
+                      .map((r, i) => {
+                        const x = 4 + i * ((64 - 8) / Math.max(1, RUN_HISTORY.length - 1))
+                        const y = r.result === 'success' ? 3 : 14
+                        return (
+                          <circle key={r.id} cx={x} cy={y} r="2" fill="currentColor" />
+                        )
+                      })}
+                    <polyline
+                      points={RUN_HISTORY.slice()
+                        .reverse()
+                        .map((r, i) => {
+                          const x = 4 + i * ((64 - 8) / Math.max(1, RUN_HISTORY.length - 1))
+                          return `${x},${r.result === 'success' ? 3 : 14}`
+                        })
+                        .join(' ')}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1"
+                    />
+                  </svg>
+                  <span className="font-mono text-[10px] text-muted-foreground">last 7 days</span>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full font-mono text-[11px]">

@@ -5,6 +5,7 @@
 //! or replayed coordinator from double-executing external mutations.
 
 use crate::prescan::ScanTarget;
+use crate::profiles::GateAction;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -207,6 +208,27 @@ impl TicketStore {
         id
     }
 
+    /// Mint honoring the profile gate (P37 — auto-run / full access honored
+    /// at ticket mint): `GateAction::Allow` mints in the **Approved** state
+    /// (policy auto-run — no Ask card for this mutation); `Ask` mints as
+    /// usual (Pending); `Block` refuses to mint at all (the mutation never
+    /// gets a ticket). Deterministic.
+    pub fn mint_gated(
+        &mut self,
+        mut ticket: AuthorizationTicket,
+        action: GateAction,
+    ) -> Result<String, TicketError> {
+        match action {
+            GateAction::Allow => {
+                ticket.state = TicketState::Approved;
+                ticket.approval_source = ApprovalSource::Policy;
+                Ok(self.mint(ticket))
+            }
+            GateAction::Ask => Ok(self.mint(ticket)),
+            GateAction::Block => Err(TicketError::Blocked),
+        }
+    }
+
     /// Look up + consume. Enforces **approval first**, then validity, arg
     /// match and single-use. A `Pending` ticket (minted but not yet approved)
     /// is refused with [`TicketError::NotApproved`] — approval is a hard
@@ -369,6 +391,8 @@ pub enum TicketError {
     NotApproved,
     #[error("args hash mismatch")]
     ArgsMismatch,
+    #[error("mint refused by profile gate (blocked)")]
+    Blocked,
 }
 
 /// Current unix time in ms (injectable in tests via `set_now_ms`).
@@ -525,6 +549,20 @@ mod tests {
         let mut t = ticket(id);
         t.state = TicketState::Approved;
         t
+    }
+
+    #[test]
+    fn mint_gated_honors_allow_ask_block() {
+        let mut store = TicketStore::new();
+        // Allow → mints pre-approved (auto-run honored, no Ask card).
+        let id = store.mint_gated(ticket("auto"), GateAction::Allow).unwrap();
+        assert!(store.use_ticket(&id, "h1").is_ok());
+        // Ask → mints Pending (human decision still required).
+        let id2 = store.mint_gated(ticket("ask"), GateAction::Ask).unwrap();
+        assert!(matches!(store.use_ticket(&id2, "h1"), Err(TicketError::NotApproved)));
+        // Block → no ticket exists at all.
+        assert!(matches!(store.mint_gated(ticket("block"), GateAction::Block), Err(TicketError::Blocked)));
+        assert!(matches!(store.use_ticket("block", "h1"), Err(TicketError::Unknown)));
     }
 
     #[test]

@@ -26,6 +26,9 @@ pub mod message;
 pub mod socket;
 
 pub use channel::{BoundedChannel, DEFAULT_CAPACITY};
+pub mod budget;
+
+pub use budget::{apply_budget, budget_for, Budgeted, MessageKind, PayloadBudget};
 pub use frame::{encode, FrameError, MAX_FRAME_LEN};
 pub use handle::{HandleRef, HandleStore, WirePayload};
 pub use message::{JsonRpcError, Request, Response};

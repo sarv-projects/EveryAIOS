@@ -5,7 +5,9 @@ import { Presentation, ChevronLeft, ChevronRight, StickyNote } from 'lucide-reac
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { OfficeOpenBar } from './office-open-bar'
-import { pptxOpen, type PptxPayload } from '@/lib/office'
+import OfficeFileSwitcher from './office-file-switcher'
+import { useAppStore } from '@/lib/store'
+import { pptxOpen, pptxNotes, officeOpenExternal, isOfficeFloorError, type PptxPayload } from '@/lib/office'
 
 const SLIDES = [
   { title: 'Q3 2026 Results', active: false },
@@ -19,12 +21,24 @@ export default function OfficePptxView() {
   const [current, setCurrent] = useState(2)
   const [payload, setPayload] = useState<PptxPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notes, setNotes] = useState<Array<{ slide: number; talk: string }>>([])
+  const [lastAttempted, setLastAttempted] = useState<string | null>(null)
+  const running = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status === 'running')
+  const paused = useAppStore((s) => s.pausedSessions[s.activeSessionId])
+  // P1.9 — read-only while the agent is running (same lock as Word).
+  const locked = running && !paused
 
   const open = async (path: string) => {
     try {
       setError(null)
+      setLastAttempted(path)
       setPayload(await pptxOpen(path))
       setCurrent(0)
+      try {
+        setNotes((await pptxNotes(path)).notes)
+      } catch {
+        setNotes([])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open deck')
     }
@@ -58,10 +72,27 @@ export default function OfficePptxView() {
       </header>
 
       <OfficeOpenBar onOpen={open} livePath={payload?.path} />
+      <OfficeFileSwitcher view="office-pptx" current={payload?.path} onOpen={open} />
+
+      {locked && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-[10px] text-amber-300">
+          Read-only while the agent is running — pause to take over
+        </div>
+      )}
 
       {error && (
-        <div className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
-          ⚠ {error}
+        <div className="flex flex-wrap items-center gap-2 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
+          <span>⚠ {error}</span>
+          {lastAttempted && !isOfficeFloorError(error) && (
+            <button
+              className="rounded border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/25"
+              onClick={() =>
+                officeOpenExternal(lastAttempted).catch((e) => setError(String(e)))
+              }
+            >
+              Engine refused — open in LibreOffice instead
+            </button>
+          )}
         </div>
       )}
 
@@ -122,6 +153,12 @@ export default function OfficePptxView() {
             )}
           </div>
 
+          {notes[current] && (
+            <div className="mt-2 rounded border border-border bg-zinc-950 p-2 font-mono text-[10px] text-muted-foreground">
+              <StickyNote className="mr-1 inline h-3 w-3" />
+              {notes[current]?.talk || 'No speaker notes'}
+            </div>
+          )}
           <div className="mt-3 flex items-center justify-between">
             <button
               onClick={() => setCurrent(Math.max(0, current - 1))}
@@ -148,18 +185,28 @@ export default function OfficePptxView() {
             <StickyNote className="h-3.5 w-3.5 text-orange-400" />
             Speaker notes
           </div>
+          {/* P2.11 — live speaker notes from pptx_notes when a deck is open;
+              the guizang demo stays the preview-only fallback. */}
           <div className="p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-            <div className="mb-1 text-[9px] uppercase tracking-wide text-orange-300">
-              P4.7b · guizang SPEAKER_NOTES
-            </div>
-            <p className="text-foreground/80">
-              Open by acknowledging the team&apos;s execution. Land the headline: $1.8M revenue,
-              up 20% QoQ. Anchor on enterprise expansion as the primary driver.
-            </p>
-            <p className="mt-2 text-foreground/70">
-              Note: margin improvement (61→66%) reflects vendor renegotiation and tiered
-              pricing. Mention 35% YoY enterprise deal growth.
-            </p>
+            {payload ? (
+              <p className="whitespace-pre-wrap text-foreground/80">
+                {notes.find((n) => n.slide === current + 1)?.talk || 'No speaker notes for this slide'}
+              </p>
+            ) : (
+              <>
+                <div className="mb-1 text-[9px] uppercase tracking-wide text-orange-300">
+                  P4.7b · guizang SPEAKER_NOTES
+                </div>
+                <p className="text-foreground/80">
+                  Open by acknowledging the team&apos;s execution. Land the headline: $1.8M revenue,
+                  up 20% QoQ. Anchor on enterprise expansion as the primary driver.
+                </p>
+                <p className="mt-2 text-foreground/70">
+                  Note: margin improvement (61→66%) reflects vendor renegotiation and tiered
+                  pricing. Mention 35% YoY enterprise deal growth.
+                </p>
+              </>
+            )}
           </div>
         </aside>
       </div>
@@ -200,7 +247,11 @@ export default function OfficePptxView() {
               </div>
             </button>
           ))}
-          <button className="flex shrink-0 items-center justify-center rounded border border-dashed border-border px-3 text-orange-300 hover:bg-accent">
+          <button
+            disabled={locked}
+            title={locked ? 'Read-only while the agent is running' : 'Add slide'}
+            className="flex shrink-0 items-center justify-center rounded border border-dashed border-border px-3 text-orange-300 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+          >
             +
           </button>
         </div>

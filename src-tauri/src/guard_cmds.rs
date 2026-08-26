@@ -5,8 +5,9 @@
 //! cards, receipts, policy summary and estop to the UI.
 
 use everyaios_core::PendingGuardCard;
-use tauri::State;
+use tauri::{AppHandle, State};
 
+use crate::guard_window::{open_guard_window, GUARD_WINDOW_LABEL};
 use crate::AppState;
 
 /// The open cards waiting on a human decision (Guard-2 card stack). Each card
@@ -24,13 +25,26 @@ pub fn guard_tickets(state: State<'_, AppState>) -> Result<Vec<PendingGuardCard>
 /// Record a human decision on a ticket: `approve` (records Human source +
 /// audit receipt) or `reject` (revokes + audit receipt). The card-bound nonce
 /// is mandatory; the ticket id alone is not an approval capability.
+///
+/// F1 — consent surface: this command only accepts calls from the dedicated
+/// `guard` window (the only surface that ever renders an approval card). The
+/// main webview renders untrusted content (browser views, generative UI,
+/// plugin views); if it could approve, a compromised renderer could draw a
+/// fake card over a real ticket. The nonce prevents forgery; the window
+/// check prevents deception.
 #[tauri::command]
 pub fn guard_respond(
+    window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     ticket_id: String,
     action: String,
     approval_nonce: String,
 ) -> Result<bool, String> {
+    if window.label() != GUARD_WINDOW_LABEL {
+        return Err(format!(
+            "Guard-2 approvals only from the dedicated approval window ({GUARD_WINDOW_LABEL}); main renderer cannot approve"
+        ));
+    }
     let mut svc = state
         .guard_service
         .lock()
@@ -40,6 +54,14 @@ pub fn guard_respond(
         "reject" => Ok(svc.reject_with_nonce(&ticket_id, &approval_nonce)),
         other => Err(format!("unknown guard action: {other}")),
     }
+}
+
+/// Bring the dedicated Guard-2 approval window to the front (F1). The main
+/// UI calls this when a pending ticket is waiting; the actual approve/reject
+/// happens inside that window, never in the untrusted main renderer.
+#[tauri::command]
+pub fn guard_open_window(app: AppHandle) -> Result<(), String> {
+    open_guard_window(&app).map_err(|e| e.to_string())
 }
 
 /// The append-only approve/reject audit receipts (P7.5 — "approval/denial
@@ -201,7 +223,12 @@ pub fn guard_permissions_matrix(
                 ("execute", _) => Operation::TerminalShell { destructive: false },
                 ("network", _) => Operation::ExternalNetwork { new_domain: true },
                 ("browser", _) => Operation::WebAction,
-                ("read", _) => Operation::GenericWrite, // reads are Allow by default
+                // There is no read-specific `Operation` variant; reads are
+                // matrix-rendered via a write-ticket for grid display only.
+                // The *actual* read path is read-only auto-approved by the Rust
+                // executor (ticket-every-effect, then Allow) — this is purely
+                // presentational, never a write entitlement.
+                ("read", _) => Operation::GenericWrite,
                 _ => Operation::GenericWrite,
             };
             let decision = match policy.evaluate(&op) {

@@ -1,26 +1,55 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { OfficeOpenBar } from './office-open-bar'
-import { docxOpen, demoDocx, type DocxPayload } from '@/lib/office'
+import OfficeFileSwitcher from './office-file-switcher'
+import { docxOpen, docxPatch, docxTracks, officeOpenExternal, isOfficeFloorError, demoDocx, type DocxPayload } from '@/lib/office'
+import { useAppStore } from '@/lib/store'
 
 export default function OfficeDocxView() {
   const [payload, setPayload] = useState<DocxPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // P11.2 — office editor UX: track-changes-style display of AI edits.
   const [trackChanges, setTrackChanges] = useState(true)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [tracks, setTracks] = useState<Array<{ kind: string; author: string; text: string }>>([])
+  const [lastAttempted, setLastAttempted] = useState<string | null>(null)
+  const officePath = useAppStore((s) => s.officePaths['office-docx'])
+  const running = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status === 'running')
+  const paused = useAppStore((s) => s.pausedSessions[s.activeSessionId])
+  const locked = running && !paused
+
+  // P3.15 — when the surgical engine refuses a file, keep the attempted path
+  // so the error banner can offer the honest LibreOffice fallback.
+  const fail = (err: unknown, path: string) => {
+    setLastAttempted(path)
+    setError(err instanceof Error ? err.message : 'Failed to open document')
+  }
 
   const open = async (path: string) => {
     try {
       setError(null)
       setPayload(await docxOpen(path))
+      useAppStore.getState().openOfficeDoc(path)
+      try {
+        const t = await docxTracks(path)
+        setTracks(t.changes)
+      } catch {
+        setTracks([])
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open document')
+      fail(err, path)
     }
   }
+
+  useEffect(() => {
+    if (officePath && officePath !== payload?.path) void open(officePath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officePath])
 
   const title = payload?.path ?? 'exec-summary.docx'
   const paragraphs = payload
@@ -68,10 +97,38 @@ export default function OfficeDocxView() {
       </header>
 
       <OfficeOpenBar onOpen={open} livePath={payload?.path} />
+      <OfficeFileSwitcher view="office-docx" current={payload?.path} onOpen={open} />
+      {locked && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-[10px] text-amber-300">
+          Read-only while the agent is running — takeover (pause) to edit
+        </div>
+      )}
+      <div className="flex gap-1 border-b border-border px-3 py-1">
+        <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={!payload || locked}
+          onClick={() => payload && officeOpenExternal(payload.path).catch((e) => setError(String(e)))}>
+          Open in LibreOffice
+        </Button>
+        {selected && (
+          <Button size="sm" className="h-6 text-[10px]" disabled={locked}
+            onClick={() => payload && selected && docxPatch(payload.path, selected, draft).then(() => open(payload.path)).catch((e) => setError(String(e)))}>
+            Patch {selected}
+          </Button>
+        )}
+      </div>
 
       {error && (
-        <div className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
-          ⚠ {error}
+        <div className="flex flex-wrap items-center gap-2 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
+          <span>⚠ {error}</span>
+          {lastAttempted && !isOfficeFloorError(error) && (
+            <button
+              className="rounded border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/25"
+              onClick={() =>
+                officeOpenExternal(lastAttempted).catch((e) => setError(String(e)))
+              }
+            >
+              Engine refused — open in LibreOffice instead
+            </button>
+          )}
         </div>
       )}
 
@@ -86,8 +143,39 @@ export default function OfficeDocxView() {
               ))}
             </article>
             <div className="mt-6 border-t border-border pt-3 font-mono text-[10px] text-muted-foreground">
-              {payload.blocks.length} block(s) · surgical OOXML read
+              {payload.blocks.length} block(s) · surgical OOXML
             </div>
+            <ul className="mt-2 space-y-1 font-mono text-[10px]">
+              {payload.blocks.map((b) => (
+                <li key={b.address}>
+                  <button
+                    className={`w-full truncate text-left ${selected === b.address ? 'text-orange-300' : 'text-muted-foreground'}`}
+                    disabled={locked}
+                    onClick={() => {
+                      setSelected(b.address)
+                      setDraft(payload.text.split('\n')[0] ?? '')
+                    }}
+                  >
+                    {b.address} · {b.kind}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {selected && (
+              <textarea
+                className="mt-2 h-20 w-full rounded border border-border bg-zinc-950 p-2 text-xs"
+                disabled={locked}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+              />
+            )}
+            {trackChanges && tracks.length > 0 && (
+              <div className="mt-3 space-y-1 text-[10px] text-orange-300">
+                {tracks.map((t, i) => (
+                  <div key={i}>{t.kind} · {t.author}: {t.text}</div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
         <div className="mx-auto max-w-3xl bg-[#1c1d20] p-8 sm:p-12">

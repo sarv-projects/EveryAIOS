@@ -1,0 +1,42 @@
+# EveryAIOS headless executor node — docker compose (P40.1, OpenClaw-style
+# container-first deployment; pattern only, we ship our own signed runtime).
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#
+# The node attaches to your mesh (P8.9) — set the sync token via the vault
+# key env (or mount a pre-created EVERYAIOS_HOME volume with the node's
+# identity). Guard-2-required steps park on the node and surface on the
+# control plane; they are never auto-approved here.
+services:
+  everyaios-node:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: everyaios-node:local
+    container_name: everyaios-node
+    restart: unless-stopped
+    environment:
+      EVERYAIOS_HOME: /data
+      # SQLCipher vault key — the node's identity + mesh key material. Set via
+      # a secret / .env file; NEVER hardcode or commit it.
+      EVERYAIOS_VAULT_KEY: ${EVERYAIOS_VAULT_KEY:?set this in deploy/.env}
+    volumes:
+      - everyaios-data:/data
+    ports:
+      # P8.9 E2E sync — the encrypted mesh transport (LAN/Tailscale/WireGuard).
+      - "47615:47615/tcp"
+    networks:
+      - everyaios-mesh
+    healthcheck:
+      test: ["CMD", "/app/everyaios-core", "--version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  everyaios-data:
+
+networks:
+  everyaios-mesh:
+    driver: bridge

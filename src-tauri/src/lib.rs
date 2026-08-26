@@ -10,14 +10,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod acp_cmds;
+mod agent_cmds;
 mod browser_cmds;
 mod cockpit_cmds;
 mod codeintel_cmds;
 mod control;
 mod fs_cmds;
 mod git_cmds;
+mod feedback_cmds;
 mod guard_cmds;
+mod guard_window;
 mod lsp_cmds;
+mod maintenance_cmds;
 mod memory_cmds;
 mod local_cmds;
 mod mcp_cmds;
@@ -28,8 +32,10 @@ mod scheduler_cmds;
 mod shell_cmds;
 mod storage_cmds;
 mod sync_cmds;
+mod tasks_cmds;
 mod trajectory_cmds;
 mod updater_cmds;
+mod vault_cmds;
 
 use everyaios_core::GuardService;
 use everyaios_guard::prescan::{guard as compiled_guard, Guard};
@@ -172,6 +178,19 @@ fn connect_chat_relay(
         if let Some(ep) = mgr.endpoint_for("llamafile") {
             relay.with_local("llamafile", ep);
         }
+    }
+    // P43 (B7 v3.53) — push completion: every terminal transition of the
+    // task ledger wakes the UI via a `task-update` event (never polling).
+    {
+        let h = app.clone();
+        relay.tasks().lock().unwrap_or_else(|e| e.into_inner()).watch(Box::new(
+            move |record: &everyaios_core::TaskRecord| {
+                let _ = h.emit(
+                    "task-update",
+                    serde_json::to_value(record).unwrap_or_else(|_| serde_json::json!({})),
+                );
+            },
+        ));
     }
     relay.spawn();
     *state.chat_relay.lock().expect("chat_relay poisoned") = Some(relay);
@@ -615,13 +634,19 @@ fn serve_unix_control_channel(app: AppHandle) {
 pub fn run() {
     // Build the initial state exactly like the headless binary would.
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let boot_report = everyaios_core::boot(&args).unwrap_or_else(|e| format!("boot failed: {e}"));
+    let mut boot_report = everyaios_core::boot(&args).unwrap_or_else(|e| format!("boot failed: {e}"));
     let guard = compiled_guard().clone();
     let data_dir = everyaios_core::default_data_dir();
     let resolved = everyaios_core::resolve_vault_key(&data_dir);
+    // Bugfix 14 — persistence must never fail *silently* open. If the vault
+    // cannot be opened on disk we fall back to an in-memory vault (chat keeps
+    // working) but flag it loudly so the UI can warn that nothing will persist,
+    // instead of letting the user believe their chat is durable.
+    let mut vault_ephemeral = false;
     let vault = match resolved {
         Ok(r) => Vault::open(&data_dir.join("vault.db"), &r.key).unwrap_or_else(|e| {
             eprintln!("everyaios-desktop: vault open failed (using in-memory): {e}");
+            vault_ephemeral = true;
             Vault::open_in_memory(&r.key).unwrap_or_else(|_| {
                 Vault::open_in_memory(&everyaios_core::default_vault_key())
                     .expect("in-memory vault")
@@ -629,9 +654,13 @@ pub fn run() {
         }),
         Err(e) => {
             eprintln!("everyaios-desktop: vault key resolve failed (using in-memory): {e}");
+            vault_ephemeral = true;
             Vault::open_in_memory(&everyaios_core::default_vault_key()).expect("in-memory vault")
         }
     };
+    if vault_ephemeral {
+        boot_report.push_str(" | EPHEMERAL VAULT: persistence disabled (fix vault lock)");
+    }
     let vault = Arc::new(Mutex::new(vault));
     let audit_log = everyaios_audit::AuditWriter::open(&data_dir.join("audit.ndjson")).ok();
 
@@ -691,7 +720,9 @@ pub fn run() {
             trajectory_cmds::trajectory_sessions,
             trajectory_cmds::trajectory_snapshot,
             guard_cmds::guard_tickets,
+            feedback_cmds::feedback_submit,
             guard_cmds::guard_respond,
+            guard_cmds::guard_open_window,
             guard_cmds::guard_receipts,
             guard_cmds::guard_policy,
             guard_cmds::guard_estop,
@@ -715,9 +746,25 @@ pub fn run() {
             mcp_cmds::mcp_servers,
             mcp_cmds::mcp_attach,
             office_cmds::docx_open,
+            office_cmds::docx_patch,
+            office_cmds::docx_tracks,
             office_cmds::pptx_open,
+            office_cmds::pptx_notes,
             office_cmds::pdf_open,
             office_cmds::pdf_bytes,
+            office_cmds::pdf_page_op,
+            office_cmds::office_open_external,
+            vault_cmds::vault_keys_list,
+            vault_cmds::vault_key_add,
+            vault_cmds::vault_key_remove,
+            acp_cmds::chief_default_get,
+            acp_cmds::chief_default_set,
+            agent_cmds::agent_registry_list,
+            agent_cmds::agent_registry_save,
+            agent_cmds::agent_registry_get,
+            agent_cmds::agent_registry_remove,
+            agent_cmds::agent_registry_duplicate,
+            agent_cmds::agent_registry_set_disabled,
             acp_cmds::acp_agents,
             acp_cmds::acp_launch,
             acp_cmds::acp_prompt,
@@ -732,6 +779,8 @@ pub fn run() {
             acp_cmds::acp_install_commit,
             acp_cmds::acp_install,
             acp_cmds::acp_authenticate,
+            // Maintenance: audit retention sweep (ledger-growth fault line).
+            maintenance_cmds::audit_compact,
             // P6.4 (B7): scheduled tasks.
             scheduler_cmds::scheduler_list,
             scheduler_cmds::scheduler_create,
@@ -746,6 +795,14 @@ pub fn run() {
             scheduler_cmds::scheduler_fire_webhook,
             scheduler_cmds::scheduler_nudges,
             scheduler_cmds::scheduler_nudge,
+            tasks_cmds::tasks_list,
+            tasks_cmds::tasks_show,
+            tasks_cmds::tasks_cancel,
+            tasks_cmds::tasks_retry,
+            tasks_cmds::tasks_enqueue,
+            tasks_cmds::tasks_start,
+            tasks_cmds::tasks_complete,
+            tasks_cmds::tasks_sweep,
             storage_cmds::storage_health,
             storage_cmds::storage_scan,
             storage_cmds::storage_large_files,
@@ -762,6 +819,7 @@ pub fn run() {
             sync_cmds::sync_serve_stop,
             sync_cmds::sync_serve_status,
             sync_cmds::sync_peer_sync,
+            sync_cmds::node_attach,
             sync_cmds::sync_fingerprint,
             // P8.8: auto-updater check + install/relaunch.
             updater_cmds::updater_check,
@@ -771,6 +829,8 @@ pub fn run() {
             fs_cmds::fs_list_dir,
             fs_cmds::fs_read_file,
             fs_cmds::fs_write_file,
+            fs_cmds::fs_write_ticket,
+            fs_cmds::fs_write_commit,
             fs_cmds::fs_undo_list,
             shell_cmds::shell_spawn,
             shell_cmds::shell_write,
@@ -793,6 +853,10 @@ pub fn run() {
             git_cmds::git_stage_all,
             git_cmds::git_commit,
             git_cmds::git_root,
+            git_cmds::git_worktree_add,
+            git_cmds::git_worktree_list,
+            git_cmds::git_worktree_merge,
+            git_cmds::git_worktree_revert,
             lsp_cmds::lsp_diagnostics,
             // P11.5.9: repo-map / file-outline / MODEL_ALIASES / ai! markers.
             codeintel_cmds::repomap_build,
@@ -815,6 +879,19 @@ pub fn run() {
             serve_unix_control_channel(app.handle().clone());
             // P2.11 (E16): serve the WebMCP tool catalog over loopback HTTP.
             spawn_webmcp_server();
+            // Ledger-growth fault line: enforce ARCH/06's configurable audit
+            // retention — compact the NDJSON log at most once per day
+            // (writer-quiescent window; marker-gated; non-fatal).
+            if let Err(e) = maintenance_cmds::run_audit_sweep_if_due(&app.state::<AppState>()) {
+                eprintln!("everyaios-desktop: audit sweep failed (continuing): {e}");
+            }
+            // P43.4 — task-ledger maintenance at boot: reap grace-expired
+            // running tasks + prune terminal records past 7-day retention.
+            // (Marker-free: the ledger itself is idempotent — reap/prune
+            // only touch records that match their predicates.)
+            if let Err(e) = tasks_cmds::tasks_sweep(app.state::<AppState>()) {
+                eprintln!("everyaios-desktop: task sweep failed (continuing): {e}");
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

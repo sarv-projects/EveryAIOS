@@ -70,6 +70,18 @@ export async function guardRespond(
   return invoke<boolean>("guard_respond", { ticketId, action, approvalNonce });
 }
 
+/**
+ * F1 — route the human to the dedicated Guard-2 approval window. The main
+ * renderer displays untrusted content (browser views, generative UI, plugin
+ * views); it must never be the surface that approves a ticket. This opens
+ * the small `guard` window where the actual approve/reject happens (its
+ * `guard_respond` is the only one Rust accepts).
+ */
+export async function openGuardWindow(): Promise<void> {
+  if (!inTauri()) return;
+  await invoke<void>("guard_open_window");
+}
+
 /** The append-only approve/reject receipts. */
 export async function guardReceipts(): Promise<GuardReceipt[]> {
   if (!inTauri()) return demoReceipts();

@@ -76,7 +76,7 @@ export default function FolderView() {
   const openFile = (entry: FsEntry, fullPath: string) => {
     const ext = entry.name.split('.').pop()?.toLowerCase() ?? ''
     if (['xlsx', 'docx', 'pptx', 'pdf'].includes(ext)) {
-      setActiveView(`office-${ext === 'pdf' ? 'pdf' : ext}` as never)
+      useAppStore.getState().openOfficeDoc(fullPath)
       return
     }
     // text files → code view (keeps the real path for save)

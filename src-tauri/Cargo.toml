@@ -34,6 +34,7 @@ everyaios-storage = { path = "../crates/everyaios-storage" }
 everyaios-browser = { path = "../crates/everyaios-browser" }
 everyaios-cdp = { path = "../crates/everyaios-cdp" }
 everyaios-codeintel = { path = "../crates/everyaios-codeintel" }
+everyaios-agents = { path = "../crates/everyaios-agents" }
 
 [profile.release]
 strip = true

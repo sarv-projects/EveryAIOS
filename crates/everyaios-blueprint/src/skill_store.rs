@@ -33,10 +33,49 @@ pub struct SkillManifest {
     /// Natural-language triggers that should surface this skill.
     #[serde(default)]
     pub triggers: Vec<String>,
+    /// When this skill should be used (I2 anatomy — conditions in natural
+    /// language, distinct from short trigger keywords).
+    #[serde(default)]
+    pub when_to_use: Vec<String>,
+    /// Scripts shipped with the skill (I2 anatomy — lazy: run on demand,
+    /// never at load).
+    #[serde(default)]
+    pub scripts: Vec<SkillScript>,
+    /// References (docs/examples) — lazy: fetched on demand, never
+    /// preloaded into the prompt.
+    #[serde(default)]
+    pub references: Vec<SkillReference>,
+    /// Asset filenames shipped in the skill directory.
+    #[serde(default)]
+    pub assets: Vec<String>,
     // Ownership markers (doc 58): who created it, when, and the version.
     pub author: String,
     pub created: String,
     pub version: String,
+}
+
+/// A script shipped with a skill (I2). Lazy by design — the registry never
+/// runs it; the coordinator invokes it on demand behind the normal guard.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillScript {
+    pub name: String,
+    pub command: String,
+    #[serde(default = "default_true")]
+    pub lazy: bool,
+}
+
+/// A reference shipped with a skill (I2) — lazy: fetched on demand, never
+/// preloaded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillReference {
+    pub label: String,
+    pub url: String,
+    #[serde(default = "default_true")]
+    pub lazy: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// A full skill: manifest + instruction body.
@@ -90,6 +129,32 @@ impl Skill {
                 out.push_str(&format!("  - {t}\n"));
             }
         }
+        if !self.manifest.when_to_use.is_empty() {
+            out.push_str("when_to_use:\n");
+            for w in &self.manifest.when_to_use {
+                out.push_str(&format!("  - {w}\n"));
+            }
+        }
+        if !self.manifest.scripts.is_empty() {
+            out.push_str("scripts:\n");
+            for s in &self.manifest.scripts {
+                out.push_str(&format!("  - name: {}\n", s.name));
+                out.push_str(&format!("    command: {}\n", s.command));
+            }
+        }
+        if !self.manifest.references.is_empty() {
+            out.push_str("references:\n");
+            for r in &self.manifest.references {
+                out.push_str(&format!("  - label: {}\n", r.label));
+                out.push_str(&format!("    url: {}\n", r.url));
+            }
+        }
+        if !self.manifest.assets.is_empty() {
+            out.push_str("assets:\n");
+            for a in &self.manifest.assets {
+                out.push_str(&format!("  - {a}\n"));
+            }
+        }
         out.push_str(&format!("author: {}\n", self.manifest.author));
         out.push_str(&format!("created: {}\n", self.manifest.created));
         out.push_str(&format!("version: {}\n", self.manifest.version));
@@ -134,11 +199,23 @@ fn parse_manifest(fm: &str, path: &str) -> Result<SkillManifest, SkillError> {
         description: String::new(),
         tools: Vec::new(),
         triggers: Vec::new(),
+        when_to_use: Vec::new(),
+        scripts: Vec::new(),
+        references: Vec::new(),
+        assets: Vec::new(),
         author: String::new(),
         created: String::new(),
         version: String::new(),
     };
     let mut list_key: Option<String> = None;
+    // While inside a `scripts`/`references` list, the continuation lines
+    // (`command:` / `url:`) belong to the most recent entry.
+    #[derive(Clone, Copy)]
+    enum EntryKind {
+        Script,
+        Reference,
+    }
+    let mut current_entry: Option<(EntryKind, usize)> = None;
     for raw in fm.lines() {
         // Trim both ends: list items are conventionally indented
         // (`  - item`), and top-level keys may carry trailing spaces.
@@ -148,12 +225,62 @@ fn parse_manifest(fm: &str, path: &str) -> Result<SkillManifest, SkillError> {
         }
         if let Some(item) = line.strip_prefix("- ") {
             let item = item.trim();
+            // A new list item always closes the previous entry's continuation
+            // window (a `- label:` inside `scripts` is not a script entry).
+            current_entry = None;
             match list_key.as_deref() {
                 Some("tools") => m.tools.push(item.into()),
                 Some("triggers") => m.triggers.push(item.into()),
+                Some("when_to_use") => m.when_to_use.push(item.into()),
+                Some("assets") => m.assets.push(item.into()),
+                Some("scripts") => {
+                    if let Some(name) = item.strip_prefix("name: ") {
+                        m.scripts.push(SkillScript {
+                            name: name.trim().into(),
+                            command: String::new(),
+                            lazy: true,
+                        });
+                        current_entry = Some((EntryKind::Script, m.scripts.len() - 1));
+                    }
+                }
+                Some("references") => {
+                    if let Some(label) = item.strip_prefix("label: ") {
+                        m.references.push(SkillReference {
+                            label: label.trim().into(),
+                            url: String::new(),
+                            lazy: true,
+                        });
+                        current_entry = Some((EntryKind::Reference, m.references.len() - 1));
+                    }
+                }
                 _ => {}
             }
             continue;
+        }
+        // Continuation sub-field of the current script/reference entry. Only
+        // the exact continuation keys are consumed; anything else falls
+        // through to top-level key handling (so `references:`/`assets:`/
+        // `author:` after an entry still parse).
+        if let Some((kind, idx)) = current_entry {
+            if let Some((k, v)) = line.split_once(':') {
+                let k = k.trim();
+                let v = v.trim();
+                let consumed = matches!(
+                    (kind, k),
+                    (EntryKind::Script, "command") | (EntryKind::Reference, "url")
+                );
+                if consumed {
+                    match kind {
+                        EntryKind::Script => m.scripts[idx].command = v.into(),
+                        EntryKind::Reference => m.references[idx].url = v.into(),
+                    }
+                    continue;
+                }
+                // Not a continuation key — treat as top-level below.
+                current_entry = None;
+            } else {
+                continue;
+            }
         }
         list_key = None;
         let Some((key, value)) = line.split_once(':') else {
@@ -167,7 +294,7 @@ fn parse_manifest(fm: &str, path: &str) -> Result<SkillManifest, SkillError> {
             "author" => m.author = value.into(),
             "created" => m.created = value.into(),
             "version" => m.version = value.into(),
-            "tools" | "triggers" => {
+            "tools" | "triggers" | "when_to_use" | "scripts" | "references" | "assets" => {
                 list_key = Some(key.to_string());
             }
             _ => {}
@@ -404,6 +531,10 @@ pub fn taste_skill() -> Skill {
             description: "Anti-slop frontend design: layout, typography, motion, and spacing discipline with VARIANCE/MOTION/DENSITY dials".into(),
             tools: vec!["file_ops.write".into()],
             triggers: vec!["design".into(), "ui".into(), "frontend".into(), "layout".into(), "style".into()],
+            when_to_use: vec!["before writing any UI code".into()],
+            scripts: Vec::new(),
+            references: Vec::new(),
+            assets: Vec::new(),
             author: "everyaios".into(),
             created: "2026-08-20".into(),
             version: "1.0.0".into(),
@@ -443,6 +574,10 @@ pub fn grow_from_task(
             description: format!("Reusable workflow: {task_name}"),
             tools: Vec::new(),
             triggers: vec![task_name.to_lowercase()],
+            when_to_use: Vec::new(),
+            scripts: Vec::new(),
+            references: Vec::new(),
+            assets: Vec::new(),
             author: author.into(),
             created: "2026-08-20".into(),
             version: final_version,
@@ -516,6 +651,18 @@ mod tests {
                 description: "Safe multi-file refactor discipline".into(),
                 tools: vec!["file_ops.read".into(), "file_ops.write".into()],
                 triggers: vec!["refactor".into(), "rename".into()],
+                when_to_use: vec!["when a multi-file change touches shared symbols".into()],
+                scripts: vec![SkillScript {
+                    name: "check-callers".into(),
+                    command: "everyaios symbol callers {symbol}".into(),
+                    lazy: true,
+                }],
+                references: vec![SkillReference {
+                    label: "Refactor discipline".into(),
+                    url: "https://example.com/refactor".into(),
+                    lazy: true,
+                }],
+                assets: vec!["callers.md".into()],
                 author: "tester".into(),
                 created: "2026-08-20".into(),
                 version: "1.0.0".into(),
@@ -527,6 +674,18 @@ mod tests {
     #[test]
     fn skill_md_roundtrips() {
         let s = sample_skill();
+        let md = s.to_skill_md();
+        let back = Skill::from_skill_md(&md, "test").unwrap();
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn anatomy_fields_roundtrip() {
+        let s = sample_skill();
+        assert_eq!(s.manifest.when_to_use.len(), 1);
+        assert_eq!(s.manifest.scripts.len(), 1);
+        assert_eq!(s.manifest.references.len(), 1);
+        assert_eq!(s.manifest.assets, vec!["callers.md"]);
         let md = s.to_skill_md();
         let back = Skill::from_skill_md(&md, "test").unwrap();
         assert_eq!(back, s);
@@ -607,6 +766,10 @@ mod tests {
                     description: "spreadsheet cleanup".into(),
                     tools: vec![],
                     triggers: vec!["cleanup".into()],
+                    when_to_use: Vec::new(),
+                    scripts: Vec::new(),
+                    references: Vec::new(),
+                    assets: Vec::new(),
                     author: "a".into(),
                     created: "c".into(),
                     version: "1".into(),
@@ -629,6 +792,10 @@ mod tests {
                     description: "matches the query word".into(),
                     tools: vec![],
                     triggers: vec!["test".into()],
+                    when_to_use: Vec::new(),
+                    scripts: Vec::new(),
+                    references: Vec::new(),
+                    assets: Vec::new(),
                     author: "a".into(),
                     created: "c".into(),
                     version: "1".into(),

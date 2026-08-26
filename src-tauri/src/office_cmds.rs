@@ -7,10 +7,10 @@
 use everyaios_office::docx::DocxEngine;
 use everyaios_office::pdf;
 use everyaios_office::pptx::PptxEngine;
-use std::path::PathBuf;
 
 fn read_bytes(path: &str) -> Result<Vec<u8>, String> {
-    std::fs::read(PathBuf::from(path)).map_err(|e| e.to_string())
+    let path = crate::control::floor_user_file(path)?;
+    std::fs::read(path).map_err(|e| e.to_string())
 }
 
 /// One addressable block of a docx (for the viewer's block sidebar).
@@ -114,4 +114,203 @@ pub fn pdf_bytes(path: String) -> Result<String, String> {
 fn base64_encode(bytes: &[u8]) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+/// Surgical block patch (agent + Word viewer).
+#[tauri::command]
+pub fn docx_patch(path: String, address: String, text: String) -> Result<serde_json::Value, String> {
+    let path = crate::control::floor_user_file(&path)?;
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let mut engine = DocxEngine::open(bytes).map_err(|e| e.to_string())?;
+    engine
+        .patch_block(&address, &text)
+        .map_err(|e| e.to_string())?;
+    let out = engine.save().map_err(|e| e.to_string())?;
+    everyaios_office::write_atomic(&path, &out).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "ok": true, "address": address }))
+}
+
+/// Tracked changes + comments for the Word viewer.
+#[tauri::command]
+pub fn docx_tracks(path: String) -> Result<serde_json::Value, String> {
+    let bytes = read_bytes(&path)?;
+    let mut archive = everyaios_office::zip::OoxmlArchive::open(bytes).map_err(|e| e.to_string())?;
+    let doc_xml = archive
+        .read_part("word/document.xml")
+        .map_err(|e| e.to_string())?;
+    let doc_str = String::from_utf8_lossy(&doc_xml);
+    let changes = everyaios_office::docx::track::extract_tracked_changes(&doc_str)
+        .map_err(|e| e.to_string())?;
+    let comments_xml = archive.read_part("word/comments.xml").ok();
+    let comments = comments_xml
+        .as_ref()
+        .and_then(|b| std::str::from_utf8(b).ok())
+        .and_then(|s| everyaios_office::docx::track::extract_comments(s).ok())
+        .unwrap_or_default();
+    Ok(serde_json::json!({
+        "changes": changes.iter().map(|c| serde_json::json!({
+            "kind": format!("{:?}", c.kind),
+            "author": c.author,
+            "text": c.text,
+        })).collect::<Vec<_>>(),
+        "comments": comments.iter().map(|c| serde_json::json!({
+            "id": c.id,
+            "author": c.author,
+            "text": c.text,
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+#[tauri::command]
+pub fn pptx_notes(path: String) -> Result<serde_json::Value, String> {
+    let bytes = read_bytes(&path)?;
+    let mut archive = everyaios_office::zip::OoxmlArchive::open(bytes).map_err(|e| e.to_string())?;
+    let mut notes = Vec::new();
+    for i in 1..=64 {
+        let part = format!("ppt/notesSlides/notesSlide{i}.xml");
+        if let Ok(xml) = archive.read_part(&part) {
+            if let Ok(s) = std::str::from_utf8(&xml) {
+                if let Ok(text) = everyaios_office::pptx::notes::extract_notes_text(s) {
+                    notes.push(serde_json::json!({ "slide": i, "talk": text }));
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({ "notes": notes }))
+}
+
+#[tauri::command]
+pub fn pdf_page_op(
+    path: String,
+    op: String,
+    pages: Option<Vec<u32>>,
+    delta: Option<i64>,
+    other: Option<String>,
+    out: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let path = crate::control::floor_user_file(&path)?;
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let pages = pages.unwrap_or_default();
+    let result = match op.as_str() {
+        "split" if pages.len() >= 2 => {
+            everyaios_office::split_pdf(&bytes, pages[0]..=pages[1]).map_err(|e| e.to_string())
+        }
+        "extract" => everyaios_office::extract_pages(&bytes, &pages).map_err(|e| e.to_string()),
+        "reorder" => everyaios_office::reorder_pages(&bytes, &pages).map_err(|e| e.to_string()),
+        "delete" => everyaios_office::delete_pages(&bytes, &pages).map_err(|e| e.to_string()),
+        "rotate" => everyaios_office::rotate_pages(
+            &bytes,
+            delta.unwrap_or(90),
+            if pages.is_empty() {
+                None
+            } else {
+                Some(pages.as_slice())
+            },
+        )
+        .map_err(|e| e.to_string()),
+        "merge" => {
+            let other = other.ok_or("merge requires other")?;
+            let other = crate::control::floor_user_file(&other)?;
+            let b2 = std::fs::read(&other).map_err(|e| e.to_string())?;
+            everyaios_office::merge_pdfs(&[bytes.clone(), b2]).map_err(|e| e.to_string())
+        }
+        // P2.12 — surgical content ops wired to the same engine the agent
+        // tools use: `other` carries a JSON payload.
+        "form_fill" => {
+            let raw = other.ok_or("form_fill requires a JSON fields payload")?;
+            let fields: Vec<(String, String)> = serde_json::from_str::<Vec<serde_json::Value>>(&raw)
+                .map_err(|e| format!("form_fill payload: {e}"))?
+                .into_iter()
+                .map(|v| {
+                    (
+                        v.get("field").and_then(serde_json::Value::as_str).unwrap_or("").to_string(),
+                        v.get("value").and_then(serde_json::Value::as_str).unwrap_or("").to_string(),
+                    )
+                })
+                .collect();
+            if fields.is_empty() {
+                return Err("form_fill requires at least one {field, value}".into());
+            }
+            everyaios_office::pdf::form::form_fill(&bytes, &fields).map_err(|e| e.to_string())
+        }
+        "redact" => {
+            let raw = other.ok_or("redact requires a JSON rects payload")?;
+            let rects: Vec<(u32, [f32; 4])> = serde_json::from_str::<Vec<serde_json::Value>>(&raw)
+                .map_err(|e| format!("redact payload: {e}"))?
+                .into_iter()
+                .map(|v| {
+                    let page = v.get("page").and_then(serde_json::Value::as_u64).unwrap_or(1) as u32;
+                    let rect = v
+                        .get("rect")
+                        .and_then(serde_json::Value::as_array)
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(serde_json::Value::as_f64)
+                                .map(|f| f as f32)
+                                .collect::<Vec<f32>>()
+                        })
+                        .unwrap_or_default();
+                    if rect.len() != 4 {
+                        return Err(format!("redact rect must be [x1,y1,x2,y2], got {rect:?}"));
+                    }
+                    Ok((page, [rect[0], rect[1], rect[2], rect[3]]))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            if rects.is_empty() {
+                return Err("redact requires at least one {page, rect}".into());
+            }
+            everyaios_office::pdf::redact::redact(&bytes, &rects).map_err(|e| e.to_string())
+        }
+        "annotate" => {
+            let raw = other.ok_or("annotate requires a JSON {page, rect, text?} payload")?;
+            let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("annotate payload: {e}"))?;
+            let page = v.get("page").and_then(serde_json::Value::as_u64).unwrap_or(1) as u32;
+            let rect = v
+                .get("rect")
+                .and_then(serde_json::Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(serde_json::Value::as_f64)
+                        .map(|f| f as f32)
+                        .collect::<Vec<f32>>()
+                })
+                .unwrap_or_default();
+            if rect.len() != 4 {
+                return Err(format!("annotate rect must be [x1,y1,x2,y2], got {rect:?}"));
+            }
+            let rect = [rect[0], rect[1], rect[2], rect[3]];
+            match v.get("text").and_then(serde_json::Value::as_str) {
+                Some(text) if !text.is_empty() => everyaios_office::pdf::annot::add_text_annotation(
+                    &bytes,
+                    page,
+                    rect,
+                    text,
+                )
+                .map_err(|e| e.to_string()),
+                _ => everyaios_office::pdf::annot::add_highlight_annotation(&bytes, page, rect)
+                    .map_err(|e| e.to_string()),
+            }
+        }
+        other_op => return Err(format!("unknown pdf page op: {other_op}")),
+    }
+    .map_err(|e| e.to_string())?;
+    let dest = match out {
+        Some(p) => crate::control::floor_user_file(&p)?,
+        None => path.clone(),
+    };
+    everyaios_office::write_atomic(&dest, &result).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "ok": true, "path": dest.display().to_string() }))
+}
+
+/// Optional human-fidelity tier: open the file in the system LibreOffice.
+#[tauri::command]
+pub fn office_open_external(path: String) -> Result<serde_json::Value, String> {
+    let path = crate::control::floor_user_file(&path)?;
+    let soffice = everyaios_office::find_soffice()
+        .ok_or_else(|| "LibreOffice (soffice) is not installed — optional human-fidelity viewer".to_string())?;
+    std::process::Command::new(soffice)
+        .arg(path.as_os_str())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "ok": true, "path": path.display().to_string() }))
 }

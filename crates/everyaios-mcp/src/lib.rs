@@ -14,11 +14,21 @@
 use serde::{Deserialize, Serialize};
 
 pub mod attach;
+pub mod hijack;
+pub mod loopback;
+pub mod manager;
 pub mod protocol;
 pub mod record;
 pub mod server;
 
 pub use attach::{AttachError, AttachRequest, AttachedServer};
+pub use hijack::{validate_external_tool, HijackError, ToolIdentity, ToolSource};
+pub use manager::{
+    install_plan, is_allowed, merge_into_catalog, verify_sha256, ChildHandle, InstallPlan,
+    ManagedServer, McpServerManager, PlanError, ProcessSpawner, RegistryIndex, RegistryServer,
+    ServerSpawner, ServerState, SpawnError, ToolSurface, ALLOW_LIST,
+};
+pub use loopback::{LoopbackPool, PoolStats};
 pub use server::{
     tool_list, ExternalTool, McpServer, MrtrHandle, StatelessRequest, ToolCallHandler, ToolCatalog,
     ToolListEntry, ToolListResponse,
@@ -517,10 +527,137 @@ pub const STORAGE_TOOLS: &[ToolDef] = tools!(
     &[STR_QUERY],
 );
 
-/// The unified agent tool registry: browser (37) + storage (5). This is what
-/// the P6.x tool-catalog reconciliation exposes to the agent loop.
+const STR_EDIT: ArgDef = ArgDef::new(
+    "edit",
+    ArgKind::Object,
+    false,
+    "Block-patch edit {path, blocks[]} (Guard-2 ticketed)",
+);
+const STR_MEMORY_QUERY: ArgDef = ArgDef::new(
+    "query",
+    ArgKind::String,
+    true,
+    "Memory retrieval query (multi-signal fusion)",
+);
+const STR_MEMORY_TEXT: ArgDef = ArgDef::new(
+    "text",
+    ArgKind::String,
+    false,
+    "Fact/text to store (taste-classified)",
+);
+const STR_SOURCES: ArgDef = ArgDef::new(
+    "sources",
+    ArgKind::StringArray,
+    true,
+    "Research sources (files/URLs/emails)",
+);
+
+/// Office surgical-editor tools (Channel B — `everyaios-office` D1 block-
+/// patch engine exposed over MCP; byte-stable OOXML, never lossy
+/// re-serialize). Edits are Guard-2 ticketed at the protocol boundary.
+pub const OFFICE_TOOLS: &[ToolDef] = tools!(
+    "office_open",
+    Read,
+    true,
+    false,
+    State,
+    "Open a docx/pptx/xlsx into the surgical editor (byte-stable open)",
+    &[STR_PATH],
+    "office_edit",
+    Edit,
+    false,
+    false,
+    State,
+    "Apply a block-patch edit (Guard-2 ticket + diff card)",
+    &[STR_PATH, STR_EDIT],
+    "office_undo",
+    Edit,
+    false,
+    false,
+    State,
+    "Roll back to the pre-edit snapshot (D7 one-click undo)",
+    &[STR_PATH],
+    "office_export",
+    Read,
+    true,
+    false,
+    State,
+    "Export a docx as pdf (LibreOffice conformance oracle)",
+    &[STR_PATH],
+);
+
+/// Memory tools (Channel B — `everyaios-memory` C-series retrieval as MCP
+/// tools): any MCP-consuming agent gets the memory fusion surface.
+pub const MEMORY_TOOLS: &[ToolDef] = tools!(
+    "memory_retrieve",
+    Search,
+    true,
+    false,
+    State,
+    "Multi-signal memory retrieval (FTS5 + vector + graph RRF fusion)",
+    &[STR_MEMORY_QUERY],
+    "memory_store",
+    Edit,
+    false,
+    false,
+    State,
+    "Store a fact/memory (taste-classified, deduped)",
+    &[STR_MEMORY_TEXT],
+    "memory_review_due",
+    Read,
+    true,
+    false,
+    State,
+    "Due reinforcement reviews (FSRS queue)",
+    &[],
+);
+
+/// Search/research tools (Channel B — `everyaios-search` G8 cascade + G2
+/// deep research over MCP).
+#[rustfmt::skip]
+pub const SEARCH_TOOLS: &[ToolDef] = tools!(
+    "search_web",
+    Fetch,
+    true,
+    true,
+    Network,
+    "G8 search cascade (parallel fetch, BM25 rerank)",
+    &[STR_QUERY],
+    "deep_research",
+    Think,
+    true,
+    true,
+    Network,
+    "G2 deep research over selected sources (grounded, cited)",
+    &[STR_SOURCES, STR_QUERY],
+);
+
+/// Channel B (doc 68 §4): every MCP-consuming agent gets the full inbuilt
+/// capability set — browser 37 + office + memory + search + storage.
+pub const INBUILT_TOOLS: &[&[ToolDef]] = &[
+    BROWSER_TOOLS,
+    OFFICE_TOOLS,
+    MEMORY_TOOLS,
+    SEARCH_TOOLS,
+    STORAGE_TOOLS,
+];
+
+/// The unified agent tool registry: browser (37) + office (4) + memory (3)
+/// + search (2) + storage (5). This is what the P6.x tool-catalog
+///   reconciliation exposes to the agent loop.
 pub fn all_tools() -> Vec<&'static ToolDef> {
-    BROWSER_TOOLS.iter().chain(STORAGE_TOOLS.iter()).collect()
+    INBUILT_TOOLS.iter().flat_map(|cat| cat.iter()).collect()
+}
+
+/// The inbuilt catalog grouped by surface (Channel B discovery response).
+pub fn inbuilt_catalog() -> Vec<(&'static str, Vec<&'static ToolDef>)> {
+    vec![
+        ("browser", BROWSER_TOOLS.iter().collect()),
+        ("office", OFFICE_TOOLS.iter().collect()),
+        ("memory", MEMORY_TOOLS.iter().collect()),
+        ("search", SEARCH_TOOLS.iter().collect()),
+        ("storage", STORAGE_TOOLS.iter().collect()),
+    ]
 }
 
 /// Look up a browser tool by name.
@@ -531,6 +668,11 @@ pub fn find_tool(name: &str) -> Option<&'static ToolDef> {
 /// Look up a storage tool by name.
 pub fn find_storage_tool(name: &str) -> Option<&'static ToolDef> {
     STORAGE_TOOLS.iter().find(|t| t.name == name)
+}
+
+/// Look up any inbuilt tool (Channel B — full catalog).
+pub fn find_inbuilt_tool(name: &str) -> Option<&'static ToolDef> {
+    all_tools().into_iter().find(|t| t.name == name)
 }
 
 /// Tools belonging to a profile (doc 55: paginated discovery per profile).
@@ -748,11 +890,15 @@ mod tests {
     #[test]
     fn all_tools_merges_browser_and_storage() {
         let all = all_tools();
-        assert_eq!(all.len(), 37 + 5);
-        // No name collision across the two catalogs.
+        assert_eq!(all.len(), 37 + 4 + 3 + 2 + 5); // browser + office + memory + search + storage
+        // No name collision across the catalogs (Channel B unified registry).
         let mut names: Vec<&str> = all.iter().map(|t| t.name).collect();
         names.sort_unstable();
         names.dedup();
-        assert_eq!(names.len(), 42);
+        assert_eq!(names.len(), 51);
+        assert!(find_inbuilt_tool("office_edit").is_some());
+        assert!(find_inbuilt_tool("memory_retrieve").is_some());
+        assert!(find_inbuilt_tool("deep_research").is_some());
+        assert_eq!(inbuilt_catalog().len(), 5);
     }
 }

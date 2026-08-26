@@ -8,12 +8,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import { staggerStyle } from '@/lib/stagger'
 import {
   guardActivity,
   guardEstop,
   guardPermissionsMatrix,
   guardPolicy,
-  guardRespond,
   guardTickets,
   type GuardPolicy,
   type GuardTicket,
@@ -102,20 +102,19 @@ export default function GuardPanel() {
     }
   }, [])
 
-  const respond = async (ticketId: string, action: 'approve' | 'reject') => {
+  // F1 — the approval decision happens in the dedicated guard window, never
+  // in this renderer (which also displays browser/generative-UI/plugin
+  // content). The panel surfaces the tickets and opens the window; the
+  // human decides there, and the guard window's own poll clears the ticket.
+  const respond = async (ticketId: string, _action: 'approve' | 'reject') => {
     setBusy(ticketId)
-    const ticket = tickets.find((t) => t.ticketId === ticketId)
-    if (!ticket) {
-      setBusy(null)
-      return
+    try {
+      const { openGuardWindow } = await import('@/lib/guard')
+      await openGuardWindow()
+      notify('Guard-2: approval opened in the dedicated window')
+    } catch {
+      notify('Guard-2: could not open the approval window', 'error')
     }
-    const accepted = await guardRespond(ticketId, action, ticket.approvalNonce)
-    if (!accepted) {
-      notify('Guard-2: stale or invalid approval card — no action taken')
-      setBusy(null)
-      return
-    }
-    setTickets((ts) => ts.filter((t) => t.ticketId !== ticketId))
     setBusy(null)
   }
 
@@ -133,6 +132,12 @@ export default function GuardPanel() {
           <span className="font-mono text-[10px] text-muted-foreground">
             Guard-1 regex · Guard-2 cleanup
           </span>
+          {/* P5.24 — honest ceiling: approvals render as an in-app webview
+              card bound to a one-time nonce; there is no OS-native dialog
+              in v1 (that is a follow-up, not a silent claim). */}
+          <Badge variant="outline" className="text-[9px] text-muted-foreground" title="v1 approvals are in-app webview cards bound to a one-time nonce — no OS-native dialog yet">
+            v1: webview + nonce
+          </Badge>
         </div>
       </header>
 
@@ -150,10 +155,12 @@ export default function GuardPanel() {
                 </Badge>
               </div>
               <ul className="space-y-2">
-                {tickets.map((t) => (
+                {tickets.map((t, ti) => (
+                  // P35.2 — entrance stagger on the guard ticket rows.
                   <li
                     key={t.ticketId}
-                    className="rounded-md border border-border bg-background/40 p-2.5"
+                    className="enter-stagger rounded-md border border-border bg-background/40 p-2.5"
+                    style={staggerStyle(ti)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -331,6 +338,11 @@ export default function GuardPanel() {
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">Recent Actions</span>
               <span className="font-mono text-[10px] text-muted-foreground">last 24h</span>
+              {activity.length === 0 && (
+                <Badge variant="outline" className="text-[9px] text-muted-foreground/60" title="Live bridge not connected — showing preview rows">
+                  preview
+                </Badge>
+              )}
             </div>
             <ul className="space-y-1.5">
               {(activity.length > 0 ? activity : demoActivityRows).map((a, i) => {

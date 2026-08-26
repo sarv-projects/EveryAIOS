@@ -72,10 +72,14 @@ pub mod xml;
 pub mod zip;
 
 pub use atomic::write_atomic;
-pub use conformance::{parts_diff, LibreOfficeOracle, PartsDiff};
+pub use conformance::{find_soffice, parts_diff, LibreOfficeOracle, PartsDiff};
 pub use docx::{DocxEngine, OfficeError};
 pub use legacy::{convert_to_modern, LegacyKind, LegacyOpen};
 pub use pdf::{inspect, replace_text, PdfError, PdfInfo};
+pub use pdf::pages::{
+    delete_pages, extract_pages, merge as merge_pdfs, page_count, reorder as reorder_pages,
+    rotate as rotate_pages, split as split_pdf, PageOpError,
+};
 pub use pptx::author::{author_deck, speaker_notes as deck_speaker_notes, AuthorError, DeckBrief, DeckSlide};
 pub use pptx::PptxEngine;
 pub use rollback::Snapshot;

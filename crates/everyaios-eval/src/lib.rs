@@ -40,9 +40,11 @@ pub mod manifest;
 pub mod report;
 pub mod retrieval;
 pub mod runner;
+pub mod simulator;
 pub mod status;
 pub mod store;
 pub mod suite;
+pub mod usage;
 pub mod verifier;
 
 pub use batch::{run_retrieval_batch, run_suite, RetrievalBatchReport, SuiteReport};
@@ -58,6 +60,10 @@ pub use retrieval::{
 pub use runner::{
     apply_filesystem_fault, Agent, Fixture, FixtureFile, RunOutcome, SandboxRunner,
 };
+pub use simulator::{
+    compile as compile_demo, CompiledDemo, CompiledStep, SimulationFixture, SimulationReport,
+    Simulator, StepVerdict,
+};
 pub use corpus::{
     builtin_fixtures, builtin_retrieval_cases, builtin_retrieval_corpus,
     builtin_retrieval_questions, RetrievalCase,
@@ -65,6 +71,10 @@ pub use corpus::{
 pub use status::{CompletionStatus, Score};
 pub use store::EvidenceStore;
 pub use suite::{builtin_suite, AdversarialTask, FaultInjection, FaultKind, TaskCategory};
+pub use usage::{
+    EfficiencyMetrics, GenericUsageParser, TurnClass, TurnKind, TurnStat, Usage, UsageParser,
+    UsageParserRegistry,
+};
 pub use verifier::{
     run_outcome_check, verify, verify_with_policy, OutcomeCheckResult, VerificationReport,
     VerificationScore,

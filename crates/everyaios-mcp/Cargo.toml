@@ -9,4 +9,5 @@ description = "EveryAIOS MCP server — 37-tool catalog (ARCH/08 §8.2) + statel
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }

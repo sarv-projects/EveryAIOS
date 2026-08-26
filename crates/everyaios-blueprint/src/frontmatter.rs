@@ -60,6 +60,25 @@ impl PermissionMode {
     }
 }
 
+/// Per-agent isolation (doc 75 §3 — `isolation: "worktree"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Isolation {
+    None,
+    /// Run the agent in its own git worktree (P17 B3/B4 pattern).
+    Worktree,
+}
+
+impl Isolation {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "worktree" | "worktree-isolation" => Some(Self::Worktree),
+            "none" | "" => Some(Self::None),
+            _ => None,
+        }
+    }
+}
+
 /// A parsed agent config.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -68,6 +87,13 @@ pub struct AgentConfig {
     pub hooks: Vec<String>,
     pub mcp_servers: Vec<String>,
     pub max_turns: Option<u32>,
+    // P19-3/P23-1 — the doc-75 agent fields (effort / background /
+    // isolation) aligned with the plugin-manifest agent schema.
+    /// Effort hint (0..=10; 5 = default).
+    pub effort: Option<u32>,
+    /// Free-text background instruction (why this agent exists).
+    pub background: Option<String>,
+    pub isolation: Isolation,
 }
 
 impl Default for AgentConfig {
@@ -78,6 +104,9 @@ impl Default for AgentConfig {
             hooks: Vec::new(),
             mcp_servers: Vec::new(),
             max_turns: None,
+            effort: None,
+            background: None,
+            isolation: Isolation::None,
         }
     }
 }
@@ -90,6 +119,10 @@ pub enum FrontmatterError {
     UnknownPermissionMode(String),
     #[error("invalid maxTurns {0:?}")]
     InvalidMaxTurns(String),
+    #[error("invalid effort {0:?} (expected 0..=10)")]
+    InvalidEffort(String),
+    #[error("unknown isolation {0:?}")]
+    UnknownIsolation(String),
 }
 
 /// Parse `---`-delimited frontmatter. Scalars are read line-by-line; `hooks`
@@ -138,6 +171,19 @@ pub fn parse_frontmatter(fm: &str) -> Result<AgentConfig, FrontmatterError> {
                 }
                 "hooks" => in_list = Some(List::Hooks),
                 "mcpServers" | "mcp_servers" => in_list = Some(List::McpServers),
+                "effort" => {
+                    config.effort = Some(
+                        value
+                            .parse()
+                            .map_err(|_| FrontmatterError::InvalidEffort(value.to_string()))?,
+                    )
+                }
+                "background" => config.background = Some(value.to_string()),
+                "isolation" => {
+                    config.isolation = Isolation::parse(value).ok_or_else(|| {
+                        FrontmatterError::UnknownIsolation(value.to_string())
+                    })?;
+                }
                 _ => {}
             }
             continue;
@@ -213,6 +259,37 @@ mod tests {
         assert!(matches!(
             parse_frontmatter("permissionMode: plan"),
             Err(FrontmatterError::UnbalancedDelimiters)
+        ));
+    }
+
+    #[test]
+    fn parses_doc75_agent_fields() {
+        let fm = "---\npermissionMode: plan\neffort: 8\nbackground: Financial-model reviewer\nisolation: worktree\n---";
+        let cfg = parse_frontmatter(fm).unwrap();
+        assert_eq!(cfg.effort, Some(8));
+        assert_eq!(cfg.background.as_deref(), Some("Financial-model reviewer"));
+        assert_eq!(cfg.isolation, Isolation::Worktree);
+        assert_eq!(cfg.permission_mode, PermissionMode::Plan);
+    }
+
+    #[test]
+    fn effort_and_isolation_defaults() {
+        let fm = "---\npermissionMode: default\n---";
+        let cfg = parse_frontmatter(fm).unwrap();
+        assert_eq!(cfg.effort, None);
+        assert_eq!(cfg.background, None);
+        assert_eq!(cfg.isolation, Isolation::None);
+    }
+
+    #[test]
+    fn bad_effort_and_isolation_errors() {
+        assert!(matches!(
+            parse_frontmatter("---\neffort: bananas\n---"),
+            Err(FrontmatterError::InvalidEffort(_))
+        ));
+        assert!(matches!(
+            parse_frontmatter("---\nisolation: warp-drive\n---"),
+            Err(FrontmatterError::UnknownIsolation(_))
         ));
     }
 

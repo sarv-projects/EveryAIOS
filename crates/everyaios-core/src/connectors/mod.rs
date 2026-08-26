@@ -11,12 +11,37 @@
 pub mod browser_session;
 pub mod calendar;
 pub mod gmail;
+pub mod graph;
+pub mod gws;
 pub mod imap_smtp;
+pub mod native;
+pub mod read_first;
+pub mod scopes;
+pub mod workspace;
 
 pub use browser_session::BrowserSessionConnector;
 pub use calendar::CalendarConnector;
-pub use gmail::GmailConnector;
+pub use gmail::{GmailConnector, TokenRefresher};
+pub use graph::{
+    GraphCalendarEvent, GraphChat, GraphChatMessage, GraphConnector, GraphDriveItem,
+    GraphMailMessage,
+};
+pub use gws::{GwsAction, GwsConnector, GwsError, GwsRequest};
 pub use imap_smtp::ImapSmtpConnector;
+pub use native::{
+    classify_sql, has_stacked_statements, AuditChain, AuditEntry, ColumnRedaction,
+    CostGuardError, ExplainCostGuard, SqlClass, SqlGuard, SqlGuardError,
+};
+pub use read_first::{
+    ReadFirstPolicy, SendAction, SendApproval, SendBlocked, SendClass, SendKind, VaultTokenRef,
+};
+pub use scopes::{
+    attach_scopes, ConnectorScopeManifest, ScopeEntry, SCOPE_MANIFEST, GOOGLE_WORKSPACE_SCOPES,
+    MICROSOFT_GRAPH_SCOPES,
+};
+pub use workspace::{
+    WorkspaceConnector, WorkspaceDoc, WorkspaceDriveFile, WorkspaceSheetValues,
+};
 
 /// Injectable HTTP transport seam — all connectors call the outside world
 /// through this trait so the full protocol logic can be tested without

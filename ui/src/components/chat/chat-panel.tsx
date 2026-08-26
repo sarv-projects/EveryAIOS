@@ -141,6 +141,25 @@ export default function ChatPanel() {
   const scopedView = useAppStore((s) => s.scopedView)
   const setScopedView = useAppStore((s) => s.setScopedView)
   const nowDoing = activeSession ? deriveNowDoing(activeSession) : null
+
+  // Bugfix — Pause must actually stop the live Rust stream, not just flip the
+  // UI flag. The stream id captured by `sendUserMessage` drives `chat_cancel`;
+  // Rust then emits the terminal `done`/`cancelled` event that ends the turn.
+  const onTogglePause = async () => {
+    if (!agentPaused) {
+      const sid = store.activeSessionId
+      const streamId = store.liveStreamId[sid]
+      if (streamId) {
+        const { chatCancel } = await import('@/lib/tauri')
+        try {
+          await chatCancel(streamId)
+        } catch {
+          /* stream already finished — nothing to cancel */
+        }
+      }
+    }
+    toggleAgentPause()
+  }
   const showStrip =
     !!nowDoing &&
     (activeSession?.status === 'running' || activeSession?.status === 'action-required')
@@ -258,7 +277,7 @@ export default function ChatPanel() {
             size="icon"
             variant="ghost"
             className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={() => toggleAgentPause()}
+            onClick={() => void onTogglePause()}
             title={agentPaused ? 'Resume agent' : 'Pause agent'}
           >
             {agentPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}

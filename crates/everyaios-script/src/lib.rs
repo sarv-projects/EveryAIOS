@@ -8,6 +8,8 @@
 //! trail or touch foreign tabs.
 
 mod sandbox;
+pub mod artifact;
+pub mod selfheal;
 
 use serde::{Deserialize, Serialize};
 

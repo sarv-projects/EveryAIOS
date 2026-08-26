@@ -15,6 +15,7 @@ import {
   type ChatWireEvent,
 } from "./tauri";
 import { acpAgents, acpInstallStatus, acpLaunch, acpPrompt, type HarnessManifest } from "./acp";
+import { limitationFor } from "./plain-language";
 import { usageSnapshot } from "./spend";
 import { AGENTS, getModel, type AgentRuntime } from "./agents";
 
@@ -90,28 +91,41 @@ function budgetKillText(message: string): string {
   return `stopped: $${m[2]} / $${m[1]}`;
 }
 
-/** Route a live chat wire event into the active session's transcript. */
+/** Route a live chat wire event into the session it belongs to. Chat-events
+ * carry a `sessionId` so switching chats mid-stream never lands tokens on the
+ * wrong transcript (bugfix 2); fall back to the active session only when the
+ * event omits one. */
 function handleChatEvent(e: ChatWireEvent): void {
   const st = useAppStore.getState();
+  const sid = e.sessionId ?? st.activeSessionId;
 
   switch (e.type) {
     case "ttft":
-      st.streamStart();
+      st.streamStart(sid);
       break;
     case "batch":
-      st.streamAppend(e.text ?? "", false);
+      st.streamAppend(e.text ?? "", false, sid);
       st.noteStreamTick(e.tokenCount ?? Math.max(1, Math.round((e.text ?? "").length / 4)));
       break;
     case "done":
-      st.streamAppend(e.fullText ?? e.text ?? "", true);
+      // `fullText` is the authoritative whole message; `batch` deltas were
+      // already appended token-by-token, so replace (never concat) it.
+      if (e.fullText) {
+        st.streamFinalize(e.fullText, sid);
+      } else if (e.text) {
+        st.streamAppend(e.text, true, sid);
+      }
       break;
     case "error":
       if (e.code === "budget_exceeded") {
-        st.streamBudgetKill(budgetKillText(e.message ?? ""));
+        st.streamBudgetKill(budgetKillText(e.message ?? ""), sid);
       } else if (e.code === "tool_failed" || e.toolId) {
         st.streamToolResult(e.toolId ?? "tool", undefined, e.message ?? "tool failed");
       } else {
-        st.streamFail(e.message ?? "Agent error");
+        // P32.4 — honest-limitation surfacing: say plainly what failed +
+        // offer the nearest alternative (Wharton: no technical framing).
+        const lim = limitationFor(e.message ?? "Agent error");
+        st.streamFail(`${lim.plain} — ${lim.alternative}`, sid);
       }
       break;
     case "stage":
@@ -135,6 +149,18 @@ function handleChatEvent(e: ChatWireEvent): void {
     case "toolCall":
       st.streamToolCall(e.toolId ?? e.text ?? e.code ?? "tool", e.args, e.risk);
       break;
+    case "verification": {
+      // P41.4 — K1 verification receipt: model-reported pass/fail per check,
+      // surfaced inline in the editor's Diff rail.
+      st.pushVerification({
+        taskId: e.taskId ?? "",
+        checks: e.checks ?? [],
+        report: e.report ?? "",
+        passed: e.passed === undefined ? null : e.passed,
+        tsMs: Date.now(),
+      });
+      break;
+    }
     case "toolResult": {
       const err =
         e.error ??
@@ -241,6 +267,10 @@ export async function initBridge(): Promise<void> {
   try {
     const { invoke } = await import("./tauri");
     const listed = await invoke<{ sessions?: Array<import("./store").Session> }>("session_list");
+    // The shell owns the sessions list the moment `session_list` answers —
+    // even an empty vault means the mock seed is superseded (bugfix 3),
+    // otherwise a boot-time write would stamp demo chats into the vault.
+    useAppStore.getState().markSessionsHydrated();
     if (listed?.sessions && listed.sessions.length > 0) {
       useAppStore.setState({
         sessions: listed.sessions,
@@ -332,6 +362,13 @@ export async function sendUserMessage(
   const inbuilt = isInbuilt(catalogId);
   const agentId = inbuilt ? undefined : catalogId;
   const { provider, model } = selectedProviderModel(st.selectedModelId);
+  // P33 scoped-PDF fix — when the study-mode chip is set (chat scoped to an
+  // open document) and no explicit context was passed, attach the open
+  // document's extracted text so answers are grounded in it.
+  let effectiveContext = context;
+  if (!effectiveContext && st.scopedView === 'office-pdf' && st.scopedDoc) {
+    effectiveContext = { title: st.scopedDoc.title, content: st.scopedDoc.content };
+  }
   st.pushUserMessage(trimmed);
 
   if (!inTauri()) {
@@ -385,7 +422,7 @@ export async function sendUserMessage(
       return;
     }
     const { SOUL_PRESETS } = await import("./personas");
-    await chatStream({
+    const streamId = await chatStream({
       sessionId,
       text: trimmed,
       agentId,
@@ -393,8 +430,11 @@ export async function sendUserMessage(
       model,
       personaId: st.personaId,
       soulMd: SOUL_PRESETS[st.soulId] || undefined,
-      ...(context ? { userDocuments: [context] } : {}),
+      ...(effectiveContext ? { userDocuments: [effectiveContext] } : {}),
     });
+    // Bugfix — remember the live stream id so Pause/Stop can `chat_cancel`
+    // the real Rust stream instead of only flipping local state.
+    if (streamId) useAppStore.getState().setLiveStreamId(sessionId, streamId);
   } catch (err) {
     // P11.5.12 — a dropped IPC mid-stream surfaces the reconnect chip instead
     // of a hard failure; the coordinator's StreamRegistry holds the last-token

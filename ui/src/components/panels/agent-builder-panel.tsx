@@ -3,6 +3,13 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
+import {
+  agentRegistryList,
+  agentRegistryRemove,
+  agentRegistrySave,
+  RegisteredAgent,
+} from '@/lib/agent-registry'
 import {
   AGENT_TEMPLATES,
   AgentBundle,
@@ -43,8 +50,30 @@ export default function AgentBuilderPanel() {
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  // Local "registry" mirror (the Rust AgentRegistry is the durable store;
-  // this is the demo-state until the Tauri command is wired).
+  // The Tauri-backed registry (P31.10): `agent_registry_list` reads the Rust
+  // AgentRegistry (`~/.everyaios/agents/`). Outside Tauri we mirror the same
+  // shape in localStorage (demo state).
+  const [registryAgents, setRegistryAgents] = useState<RegisteredAgent[]>([])
+  const [registryErr, setRegistryErr] = useState<string | null>(null)
+
+  const live = inTauri()
+
+  const loadRegistry = async () => {
+    try {
+      const { agents } = await agentRegistryList()
+      setRegistryAgents(agents)
+      setRegistryErr(null)
+    } catch (e) {
+      setRegistryErr(String(e))
+    }
+  }
+
+  React.useEffect(() => {
+    void loadRegistry()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Demo mirror (browser preview): full bundles, localStorage-backed.
   const [localBundles, setLocalBundles] = useState<AgentBundle[]>(() => {
     try {
       const raw = localStorage.getItem('everyaios.agents')
@@ -62,6 +91,9 @@ export default function AgentBuilderPanel() {
       /* storage unavailable — demo state only */
     }
   }
+
+  /** The row count shown under "Your agents": Tauri registry or demo mirror. */
+  const agentCount = live ? registryAgents.length : localBundles.length
 
   const startFromTemplate = (id: string) => {
     setTemplateId(id)
@@ -81,15 +113,38 @@ export default function AgentBuilderPanel() {
     return b
   }
 
-  const saveAgent = () => {
+  const saveAgent = async () => {
     const b = build()
+    if (live) {
+      // The Rust store is the durable registry — save the exact agent.toml
+      // the crate parses (bundleToToml emits the serde schema).
+      try {
+        await agentRegistrySave(bundleToToml(b))
+        await loadRegistry()
+        setBundle(b)
+        setSaved(true)
+        setRegistryErr(null)
+      } catch (e) {
+        setRegistryErr(String(e))
+      }
+      return
+    }
     const list = [...localBundles.filter((x) => slug(x.name) !== slug(b.name)), b]
     persistBundles(list)
     setBundle(b)
     setSaved(true)
   }
 
-  const removeAgent = (id: string) => {
+  const removeAgent = async (id: string) => {
+    if (live) {
+      try {
+        await agentRegistryRemove(id)
+        await loadRegistry()
+      } catch (e) {
+        setRegistryErr(String(e))
+      }
+      return
+    }
     persistBundles(localBundles.filter((x) => slug(x.name) !== id))
   }
 
@@ -344,11 +399,11 @@ export default function AgentBuilderPanel() {
         </div>
       )}
 
-      {/* Registry (P31.10) */}
+      {/* Registry (P31.10) — the Rust AgentRegistry in Tauri, demo mirror out */}
       <div className="mt-8">
         <div className="mb-2 flex items-center justify-between">
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Your agents ({localBundles.length})
+            Your agents ({agentCount})
           </div>
           <button
             onClick={() => {
@@ -362,9 +417,42 @@ export default function AgentBuilderPanel() {
             <Plus className="h-3 w-3" /> New
           </button>
         </div>
-        {localBundles.length === 0 ? (
+        {registryErr && (
+          <div className="mb-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+            {registryErr}
+          </div>
+        )}
+        {agentCount === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             No custom agents yet — pick a template above to create your first one.
+          </div>
+        ) : live ? (
+          <div className="space-y-2">
+            {registryAgents.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center gap-3 rounded-lg border border-border bg-card p-3"
+              >
+                <div className="text-xl">{a.emoji}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-foreground">{a.name}</div>
+                  <div className="truncate text-xs text-muted-foreground">{a.description}</div>
+                  <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-muted-foreground">
+                    <span className="rounded bg-background/60 px-1.5 py-0.5">
+                      engine: {a.engine.toLowerCase()}
+                    </span>
+                    <span className="rounded bg-background/60 px-1.5 py-0.5">id: {a.id}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeAgent(a.id)}
+                  className="rounded-md border border-border p-1.5 text-muted-foreground hover:text-red-400"
+                  title="Remove"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="space-y-2">
@@ -406,7 +494,7 @@ export default function AgentBuilderPanel() {
                       setName(b2.name)
                       setEmoji(b2.emoji)
                       setSaved(true)
-                      navigator.clipboard?.writeText(exportBundle(b2).content).catch(() => {})
+                      navigator.clipboard.writeText(exportBundle(b2).content).catch(() => {})
                     }
                   }}
                   className="rounded-md border border-border p-1.5 text-muted-foreground hover:text-foreground"

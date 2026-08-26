@@ -13,7 +13,17 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { mockMemory, type MemoryItem } from '@/lib/store'
 import { useAppStore } from '@/lib/store'
 import { useDebouncedValue } from '@/lib/ux'
-import { memoryRead } from '@/lib/memory'
+import { staggerStyle } from '@/lib/stagger'
+import {
+  memoryRead,
+  memoryRequest,
+  memoryFacts,
+  memoryGraph,
+  memoryEpisodes,
+  type MemoryFact,
+  type MemoryGraph,
+  type MemoryEpisode,
+} from '@/lib/memory'
 import { SkeletonBlock } from '@/components/ui/loading-state'
 import { cn } from '@/lib/utils'
 
@@ -48,7 +58,7 @@ const EPISODES = [
 ]
 
 // Mock semantic store — extracted facts (C3).
-const FACTS = [
+const DEMO_FACTS = [
   { id: 'f1', fact: 'Revenue grew 20% QoQ to $1.8M in Q3', confidence: 0.97, source: 'Q3-Financials.xlsx' },
   { id: 'f2', fact: 'Churn rate is 2.1% (down from 3.4%)', confidence: 0.94, source: 'exec-summary.docx' },
   { id: 'f3', fact: 'User prefers pnpm over npm', confidence: 0.99, source: 'explicit memory' },
@@ -85,10 +95,47 @@ export default function MemoryPanel() {
   const [items, setItems] = useState(mockMemory)
   const [activeCat, setActiveCat] = useState('all')
   const [tab, setTab] = useState('knowledge')
+  const [liveFacts, setLiveFacts] = useState<MemoryFact[] | null>(null)
+  const [liveGraph, setLiveGraph] = useState<MemoryGraph | null>(null)
+  const [liveEpisodes, setLiveEpisodes] = useState<MemoryEpisode[] | null>(null)
   const notify = useAppStore((s) => s.notify)
 
-  const suggestions = items.filter((i) => i.source === 'suggested')
-  const knowledge = items.filter((i) => i.source !== 'suggested')
+  // P5.22 — the knowledge/episodic/graph tabs read the live MemoryService
+  // store when the shell is up: `memory/status` (facts), `memory/graph` (the
+  // real GraphStore nodes/edges) and `memory/episodes` (facts grouped per
+  // session). Demo fallback in preview.
+  useEffect(() => {
+    let alive = true
+    memoryFacts()
+      .then((s) => alive && setLiveFacts(s.facts.filter((f) => f.status === 'active')))
+      .catch(() => {})
+    memoryGraph()
+      .then((g) => alive && g.nodes.length > 0 && setLiveGraph(g))
+      .catch(() => {})
+    memoryEpisodes()
+      .then((e) => alive && e.episodes.length > 0 && setLiveEpisodes(e.episodes))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // Live facts feed the knowledge list (each fact = one MemoryItem); the
+  // demo seed stays the fallback in plain-browser preview.
+  const liveItems: MemoryItem[] = (liveFacts ?? []).map((f, i) => ({
+    id: f.id,
+    title: f.text,
+    category: 'Project context',
+    trigger: f.source,
+    macro: '',
+    scope: f.sessionId,
+    enabled: true,
+    source: 'learned' as const,
+  }))
+  const shownItems = liveFacts ? liveItems : items
+
+  const suggestions = shownItems.filter((i) => i.source === 'suggested')
+  const knowledge = shownItems.filter((i) => i.source !== 'suggested')
 
   const toggleItem = (id: string) =>
     setItems((prev) =>
@@ -113,8 +160,13 @@ export default function MemoryPanel() {
             <Brain className="h-4 w-4 text-orange-400" />
             <h2 className="text-sm font-semibold text-foreground">Memory</h2>
             <Badge variant="secondary" className="text-[9px]">
-              {items.length} items
+              {shownItems.length} items
             </Badge>
+            {liveFacts && (
+              <Badge variant="outline" className="text-[9px] text-emerald-300">
+                live store
+              </Badge>
+            )}
           </div>
           <Button
             size="sm"
@@ -222,9 +274,9 @@ export default function MemoryPanel() {
               </div>
             </section>
           )}
-          {tab === 'episodic' && <EpisodicTab />}
+          {tab === 'episodic' && <EpisodicTab facts={liveFacts} episodes={liveEpisodes} />}
           {tab === 'semantic' && <SemanticTab />}
-          {tab === 'graph' && <GraphTab />}
+          {tab === 'graph' && <GraphTab facts={liveFacts} graph={liveGraph} />}
           {tab === 'skills' && <SkillsTab />}
           {tab === 'knowledge' && (
           <>
@@ -248,12 +300,14 @@ export default function MemoryPanel() {
                 Knowledge
               </div>
               <div className="space-y-2">
-                {knowledge.map((i) => (
-                  <KnowledgeCard
-                    key={i.id}
-                    item={i}
-                    onToggle={() => toggleItem(i.id)}
-                  />
+                {knowledge.map((i, idx) => (
+                  // P35.2 — entrance stagger on the memory entries list.
+                  <div key={i.id} className="enter-stagger" style={staggerStyle(idx)}>
+                    <KnowledgeCard
+                      item={i}
+                      onToggle={() => toggleItem(i.id)}
+                    />
+                  </div>
                 ))}
               </div>
             </section>
@@ -267,7 +321,41 @@ export default function MemoryPanel() {
   )
 }
 
-function EpisodicTab() {
+function EpisodicTab({
+  facts,
+  episodes,
+}: {
+  facts: MemoryFact[] | null
+  episodes: MemoryEpisode[] | null
+}) {
+  // P5.22 — live episodes from `memory/episodes` (facts grouped per session);
+  // fall back to the fact list, then the preview seed.
+  const rows =
+    episodes && episodes.length > 0
+      ? episodes.map((e) => ({
+          id: e.sessionId,
+          ts: new Date(e.latestMs).toLocaleString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          title: `${e.count} fact${e.count === 1 ? '' : 's'} · ${e.sessionId}`,
+          detail: e.preview[0] ?? 'no preview',
+        }))
+      : facts && facts.length > 0
+        ? facts.slice(0, 12).map((f, i) => ({
+            id: f.id,
+            ts: new Date(f.createdAtMs).toLocaleString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            title: f.text,
+            detail: `source: ${f.source} · session ${f.sessionId}`,
+          }))
+        : EPISODES
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
@@ -275,10 +363,16 @@ function EpisodicTab() {
           <Brain className="h-3.5 w-3.5 text-orange-400" />
           <span className="text-xs font-medium text-foreground">Episodic memory</span>
         </div>
-        <span className="font-mono text-[10px] text-muted-foreground">{EPISODES.length} episodes · last 7d</span>
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {episodes && episodes.length > 0
+            ? `${episodes.length} live sessions`
+            : facts && facts.length > 0
+              ? `${facts.length} live facts`
+              : `${EPISODES.length} episodes · last 7d`}
+        </span>
       </div>
       <ul className="divide-y divide-border/50">
-        {EPISODES.map((e) => (
+        {rows.map((e) => (
           <li key={e.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/40">
             <CircleDot className="h-3 w-3 shrink-0 text-orange-400" />
             <div className="min-w-0 flex-1">
@@ -286,7 +380,6 @@ function EpisodicTab() {
               <div className="truncate text-[10px] text-muted-foreground">{e.detail}</div>
             </div>
             <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{e.ts}</span>
-            <span className="shrink-0 font-mono text-[9px] text-orange-300/70">{(e.tokens / 1000).toFixed(0)}K tok</span>
           </li>
         ))}
       </ul>
@@ -297,7 +390,7 @@ function EpisodicTab() {
 function SemanticTab() {
   // P11.5.6 — semantic store over the live memory/* RPC (demo fallback in
   // preview). Search box (debounced) + folder organization + bulk enable.
-  const [facts, setFacts] = useState<string[]>(FACTS.map((f) => f.fact))
+  const [facts, setFacts] = useState<string[]>(DEMO_FACTS.map((f) => f.fact))
   const [query, setQuery] = useState('')
   const [folders, setFolders] = useState<Record<string, string>>({})
   const [disabled, setDisabled] = useState<Record<string, boolean>>({})
@@ -309,7 +402,7 @@ function SemanticTab() {
     setLoading(true)
     void memoryRead(debounced, 20).then((r) => {
       if (!active) return
-      setFacts(r.results.length ? r.results : FACTS.map((f) => f.fact))
+      setFacts(r.results.length ? r.results : DEMO_FACTS.map((f) => f.fact))
       setLoading(false)
     })
     return () => {
@@ -388,30 +481,74 @@ function SemanticTab() {
   )
 }
 
-function GraphTab() {
+function GraphTab({
+  facts,
+  graph,
+}: {
+  facts: MemoryFact[] | null
+  graph: MemoryGraph | null
+}) {
   const [sel, setSel] = useState<string | null>('g2')
-  const nodePos: Record<string, { x: number; y: number }> = {
-    g1: { x: 20, y: 40 },
-    g2: { x: 55, y: 25 },
-    g3: { x: 82, y: 40 },
-    g4: { x: 55, y: 72 },
-    g5: { x: 20, y: 78 },
-  }
+  // P5.22 — live mode: the real GraphStore surface (`memory/graph`: Episodic
+  // nodes + session→fact DerivedFrom edges), then the facts-derived ring,
+  // then the preview seed.
+  const liveGraph = graph && graph.nodes.length > 0
+  const nodes = liveGraph
+    ? graph!.nodes.slice(0, 8).map((n) => ({ id: n.id, label: n.label || n.id }))
+    : facts && facts.length > 0
+      ? facts.slice(0, 8).map((f) => ({ id: f.id, label: f.text.split(/\s+/).slice(0, 3).join(' ') }))
+      : GRAPH_NODES
+  const edges = liveGraph
+    ? graph!.edges
+        .filter((e) => nodes.some((n) => n.id === e.src) && nodes.some((n) => n.id === e.dst))
+        .slice(0, 14)
+        .map((e) => ({ from: e.src, to: e.dst, label: e.ty }))
+    : facts && facts.length > 0
+      ? facts.slice(0, 8).flatMap((f, i) =>
+          i === 0 ? [] : [{ from: facts[i - 1]!.id, to: f.id, label: facts[i - 1]!.sessionId === f.sessionId ? 'episodic' : 'derived' }],
+        )
+      : GRAPH_EDGES
+  const nodePos: Record<string, { x: number; y: number }> =
+    liveGraph || (facts && facts.length > 0)
+      ? Object.fromEntries(
+          nodes.map((n, i) => {
+            const angle = (i / Math.max(nodes.length, 1)) * 2 * Math.PI - Math.PI / 2
+            return [n.id, { x: 50 + 32 * Math.cos(angle), y: 45 + 28 * Math.sin(angle) }]
+          }),
+        )
+      : {
+          g1: { x: 20, y: 40 },
+          g2: { x: 55, y: 25 },
+          g3: { x: 82, y: 40 },
+          g4: { x: 55, y: 72 },
+          g5: { x: 20, y: 78 },
+        }
+  const countLabel = liveGraph
+    ? `${nodes.length} live nodes · ${edges.length} edges`
+    : facts && facts.length > 0
+      ? `${nodes.length} live nodes · ${edges.length} edges`
+      : `${GRAPH_NODES.length} nodes · ${GRAPH_EDGES.length} edges`
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-1.5">
           <GitBranch className="h-3.5 w-3.5 text-orange-400" />
           <span className="text-xs font-medium text-foreground">Knowledge graph</span>
+          {liveGraph && (
+            <Badge variant="outline" className="text-[9px] text-emerald-300">
+              live GraphStore
+            </Badge>
+          )}
         </div>
-        <span className="font-mono text-[10px] text-muted-foreground">{GRAPH_NODES.length} nodes · {GRAPH_EDGES.length} edges</span>
+        <span className="font-mono text-[10px] text-muted-foreground">{countLabel}</span>
       </div>
       <div className="relative h-72">
         {/* edges */}
         <svg className="absolute inset-0 h-full w-full" aria-hidden>
-          {GRAPH_EDGES.map((e, i) => {
+          {edges.map((e, i) => {
             const a = nodePos[e.from]
             const b = nodePos[e.to]
+            if (!a || !b) return null
             return (
               <g key={i}>
                 <line
@@ -431,8 +568,9 @@ function GraphTab() {
           })}
         </svg>
         {/* nodes */}
-        {GRAPH_NODES.map((n) => {
+        {nodes.map((n) => {
           const p = nodePos[n.id]
+          if (!p) return null
           const active = sel === n.id
           return (
             <button

@@ -110,6 +110,15 @@ jobs:
       - name: Build
         working-directory: ui
         run: npm run build
+      # P10.5 "vitest": the UI's unit tests (lib/*.test.ts — NPS timing,
+      # session recording, stagger) run under bun, which the lockfile pins.
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Unit tests (bun test)
+        working-directory: ui
+        run: bun test
 
   # Sidecar: coordinator bun tests + typecheck. Needs the private APP repo
   # (sarv-projects/APP — the @personal-ai/core-* packages) checked out as a
@@ -161,3 +170,51 @@ jobs:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app/packages/coordinator
         run: bun test
+
+  # P10.5 — "cargo test + vitest + Tauri build for Win/Mac/Linux": the Tauri
+  # shell itself must type-check on all 3 platforms, not just at release time.
+  # cargo check is the fast gate; the release workflow does the full signed
+  # bundle build.
+  tauri-check:
+    name: tauri shell check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates, src-tauri
+
+      - name: Install Linux packaging deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf libssl-dev
+
+      - name: Install OpenSSL (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install openssl:x64-windows-static-md
+          echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $env:GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+          $libs = "-Clink-arg=advapi32.lib -Clink-arg=user32.lib -Clink-arg=crypt32.lib -Clink-arg=gdi32.lib"
+          echo "RUSTFLAGS=$libs" >> $env:GITHUB_ENV
+
+      - name: cargo check (tauri shell)
+        run: cargo check
+
+      - name: cargo test --lib (tauri shell)
+        run: cargo test --lib

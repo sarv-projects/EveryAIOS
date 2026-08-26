@@ -31,6 +31,16 @@ pub struct Config {
     /// these before the router so users type short names everywhere.
     #[serde(default)]
     pub model_aliases: std::collections::HashMap<String, String>,
+    /// P38 (v3.45) — the session's top brain: `inbuilt` | an ACP-registered
+    /// agent id (`claude-code`, `codex`, …). Read at session start; resolution
+    /// = explicit session value → this default → `inbuilt`. Unknown ids fail
+    /// closed (never a silent fallback to inbuilt).
+    #[serde(default = "default_primary_chief")]
+    pub primary_chief: String,
+}
+
+fn default_primary_chief() -> String {
+    "inbuilt".to_string()
 }
 
 impl Default for Config {
@@ -44,6 +54,7 @@ impl Default for Config {
             socket_path: None,
             local: LocalConfig::default(),
             model_aliases: std::collections::HashMap::new(),
+            primary_chief: default_primary_chief(),
         }
     }
 }

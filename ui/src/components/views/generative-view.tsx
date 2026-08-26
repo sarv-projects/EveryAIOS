@@ -87,7 +87,7 @@ export default function GenerativeView() {
             <MermaidBlock source={DEMO_MERMAID} title="Intent routing" />
           </section>
 
-          <section>
+          <section className="enter-surface">
             <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               Token-cheap descriptor renderer
             </div>
@@ -99,7 +99,7 @@ export default function GenerativeView() {
             </div>
           </section>
 
-          <section>
+          <section className="enter-surface">
             <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               Artifact card — make-live with version selector
             </div>

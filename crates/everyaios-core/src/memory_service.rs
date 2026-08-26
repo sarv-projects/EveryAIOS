@@ -378,6 +378,56 @@ impl MemoryService {
         })
     }
 
+    /// P5.22 `memory/graph`: the real GraphStore listing (nodes + edges) that
+    /// `ingest` maintains — every fact is an Episodic node with a
+    /// session→fact `DerivedFrom` edge. The memory browser's graph tab
+    /// renders this authoritative surface instead of restyling the fact list.
+    pub fn graph_snapshot(&self) -> Value {
+        let (nodes, edges) = self.graph.snapshot(64);
+        json!({
+            "nodes": nodes.iter().map(|n| json!({
+                "id": n.id,
+                "kind": format!("{:?}", n.kind).to_lowercase(),
+                "label": n.label,
+                "recordedAtMs": n.recorded_at,
+            })).collect::<Vec<_>>(),
+            "edges": edges.iter().map(|e| json!({
+                "src": e.src,
+                "dst": e.dst,
+                "ty": format!("{:?}", e.ty).to_lowercase(),
+                "weight": e.weight,
+            })).collect::<Vec<_>>(),
+            "nodeCount": self.graph.node_count(),
+            "edgeCount": self.graph.edge_count(),
+        })
+    }
+
+    /// P5.22 `memory/episodes`: group the active fact store by session — the
+    /// episodic shape (one record per session with recency + a text preview),
+    /// distinct from the flat fact list.
+    pub fn episodes(&self) -> Value {
+        let mut by_session: std::collections::BTreeMap<String, Vec<&StoredFact>> =
+            std::collections::BTreeMap::new();
+        for f in self.facts.iter().filter(|f| self.visible(f)) {
+            by_session.entry(f.session_id.clone()).or_default().push(f);
+        }
+        let episodes = by_session
+            .into_iter()
+            .map(|(session, facts)| {
+                let mut facts = facts;
+                facts.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
+                let latest = facts[0];
+                json!({
+                    "sessionId": session,
+                    "count": facts.len(),
+                    "latestMs": latest.created_at_ms,
+                    "preview": facts.iter().take(5).map(|f| f.text.clone()).collect::<Vec<_>>(),
+                })
+            })
+            .collect::<Vec<_>>();
+        json!({ "episodes": episodes, "total": episodes.len() })
+    }
+
     /// P5.1 `memory/read`: BM25-ranked fact ids for a query (the vectorless
     /// default signal; the graph/vector signals compose on top via fusion).
     pub fn read(&self, query: &str, k: usize) -> Vec<String> {
@@ -849,6 +899,8 @@ impl MemoryService {
                 }
             }
             "memory/status" => Ok(self.status()),
+            "memory/graph" => Ok(self.graph_snapshot()),
+            "memory/episodes" => Ok(self.episodes()),
             "memory/save" => {
                 let path = params
                     .get("path")
@@ -1384,5 +1436,34 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn graph_snapshot_lists_the_real_store() {
+        let mut m = MemoryService::new();
+        m.write("s1", &["Revenue grew 20% QoQ.".into(), "Churn fell to 2.1%.".into()]);
+        m.write("s2", &["User prefers pnpm.".into()]);
+
+        let out = m.handle("memory/graph", &json!({})).unwrap();
+        assert_eq!(out["nodeCount"], 3, "one Episodic node per fact");
+        assert_eq!(out["edgeCount"], 3, "one session→fact DerivedFrom edge per fact");
+        let nodes = out["nodes"].as_array().unwrap();
+        assert!(nodes.iter().all(|n| n["kind"] == "episodic"));
+        let edges = out["edges"].as_array().unwrap();
+        assert!(edges.iter().all(|e| e["ty"] == "derivedfrom"));
+    }
+
+    #[test]
+    fn episodes_group_facts_by_session() {
+        let mut m = MemoryService::new();
+        m.write("s1", &["Fact one.".into(), "Fact two.".into()]);
+        m.write("s2", &["Fact three.".into()]);
+
+        let out = m.handle("memory/episodes", &json!({})).unwrap();
+        assert_eq!(out["total"], 2);
+        let eps = out["episodes"].as_array().unwrap();
+        let s1 = eps.iter().find(|e| e["sessionId"] == "s1").unwrap();
+        assert_eq!(s1["count"], 2);
+        assert_eq!(s1["preview"].as_array().unwrap().len(), 2);
     }
 }

@@ -196,7 +196,10 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
 ]
 
 export function templateById(id: string): AgentTemplate {
-  return AGENT_TEMPLATES.find((t) => t.id === id) ?? AGENT_TEMPLATES[0]
+  // AGENT_TEMPLATES is never empty (the catalog is static); the non-null
+  // assertion keeps strict noUncheckedIndexedAccess consumers (coordinator
+  // tsconfig) happy.
+  return AGENT_TEMPLATES.find((t) => t.id === id) ?? AGENT_TEMPLATES[0]!
 }
 
 /** Deterministic id from a display name (mirrors the Rust slug()). */
@@ -225,8 +228,12 @@ function arr(a: string[]): string {
 }
 
 /**
- * The bundle → agent.toml export. Order matters for diff-friendliness:
- * identity → brain → capabilities → workflows, exactly like the Rust write.
+ * The bundle → agent.toml export. Layout mirrors the Rust serializer
+ * (`toml::to_string`): every scalar/array field first, then the tables —
+ * `[engine]` (Acp newtype only), `[model]`, `[tools]`. In TOML, opening a
+ * table absorbs every following key into it, so arrays MUST come before the
+ * table headers or they silently land inside `[model]` and are dropped by
+ * `AgentBundle::from_toml` (verified against the crate's serde schema).
  */
 export function bundleToToml(b: AgentBundle): string {
   const L: string[] = []
@@ -236,18 +243,23 @@ export function bundleToToml(b: AgentBundle): string {
   L.push(`description = ${q(b.description)}`)
   if (b.persona) L.push(`persona = ${q(b.persona)}`)
   if (b.systemPrompt) L.push(`system_prompt = ${q(b.systemPrompt)}`)
-  const engine = b.engine.kind === 'acp' ? `{ kind = "acp", cli = ${q(b.engine.cli)} }` : `{ kind = ${q(b.engine.kind)} }`
-  L.push(`engine = ${engine}`)
-  if (b.model.provider || b.model.model) {
-    L.push(`[model]`)
-    if (b.model.provider) L.push(`provider = ${q(b.model.provider)}`)
-    if (b.model.model) L.push(`model = ${q(b.model.model)}`)
-  }
   L.push(`mcp_servers = ${arr(b.mcpServers)}`)
   L.push(`connectors = ${arr(b.connectors)}`)
   L.push(`skills = ${arr(b.skills)}`)
   L.push(`blueprints = ${arr(b.blueprints)}`)
   L.push(`automations = ${arr(b.automations)}`)
+  // Tables last (Rust serializer order) — see the doc comment above.
+  if (b.engine.kind === 'acp') {
+    L.push(`[engine]`)
+    L.push(`acp = ${q(b.engine.cli)}`)
+  } else {
+    L.push(`engine = ${q(b.engine.kind === 'inbuilt' ? 'inbuilt' : 'model-only')}`)
+  }
+  if (b.model.provider || b.model.model) {
+    L.push(`[model]`)
+    if (b.model.provider) L.push(`provider = ${q(b.model.provider)}`)
+    if (b.model.model) L.push(`model = ${q(b.model.model)}`)
+  }
   L.push(`[tools]`)
   L.push(`allow = ${arr(b.tools.allow)}`)
   L.push(`deny = ${arr(b.tools.deny)}`)

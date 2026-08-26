@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import {
   Check, Cloud, Plug, Plus, Search, Server, Zap, Wrench,
@@ -8,6 +8,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { staggerStyle } from '@/lib/stagger'
+import { scopesFor } from '@/lib/connector-scopes'
 import { type Connector } from '@/lib/store'
 import { useAppStore } from '@/lib/store'
 import {
@@ -26,6 +28,7 @@ import {
   oauthStatus,
   type OAuthAccount,
 } from '@/lib/oauth'
+import { inTauri } from '@/lib/tauri'
 
 const STATS = [
   { label: 'Connected', value: '5', tone: 'text-emerald-300' },
@@ -303,15 +306,120 @@ export default function ConnectorsPanel() {
                   <Badge variant="secondary" className="text-[9px]">OAuth tokens in local vault</Badge>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {NATIVE_SAMPLES.map((c, i) => (
-                    <ConnectorCard
-                      key={c.id}
-                      c={c}
-                      colorIdx={i}
-                      onConnect={() => notify(`Connect ${c.name} — OAuth flow opens in the shell`)}
-                    />
-                  ))}
+                  {/* P5.23 — live rows: real OAuth accounts from the shell
+                      (vault-backed). NATIVE_SAMPLES is the *preview-only* seed:
+                      when the shell is up and the vault is empty, no mock
+                      "connected" rows are shown — the empty state below is. */}
+                  {inTauri() && oauthAccts.length > 0
+                    ? oauthAccts.map((a, i) => (
+                        // P35.2 — entrance stagger on the connectors list.
+                        <div key={`${a.provider}:${a.accountId}`} className="enter-stagger" style={staggerStyle(i)}>
+                          <ConnectorCard
+                            colorIdx={i}
+                            c={{
+                              id: `${a.provider}:${a.accountId}`,
+                              name: a.provider,
+                              category: 'native',
+                              status: 'connected',
+                              tools: 0,
+                              type: 'oauth',
+                              lastUsed: a.expiresAt
+                                ? `expires ${new Date(a.expiresAt).toLocaleDateString()}`
+                                : a.email ?? a.accountId,
+                            }}
+                            onConnect={() => notify(`${a.provider} is already connected in the vault`)}
+                          />
+                        </div>
+                      ))
+                    : inTauri()
+                      ? null
+                      : NATIVE_SAMPLES.map((c, i) => (
+                          <div key={c.id} className="enter-stagger" style={staggerStyle(i)}>
+                            <ConnectorCard
+                              c={c}
+                              colorIdx={i}
+                              onConnect={() => notify(`Connect ${c.name} — OAuth flow opens in the shell`)}
+                            />
+                          </div>
+                        ))}
                 </div>
+                {inTauri() && oauthAccts.length === 0 && (
+                  <div className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center">
+                    <Zap className="mx-auto h-4 w-4 text-muted-foreground/50" />
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      No OAuth accounts in the vault yet — connect one via the
+                      vault OAuth flow to see it here.
+                    </p>
+                  </div>
+                )}
+              </section>
+              {/* P4.20 — honest planned rows: P42 (Google Workspace / M365
+                  Graph) is spec'd, not attached. Never shown as connected. */}
+              <section>
+                <div className="mb-2 flex items-center gap-1.5">
+                  <Cloud className="h-3.5 w-3.5 text-sky-400" />
+                  <span className="text-xs font-medium text-foreground">Planned (P42)</span>
+                  <Badge variant="outline" className="text-[9px] text-sky-300">not attached</Badge>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {[
+                    { id: 'p42-google', name: 'Google Workspace', desc: 'Gmail · Drive · Docs · Sheets — official APIs, read-only-first (P42.2)' },
+                    { id: 'p42-m365', name: 'Microsoft 365 / Graph', desc: 'Mail · Calendar · OneDrive · Teams — official Graph, read-only-first (P42.1)' },
+                  ].map((p, i) => {
+                    const manifest = scopesFor(p.id === 'p42-google' ? 'google-workspace' : 'microsoft-graph')
+                    return (
+                      <ConnectorCard
+                        key={p.id}
+                        colorIdx={i + NATIVE_SAMPLES.length}
+                        c={{
+                          id: p.id,
+                          name: p.name,
+                          // The Connector union has no "planned" category — these
+                          // are honest placeholders inside the native surface.
+                          category: 'native',
+                          status: 'disconnected',
+                          tools: 0,
+                          type: 'oauth',
+                        }}
+                        onConnect={() =>
+                          notify(`${p.name}: P42 attach — official server behind Guard-2, not shipped yet`)
+                        }
+                      >
+                        {/* P42.3 — the reviewed scope manifest, rendered verbatim
+                            (read-only-first; write scope opt-in). */}
+                        {manifest && (
+                          <div className="mt-2 space-y-1 rounded-md border border-border/60 bg-background/40 p-2">
+                            {manifest.scopes.map((s) => (
+                              <div key={s.scope} className="flex items-start gap-1.5 text-[10px]">
+                                <span
+                                  className={cn(
+                                    'mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full',
+                                    s.direction === 'write' ? 'bg-amber-400' : 'bg-emerald-400/70',
+                                  )}
+                                />
+                                <div className="min-w-0">
+                                  <span className="font-mono text-[9px] text-foreground/80">
+                                    {s.scope}
+                                  </span>
+                                  <span className="text-muted-foreground"> · {s.purpose}</span>
+                                  {!s.required && (
+                                    <span className="text-amber-500/90"> · opt-in</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                            <p className="pt-0.5 text-[9px] text-muted-foreground/70">
+                              {manifest.posture}
+                            </p>
+                          </div>
+                        )}
+                      </ConnectorCard>
+                    )
+                  })}
+                </div>
+                <p className="mt-2 font-mono text-[9px] text-muted-foreground/60">
+                  P42 rows are honest placeholders — no token is stored until the official server is attached behind Guard-2. Scopes above are the reviewed P42.3 manifest.
+                </p>
               </section>
             </>
           ) : (
@@ -529,10 +637,12 @@ function ConnectorCard({
   c,
   colorIdx,
   onConnect,
+  children,
 }: {
   c: Connector & { lastUsed?: string }
   colorIdx: number
   onConnect?: () => void
+  children?: ReactNode
 }) {
   const connected = c.status === 'connected'
   const color = LOGO_COLORS[colorIdx % LOGO_COLORS.length]
@@ -595,6 +705,7 @@ function ConnectorCard({
           </Button>
         )}
       </div>
+      {children}
     </div>
   )
 }

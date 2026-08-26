@@ -40,7 +40,7 @@ pub fn xlsx_open(
     offset: u32,
     limit: u32,
 ) -> Result<XlsxWindowPayload, String> {
-    let path_buf = PathBuf::from(&path);
+    let path_buf = crate::control::floor_user_file(&path)?;
     let meta = read::open(&path_buf).map_err(|e| e.to_string())?;
 
     let sheet_name = match &sheet {
@@ -72,7 +72,8 @@ pub fn xlsx_open(
 /// the formula bar's Recalc action shows formula_cells + computed values.
 #[tauri::command]
 pub fn xlsx_recalc(path: String) -> Result<RecalcResult, String> {
-    let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    let path = crate::control::floor_user_file(&path)?;
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
     recalc::recalc(&bytes).map_err(|e| e.to_string())
 }
 
@@ -91,6 +92,7 @@ pub fn xlsx_edit_request(
 ) -> Result<serde_json::Value, String> {
     // Validate the address up-front so the card never shows a bad ref.
     parse_ref(&address).map_err(|e| e.to_string())?;
+    let path = crate::control::floor_user_file(&path)?.display().to_string();
 
     let decision = DecisionPackage::new(format!("Set {address} to {value}"))
         .with_risk(RiskLevel::Medium)
@@ -149,6 +151,7 @@ pub fn xlsx_edit_commit(
     value: String,
     ticket_id: String,
 ) -> Result<serde_json::Value, String> {
+    let path = crate::control::floor_user_file(&path)?.display().to_string();
     let (_, cell) = parse_ref(&address).map_err(|e| e.to_string())?;
 
     // The ticket is mandatory: no ticket, no mutation. `use_ticket` enforces
@@ -203,6 +206,7 @@ pub fn xlsx_batch_request(
     sheet: String,
     batch: WorkbookCommandBatch,
 ) -> Result<serde_json::Value, String> {
+    let path = crate::control::floor_user_file(&path)?.display().to_string();
     let decision = DecisionPackage::new(batch.summary.clone())
         .with_risk(RiskLevel::Medium)
         .with_paths(vec![path.clone()]);
@@ -254,6 +258,7 @@ pub fn xlsx_batch_commit(
     batch: WorkbookCommandBatch,
     ticket_id: String,
 ) -> Result<serde_json::Value, String> {
+    let path = crate::control::floor_user_file(&path)?.display().to_string();
     let args_hash = batch_args_hash(&sheet, &batch);
     let mut guard = state
         .guard_service
@@ -318,6 +323,7 @@ pub fn xlsx_pivot(
     aggregate: usize,
     agg: String,
 ) -> Result<serde_json::Value, String> {
+    let path = crate::control::floor_user_file(&path)?;
     let (_, range) = parse_range(&source).map_err(|e| e.to_string())?;
     let agg = match agg.as_str() {
         "sum" => PivotAgg::Sum,
@@ -325,7 +331,7 @@ pub fn xlsx_pivot(
         _ => PivotAgg::Avg,
     };
     let rows =
-        read::read_range(PathBuf::from(&path).as_path(), &sheet, &range).map_err(|e| e.to_string())?;
+        read::read_range(path.as_path(), &sheet, &range).map_err(|e| e.to_string())?;
     let out = pivot_result(&rows, group_by, aggregate, agg);
     serde_json::to_value(&out).map_err(|e| e.to_string())
 }

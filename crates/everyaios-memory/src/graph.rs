@@ -229,6 +229,20 @@ impl GraphStore {
             .collect()
     }
 
+    /// A plain listing of the stored nodes and edges (most-recent first,
+    /// capped) — the read surface for the memory browser's graph tab. The
+    /// panel renders this directly instead of restyling the fact list.
+    pub fn snapshot(&self, limit: usize) -> (Vec<Node>, Vec<Edge>) {
+        let limit = limit.max(8);
+        let mut nodes = self.nodes.clone();
+        nodes.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at));
+        nodes.truncate(limit);
+        let mut edges = self.edges.clone();
+        edges.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at));
+        edges.truncate(limit.saturating_mul(2));
+        (nodes, edges)
+    }
+
     /// Add an edge version at `at_time`, closing any prior open version of the
     /// same `(src, dst, ty)` (temporal edge-versioning).
     pub fn add_edge(

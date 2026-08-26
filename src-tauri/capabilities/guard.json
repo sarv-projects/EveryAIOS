@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "guard",
+  "description": "Capability for the dedicated Guard-2 approval window (F1). The window loads only the bundled guard.html and is the only surface guard_respond accepts. Custom app commands are callable by default; this grants the standard core baseline.",
+  "windows": ["guard"],
+  "permissions": [
+    "core:default"
+  ]
+}

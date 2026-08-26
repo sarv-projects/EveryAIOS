@@ -1,0 +1,61 @@
+# EveryAIOS — performance regression tracking (P10.5).
+#
+# Runs the P10.3 perf/stress benches on a weekly schedule + manual dispatch,
+# uploads the full output as a CI artifact, and summarizes the key published
+# numbers (cold start, IPC round-trip, RSS idle/warm, memory retrieval, FTS5,
+# compaction, concurrent tool calls) as the job summary. The artifact is the
+# regression baseline: a later run's numbers can be diffed against it.
+#
+# Long-running gates (30-min heap / battery / 4-hr stability) stay in the
+# nightly-e2e workflow; this job runs the fast, reproducible benches only so
+# the numbers are comparable run-over-run.
+
+name: perf-regression
+
+on:
+  schedule:
+    # Monday 03:00 UTC — weekly baseline.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    name: p10 perf/stress benches
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+
+      - name: cargo bench-suite (p10_bench)
+        run: cargo test --release --all-features --test p10_bench -- --test-threads=4 2>&1 | tee /tmp/p10_bench.log
+
+      - name: Summarize published numbers
+        run: |
+          echo "## Perf regression summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "PASS|FAIL|RSS|ms$|/s$|MB$|KB$|seconds|secs|s$" /tmp/p10_bench.log \
+            | grep -vE "^\s*$" | tail -40 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifact \`p10-bench.log\` holds the full output for diffing against prior baselines." >> "$GITHUB_STEP_SUMMARY"
+          echo "⚠️  Any FAIL above is a regression gate — investigate before the next release." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bench log artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: p10-bench.log
+          path: /tmp/p10_bench.log
+          if-no-files-found: error

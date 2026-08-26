@@ -39,7 +39,9 @@ export function isDescriptor(value: unknown): value is Descriptor {
 /** Render a descriptor as local UI — zero iframes, zero remote assets. */
 export function DescriptorRenderer({ d, className }: { d: Descriptor; className?: string }) {
   return (
-    <div className={cn('rounded-lg border border-border/70 bg-background/40 p-3', className)}>
+    // P35.4 — widget/generative surfaces crossfade in (300ms, distinct from
+    // the 150ms viewport enter-surface).
+    <div className={cn('widget-enter rounded-lg border border-border/70 bg-background/40 p-3', className)}>
       {d.type === 'metric' && (
         <div className="flex items-baseline gap-2">
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{d.label}</span>
@@ -206,7 +208,8 @@ export function ArtifactCard({
   const current = versions.find((v) => v.id === currentId) ?? versions[0]
   if (!current) return null
   return (
-    <div className="rounded-lg border border-border/70 bg-card/60">
+    // P35.4 — the generative artifact card gets the same crossfade treatment.
+    <div className="widget-enter rounded-lg border border-border/70 bg-card/60">
       <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1.5">
         <span className="text-[10px] font-medium text-muted-foreground">Artifact</span>
         {versions.length > 1 && (

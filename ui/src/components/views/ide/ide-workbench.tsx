@@ -11,6 +11,7 @@ import {
   Terminal as TerminalIcon,
   AlertCircle,
   X,
+  GitCompare,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EditorTabs, type OpenFile } from './editor-tabs'
@@ -18,11 +19,12 @@ import { MonacoPane } from './monaco-pane'
 import { ExplorerPanel } from './explorer-panel'
 import { ScmPanel } from './scm-panel'
 import { ProblemsPanel } from './problems-panel'
+import { DiffRail } from './diff-rail'
 import { shellSpawn, shellWrite, onShellEvent, shellKill } from '@/lib/shell'
 import { useAppStore } from '@/lib/store'
 
 type ActivityId = 'explorer' | 'search' | 'scm' | 'run' | 'extensions' | 'everyaios'
-type PanelId = 'problems' | 'terminal' | 'output'
+type PanelId = 'problems' | 'terminal' | 'output' | 'diff'
 
 /**
  * P11.5.3 — EveryAIOS Code: a VS Code-like workbench over our Rust backends.
@@ -206,6 +208,7 @@ export function IdeWorkbench() {
               ['problems', AlertCircle, 'Problems'],
               ['terminal', TerminalIcon, 'Terminal'],
               ['output', TerminalIcon, 'Output'],
+              ['diff', GitCompare, 'Diff rail'],
             ] as const
           ).map(([id, Icon, label]) => (
             <button
@@ -260,6 +263,7 @@ export function IdeWorkbench() {
               Output channels appear here (agent logs, scheduler runs, office recalc).
             </div>
           )}
+          {panel === 'diff' && <DiffRail />}
         </div>
       </div>
 

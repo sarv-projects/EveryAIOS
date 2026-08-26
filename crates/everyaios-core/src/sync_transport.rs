@@ -243,7 +243,7 @@ impl Drop for SyncServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sync::{SyncItem, SyncScope};
+    use crate::sync::SyncScope;
 
     fn seed(session: &mut SyncSession, key: &str, rev: u64) {
         session.upsert(SyncScope::Memory, key, rev, key.as_bytes().to_vec());

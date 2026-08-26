@@ -49,8 +49,15 @@ import {
   type PlanTask,
 } from "./plan";
 import { startScheduler } from "./scheduler";
+import { hydrateObservations, type DurableUsageRow } from "./observations";
 import { connectorCatalog, queryConnectors } from "./connector-bridge";
 import { searchExternalMcp } from "./mcp-bridge";
+import {
+  chiefRegistry,
+  governanceBadge,
+  resolveChiefId,
+  type GovernanceMode,
+} from "./chief";
 
 /** Must stay in lock-step with `everyaios_ipc::PROTOCOL_VERSION` (Rust, = 1). */
 export const PROTOCOL_VERSION = 1;
@@ -151,6 +158,44 @@ export function handleRequest(req: Request): Response | null {
         text: p.text ?? p.data ?? null,
         echoed: true,
       });
+      break;
+    }
+
+    case "chief/resolve": {
+      // P38 — the dispatcher resolves `primary_chief` (explicit session value
+      // → user default → inbuilt) and records the session's Chief so Work
+      // survives Chief death (same intent→plan→checkpoints→receipts chain).
+      const p = (req.params ?? {}) as {
+        explicit?: string;
+        userDefault?: string;
+        sessionId?: string;
+        governance?: GovernanceMode;
+      };
+      try {
+        const chiefId = resolveChiefId(p.explicit, p.userDefault);
+        // Bugfix — the response badge used to be hardcoded `not_governed`,
+        // ignoring the governance this call resolves/records. Reflect the
+        // actual mode (or stay honestly not_governed when none is supplied —
+        // there is no governance signal to report then).
+        const governance: GovernanceMode = p.governance ?? { kind: "not_governed" };
+        if (typeof p.sessionId === "string") {
+          const prev = chiefRegistry.get(p.sessionId);
+          chiefRegistry.record({
+            sessionId: p.sessionId,
+            chiefId,
+            governance,
+            lastCompletedTurn: prev?.lastCompletedTurn ?? 0,
+            configHash: prev?.configHash ?? "",
+          });
+        }
+        response = ok(id, { chiefId, badge: governanceBadge(governance) });
+      } catch (e) {
+        response = err(
+          id,
+          ERROR_CODES.INVALID_REQUEST,
+          e instanceof Error ? e.message : String(e),
+        );
+      }
       break;
     }
 
@@ -557,6 +602,21 @@ export const schedulerRuntime = startScheduler(
 if (import.meta.main) {
   startOrphanWatch();
   startHeapMonitor();
+  // ARCH/05 durable-observation seam: hydrate the RouteDecision ring once
+  // from the vault's `token_usage` ledger (provider/model/cost per completed
+  // call) so routing survives restarts. Best-effort — a missing vault or
+  // relay (e.g. first boot) leaves the ring empty and routing falls back to
+  // capability-filter + cost-sort until live turns record observations.
+  void sendRequest("usage/recent", { limit: 200 })
+    .then((res) => {
+      const rows = Array.isArray(res) ? (res as DurableUsageRow[]) : [];
+      if (rows.length > 0) {
+        hydrateObservations(rows);
+      }
+    })
+    .catch(() => {
+      /* best-effort — ring stays empty */
+    });
   // First byte on stdout → supervisor promotes Starting → Running.
   announceReady();
   // Keeps the supervisor's idle watchdog (30s) from false-killing an idle

@@ -19,6 +19,7 @@ import type { ChatMessage } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import ArtifactCard from './artifact-card'
+import { staggerStyle } from '@/lib/stagger'
 import McqInterruptCard from './mcq-interrupt-card'
 import ProgressSteps from './progress-steps'
 import ToolChips from './tool-chip'
@@ -310,8 +311,11 @@ export default function MessageBubble({ message, streaming }: Props) {
 
         {message.artifacts && message.artifacts.length > 0 && (
           <div className="grid gap-2 sm:grid-cols-2">
-            {message.artifacts.map((a) => (
-              <ArtifactCard key={a.id} artifact={a} />
+            {message.artifacts.map((a, i) => (
+              // P35.2 — entrance stagger on artifact cards.
+              <div key={a.id} className="enter-stagger" style={staggerStyle(i)}>
+                <ArtifactCard artifact={a} />
+              </div>
             ))}
           </div>
         )}

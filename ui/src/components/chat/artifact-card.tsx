@@ -1,6 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
+  Check,
   Code,
   Copy,
   Download,
@@ -9,13 +11,17 @@ import {
   FileSpreadsheet,
   FileText,
   Image as ImageIcon,
+  Loader2,
+  MonitorSmartphone,
   Presentation,
+  X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useAppStore, type Artifact } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { preciseFigures } from '@/lib/plain-language'
 
 function TypeIcon({ type, className }: { type: Artifact['type']; className?: string }) {
   const cls = cn('h-3.5 w-3.5', className)
@@ -28,6 +34,8 @@ function TypeIcon({ type, className }: { type: Artifact['type']; className?: str
       return <Presentation className={cls} />
     case 'pdf':
       return <FileText className={cls} />
+    case 'webapp':
+      return <MonitorSmartphone className={cls} />
     case 'code':
       return <Code className={cls} />
     case 'image':
@@ -39,6 +47,7 @@ function TypeIcon({ type, className }: { type: Artifact['type']; className?: str
 
 function TypeAccent({ type }: { type: Artifact['type'] }) {
   const map: Record<Artifact['type'], string> = {
+    webapp: 'text-emerald-400',
     xlsx: 'text-emerald-400',
     docx: 'text-sky-300',
     pptx: 'text-orange-400',
@@ -50,7 +59,8 @@ function TypeAccent({ type }: { type: Artifact['type'] }) {
   return <span className={map[type]} />
 }
 
-function Preview({ type }: { type: Artifact['type'] }) {
+function Preview({ artifact }: { artifact: Artifact }) {
+  const type = artifact.type
   switch (type) {
     case 'xlsx':
       return (
@@ -134,6 +144,20 @@ function Preview({ type }: { type: Artifact['type'] }) {
       return (
         <div className="aspect-video w-full rounded bg-gradient-to-br from-fuchsia-500/40 via-orange-500/30 to-amber-500/40" />
       )
+    case 'webapp':
+      return (
+        <div className="relative aspect-video w-full overflow-hidden rounded border border-border bg-zinc-950">
+          <div className="absolute inset-x-0 top-0 flex h-4 items-center gap-1 border-b border-border/60 px-1.5">
+            <span className="size-1 rounded-full bg-red-400/70" />
+            <span className="size-1 rounded-full bg-amber-400/70" />
+            <span className="size-1 rounded-full bg-emerald-400/70" />
+          </div>
+          <div className="flex h-full items-center justify-center pt-3 text-[9px] text-emerald-300/80">
+            <MonitorSmartphone className="mr-1 h-3 w-3" />
+            live on 127.0.0.1:{artifact.server?.port ?? '…'}
+          </div>
+        </div>
+      )
     default:
       return null
   }
@@ -151,7 +175,15 @@ export default function ArtifactCard({ artifact }: Props) {
 
   return (
     <Card
-      onClick={() => artifact.view && setActiveView(artifact.view)}
+      onClick={() => {
+        const p = artifact.path ?? artifact.preview ?? artifact.name
+        if (/\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(p) || /\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(artifact.name)) {
+          const file = /\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(p) ? p : artifact.name
+          useAppStore.getState().openOfficeDoc(file)
+          return
+        }
+        if (artifact.view) setActiveView(artifact.view)
+      }}
       className="group cursor-pointer gap-0 overflow-hidden border-border bg-card/60 p-0 transition-colors hover:border-orange-500/40"
     >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -169,13 +201,36 @@ export default function ArtifactCard({ artifact }: Props) {
             Live
           </Badge>
         )}
+        {/* P32.3 — precise numbers in outputs (competence via precision). */}
+        <Badge
+          variant="outline"
+          className="ml-auto shrink-0 border-emerald-500/30 bg-emerald-500/5 font-mono text-[9px] text-emerald-300"
+          title="Exact figures from this run's receipt"
+        >
+          {preciseFigures(artifact).join(' · ')}
+        </Badge>
       </div>
 
       <div className="px-3 pt-2.5 pb-3">
-        <Preview type={artifact.type} />
+        <Preview artifact={artifact} />
         <p className="mt-2 truncate font-mono text-[10px] text-muted-foreground">
           {artifact.preview}
         </p>
+
+        {/* P15-H29 — inline artifact action checklist (bolt.diy Artifact.tsx
+            pattern): auto-expands while any action is running, collapses to
+            a progress line when everything is terminal. */}
+        {artifact.actions && artifact.actions.length > 0 && (
+          <div className="mt-2 border-t border-border pt-2">
+            <ActionChecklist
+              key={artifact.id}
+              actions={artifact.actions}
+              running={
+                artifact.actions.some((a) => a.state === 'running' || a.state === 'pending')
+              }
+            />
+          </div>
+        )}
 
         <div className="mt-2.5 flex items-center gap-1 border-t border-border pt-2">
           <Button
@@ -229,5 +284,88 @@ export default function ArtifactCard({ artifact }: Props) {
         </div>
       </div>
     </Card>
+  )
+}
+
+/* ---- P15-H29 inline action checklist ---- */
+
+function ActionChecklist({
+  actions,
+  running,
+}: {
+  actions: NonNullable<Artifact['actions']>
+  running: boolean
+}) {
+  const done = actions.filter((a) => a.state === 'complete').length
+  const failed = actions.filter((a) => a.state === 'failed').length
+  // Auto-expand while running; collapse to a one-line progress summary once
+  // everything is terminal (bolt.diy Artifact.tsx behavior).
+  const [expanded, setExpanded] = useState(running)
+  useEffect(() => {
+    if (running) setExpanded(true)
+  }, [running])
+
+  return (
+    <div className="rounded-md border border-border/70 bg-background/40">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+      >
+        {running ? (
+          <Loader2 className="h-3 w-3 animate-spin text-orange-400" />
+        ) : failed > 0 ? (
+          <X className="h-3 w-3 text-rose-400" />
+        ) : (
+          <Check className="h-3 w-3 text-emerald-400" />
+        )}
+        <span className="text-[10px] font-medium text-foreground">
+          Actions {done}/{actions.length}
+        </span>
+        {failed > 0 && (
+          <span className="text-[10px] text-rose-400">{failed} failed</span>
+        )}
+        <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+          {expanded ? '−' : '+'}
+        </span>
+      </button>
+      {expanded && (
+        <ol className="space-y-0.5 border-t border-border/70 px-2.5 py-1.5">
+          {actions.map((a) => (
+            <li key={a.index} className="flex items-center gap-2 text-[10px]">
+              <span
+                className={cn(
+                  'flex size-3.5 shrink-0 items-center justify-center rounded-full border',
+                  a.state === 'complete' && 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400',
+                  a.state === 'running' && 'border-orange-500/40 bg-orange-500/10 text-orange-300',
+                  a.state === 'failed' && 'border-rose-500/40 bg-rose-500/10 text-rose-400',
+                  a.state === 'aborted' && 'border-muted-foreground/40 text-muted-foreground',
+                  a.state === 'pending' && 'border-muted-foreground/30 text-muted-foreground/50'
+                )}
+              >
+                {a.state === 'complete' && <Check className="h-2 w-2" />}
+                {a.state === 'running' && <Loader2 className="h-2 w-2 animate-spin" />}
+                {a.state === 'failed' && <X className="h-2 w-2" />}
+                {a.state === 'aborted' && <X className="h-2 w-2" />}
+              </span>
+              <span
+                className={cn(
+                  'truncate font-mono',
+                  a.state === 'failed' ? 'text-rose-300/90' : 'text-foreground/80',
+                  a.state === 'pending' && 'text-muted-foreground/60'
+                )}
+              >
+                {a.label}
+              </span>
+              {a.state === 'failed' && a.formatted && (
+                <span className="ml-auto shrink-0 font-mono text-[9px] text-rose-400/80">
+                  {a.formatted}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   )
 }

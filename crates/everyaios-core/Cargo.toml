@@ -17,6 +17,8 @@ everyaios-audit = { path = "../everyaios-audit" }
 everyaios-script = { path = "../everyaios-script" }
 everyaios-storage = { path = "../everyaios-storage" }
 everyaios-eval = { path = "../everyaios-eval" }
+everyaios-office = { path = "../everyaios-office" }
+everyaios-search = { path = "../everyaios-search" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
@@ -31,6 +33,13 @@ rand = { workspace = true }
 opentelemetry = { workspace = true }
 ureq = { workspace = true }
 sysinfo = "0.30"
+
+[dev-dependencies]
+# P10 E2E/bench suites — browser tree/diff/ownership compose the pipeline
+# tests and the snapshot/tab benchmarks (production build unaffected).
+everyaios-browser = { path = "../everyaios-browser" }
+# TabRegistry::sync_targets takes cdp TargetInfo (the ownership stress bench).
+everyaios-cdp = { path = "../everyaios-cdp" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

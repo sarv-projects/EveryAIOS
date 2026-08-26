@@ -189,17 +189,29 @@ pub fn setup_vault_passphrase(
     })
 }
 
-/// Unlock an existing passphrase keyfile (subsequent launches).
+// Thread-local carry for the unlock passphrase — never copied into the
+// process environment (bugfix 16), so it can't leak into `/proc/<pid>/environ`
+// or be inherited by child processes. Cleared immediately after the KDF.
+thread_local! {
+    static UNLOCK_PASSPHRASE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn with_unlock_passphrase<T>(passphrase: Option<String>, f: impl FnOnce() -> T) -> T {
+    UNLOCK_PASSPHRASE.with(|cell| *cell.borrow_mut() = passphrase);
+    let out = f();
+    UNLOCK_PASSPHRASE.with(|cell| *cell.borrow_mut() = None);
+    out
+}
+
+/// Unlock an existing passphrase keyfile (subsequent launches). The passphrase
+/// is carried thread-locally for the KDF and cleared afterwards — it is never
+/// placed in the process environment.
 pub fn unlock_vault_passphrase(
     data_dir: &Path,
     passphrase: &str,
 ) -> Result<ResolvedVaultKey, VaultKeyError> {
-    std::env::set_var("EVERYAIOS_VAULT_PASSPHRASE", passphrase);
-    let r = resolve_vault_key(data_dir);
-    if r.is_err() {
-        std::env::remove_var("EVERYAIOS_VAULT_PASSPHRASE");
-    }
-    r
+    with_unlock_passphrase(Some(passphrase.to_string()), || resolve_vault_key(data_dir))
 }
 
 fn generate_keyfile(data_dir: &Path) -> Result<ResolvedVaultKey, VaultKeyError> {
@@ -242,8 +254,11 @@ fn open_keyfile(path: &Path) -> Result<ResolvedVaultKey, VaultKeyError> {
             path: Some(path.display().to_string()),
         });
     }
-    let pass =
-        std::env::var("EVERYAIOS_VAULT_PASSPHRASE").map_err(|_| VaultKeyError::NeedsSetup)?;
+    // Prefer the thread-local unlock passphrase (bugfix 16 — never leaked into
+    // the environment); env fallback remains for env-driven/test flows.
+    let pass = UNLOCK_PASSPHRASE.with(|c| c.borrow().clone())
+        .or_else(|| std::env::var("EVERYAIOS_VAULT_PASSPHRASE").ok())
+        .ok_or(VaultKeyError::NeedsSetup)?;
     let salt = unhex(&rec.salt_hex).map_err(VaultKeyError::Kdf)?;
     let wrapping = derive(&pass, &salt)?;
     let key = if let Some(w) = rec.wrapped_key_hex.as_deref() {

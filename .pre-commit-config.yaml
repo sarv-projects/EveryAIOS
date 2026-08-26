@@ -1,0 +1,56 @@
+# EveryAIOS — pre-commit hooks (P10.5).
+#
+# Install with:  pip install pre-commit && pre-commit install
+# Then every commit runs: Rust fmt + clippy (workspace), UI eslint
+# (via next-eslint bridge — see below), and the UI + coordinator
+# type-checks. The heavy cargo test suite stays in CI (the matrix runs it);
+# local hooks keep the fast, mechanical gates.
+#
+# `repo: local` hooks run against the checked-out tree — no network fetch of
+# third-party hook repos at install time.
+
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt (workspace)
+        entry: bash -c 'cd crates && cargo fmt --all -- --check'
+        language: system
+        pass_filenames: false
+        files: \.(rs)$
+        stages: [pre-commit]
+
+      - id: cargo-clippy
+        name: cargo clippy (workspace, -D warnings)
+        entry: bash -c 'cd crates && cargo clippy --all-targets --all-features -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: \.(rs)$
+        stages: [pre-commit]
+
+      - id: ui-typecheck
+        name: ui typecheck (tsc --noEmit)
+        entry: bash -c 'cd ui && npm run type-check'
+        language: system
+        pass_filenames: false
+        files: ^ui/src/.*\.(ts|tsx)$
+        stages: [pre-commit]
+
+      - id: coordinator-typecheck
+        name: coordinator typecheck (tsc --noEmit)
+        entry: bash -c 'cd packages/coordinator && bun run type-check'
+        language: system
+        pass_filenames: false
+        files: ^packages/coordinator/src/.*\.ts$
+        stages: [pre-commit]
+
+      # The UI has no eslint config yet (the design-system pass standardized on
+      # tsc --noEmit as the mechanical gate). Keep the hook shape so enabling
+      # eslint later is a one-line change, and run tsc as the actual check.
+      - id: ui-lint
+        name: ui lint (tsc --noEmit as the JS mechanical gate)
+        entry: bash -c 'cd ui && npm run type-check'
+        language: system
+        pass_filenames: false
+        files: ^ui/src/.*\.(ts|tsx)$
+        stages: [pre-commit]

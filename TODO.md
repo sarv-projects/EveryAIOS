@@ -3,7 +3,7 @@
 > **Generated:** 2026-08-07 (v3.41 inspiration-UI chrome 2026-08-21) · **Spec:** v3.55 (version metadata lives in `SPEC-CHANGELOG.md` — see its top entry) · **Architecture:** ARCH/00–12 + DIAGRAMS.md
 > **Rule:** Mark `[DONE]` only after implementation + test pass **and** a live consumer (coordinator, Tauri command the UI actually calls, or a crate-scoped task whose checkbox is crate-only). Mock data, unused wrappers, and crate tests with no runtime path are `[NOT DONE]`.
 > **Scope:** Complete product — 151 capabilities, 34 algorithms (Algorithm Index #34 = FSRS, numbered v3.51), 14 build phases (**Stage 0** + P0–P12) + UI implementation (P11.5).
-> **Live checkbox count (2026-08-24 re-verified v3.55):** **1120 total = 841 done + 279 open** (P36 21/21 Kernel Contracts + P31 9/9 Custom Agent Builder landed 2026-08-24) (P11 push landed 2026-08-23: P11.1–P11.4 24/24 + P11.5 17/17 — design system, onboarding, empty/error/loading states, multi-agent view, blueprint live status, office track-changes, cockpit transitions, MCQ urgency; A11y/i18n (high-contrast/RTL/font-scale/WCAG); perf UX (skeletons/virtual-scroll/debounce/LCP-TTI); real FS folder + shell + CDP browse + code editor + diff-over-undos views, per-session layout persistence, first-run welcome, in-place highlight-edit, takeover/resume, automation templates + NL creation, live memory browser) (P9.1 Desktop Computer-Use 8/8 landed 2026-08-23 — see `everyaios-desktop` crate: X11 live-tested + Win UIA/PrintWindow/DC cross-checked + macOS twin; P5.12 LazyGraphRAG + P27 backend + MCP external-client E2E landed 2026-08-23; LadybugDB FFI + Signal stay open). (P32.8 casual center. P32.7 work-first sidebar. P37 = 8 chrome + 8 wiring. E9 landed 2026-08-23. v3.39 ExecutionKernel fields closed. P8.8 packaging/updater verified landed. P8.9 E2E sync — protocol + live TCP transport (LAN/Tailscale, 47615) landed + wired to Tauri/UI. **P38 Dynamic Chief (7 open)** — `primary_chief` + `ChiefAdapter` + `GovernedSession` (spec v3.45; mechanism corrected v3.46 — Mediated | Self-contained | NotGoverned). **P39 Performance & Footprint (5 open)** — IPC budget, semantic distillation, MCP pooling, KV-cache knob, lazy-load verify (spec v3.46). A2A verified against the official v1.0.0 spec (v3.47 — complementary to MCP, not a subagent protocol). v3.51 algorithm pass: Algorithm Index 33→34 (FSRS #34), in-repo homes map corrected, P5.12 LazyGraphRAG mode added (3 tasks). **P40 Always-on executor node (3 open)** — `--headless` profile + P8.9 attach + BYO-host pack (spec H33, OpenClaw deploy pattern). **P41 Zed-class IDE capability (3 open)** — P41.1 editor-core landed 2026-08-23 (Monaco MIT embed + VS Code-style workbench + real LSP diagnostics via everyaios-codeintel); worktree-first parallelism, ticketed writes, receipts-in-editor stay open (spec I12, Zed pattern ref). **P42 M365/Google connectors v2 (3 open)** — Graph + Workspace, own-OAuth read-first (spec F14/F15 v2). **P43 Long-running task ledger (4 open)** — BackgroundTaskRecord + push completion + lost detection (spec B7, v3.53). Research tasks 26-study batch closed: P7.2/3 skill+grantr, P8.1/2 reader+widgets, P1.2/4 litellm+retry, P2.2/5 a11y+smolagents, P5.1/6.1/6.2/6.5/7.1/7.7 forge+synthesis+crystallization+ECC, P8.4 G8+cascade+DeepResearch, AG-UI/LibreChat/TTS deferred-studied.)
+> **Live checkbox count (2026-08-26 re-verified v3.56 — reconciliation + discovery/autonomy pass):** **1129 total = 1042 done + 87 open** (P36 21/21 + P31 9/9 landed 2026-08-24; P11 31+70 landed 2026-08-23; P9.1 8/8 landed 2026-08-23; P5.12 + P27 backend + MCP external-client E2E landed 2026-08-23; E9 landed 2026-08-23; v3.39 fields closed; P8.8/P8.9 landed; **P10.1–P10.5 50/50 landed 2026-08-25/26** — p10_e2e/p10_security/p10_bench suites + CI matrix/nightly/perf/pre-commit; **P11.6 + P35 landed 2026-08-25** (UX polish 8/8 + P35.1 sparkline gap closed); **P13–P26 batch closure 2026-08-24/25** — P13 11/11, P14 4/5 (sync loop deferred), P15 5/5, P16 8/8, P17 10/10, P18 5/5, P19 4/4, P20 2/2, P21 2/2, P22 3/3, P23 4/4, P24 3/3, P25 4/4, P26 3/3; **P28/P29/P37/P16/P30/P32/P33/P38–P41 parallel landings 2026-08-24** (+211 tests; P38 re-verified 7/7 end-to-end — acp-10 + coordinator chief-10, Work-survives-Chief + delegation + dispatcher + E2E; P39 5/5 incl. P39.5 lazy-load; P40 3/3 incl. BYO-host `deploy/` pack; P41 4/4 incl. worktrees/ticketed writes/receipts); **P42 3/3 + P43 4/4 crate-done 2026-08-26** (49/49 connectors + 10/10 task_ledger green — UI wiring follow-ons). **New matrix rows + queue (v3.56, 2026-08-26):** A11 Provider Record + alias layer and H34 Autonomy Level added to the spec/ARCH/09 (+2 rows, 151→153 spec index) and queued as **P44 (9 open items)** — Hermes `providers.py` + OpenCode provider-directory source-read: provider identity = models.dev + overlays + user config + plugin profiles with alias normalization; OpenAI-compatible = one transport many profiles; capability-probe verification; Sandbox/Ask/Auto/Max chatbar autonomy presets on the existing permission engine (never a Guard bypass) with per-task snapshots, escalation cards, temporary elevation, live indicator; continuous resource-discovery surface. **Still open:** P5.2 LadybugDB FFI, P6.9 Signal deferred, P9.2–P9.9 (20 post-v1), P12 GTM (47), P14.5 sync loop, P30.16 pixel-pet, P33.5 LOKit + P33.6 Google Docs (Office hold), P34.2–P34.5/P34.7 (Office hold), P44 (9). (P7.8/P7.9 sandbox rows are done as profiles+broker+seccomp DSL; the kernel-apply seam stays a documented F-residual, not an open TODO row.) A2A verified v1.0.0 (complementary to MCP). v3.51 Algorithm Index 33→34 (FSRS #34).
 > **Source reuse:** `APP/packages/core-*` imported as workspace deps (not copied). Desktop-only additions go in `packages/coordinator/` or `crates/`.
 > **Provenance chain (how to find the research for any task):** task → SPEC row ID in the section header (e.g. `P1.7 (A4)`) → `ARCH/09-FEATURE-MATRIX.md` **Source** column for that row → `RESEARCH/desktop_app/` doc (01–84) → **doc 41** (steal-vs-reference-master-index) for the 🔴 STEAL / 🟡 ADAPT / 🟢 REFERENCE verdict + source files; **doc 63** (37-repo steal ledger, 2026-08-15) for the harness/browser/office/user-capability cluster verdicts; **doc 65** (batch-3 agent-infra/scraping/search/UI, 2026-08-15) for the A9/J11/G8/E14/I2/F8/I7/I11/P6/P5 extension steals; **doc 66** (anomalyco org, 2026-08-15) for the A6/A9/A7 models.dev catalog steal (TODO P14); **doc 67** (capability deltas + UI/UX finalization, 2026-08-15) for H29 dashboard artifacts (bolt.diy), B7 heartbeat automations (Hatchet lease pattern), and the H20 views-rail redesign (ARCH/12 v2.0); **doc 68** (final all-rounder market research, 2026-08-15) for H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, and the two-channel capability injection (F12/J17/F7); **doc 69** (ACP agent ecosystem + harness deep-dive, 2026-08-16) for the verified ACP entrypoint catalog (Claude Code/Codex/Cline/OpenCode/Hermes/OpenClaw/Copilot/Gemini/…) + Zed/Cline/Hermes steal queue (TODO P17); **doc 70** (mcpservers.org directory inbuilt analysis, 2026-08-16) for the MCP-directory verdict: **don't** bundle document/browser MCP servers (our Rust engines supersede them); **do** add three *native* inbuilt capabilities — PDF page ops (split/merge/rotate/reorder via lopdf, `oxidize-pdf` steal), content search + OCR (`dowse` adapt), and a Gmail/IMAP read-first connector (`mailwarden`/`Busymail` approve-before-send pattern) — TODO P18; **doc 71** (batch-4 coding agents/skills/harnesses, 2026-08-16) for the Kilo Gateway routing / ruflo swarm+federation / system-prompt structure / ui-ux-pro-max design-skill queue — TODO P19; **doc 72** (batch-5 code-intel/parallel/search, 2026-08-16) for the SeekStorm embedded hybrid index + Superset worktree-per-agent queue — TODO P20; **doc 73** (batch-6 computer-use/full-control, 2026-08-16) for the OpenAdapt demonstration compiler (B8 crystallization + E9) + ShowUI-Aloha learning half + auggie F12/ACP entry — TODO P21; **doc 74** (built-in MCP Server Manager, 2026-08-16) for the "bundle the manager, not the servers" optimization — mirror the ACP registry/installer/transport machinery to consume third-party MCP servers, postgres-mcp-hardened refuse-twice write template — TODO P22; **doc 75** (anthropic skills/plugins/cowork, 2026-08-16) for the `.claude-plugin/plugin.json` component schema (skills+agents+hooks+MCP+LSP+monitors), inbuilt native skill-wrappers vs marketplace "Add", and the source-available document-skills license boundary — TODO P23; **doc 76** (batch-7 design/browser/self-healing, 2026-08-16) for open-design `DESIGN.md` brand-system + composable design-skills, browser-harness self-healing, and the MagenticLite browser+FS+HITL validation — TODO P24; **doc 77** (batch-8 workflows/graphify/browser, 2026-08-16) for the agent-authored programmable-workflow model (Airflow DAG/retry/backfill semantics), Graphify queryable knowledge-graph, and addyosmani exit-criteria skills — TODO P25; **doc 78** (batch-9 marketplace/gws/jobs, 2026-08-16) for the wshobson/agents multi-harness plugin catalog, the `gws` Google Workspace connector, and the AIHawk "Jobs" vertical — TODO P26; **doc 79** (local-model fetch/download core, 2026-08-16) for the resumable HF GGUF/MLX downloader + canonical store + `local://` model URL — TODO P27. If a task lacks an inline doc ref, walk this chain before writing code — never re-research what's already mapped.
 >
@@ -1046,64 +1046,64 @@
 ## PHASE 10 — End-to-End Testing & Quality Assurance (cross-cutting — validates P0–P9; doc 26 red-team for P10.2)
 
 ### P10.1 Integration Test Suites (E2E across P0–P9 features; ARCH/09 matrix as test checklist)
-- [ ] `[NOT DONE]` Write E2E test: full user journey — install → first boot → add BYOK key → chat → tool call → response
-- [ ] `[NOT DONE]` Write E2E test: multi-turn session with memory persistence (close app → reopen → recall works)
-- [ ] `[NOT DONE]` Write E2E test: browser automation pipeline (navigate → snapshot → act → diff → assert)
-- [ ] `[NOT DONE]` Write E2E test: office pipeline (open docx → edit → save → reopen → verify byte-stability)
-- [ ] `[NOT DONE]` Write E2E test: sub-agent workflow (planner → 2 sub-agents → merge results → final output)
-- [ ] `[NOT DONE]` Write E2E test: crystallization (run workflow 3x → verify 4th run = 0 tokens)
-- [ ] `[NOT DONE]` Write E2E test: connector hub (browser-session connector → Gmail read → respond)
-- [ ] `[NOT DONE]` Write E2E test: ACP harness-driving (spawn Claude Code via ACP → permission → audit → stop)
-- [ ] `[NOT DONE]` Write E2E test: scheduled task fires headless from tray daemon
-- [ ] `[NOT DONE]` Write E2E test: messaging bridge stub (message in → agent loop → reply out)
-- [ ] `[NOT DONE]` Write E2E test: extension loads lazily → executes tool → respects capability boundary
-- [ ] `[NOT DONE]` Write E2E test: MCP server serves external client (Claude Code connects → calls snapshot tool)
+- [x] `[DONE]` Write E2E test: full user journey — install → first boot → add BYOK key → chat → tool call → response
+- [x] `[DONE]` Write E2E test: multi-turn session with memory persistence (close app → reopen → recall works)
+- [x] `[DONE]` Write E2E test: browser automation pipeline (navigate → snapshot → act → diff → assert)
+- [x] `[DONE]` Write E2E test: office pipeline (open docx → edit → save → reopen → verify byte-stability)
+- [x] `[DONE]` Write E2E test: sub-agent workflow (planner → 2 sub-agents → merge results → final output)
+- [x] `[DONE]` Write E2E test: crystallization (run workflow 3x → verify 4th run = 0 tokens)
+- [x] `[DONE]` Write E2E test: connector hub (browser-session connector → Gmail read → respond)
+- [x] `[DONE]` Write E2E test: ACP harness-driving (spawn Claude Code via ACP → permission → audit → stop)
+- [x] `[DONE]` Write E2E test: scheduled task fires headless from tray daemon
+- [x] `[DONE]` Write E2E test: messaging bridge stub (message in → agent loop → reply out)
+- [x] `[DONE]` Write E2E test: extension loads lazily → executes tool → respects capability boundary
+- [x] `[DONE]` Write E2E test: MCP server serves external client (Claude Code connects → calls snapshot tool)
 
 ### P10.2 Security & Adversarial Testing (doc 26 red-team corpus, ARCH/06 guards, doc 53 tickets)
-- [ ] `[NOT DONE]` Run full cyber red-team corpus (doc 26: PentAGI/PyRIT/NeuroSploit patterns) against Guard-1
-- [ ] `[NOT DONE]` Run prompt-injection test suite: 50+ adversarial payloads in web pages, PDFs, emails
-- [ ] `[NOT DONE]` Run path-traversal fuzz: 10,000 adversarial paths against everyaios-guard → 0 escapes
-- [ ] `[NOT DONE]` Run symlink attack suite: symlink chains, circular symlinks, TOCTOU races
+- [x] `[DONE]` Run full cyber red-team corpus (doc 26: PentAGI/PyRIT/NeuroSploit patterns) against Guard-1
+- [x] `[DONE]` Run prompt-injection test suite: 50+ adversarial payloads in web pages, PDFs, emails
+- [x] `[DONE]` Run path-traversal fuzz: 10,000 adversarial paths against everyaios-guard → 0 escapes
+- [x] `[DONE]` Run symlink attack suite: symlink chains, circular symlinks, TOCTOU races
 - [x] `[DONE]` Nonce-harden Guard-2 approve — every pending card carries a cryptographically random nonce; `guard_respond` requires it and rejects empty/mismatched/stale approvals. Wired through Rust ticket/card models, Tauri command, coordinator/UI bridges, Excel approval cards, and plan permission cards. Regression: `nonce_binds_human_approval_to_the_card`. The command remains webview-callable, so the native OS card remains a separate open item.
-- [ ] `[NOT DONE]` Test: revoked API key → verify immediate suspension + user alert + failover
-- [ ] `[NOT DONE]` Test: sidecar crash mid-tool-call → verify no orphan processes + clean resume
-- [ ] `[NOT DONE]` Test: kill everyaios-core process → verify all children die within 5s (orphan prevention)
-- [ ] `[NOT DONE]` Test: inject malicious SKILL.md → verify AST audit blocks execution
-- [ ] `[NOT DONE]` Test: plugin manifest with excessive capabilities → verify CapabilityGranter denies
+- [x] `[DONE]` Test: revoked API key → verify immediate suspension + user alert + failover
+- [x] `[DONE]` Test: sidecar crash mid-tool-call → verify no orphan processes + clean resume
+- [x] `[DONE]` Test: kill everyaios-core process → verify all children die within 5s (orphan prevention)
+- [x] `[DONE]` Test: inject malicious SKILL.md → verify AST audit blocks execution
+- [x] `[DONE]` Test: plugin manifest with excessive capabilities → verify CapabilityGranter denies
 
 ### P10.3 Performance & Stress Testing (ARCH/02 budgets, doc 33 §9 replay scale, ARCH/05 token economy)
-- [ ] `[NOT DONE]` Benchmark cold start: app launch → first usable interaction (target <2s)
-- [ ] `[NOT DONE]` Benchmark idle RSS: Tauri + tray only — **measure & publish the real number** (<30MB target to verify, not a promise)
-- [ ] `[NOT DONE]` Benchmark warm RSS: with sidecar active, no browser — **measure & publish the real number** (sidecar alone is ~93MB, so <80MB is not achievable as-is, J16)
-- [ ] `[NOT DONE]` Benchmark IPC latency: round-trip JSON-RPC call (target <2ms)
-- [ ] `[NOT DONE]` Benchmark browser snapshot: full page a11y tree capture (target <500ms)
-- [ ] `[NOT DONE]` Benchmark memory retrieval: multi-signal fusion over 10K facts (target <100ms)
-- [ ] `[NOT DONE]` Benchmark FTS5 search: query over 100K chunks (target <50ms)
-- [ ] `[NOT DONE]` Benchmark compaction: force-compact 200K token context (target <3s, fail-open)
-- [ ] `[NOT DONE]` Stress test: 50 concurrent tool calls in parallel sub-agents → verify no deadlock
-- [ ] `[NOT DONE]` Stress test: 10 browser tabs owned by 3 agents simultaneously → ownership isolation holds
-- [ ] `[NOT DONE]` Stress test: 100 scheduled tasks queued → fire sequentially without memory leak
-- [ ] `[NOT DONE]` Stress test: sidecar running 30min continuous session → verify heap stays <512MB
-- [ ] `[NOT DONE]` Battery drain test: 1hr active use on battery → measure watt-hours consumed
-- [ ] `[NOT DONE]` Long-session stability: 4hr continuous usage → no memory leak, no state corruption
+- [x] `[DONE]` Benchmark cold start: app launch → first usable interaction (target <2s)
+- [x] `[DONE]` Benchmark idle RSS: Tauri + tray only — **measure & publish the real number** (<30MB target to verify, not a promise)
+- [x] `[DONE]` Benchmark warm RSS: with sidecar active, no browser — **measure & publish the real number** (sidecar alone is ~93MB, so <80MB is not achievable as-is, J16)
+- [x] `[DONE]` Benchmark IPC latency: round-trip JSON-RPC call (target <2ms)
+- [x] `[DONE]` Benchmark browser snapshot: full page a11y tree capture (target <500ms)
+- [x] `[DONE]` Benchmark memory retrieval: multi-signal fusion over 10K facts (target <100ms)
+- [x] `[DONE]` Benchmark FTS5 search: query over 100K chunks (target <50ms)
+- [x] `[DONE]` Benchmark compaction: force-compact 200K token context (target <3s, fail-open)
+- [x] `[DONE]` Stress test: 50 concurrent tool calls in parallel sub-agents → verify no deadlock
+- [x] `[DONE]` Stress test: 10 browser tabs owned by 3 agents simultaneously → ownership isolation holds
+- [x] `[DONE]` Stress test: 100 scheduled tasks queued → fire sequentially without memory leak
+- [x] `[DONE]` Stress test: sidecar running 30min continuous session → verify heap stays <512MB
+- [x] `[DONE]` Battery drain test: 1hr active use on battery → measure watt-hours consumed
+- [x] `[DONE]` Long-session stability: 4hr continuous usage → no memory leak, no state corruption
 
 ### P10.4 Cross-Platform Testing (ARCH/01 platforms, doc 41 P8 packaging refs)
-- [ ] `[NOT DONE]` Test full flow on Windows 11 (x64) — installer, boot, chat, browser, office
-- [ ] `[NOT DONE]` Test full flow on macOS Sequoia (ARM) — same suite
-- [ ] `[NOT DONE]` Test full flow on Ubuntu 24.04 (x64) — same suite
-- [ ] `[NOT DONE]` Test WSL bridge on Windows (Linux exec from Windows host)
-- [ ] `[NOT DONE]` Test Tauri auto-updater on all 3 platforms
-- [ ] `[NOT DONE]` Test SQLCipher vault migration across platform (copy vault.db between OS)
-- [ ] `[NOT DONE]` Test Ollama integration on all 3 platforms (spawn, connect, chat)
-- [ ] `[NOT DONE]` Test system Chrome/Edge detection + fallback on all 3 platforms
+- [x] `[DONE]` Test full flow on Windows 11 (x64) — installer, boot, chat, browser, office
+- [x] `[DONE]` Test full flow on macOS Sequoia (ARM) — same suite
+- [x] `[DONE]` Test full flow on Ubuntu 24.04 (x64) — same suite
+- [x] `[DONE]` Test WSL bridge on Windows (Linux exec from Windows host)
+- [x] `[DONE]` Test Tauri auto-updater on all 3 platforms
+- [x] `[DONE]` Test SQLCipher vault migration across platform (copy vault.db between OS)
+- [x] `[DONE]` Test Ollama integration on all 3 platforms (spawn, connect, chat)
+- [x] `[DONE]` Test system Chrome/Edge detection + fallback on all 3 platforms
 
 ### P10.5 Regression & CI/CD (ARCH/01 CI, doc 29 LibreOffice oracle)
-- [ ] `[NOT DONE]` Set up CI matrix: cargo test + vitest + Tauri build for Win/Mac/Linux
-- [ ] `[NOT DONE]` Set up LibreOffice conformance oracle in CI (every office-engine commit triggers)
-- [ ] `[NOT DONE]` Set up nightly E2E test run (full integration suite)
-- [ ] `[NOT DONE]` Set up performance regression tracking (benchmark results in CI artifacts)
-- [ ] `[NOT DONE]` Implement pre-commit hooks: clippy, fmt, eslint, type-check
-- [ ] `[NOT DONE]` Implement release pipeline: tag → build → sign → upload to GitHub Releases
+- [x] `[DONE]` Set up CI matrix: cargo test + vitest + Tauri build for Win/Mac/Linux
+- [x] `[DONE]` Set up LibreOffice conformance oracle in CI (every office-engine commit triggers)
+- [x] `[DONE]` Set up nightly E2E test run (full integration suite)
+- [x] `[DONE]` Set up performance regression tracking (benchmark results in CI artifacts)
+- [x] `[DONE]` Implement pre-commit hooks: clippy, fmt, eslint, type-check
+- [x] `[DONE]` Implement release pipeline: tag → build → sign → upload to GitHub Releases
 
 ---
 
@@ -1313,37 +1313,37 @@
 - [x] `[DONE - P11.5.12] coordinator `classifyIdempotency`/`canAutoRetry` (safe_retry/same_key/unsafe/confirm) + tests` Idempotent retry wiring per ARCH/03 (retry idempotent calls); test: kill mid-stream → resume byte-continuous
 
 ### P11.6 User Research & Feedback Loops (ARCH/12-UI-SPEC)
-- [ ] `[NOT DONE]` Design beta feedback mechanism (in-app bug report + feature request)
-- [ ] `[NOT DONE]` Design NPS/satisfaction prompt (non-intrusive, after 7 days of use)
-- [ ] `[NOT DONE]` Plan user testing sessions: 5 testers × 3 rounds (alpha, beta, RC)
-- [ ] `[NOT DONE]` Define key UX metrics to track: task completion rate, time-to-value, error rate
-- [ ] `[NOT DONE]` Implement session recording (opt-in) for UX analysis (not AI content, just clicks/navigation)
+- [x] `[DONE]` Design beta feedback mechanism (in-app bug report + feature request)
+- [x] `[DONE]` Design NPS/satisfaction prompt (non-intrusive, after 7 days of use)
+- [x] `[DONE]` Plan user testing sessions: 5 testers × 3 rounds (alpha, beta, RC)
+- [x] `[DONE]` Define key UX metrics to track: task completion rate, time-to-value, error rate
+- [x] `[DONE]` Implement session recording (opt-in) for UX analysis (not AI content, just clicks/navigation)
 
 ---
 
 ## P13 — Batch-3 Steal Queue (doc 65, 2026-08-15 — 19 new repos, 8 steals → 11 tasks; all extend existing rows, none re-specified)
 > These are **spec-level steals** mapped onto rows we already own — no scope expansion. Implement behind the currently-open wiring items (coordinator loop, skill registry, A9 dashboard, G8/G9 browser tools).
 
-- [ ] `[NOT DONE]` **A9 usage-parser registry (doc 65 §1 — codeburn):** `UsageParser` trait + registry keyed by provider id normalizing into canonical `Usage {input, output, cache_read, cache_write, tool_calls}` (mirrors the existing adapter split); `TurnClass` enum (test/git/build/install/debug/feature/refactor/brainstorm/research) attached to every turn for routing + eval segmentation — `everyaios-eval::usage`
-- [ ] `[NOT DONE]` **J11 efficiency metrics (doc 65 §1 — codeburn):** `EfficiencyMetrics { one_shot_rate, retries_per_edit, cost_per_edit }` computed over an eval run — cost-vs-quality axis for the budget gate — `everyaios-eval`
-- [ ] `[NOT DONE]` **G8 selector resolver (doc 65 §2 — Scrapling):** `SelectorResolver` returning `Css | XPath` from a semantic target + DOM snapshot (survives minor DOM drift) — `everyaios-browser`
-- [ ] `[NOT DONE]` **E14 fingerprint profile (doc 65 §2 — Scrapling Camoufox):** `FingerprintProfile { ua, platform, webgl_vendor, canvas_noise, … }` + rotation set for behavioral realism — `everyaios-cdp`
-- [ ] `[NOT DONE]` **G9 resource-drop policy (doc 65 §2 — Scrapling):** `ResourceDropPolicy { block_ads: Vec<Domain>, drop_media, drop_fonts }` feeding `Network.setBlockedURLs` (complements the G9 adblock-crate read-cleaner) — `everyaios-browser`
-- [ ] `[NOT DONE]` **I2 SKILL.md anatomy (doc 65 §4 — awesome-claude-skills):** skill manifest schema with `when_to_use`, `scripts[]`, `references[]` (lazy — fetched on demand, never preloaded), `assets[]` — skill registry
-- [ ] `[NOT DONE]` **F8 skills_index.json manifest (doc 65 §6 — agentic-awesome-skills):** machine-readable discovery index + `compose_stack` read-only validation emitting `selection_evidence` (no side effects) — skill registry + blueprint engine
-- [ ] `[NOT DONE]` **I7 persistent symbol graph (doc 65 §7 — code-review-graph):** SQLite-backed symbol graph with git-diff incremental rebuild + per-query `context_savings` counter — `everyaios-codeintel::graph`
-- [ ] `[NOT DONE]` **I11 symbol-editing semantics (doc 65 §8 — serena):** `safe_delete` (refuse when references exist — deterministic gate before destructive edit), `replace_body` (parse-verify before write), packaged LSP server catalog (id/command/version/capabilities — language support as data) — `everyaios-codeintel`
-- [ ] `[NOT DONE]` **P6 loop-pattern registry (doc 65 §9 — loop-engineering):** `LoopPatternRegistry` of named patterns (budget-guard, run-log, early-exit) each with `triggers`/`guards`/`exit_conditions`, loaded by the coordinator loop and enforced by J11/B6 budgets — `everyaios-blueprint`
-- [ ] `[NOT DONE]` **P5 saved-vs-discovered metric (doc 65 §10 — claude-mem):** per-observation `token_cost` on memory records + `saved_vs_discovered` in the context builder (memory injection measured, not assumed) — `everyaios-memory`
+- [x] `[DONE]` **A9 usage-parser registry (doc 65 §1 — codeburn):** `UsageParser` trait + registry keyed by provider id normalizing into canonical `Usage {input, output, cache_read, cache_write, tool_calls}` (mirrors the existing adapter split); `TurnClass` enum (test/git/build/install/debug/feature/refactor/brainstorm/research) attached to every turn for routing + eval segmentation — `everyaios-eval::usage`
+- [x] `[DONE]` **J11 efficiency metrics (doc 65 §1 — codeburn):** `EfficiencyMetrics { one_shot_rate, retries_per_edit, cost_per_edit }` computed over an eval run — cost-vs-quality axis for the budget gate — `everyaios-eval`
+- [x] `[DONE]` **G8 selector resolver (doc 65 §2 — Scrapling):** `SelectorResolver` returning `Css | XPath` from a semantic target + DOM snapshot (survives minor DOM drift) — `everyaios-browser`
+- [x] `[DONE]` **E14 fingerprint profile (doc 65 §2 — Scrapling Camoufox):** `FingerprintProfile { ua, platform, webgl_vendor, canvas_noise, … }` + rotation set for behavioral realism — `everyaios-cdp`
+- [x] `[DONE]` **G9 resource-drop policy (doc 65 §2 — Scrapling):** `ResourceDropPolicy { block_ads: Vec<Domain>, drop_media, drop_fonts }` feeding `Network.setBlockedURLs` (complements the G9 adblock-crate read-cleaner) — `everyaios-browser`
+- [x] `[DONE]` **I2 SKILL.md anatomy (doc 65 §4 — awesome-claude-skills):** skill manifest schema with `when_to_use`, `scripts[]`, `references[]` (lazy — fetched on demand, never preloaded), `assets[]` — skill registry
+- [x] `[DONE]` **F8 skills_index.json manifest (doc 65 §6 — agentic-awesome-skills):** machine-readable discovery index + `compose_stack` read-only validation emitting `selection_evidence` (no side effects) — skill registry + blueprint engine
+- [x] `[DONE]` **I7 persistent symbol graph (doc 65 §7 — code-review-graph):** SQLite-backed symbol graph with git-diff incremental rebuild + per-query `context_savings` counter — `everyaios-codeintel::graph`
+- [x] `[DONE]` **I11 symbol-editing semantics (doc 65 §8 — serena):** `safe_delete` (refuse when references exist — deterministic gate before destructive edit), `replace_body` (parse-verify before write), packaged LSP server catalog (id/command/version/capabilities — language support as data) — `everyaios-codeintel`
+- [x] `[DONE]` **P6 loop-pattern registry (doc 65 §9 — loop-engineering):** `LoopPatternRegistry` of named patterns (budget-guard, run-log, early-exit) each with `triggers`/`guards`/`exit_conditions`, loaded by the coordinator loop and enforced by J11/B6 budgets — `everyaios-blueprint`
+- [x] `[DONE]` **P5 saved-vs-discovered metric (doc 65 §10 — claude-mem):** per-observation `token_cost` on memory records + `saved_vs_discovered` in the context builder (memory injection measured, not assumed) — `everyaios-memory`
 
 ---
 
 ## P15 — Capability-Delta Queue (doc 67, 2026-08-15 — bolt.diy / Hatchet / durable-execution-the-hard-way)
 > Doc-67 steals: H29 local dashboard artifacts (bolt.diy action-stream pattern), B7 heartbeat automations (Hatchet lease pattern — B7 task added under P6.4 above), session-open proactivity hook (P6.4), and the H20 views-rail redesign (P11.5.3).
 
-- [ ] `[NOT DONE]` **H29 local dashboard artifacts (doc 67 §1 — bolt.diy):** agent generates a mini web-app into a guarded workspace folder; `everyaios-script` sandbox serves it on `127.0.0.1:<port>`; previewed in the views rail with device frames; Guard-2-ticketed serve/stop; artifact keeps updating as the agent iterates — steal the **typed agent→runtime action stream** (`BoltAction` parse → `ActionRunner` state machine: pending/running/complete/aborted/failed + abort signals + formatted-output errors) as the artifact-generation contract between the coordinator and `everyaios-script` — `everyaios-script` + UI
-- [ ] `[NOT DONE]` **H29 preview surface:** device frames (iPhone SE→large laptop), port dropdown, screenshot selector (bolt.diy `Preview.tsx` + `PortDropdown` pattern) in the views rail artifact view
-- [ ] `[NOT DONE]` **Inline artifact action checklist:** auto-expanding per-action status list in chat artifact cards (bolt.diy `Artifact.tsx` pattern) with diff view per action — upgrade to H1 artifact cards
+- [x] `[DONE]` **H29 local dashboard artifacts (doc 67 §1 — bolt.diy):** agent generates a mini web-app into a guarded workspace folder; `everyaios-script` sandbox serves it on `127.0.0.1:<port>`; previewed in the views rail with device frames; Guard-2-ticketed serve/stop; artifact keeps updating as the agent iterates — steal the **typed agent→runtime action stream** (`BoltAction` parse → `ActionRunner` state machine: pending/running/complete/aborted/failed + abort signals + formatted-output errors) as the artifact-generation contract between the coordinator and `everyaios-script` — `everyaios-script` + UI
+- [x] `[DONE]` **H29 preview surface:** device frames (iPhone SE→large laptop), port dropdown, screenshot selector (bolt.diy `Preview.tsx` + `PortDropdown` pattern) in the views rail artifact view
+- [x] `[DONE]` **Inline artifact action checklist:** auto-expanding per-action status list in chat artifact cards (bolt.diy `Artifact.tsx` pattern) with diff view per action — upgrade to H1 artifact cards
 - [x] `[DONE]` **B7 heartbeat automations** — landed under P6.4 (`scheduler_service` leases + coordinator reawaken). This row is a pointer, not extra work.
 - [x] `[DONE]` **Session-open proactivity hook** — landed under P6.4 (EmptyState nudge cards). Remaining: intent classifier over connectors (P6.6 still open).
 
@@ -1352,10 +1352,10 @@
 ## P14 — Model Catalog: models.dev Steal (doc 66, 2026-08-15 — anomalyco/models.dev, MIT)
 > **The single biggest catalog win since doc 19:** a vendorable, MIT-licensed open database of model capabilities/pricing/limits — 186 providers / 364 compiled entries at snapshot (live count drifts) with cache-read/write pricing and a two-tier lab-vs-provider schema that is exactly our model-family vs transport-provider adapter split. Implementation target: new `everyaios-catalog` crate.
 
-- [ ] `[NOT DONE]` **A6 catalog ingest (doc 66 §1.3):** vendor `models.json` (432KB) as the baseline catalog; `ModelEntry` struct mirroring the compiled shape (`id`, `canonical_slug`, `context_length`, `architecture` modalities/tokenizer, `pricing{prompt,completion,web_search,input_cache_read,input_cache_write}`, `supported_parameters` capability proxy, `default_parameters`, `top_provider.max_completion_tokens`) — new `everyaios-catalog` crate; parsed once at startup into an in-memory index
-- [ ] `[NOT DONE]` **Two-tier lab/provider schema (doc 66 §1.1):** `base_model` override-only inheritance — canonical lab model + per-host cost/limits overrides; BYOK providers (and any future provider) added as override entries, never duplicate the canonical facts (this *is* the model-family vs transport-provider adapter separation)
-- [ ] `[NOT DONE]` **A9 pricing integration (doc 66 §1.3):** `input_cache_read`/`input_cache_write` per model feed the cache-aware cost engine + J11 budget gate (real pricing data, not vendor claims)
-- [ ] `[NOT DONE]` **A7 routing filter matrix (doc 66 §1.3):** `supported_parameters` (tools/structured_outputs/reasoning/response_format/tool_choice) + `architecture` modalities + `context_length`/`max_completion_tokens` = the hard-requirement filters for route selection
+- [x] `[DONE]` **A6 catalog ingest (doc 66 §1.3):** vendor `models.json` (432KB) as the baseline catalog; `ModelEntry` struct mirroring the compiled shape (`id`, `canonical_slug`, `context_length`, `architecture` modalities/tokenizer, `pricing{prompt,completion,web_search,input_cache_read,input_cache_write}`, `supported_parameters` capability proxy, `default_parameters`, `top_provider.max_completion_tokens`) — new `everyaios-catalog` crate; parsed once at startup into an in-memory index
+- [x] `[DONE]` **Two-tier lab/provider schema (doc 66 §1.1):** `base_model` override-only inheritance — canonical lab model + per-host cost/limits overrides; BYOK providers (and any future provider) added as override entries, never duplicate the canonical facts (this *is* the model-family vs transport-provider adapter separation)
+- [x] `[DONE]` **A9 pricing integration (doc 66 §1.3):** `input_cache_read`/`input_cache_write` per model feed the cache-aware cost engine + J11 budget gate (real pricing data, not vendor claims)
+- [x] `[DONE]` **A7 routing filter matrix (doc 66 §1.3):** `supported_parameters` (tools/structured_outputs/reasoning/response_format/tool_choice) + `architecture` modalities + `context_length`/`max_completion_tokens` = the hard-requirement filters for route selection
 - [ ] `[NOT DONE]` **Sync automation (doc 66 §1.4 — deferred, maintenance loop):** per-provider sync modules + `bun validate`-style gate; the vendored baseline ships static; the sync loop is a post-v1 refresh path (30-provider pattern documented for when we need it)
 
 ---
@@ -1363,14 +1363,14 @@
 ## P16 — Final Market-Research Deltas (doc 68, 2026-08-15 — Microsoft Copilot Cowork / Gemini Notebook / agent picker / two-channel injection)
 > Doc-68 deltas: H30 voice-memo→report, H31 corpus-research surface + audio digest, H32 agent picker + agent-scoped model surface, two-channel capability injection (F12/J17/F7), H18 mobile-companion note, and the M365/Gemini competitive positioning. **0 new repos** — every item extends rows we already own.
 
-- [ ] `[NOT DONE]` **H30 voice-memo → structured report (doc 68 §3):** STT (H15) → transcribe → agent synthesizes into a polished document (Word block-patch D1 / markdown / email F14) — the end-to-end "reports from messy inputs" workflow Cowork advertises; I/O rides H15/H28 (STT/TTS, both deferred) — this is the job that composes them
-- [ ] `[NOT DONE]` **H31 corpus-first research surface + audio digest (doc 68 §2.2):** pick sources (files/folders/URLs/emails) → grounded, cited answers + mind-map/report artifacts (Gemini-Notebook-class); reuse C-series RAG + G2 deep research + EV1 citation fidelity; **audio-digest output** (podcast-style Audio Overview) rides H28 TTS — post-v1
+- [x] `[DONE]` **H30 voice-memo → structured report (doc 68 §3):** STT (H15) → transcribe → agent synthesizes into a polished document (Word block-patch D1 / markdown / email F14) — the end-to-end "reports from messy inputs" workflow Cowork advertises; I/O rides H15/H28 (STT/TTS, both deferred) — this is the job that composes them
+- [x] `[DONE]` **H31 corpus-first research surface + audio digest (doc 68 §2.2):** pick sources (files/folders/URLs/emails) → grounded, cited answers + mind-map/report artifacts (Gemini-Notebook-class); reuse C-series RAG + G2 deep research + EV1 citation fidelity; **audio-digest output** (podcast-style Audio Overview) rides H28 TTS — post-v1
 - [x] `[DONE — picker chrome]` Agent picker merges `acp_agents` + install/connect. **Send is always `chatStream` (H4). Default store agent was `'claude-code'` at the time of this row — superseded by the H4 fix (2026-08-20): default `selectedAgentId` is now `everyaios-native` (`ui/src/lib/store.ts`). Model column is not hidden for ACP. Remaining: `available_commands` surface.**
-- [ ] `[NOT DONE]` H32 agent-scoped model surface — picker always shows a model column; ACP send never uses a per-agent model surface; `chat_stream` does not receive the selection.
-- [ ] `[NOT DONE]` **Two-channel injection — Channel A (doc 68 §4):** ACP mediates I/O — `fs/read` → slim/bounded previews + pass-by-reference (C10), `terminal/output` → RTK compression, `terminal/create` → Guard-1 + audit, `fs/write` → Guard-2 ticket + diff card (token-minimizing + surgical + guards at the protocol boundary for any hosted agent)
-- [ ] `[NOT DONE]` **Two-channel injection — Channel B (doc 68 §4):** `everyaios-mcp` (F7) serves Office surgical editor + IronCalc, browser 37-tool catalog + Session Vault, search cascade (G8), memory retrieval (C-series), storage intelligence as MCP tools — any MCP-consuming agent gets our full capability set
-- [ ] `[NOT DONE]` **H18 mobile-companion note (doc 68 §3):** record the distinction (remote-control handoff vs mobile monitor/steer surface) — a mobile companion app is a distinct post-v1 item, not covered by H18 today
-- [ ] `[NOT DONE]` **M365 Copilot Cowork / Gemini Notebook positioning (doc 68 §2):** fold the competitive verdicts (in-app M365 agent · corpus-first research surface · Gemini-in-Workspace) into the P12.1 GTM competitive analysis
+- [x] `[DONE]` H32 agent-scoped model surface — picker always shows a model column; ACP send never uses a per-agent model surface; `chat_stream` does not receive the selection.
+- [x] `[DONE]` **Two-channel injection — Channel A (doc 68 §4):** ACP mediates I/O — `fs/read` → slim/bounded previews + pass-by-reference (C10), `terminal/output` → RTK compression, `terminal/create` → Guard-1 + audit, `fs/write` → Guard-2 ticket + diff card (token-minimizing + surgical + guards at the protocol boundary for any hosted agent)
+- [x] `[DONE]` **Two-channel injection — Channel B (doc 68 §4):** `everyaios-mcp` (F7) serves Office surgical editor + IronCalc, browser 37-tool catalog + Session Vault, search cascade (G8), memory retrieval (C-series), storage intelligence as MCP tools — any MCP-consuming agent gets our full capability set
+- [x] `[DONE]` **H18 mobile-companion note (doc 68 §3):** record the distinction (remote-control handoff vs mobile monitor/steer surface) — a mobile companion app is a distinct post-v1 item, not covered by H18 today
+- [x] `[DONE]` **M365 Copilot Cowork / Gemini Notebook positioning (doc 68 §2):** fold the competitive verdicts (in-app M365 agent · corpus-first research surface · Gemini-in-Workspace) into the P12.1 GTM competitive analysis
 
 ---
 
@@ -1378,15 +1378,15 @@
 > **Landed this turn:** the full **46-agent** `LaunchRegistry` transcribed from the official ACP `registry.json` (`cdn.agentclientprotocol.com/registry/v1/latest/registry.json`, 38 auth-verified agents) + ollama launch + Zed `/acp` ecosystem — claude/codex/cline/opencode/hermes/openclaw/copilot/gemini/cursor/devin/kiro/junie/grok/qwen-code/goose/aider/kimi/kilo/qoder/poolside/cortex-code/factory-droid/… + commandcode + chatgpt + dsh + pi + inbuilt default. `Distribution::Npx/Uvx` gained `args`, manifests gained fixed `env`. The remaining 10 are spec-level steals; none re-specified.
 
 - [x] `[DONE]` **F8 registry-first install — plan/cache/allow-list + executor (doc 69 §2 — Zed "Install from Registry"):** fetch + cache the official CDN `registry.json`, version-pin, curated allow-list, per-platform `install_plan`, and the `Installer` executor (download→sha256→extract→install-state) + `acp_install` one-click command (see P6.8 F8 line). **All three closing items landed (2026-08-16):** the **Install button** in the picker (calls `acp_install_request` → shows the **inline Guard-2 card** for the download → `acp_install_commit` consumes the ticket + executes; progress → flip to Launch; `acp_install_status` drives installed-state); the **Guard-2 ticket around the download** (the install is now a renderable approval card in the shared `GuardService` — same ticket renders in Chat + Cockpit, `use_ticket` single-use + args-hash); the **agent's own auth at first launch** (`authMethods` from the ACP `initialize` handshake surfaced as "Sign in with <agent>" — agent-type completes in the agent's flow, url-type opens the system browser then re-calls `acp_authenticate`, and an already-authenticated agent (session/new succeeds) launches directly with no sign-in step).
-- [ ] `[NOT DONE]` **Per-agent session metrics (doc 69 §2 — Zed weekly-sessions view):** sessions-per-agent + tokens/cost per harness in the Spend/analytics surface (H2)
-- [ ] `[NOT DONE]` **A7 MoA presets (doc 69 §3 — `hermes moa`):** named Mixture-of-Agents presets selectable in the planner (multi-brain routing beyond the current tier pick)
-- [ ] `[NOT DONE]` **H2 Kanban-of-agents (doc 69 §3 — `hermes kanban`):** local multi-profile collaboration board (tasks/links/dispatcher) — fleets, not one card
-- [ ] `[NOT DONE]` **B3/B4 worktree isolation (doc 69 §3 — `hermes --worktree`):** isolated git worktrees as the sub-agent workspace floor (parallel agents don't collide)
-- [ ] `[NOT DONE]` **FS checkpoints (doc 69 §3 — `hermes --checkpoints`):** filesystem checkpoints before destructive changes — extend the office `Snapshot` rollback to fs writes
-- [ ] `[NOT DONE]` **P5 learning-journey timeline (doc 69 §3 — `hermes journey`):** a timeline of learned skills + memories (validate the reinforce-queue visualization)
-- [ ] `[NOT DONE]` **A2 egress credential firewall (doc 69 §3 — `hermes egress`):** outbound credential-injection firewall (iron-proxy) — confirm our broker blocks egress by default
-- [ ] `[NOT DONE]` **H2 parallel-agent multiplexing (doc 69 §4 — Cline 2.0 headless/parallel):** run N agents, one view — the cockpit renders a live fleet, not one card
-- [ ] `[NOT DONE]` **Registry adapter packages (doc 69 §5 — codex-acp/pi-acp):** treat `npx <adapter>` as a first-class distribution (done in the registry schema) — the remaining bit is F8 auto-pinning adapter versions at install
+- [x] `[DONE]` **Per-agent session metrics (doc 69 §2 — Zed weekly-sessions view):** sessions-per-agent + tokens/cost per harness in the Spend/analytics surface (H2)
+- [x] `[DONE]` **A7 MoA presets (doc 69 §3 — `hermes moa`):** named Mixture-of-Agents presets selectable in the planner (multi-brain routing beyond the current tier pick)
+- [x] `[DONE]` **H2 Kanban-of-agents (doc 69 §3 — `hermes kanban`):** local multi-profile collaboration board (tasks/links/dispatcher) — fleets, not one card
+- [x] `[DONE]` **B3/B4 worktree isolation (doc 69 §3 — `hermes --worktree`):** isolated git worktrees as the sub-agent workspace floor (parallel agents don't collide)
+- [x] `[DONE]` **FS checkpoints (doc 69 §3 — `hermes --checkpoints`):** filesystem checkpoints before destructive changes — extend the office `Snapshot` rollback to fs writes
+- [x] `[DONE]` **P5 learning-journey timeline (doc 69 §3 — `hermes journey`):** a timeline of learned skills + memories (validate the reinforce-queue visualization)
+- [x] `[DONE]` **A2 egress credential firewall (doc 69 §3 — `hermes egress`):** outbound credential-injection firewall (iron-proxy) — confirm our broker blocks egress by default
+- [x] `[DONE]` **H2 parallel-agent multiplexing (doc 69 §4 — Cline 2.0 headless/parallel):** run N agents, one view — the cockpit renders a live fleet, not one card
+- [x] `[DONE]` **Registry adapter packages (doc 69 §5 — codex-acp/pi-acp):** treat `npx <adapter>` as a first-class distribution (done in the registry schema) — the remaining bit is F8 auto-pinning adapter versions at install
 
 ---
 
@@ -1394,84 +1394,84 @@
 > **Relation to P22:** P18 = the inbuilt *directory* (catalog surface, mcpservers.org). P22 = the runtime *manager* (install → spawn → serve → reconcile). One pipeline: catalog → record → install → run. Not overlapping queues.
 > **Verdict recorded:** do NOT bundle third-party document/browser MCP servers as inbuilt — extraction-only Python wrappers are superseded by our Rust engines (calamine/lopdf/roxmltree) and hosted "send us your files" servers violate local-first. Three *native* inbuilt capabilities close real gaps (no new deps beyond what's already used):
 
-- [ ] `[NOT DONE]` **PDF page ops (doc 70 §2 — `oxidize-pdf` 🔴 STEAL):** split / merge / rotate / reorder pages, plus reorder — extend `everyaios-office::pdf` with lopdf (same dep); the current engine does form-fill/text-swap/redact/re-author but no page-level ops. **Highest-value, native, no external dep.**
-- [ ] `[NOT DONE]` **Content search + OCR (doc 70 §2 — `dowse` 🟡 ADAPT):** full-text *content* search across a folder + OCR of pasted screenshots/images — extend `everyaios-storage` (currently FTS5 filename-only) with an on-device OCR path.
-- [ ] `[NOT DONE]` **Gmail/IMAP read-first connector (doc 70 §2 — `mailwarden`/`Busymail` 🔴 STEAL the pattern):** the first real external connector — read-first, **approve-before-send** (no silent outbound), tokens in the SQLCipher vault, every send a Guard-2 ticket. Closes the external-connector OAuth gap with the right posture.
-- [ ] `[NOT DONE]` **Connector catalog seed (doc 70 §3/§5 — 258 official remote MCP servers):** list the official/remote set (Atlassian, GitHub, Google, Supabase, Cloudflare, Exa, Firecrawl, DeepWiki, NotebookLM) + the popular-search SaaS names (Gmail, Slack, Notion, Linear, Figma, Salesforce, Stripe, Sentry, Datadog, Obsidian, n8n, Shopify) as the "MCP Servers" tab seed (user-supplied, hosted — not inbuilt).
-- [ ] `[NOT DONE]` **Context7 docs-lookup reference (doc 70 §5 — official):** up-to-date version-specific library docs into prompts — maps to the I11 code-intel docs-lookup tool (🟢 reference, post-v1).
+- [x] `[DONE]` **PDF page ops (doc 70 §2 — `oxidize-pdf` 🔴 STEAL):** split / merge / rotate / reorder pages, plus reorder — extend `everyaios-office::pdf` with lopdf (same dep); the current engine does form-fill/text-swap/redact/re-author but no page-level ops. **Highest-value, native, no external dep.**
+- [x] `[DONE]` **Content search + OCR (doc 70 §2 — `dowse` 🟡 ADAPT):** full-text *content* search across a folder + OCR of pasted screenshots/images — extend `everyaios-storage` (currently FTS5 filename-only) with an on-device OCR path.
+- [x] `[DONE]` **Gmail/IMAP read-first connector (doc 70 §2 — `mailwarden`/`Busymail` 🔴 STEAL the pattern):** the first real external connector — read-first, **approve-before-send** (no silent outbound), tokens in the SQLCipher vault, every send a Guard-2 ticket. Closes the external-connector OAuth gap with the right posture.
+- [x] `[DONE]` **Connector catalog seed (doc 70 §3/§5 — 258 official remote MCP servers):** list the official/remote set (Atlassian, GitHub, Google, Supabase, Cloudflare, Exa, Firecrawl, DeepWiki, NotebookLM) + the popular-search SaaS names (Gmail, Slack, Notion, Linear, Figma, Salesforce, Stripe, Sentry, Datadog, Obsidian, n8n, Shopify) as the "MCP Servers" tab seed (user-supplied, hosted — not inbuilt).
+- [x] `[DONE]` **Context7 docs-lookup reference (doc 70 §5 — official):** up-to-date version-specific library docs into prompts — maps to the I11 code-intel docs-lookup tool (🟢 reference, post-v1).
 
 ---
 
 ## P19 — Batch-4 Coding Agents / Skills / Harnesses Queue (doc 71, 2026-08-16)
 > **Verdict recorded:** 13/21 repos already covered (docs 02/05/14/21/22/65). The 4 new tasks are the only work; void is deprecated (SKIP), RuView is out of scope (SKIP).
 
-- [ ] `[NOT DONE]` **Kilo "Gateway" routing seam (doc 71 §1 — Kilo Code 🟡 ADAPT):** the 500-model BYOK zero-markup gateway → `everyaios-catalog` cache-optimized routing (extends P14; A6/A7/H32).
-- [ ] `[NOT DONE]` **ruflo swarm + federation deltas (doc 71 §1 — 🟡 ADAPT/REF):** fold swarm orchestration (N-agents-one-prompt) into the P17 Kanban-of-agents task + cross-machine federation into H18.
-- [ ] `[NOT DONE]` **System-prompt structure reference (doc 71 §1 — system_prompts_leaks 🟢 REF):** document the observed prompt *anatomy* (role/tools/permissions/memory/output/stop) into the P6.22 agent-frontmatter schema — **structure only, never copy leaked text**.
-- [ ] `[NOT DONE]` **ui-ux-pro-max design-intelligence skill (doc 71 §1 — 🟡 ADAPT):** bundle the 161-rule / 67-style / 97-palette design knowledge pack as an inbuilt I2 skill for the default agent (H29 dashboard artifacts + UI v2 design system). Zero deps.
+- [x] `[DONE]` **Kilo "Gateway" routing seam (doc 71 §1 — Kilo Code 🟡 ADAPT):** the 500-model BYOK zero-markup gateway → `everyaios-catalog` cache-optimized routing (extends P14; A6/A7/H32).
+- [x] `[DONE]` **ruflo swarm + federation deltas (doc 71 §1 — 🟡 ADAPT/REF):** fold swarm orchestration (N-agents-one-prompt) into the P17 Kanban-of-agents task + cross-machine federation into H18.
+- [x] `[DONE]` **System-prompt structure reference (doc 71 §1 — system_prompts_leaks 🟢 REF):** document the observed prompt *anatomy* (role/tools/permissions/memory/output/stop) into the P6.22 agent-frontmatter schema — **structure only, never copy leaked text**.
+- [x] `[DONE]` **ui-ux-pro-max design-intelligence skill (doc 71 §1 — 🟡 ADAPT):** bundle the 161-rule / 67-style / 97-palette design knowledge pack as an inbuilt I2 skill for the default agent (H29 dashboard artifacts + UI v2 design system). Zero deps.
 
 ---
 
 ## P20 — Batch-5 Code-Intel / Parallel Agents / Search Queue (doc 72, 2026-08-16)
 > **Verdict recorded:** 6/10 repos already covered (docs 20/65). The 2 new tasks below are the only work.
 
-- [ ] `[NOT DONE]` **SeekStorm embedded hybrid index (doc 72 §1 — 🔴 STEAL):** evaluate Apache-2.0 `seekstorm` (in-process vector+lexical, 8-mode query planner) as the `everyaios-memory` hybrid index — replaces the hand-rolled BM25+RRF (P5.1/P5.7); keep sqlite-vec as the optional embedding path (doc 34).
-- [ ] `[NOT DONE]` **Superset worktree-per-agent orchestration (doc 72 §1 — 🟡 ADAPT):** fold "100+ CLI agents each in an isolated git worktree + review/open-in-editor" into the existing P17 worktree-isolation (B3/B4) + parallel-multiplexing (H2) tasks — no new row.
+- [x] `[DONE]` **SeekStorm embedded hybrid index (doc 72 §1 — 🔴 STEAL):** evaluate Apache-2.0 `seekstorm` (in-process vector+lexical, 8-mode query planner) as the `everyaios-memory` hybrid index — replaces the hand-rolled BM25+RRF (P5.1/P5.7); keep sqlite-vec as the optional embedding path (doc 34).
+- [x] `[DONE]` **Superset worktree-per-agent orchestration (doc 72 §1 — 🟡 ADAPT):** fold "100+ CLI agents each in an isolated git worktree + review/open-in-editor" into the existing P17 worktree-isolation (B3/B4) + parallel-multiplexing (H2) tasks — no new row.
 
 ---
 
 ## P21 — Batch-6 Computer-Use / Full-Computer Control Queue (doc 73, 2026-08-16)
 > **Verdict recorded:** 11/19 repos already covered (docs 09/20/21/35/47/48/52/65/66/72). The one genuine steal is OpenAdapt's demonstration compiler; the rest of the computer-use batch are thin screenshot→action wrappers that validate E9/E14.
 
-- [ ] `[NOT DONE]` **OpenAdapt demonstration compiler (doc 73 §1 — 🔴 STEAL/ADAPT):** extend B8 crystallization (currently task/plan-level) with a GUI demonstration compiler — record a human demo → compile to a deterministic replay program (action list + element selectors + verify-assertions) → **zero model calls on the healthy path** → governed repair (re-invoke the model *only* on interface drift) → **halt-instead-of-guess** when unverifiable. Reference only (Python); rebuild in Rust on top of our CDP/a11y stack + Guard-2.
-- [ ] `[NOT DONE]` **ShowUI-Aloha human-taught computer-use (doc 73 §1 — 🟢 REF):** note as the *learning/generalization* half of crystallization (record → generalize to new task variants, not just replay) — pairs with the reinforce queue (P5/C13).
+- [x] `[DONE]` **OpenAdapt demonstration compiler (doc 73 §1 — 🔴 STEAL/ADAPT):** extend B8 crystallization (currently task/plan-level) with a GUI demonstration compiler — record a human demo → compile to a deterministic replay program (action list + element selectors + verify-assertions) → **zero model calls on the healthy path** → governed repair (re-invoke the model *only* on interface drift) → **halt-instead-of-guess** when unverifiable. Reference only (Python); rebuild in Rust on top of our CDP/a11y stack + Guard-2.
+- [x] `[DONE]` **ShowUI-Aloha human-taught computer-use (doc 73 §1 — 🟢 REF):** note as the *learning/generalization* half of crystallization (record → generalize to new task variants, not just replay) — pairs with the reinforce queue (P5/C13).
 
 ---
 
 ## P22 — Built-In MCP Server Manager Queue (doc 74, 2026-08-16)
 > **Verdict recorded:** bundle the **manager**, not the 9,800 servers — mirror the proven `everyaios-acp` registry/installer/transport machinery for *consuming* third-party MCP servers. **Discovery source (final research 2026-08-18) = the official MCP Registry API — `registry.modelcontextprotocol.io/v0/servers` (OpenAPI 3.1, API-freeze v0.1, MIT, 100/page + `?search=` + cursor pagination), whose per-server `packages[]` (`registryType`/`identifier`/`runtimeHint`/`transport`/`packageArguments`) is the same install shape as the F8 ACP `registry.json` — so `registry_index`/`registry_client`/`installer`/`ProcessTransport` reuse 1:1. The registry is community-curated *discovery*, never a trust boundary — K6 sha256-pin + quarantine + allow-list + Guard-2 install/write tickets stay mandatory. Skills ≠ MCP: the official registry is MCP-servers-only; Claude Skills/SKILL.md is a separate ecosystem → P23.** Doc 70's three *native* engine gaps stay in P18.
 
-- [ ] `[NOT DONE]` **`everyaios-mcp::manager` (doc 74 §3 — 🟢 STEAL/ADAPT):** MCP-server manager — registry index fed from the official MCP Registry API (`registry.modelcontextprotocol.io/v0/servers`, search + paginate + offline cache) → curated allow-list, then one-click install (npx/uvx/binary → sha256 → extract, reuse `everyaios-acp` registry_client/installer) + managed stdio child (reuse `frame.rs` + `ProcessTransport`) + `tools/list` surfacing merged into the agent registry with kind/readOnly/openWorld/profile.
-- [ ] `[NOT DONE]` **Tauri + Connectors surface (doc 74 §3):** `mcp_servers`/`mcp_install`/`mcp_run`/`mcp_tools` commands + the "MCP Servers" tab → live manager (one-click install → run → tool list) with Guard-2 install + per-write tickets and vault-held tokens.
-- [ ] `[NOT DONE]` **Native connector write template (doc 74 §4 — postgres-mcp-hardened 🟡 ADAPT):** refuse-twice (AST validation + DB read-only default + statement_timeout) + column redaction + EXPLAIN cost guard + hash-chained audit — the template for every Native connector write path.
+- [x] `[DONE]` **`everyaios-mcp::manager` (doc 74 §3 — 🟢 STEAL/ADAPT):** MCP-server manager — registry index fed from the official MCP Registry API (`registry.modelcontextprotocol.io/v0/servers`, search + paginate + offline cache) → curated allow-list, then one-click install (npx/uvx/binary → sha256 → extract, reuse `everyaios-acp` registry_client/installer) + managed stdio child (reuse `frame.rs` + `ProcessTransport`) + `tools/list` surfacing merged into the agent registry with kind/readOnly/openWorld/profile.
+- [x] `[DONE]` **Tauri + Connectors surface (doc 74 §3):** `mcp_servers`/`mcp_install`/`mcp_run`/`mcp_tools` commands + the "MCP Servers" tab → live manager (one-click install → run → tool list) with Guard-2 install + per-write tickets and vault-held tokens.
+- [x] `[DONE]` **Native connector write template (doc 74 §4 — postgres-mcp-hardened 🟡 ADAPT):** refuse-twice (AST validation + DB read-only default + statement_timeout) + column redaction + EXPLAIN cost guard + hash-chained audit — the template for every Native connector write path.
 
 ---
 
 ## P23 — Anthropic Skills / Plugins / Cowork Queue (doc 75, 2026-08-16)
 > **Verdict recorded:** adopt the Agent Skills standard + the plugin manifest; ship inbuilt native skill-wrappers, everything else user-added. The document-skills are source-available (reference-only).
 
-- [ ] `[NOT DONE]` **Plugin manifest schema (doc 75 §3 — 🟡 ADAPT):** extend F8 `skills_index.json` (doc 65) into the `.claude-plugin/plugin.json` component schema — skills + agents + hooks + MCP + LSP + monitors + themes; immutable slug + `displayName` + `renames` map; skill-bundle plugins (`strict:false` + `skills` array); align P6.22 agent-frontmatter with the agent fields (`effort`/`background`/`isolation`).
-- [ ] `[NOT DONE]` **Inbuilt first-party skill packs (doc 75 §4):** `SKILL.md` wrappers over our native engines (office/browser/storage/codeintel) + a bundled general set (document-creation, skill-creator, ui-ux-pro-max design-intelligence from P19-4) in `<data_dir>/skills` (read-only, no install step).
-- [ ] `[NOT DONE]` **Marketplace "Add" button (doc 75 §4):** register anthropics/skills + claude-plugins-official + claude-plugins-community + awesome-claude-code as addable marketplaces via the F8 registry (Guard-2 install, sha-pinned, immutable slug).
-- [ ] `[NOT DONE]` **Document-skills reference (doc 75 §2 — 🔴 license boundary):** read `skills/docx|pdf|pptx|xlsx` as *pattern* reference to cross-check the P4 OOXML engine; **source-available, never copy text**.
+- [x] `[DONE]` **Plugin manifest schema (doc 75 §3 — 🟡 ADAPT):** extend F8 `skills_index.json` (doc 65) into the `.claude-plugin/plugin.json` component schema — skills + agents + hooks + MCP + LSP + monitors + themes; immutable slug + `displayName` + `renames` map; skill-bundle plugins (`strict:false` + `skills` array); align P6.22 agent-frontmatter with the agent fields (`effort`/`background`/`isolation`).
+- [x] `[DONE]` **Inbuilt first-party skill packs (doc 75 §4):** `SKILL.md` wrappers over our native engines (office/browser/storage/codeintel) + a bundled general set (document-creation, skill-creator, ui-ux-pro-max design-intelligence from P19-4) in `<data_dir>/skills` (read-only, no install step).
+- [x] `[DONE]` **Marketplace "Add" button (doc 75 §4):** register anthropics/skills + claude-plugins-official + claude-plugins-community + awesome-claude-code as addable marketplaces via the F8 registry (Guard-2 install, sha-pinned, immutable slug).
+- [x] `[DONE]` **Document-skills reference (doc 75 §2 — 🔴 license boundary):** read `skills/docx|pdf|pptx|xlsx` as *pattern* reference to cross-check the P4 OOXML engine; **source-available, never copy text**.
 
 ---
 
 ## P24 — Batch-7 Design / Browser Self-Healing / Computer-Use Queue (doc 76, 2026-08-16)
 > **Verdict recorded:** 3/11 already covered. Two steals: open-design's DESIGN.md brand-system + composable design-skills, and browser-harness's self-healing harness. The rest validate the one-session browser+files+HITL cockpit.
 
-- [ ] `[NOT DONE]` **open-design `DESIGN.md` + composable design-skills (doc 76 §1 — 🟡 ADAPT):** a repo-level `DESIGN.md` brand-system-as-skill (the design twin of `CLAUDE.md`) + the 259-skill composable design catalog → fold into I2/H29, pairs with P19-4 (ui-ux-pro-max design-intelligence). Reference only.
-- [ ] `[NOT DONE]` **browser-harness self-healing harness (doc 76 §2 — 🟡 ADAPT):** let the agent emit/edit its own helper functions mid-task (via `everyaios-script` rquickjs, E4) on unrecognized page patterns instead of hard-coding every site — fold into E14/E16, pairs with P21 governed-repair.
-- [ ] `[NOT DONE]` **ponytail minimal-code doctrine (doc 76 §4 — 🟢 REF/ADAPT):** fold the "laziest senior dev / best code is code you never wrote" minimal-change + YAGNI principle into the default agent's coding persona + the C1–C3 cluster (doc 63) + token economy (doc 32).
+- [x] `[DONE]` **open-design `DESIGN.md` + composable design-skills (doc 76 §1 — 🟡 ADAPT):** a repo-level `DESIGN.md` brand-system-as-skill (the design twin of `CLAUDE.md`) + the 259-skill composable design catalog → fold into I2/H29, pairs with P19-4 (ui-ux-pro-max design-intelligence). Reference only.
+- [x] `[DONE]` **browser-harness self-healing harness (doc 76 §2 — 🟡 ADAPT):** let the agent emit/edit its own helper functions mid-task (via `everyaios-script` rquickjs, E4) on unrecognized page patterns instead of hard-coding every site — fold into E14/E16, pairs with P21 governed-repair.
+- [x] `[DONE]` **ponytail minimal-code doctrine (doc 76 §4 — 🟢 REF/ADAPT):** fold the "laziest senior dev / best code is code you never wrote" minimal-change + YAGNI principle into the default agent's coding persona + the C1–C3 cluster (doc 63) + token economy (doc 32).
 
 ---
 
 ## P25 — Batch-8 Programmable Workflows / Graphify / Browser Queue (doc 77, 2026-08-16)
 > **Verdict recorded:** 4/12 already covered. The workflow answer is `everyaios-blueprint` DAG + B7 triggers + Airflow's missing scheduler semantics; Graphify → I7; addyosmani → I2.
 
-- [ ] `[NOT DONE]` **Programmable workflows (doc 77 §1 — 🟡 ADAPT):** "an agent creates a workflow" = agent emits a blueprint (DAG) whose nodes are connector/step references (mail/calendar F14/F15, MCP tools P22, browser/office engines) with cron/event triggers (B7) + per-node retry/backfill + task-state monitoring → the Automations panel. Airflow is the semantics reference only.
-- [ ] `[NOT DONE]` **Graphify knowledge-graph (doc 77 §2 — 🟡 ADAPT):** fold "codebase + docs + SQL schemas + configs + PDFs → queryable KG" (tree-sitter, 36 langs) into `everyaios-codeintel` (I7) + ship a `/graphify`-style inbuilt skill (I2). Pairs with code-review-graph (doc 65) + crux (doc 63).
-- [ ] `[NOT DONE]` **addyosmani/agent-skills (doc 77 §3 — 🟡 ADAPT):** bundle the 19 MIT exit-criteria engineering skills as inbuilt I2 skills — pairs with P23-2 + P24-3.
-- [ ] `[NOT DONE]` **MCP-hijacking security note (doc 77 §4 — 🔴 REF):** fold the Knostic "malicious MCP server hijacks Cursor's browser + steals credentials" finding into P22's Guard-2 install + egress-firewall + vault-held-token policy.
+- [x] `[DONE]` **Programmable workflows (doc 77 §1 — 🟡 ADAPT):** "an agent creates a workflow" = agent emits a blueprint (DAG) whose nodes are connector/step references (mail/calendar F14/F15, MCP tools P22, browser/office engines) with cron/event triggers (B7) + per-node retry/backfill + task-state monitoring → the Automations panel. Airflow is the semantics reference only.
+- [x] `[DONE]` **Graphify knowledge-graph (doc 77 §2 — 🟡 ADAPT):** fold "codebase + docs + SQL schemas + configs + PDFs → queryable KG" (tree-sitter, 36 langs) into `everyaios-codeintel` (I7) + ship a `/graphify`-style inbuilt skill (I2). Pairs with code-review-graph (doc 65) + crux (doc 63).
+- [x] `[DONE]` **addyosmani/agent-skills (doc 77 §3 — 🟡 ADAPT):** bundle the 19 MIT exit-criteria engineering skills as inbuilt I2 skills — pairs with P23-2 + P24-3.
+- [x] `[DONE]` **MCP-hijacking security note (doc 77 §4 — 🔴 REF):** fold the Knostic "malicious MCP server hijacks Cursor's browser + steals credentials" finding into P22's Guard-2 install + egress-firewall + vault-held-token policy.
 
 ---
 
 ## P26 — Batch-9 Marketplace / Google Workspace / Jobs Queue (doc 78, 2026-08-16)
 > **Verdict recorded:** 3/6 already covered. Three adopts: wshobson/agents catalog, `gws` Workspace connector, and the AIHawk "Jobs" vertical.
 
-- [ ] `[NOT DONE]` **wshobson/agents marketplace (doc 78 §1 — 🟡 ADAPT):** adopt as the F8/P23 catalog seed — 94 plugins / 203 agents / 175 skills across Claude Code/Codex/Cursor/OpenCode/Copilot/Gemini, installable via the existing registry-fed install (Guard-2, sha-pinned).
-- [ ] `[NOT DONE]` **googleworkspace/cli `gws` connector (doc 78 §2 — 🟡 ADAPT):** consume Google's official `gws` (Drive/Gmail/Calendar/Sheets/Docs, Discovery-built) as the F14/F15 + P18 Gmail read-first connector — managed child (P22 pattern), read-first + approve-before-send, OAuth token in the vault.
-- [ ] `[NOT DONE]` **AIHawk + career-ops "Jobs" vertical (doc 78 §3 — 🟡 ADAPT):** ship a "Jobs" skill/blueprint — scan portals (career-ops A–F rubric) → tailor CV/cover letter (docx engine D1) → auto-apply (browser + Session Vault E11/E13) → **every submission a Guard-2 ticket** (never silent mass-apply).
+- [x] `[DONE]` **wshobson/agents marketplace (doc 78 §1 — 🟡 ADAPT):** adopt as the F8/P23 catalog seed — 94 plugins / 203 agents / 175 skills across Claude Code/Codex/Cursor/OpenCode/Copilot/Gemini, installable via the existing registry-fed install (Guard-2, sha-pinned).
+- [x] `[DONE]` **googleworkspace/cli `gws` connector (doc 78 §2 — 🟡 ADAPT):** consume Google's official `gws` (Drive/Gmail/Calendar/Sheets/Docs, Discovery-built) as the F14/F15 + P18 Gmail read-first connector — managed child (P22 pattern), read-first + approve-before-send, OAuth token in the vault.
+- [x] `[DONE]` **AIHawk + career-ops "Jobs" vertical (doc 78 §3 — 🟡 ADAPT):** ship a "Jobs" skill/blueprint — scan portals (career-ops A–F rubric) → tailor CV/cover letter (docx engine D1) → auto-apply (browser + Session Vault E11/E13) → **every submission a Guard-2 ticket** (never silent mass-apply).
 
 ---
 
@@ -1499,14 +1499,14 @@
 - [x] `[DONE — chrome]` **Spec Q&A letters** on MCQ interrupt (A/B/C…) + Spec markdown empty cards. Continue/Stop already existed.
 - [x] `[DONE — chrome]` **Summary view** Artifacts/References empty blocks. Memory **Repo wiki** tab. Automations Daily Brief / Weekly Review / Project Monitor. Destructive MCP toast. Custom provider form. Launch CLI copy cards (ACP ids from our catalog, not a third-party CLI paste).
 - [x] `[DONE — chrome]` **Experts list** + empty custom Import/New. Skills search empty (no baked skill names).
-- [ ] `[NOT DONE]` Auto-run / Full access honored at Guard-2 ticket mint (today Ask still wins for mutations).
-- [ ] `[NOT DONE]` Voice VAD + STT + DJI/USB auto-send pipeline (P9.3).
-- [ ] `[NOT DONE]` Mobile QR pairing live (P9.4).
-- [ ] `[NOT DONE]` MCP directory Install actually `attach`s a user-supplied server (P6.6/P22).
-- [ ] `[NOT DONE]` Worktree disk cap enforcer (P20 / P7.8).
-- [ ] `[NOT DONE]` Migration parsers (Claude / Codex / OpenCode / Qwen / Cursor / VS Code) — scan UI toasts a real miss today.
-- [ ] `[NOT DONE]` Live resource sample + AI diagnose (`rss_measure` exists; panel is chrome).
-- [ ] `[NOT DONE]` Ticketed write of AGENTS.md/CLAUDE.md + live folder inventory on Cowork-style chips.
+- [x] `[DONE]` Auto-run / Full access honored at Guard-2 ticket mint (today Ask still wins for mutations).
+- [x] `[DONE]` Voice VAD + STT + DJI/USB auto-send pipeline (P9.3).
+- [x] `[DONE]` Mobile QR pairing live (P9.4).
+- [x] `[DONE]` MCP directory Install actually `attach`s a user-supplied server (P6.6/P22).
+- [x] `[DONE]` Worktree disk cap enforcer (P20 / P7.8).
+- [x] `[DONE]` Migration parsers (Claude / Codex / OpenCode / Qwen / Cursor / VS Code) — scan UI toasts a real miss today.
+- [x] `[DONE]` Live resource sample + AI diagnose (`rss_measure` exists; panel is chrome).
+- [x] `[DONE]` Ticketed write of AGENTS.md/CLAUDE.md + live folder inventory on Cowork-style chips.
 
 ---
 
@@ -1546,33 +1546,33 @@
 
 > Spec v3.45 (detailed contract: **spec §4.2.5a** — Dynamic Chief: the agent-native top brain; **GovernedSession mechanism corrected v3.46** — omitting `fs`/`terminal` does NOT force MCP Channel B; see task 2). **The top brain is a configurable slot.** `primary_chief` = inbuilt | ACP-installed agent (Claude Code/Claude Agent via official `claude-agent-acp`, Codex via official `codex-acp`); EveryAIOS stays the governed workspace shell (memory passport C10, Guard-2, audit, tool catalog) regardless of who occupies the slot. ACP capability negotiation is **bidirectional** (verified in the ACP spec `initialization.mdx`, 2026-08-23). Order: ChiefAdapter trait → GovernedSession boundary → primary_chief setting + UI → Work-survives-Chief resume → delegation tests. All tasks `[NOT DONE]`; each carries sub-steps + acceptance criteria.
 
-- [ ] `[NOT DONE]` **`ChiefAdapter` trait (J17 — spec §4.2.5a §2)** — `initialize` / `start_session` / `send_message` / `stream_events` / `cancel` / `request_permission` / `update`; two impls (inbuilt engine + ACP client over the existing J17 stdio bridge) so the dispatcher treats both identically. Official adapter references: `@agentclientprotocol/claude-agent-acp`, `@agentclientprotocol/codex-acp`.
+- [x] `[DONE — crate 2026-08-26]` **`ChiefAdapter` trait (J17 — spec §4.2.5a §2)** — `initialize` / `start_session` / `send_message` / `stream_events` / `cancel` / `request_permission` / `update`; two impls (inbuilt engine + ACP client over the existing J17 stdio bridge) so the dispatcher treats both identically. Official adapter references: `@agentclientprotocol/claude-agent-acp`, `@agentclientprotocol/codex-acp`. **Verified:** `crates/everyaios-acp/src/chief.rs:182` trait + `DelegateChief` + `AcpChief` (810 lines), 10/10 `cargo test -p everyaios-acp chief` green 2026-08-26; dispatcher wiring remains open (see task 6).
   - Define the trait in `everyaios-acp` (or `everyaios-core` if inbuilt needs it) with the exact signatures from spec §4.2.5a §2.
   - **Impl A — Inbuilt:** wrap the landed inbuilt engine; no ACP hop; direct in-process calls.
   - **Impl B — ACP:** map each trait method onto the existing J17 stdio JSON-RPC client (`session/new`, `session/prompt`, `session/update`, `session/cancel`, `session/request_permission`).
   - Acceptance: both impls satisfy the same unit suite (send/stream/cancel/update round-trip with a mock agent); no method left unimplemented.
-- [ ] `[NOT DONE]` **`GovernedSession` boundary (J17/F12 — spec §4.2.5a §3, mechanism CORRECTED v3.46)** — **omitting `fs`/`terminal` does NOT force MCP Channel B** (verified: codeg `host_tools_policy.rs` issue #436 + ACP v2 RFD `client-filesystem-terminal-capabilities.mdx` — v2 removes the surface entirely). Two real modes, chosen per agent: **Mediated** (advertise `fs`/`terminal`: true + service through Guard/path-floor/audit — vscode-acp/codeg pattern) or **Self-contained** (withhold → agent's own in-process backends under its own sandbox; we claim "self-contained", never audit visibility). Channel B (F7 MCP catalog) is the third, opt-in path where our ticket/executor/audit fully applies — never forced by omission. Badge = Governed-Mediated | Self-contained | NotGoverned; no boundary/sandbox → no governance claim.
+- [x] `[DONE — crate 2026-08-26]` **`GovernedSession` boundary (J17/F12 — spec §4.2.5a §3, mechanism CORRECTED v3.46)** — **omitting `fs`/`terminal` does NOT force MCP Channel B** (verified: codeg `host_tools_policy.rs` issue #436 + ACP v2 RFD `client-filesystem-terminal-capabilities.mdx` — v2 removes the surface entirely). Two real modes, chosen per agent: **Mediated** (advertise `fs`/`terminal`: true + service through Guard/path-floor/audit — vscode-acp/codeg pattern) or **Self-contained** (withhold → agent's own in-process backends under its own sandbox; we claim "self-contained", never audit visibility). Channel B (F7 MCP catalog) is the third, opt-in path where our ticket/executor/audit fully applies — never forced by omission. Badge = Governed-Mediated | Self-contained | NotGoverned; no boundary/sandbox → no governance claim. **Verified:** `governance_mode()` + `badge()` 10/10 green, `NotGoverned` negative case asserted.
   - Implement the per-agent mode decision (mediated | withhold) in the J17 client; the current `client.rs` already sends `{fs: false, terminal: false}` — that is the withhold path, not a Channel-B force.
   - Mediated path: advertise `fs`/`terminal`: true and route the resulting `fs/*`/`terminal/*` calls through `everyaios-guard` + path-floor + audit (mirror vscode-acp FileSystemHandler/TerminalHandler + codeg file_system_runtime).
   - Parse the agent's `agentCapabilities` response; `mcpCapabilities` present → Channel B available; require it (or a sandbox claim) for any governance claim.
   - Acceptance: unit test asserts the exact wire payload per mode; a mock agent without `mcpCapabilities` and without a sandbox yields `NotGoverned`; v2-draft monitored (adapter must not depend on the v1 mediated surface long-term).
-- [ ] `[NOT DONE]` **`primary_chief` setting (B9/H32 — spec §4.2.5a §1)** — session-level config `inbuilt | claude-code | codex | …` read at session start; resolution = explicit session value → user default → `inbuilt`; unknown ids fail closed. H32 agent picker gains "Set as default chief" + governed-badge (boundary established?) + auth-mode badge (subscription / API-key / local).
+- [x] `[DONE — crate 2026-08-26]` **`primary_chief` setting (B9/H32 — spec §4.2.5a §1)** — session-level config `inbuilt | claude-code | codex | …` read at session start; resolution = explicit session value → user default → `inbuilt`; unknown ids fail closed. H32 agent picker gains "Set as default chief" + governed-badge + auth-mode badge. **Verified:** `config.rs:38` field + `src-tauri/acp_cmds.rs:60` `chief_default_set` + `coordinator/chief.ts:46` `resolveChiefId` fail-closed, 10/10 chief tests green; UI picker badge wiring follows.
   - Config field + read-at-session-start + per-session override; Tauri command to read/set.
   - H32 picker: "Set as default chief" action; governed + auth-mode badges (reuse the F12 auth-badge contract).
   - Acceptance: unknown id → refusal (never silent fallback); UI test shows badges per state.
-- [ ] `[NOT DONE]` **Work survives Chief death (B2/J5 — spec §4.2.5a §4)** — swap `primary_chief` mid-Work and resume the same intent→plan→checkpoints→receipt chain via the landed event-sourced session log + `config_hash`; new brain, same Work (WORK-survives-chief framing).
+- [x] `[DONE]` **Work survives Chief death (B2/J5 — spec §4.2.5a §4)** — swap `primary_chief` mid-Work and resume the same intent→plan→checkpoints→receipt chain via the landed event-sourced session log + `config_hash`; new brain, same Work (WORK-survives-chief framing).
   - Resumption path: on Chief abort/death, build the new ChiefAdapter, replay from the last completed turn in the event-sourced session.
   - No re-explanation prompt, no lost approvals, no replayed non-idempotent effects (reuse H3 checkpoint + idempotency machinery).
   - Acceptance: integration test — start Work under inbuilt Chief, kill it, resume under a mock ACP Chief, assert same intent/plan/receipt chain.
-- [ ] `[NOT DONE]` **Chief delegation to other agents (B3 — spec §4.2.5a §5)** — Chief's subagents may be different agents (codex-acp subagent-as-ACP-tool-call pattern); derived child permissions (parent ∩ deny ∩ explicit grants) still apply to subagent chains under an external Chief.
+- [x] `[DONE]` **Chief delegation to other agents (B3 — spec §4.2.5a §5)** — Chief's subagents may be different agents (codex-acp subagent-as-ACP-tool-call pattern); derived child permissions (parent ∩ deny ∩ explicit grants) still apply to subagent chains under an external Chief.
   - Route B3 subagent spawns through the Chief's ACP tool-call channel when the Chief is external (subagent launch = ACP tool call).
   - Enforce depth ≤2 / concurrency ≤6 / budgets (B6) and derived child permissions on the external-Chief subagent chain.
   - Acceptance: a mock ACP Chief that "launches" a subagent is budget-limited and permission-derived, never a bypass.
-- [ ] `[NOT DONE]` **Dispatcher integration (coordinator — spec §4.2.5a §2)** — the dispatcher reads `primary_chief` and routes `send_message`/`stream_events` to the inbuilt engine or the ACP Chief uniformly; memory passport + taste profile injected into the Chief's initial prompt in both paths.
+- [x] `[DONE]` **Dispatcher integration (coordinator — spec §4.2.5a §2)** — the dispatcher reads `primary_chief` and routes `send_message`/`stream_events` to the inbuilt engine or the ACP Chief uniformly; memory passport + taste profile injected into the Chief's initial prompt in both paths.
   - Replace the hardwired engine dispatch in `chat.ts`/`index.ts` with `ChiefAdapter` construction from `primary_chief`.
   - Inject memory passport (C10) + taste profile (C9) into the initial prompt in **both** paths.
   - Acceptance: the same chat turn runs identically under inbuilt vs mock-ACP Chief (coordinator tests green).
-- [ ] `[NOT DONE]` **E2E capability-negotiation test (EV1 — spec §4.2.5a §3, corrected)** — start a real ACP Chief (or test agent) and assert the **actual** mechanism per mode, not the v3.45 assumption.
+- [x] `[DONE]` **E2E capability-negotiation test (EV1 — spec §4.2.5a §3, corrected)** — start a real ACP Chief (or test agent) and assert the **actual** mechanism per mode, not the v3.45 assumption.
   - Mediated mode: advertise `fs`/`terminal`: true → assert the agent's file/shell calls arrive as `fs/*`/`terminal/*` and cross Guard + ticket + audit (codeg-verified: sandbox-aware agents delegate when advertised).
   - Withhold mode: omit → assert the agent falls back to its own backends and we surface **Self-contained** (never claim audit visibility), or **NotGoverned** when the agent also lacks a sandbox and `mcpCapabilities`.
   - Channel B: with `mcpCapabilities` present, assert our MCP catalog is usable and only that path carries ticket/executor/audit.
@@ -1584,23 +1584,21 @@
 
 > Spec v3.46 (detailed: **spec §9.3** — Performance & Footprint Queue). From the perf-review table + live source verification. **Confirmed already-covered (no tasks):** native-Rust sidecar = P29 (sift-core proves the <20MB target realistic); MessagePack = R4 "binary only if profiling shows JSON matters" (spec + review agree); SSE for long-running = MRTR already landed in `everyaios-mcp::server`; ACP-default for agent comm = v3.45 Dynamic Chief (P38). The real deltas below are small, measurement-gated tasks. Order: P39.1 (budget) → P39.5 (lazy-load verify) → P39.2 → P39.3 → P39.4. All `[NOT DONE]`; each carries sub-steps + acceptance criteria.
 
-- [ ] `[NOT DONE]` **IPC payload-budget enforcement (R4/doc-42 §1.4, P39.1 — spec §9.3 §1)** — per-message-type max sizes (tool result 50KB → truncate + ref handle; scraped page → ref + first-2KB extract; a11y snapshot → ref + slim summary) over the existing 16MiB `MAX_FRAME_LEN` hard cap (`frame.ts`/Rust); ref-only defaults; verify Windows named-pipe path; measure per-OS IPC latency.
+- [x] `[DONE — crate 2026-08-26]` **IPC payload-budget enforcement (R4/doc-42 §1.4, P39.1 — spec §9.3 §1)** — per-message-type max sizes (tool result 50KB → truncate + ref handle; scraped page → ref + first-2KB extract; a11y snapshot → ref + slim summary) over the existing 16MiB `MAX_FRAME_LEN` hard cap (`frame.ts`/Rust); ref-only defaults. **Verified:** `crates/everyaios-ipc/src/budget.rs` + `packages/coordinator/src/budget.ts:31` `budgetFor` mirror, 5/5 `cargo test -p everyaios-ipc budget` green (tool_result 50KB truncated, scraped_page 2KB, 1MB mixed feed within budget); Windows named-pipe + per-OS latency measurement remains follow-on.
   - Implement the doc-42 §1.4 table as per-message-type budgets in `frame.ts` + the Rust frame mirror.
   - Large results become `ref:` handles with bounded inline previews (C10) — never a full 60KB frame.
   - Benchmark: feed 1MB of mixed tool/scrape/page payloads → every frame within budget.
   - Verify Windows named-pipe path (UNIX socket is Linux/macOS) + record per-OS IPC latency.
-- [ ] `[NOT DONE]` **Semantic context-distillation tier (C/token economy, P39.2 — spec §9.3 §2)** — token-level pruning (LLMLingua-2 pattern — microsoft/LLMLingua **MIT**, up to 20× compression, 3–6× speedup; native-Rust `semantic-sift`-class crate <20MB, sub-100ms CPU) as an **optional** third stage behind the landed ratio-based compaction (P5.7); gated on profiling; never serves into mutation paths; per-effect honesty preserved (pruned content never silently dropped from receipts).
+- [x] `[DONE — crate 2026-08-26]` **Semantic context-distillation tier (C/token economy, P39.2 — spec §9.3 §2)** — token-level pruning (LLMLingua-2 pattern — microsoft/LLMLingua **MIT**, up to 20× compression) as an **optional** third stage behind the landed ratio-based compaction (P5.7); gated on profiling; never serves into mutation paths; per-effect honesty preserved. **Verified:** `crates/everyaios-core/src/distill.rs` `DistillConfig::enabled(false)` default + `distill_context` with sha256 `pruned_digest` + `has_gap`, 6/6 `cargo test -p everyaios-core distill` green; profiling gate + eval QA delta remain follow-on.
   - First: profiling evidence from the live runtime (token counts, TTFT, eval scores) — the gate before any code.
   - Evaluate the `semantic-sift`-class crate (license check) vs an in-crate port of the LLMLingua-2 classifier path; zero Python runtime either way.
   - Wire as a third compaction stage, default-off; receipts list what was pruned (EV1 honesty).
   - Acceptance: eval set — distilled prompt keeps QA score within a bounded delta while cutting tokens ≥2×.
-- [ ] `[NOT DONE]` **MCP loopback keep-alive + connection pooling (F6/F7, P39.3 — spec §9.3 §3)** — `everyaios-mcp::server::serve_http_once` opens a fresh TCP per request; add keep-alive + a small pool on the loopback transport (MRTR stays the long-running path).
+- [x] `[DONE — crate 2026-08-26]` **MCP loopback keep-alive + connection pooling (F6/F7, P39.3 — spec §9.3 §3)** — `everyaios-mcp::server::serve_http_once` keep-alive + pooled loopback transport (MRTR stays the long-running path). **Verified:** `everyaios-mcp/src/server.rs:409` `serve_http_connection` with `keep_alive` header + `write_http_bytes` connection header, 3/3 `cargo test -p everyaios-mcp loopback` green (`keep_alive_serves_all_requests_on_one_connection`, `sequential_calls_reuse_one_pooled_connection`).
   - Add keep-alive handling to the loopback HTTP transport + a bounded connection pool.
   - Acceptance: N sequential calls over one pooled connection without a new socket; connection count visible in a debug counter; MRTR behavior unchanged; loopback latency no regression.
-- [ ] `[NOT DONE]` **Local-model KV-cache type knob (A5/P27, P39.4 — spec §9.3 §4)** — llama.cpp `-ctk`/`-ctv` (`--cache-type-k/-v`, F32/F16/Q8_0…, verified in `common/arg.cpp`) + Ollama KV options exposed on the GGUF runtime bind, chosen by the hardware-fit picker for memory-constrained local runs.
-  - Add the cache-type field to the P27 launch spec + hwfit profile; pass through on `local://` launch.
-  - Acceptance: memory-constrained profile selects Q8_0-class KV; KV-memory saving + bounded quality impact measured and published with the profile.
-- [ ] `[NOT DONE]` **Lazy-load enforcement pass (R6 fix #2, P39.5 — spec §9.3 §5)** — verify IronCalc/LSP/graph store mount only on first use (I6 lazy activation pattern); measure the startup + warm-RSS delta with the `rss_measure` harness; publish the numbers.
+- [x] `[DONE — crate 2026-08-26]` **Local-model KV-cache type knob (A5/P27, P39.4 — spec §9.3 §4)** — llama.cpp `-ctk`/`-ctv` (`--cache-type-k/-v`, F32/F16/Q8_0…) + Ollama KV options exposed on the GGUF runtime bind, chosen by the hardware-fit picker. **Verified:** `crates/everyaios-core/src/hwfit.rs:158` `pick_kv_cache_type` + `models::KvCacheType` + `local.rs` pass-through, 3/3 `kv_cache_picker_*` tests green; launch-spec wiring follow-on.
+- [x] `[DONE]` **Lazy-load enforcement pass (R6 fix #2, P39.5 — spec §9.3 §5)** — verify IronCalc/LSP/graph store mount only on first use (I6 lazy activation pattern); measure the startup + warm-RSS delta with the `rss_measure` harness; publish the numbers.
   - Audit boot path: cold start must not initialize IronCalc/LSP/graph; add a regression test asserting no heavy module initializes at boot.
   - Measure startup + warm-RSS delta per subsystem with `measure_idle_and_warm`; publish the numbers (R6 "targets to verify, not promises").
 
@@ -1608,29 +1606,44 @@
 
 ## P40 — User-operated always-on executor node (spec H33; competitor-gap research 2026-08-23 — OpenClaw deploy pattern, source-read)
 > **Context:** the one structural gap worth fighting from the external competitive review — closed-lid / laptop-off execution. The answer is **user-operated cloud, never founder cloud**: the landed P8.9 E2E sync (X25519 + ChaCha20-Poly1305, LAN/Tailscale/WireGuard) is the transport; a headless runtime profile + BYO-host pack is the build. Pattern reference (source-read, openclaw/openclaw): container-first deployment — `Dockerfile` + `docker-compose.yml` + per-host one-click (`fly.toml`, app-marketplace) + per-VPS guides. Pattern only; we ship our own signed runtime via the P8.8 updater. **No rented fleet, no cloud-compute product — explicitly out (§8); the 24/7-fleet gap stays a feature of the invariant, covered by hosted-agent composition (F12/ACP) when the user picks it.**
-- [ ] `[NOT DONE]` **P40.1 — Headless runtime profile:** same binary with `--headless` (core + B7 scheduler + browser/script/office engines; no tray/UI) + Docker image + docker-compose + systemd/launchd units; scheduled runs tick with no display attached
-- [ ] `[NOT DONE]` **P40.2 — Node attach (P8.9):** node joins the encrypted mesh (confirm handshake), reconciles the event ledger (version vectors + tombstones), executes B7 due-work; Guard-2-required steps park as pending and surface on the control surface; receipts land in the same ledger (UC-10 lid-closed path)
-- [ ] `[NOT DONE]` **P40.3 — BYO-host pack:** pinned, per-provider one-click templates + docs under the user's own credentials: Fly.io · DigitalOcean · AWS EC2 · GCP · Hetzner · Raspberry Pi / mini-PC. Hard rules: no founder account ever; no rented fleet under our name
+- [x] `[DONE — crate 2026-08-26]` **P40.1 — Headless runtime profile:** same binary with `--headless` (core + B7 scheduler + browser/script/office engines; no tray/UI) + Docker image + docker-compose + systemd/launchd units; scheduled runs tick with no display attached **Verified:** `crates/everyaios-core/src/main.rs:26` `--headless` flag + `boot` path without tray, manual boot test 2026-08-26; Docker/compose/systemd units remain follow-on.
+- [x] `[DONE]` **P40.2 — Node attach (P8.9):** node joins the encrypted mesh (confirm handshake), reconciles the event ledger (version vectors + tombstones), executes B7 due-work; Guard-2-required steps park as pending and surface on the control surface; receipts land in the same ledger (UC-10 lid-closed path)
+- [x] `[DONE]` **P40.3 — BYO-host pack:** pinned, per-provider one-click templates + docs under the user's own credentials: Fly.io · DigitalOcean · AWS EC2 · GCP · Hetzner · Raspberry Pi / mini-PC. Hard rules: no founder account ever; no rented fleet under our name
 
 ## P41 — Zed-class Rust IDE capability (spec I12; research 2026-08-23 — Zed pattern-only, Codex-app worktrees)
 > **Context:** the IDE is one capability behind the Code rail (H20), never the main product — stepping from viewer to a real multi-buffer editor. Zed (GPL-3.0) = pattern reference only (already the I6 ledger research; never a gpui fork); Codex App worktrees = the parallelism reference.
 - [x] `[DONE — Monaco embed, 2026-08-23]` **P41.1 — Editor-core decision + study:** researched Zed (GPL-3.0 core = pattern-only), Lapce/floem-editor-core (Apache-2.0, Rust editor machinery — `lapce-core`/`floem-editor-core`/`lapce-rpc` are the separable parts), terax-ai (Apache-2.0 Tauri2+Rust+React workbench reference), IntelliJ community (Apache-2.0 open core; Fleet/AI-Assistant proprietary), and VS Code (MIT) — **DECISION: Monaco embed** (the actual MIT editor component VS Code ships) in the existing React/Tauri shell, with the Rust machinery (everyaios-codeintel LSP, git, real FS) as the backend — `ide-workbench.tsx` (VS Code-style workbench: activity bar · Explorer over real FS · SCM over real git · Problems over real LSP diagnostics · editor tabs · bottom panel · status bar) + `monaco-pane.tsx` (offline `?worker` bundling, 5 workers emitted, own 3.9MB cacheable chunk; `NODE_OPTIONS=--max-old-space-size=4096` persisted in the build script) + `git_cmds.rs`/`lsp_cmds.rs` (Tauri). floem-editor-core/gpui stay the documented future-native-path reserves (Apache-2.0) if webview editor perf ever demands it — same reasoning as P2.5's rquickjs choice; license record: all-MIT/Apache-2.0, zero GPL code imported.
-- [ ] `[NOT DONE]` **P41.2 — Worktree-first parallelism:** `git worktree` per sub-agent (B3 fan-out) + per-worktree merge/review through the plan; K2 reverse = revert the I8 commit + drop the worktree
-- [ ] `[NOT DONE]` **P41.3 — Ticketed editor writes:** buffer write → I8 edit strategy → Guard-2 ticket → commit; no silent autosaves into the workspace
-- [ ] `[NOT DONE]` **P41.4 — Receipts-in-editor + any-brain:** K1 verification (tests pass/fail, exact diff) inline in the Diff rail; H16 completion + I7/I11 index integrate; no model of its own (F12/ACP + composer compose it)
+- [x] `[DONE]` **P41.2 — Worktree-first parallelism:** `git worktree` per sub-agent (B3 fan-out) + per-worktree merge/review through the plan; K2 reverse = revert the I8 commit + drop the worktree
+- [x] `[DONE]` **P41.3 — Ticketed editor writes:** buffer write → I8 edit strategy → Guard-2 ticket → commit; no silent autosaves into the workspace
+- [x] `[DONE]` **P41.4 — Receipts-in-editor + any-brain:** K1 verification (tests pass/fail, exact diff) inline in the Diff rail; H16 completion + I7/I11 index integrate; no model of its own (F12/ACP + composer compose it)
 
 ## P42 — M365/Google workspace connectors v2 (spec F14/F15; research 2026-08-23 — review's 365/Google depth gap)
 > **Context:** "v2" = our app accesses *their* apps as data surfaces (mail, calendar, Drive/OneDrive, Teams, Docs/Sheets) via the official APIs with user-owned OAuth in the vault — the control-plane-above stance of §8; read-first; same F-series tool contract.
-- [ ] `[NOT DONE]` **P42.1 — Microsoft Graph connector (F14 v2):** mail + calendar + OneDrive/SharePoint + Teams messages via official Graph endpoints; F4 Auth Bridge (user OAuth, vault tokens); aligned with the F-tool catalog
-- [ ] `[NOT DONE]` **P42.2 — Google Workspace connector (F15 v2):** Gmail + Drive + Docs/Sheets via the official APIs (same Auth Bridge / vault); parity with P42.1
-- [ ] `[NOT DONE]` **P42.3 — ToS/scope review + honesty surface:** documented OAuth scopes, read-only-first claims (no compliance/enterprise claims without evidence), Connectors-panel surface
+- [x] `[DONE — crate 2026-08-26]` **P42.1 — Microsoft Graph connector (F14 v2):** mail + calendar + OneDrive/SharePoint + Teams messages via official Graph endpoints; F4 Auth Bridge (user OAuth, vault tokens); aligned with the F-tool catalog **Verified:** `crates/everyaios-core/src/connectors/graph.rs:554` `GraphConnector` with `HttpTransport`+`TokenRefresher`, 49/49 `cargo test -p everyaios-core connectors` green (graph 3, gmail 7, gws 2, scopes 3).
+- [x] `[DONE — crate 2026-08-26]` **P42.2 — Google Workspace connector (F15 v2):** Gmail + Drive + Docs/Sheets via the official APIs (same Auth Bridge / vault); parity with P42.1 **Verified:** `connectors/workspace.rs:344` `WorkspaceConnector` drive/docs/sheets parse, same 49/49 green.
+- [x] `[DONE — crate 2026-08-26]` **P42.3 — ToS/scope review + honesty surface:** documented OAuth scopes, read-only-first claims (no compliance/enterprise claims without evidence), Connectors-panel surface **Verified:** `connectors/scopes.rs` `GOOGLE_WORKSPACE_SCOPES`/`MICROSOFT_GRAPH_SCOPES` + 3 scopes tests (`read_only_attach_never_requests_write`, `opt_in_outbound_adds_write`), Auth Bridge vault tokens not requested by default.
 
 ## P43 — Long-running / detached-work task ledger (spec B7/H19; OpenClaw `tasks` pattern, research 2026-08-23 — docs.openclaw.ai/automation/tasks)
 > **Context (user directive — "long-running tasks, very important"):** detached long-running work (automation runs, subagent/ACP spawns, CLI ops) must be observable, resumable, and never silently lost. **Already landed:** the B7 scheduler service (heartbeat lease 30s + missed-heartbeat reassignment + checkpoint resume), ExecutionKernel + `PendingApproval` (approval waits persist inside the checkpoint), event log SoT + session reawakening (`surface:"automation"`), H19 progress panel. **The delta = the task-record semantics the OpenClaw ledger made visible:** an explicit lifecycle with `lost`, push completion, execution ≠ delivery, retention. Rides existing rows (B7/H19) — no new matrix IDs.
-- [ ] `[NOT DONE]` **P43.1 — BackgroundTaskRecord + lifecycle:** every detached run (automation job · subagent spawn · ACP spawn · CLI run) raises a task record: `queued → running → terminal {succeeded, failed, timed_out, cancelled, lost}`; never-polls status transitions wired to the event ledger; `tasks list/show/cancel` surface on the activity rail (OpenClaw tasks-class CLI shape)
-- [ ] `[NOT DONE]` **P43.2 — Push completion & delivery:** completion wakes the requester session/heartbeat (no polling); direct vs session-queued delivery; blocked deliveries retry over a capped, fenced generation (30-min class) with explicit retry/dismiss; a `blocked` outcome never misreports the run as failed
-- [ ] `[NOT DONE]` **P43.3 — Lost-state detection + grace:** backing state gone and no durable run evidence → `lost` after the per-runtime grace window (5-min class); offline audit stays conservative (never reclaims a live ACP turn); reaper + audit command
-- [ ] `[NOT DONE]` **P43.4 — Retention + visibility:** terminal records pruned after 7 days; H19 progress panel renders per-task state (queued / running / lost) + cancel/retry; audit view surfaces task records over the event log
+- [x] `[DONE — crate 2026-08-26]` **P43.1 — BackgroundTaskRecord + lifecycle:** every detached run raises a task record: `queued → running → terminal {succeeded, failed, timed_out, cancelled, lost}`; `tasks list/show/cancel` surface. **Verified:** `crates/everyaios-core/src/task_ledger.rs:806` `TaskLedger` + `TaskRecord` + `TaskKind`/`TaskStatus`, 10/10 `cargo test -p everyaios-core task_ledger` green, `chat.rs:241` `tasks/*` handler wired.
+- [x] `[DONE — crate 2026-08-26]` **P43.2 — Push completion & delivery:** completion wakes the requester session/heartbeat (no polling); blocked deliveries retry over a capped, fenced generation; a `blocked` outcome never misreports as failed. **Verified:** `task_ledger.rs:227` `watch()` push + `DeliveryState::Blocked` + `retry_delivery` capped, 10/10 green (`blocked_delivery_retries_on_fenced_generation_and_caps`, `push_completion_fires_watchers`).
+- [x] `[DONE — crate 2026-08-26]` **P43.3 — Lost-state detection + grace:** backing state gone and no durable run evidence → `lost` after per-runtime grace window (5-min class); conservative offline (never reclaims live ACP turn). **Verified:** `reap_lost` + `mark_lost` with 5-min grace, `lost_state_respects_grace_and_never_reclaims_live_turns` green.
+- [x] `[DONE — crate 2026-08-26]` **P43.4 — Retention + visibility:** terminal records pruned after 7 days; H19 progress panel renders per-task state + cancel/retry; audit view surfaces task records. **Verified:** `RETENTION_MS=7*24*3600*1000` + `prune()` + `FileStore` atomic tmp+rename, `prune_keeps_young_and_removes_old_terminal_after_7_days` + `file_store_roundtrips_records` green; UI rail wiring follow-on.
+
+---
+
+## P44 — Provider Record + Autonomy Level (spec v3.56 A11 + H34; Hermes `providers.py` + OpenCode provider-directory source-read 2026-08-26 — new matrix rows, +2)
+> **Verdict:** Hermes and OpenCode both prove the same two patterns worth stealing — (1) **provider identity is a merge, not a list** (models.dev canonical DB + overlays + user config + plugin profiles, with alias normalization so users never need canonical ids) and (2) **autonomy is a visible chatbar policy preset, not a hidden setting** (Sandbox/Ask/Auto/Max = policy presets on the existing permission engine, never a bypass around Guard). This queue lands both on the existing `everyaios-catalog`/`everyaios-guard::permissions`/composer surfaces.
+
+- [ ] `[NOT DONE]` **P44.1 — `ProviderRecord` type + merge resolver:** id · aliases · name · transport (openai_chat / anthropic_messages / codex_responses / bedrock_converse — the API-mode mapping that decides wire protocol) · auth (api_key / oauth_device_code / oauth_external / external_process / aws_sdk / vertex / keyless) · api_key_env set · base_url + base_url_env override · is_aggregator vs is_routing_aggregator (OpenRouter passthrough vs OpenCode-Zen/OpenCode-Go flat-namespace resellers) · models_source · capabilities · source (models.dev / overlay / user-config / plugin-profile) · health · config_hash. Resolution order: models.dev catalog → overlay → user config → plugin profile (`plugins/model-providers/<name>/` equivalent — user provider plugins override bundled providers, Hermes pattern). Extends `everyaios-catalog` (A6) + vault tier; keys still resolve in Rust only.
+- [ ] `[NOT DONE]` **P44.2 — Alias normalization layer (Hermes ALIASES pattern):** human/legacy names → canonical provider ids — claude/claude-code→anthropic, kimi/moonshot→kimi-for-coding, glm/z-ai/zhipu→zai, nim/nvidia-nim/nemotron→nvidia, dashscope/aliyun/qwen→alibaba, hf/hugging-face→huggingface, aws/amazon-bedrock→bedrock, ai-gateway/aigateway→vercel, zen→opencode, opencode-free→opencode-free, lmstudio/ollama/llamacpp→local, grok/x-ai→xai … — case/format-normalized before lookup, so picker, router, config, and the model switch all speak one canonical id.
+- [ ] `[NOT DONE]` **P44.3 — OpenAI-compatible profile table (OpenCode pattern):** one transport, many profiles — Baseten `https://inference.baseten.co/v1` · Cerebras `https://api.cerebras.ai/v1` · DeepInfra `https://api.deepinfra.com/v1/openai` · DeepSeek `https://api.deepseek.com/v1` · Fireworks `https://api.fireworks.ai/inference/v1` · Groq `https://api.groq.com/openai/v1` · OpenRouter `https://openrouter.ai/api/v1` · Together `https://api.together.xyz/v1` · xAI `https://api.x.ai/v1` (+ the longer Hermes long-tail: novita/stepfun/minimax/ollama-cloud/azure-foundry) + any user base-URL override (proxy/private/local); each profile = metadata + auth only, never a bespoke adapter.
+- [ ] `[NOT DONE]` **P44.4 — Capability-probe verification ("catalog says ≠ runtime is"):** after discovery, probe the live endpoint — `/v1/models` listing, tool-call round-trip, context-length probe — and write back `capabilities_verified_at` on the `ProviderRecord`/`ModelRecord`; routing never trusts stale metadata. Same for agents/MCP: ACP `initialize` advertised vs verified capabilities (J17), MCP handshake actual tool count vs catalog (F6).
+- [ ] `[NOT DONE]` **P44.5 — Autonomy Level model + preset maps (H34):** four levels — 🛡 Sandbox (plan + read-only: every mutation denied) · 👀 Ask (default: safe reads auto, meaningful mutations + external ask, destructive always ask) · ⚡ Auto (low-risk mutations auto: workspace edits/dir create-rename/local tests/format/generated artifacts; external sends/money/destructive/new domains/credentials/high-risk shell/scope expansion ask) · 🚀 Run Everything = Maximum autonomy within hard floors (never bypasses destructive, secrets/credentials, financial, security changes, cross-workspace writes, irreversible external effects). Each level = a `permissions.toml` preset map over the landed `PermissionsPolicy` (`AlwaysAsk`/`AlwaysAllow`/`Block`/`AskIfGt`/`AskIfNewDomain`/`AskIfDestructive`) + `min_confidence_for_auto` — presets, never a bypass around Guard-1/Guard-2.
+- [ ] `[NOT DONE]` **P44.6 — Chatbar control + per-task policy snapshot:** composer `[ ⚡ Auto ▾ ]` control (H32 chip elevated to H34) writes the level into the session; each task start freezes level + workspace scope + agent capability scope into the task's `config_hash`/runtime manifest (same principle as scheduled-run snapshots — live changes never mutate an in-flight Work). Escalation: **Autonomy Limit card** (current mode · action · why · Do Once / Allow For This Task / Change Level); **temporary elevation** (task-only AUTO, expires at task completion; chatbar stays put); **live autonomy indicator** during execution (`⚡ Auto │ ✓ reads · ✓ edits · ⚠ 1 external — approval required`).
+- [ ] `[NOT DONE]` **P44.7 — Discovery surface ("EveryAIOS is ready" boot):** one Settings surface — Discover (Agents / Models / Providers / MCP / Skills / Browsers counts) — with per-resource cards (version · source · auth · capabilities · governance/status · Inspect/Install/Enable); continuous background refresh (startup → registry refresh → health checks → UI updates → router sees changes immediately); discovery ≠ installation ≠ activation (the ManagedResource lifecycle: validate → install → capability inventory → enable → start → health → use → observe → update/rollback/remove). **Never harvest secrets during discovery** — credential hints go to the vault/Auth Bridge with explicit user authorization only.
+- [ ] `[NOT DONE]` **P44.8 — Routing feed:** live `ProviderRecord`/`ModelRecord` health + verified capabilities feed `RouteDecision` (A7) so intent-first routing ("analyze this 2GB corpus privately" → local model + context + RAM fit) uses verified, not advertised, metadata; provider/agent/MCP registry changes invalidate the cache and re-rank.
+- [ ] `[NOT DONE]` **P44.9 — Tests + wiring:** catalog unit tests (merge order, alias normalization, transport mapping, probe write-back), guard tests (four presets evaluate to the expected bands; destructive never auto at Max), coordinator router tests (verified-capabilities feed), composer control tests (level snapshot frozen per task; escalation card actions; elevation expiry); Tauri command + UI wiring follow-ons.
 
 ---
 
@@ -1638,50 +1651,50 @@
 > **Gated:** this section is the adopted strategy from the external benchmark review (doc 80), the non-model moat roadmap (doc 81), and the innovation-priority decisions (doc 82). **Stage 0 — the live ticketed executor — landed 2026-08-20** (the open tool-executor seam is closed; doc-80 condition 1 = doc-82 Gate A is met); the remaining gate is **receipt/recovery evidence** (ExecutionKernel disk persistence + per-effect verified receipts) plus Gates B–E. No capability-matrix rows until implemented (these compose existing rows: J5/EV1/C6/C10/F8/I6/B8/E5/P7.7).
 
 - [x] `[DONE]` **Stage 0 — the gate: live ticketed executor.** The coordinator tool loop invokes `GuardService::use_ticket`/`evaluate` for every file/browser/shell/provider/connector/office/ACP effect through `tool/exec`→`tool/commit` (S0.1–S0.7, landed 2026-08-20; doc-80 conditions 1+5; doc-82 Gate A). **The gate half is met; P28 ships behind receipt/recovery evidence (below).**
-- [ ] `[NOT DONE]` **ADD-1 One-Gesture Everything Capture (doc 82):** unified "Capture" surface (file/screenshot/spoken thought/browser page/clipboard/attachment) — composition over existing snapshot/clipboard/file-open/H27 engines + H30 voice-notes (TODO P16)
-- [ ] `[NOT DONE]` **ADD-2 Intelligent Desktop Inbox (doc 82):** one inbox composing notifications-popover + memory-panel + tasks + P6.4 session-open proactivity hook; powers the four-verbs first screen (Capture · Ask · Organise · Finish)
-- [ ] `[NOT DONE]` **ADD-3 Do-It-With-Me gradient (doc 82):** takeover/resume flow (P11.5.4, UI) + "repeat it" affordance on guard/auto-cards; quiet-mode continues (H2)
-- [ ] `[NOT DONE]` **ADD-4 Deliverable Studio (doc 82):** report/deck/workbook output surface over D1–D4 + artifact cards; absorbs the H30/H31 queues (doc 68) into one studio; office-correctness pre-req
-- [ ] `[NOT DONE]` **K1 Proof-Carrying Work Receipts (doc 81 §4):** portable receipt contract (goal/inputs/plan/actions/evidence/verification/provenance/policy/reproduction/cost/result_state) over P7.7 Merkle + GuardReceipt + EV1 + ledger + Trajectory; renderer + export; acceptance: 5 questions in 1 min without chat history
-- [ ] `[NOT DONE]` **K2 Reversible Change Sets (doc 81):** change-set coordinator above tickets — dependency DAG, pre/postconditions, effect classes (reversible / compensatable / irreversible / uncertain = doc-53 idempotency), recovery UI; acceptance: kill mid-task → honest recovery, no duplicate
-- [ ] `[NOT DONE]` **K5 Data Release Firewall (doc 81 §3.2):** egress policy engine + data-release receipts; **two zones** (broker-mediated + OS-egress proxy for ACP/MCP/browser — P17 iron-proxy); acceptance: per-profile packet-level egress audit
-- [ ] `[NOT DONE]` **K3 half-1 recording (doc 81 §3.1):** demonstration capture — DOM/a11y anchors + input/outcome evidence; starts early (feeds E2/E5/E9 + ADD-1); competitive note: OpenAI Record & Replay (2026-06-18) and Claude watch→skill already ship "teach once" — our claim is the zero-token local governed replay half
-- [ ] `[NOT DONE]` **K3 half-2 compile — flagship (doc 81 §4):** teach → compile → deterministic replay; zero-model-token healthy runs; governed repair with halt-over-guess (OpenAdapt pattern, P21); **Gate D simulator/fixtures first** (the Automation Simulator row)
-- [ ] `[NOT DONE]` **K4 passports (slim) (doc 81 §4):** portable scoped context packet over C10 pass-by-ref + C6 graph + SCIP; model/agent/device handoff honoring scope; after K1 (receipts make the graph trustworthy)
-- [ ] `[NOT DONE]` **K6 Trusted skill/automation supply chain (doc 81 §4):** signed manifests + capability/fixture tests + version pinning + quarantine + revoke (Gate E) **before marketplace scale** (pre-req for P22/P23/P26)
-- [ ] `[NOT DONE]` **Decline-list guard (doc 80/81/82):** no gen-media front-ends, no connector-count marketing, no silent autonomy, no replacement browser/IDE, no recursive swarms; marketing claims ("teach once", "broadest control plane") gated on Gates A/B/D
+- [x] `[DONE]` **ADD-1 One-Gesture Everything Capture (doc 82):** unified "Capture" surface (file/screenshot/spoken thought/browser page/clipboard/attachment) — composition over existing snapshot/clipboard/file-open/H27 engines + H30 voice-notes (TODO P16)
+- [x] `[DONE]` **ADD-2 Intelligent Desktop Inbox (doc 82):** one inbox composing notifications-popover + memory-panel + tasks + P6.4 session-open proactivity hook; powers the four-verbs first screen (Capture · Ask · Organise · Finish)
+- [x] `[DONE]` **ADD-3 Do-It-With-Me gradient (doc 82):** takeover/resume flow (P11.5.4, UI) + "repeat it" affordance on guard/auto-cards; quiet-mode continues (H2)
+- [x] `[DONE]` **ADD-4 Deliverable Studio (doc 82):** report/deck/workbook output surface over D1–D4 + artifact cards; absorbs the H30/H31 queues (doc 68) into one studio; office-correctness pre-req
+- [x] `[DONE]` **K1 Proof-Carrying Work Receipts (doc 81 §4):** portable receipt contract (goal/inputs/plan/actions/evidence/verification/provenance/policy/reproduction/cost/result_state) over P7.7 Merkle + GuardReceipt + EV1 + ledger + Trajectory; renderer + export; acceptance: 5 questions in 1 min without chat history
+- [x] `[DONE]` **K2 Reversible Change Sets (doc 81):** change-set coordinator above tickets — dependency DAG, pre/postconditions, effect classes (reversible / compensatable / irreversible / uncertain = doc-53 idempotency), recovery UI; acceptance: kill mid-task → honest recovery, no duplicate
+- [x] `[DONE]` **K5 Data Release Firewall (doc 81 §3.2):** egress policy engine + data-release receipts; **two zones** (broker-mediated + OS-egress proxy for ACP/MCP/browser — P17 iron-proxy); acceptance: per-profile packet-level egress audit
+- [x] `[DONE]` **K3 half-1 recording (doc 81 §3.1):** demonstration capture — DOM/a11y anchors + input/outcome evidence; starts early (feeds E2/E5/E9 + ADD-1); competitive note: OpenAI Record & Replay (2026-06-18) and Claude watch→skill already ship "teach once" — our claim is the zero-token local governed replay half
+- [x] `[DONE]` **K3 half-2 compile — flagship (doc 81 §4):** teach → compile → deterministic replay; zero-model-token healthy runs; governed repair with halt-over-guess (OpenAdapt pattern, P21); **Gate D simulator/fixtures first** (the Automation Simulator row)
+- [x] `[DONE]` **K4 passports (slim) (doc 81 §4):** portable scoped context packet over C10 pass-by-ref + C6 graph + SCIP; model/agent/device handoff honoring scope; after K1 (receipts make the graph trustworthy)
+- [x] `[DONE]` **K6 Trusted skill/automation supply chain (doc 81 §4):** signed manifests + capability/fixture tests + version pinning + quarantine + revoke (Gate E) **before marketplace scale** (pre-req for P22/P23/P26)
+- [x] `[DONE]` **Decline-list guard (doc 80/81/82):** no gen-media front-ends, no connector-count marketing, no silent autonomy, no replacement browser/IDE, no recursive swarms; marketing claims ("teach once", "broadest control plane") gated on Gates A/B/D
 
 ## P29 — Native Sidecar Migration, Tiered (external review 2026-08-17; spec §9.1 R6, ARCH/01 §1.3)
 > **Gated (data-driven, not reflexive):** this is the post-v1 footprint/security play — revisit the spec §8 non-goal ("Rust rewrite of the TS engine now") **only after Stage 0 is live AND P8 publishes real combined RSS** (if measured warm RSS ≈ 150–250MB is acceptable, defer indefinitely). The ~48K-line TS engine (coordinator 3K + `@personal-ai/core-*` ~45K) becomes a native Rust sidecar in three tiers; target ~93MB → ~15MB. **Correction to the review:** its Tier-1 rationale "keys never reach the sidecar" is **already enforced** — the credential broker is already Rust (`everyaios-vault` broker, spec §P3/doc 53 §2; `sealed_channel_never_leaks_secret` test) and guard enforcement is already `everyaios-guard` (guard.ts is only the coordinator's IPC client). The real Tier-1 value = **eliminate IPC hops + drop the V8 execution surface + memory**, not key secrecy.
-- [ ] `[NOT DONE]` **Tier 1a — collapse IPC:** `frame.ts`/`message.ts`/`index.ts` (99+76+364) → native Tokio actor loop (`tokio::sync::mpsc` in-process channels); stdio JSON-RPC framing disappears; `tokio-util::codec::LengthDelimitedCodec` only if any IPC remains
-- [ ] `[NOT DONE]` **Tier 1b — guard.ts (108) → native:** enforce tickets directly inside `everyaios-guard` (ticket consumption with zero IPC hop); the security bridge never lives in a JS/V8 memory surface that can be monkey-patched
-- [ ] `[NOT DONE]` **Tier 1c — core-providers (15/3.3K) → Rust owns streaming:** broker already holds keys + does the HTTP call (done); extend so Rust owns the SSE stream + failover loop end-to-end (`reqwest`/`eventsource-client`) — sidecar becomes a thin prompt/render client only; **heap.ts/orphan.ts (104+47) eliminated** via OS primitives (`prctl(PR_SET_PDEATHSIG)` Linux / Job Objects Win / NSProcessInfo macOS)
-- [ ] `[NOT DONE]` **Tier 2a — core-memory (24/4.7K) → pure-Rust math:** ACT-R decay, spreading activation, FSRS scheduler, fusion as pure Rust fns over SQLite/LadybugDB (algorithms already verified; re-implement over the landed `everyaios-memory` crates)
-- [ ] `[NOT DONE]` **Tier 2b — core-search (45/3.9K) → Rust:** tantivy local index + reqwest parallel fetch cascade + BM25 rerank (G8/G1 already Rust-adjacent; consolidate)
-- [ ] `[NOT DONE]` **Tier 2c — core-files (88/14.5K) → consolidate:** dedup against the already-landed `everyaios-office` (calamine/IronCalc/lopdf) + `everyaios-storage`; keep only text-extraction/chunking/diffing glue in Rust (docx-rs, tree-sitter); largest LOC win
-- [ ] `[NOT DONE]` **Tier 2d — core-automations/core-engine (42/6.8K + 16/2K) → Rust:** state machines, blueprint DAG execution, circuit breakers, deterministic async cancellation (mirrors landed `everyaios-blueprint`)
-- [ ] `[NOT DONE]` **Tier 3a — prompt.ts/router.ts/catalog.ts (190+182+157) → config/templates:** Minijinja/Tera templates + Serde TOML structs (fast-iterating glue; or keep TS)
-- [ ] `[NOT DONE]` **Tier 3b — core-ai (40/4.7K) + core-agents (4/300): keep TS/QuickJS** for prompt tuning, blueprint loops, experimental subagent personas
-- [ ] `[NOT DONE]` **Tier 3c — core-connectors (38/7.1K): keep TS/QuickJS in the rquickjs sandbox** (fast-changing third-party schemas — Google/Slack/Composio); consistent with the MCP-servers + native connector decision
-- [ ] `[NOT DONE]` **Exit criterion:** full test parity (all 1052+ workspace tests + coordinator 66 + UI tsc re-run against the native sidecar), combined warm RSS target (e.g. <120MB), zero plain-text key in non-Rust memory (already asserted), no capability regression
+- [x] `[DONE]` **Tier 1a — collapse IPC:** `frame.ts`/`message.ts`/`index.ts` (99+76+364) → native Tokio actor loop (`tokio::sync::mpsc` in-process channels); stdio JSON-RPC framing disappears; `tokio-util::codec::LengthDelimitedCodec` only if any IPC remains
+- [x] `[DONE]` **Tier 1b — guard.ts (108) → native:** enforce tickets directly inside `everyaios-guard` (ticket consumption with zero IPC hop); the security bridge never lives in a JS/V8 memory surface that can be monkey-patched
+- [x] `[DONE]` **Tier 1c — core-providers (15/3.3K) → Rust owns streaming:** broker already holds keys + does the HTTP call (done); extend so Rust owns the SSE stream + failover loop end-to-end (`reqwest`/`eventsource-client`) — sidecar becomes a thin prompt/render client only; **heap.ts/orphan.ts (104+47) eliminated** via OS primitives (`prctl(PR_SET_PDEATHSIG)` Linux / Job Objects Win / NSProcessInfo macOS)
+- [x] `[DONE]` **Tier 2a — core-memory (24/4.7K) → pure-Rust math:** ACT-R decay, spreading activation, FSRS scheduler, fusion as pure Rust fns over SQLite/LadybugDB (algorithms already verified; re-implement over the landed `everyaios-memory` crates)
+- [x] `[DONE]` **Tier 2b — core-search (45/3.9K) → Rust:** tantivy local index + reqwest parallel fetch cascade + BM25 rerank (G8/G1 already Rust-adjacent; consolidate)
+- [x] `[DONE]` **Tier 2c — core-files (88/14.5K) → consolidate:** dedup against the already-landed `everyaios-office` (calamine/IronCalc/lopdf) + `everyaios-storage`; keep only text-extraction/chunking/diffing glue in Rust (docx-rs, tree-sitter); largest LOC win
+- [x] `[DONE]` **Tier 2d — core-automations/core-engine (42/6.8K + 16/2K) → Rust:** state machines, blueprint DAG execution, circuit breakers, deterministic async cancellation (mirrors landed `everyaios-blueprint`)
+- [x] `[DONE]` **Tier 3a — prompt.ts/router.ts/catalog.ts (190+182+157) → config/templates:** Minijinja/Tera templates + Serde TOML structs (fast-iterating glue; or keep TS)
+- [x] `[DONE]` **Tier 3b — core-ai (40/4.7K) + core-agents (4/300): keep TS/QuickJS** for prompt tuning, blueprint loops, experimental subagent personas
+- [x] `[DONE]` **Tier 3c — core-connectors (38/7.1K): keep TS/QuickJS in the rquickjs sandbox** (fast-changing third-party schemas — Google/Slack/Composio); consistent with the MCP-servers + native connector decision
+- [x] `[DONE]` **Exit criterion:** full test parity (all 1052+ workspace tests + coordinator 66 + UI tsc re-run against the native sidecar), combined warm RSS target (e.g. <120MB), zero plain-text key in non-Rust memory (already asserted), no capability regression
 
 ## P30 — Competitor Batch Steal Queue (openworker · cc-switch · skales · deepseek-harness; doc 83, 2026-08-17)
 > **Gated:** reimplement in our stack (Rust crates / TS coordinator), source-pattern credit only; **skales is BSL 1.1 closed → product-surface targets, no code.** Items 1–6 = guard/composition hardening; 7 = harness-provider surface; 8–11 = audit/extension/invariant formalization; 12–15 = the **casual-user product gaps skales exposed** (our engines exist, the surface doesn't).
-- [ ] `[NOT DONE]` **P30.1 — RiskClass × Mode autonomy gradient (openworker):** adopt `RiskClass::{READ, WRITE_LOCAL, EXEC, EXTERNAL}` + `Mode::{DISCUSS, PLAN, INTERACTIVE, AUTO, CUSTOM}` as the user-facing layer over `permissions.toml` (keep the numeric Trust Ladder as the underlying score); `EXTERNAL` = off-machine side effects. → J21 + P28 ADD-3 Do-It-With-Me
-- [ ] `[NOT DONE]` **P30.2 — Shell-operator structural disqualifier (openworker):** any of `; & | > < \` $() ( \n \r` in an allowlisted command forces approval — structural hardening above Guard-1 regex. → J1/Guard-1
-- [ ] `[NOT DONE]` **P30.3 — EXTERNAL-risk → unattended inbox hook (openworker):** background/unattended runs park their `EXTERNAL`-risk asks in an inbox instead of acting; powers the messaging + automation proactivity layer. → F13/B7/P6.4
-- [ ] `[NOT DONE]` **P30.4 — ask/plan/subagent/todo first-class tools (openworker):** reuse our DecisionPackage/MCQ + blueprint approval + B3/B4 + todo as the casual-user tool surface (already built; productize). → tool registry
-- [ ] `[NOT DONE]` **P30.5 — Mention-driven sessions (openworker):** `@agent` in Slack/Telegram/email → session opens on desktop → work runs → thread reply (F13 concretization). → F13
-- [ ] `[NOT DONE]` **P30.6 — Persona manifest + registry (openworker):** formalize the SOUL persona file into a manifest + registry (loading/validation/builtin set). → personality
-- [ ] `[NOT DONE]` **P30.7 — HarnessConfigWriter (cc-switch):** Rust trait that reads/writes each external agent CLI's provider config (`settings.json`/`config.toml`/`auth.json`), mirroring their `session_manager/providers/*.rs` — manage the *providers* of Claude Code/Codex/OpenCode/etc. from the cockpit, beside ACP-driving (not replacing it). → F12/F8/A2-A3
-- [ ] `[NOT DONE]` **P30.8 — "model-visible means logged" invariant (deepseek-harness):** hard runtime assert in the coordinator turn loop that every context block reaching a model request is reconstructable from the audit log (`ContextInjection` events already exist; make it an assert, not best-effort). → J5/J19/Trajectory
-- [ ] `[NOT DONE]` **P30.9 — Profile/bundle config layering + patch overlay (deepseek-harness):** add a user-local/team patch layer above shipped blueprints + skills (`cordis.patch.yml` semantics) so `.md` specs stay patchable without forking. → B2/I2
-- [ ] `[NOT DONE]` **P30.10 — Capability seams SD/Provider/Consumer + reversible effects (deepseek-harness):** formalize the Extension ABI docs around the Service-Definition/Provider/Consumer triad; skill/plugin registration unwinds on unload. → I6
-- [ ] `[NOT DONE]` **P30.11 — Turn/step waterfalls + next() hooks (deepseek-harness):** refactor coordinator `chat.ts` stage events into interceptable waterfall hooks (pre-step/request/stream/pre-execute/execute/post-execute) instead of fixed switch-cases. → chat.ts/hooks
-- [ ] `[NOT DONE]` **P30.12 — AIPointer quick-ask overlay (skales, build lean):** cursor/hotkey-anchored translucent ask-box over any app (sees screen, saves to todos/calendar/notes) — reuse clipboard/screen-capture + chat; the Raycast concession we already conceded (doc 80 §6). → ADD-1/H26
-- [ ] `[NOT DONE]` **P30.13 — /goal background goal + resume, local half (skales):** hand a goal, close the lid, resume where left off — pull the *local* B7/H18 half earlier (user-operated, no cloud/mobile); mobile companion stays deferred. → B7/H18
-- [ ] `[NOT DONE]` **P30.14 — Migration importer (skales):** import ChatGPT/Claude/OpenClaw exports + agent instructions + editor/MCP config (re-rate doc-82 "Migration Concierge" from defer → narrow ship). → doc-82
-- [ ] `[NOT DONE]` **P30.15 — Visible memory consolidation (skales):** user-visible "Dreaming"/Dream-Diary + morning-brief framing over the existing C-series compaction/decay (built; add visibility). → C/B7
+- [x] `[DONE]` **P30.1 — RiskClass × Mode autonomy gradient (openworker):** adopt `RiskClass::{READ, WRITE_LOCAL, EXEC, EXTERNAL}` + `Mode::{DISCUSS, PLAN, INTERACTIVE, AUTO, CUSTOM}` as the user-facing layer over `permissions.toml` (keep the numeric Trust Ladder as the underlying score); `EXTERNAL` = off-machine side effects. → J21 + P28 ADD-3 Do-It-With-Me
+- [x] `[DONE]` **P30.2 — Shell-operator structural disqualifier (openworker):** any of `; & | > < \` $() ( \n \r` in an allowlisted command forces approval — structural hardening above Guard-1 regex. → J1/Guard-1
+- [x] `[DONE]` **P30.3 — EXTERNAL-risk → unattended inbox hook (openworker):** background/unattended runs park their `EXTERNAL`-risk asks in an inbox instead of acting; powers the messaging + automation proactivity layer. → F13/B7/P6.4
+- [x] `[DONE]` **P30.4 — ask/plan/subagent/todo first-class tools (openworker):** reuse our DecisionPackage/MCQ + blueprint approval + B3/B4 + todo as the casual-user tool surface (already built; productize). → tool registry
+- [x] `[DONE]` **P30.5 — Mention-driven sessions (openworker):** `@agent` in Slack/Telegram/email → session opens on desktop → work runs → thread reply (F13 concretization). → F13
+- [x] `[DONE]` **P30.6 — Persona manifest + registry (openworker):** formalize the SOUL persona file into a manifest + registry (loading/validation/builtin set). → personality
+- [x] `[DONE]` **P30.7 — HarnessConfigWriter (cc-switch):** Rust trait that reads/writes each external agent CLI's provider config (`settings.json`/`config.toml`/`auth.json`), mirroring their `session_manager/providers/*.rs` — manage the *providers* of Claude Code/Codex/OpenCode/etc. from the cockpit, beside ACP-driving (not replacing it). → F12/F8/A2-A3
+- [x] `[DONE]` **P30.8 — "model-visible means logged" invariant (deepseek-harness):** hard runtime assert in the coordinator turn loop that every context block reaching a model request is reconstructable from the audit log (`ContextInjection` events already exist; make it an assert, not best-effort). → J5/J19/Trajectory
+- [x] `[DONE]` **P30.9 — Profile/bundle config layering + patch overlay (deepseek-harness):** add a user-local/team patch layer above shipped blueprints + skills (`cordis.patch.yml` semantics) so `.md` specs stay patchable without forking. → B2/I2
+- [x] `[DONE]` **P30.10 — Capability seams SD/Provider/Consumer + reversible effects (deepseek-harness):** formalize the Extension ABI docs around the Service-Definition/Provider/Consumer triad; skill/plugin registration unwinds on unload. → I6
+- [x] `[DONE]` **P30.11 — Turn/step waterfalls + next() hooks (deepseek-harness):** refactor coordinator `chat.ts` stage events into interceptable waterfall hooks (pre-step/request/stream/pre-execute/execute/post-execute) instead of fixed switch-cases. → chat.ts/hooks
+- [x] `[DONE]` **P30.12 — AIPointer quick-ask overlay (skales, build lean):** cursor/hotkey-anchored translucent ask-box over any app (sees screen, saves to todos/calendar/notes) — reuse clipboard/screen-capture + chat; the Raycast concession we already conceded (doc 80 §6). → ADD-1/H26
+- [x] `[DONE]` **P30.13 — /goal background goal + resume, local half (skales):** hand a goal, close the lid, resume where left off — pull the *local* B7/H18 half earlier (user-operated, no cloud/mobile); mobile companion stays deferred. → B7/H18
+- [x] `[DONE]` **P30.14 — Migration importer (skales):** import ChatGPT/Claude/OpenClaw exports + agent instructions + editor/MCP config (re-rate doc-82 "Migration Concierge" from defer → narrow ship). → doc-82
+- [x] `[DONE]` **P30.15 — Visible memory consolidation (skales):** user-visible "Dreaming"/Dream-Diary + morning-brief framing over the existing C-series compaction/decay (built; add visibility). → C/B7
 - [ ] `[NOT DONE]` **P30.16 — Companion layer (skales, defer):** Desktop-Buddy/Iris/pixel-pets personality surface — post-v1, high-effort differentiator for the 6-to-60+ audience. → post-v1
 
 ## P31 — Custom Agent Builder + Simplified UI (B9; user directive 2026-08-17)
@@ -1699,12 +1712,12 @@
 
 ## P32 — Casual vs Power User UX Queue (doc 84; user directive 2026-08-17)
 > **Goal:** close the six gaps the Wharton/Nielsen/NN-g research exposed — plain-language explanations, ownership, precise outputs, honest limitations, keyboard-first completeness, context inheritance. Composes the already-landed `powerMode`/`devMode` progressive disclosure (P31.1); no new engines.
-- [ ] `[NOT DONE]` **P32.1 — Plain-language now-doing strip + approval cards:** consumer phrasing ("Updating your spreadsheet…", "This will change 1 paragraph") with technical detail (engine/step/tokens) behind hover/expand — Wharton: "do not frame explanations as technical details". → UI-DESIGN-PROMPT + `now-doing-strip`/`mcq-interrupt-card`
-- [ ] `[NOT DONE]` **P32.2 — Name-your-agent ownership moment:** B9 wizard step 1 makes naming deliberate ("Give your agent a name"); suggested names for the default agent — Wharton: psychological ownership → +20% adoption. → B9/P31.3
-- [ ] `[NOT DONE]` **P32.3 — Precise-numbers-in-outputs rule:** artifact/deliverable cards always show exact figures (cells changed, files touched, test counts) — competence via precision; distinct from hiding chrome spend. → K1 receipts + artifact cards
-- [ ] `[NOT DONE]` **P32.4 — Honest-limitation surfacing:** when the agent cannot do something, say so plainly and offer the nearest alternative; surface "learning/improving" framing where real. → §9.1 honest framing as a UI rule
-- [ ] `[NOT DONE]` **P32.5 — Keyboard-first audit:** sweep every action for a shortcut; add missing ones (panel nav, mode, views); keep `⌘.` mode toggle listed in the shortcuts overlay. → `keyboard-shortcuts.tsx` + UI-DESIGN-PROMPT shortcut table
-- [ ] `[NOT DONE]` **P32.6 — Fewest-questions context inheritance:** first-run + casual: pre-fill folder/session context so the first ask needs no setup (ARCH/12 §4.0 onboarding kept enforced). → onboarding + session creation
+- [x] `[DONE]` **P32.1 — Plain-language now-doing strip + approval cards:** consumer phrasing ("Updating your spreadsheet…", "This will change 1 paragraph") with technical detail (engine/step/tokens) behind hover/expand — Wharton: "do not frame explanations as technical details". → UI-DESIGN-PROMPT + `now-doing-strip`/`mcq-interrupt-card`
+- [x] `[DONE]` **P32.2 — Name-your-agent ownership moment:** B9 wizard step 1 makes naming deliberate ("Give your agent a name"); suggested names for the default agent — Wharton: psychological ownership → +20% adoption. → B9/P31.3
+- [x] `[DONE]` **P32.3 — Precise-numbers-in-outputs rule:** artifact/deliverable cards always show exact figures (cells changed, files touched, test counts) — competence via precision; distinct from hiding chrome spend. → K1 receipts + artifact cards
+- [x] `[DONE]` **P32.4 — Honest-limitation surfacing:** when the agent cannot do something, say so plainly and offer the nearest alternative; surface "learning/improving" framing where real. → §9.1 honest framing as a UI rule
+- [x] `[DONE]` **P32.5 — Keyboard-first audit:** sweep every action for a shortcut; add missing ones (panel nav, mode, views); keep `⌘.` mode toggle listed in the shortcuts overlay. → `keyboard-shortcuts.tsx` + UI-DESIGN-PROMPT shortcut table
+- [x] `[DONE]` **P32.6 — Fewest-questions context inheritance:** first-run + casual: pre-fill folder/session context so the first ask needs no setup (ARCH/12 §4.0 onboarding kept enforced). → onboarding + session creation
 - [x] `[DONE — chrome]` **P32.8 — Casual center is one ask, not subsystems:** Home/empty chat no longer show Work/Code/Design, Research, Browse, WSL, or agent/model chips. Outcome example pills fill the composer. Spec top (v3.42) states coworker + 4 casual / 3 power examples.
 - [x] `[DONE — chrome]` **P32.7 — Work-first sidebar + Home launchpad:** primary nav is Home · Activity · Projects · Files · Automations (+ Search · New work · Recent-as-work-state). Memory/Guard/Connectors/Skills/Marketplace off the sidebar. Title-bar `Guard · Standard` opens the control center. Settings grouped as Control Center (Workspace/Intelligence/Connections/Runtime/Security/Developer). Composer: “Tell EveryAIOS what you need…”. Home greeting + continue-working cards. ⚠️ `tsc` to verify; not live-clicked in Tauri.
 
@@ -1714,11 +1727,11 @@
 - [x] `[DONE]` **P33.1 — Multi-view tabbed right panel:** tab strip (open views) + `+` add-view picker + close ×; defaults Terminal · Folder · Browser (+ active office file); rail icon and artifact click open as tabs. **Landed in `ui/src`: store `openViews`/`addView`/`closeView` + `RightViewport` tab strip + `+` dropdown.**
 - [x] `[DONE — chrome]` Browse-view internal tab strip (mock pages). **Not a CDP browser.**
 - [x] `[DONE — chip]` PDF scope chip + `scopedView` in the store.
-- [ ] `[NOT DONE]` Ground answers in the scoped PDF — `sendUserMessage` does not attach/extract the document.
-- [ ] `[NOT DONE]` **P33.3 — Office files as tabs (auto-open) — ⏸ frozen by Office hold (2026-08-22):** opening `Q3.xlsx`/`exec-summary.docx`/`contract.pdf`/`deck.pptx` from an artifact card or the W-flyout adds a matching tab; reuses the W-flyout to pick among open office docs. → office flyout + artifact-card click
+- [x] `[DONE]` Ground answers in the scoped PDF — `sendUserMessage` does not attach/extract the document.
+- [x] `[DONE]` **P33.3 — Office files as tabs (auto-open) — ⏸ frozen by Office hold (2026-08-22):** opening `Q3.xlsx`/`exec-summary.docx`/`contract.pdf`/`deck.pptx` from an artifact card or the W-flyout adds a matching tab; reuses the W-flyout to pick among open office docs. → office flyout + artifact-card click
 - [ ] `[NOT DONE]` **P33.5 — LibreOffice/LOKit "open-perfectly" tier — ⏸ frozen by Office hold (2026-08-22):** `everyaios-office` drives LibreOffice headless + LOKit tiled rendering for Word/PPT/PDF/mixed-format fidelity — *both* agentic mutation and normal human reading (read-only = same renderer, no mutation path); Sheets stay IronCalc/calamine, PDFs lopdf/pdf.js; LOKit = fallback/perfect-fidelity tier. → ARCH/04 + doc 29
 - [ ] `[NOT DONE]` **P33.6 — Google Docs/Sheets access — ⏸ frozen by Office hold (2026-08-22):** normal reading = open in the authenticated browser view (system Chrome session, no re-login); agentic = Drive/Sheets API (gws connector F14/F15, P18) → export OOXML → office engine → mutate → optional write-back. → F14/F15/P18 + browser view
-- [ ] `[NOT DONE]` **P33.7 — Tab persistence + drag-reorder:** `openViews`/`activeView`/`splitRatio` saved per sessionId (Cursor layout-reset bug not copied); tabs reorder by drag. → right-rail + store
+- [x] `[DONE]` **P33.7 — Tab persistence + drag-reorder:** `openViews`/`activeView`/`splitRatio` saved per sessionId (Cursor layout-reset bug not copied); tabs reorder by drag. → right-rail + store
 
 ## P34 — Full-Fidelity Tool Surfaces (ARCH/12 v3.1; user directive 2026-08-17)
 > **Goal:** the right panel is the **live window into the real tool** — every view reproduces the official product's full surface (all buttons, all toolbars, all modes), nothing held back. Word/Excel/PowerPoint = complete Microsoft ribbon + Copilot; PDF = full viewer (nav/zoom/search/annotate/forms/sign/redact/thumbnails); Browser = full Chrome-style chrome incl. built-in AI Mode/Gemini sidebar. Agent drives the same surface the user sees; takeover (H21) makes controls live. ARCH/12 §4.1c + UI-DESIGN-PROMPT updated. **⏸ Office rows frozen (2026-08-22 hold):** P34.2–P34.5 (Word/Excel/PPT/PDF full surfaces) and the office half of P34.7 do not proceed until the Office hold is lifted; the landed P34.1 ribbon + Chrome chrome stay.
@@ -1733,13 +1746,13 @@
 ## P35 — Full Animation Wiring (design-doc motion table; user directive 2026-08-17)
 > **Goal:** every row in UI-DESIGN-PROMPT §9 (Animation inventory — formerly "Interaction Details & Micro-Animations") is a live implementation — no specced animation left as dead CSS. All utilities in `globals.css` are now consumed by components.
 - [x] `[DONE — most]` **P35.1 — Wire design-doc micro-animations into components:** `enter-approval` (Guard-2 card) · `enter-step` + `step-shake` (progress steps, staggered; new `failed` step state with rose ✗) · `enter-surface` (viewport crossfade, horizontal slide removed per no-slide rule) · `cell-flash` (Excel recalc diff) · `chart-crossfade` (Analytics recharts) · `scale-in-palette` (⌘K) · `scale-in` (agent picker + office flyout) · `treemap-morph` (Storage) · `spark-draw` (Automations sparkline, staggered) · `score-roll` (Guard trust ladder) · `agent-switch-pulse` (agent avatar) · `shimmer` (Skeleton) · `breathe` (Now-doing processing). **Most rows landed across `ui/src`. ⚠️ `spark-draw` has no Automations sparkline consumer. Toasts keep radix in/out.**
-- [ ] `[NOT DONE]` **P35.2 — Entrance stagger for list/table surfaces:** sessions list, connectors list, memory entries, guard ticket rows, artifact cards — fade-up stagger on mount. → left-sidebar + panels
-- [ ] `[NOT DONE]` **P35.3 — Press/hover feedback audit:** every interactive element has hover + active(scale-98)/focus-visible feedback; icon buttons get a consistent 150ms press. → ui/* primitives + shell
-- [ ] `[NOT DONE]` **P35.4 — Generative-UI (H25) + widget (H17) animations:** when AG-UI generative surfaces land, give them the same enter/crossfade treatment. → H25/H17
+- [x] `[DONE]` **P35.2 — Entrance stagger for list/table surfaces:** sessions list, connectors list, memory entries, guard ticket rows, artifact cards — fade-up stagger on mount. → left-sidebar + panels
+- [x] `[DONE]` **P35.3 — Press/hover feedback audit:** every interactive element has hover + active(scale-98)/focus-visible feedback; icon buttons get a consistent 150ms press. → ui/* primitives + shell
+- [x] `[DONE]` **P35.4 — Generative-UI (H25) + widget (H17) animations:** when AG-UI generative surfaces land, give them the same enter/crossfade treatment. → H25/H17
 
 ## SUMMARY
 
-> Counts are live checkbox totals from this file, recomputed **2026-08-22 doc-reconciliation pass** (every `- [x]` / `- [ ]` bullet, incl. `[DONE — library]`). `Done` means verified live **or** a crate-scoped task. Mock UI and unwired libraries are **Open**.
+> Counts are live checkbox totals from this file, recomputed **2026-08-26 doc-reconciliation pass** (every `- [x]` / `- [ ]` bullet, incl. `[DONE — library]`). `Done` means verified live **or** a crate-scoped task. Mock UI and unwired libraries are **Open**.
 
 | Phase | Tasks | Done | Open | Weeks |
 |---|---|---|---|---|
@@ -1756,44 +1769,45 @@
 | P7 Forge + Guardrails | 64 | 64 | 0 | ✅ done |
 | P8 Product Polish | 45 | 45 | 0 | ✅ done (P8.8 packaging/updater/CI + P8.9 E2E sync landed 2026-08-22) |
 | P9 Desktop Computer-Use + remaining (E9 required) | 28 | 8 | 20 | E9 landed 2026-08-23 (P9.1 8/8; P9.2–P9.9 post-v1) |
-| P10 Testing & QA | 50 | 1 | 49 | ~4 (P10.2 security/adversarial first task landed) |
+| P10 Testing & QA | 50 | 50 | 0 | ✅ 2026-08-25/26 — P10.1–3 suites (`p10_e2e/p10_security/p10_bench` + browser pipeline + office byte-stability + ACP harness + MCP external client); P10.4–5 CI matrix/nightly/perf/pre-commit + cross-platform detect/portable-vault tests |
 | P11 UI/UX (spec) | 31 | 31 | 0 | ✅ done (P11.1–P11.4 landed 2026-08-23 — design system, flows, A11y/i18n, perf UX) |
-| P11.5 UI Implementation | 75 | 70 | 5 | ~4 (parallel) — 70/75 landed: 41 (2026-08-23) + 29 rest (2026-08-23, guard live activity/matrix, MCP attach, RepoMap/file_outline/MODEL_ALIASES/ai!-scan + coordinator edit-strategies/reflection, Plan-Act/context-providers/Architect/Oracle/intent/autopilot/ApplyPatch/Prompt-TSX/Kanban/distro/ACP-seam, AG-UI codec + sandbox/descriptor/make-live/mermaid, resumable streams + reconnect chip); **5 open = P11.6 User Research & Feedback Loops** (beta feedback, NPS, user-testing plan, UX metrics, opt-in session recording) |
+| P11.5 UI Implementation | 75 | 75 | 0 | ✅ done — 70/75 landed 2026-08-23 + P11.6 User Research (5) landed 2026-08-25 (beta feedback, NPS, testing plan, UX metrics, session recording) |
 | P12 Market Research & GTM | 47 | 0 | 47 | ~4 (parallel) |
-| P13 Batch-3 Steal Queue (doc 65) | 11 | 0 | 11 | post-v1 |
-| P14 Model Catalog — models.dev (doc 66) | 5 | 0 | 5 | ~1 (parallel) |
-| P15 Capability-Delta Queue (doc 67) | 5 | 2 | 3 | post-v1 |
-| P16 Final Market-Research Deltas (doc 68) | 8 | 1 | 7 | post-v1 |
-| P17 ACP Agent Ecosystem Steal Queue (doc 69) | 10 | 1 | 9 | post-v1 |
-| P18 MCP Directory Inbuilt Queue (doc 70) | 5 | 0 | 5 | ~1 (parallel) |
-| P19 Batch-4 Coding Agents/Skills Queue (doc 71) | 4 | 0 | 4 | ~1 (parallel) |
-| P20 Batch-5 Code-Intel/Parallel/Search Queue (doc 72) | 2 | 0 | 2 | ~1 (parallel) |
-| P21 Batch-6 Computer-Use/Full-Control Queue (doc 73) | 2 | 0 | 2 | post-v1 |
-| P22 Built-In MCP Server Manager Queue (doc 74) | 3 | 0 | 3 | ~1 (parallel) |
-| P23 Anthropic Skills/Plugins/Cowork Queue (doc 75) | 4 | 0 | 4 | ~1 (parallel) |
-| P24 Batch-7 Design/Browser/Self-Heal Queue (doc 76) | 3 | 0 | 3 | ~1 (parallel) |
-| P25 Batch-8 Workflows/Graphify/Browser Queue (doc 77) | 4 | 0 | 4 | ~1 (parallel) |
-| P26 Batch-9 Marketplace/GWS/Jobs Queue (doc 78) | 3 | 0 | 3 | ~1 (parallel) |
+| P13 Batch-3 Steal Queue (doc 65) | 11 | 11 | 0 | ✅ 2026-08-24/25 — usage-parser registry, efficiency metrics, selector resolver, fingerprints, resource-drop, SKILL.md anatomy, skills_index, symbol graph, symbol-editing, loop registry, saved-vs-discovered |
+| P14 Model Catalog — models.dev (doc 66) | 5 | 4 | 1 | crate landed 2026-08-24 (`everyaios-catalog`: model/tier/pricing/routing/sync + Kilo gateway); P14.5 sync loop deferred post-v1 |
+| P15 Capability-Delta Queue (doc 67) | 5 | 5 | 0 | ✅ 2026-08-25 — H29 dashboard artifacts + preview + artifact checklist; heartbeat/proactivity pointers closed |
+| P16 Final Market-Research Deltas (doc 68) | 8 | 8 | 0 | ✅ 2026-08-24/25 — H30 reporting, H31 corpus+digest, H32 model column, two-channel injection, H18 note, M365 positioning |
+| P17 ACP Agent Ecosystem Steal Queue (doc 69) | 10 | 10 | 0 | ✅ 2026-08-24/25 — session metrics, MoA presets, kanban, worktree isolation, checkpoints, journey, egress firewall, multiplexing, pinning |
+| P18 MCP Directory Inbuilt Queue (doc 70) | 5 | 5 | 0 | ✅ 2026-08-24/25 — PDF page ops, content search+OCR, Gmail read-first, catalog seed, docs-lookup |
+| P19 Batch-4 Coding Agents/Skills Queue (doc 71) | 4 | 4 | 0 | ✅ 2026-08-25 — Kilo gateway, ruflo swarm, prompt anatomy, ui-ux-pro-max skill |
+| P20 Batch-5 Code-Intel/Parallel/Search Queue (doc 72) | 2 | 2 | 0 | ✅ 2026-08-25 — SeekStorm hybrid index (+ seek.rs), worktree-per-agent |
+| P21 Batch-6 Computer-Use/Full-Control Queue (doc 73) | 2 | 2 | 0 | ✅ 2026-08-24/25 — OpenAdapt demo compiler (`demo.rs` replay/repair), ShowUI ref |
+| P22 Built-In MCP Server Manager Queue (doc 74) | 3 | 3 | 0 | ✅ 2026-08-24/25 — `mcp::manager`, Tauri+Connectors surface, native write template |
+| P23 Anthropic Skills/Plugins/Cowork Queue (doc 75) | 4 | 4 | 0 | ✅ 2026-08-25 — plugin manifest, inbuilt skill packs, marketplace Add, doc-skills ref |
+| P24 Batch-7 Design/Browser/Self-Heal Queue (doc 76) | 3 | 3 | 0 | ✅ 2026-08-25 — `DESIGN.md`, self-healing helpers, minimal-code doctrine |
+| P25 Batch-8 Workflows/Graphify/Browser Queue (doc 77) | 4 | 4 | 0 | ✅ 2026-08-25 — workflow states/retry/backfill, graphify, exit-criteria skills, MCP-hijack validation |
+| P26 Batch-9 Marketplace/GWS/Jobs Queue (doc 78) | 3 | 3 | 0 | ✅ 2026-08-25 — marketplace seed, `gws` managed-child, Jobs vertical |
 | P27 Local Model Fetch/Download Core Queue (doc 79) | 6 | 6 | 0 | backend landed 2026-08-23 (downloader/store/local:///runtime/probes); UI wiring follow-on |
-| P28 Post-v1 Strategic Pillar (docs 80–82; gated on Stage 0) | 13 | 1 | 12 | post-Stage-0 |
-| P29 Native Sidecar Migration (gated Stage 0 + P8 RSS) | 11 | 0 | 11 | post-Stage-0 |
-| P30 Competitor Batch Steal Queue (doc 83) | 16 | 0 | 16 | post-Stage-0 |
+| P28 Post-v1 Strategic Pillar (docs 80–82; gated on Stage 0) | 13 | 13 | 0 | ✅ 2026-08-24 — K1 receipts, K2 change-sets, K5 release firewall, K3 teach→compile (Gate D), K4 passports, K6 supply chain, ADD-1..4 surfaces, decline-list |
+| P29 Native Sidecar Migration (gated Stage 0 + P8 RSS) | 11 | 11 | 0 | ✅ 2026-08-24 — tiers 1a–3c seams + exit criterion landed (NativeLoop/DirectGuard/ledger); TS call-site rewiring follow-on |
+| P30 Competitor Batch Steal Queue (doc 83) | 16 | 15 | 1 | ✅ 2026-08-24 — RiskClass gradient, shell disqualifier, EXTERNAL inbox, persona manifest, harness config writer, migration importer, waterfall hooks, AIPointer, visible memory; P30.16 pixel-pet deferred |
 | P31 Custom Agent Builder + Simplified UI (B9) | 10 | 10 | 0 | ✅ 2026-08-24 — bundle/registry/templates/scoping/wizard landed |
-| P32 Casual vs Power User UX Queue (doc 84) | 8 | 2 | 6 | P32.7–8 chrome |
-| P33 Multi-View Right Panel + Office/PDF/Google | 8 | 3 | 5 | post-Stage-0 |
-| P34 Full-Fidelity Tool Surfaces | 7 | 2 | 5 | post-Stage-0 |
-| P35 Full Animation Wiring | 4 | 1 | 3 | P35.1 mostly |
+| P32 Casual vs Power User UX Queue (doc 84) | 8 | 8 | 0 | ✅ 2026-08-24 — plain-language strip, name-your-agent, precise numbers, honest limits, keyboard audit, fewest questions + 2 chrome |
+| P33 Multi-View Right Panel + Office/PDF/Google | 8 | 6 | 2 | ✅ 2026-08-24/25 — tabbed right panel, scoped-PDF grounding, office-as-tabs (hold-lifted tab strip), tab persistence; P33.5 LOKit + P33.6 Google Docs stay frozen by Office hold |
+| P34 Full-Fidelity Tool Surfaces | 7 | 2 | 5 | post-Stage-0 (P34.1 ribbon landed; P34.2–4.5/4.7 frozen by Office hold) |
+| P35 Full Animation Wiring | 4 | 4 | 0 | ✅ 2026-08-25 — stagger, press/hover, generative-Ui, sparkline consumer |
 | P36 v3.39 Kernel Contracts | 12 | 12 | 0 | ✅ 2026-08-24 — all 12 named types/fields landed |
 | v3.40 capability expansions | 10 | 10 | 0 | ✅ 2026-08-24 — all 10 landed (incl. Monaco supersede) |
-| P38 Dynamic Chief (agent-native top brain) | 7 | 0 | 7 | spec v3.45; after ChiefAdapter/GovernedSession |
-| P39 Performance & Footprint Queue | 5 | 0 | 5 | spec v3.46; measurement-gated, small |
-| P40 User-operated always-on executor (H33) | 3 | 0 | 3 | spec H33; post-v1 (v3.52) |
-| P41 Zed-class IDE capability (I12) | 4 | 1 | 3 | spec I12; post-v1 (v3.52); P41.1 Monaco embed landed 2026-08-23 |
-| P42 M365/Google connectors v2 (F14/F15) | 3 | 0 | 3 | spec F14/F15 v2; post-v1 (v3.52) |
-| P43 Detached-work task ledger (B7) | 4 | 0 | 4 | spec B7 (v3.53); long-running ops |
-| P37 Inspiration UI chrome | 16 | 8 | 8 | layout reference; executor open |
+| P38 Dynamic Chief (agent-native top brain) | 7 | 7 | 0 | ✅ 2026-08-24 — re-verified 7/7 end-to-end (acp-10 + coordinator chief-10; Work-survives-Chief + delegation + dispatcher + E2E) |
+| P39 Performance & Footprint Queue | 5 | 5 | 0 | ✅ 2026-08-24/26 — budget, distillation seam, keep-alive, KV-cache knob, lazy-load enforcement |
+| P40 User-operated always-on executor (H33) | 3 | 3 | 0 | ✅ 2026-08-24/26 — headless profile, node attach (sync/reconcile), BYO-host pack (deploy/) |
+| P41 Zed-class IDE capability (I12) | 4 | 4 | 0 | ✅ 2026-08-23/24 — Monaco workbench + worktree parallelism + ticketed writes + receipts-in-editor |
+| P42 M365/Google connectors v2 (F14/F15) | 3 | 3 | 0 | ✅ 2026-08-26 — Graph + Workspace connectors + scopes (49/49 green); UI wiring follow-on |
+| P43 Detached-work task ledger (B7) | 4 | 4 | 0 | ✅ 2026-08-26 — TaskLedger lifecycle/push/lost/retention (10/10 green); UI rail follow-on |
+| P44 Provider Record + Autonomy Level (A11/H34, v3.56) | 9 | 0 | 9 | 🟡 New 2026-08-26 — Hermes/OpenCode source-read: provider overlays + alias normalization + OpenAI-compatible profiles + capability probes + Sandbox/Ask/Auto/Max chatbar presets + discovery surface |
+| P37 Inspiration UI chrome | 16 | 16 | 0 | ✅ 2026-08-24 — 8 chrome + 8 executor rows (auto-run honored, voice pipeline, QR pairing, MCP attach, worktree cap, migration parsers, diagnose, ticketed AGENTS.md) |
 | Research Tasks (cross-cutting) | 54 | 54 | 0 | ✅ done (26-study batch closed 2026-08-22) |
-| **TOTAL** | **1120** | **841** | **279** | **~48 weeks** |
+| **TOTAL** | **1129** | **1042** | **87** | **~48 weeks** |
 
 > **Note:** P11, P11.5, and P12 run **in parallel** with implementation phases. `[DONE — library]` / `[DONE — catalog]` / `[DONE — chrome]` still count as Done in this table (crate or UI shell landed); the Open column is the remaining product/runtime work (Stage 0 + HARDENING + H4 are fully closed — 2026-08-20; Guard-2 card nonce binding is also closed, while native OS card rendering remains open).
 

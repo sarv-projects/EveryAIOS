@@ -23,23 +23,37 @@
 
 pub mod automation;
 pub mod blueprint;
+pub mod change_set;
 pub mod checkpoint;
 pub mod crystallize;
 pub mod frontmatter;
 pub mod helpers;
+pub mod inbuilt;
+pub mod jobs;
 pub mod iteration;
+pub mod kanban;
+pub mod loop_pattern;
 pub mod md;
 pub mod persona;
 pub mod plan_cache;
 pub mod plugin;
+pub mod marketplace;
+pub mod plugin_manifest;
 pub mod skill_store;
+pub mod skills_index;
 pub mod spec;
 pub mod subagent;
+pub mod supply_chain;
+pub mod swarm;
 pub mod surgical;
 pub mod topology;
+pub mod workflow;
 
 pub use automation::{Automation, AutomationStep, Trigger};
 pub use blueprint::{Blueprint, BlueprintError, BlueprintTask, TaskStatus, VerifyBlock};
+pub use change_set::{
+    Change, ChangeSet, ChangeState, CommittedChange, EffectClass, RecoveryReport,
+};
 pub use checkpoint::{BlueprintRegistry, Checkpoint, CheckpointError, RegistryError};
 pub use crystallize::{
     compile_to_script, decrystallize_check, signature as workflow_signature, CompiledSkill, Drift,
@@ -53,6 +67,10 @@ pub use iteration::{
     LoopVerdict, McqOption, Scope, StepKind, TimeoutPolicy, PARENT_MAX_ITERATIONS,
     SUBAGENT_MAX_ITERATIONS, SUBAGENT_TIMEOUT_CUSTOM_SECS, SUBAGENT_TIMEOUT_GLOBAL_SECS,
 };
+pub use kanban::{Column, Dispatcher, KanbanBoard, KanbanTask};
+pub use loop_pattern::{
+    Condition, LoopPattern, LoopPatternRegistry, LoopSnapshot,
+};
 pub use md::{BlueprintDoc, MdError};
 pub use persona::{
     load_persona, render_persona, Persona, PersonaConfig, PersonaError, TonePreset, CORE_RULES,
@@ -65,11 +83,20 @@ pub use plugin::{
 };
 pub use skill_store::{
     grow_from_task, taste_skill, ScoredSkill, Skill, SkillError, SkillIndex, SkillManifest,
-    SkillStore, MAX_ACTIVE_SKILLS,
+    SkillReference, SkillScript, SkillStore, MAX_ACTIVE_SKILLS,
+};
+pub use skills_index::{
+    compose_stack, ComposeOutcome, IndexEntry, RejectionReason, SelectionEvidence,
+    SkillsIndexFile,
 };
 pub use spec::{SpecError, TaskSpec};
+pub use supply_chain::{
+    digest as manifest_digest, hmac_sha256, ManifestBody, QuarantineEntry, SignedManifest,
+    SupplyChainPolicy, SupplyVerdict,
+};
 pub use subagent::{
     AgentMessage, AgentMessageKind, SubAgentError, SubAgentLimits, SubAgentResult, SubAgentRuntime,
     SubAgentSpec, DELEGATE_BLOCKED_TOOLS, ROOT_AGENT,
 };
 pub use topology::{AgentRole, MultiAgentPlan, Topology};
+pub mod worktree;

@@ -19,6 +19,7 @@ members = [
     "everyaios-acp",
     "everyaios-agents",
     "everyaios-search",
+    "everyaios-catalog",
     "everyaios-desktop",
 ]
 

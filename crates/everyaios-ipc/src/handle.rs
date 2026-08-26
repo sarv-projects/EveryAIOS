@@ -60,7 +60,13 @@ impl HandleStore {
 
     /// Store a payload; small ones stay inline, large ones become a handle.
     pub fn store(&self, payload: Vec<u8>) -> WirePayload {
-        if payload.len() <= TRUNCATION_THRESHOLD {
+        self.store_above(payload, TRUNCATION_THRESHOLD)
+    }
+
+    /// Store a payload with a caller-chosen threshold (P39.1 per-message-type
+    /// budgets need 2–50 KB thresholds, far below the 1 MiB default).
+    pub fn store_above(&self, payload: Vec<u8>, threshold: usize) -> WirePayload {
+        if payload.len() <= threshold {
             return WirePayload::Inline(payload);
         }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
@@ -127,6 +133,18 @@ mod tests {
         let store = HandleStore::new();
         let payload = vec![b'x'; TRUNCATION_THRESHOLD];
         assert!(matches!(store.store(payload), WirePayload::Inline(_)));
+    }
+
+    #[test]
+    fn store_above_honors_custom_threshold() {
+        let store = HandleStore::new();
+        // 60 KB is well under the 1 MiB default threshold but over a 50 KB
+        // per-type budget → must become a ref (P39.1).
+        let payload = vec![b'x'; 60 * 1024];
+        let r = store.store_above(payload, 50 * 1024);
+        assert!(matches!(r, WirePayload::Ref(_)), "60KB must be a ref at a 50KB budget");
+        let small = vec![b'x'; 40 * 1024];
+        assert!(matches!(store.store_above(small, 50 * 1024), WirePayload::Inline(_)));
     }
 
     #[test]

@@ -55,6 +55,32 @@ export async function fsWriteFile(path: string, content: string): Promise<{ path
   return invoke('fs_write_file', { path, content })
 }
 
+/** P41.3 — ticketed editor write, request half: a Guard-2 ticket (diff card)
+ * for a buffer write. `action: allow` = policy auto-approved; `ask` = the
+ * card awaits the human. The write happens only via `fsWriteCommit`. */
+export async function fsWriteTicket(
+  path: string,
+  content: string,
+): Promise<{
+  action: 'allow' | 'ask'
+  ticketId: string
+  approvalNonce: string
+  preview: { before: string; after: string }
+}> {
+  return invoke('fs_write_ticket', { path, content })
+}
+
+/** P41.3 — ticketed editor write, executor half: consumes the mandatory
+ * single-use ticket, then writes. No ticket, no write — no silent autosaves
+ * into the workspace. */
+export async function fsWriteCommit(
+  path: string,
+  content: string,
+  ticketId: string,
+): Promise<{ path: string; bytes: number }> {
+  return invoke('fs_write_commit', { path, content, ticketId })
+}
+
 export async function fsUndoList(): Promise<{ undos: FsUndo[]; count: number }> {
   if (!inTauri()) {
     return { undos: [], count: 0 }

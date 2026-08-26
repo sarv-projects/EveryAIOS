@@ -1,0 +1,22 @@
+//! P14 — Model catalog (doc 66, models.dev steal).
+//!
+//! A vendorable model-capability index: one `ModelEntry` per provider/model
+//! (compiled shape), the two-tier lab/provider schema, a cache-aware cost
+//! engine, and the routing filter matrix. Parsed once at startup; the router
+//! and cost display read from it — nothing here mutates.
+
+pub mod catalog;
+pub mod gateway;
+pub mod model;
+pub mod pricing;
+pub mod routing;
+pub mod sync;
+pub mod tier;
+
+pub use catalog::ModelCatalog;
+pub use model::ModelEntry;
+pub use pricing::{cost_for, split_input, CostBreakdown};
+pub use routing::{rejection_reasons, RouteFilters};
+pub use gateway::{GatewayError, GatewayRouter, RouteResult, TaskHint};
+pub use sync::{gate_passes, refresh_plan, validate_vendored, GateFinding, Severity, SyncSpec, SYNC_MODULES};
+pub use tier::{validate_tiers, ProviderOverride, ResolvedModel};

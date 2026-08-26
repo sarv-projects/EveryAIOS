@@ -8,6 +8,8 @@
 
 use crate::blueprint::Blueprint;
 use crate::frontmatter::AgentConfig;
+#[cfg(test)]
+use crate::frontmatter::Isolation;
 use crate::md::{BlueprintDoc, MdError};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -260,6 +262,9 @@ mod tests {
                 hooks: vec![],
                 mcp_servers: vec![],
                 max_turns: None,
+                effort: None,
+                background: None,
+                isolation: Isolation::None,
             }),
             blueprint: bp("a"),
         })

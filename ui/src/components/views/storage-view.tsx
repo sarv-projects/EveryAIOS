@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { HardDrive, Copy, AlertTriangle, FileSearch, GitCompare, Trash2, Battery, RefreshCw } from 'lucide-react'
+import { HardDrive, Copy, AlertTriangle, FileSearch, GitCompare, Trash2, Battery, RefreshCw, Moon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -18,6 +18,32 @@ import {
   type LargeFile,
   type DupGroup,
 } from '@/lib/storage'
+
+/** P30.15 — dream-diary card: visible memory consolidation over the C-series. */
+function DreamDiaryCard() {
+  const dreamDiary = useAppStore((s) => s.dreamDiary)
+  if (dreamDiary.length === 0) return null
+  const [latest] = dreamDiary
+  return (
+    <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+      <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-violet-300">
+        <Moon className="h-3.5 w-3.5" />
+        Dream diary
+        <span className="font-mono text-[9px] text-muted-foreground">
+          {dreamDiary.length} run{dreamDiary.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      {latest && (
+        <div className="text-[11px] text-foreground/90">{latest.brief}</div>
+      )}
+      {dreamDiary.slice(1, 4).map((e) => (
+        <div key={e.id} className="mt-1 truncate text-[10px] text-muted-foreground/80">
+          {e.headline}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function treemapColor(c: [number, number, number] | undefined): string {
   if (!c) return 'bg-zinc-700/70'
@@ -92,6 +118,9 @@ export default function StorageView() {
 
       <ScrollArea className="scroll-thin min-h-0 flex-1">
         <div className="space-y-4 p-4">
+          {/* P30.15 — visible memory consolidation: the dream diary. */}
+          <DreamDiaryCard />
+
           {deferred && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-[11px] text-amber-300">
               <Battery className="mb-1 h-3.5 w-3.5" />

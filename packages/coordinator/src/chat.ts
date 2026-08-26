@@ -35,7 +35,14 @@ import {
   type OpenAIFunctionTool,
 } from "./tools";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
+import { recordObservation, currentObservations } from "./observations";
+import { hintsFor } from "./catalog";
+import { budgetJson, refRegistry } from "./budget";
+import { assertAllLogged, ContextTrace, type ContextSource } from "./context-trace";
+import { runStage, type WaterfallHooks } from "./waterfall";
 export { evaluateGuard, useTicket, guardGate } from "./guard";
+export { assertAllLogged, ContextTrace, type ContextSource } from "./context-trace";
+export { composeHooks, runStage, type WaterfallHooks } from "./waterfall";
 
 /** Minimal B1-base turn parameters (P1.5 owns full system-prompt assembly). */
 export interface ChatStreamParams {
@@ -58,6 +65,8 @@ export interface ChatStreamParams {
   userDocuments?: Array<{ title: string; content: string }>;
   /** P5/P6 project-scope isolation key (H2). */
   projectId?: string;
+  /** P30.11 — interceptable turn/step waterfall hooks (default: pass-through). */
+  hooks?: WaterfallHooks;
 }
 
 /** Events the coordinator forwards to the UI as `chat/<type>` notifications. */
@@ -92,6 +101,17 @@ export type ChatEvent =
       args?: Record<string, unknown>;
     }
   | { type: "cancelled"; streamId: string }
+  | {
+      /** P41.4 — K1 verification receipt (inline in the editor's Diff rail):
+       * model-reported pass/fail per plan-task check, never claimed as
+       * executed. `passed: null` = the report was ambiguous. */
+      type: "verification";
+      streamId: string;
+      taskId: string;
+      checks: string[];
+      report: string;
+      passed: boolean | null;
+    }
   | {
       type: "memory_extracted";
       streamId: string;
@@ -376,6 +396,7 @@ export async function runChatStream(
   const batcher = new StreamSession(streamId, (ev) => {
     switch (ev.type) {
       case "ttft":
+        ttftMs = ev.latencyMs;
         emit({ type: "ttft", streamId, latencyMs: ev.latencyMs });
         break;
       case "batch":
@@ -393,6 +414,11 @@ export async function runChatStream(
   let openaiTools: OpenAIFunctionTool[] | undefined;
   let catalogIndex: string[] = [];
   const riskById = new Map<string, string>();
+  // P30.8 — "model-visible means logged": every block injected below is
+  // recorded on the trace at injection time and proven present in the final
+  // prompt (assertAllLogged) before the turn completes.
+  const contextTrace = new ContextTrace();
+  const injectedBlocks: { source: ContextSource; content: string }[] = [];
   if (toolExecutor) {
     try {
       const listed: ListedTool[] = sortToolsStable(await toolExecutor.listTools());
@@ -414,6 +440,10 @@ export async function runChatStream(
       task,
       ...(provider !== undefined ? { provider } : {}),
       ...(model !== undefined ? { model } : {}),
+      // P36/P0-5 — feed the RouteDecision consensus scorer the observations
+      // recorded by *prior* turns of this process (health/cost/latency), so
+      // the next routing decision reflects live provider outcomes.
+      observations: currentObservations(),
     });
     provider = sel.provider;
     model = sel.model;
@@ -477,10 +507,10 @@ export async function runChatStream(
           };
           const facts = plan?.coreFacts ?? [];
           if (facts.length > 0) {
-            system = injectBelowBoundary(
-              system,
-              `<memory_warm_set>\n${facts.join("\n")}\n</memory_warm_set>`,
-            );
+            const block = `<memory_warm_set>\n${facts.join("\n")}\n</memory_warm_set>`;
+            contextTrace.record("memory_warm_set", block);
+            injectedBlocks.push({ source: "memory_warm_set", content: block });
+            system = injectBelowBoundary(system, block);
           }
         } catch {
           /* memory/plan is best-effort — a missing handler never blocks the turn */
@@ -490,12 +520,17 @@ export async function runChatStream(
       // stable prefix stays byte-identical as the catalog grows. Full
       // schemas are the resolved subset on ProviderRequest.tools.
       if (catalogIndex.length > 0) {
-        system = injectBelowBoundary(
-          system,
-          `<tool_index>\n${catalogIndex.join("\n")}\n</tool_index>`,
-        );
+        const block = `<tool_index>\n${catalogIndex.join("\n")}\n</tool_index>`;
+        contextTrace.record("tool_index", block);
+        injectedBlocks.push({ source: "tool_index", content: block });
+        system = injectBelowBoundary(system, block);
       }
-      return `${system}\n\n<user>\n${input.text}\n</user>`;
+      const userBlock = `<user>\n${input.text}\n</user>`;
+      contextTrace.record("user", userBlock);
+      injectedBlocks.push({ source: "user", content: userBlock });
+      contextTrace.record("system", system);
+      injectedBlocks.push({ source: "system", content: system });
+      return `${system}\n\n${userBlock}`;
     },
     streamProvider: async function* (prompt, signal, extras) {
       const messages: ProviderMessage[] = [
@@ -537,6 +572,17 @@ export async function runChatStream(
           ? { tools: openaiTools, tool_choice: "auto" as const }
           : {}),
       };
+      // P30.8 — invariant: every recorded block is present in what we send.
+      const logged = assertAllLogged(contextTrace, injectedBlocks, prompt);
+      if (!logged.ok) {
+        emit({
+          type: "error",
+          streamId,
+          code: "context_not_logged",
+          message: `model-visible block(s) not reconstructable from the trace: ${logged.missing.join(", ")}`,
+        });
+      }
+      emit({ type: "stage", streamId, stage: `context:logged:${contextTrace.count()}` });
       for await (const chunk of bridge.streamChat(req, signal)) {
         if (signal.aborted) return;
         yield chunk;
@@ -552,9 +598,29 @@ export async function runChatStream(
             const ctx: { sessionId: string; agentId?: string } = { sessionId };
             if (params.agentId !== undefined) ctx.agentId = params.agentId;
             emit({ type: "stage", streamId, stage: `tool:${toolId}:running` });
+            // P30.11 — preExecute hook: veto (ctx.veto) blocks the call.
+            if (hooks) {
+              const hookCtx = await runStage("preExecute", hooks, {
+                stage: "preExecute",
+                streamId,
+                toolId,
+                args,
+              });
+              if (hookCtx.veto === true) {
+                return { ok: false, error: `blocked by preExecute hook (${toolId})` };
+              }
+            }
             try {
               const result = await toolExecutor.executeTool(toolId, args, ctx);
               emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
+              if (hooks) {
+                await runStage("postExecute", hooks, {
+                  stage: "postExecute",
+                  streamId,
+                  toolId,
+                  result,
+                });
+              }
               return result;
             } catch (toolErr) {
               const message = toolErr instanceof Error ? toolErr.message : String(toolErr);
@@ -602,11 +668,23 @@ export async function runChatStream(
   });
 
   const input: TurnInput = { text, surface, sessionId };
+  const hooks = params.hooks;
+
+  // P30.11 — preStep hook (observe / short-circuit before the engine runs).
+  if (hooks) {
+    const ctx = await runStage("preStep", hooks, { stage: "preStep", streamId, sessionId, text });
+    if (ctx.abort === true) {
+      emit({ type: "done", streamId, turnId: `${sessionId}:${++turnCounter}:aborted`, fullText: "", totalTokens: 0 });
+      active.delete(streamId);
+      return;
+    }
+  }
 
   let turnId = "";
   let fullText = "";
   let aguiArtifactCounter = 0;
   let usage: { promptTokens: number; completionTokens: number } | undefined;
+  let ttftMs = 0;
 
   try {
     for await (const ev of engine.run(input, controller.signal)) {
@@ -645,7 +723,13 @@ export async function runChatStream(
           break;
         }
         case "tool_result":
-          emit({ type: "tool_result", streamId, toolId: ev.toolId, result: ev.result });
+          // P39.1: oversized tool results become ref + bounded preview.
+          emit({
+            type: "tool_result",
+            streamId,
+            toolId: ev.toolId,
+            result: budgetJson(ev.result, refRegistry),
+          });
           notifyAgui("tool_call_result", streamId, {
             call_id: ev.toolId,
             name: ev.toolId,
@@ -684,6 +768,16 @@ export async function runChatStream(
           // Trajectory → audit (P2).
           break;
         case "error":
+          // P36 — record the failed outcome so the scorer deprioritizes this
+          // provider:model on the next turn (budget kills excluded — that is
+          // a session constraint, not a provider-health signal).
+          if (!isBudgetError(ev.error)) {
+            recordObservation(finalProvider, finalModel, {
+              ok: false,
+              latencyMs: ttftMs,
+              costScore: hintsFor(finalProvider, finalModel).costScore,
+            });
+          }
           if (controller.signal.aborted) {
             emit({ type: "cancelled", streamId });
           } else {
@@ -700,9 +794,27 @@ export async function runChatStream(
 
     batcher.complete();
 
+    // P30.11 — postStep hook (final observe / rewrite before the done event).
+    if (hooks) {
+      await runStage("postStep", hooks, {
+        stage: "postStep",
+        streamId,
+        turnId,
+        fullText,
+      });
+    }
+
     if (controller.signal.aborted) {
       emit({ type: "cancelled", streamId });
     } else {
+      // P36 — record the successful outcome (health 1, latency, cost
+      // estimate) so the next routing decision sees a live observation.
+      recordObservation(finalProvider, finalModel, {
+        ok: true,
+        latencyMs: ttftMs,
+        tokens: batcher.getTokenCount(),
+        costScore: hintsFor(finalProvider, finalModel).costScore,
+      });
       emit({
         type: "done",
         streamId,
@@ -726,6 +838,14 @@ export async function runChatStream(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // P36 — the catch path is a provider/engine failure too (not a cancel).
+    if (!isBudgetError(message)) {
+      recordObservation(finalProvider, finalModel, {
+        ok: false,
+        latencyMs: ttftMs,
+        costScore: hintsFor(finalProvider, finalModel).costScore,
+      });
+    }
     emit({
       type: "error",
       streamId,
@@ -862,7 +982,8 @@ export async function runToolRetry(
     const ctx: { sessionId: string; agentId?: string } = { sessionId };
     if (params.agentId !== undefined) ctx.agentId = params.agentId;
     const result = await ex.executeTool(toolId, args, ctx);
-    emit({ type: "tool_result", streamId, toolId, result });
+    // P39.1: oversized tool results become ref + bounded preview.
+    emit({ type: "tool_result", streamId, toolId, result: budgetJson(result, refRegistry) });
     emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

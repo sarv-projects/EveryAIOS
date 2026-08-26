@@ -61,6 +61,32 @@ pub trait AgentCardVerifier {
     fn verify(&self, signed: &SignedAgentCard) -> Result<(), String>;
 }
 
+/// True when `endpoint` is `https` or loopback `http`, refusing insecure
+/// remote `http`. The loopback check parses the host and requires a literal
+/// loopback address — lookalikes like `http://localhost.evil.com` or
+/// `http://127.0.0.1.nip.io` do **not** pass (bugfix 10).
+pub fn is_secure_endpoint(endpoint: &str) -> Result<(), A2aError> {
+    let url = url::Url::parse(endpoint).map_err(|_| A2aError::InsecureEndpoint)?;
+    match url.scheme() {
+        "https" => Ok(()),
+        "http" => {
+            let host = url
+                .host_str()
+                .unwrap_or("")
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_ascii_lowercase();
+            let loopback = host == "127.0.0.1" || host == "localhost" || host == "::1";
+            if !loopback {
+                Err(A2aError::InsecureEndpoint)
+            } else {
+                Ok(())
+            }
+        }
+        _ => Err(A2aError::InsecureEndpoint),
+    }
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum A2aError {
     #[error("A2A card is missing a required identity field")]
@@ -85,13 +111,7 @@ impl SignedAgentCard {
         {
             return Err(A2aError::InvalidIdentity);
         }
-        let endpoint = self.card.endpoint.to_ascii_lowercase();
-        let loopback = endpoint.starts_with("http://127.0.0.1")
-            || endpoint.starts_with("http://localhost")
-            || endpoint.starts_with("http://[::1]");
-        if !endpoint.starts_with("https://") && !loopback {
-            return Err(A2aError::InsecureEndpoint);
-        }
+        is_secure_endpoint(&self.card.endpoint)?;
         Ok(())
     }
 
@@ -165,5 +185,20 @@ mod tests {
         let mut c = card("https://agent.example");
         c.signature.clear();
         assert_eq!(c.validate(), Err(A2aError::InvalidIdentity));
+    }
+
+    #[test]
+    fn loopback_lookalikes_do_not_pass() {
+        // Bugfix 10 — a prefix check would let these through; a parsed-host
+        // check rejects them (they are external hosts that happen to start
+        // with the loopback text or resolve to it via a wildcard).
+        assert!(card("http://localhost.evil.com").validate().is_err());
+        assert!(card("http://127.0.0.1.nip.io").validate().is_err());
+        assert!(card("http://127.0.0.1.evil.io").validate().is_err());
+        assert!(card("http://127.0.0.1.0.1").validate().is_err());
+        // Genuine literal loopback still passes.
+        assert!(card("http://127.0.0.1:9000/a2a").validate().is_ok());
+        assert!(card("http://localhost:8080").validate().is_ok());
+        assert!(card("http://[::1]:7000/a2a").validate().is_ok());
     }
 }

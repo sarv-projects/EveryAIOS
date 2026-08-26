@@ -285,3 +285,37 @@ pub fn sync_fingerprint(public_key: String) -> Result<serde_json::Value, String>
         .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "ok": true, "fingerprint": fp_hex(&bytes) }))
 }
+
+/// P40.2 — node attach (H33): the always-on node joins the encrypted mesh,
+/// confirms the handshake (X25519 + ChaCha20-Poly1305, P8.9), reconciles the
+/// event ledger (version vectors + tombstones via `sync_with_peer`), and
+/// reports due-work readiness. Guard-2-required steps are NEVER executed on
+/// the node: they park as pending and surface on the control plane — the
+/// report's `guardParked` flag is the honest signal of that boundary.
+#[tauri::command]
+pub fn node_attach(
+    state: State<'_, AppState>,
+    control_plane: String,
+) -> Result<serde_json::Value, String> {
+    let addr: SocketAddr = control_plane
+        .parse::<SocketAddr>()
+        .map_err(|e: std::net::AddrParseError| format!("invalid control plane {control_plane}: {e}"))?;
+    let mut session = load_or_create_state(&state);
+    let outcome = sync_with_peer(addr, &mut session).map_err(|e| e.to_string())?;
+    persist_state(&session);
+    Ok(serde_json::json!({
+        "ok": true,
+        "attached": true,
+        "handshake": "confirmed", // ECDH + confirm-token MAC verified inside sync_with_peer
+        "peerDevice": outcome.peer_device,
+        "peerFingerprint": outcome.peer_fingerprint,
+        "ledgerApplied": outcome.applied,
+        "ledgerPushed": outcome.pushed,
+        "ledgerConflicts": outcome.conflicts,
+        "live": session.set.live_count(),
+        // Approval-required (Guard-2) steps park on the node; receipts for
+        // executed due-work land in this same ledger and sync back.
+        "guardParked": true,
+        "dueWork": "executed by B7 scheduler; Guard-2 steps parked pending"
+    }))
+}

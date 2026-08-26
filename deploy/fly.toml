@@ -1,0 +1,42 @@
+# EveryAIOS headless executor node — Fly.io one-click template (P40.3).
+#
+# Deploy under YOUR OWN Fly account (never a founder account):
+#   fly launch --image your-registry/everyaios-node:local --copy-config
+#   fly secrets set EVERYAIOS_VAULT_KEY=<your node key>
+#   fly deploy
+#
+# Hard rules (spec §8 + H33): this is user-operated compute — the image is
+# built and deployed by you; no rented fleet under our name exists.
+
+app = "everyaios-node"
+
+[build]
+  # Point this at your registry copy of the deploy/Dockerfile build, or use
+  # fly.toml's [build] with a Dockerfile path:
+  dockerfile = "deploy/Dockerfile"
+  context = ".."
+
+[env]
+  EVERYAIOS_HOME = "/data"
+
+[mounts]
+  source = "everyaios_data"
+  destination = "/data"
+
+[[services]]
+  # P8.9 E2E sync transport (the encrypted mesh). Bind only to your private
+  # network / Tailscale; never expose the vault key endpoint publicly.
+  internal_port = 47615
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 47615
+    # Prefer a private network (fly private networking / Tailscale). If you
+    # must expose publicly, require the bearer token and use an IP allowlist.
+    handlers = []
+
+[checks]
+  [checks.health]
+    port = 47615
+    type = "tcp"
+    interval = "30s"

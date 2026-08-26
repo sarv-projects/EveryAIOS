@@ -63,9 +63,15 @@ fn main() -> std::io::Result<()> {
             eprintln!("everyaios-mcp standalone listening on 127.0.0.1:{bound}");
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { continue };
-                // One request per connection (loopback supervision model);
-                // a failed serve just ends that connection.
-                let _ = server.serve_http_once(&mut stream);
+                // Keep-alive loop (P39.3): one connection serves many
+                // requests until the peer closes it; a failed serve just
+                // ends that connection.
+                match server.serve_http_connection(&mut stream) {
+                    Ok(n) if n > 1 => {
+                        eprintln!("served {n} requests on one keep-alive connection");
+                    }
+                    _ => {}
+                }
             }
             Ok(())
         }

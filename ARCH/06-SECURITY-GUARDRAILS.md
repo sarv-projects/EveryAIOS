@@ -56,7 +56,7 @@ Escalated actions freeze the loop and render a human approval card (not LLM-gene
 - Every tool dispatch: **`trace_id, span_id`** (OpenTelemetry — matrix J14, doc 43 §2.3: one Rust→sidecar→provider→sandbox flow = one span chain; console/log-file export at v1, OTLP/Jaeger post-v1), plus `session, agent, tool, args(hashed+bounded), result_meta, duration, token_estimate, outcome, approval receipts`.
 - Every script primitive via InnerCallHook (BrowserOS, doc 33 §6.3) — `run` can't hide anything.
 - Replay of browser sessions (08 §8.5) + screenshot-per-step.
-- Retention: replays 7d default, audit configurable; export/wipe controls.
+- Retention: replays 7d default, audit configurable — **landed end-to-end**: `everyaios-audit::retention::compact` rolls up events older than N days to `{rolled_up, payload_sha256}` digests (full payloads pruned, envelope + seq + Merkle verifiability kept; `log.rollup` header at seq 0), and the sweep is **live**: `src-tauri/src/maintenance_cmds.rs` — `audit_compact` Tauri command + `run_audit_sweep_if_due` invoked from Tauri `.setup` (daily, marker-gated, writer-quiescent: lock → drop writer → compact → reopen, seq resumes).
 - The cyber red-team corpus (doc 26: PentAGI/PyRIT/NeuroSploit etc.) doubles as our **adversarial test suite** for Guard 1 + injection defense — we test with the same tools the attackers use.
 
 ## 6.8 Secrets (see also 03 §3.4)
@@ -110,7 +110,9 @@ sequenceDiagram
 
 > "Nothing unreconstructable" needs more than snapshots: an append-only event log is the source of truth; J13 checkpoints are the accelerant.
 
-**Event types (single writer):** `UserMessageAdded · PlanCreated · TaskStarted · ToolProposed · PermissionGranted · ToolStarted · ToolCompleted · ArtifactWritten · ModelTurnCompleted · CheckpointCommitted` — each carries `seq, ts, session, agent, tool, args_hash, result_meta`, feeds J5 NDJSON + J19 Merkle chain + J13 snapshots.
+**Event types (single writer — per node):** `UserMessageAdded · PlanCreated · TaskStarted · ToolProposed · PermissionGranted · ToolStarted · ToolCompleted · ArtifactWritten · ModelTurnCompleted · CheckpointCommitted` — each carries `seq, ts, session, agent, tool, args_hash, result_meta`, feeds J5 NDJSON + J19 Merkle chain + J13 snapshots.
+
+> **W3 — regime boundary (verified 2026-08-25, conflict policy landed same day):** the single-writer rule is **per node**. `seq` ordering, the Merkle chain, and `AuditWriter` resume all hold within one node's log. Cross-node causal ordering does **not** follow from these primitives: H33/P40.2 sync is a distinct eventual-consistency regime — version vectors + tombstones, 3-way `reconcile` (`everyaios-core::sync`, P8.9 landed; `node_attach` P40.2) — and must never be treated as an extension of the single-writer story. **F2 — the equal-rev conflict rule is now a stated policy, not a caller guess:** [`ConflictPolicy`] (`Manual` · `LastWriteWins` · `KeepBoth`) + `resolve_conflicts` + `SyncSession::reconcile_with_policy` (all in `everyaios-core::sync`, 6 tests). State-plane scopes (messages/memory/connector) converge Last-Write-Wins with a deterministic timestamp tie-break (`SyncItem::ts_ms`, `#[serde(default)]` — old bundles stay readable) so **both** nodes compute the same winner; effect-plane records (tickets, receipts, audit) are never replicated through `SyncSet` today, and if a future scope ever syncs effect-like records it must stay `Manual` — "whose ticket wins" and "what a receipt means after reconcile" are human/governance decisions, never a merge rule. Reconcile runs at the sync layer; the local chain stays authoritative for its own scope.
 
 **Idempotency classes** (declared per operation in the tool manifest):
 

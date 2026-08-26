@@ -82,6 +82,21 @@ pub enum ChatWireEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// P41.4 — K1 verification receipt for the editor's Diff rail
+    /// (model-reported pass/fail per plan-task check; `passed: null` =
+    /// ambiguous — never claimed as executed).
+    Verification {
+        #[serde(rename = "streamId")]
+        stream_id: String,
+        #[serde(rename = "taskId")]
+        task_id: String,
+        #[serde(rename = "checks")]
+        checks: Vec<String>,
+        #[serde(rename = "report")]
+        report: String,
+        #[serde(rename = "passed")]
+        passed: Option<bool>,
+    },
     Done {
         stream_id: String,
         turn_id: String,
@@ -220,6 +235,11 @@ pub struct ChatRelay<W, R> {
     executions: Arc<Mutex<ExecutionKernel>>,
     /// H3 data egress engine.
     egress: Arc<Mutex<everyaios_guard::EgressEngine>>,
+    /// P43 (B7 v3.53): the detached-work task ledger (BackgroundTaskRecord
+    /// lifecycle, push completion, lost-state grace, 7-day retention). Rust
+    /// owns the state machine; the coordinator + Tauri shell drive it via
+    /// `tasks/*` methods.
+    tasks: Arc<Mutex<crate::task_ledger::TaskLedger>>,
     on_event: Arc<Mutex<EventSink>>,
     /// P11.5.11 — AG-UI live transport: forwards `agui/event` lines to the UI.
     agui: crate::agui::AguiRelay,
@@ -270,6 +290,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             evals: Arc::new(Mutex::new(EvalService::new())),
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
             egress,
+            tasks: Arc::new(Mutex::new(crate::task_ledger::TaskLedger::new(
+                Box::new(crate::task_ledger::InMemoryStore::new()),
+            ))),
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
             agui: crate::agui::AguiRelay::new(),
         }
@@ -296,6 +319,13 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         Arc::clone(&self.tools)
     }
 
+    /// Attach a live CDP backend to the tool executor (after `browser_start`).
+    pub fn attach_browser(&self, browser: Arc<dyn crate::tools::BrowserBackend>) {
+        if let Ok(mut tools) = self.tools.lock() {
+            tools.attach_browser(browser);
+        }
+    }
+
     /// The Stage-0 plan service handle (the coordinator steps per-plan
     /// circuit breakers via `plan/*`; trips surface as chat interrupts).
     pub fn plan(&self) -> Arc<Mutex<PlanService>> {
@@ -306,6 +336,12 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// drive it via `scheduler/*` methods).
     pub fn scheduler(&self) -> Arc<Mutex<SchedulerService>> {
         Arc::clone(&self.scheduler)
+    }
+
+    /// The P43 detached-work task ledger handle (the coordinator + Tauri
+    /// shell drive it via `tasks/*` methods).
+    pub fn tasks(&self) -> Arc<Mutex<crate::task_ledger::TaskLedger>> {
+        Arc::clone(&self.tasks)
     }
 
     /// Load the J21 policy file into the Guard-2 service (builder pattern —
@@ -384,6 +420,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let evals = Arc::clone(&self.evals);
         let executions = Arc::clone(&self.executions);
         let egress = Arc::clone(&self.egress);
+        let tasks = Arc::clone(&self.tasks);
         let agui = self.agui.clone();
 
         std::thread::spawn(move || loop {
@@ -405,11 +442,48 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             let _ = stream_provider(vault2, base2, local2, params, w2);
                         });
                     }
+                    // ARCH/05 durable-observation seam: the coordinator
+                    // hydrates its RouteDecision ring at boot from the vault's
+                    // `token_usage` ledger (provider/model/cost per completed
+                    // call) so routing survives restarts. Wrapped: vault read
+                    // is a small indexed query on the consumer loop.
+                    "usage/recent" => {
+                        let v = vault.lock().unwrap_or_else(|e| e.into_inner());
+                        let limit = params.get("limit").and_then(|x| x.as_u64()).unwrap_or(100);
+                        match v.recent_usage(limit) {
+                            Ok(rows) => {
+                                let _ = writer.reply(
+                                    id,
+                                    serde_json::to_value(rows)
+                                        .unwrap_or_else(|_| serde_json::json!([])),
+                                );
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e.to_string());
+                            }
+                        }
+                    }
                     // P5.1/P5.3/P5.4/P5.9: memory + usage dispatch. Runs on
                     // the consumer loop (fast, deterministic, no I/O) so the
                     // reply is synchronous and the sidecar can await it.
                     method if method.starts_with("memory/") || method == "usage/snapshot" => {
                         let mut svc = memory.lock().unwrap_or_else(|e| e.into_inner());
+                        match svc.handle(method, &params) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
+                    }
+                    // P43 (B7 v3.53): detached-work task ledger dispatch. The
+                    // coordinator + Tauri shell drive the same Rust-owned
+                    // state machine (tasks/list, start, complete, cancel,
+                    // retry, reap, prune) — completion wakes watchers
+                    // (push-driven, never polled).
+                    method if method.starts_with("tasks/") => {
+                        let mut svc = tasks.lock().unwrap_or_else(|e| e.into_inner());
                         match svc.handle(method, &params) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
@@ -720,6 +794,32 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 agui.forward(&serde_json::to_string(raw).unwrap_or_default());
                             }
                         }
+                        "chat/verification" => emit(
+                            &on_event,
+                            ChatWireEvent::Verification {
+                                stream_id,
+                                task_id: params
+                                    .get("taskId")
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                checks: params
+                                    .get("checks")
+                                    .and_then(|c| c.as_array())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|v| v.as_str().map(str::to_string))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default(),
+                                report: params
+                                    .get("report")
+                                    .and_then(|r| r.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                passed: params.get("passed").and_then(|p| p.as_bool()),
+                            },
+                        ),
                         "chat/tool_result" => emit(
                             &on_event,
                             ChatWireEvent::ToolResult {

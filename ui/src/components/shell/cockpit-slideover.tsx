@@ -32,6 +32,7 @@ import {
 import { interruptRespond } from '@/lib/cockpit'
 import { useAppStore } from '@/lib/store'
 
+
 /**
  * P3.2 + P11.2 + P11.5.4 — cockpit / ambient flight-deck slide-over.
  *
@@ -52,7 +53,6 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
   const setSessionPaused = useAppStore((s) => s.setSessionPaused)
   const [resumeFor, setResumeFor] = useState<string | null>(null)
   const [resumeNote, setResumeNote] = useState('')
-  const pushUserMessage = useAppStore((s) => s.pushUserMessage)
 
   // Poll cockpit_snapshot every 2s when open.
   useEffect(() => {
@@ -83,7 +83,17 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
     // mandatory context (the agent can't see what the user edited otherwise).
     const note = resumeNote.trim() || 'Resumed after manual edits.'
     setSessionPaused(resumeFor, false)
-    pushUserMessage(`(resumed) ${note}`)
+    // Bugfix 6 — resume must actually continue the agent, not just decorate the
+    // transcript locally. Dispatch the describe-changes note as a real turn so
+    // it reaches the model (chat_stream) on the session bound to this agent.
+    void (async () => {
+      const st = useAppStore.getState()
+      // Bind to the store session whose agent matches this cockpit card.
+      const bound = st.sessions.find((s) => s.agent === resumeFor)
+      if (bound) st.setActiveSession(bound.id)
+      const { sendUserMessage } = await import('@/lib/bridge')
+      await sendUserMessage(`(resumed) ${note}`)
+    })()
     setResumeFor(null)
     setResumeNote('')
   }

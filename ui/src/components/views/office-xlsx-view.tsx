@@ -7,7 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { OfficeOpenBar } from './office-open-bar'
+import OfficeFileSwitcher from './office-file-switcher'
 import { OfficeRibbon } from './office-ribbon'
+import { useAppStore } from '@/lib/store'
+import { officeOpenExternal, isOfficeFloorError } from '@/lib/office'
 import {
   cellDisplay,
   colLetter,
@@ -28,7 +31,6 @@ import {
   type WorkbookBatch,
   type XlsxWindowPayload,
 } from '@/lib/spreadsheet'
-import { guardRespond } from '@/lib/guard'
 
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F']
 
@@ -68,6 +70,11 @@ export default function OfficeXlsxView() {
     ticketId: string
     approvalNonce: string
   } | null>(null)
+  const [lastAttempted, setLastAttempted] = useState<string | null>(null)
+  const running = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status === 'running')
+  const paused = useAppStore((s) => s.pausedSessions[s.activeSessionId])
+  // P1.9 — read-only while the agent is running (same lock as Word).
+  const locked = running && !paused
 
   // P4.2 — virtualized 100K+ row grid (overscan windowing). Only the visible
   // slice (+overscan) is in the DOM; spacer rows fake the full scroll height.
@@ -92,6 +99,7 @@ export default function OfficeXlsxView() {
       setSelected(null)
       setScrollTop(0)
     } catch (err) {
+      setLastAttempted(path)
       setError(err instanceof Error ? err.message : 'Failed to open workbook')
     }
   }
@@ -165,6 +173,24 @@ export default function OfficeXlsxView() {
     }
   }
 
+  // F1 — the approval decision happens in the dedicated guard window. Open it
+  // and wait for the ticket to be consumed (approved or rejected); a rejected
+  // ticket makes the follow-up commit fail honestly with a revoked-ticket
+  // error. The guard window's `guard_respond` is the only one Rust accepts.
+  const openApproval = async (ticketId: string): Promise<void> => {
+    const { openGuardWindow } = await import('@/lib/guard')
+    await openGuardWindow()
+    const deadline = Date.now() + 120_000
+    for (;;) {
+      const { guardTickets } = await import('@/lib/guard')
+      const tickets = await guardTickets().catch(() => null)
+      if (tickets === null) return // shell not ready — commit fails honestly
+      if (!tickets.some((t) => t.ticketId === ticketId)) return
+      if (Date.now() > deadline) throw new Error('Timed out waiting for the approval decision')
+      await new Promise((r) => setTimeout(r, 400))
+    }
+  }
+
   const commitEdit = async (
     address: string,
     value: string,
@@ -175,9 +201,11 @@ export default function OfficeXlsxView() {
     if (!payload || committing) return
     setCommitting(true)
     try {
-      // `ask` tickets need the human approval first (audit receipt); `allow`
-      // tickets are already approved. Either way the commit consumes it.
-      if (approve) await guardRespond(ticketId, 'approve', approvalNonce)
+      // F1 — `ask` tickets are decided in the dedicated guard window (the
+      // main renderer cannot approve). We open it and wait for the human's
+      // decision; a rejected ticket then makes the commit fail honestly
+      // (revoked-ticket error). `allow` tickets are pre-approved.
+      if (approve) await openApproval(ticketId)
       await xlsxEditCommit(payload.path, payload.sheet, address, value, ticketId)
       setProposal(null)
       setDraft(value)
@@ -215,7 +243,7 @@ export default function OfficeXlsxView() {
     if (!payload || committing) return
     setCommitting(true)
     try {
-      if (approve) await guardRespond(ticketId, 'approve', approvalNonce)
+      if (approve) await openApproval(ticketId)
       await xlsxBatchCommit(payload.path, payload.sheet, batch, ticketId)
       setBatchProposal(null)
       setPivotRows(null)
@@ -344,10 +372,27 @@ export default function OfficeXlsxView() {
       <OfficeRibbon app="Excel" />
 
       <OfficeOpenBar onOpen={open} livePath={payload?.path} />
+      <OfficeFileSwitcher view="office-xlsx" current={payload?.path} onOpen={open} />
+
+      {locked && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-[10px] text-amber-300">
+          Read-only while the agent is running — pause to take over
+        </div>
+      )}
 
       {error && (
-        <div className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
-          ⚠ {error}
+        <div className="flex flex-wrap items-center gap-2 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
+          <span>⚠ {error}</span>
+          {lastAttempted && !isOfficeFloorError(error) && (
+            <button
+              className="rounded border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/25"
+              onClick={() =>
+                officeOpenExternal(lastAttempted).catch((e) => setError(String(e)))
+              }
+            >
+              Engine refused — open in LibreOffice instead
+            </button>
+          )}
         </div>
       )}
 
@@ -364,8 +409,8 @@ export default function OfficeXlsxView() {
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void propose()}
             placeholder="select a cell to edit…"
-            disabled={!payload}
-            className="min-w-0 flex-1 bg-transparent text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+            disabled={!payload || locked}
+            className="min-w-0 flex-1 bg-transparent text-foreground placeholder:text-muted-foreground/40 focus:outline-none disabled:cursor-not-allowed"
           />
           {recalc && selected && computed(selected.r, selected.c) != null && (
             <span className="shrink-0 text-[9px] text-emerald-400">✓ engine</span>
@@ -385,6 +430,22 @@ export default function OfficeXlsxView() {
           )}
           Recalc
         </Button>
+        {(() => {
+          const nums: number[] = []
+          if (payload && selected) {
+            const raw = cellDisplay(payload.rows[selected.r]?.[selected.c])
+            const n = Number(raw)
+            if (Number.isFinite(n) && raw !== '') nums.push(n)
+          }
+          const count = nums.length
+          const sum = nums.reduce((a, b) => a + b, 0)
+          const avg = count ? sum / count : 0
+          return (
+            <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
+              Avg {avg.toFixed(2)} · Count {count} · Sum {sum.toFixed(2)}
+            </span>
+          )
+        })()}
         {recalc && (
           <Badge variant="outline" className="shrink-0 text-[9px] text-emerald-300">
             {recalc.formula_cells} formula cells · verified
@@ -393,7 +454,7 @@ export default function OfficeXlsxView() {
         <Button
           size="sm"
           variant="outline"
-          disabled={!payload}
+          disabled={!payload || locked}
           className="h-6 gap-1 px-2 text-[10px]"
           onClick={() => setBulkOpen((v) => !v)}
         >
@@ -402,7 +463,7 @@ export default function OfficeXlsxView() {
         </Button>
         <Button
           size="sm"
-          disabled={!payload || !selected || draft === selValue || committing}
+          disabled={!payload || !selected || draft === selValue || committing || locked}
           className="h-6 gap-1 px-2 text-[10px]"
           onClick={() => void propose()}
         >
@@ -435,7 +496,8 @@ export default function OfficeXlsxView() {
             disabled={committing}
             className="h-6 gap-1 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
             onClick={() => {
-              if (proposal.ticketId) void guardRespond(proposal.ticketId, 'reject', proposal.approvalNonce)
+              // F1 — the human rejects in the dedicated guard window.
+              if (proposal.ticketId) void openApproval(proposal.ticketId)
               setProposal(null)
             }}
           >
@@ -468,7 +530,7 @@ export default function OfficeXlsxView() {
               disabled={!payload}
               className="w-16 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-orange-500/60 focus:outline-none"
             />
-            <Button size="sm" disabled={!payload || committing} className="h-6 gap-1 px-2 text-[10px]" onClick={runFill}>
+            <Button size="sm" disabled={!payload || committing || locked} className="h-6 gap-1 px-2 text-[10px]" onClick={runFill}>
               Fill
             </Button>
           </div>
@@ -477,14 +539,14 @@ export default function OfficeXlsxView() {
             <Button
               size="sm"
               variant="outline"
-              disabled={!payload || committing}
+              disabled={!payload || committing || locked}
               className="h-6 gap-1 px-2 text-[10px]"
               onClick={() => setSortDesc((v) => !v)}
             >
               <ChevronsUpDown className="h-3 w-3" />
               {sortDesc ? 'Desc' : 'Asc'}
             </Button>
-            <Button size="sm" variant="outline" disabled={!payload || committing} className="h-6 gap-1 px-2 text-[10px]" onClick={runSort}>
+            <Button size="sm" variant="outline" disabled={!payload || committing || locked} className="h-6 gap-1 px-2 text-[10px]" onClick={runSort}>
               Sort
             </Button>
           </div>
@@ -516,7 +578,7 @@ export default function OfficeXlsxView() {
               disabled={!payload}
               className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
             />
-            <Button size="sm" variant="outline" disabled={!payload || committing} className="h-6 gap-1 px-2 text-[10px]" onClick={runShift}>
+            <Button size="sm" variant="outline" disabled={!payload || committing || locked} className="h-6 gap-1 px-2 text-[10px]" onClick={runShift}>
               Shift
             </Button>
           </div>
@@ -598,7 +660,8 @@ export default function OfficeXlsxView() {
             disabled={committing}
             className="h-6 gap-1 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
             onClick={() => {
-              if (batchProposal.ticketId) void guardRespond(batchProposal.ticketId, 'reject', batchProposal.approvalNonce)
+              // F1 — the human rejects in the dedicated guard window.
+              if (batchProposal.ticketId) void openApproval(batchProposal.ticketId)
               setBatchProposal(null)
             }}
           >

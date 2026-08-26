@@ -90,9 +90,7 @@ pub fn git_stage_all(dir: String) -> Result<serde_json::Value, String> {
 pub fn git_commit(dir: String, message: String) -> Result<serde_json::Value, String> {
     run_git(&dir, &["commit", "-m", &message])?;
     Ok(serde_json::json!({ "committed": true }))
-}
-
-/// Find the nearest enclosing git root for a file/dir path (for the SCM
+}/// Find the nearest enclosing git root for a file/dir path (for the SCM
 /// panel when a file is open in the editor). Returns `None` honestly.
 #[tauri::command]
 pub fn git_root(start: String) -> Result<serde_json::Value, String> {
@@ -108,4 +106,100 @@ pub fn git_root(start: String) -> Result<serde_json::Value, String> {
     }
     let root = String::from_utf8_lossy(&out.stdout).trim().to_string();
     Ok(serde_json::json!({ "root": if root.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(root) } }))
+}
+
+/// P41.2 — worktree path convention: `<repo>/.worktrees/<name>`.
+fn worktree_path(repo: &str, name: &str) -> String {
+    format!("{}/.worktrees/{}", repo.trim_end_matches('/'), name)
+}
+
+/// P41.2 — Worktree-first parallelism (I12): create a `git worktree` for one
+/// B3 sub-agent, derived from `base` (a branch or commit). The sub-agent
+/// works in its own checkout so N agents never share a dirty working tree
+/// (Codex-app pattern). The worktree branch is named `<name>`.
+#[tauri::command]
+pub fn git_worktree_add(repo: String, name: String, base: String) -> Result<serde_json::Value, String> {
+    let path = worktree_path(&repo, &name);
+    // `git worktree add -b <name> <path> <base>` — a fresh branch off base.
+    run_git(&repo, &["worktree", "add", "-b", &name, &path, &base])?;
+    Ok(serde_json::json!({
+        "path": path,
+        "branch": name,
+        "base": base,
+    }))
+}
+
+/// P41.2 — list the repo's worktrees (porcelain: `worktree <path>` + `branch`
+/// lines) for the plan's per-worktree review surface.
+#[tauri::command]
+pub fn git_worktree_list(repo: String) -> Result<serde_json::Value, String> {
+    let raw = run_git(&repo, &["worktree", "list", "--porcelain"])?;
+    let mut trees: Vec<serde_json::Value> = Vec::new();
+    let mut current: Option<(String, Option<String>)> = None;
+    for line in raw.lines() {
+        if let Some(path) = line.strip_prefix("worktree ") {
+            if let Some(c) = current.take() {
+                trees.push(serde_json::json!({ "path": c.0, "branch": c.1 }));
+            }
+            current = Some((path.to_string(), None));
+        } else if let Some(branch) = line.strip_prefix("branch ") {
+            if let Some((_, slot)) = current.as_mut() {
+                *slot = Some(branch.trim_start_matches("refs/heads/").to_string());
+            }
+        }
+    }
+    if let Some(c) = current.take() {
+        trees.push(serde_json::json!({ "path": c.0, "branch": c.1 }));
+    }
+    Ok(serde_json::json!({ "worktrees": trees }))
+}
+
+/// P41.2 — commit a worktree's changes onto its own branch, then merge it
+/// into the main branch through the plan (review merges per-worktree).
+/// Returns the merge commit hash.
+#[tauri::command]
+pub fn git_worktree_merge(
+    repo: String,
+    name: String,
+    target_branch: String,
+    message: String,
+) -> Result<serde_json::Value, String> {
+    let path = worktree_path(&repo, &name);
+    // Commit the worktree's work onto its branch (if anything changed).
+    run_git(&path, &["add", "-A"])?;
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(&path)
+        .args(["diff", "--cached", "--quiet"])
+        .status()
+        .map_err(|e| format!("git: {e}"))?;
+    if !status.success() {
+        run_git(&path, &["commit", "-m", &message])?;
+    }
+    // Merge the worktree branch into the main branch (from the main worktree).
+    run_git(&repo, &["checkout", &target_branch])?;
+    run_git(&repo, &["merge", "--no-ff", &name, "-m", &message])?;
+    let head = run_git(&repo, &["rev-parse", "HEAD"])?;
+    Ok(serde_json::json!({
+        "merged": true,
+        "branch": name,
+        "into": target_branch,
+        "mergeHead": head.trim(),
+    }))
+}
+
+/// P41.2 — K2 reverse: revert the I8 commit and drop the worktree. `commit`
+/// is the merge commit to revert (from `git_worktree_merge`); the worktree
+/// and its branch are removed afterwards.
+#[tauri::command]
+pub fn git_worktree_revert(repo: String, name: String, commit: String) -> Result<serde_json::Value, String> {
+    let path = worktree_path(&repo, &name);
+    run_git(&repo, &["revert", "--no-edit", &commit])?;
+    run_git(&repo, &["worktree", "remove", "--force", &path])?;
+    run_git(&repo, &["branch", "-D", &name])?;
+    Ok(serde_json::json!({
+        "reverted": true,
+        "commit": commit,
+        "worktreeDropped": true,
+    }))
 }

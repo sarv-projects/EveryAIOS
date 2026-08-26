@@ -53,6 +53,23 @@ impl std::ops::Add for UsageRecord {
     }
 }
 
+/// One agent's summary row (P17 per-agent session metrics).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentSessionMetrics {
+    pub agent: String,
+    /// Sessions started for this agent/harness.
+    pub sessions: u64,
+    pub usage: UsageRecord,
+}
+
+impl AgentSessionMetrics {
+    /// Estimated USD for this harness — callers supply the provider price
+    /// (the ledger's key pricing doesn't map 1:1 to agents).
+    pub fn est_cost_usd(&self, input_per_mtok: f64, output_per_mtok: f64) -> f64 {
+        self.usage.est_cost_usd(input_per_mtok, output_per_mtok)
+    }
+}
+
 /// The usage ledger.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UsageLedger {
@@ -60,12 +77,18 @@ pub struct UsageLedger {
     by_key: BTreeMap<String, UsageRecord>,
     /// Session id → usage.
     by_session: BTreeMap<String, UsageRecord>,
+    /// Agent/harness id → usage (P17 per-agent session metrics).
+    by_agent: BTreeMap<String, UsageRecord>,
+    /// Agent/harness id → session count (sessions-per-agent).
+    sessions_by_agent: BTreeMap<String, u64>,
     /// Provider key → price per Mtok (input, output). Empty = no pricing.
     prices: BTreeMap<String, (f64, f64)>,
     /// Active session (what `record` attributes to when a session is set).
     active_session: Option<String>,
     /// The key the active session is billed to.
     active_key: Option<String>,
+    /// The active agent/harness (what `record` attributes to, when set).
+    active_agent: Option<String>,
 }
 
 impl UsageLedger {
@@ -89,6 +112,17 @@ impl UsageLedger {
         self.active_key = None;
     }
 
+    /// Begin a session for an agent/harness (P17): increments the agent's
+    /// session count and makes subsequent `record` calls attribute to it.
+    pub fn begin_session(&mut self, agent_id: &str) {
+        *self.sessions_by_agent.entry(agent_id.to_string()).or_insert(0) += 1;
+        self.active_agent = Some(agent_id.to_string());
+    }
+
+    pub fn clear_agent(&mut self) {
+        self.active_agent = None;
+    }
+
     /// Record one model call: tokens + a cache-hit/miss flag.
     pub fn record(&mut self, tokens_in: u64, tokens_out: u64, cache_hit: bool, cached_tokens: u64) {
         let rec = UsageRecord {
@@ -100,12 +134,17 @@ impl UsageLedger {
         };
         let key = self.active_key.clone();
         let session = self.active_session.clone();
+        let agent = self.active_agent.clone();
         if let Some(key) = key {
             let entry = self.by_key.entry(key).or_default();
             *entry = *entry + rec;
         }
         if let Some(session) = session {
             let entry = self.by_session.entry(session).or_default();
+            *entry = *entry + rec;
+        }
+        if let Some(agent) = agent {
+            let entry = self.by_agent.entry(agent).or_default();
             *entry = *entry + rec;
         }
     }
@@ -128,6 +167,33 @@ impl UsageLedger {
     /// Every session with usage.
     pub fn sessions(&self) -> Vec<(String, UsageRecord)> {
         self.by_session.iter().map(|(k, v)| (k.clone(), *v)).collect()
+    }
+
+    /// Per-agent/harness summary (P17): sessions + tokens + est. cost per
+    /// harness, for the Spend/analytics surface. Cost uses the *active key's*
+    /// price when the agent billed to a key, else 0.
+    pub fn agent_metrics(&self) -> Vec<AgentSessionMetrics> {
+        let mut out: Vec<AgentSessionMetrics> = self
+            .by_agent
+            .iter()
+            .map(|(agent, usage)| AgentSessionMetrics {
+                agent: agent.clone(),
+                sessions: self.sessions_by_agent.get(agent).copied().unwrap_or(0),
+                usage: *usage,
+            })
+            .collect();
+        // Agents with sessions but no recorded usage still appear.
+        for (agent, sessions) in &self.sessions_by_agent {
+            if !out.iter().any(|m| &m.agent == agent) {
+                out.push(AgentSessionMetrics {
+                    agent: agent.clone(),
+                    sessions: *sessions,
+                    usage: UsageRecord::default(),
+                });
+            }
+        }
+        out.sort_by(|a, b| b.usage.total_tokens().cmp(&a.usage.total_tokens()));
+        out
     }
 
     /// Totals across all keys.
@@ -207,6 +273,33 @@ mod tests {
         let cost = l.key_cost_usd("k").unwrap();
         // Only 200k uncached input tokens billed.
         assert!((cost - (0.2 * 3.0 + 0.1 * 15.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn per_agent_session_metrics() {
+        let mut l = UsageLedger::new();
+        l.begin_session("claude");
+        l.set_active("s1", "anthropic");
+        l.record(1_000, 200, true, 800);
+        l.clear_agent();
+        l.begin_session("claude");
+        l.record(500, 100, false, 0);
+        l.clear_agent();
+        l.begin_session("opencode");
+        l.set_active("s2", "openai");
+        l.record(100, 50, false, 0);
+        l.clear_agent();
+        l.clear_active();
+
+        let metrics = l.agent_metrics();
+        assert_eq!(metrics.len(), 2);
+        let claude = metrics.iter().find(|m| m.agent == "claude").unwrap();
+        assert_eq!(claude.sessions, 2);
+        assert_eq!(claude.usage.total_tokens(), 1_800);
+        let opencode = metrics.iter().find(|m| m.agent == "opencode").unwrap();
+        assert_eq!(opencode.sessions, 1);
+        // Tokens-per-harness, sorted desc.
+        assert_eq!(metrics[0].agent, "claude");
     }
 
     #[test]

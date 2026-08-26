@@ -13,6 +13,10 @@
 //! - `scip` — SCIP protobuf ingestion: a dependency-free wire-format reader
 //!   that decodes a SCIP `Document` into the `SemanticIndex`.
 
+pub mod docs_lookup;
+pub mod edit;
+pub mod graph;
+pub mod graphify;
 pub mod lsp;
 pub mod lsp_config;
 pub mod lsp_runner;
@@ -24,6 +28,14 @@ pub mod semantic;
 pub mod session;
 pub mod warp;
 
+pub use edit::{
+    parse_verify, replace_body, safe_delete, DeleteVerdict, EditRegion, LspCapabilities,
+    LspServerCatalog, LspServerEntry,
+};
+pub use graphify::{KnowledgeEdge, KnowledgeGraph, KnowledgeKind, KnowledgeNode};
+pub use graph::{
+    GraphEdge, GraphSymbol, SymbolGraph, SymbolQueryResult,
+};
 pub use lsp::{
     decode_messages, encode_message, CodeAction, Diagnostic, FramingError, Hover, HoverContents,
     InlayHint, Location, LspRequest, LspResponse, Position, Range, TextEdit, WorkspaceEdit,

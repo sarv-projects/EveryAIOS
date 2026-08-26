@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ExternalLink, FileCode2, Save, Sparkles, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { fsReadFile, fsWriteFile } from '@/lib/fs'
+import { fsReadFile } from '@/lib/fs'
 import { useAppStore } from '@/lib/store'
 import { SkeletonBlock } from '@/components/ui/loading-state'
 
@@ -58,9 +58,24 @@ export default function CodeView() {
     setSaving(true)
     setError(null)
     try {
-      await fsWriteFile(file.path, draft)
-      setDirty(false)
-      setSavedAt(new Date().toLocaleTimeString())
+      // Bugfix 4 — the older code view must respect the same Guard-2 floor as
+      // the ticketed Monaco editor: a buffer write mints a Guard-2 ticket and
+      // commits only after it's approved. No unguarded fs_write_file straight
+      // into the workspace.
+      const { fsWriteTicket, fsWriteCommit } = await import('@/lib/fs')
+      const ticket = await fsWriteTicket(file.path, draft)
+      if (ticket.action === 'allow') {
+        await fsWriteCommit(file.path, draft, ticket.ticketId)
+        setDirty(false)
+        setSavedAt(new Date().toLocaleTimeString())
+      } else {
+        // Card pending: park the write (the guard panel commits on approval).
+        // The buffer stays dirty until the write lands.
+        const st = (await import('@/lib/store')).useAppStore.getState()
+        st.parkEditorWrite(ticket.ticketId, { path: file.path, content: draft })
+        st.setCenterScreen('guard')
+        st.notify('Guard-2 card created — approve to save')
+      }
     } catch (e) {
       setError(String(e))
     } finally {

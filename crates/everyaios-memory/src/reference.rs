@@ -13,14 +13,15 @@ pub const PREVIEW_BUDGET_TOKENS: usize = 2000;
 /// Truncation marker inserted between head and tail.
 pub const PREVIEW_MARKER: &str = "\n…[preview truncated — query via script-eval]…\n";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RefKind {
     File,
     Dataset,
     ToolResult,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RefHandle {
     pub id: String,
     pub path: String,

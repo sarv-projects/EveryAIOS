@@ -146,6 +146,29 @@ pub fn recommend(candidates: &[LocalModelCandidate], hw: &HardwareProfile) -> Ve
     out
 }
 
+/// Pick the KV-cache element type for a local run (P39.4 — llama.cpp
+/// `-ctk`/`-ctv`). Memory-constrained machines (little RAM relative to the
+/// model, or <16 GiB total) quantize the cache (Q8_0 ≈ 8-bit KV, ~4× memory
+/// savings vs F16 with a bounded quality impact); roomy machines keep F16
+/// (the llama.cpp default — the best quality/memory balance). F32 is never
+/// auto-picked: it burns 2× F16's memory for a negligible quality delta, so
+/// it stays available only as the user's explicit knob. The picker result
+/// rides the `local://` launch spec so the memory-constrained profile never
+/// guesses.
+pub fn pick_kv_cache_type(hw: &HardwareProfile, model_bytes: u64) -> crate::models::KvCacheType {
+    use crate::models::KvCacheType;
+    let headroom = if model_bytes == 0 {
+        0.0
+    } else {
+        hw.ram_bytes as f64 / model_bytes as f64
+    };
+    if headroom < 3.0 || hw.ram_bytes < 16 * 1024 * 1024 * 1024 {
+        KvCacheType::Q8_0
+    } else {
+        KvCacheType::F16
+    }
+}
+
 /// Probe the running machine (best-effort; never fails — degrades to an empty
 /// profile). Uses `sysinfo` for RAM + core count and a platform GPU check.
 pub fn detect() -> HardwareProfile {
@@ -307,6 +330,31 @@ mod tests {
         let hw = detect();
         assert!(hw.ram_bytes > 0);
         assert!(hw.cpu_cores >= 1);
+    }
+
+    #[test]
+    fn kv_cache_picker_quantizes_for_memory_constrained() {
+        use crate::models::KvCacheType;
+        // 8 GiB machine + an 18 GiB model → the KV cache must be quantized.
+        assert_eq!(
+            pick_kv_cache_type(&small_machine(), 18_000 * 1024 * 1024),
+            KvCacheType::Q8_0
+        );
+        // Roomier 32 GiB machine with a small model → F16 (quality default).
+        assert_eq!(
+            pick_kv_cache_type(&big_machine(), 397 * 1024 * 1024),
+            KvCacheType::F16
+        );
+        // F32 is never auto-picked (explicit user knob only).
+        assert_eq!(
+            pick_kv_cache_type(&big_machine(), 100 * 1024 * 1024),
+            KvCacheType::F16
+        );
+        // Unknown model size never panics and falls to the safe Q8_0.
+        assert_eq!(
+            pick_kv_cache_type(&small_machine(), 0),
+            KvCacheType::Q8_0
+        );
     }
 
     #[test]

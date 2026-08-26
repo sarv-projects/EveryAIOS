@@ -17,6 +17,7 @@ import {
 } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 import { ensureLocal, listLocalModels, type LocalModelRow } from '@/lib/local-models'
+import { chiefDefaultGet, chiefDefaultSet } from '@/lib/acp'
 
 function StatusDot({ status }: { status: AgentRuntime['status'] }) {
   const tone =
@@ -74,6 +75,35 @@ export default function AgentModelPicker({ compact }: Props) {
   } | null>(null)
 
   const agent = catalog.find((a) => a.id === selectedAgentId) ?? catalog[0]
+
+  // P38 — the Dynamic Chief slot: which agent occupies the top brain by
+  // default (inbuilt | ACP agent id). Resolution is fail-closed upstream.
+  const [defaultChief, setDefaultChief] = useState('inbuilt')
+  useEffect(() => {
+    chiefDefaultGet()
+      .then((r) => setDefaultChief(r.primaryChief))
+      .catch(() => {})
+  }, [])
+  // Map the picker's runtime id onto a chief id (only chief-eligible agents).
+  const chiefIdFor = (runtimeId: string): string | null =>
+    runtimeId === 'everyaios-native'
+      ? 'inbuilt'
+      : runtimeId === 'claude-code' || runtimeId === 'codex'
+        ? runtimeId
+        : null
+  const chiefEligibleId = chiefIdFor(agent.id)
+  const defaultChiefLabel =
+    defaultChief === 'inbuilt' ? 'inbuilt engine' : defaultChief
+  const handleSetChief = async () => {
+    if (!chiefEligibleId) return
+    try {
+      await chiefDefaultSet(chiefEligibleId)
+      setDefaultChief(chiefEligibleId)
+      notify(`Default chief set to ${chiefEligibleId}`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), 'error')
+    }
+  }
   const activeFolder = useAppStore(
     (s) => s.sessions.find((x) => x.id === s.activeSessionId)?.folder,
   )
@@ -227,6 +257,34 @@ export default function AgentModelPicker({ compact }: Props) {
               >
                 Manage in settings
               </button>
+            </div>
+
+            {/* P38 — Dynamic Chief slot: the swappable top brain */}
+            <div className="flex items-center justify-between gap-2 border-b border-border bg-zinc-950/40 px-3 py-1.5">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Route className="h-3 w-3 shrink-0 text-orange-400" />
+                <span className="truncate text-[10px] text-muted-foreground">
+                  Chief slot:{' '}
+                  <span className="font-mono text-orange-300">{defaultChiefLabel}</span>
+                </span>
+                {defaultChief !== 'inbuilt' && (
+                  <Badge className="shrink-0 bg-emerald-500/15 px-1 text-[8px] text-emerald-300">
+                    swappable
+                  </Badge>
+                )}
+              </div>
+              {chiefEligibleId && (
+                <button
+                  type="button"
+                  onClick={handleSetChief}
+                  disabled={chiefEligibleId === defaultChief}
+                  className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-orange-300 hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted-foreground disabled:hover:no-underline"
+                >
+                  {chiefEligibleId === defaultChief
+                    ? 'default chief'
+                    : `Set ${agent.name} as default chief`}
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-[minmax(0,260px)_1fr]">

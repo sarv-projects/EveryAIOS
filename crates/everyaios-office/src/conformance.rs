@@ -129,7 +129,7 @@ pub(crate) fn seq() -> u64 {
 }
 
 /// Find the LibreOffice binary on PATH or in common install locations.
-pub(crate) fn find_soffice() -> Option<PathBuf> {
+pub fn find_soffice() -> Option<PathBuf> {
     for name in ["soffice", "libreoffice"] {
         if let Some(p) = find_on_path(name) {
             return Some(p);

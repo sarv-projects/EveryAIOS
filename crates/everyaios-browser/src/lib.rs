@@ -21,6 +21,7 @@ pub mod actions;
 pub mod ax;
 pub mod capture;
 pub mod content;
+pub mod demo;
 pub mod diagnostics;
 pub mod diff;
 pub mod electron;
@@ -31,6 +32,8 @@ pub mod ownership;
 pub mod protocol;
 pub mod read;
 pub mod replay;
+pub mod resources;
+pub mod selector;
 pub mod session;
 pub mod tiers;
 pub mod tree;
@@ -69,6 +72,12 @@ pub use webmcp_http::{
     MCP_PATH, MAX_BODY_BYTES,
 };
 pub use content::{clean_markdown, CleanedText, FilterSet, RuleKind};
+pub use demo::{
+    anchor_from_node, outcome_holds, DemoAnchor, DemoInput, DemoRecording, DemoStep,
+    OutcomeEvidence,
+};
+pub use resources::{Domain, ResourceDropPolicy};
+pub use selector::{CssOrXPath, SelectorResolver, SemanticTarget};
 pub use locator::{
     a11y_audit, find_first, find_semantic, first_actionable_ref, parse_batch, A11yIssue,
     A11ySeverity, BatchParseError, Located, SemanticQuery,

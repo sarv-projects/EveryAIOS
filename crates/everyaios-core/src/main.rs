@@ -19,6 +19,12 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // P40.1 — the headless runtime profile (spec H33): the same binary, no
+    // tray/UI, for the always-on executor node. The core + B7 scheduler
+    // (inside the coordinator) + browser/script/office engines all run; the
+    // engines stay command-driven (constructed on first use, never at boot).
+    let headless = args.iter().any(|a| a == "--headless");
+
     match boot(&args) {
         Ok(msg) => {
             eprintln!("{msg}");
@@ -26,6 +32,13 @@ fn main() -> ExitCode {
         Err(e) => {
             eprintln!("everyaios-core: boot failed: {e}");
             return ExitCode::FAILURE;
+        }
+    }
+
+    if headless {
+        eprintln!("[main] headless runtime profile (no tray/UI) — scheduled work runs via the coordinator's B7 scheduler");
+        if coordinator_bin_from_args(&args).is_none() {
+            eprintln!("[main] WARNING: --headless without --coordinator-bin has no scheduler; pass --coordinator-bin <bun binary> to run B7 due-work");
         }
     }
 

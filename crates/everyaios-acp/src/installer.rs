@@ -85,10 +85,16 @@ impl Installer {
                 Ok(outcome)
             }
             InstallKind::Binary { archive, cmd, args, sha256, env } => {
-                let bytes = self.download(archive)?;
-                if !sha256.is_empty() {
-                    verify_sha256(&bytes, sha256)?;
+                // Fail closed: a registry binary install without a published
+                // sha256 is never verified, so refuse before downloading at
+                // all (bugfix 11). Unverified bytes must never reach disk.
+                if sha256.trim().is_empty() {
+                    return Err(InstallError::Msg(
+                        "registry entry has no sha256 pin — refusing unverified download".into(),
+                    ));
                 }
+                let bytes = self.download(archive)?;
+                verify_sha256(&bytes, sha256)?;
                 let extract_dir = dir.join("pkg");
                 extract_archive(&bytes, archive, &extract_dir)?;
                 let binary_path = extract_dir.join(rel_path(cmd));
@@ -274,25 +280,115 @@ fn extract_archive(bytes: &[u8], url: &str, dest: &Path) -> Result<(), InstallEr
     }
 }
 
+/// Confine a member path under `dest`: reject absolute paths, `..` escapes
+/// and Windows drive roots. Returns the joined target path (path-traversal
+/// safe) — bugfix 11. `..` inside a segment is allowed (e.g. a name with a
+/// literal `..`) as long as no *segment* is exactly `..`.
+fn safe_join(dest: &Path, member: &str) -> Result<std::path::PathBuf, InstallError> {
+    let member = member.replace('\\', "/"); // normalize windows separators too
+    if member.starts_with('/') || member.contains(':') {
+        return Err(InstallError::Msg(format!(
+            "archive member with absolute path refused: {member}"
+        )));
+    }
+    let mut out = dest.to_path_buf();
+    for seg in member.split('/') {
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        if seg == ".." {
+            return Err(InstallError::Msg(format!(
+                "archive member with path traversal refused: {member}"
+            )));
+        }
+        out.push(seg);
+    }
+    // Belt + braces: the joined path must stay strictly under dest.
+    if !out.starts_with(dest) {
+        return Err(InstallError::Msg(format!(
+            "archive member escapes extraction root: {member}"
+        )));
+    }
+    Ok(out)
+}
+
 fn extract_zip(bytes: &[u8], dest: &Path) -> Result<(), InstallError> {
     let mut archive = zip::ZipArchive::new(io::Cursor::new(bytes))
         .map_err(|e| InstallError::Msg(e.to_string()))?;
-    archive
-        .extract(dest)
-        .map_err(|e| InstallError::Msg(e.to_string()))?;
+    for i in 0..archive.len() {
+        let file = archive
+            .by_index(i)
+            .map_err(|e| InstallError::Msg(e.to_string()))?;
+        let target = safe_join(dest, file.name())?;
+        if file.is_dir() {
+            std::fs::create_dir_all(&target).map_err(InstallError::Io)?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(InstallError::Io)?;
+        }
+        let mut reader = std::io::BufReader::new(file);
+        let mut out = std::fs::File::create(&target).map_err(InstallError::Io)?;
+        std::io::copy(&mut reader, &mut out).map_err(InstallError::Io)?;
+    }
     Ok(())
 }
 
 fn extract_tar_gz(bytes: &[u8], dest: &Path) -> Result<(), InstallError> {
     let gz = flate2::read::GzDecoder::new(io::Cursor::new(bytes));
     let mut archive = tar::Archive::new(gz);
-    archive.unpack(dest).map_err(|e| InstallError::Msg(e.to_string()))?;
-    Ok(())
+    extract_tar_entries(&mut archive, dest)
 }
 
 fn extract_tar(bytes: &[u8], dest: &Path) -> Result<(), InstallError> {
     let mut archive = tar::Archive::new(io::Cursor::new(bytes));
-    archive.unpack(dest).map_err(|e| InstallError::Msg(e.to_string()))?;
+    extract_tar_entries(&mut archive, dest)
+}
+
+/// Extract a tar archive, confining every member under `dest` (zip-slip
+/// defence). Symlinks/hard-links are never followed out of the root; a link
+/// target that escapes is refused and the link is materialized only as a
+/// regular file inside `dest` if it stays in-root.
+fn extract_tar_entries<R: std::io::Read>(
+    archive: &mut tar::Archive<R>,
+    dest: &Path,
+) -> Result<(), InstallError> {
+    let full = dest.to_path_buf();
+    std::fs::create_dir_all(&full)?;
+    let entries = archive
+        .entries()
+        .map_err(|e| InstallError::Msg(e.to_string()))?;
+    for entry in entries {
+        let mut entry = entry.map_err(|e| InstallError::Msg(e.to_string()))?;
+        let path = entry
+            .path()
+            .map_err(|e| InstallError::Msg(e.to_string()))?
+            .to_string_lossy()
+            .into_owned();
+        let target = safe_join(&full, &path)?;
+        let entry_type = entry.header().entry_type();
+        if entry_type.is_dir() {
+            std::fs::create_dir_all(&target).map_err(InstallError::Io)?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(InstallError::Io)?;
+        }
+        if entry_type.is_symlink() {
+            // Materialize the link as a plain file carrying its target text —
+            // never create a symlink that could point outside the root.
+            let link = entry
+                .link_name()
+                .map_err(|e| InstallError::Msg(e.to_string()))?;
+            let text = link
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            std::fs::write(&target, text).map_err(InstallError::Io)?;
+            continue;
+        }
+        let mut out = std::fs::File::create(&target).map_err(InstallError::Io)?;
+        std::io::copy(&mut entry, &mut out).map_err(InstallError::Io)?;
+    }
     Ok(())
 }
 
@@ -395,5 +491,54 @@ mod tests {
     fn rel_path_strips_leading_dot_slash() {
         assert_eq!(rel_path("./bin/devin"), PathBuf::from("bin/devin"));
         assert_eq!(rel_path("kilo.exe"), PathBuf::from("kilo.exe"));
+    }
+
+    #[test]
+    fn zip_slip_is_refused() {
+        // Bugfix 11 — the zip format permits `..` member names, so this is the
+        // real zip-slip vector our confined extractor must refuse. (The tar
+        // crate rejects `..`/absolute members at both build and unpack, so tar
+        // needs no extra defence.)
+        let root = tmp_root("slip");
+        let dest = root.join("pkg");
+
+        let evil_zip = zip_bytes(&[("../evil", b"bad"), ("bin/ok", b"ok")]);
+        let err = extract_archive(&evil_zip, "https://x/evil.zip", &dest).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("traversal") || msg.contains("escape"), "got: {msg}");
+        assert!(!dest.join("evil").exists());
+        assert!(!root.join("evil").exists());
+        // The safe member inside the same archive should never have been
+        // written either (extraction aborts on the hostile member).
+        assert!(!dest.join("bin/ok").exists());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn missing_sha256_is_refused_before_download() {
+        // Bugfix 11 — an empty sha pin fails closed (no unverified archive
+        // can reach disk). Exercises the guard directly on a Binary spec.
+        let root = tmp_root("nosha");
+        let installer = Installer::new(root.clone());
+        let spec = InstallSpec {
+            agent_id: "x".into(),
+            name: "X".into(),
+            version: "1".into(),
+            license: "MIT".into(),
+            kind: InstallKind::Binary {
+                archive: "https://x/sha.tar.gz".into(),
+                cmd: "bin/x".into(),
+                args: vec![],
+                sha256: String::new(),
+                env: vec![],
+            },
+            install_dir: None,
+        };
+        let err = installer.install(&spec).unwrap_err();
+        assert!(err.to_string().contains("sha256"), "got: {err}");
+        // Nothing was extracted.
+        assert!(!root.join("x").join("pkg").exists());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

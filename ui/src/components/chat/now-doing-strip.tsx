@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Activity } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
+import { toPlainStage } from '@/lib/plain-language'
 
 interface Props {
   title: string
@@ -42,8 +43,12 @@ export default function NowDoingStrip({
     ? `${Math.round(tokensThisTurn / 1000)}K tokens this turn`
     : null
 
+  // P32.1 — consumer phrasing for the headline; the technical stage/detail
+  // stays behind the hover/expand layer (never the other way around).
+  const plainTitle = toPlainStage(title)
   const subParts = [detail, elapsedLabel, tokensLabel].filter(Boolean) as string[]
   const sub = subParts.join(' · ')
+  const technical = title !== plainTitle ? title : undefined
 
   return (
     <motion.button
@@ -62,8 +67,11 @@ export default function NowDoingStrip({
         ) : (
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/60" />
         )}
-        <span className="truncate text-[11px] font-medium text-foreground">
-          {title}
+        <span
+          className="truncate text-[11px] font-medium text-foreground"
+          title={technical}
+        >
+          {plainTitle}
         </span>
         {stepLabel && (
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">

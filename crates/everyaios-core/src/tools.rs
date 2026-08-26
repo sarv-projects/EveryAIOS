@@ -6,8 +6,9 @@
 //! `script.run`, `file_ops.*`, and `search.query`.
 //!
 //! Browser CDP / G8 search / office mutation engines are **dispatched**
-//! (every id has a table entry) and fail honestly when the engine is not
-//! attached — they never run without a consumed ticket on the mutation path.
+//! through the same ticket path. Search uses `everyaios-search::G8Cascade`.
+//! Office mutations run `everyaios-office` against a path-floored file.
+//! Browser tools need an attached [`BrowserBackend`] (CDP session).
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -47,6 +48,18 @@ pub trait BrowserBackend: Send + Sync {
     fn save_pdf_enhanced(&self, dir: &Path) -> Result<String, String>;
     /// `Page.captureScreenshot` → write a JPEG under `dir`, return the path.
     fn save_screenshot_enhanced(&self, dir: &Path, quality: u8) -> Result<String, String>;
+    /// A11y snapshot text of the current page.
+    fn snapshot(&self) -> Result<String, String> {
+        Err("browser session not attached".into())
+    }
+    /// Navigate the attached page.
+    fn navigate(&self, _url: &str) -> Result<String, String> {
+        Err("browser session not attached".into())
+    }
+    /// Click / type against an a11y ref (`[ref=eN]`).
+    fn act(&self, _kind: &str, _selector: Option<&str>, _text: Option<&str>) -> Result<String, String> {
+        Err("browser session not attached".into())
+    }
 }
 
 /// Family a registered tool belongs to (dispatch key).
@@ -137,6 +150,20 @@ impl ToolRegistry {
         aliases.insert("search.query".into(), "search.query".into());
         for op in ["read", "write", "delete", "list"] {
             aliases.insert(format!("file_ops.{op}"), format!("file_ops.{op}"));
+        }
+        for id in [
+            "office.docx_open",
+            "office.docx_patch",
+            "office.xlsx_open",
+            "office.xlsx_edit",
+            "office.pptx_open",
+            "office.pptx_patch",
+            "office.pdf_open",
+            "office.pdf_form_fill",
+            "office.pdf_redact",
+            "office.pdf_pages",
+        ] {
+            aliases.insert(id.into(), id.into());
         }
 
         Self { tools, aliases }
@@ -255,7 +282,7 @@ fn extra_tools() -> Vec<RegisteredTool> {
         RegisteredTool {
             id: "search.query".into(),
             family: ToolFamily::Search,
-            description: "Web search cascade (G8) — not built; dispatch fails honestly".into(),
+            description: "Web search via the G8 cascade (cache → SearXNG → DDG fallback)".into(),
             read_only: true,
             operation: "external_network".into(),
             risk: "medium".into(),
@@ -269,6 +296,137 @@ fn extra_tools() -> Vec<RegisteredTool> {
                 "additionalProperties": false
             }),
         },
+        office_tool(
+            "office.docx_open",
+            "Open a .docx and return plain text + block addresses",
+            true,
+            "low",
+            path_schema("Path to a .docx", false),
+        ),
+        office_tool(
+            "office.docx_patch",
+            "Surgically patch one docx block (byte-preserving w:t write)",
+            false,
+            "medium",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "address": { "type": "string", "description": "Block address (e.g. p1)" },
+                    "text": { "type": "string" }
+                },
+                "required": ["path", "address", "text"],
+                "additionalProperties": false
+            }),
+        ),
+        office_tool(
+            "office.xlsx_open",
+            "Open a .xlsx (windowed calamine read of the first sheet)",
+            true,
+            "low",
+            path_schema("Path to a .xlsx", false),
+        ),
+        office_tool(
+            "office.xlsx_edit",
+            "Set one spreadsheet cell through IronCalc + surgical part-patch",
+            false,
+            "medium",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "sheet": { "type": "string" },
+                    "address": { "type": "string" },
+                    "value": { "type": "string" }
+                },
+                "required": ["path", "address", "value"],
+                "additionalProperties": false
+            }),
+        ),
+        office_tool(
+            "office.pptx_open",
+            "Open a .pptx and return the deck outline + per-slide text",
+            true,
+            "low",
+            path_schema("Path to a .pptx", false),
+        ),
+        office_tool(
+            "office.pptx_patch",
+            "Patch shape text on one slide (byte-preserving a:t write)",
+            false,
+            "medium",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "part": { "type": "string" },
+                    "shape": { "type": "number" },
+                    "text": { "type": "string" }
+                },
+                "required": ["path", "text"],
+                "additionalProperties": false
+            }),
+        ),
+        office_tool(
+            "office.pdf_open",
+            "Inspect a PDF (page count + extracted text)",
+            true,
+            "low",
+            path_schema("Path to a .pdf", false),
+        ),
+        office_tool(
+            "office.pdf_form_fill",
+            "Fill AcroForm fields on a PDF",
+            false,
+            "medium",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "fields": { "type": "object" }
+                },
+                "required": ["path", "fields"],
+                "additionalProperties": false
+            }),
+        ),
+        office_tool(
+            "office.pdf_redact",
+            "Mark a PDF rectangle for redaction",
+            false,
+            "high",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "page": { "type": "number" },
+                    "x1": { "type": "number" },
+                    "y1": { "type": "number" },
+                    "x2": { "type": "number" },
+                    "y2": { "type": "number" }
+                },
+                "required": ["path", "page"],
+                "additionalProperties": false
+            }),
+        ),
+        office_tool(
+            "office.pdf_pages",
+            "PDF page ops: split / merge / rotate / reorder / delete / extract",
+            false,
+            "medium",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "op": { "type": "string" },
+                    "pages": { "type": "array", "items": { "type": "number" } },
+                    "delta": { "type": "number" },
+                    "other": { "type": "string" },
+                    "out": { "type": "string" }
+                },
+                "required": ["path", "op"],
+                "additionalProperties": false
+            }),
+        ),
     ]
     .into_iter()
     .map(stamp_tier)
@@ -282,6 +440,19 @@ fn path_schema(desc: &str, extra: bool) -> Value {
         "required": ["path"],
         "additionalProperties": extra
     })
+}
+
+fn office_tool(id: &str, desc: &str, read_only: bool, risk: &str, schema: Value) -> RegisteredTool {
+    RegisteredTool {
+        id: id.into(),
+        family: ToolFamily::Office,
+        description: desc.into(),
+        read_only,
+        operation: "write".into(),
+        risk: risk.into(),
+        risk_tier: String::new(),
+        args_schema: schema,
+    }
 }
 
 fn schema_of(args: &[ArgDef]) -> Value {
@@ -380,6 +551,9 @@ pub struct ToolService {
     undo: Vec<FileUndo>,
     /// P2.3 — optional browser engine (PDF/screenshot file-op tools).
     browser: Option<Arc<dyn BrowserBackend>>,
+    /// G8 cascade (cache → SearXNG → DDG).
+    search: everyaios_search::G8Cascade,
+    search_transport: Arc<dyn everyaios_search::SearchTransport>,
 }
 
 #[derive(Debug, Clone)]
@@ -414,6 +588,8 @@ impl ToolService {
             egress,
             undo: Vec::new(),
             browser: None,
+            search: everyaios_search::G8Cascade::default(),
+            search_transport: Arc::new(UreqSearchTransport),
         }
     }
 
@@ -421,6 +597,17 @@ impl ToolService {
     /// `save_screenshot_enhanced` route real captures to disk.
     pub fn with_browser(mut self, browser: Arc<dyn BrowserBackend>) -> Self {
         self.browser = Some(browser);
+        self
+    }
+
+    /// Attach (or replace) the live CDP backend after `browser_start`.
+    pub fn attach_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
+        self.browser = Some(browser);
+    }
+
+    /// Inject a search transport (tests; production uses [`UreqSearchTransport`]).
+    pub fn with_search_transport(mut self, t: Arc<dyn everyaios_search::SearchTransport>) -> Self {
+        self.search_transport = t;
         self
     }
 
@@ -710,51 +897,9 @@ impl ToolService {
             ToolFamily::FileOps => self.dispatch_file_ops(&spec.id, args),
             ToolFamily::Storage => self.dispatch_storage(&spec.id, args),
             ToolFamily::Script => self.dispatch_script(args),
-            ToolFamily::Search => json!({
-                "ok": false,
-                "error": "G8 search cascade is not built (TODO P8.4)"
-            }),
-            ToolFamily::Browser => match spec.id.as_str() {
-                // P2.3 (E2) — the three file-op tools have a real path.
-                "download_file" => self.dispatch_download_file(args),
-                "save_pdf_enhanced" | "save_screenshot_enhanced" => {
-                    let dir = args
-                        .get("dir")
-                        .and_then(Value::as_str)
-                        .unwrap_or("downloads");
-                    let abs = match self.floor_dir(dir) {
-                        Ok(p) => p,
-                        Err(e) => return json!({"ok": false, "error": e}),
-                    };
-                    match &self.browser {
-                        Some(b) => {
-                            let res = if spec.id == "save_pdf_enhanced" {
-                                b.save_pdf_enhanced(&abs)
-                            } else {
-                                let q =
-                                    args.get("quality").and_then(Value::as_u64).unwrap_or(80) as u8;
-                                b.save_screenshot_enhanced(&abs, q)
-                            };
-                            match res {
-                                Ok(path) => json!({"ok": true, "path": path}),
-                                Err(e) => json!({"ok": false, "error": e}),
-                            }
-                        }
-                        None => json!({
-                            "ok": false,
-                            "error": "browser session not attached"
-                        }),
-                    }
-                }
-                _ => json!({
-                    "ok": false,
-                    "error": "browser session not attached"
-                }),
-            },
-            ToolFamily::Office => json!({
-                "ok": false,
-                "error": "office engine not attached on this path"
-            }),
+            ToolFamily::Search => self.dispatch_search(args),
+            ToolFamily::Browser => self.dispatch_browser(&spec.id, args),
+            ToolFamily::Office => self.dispatch_office(&spec.id, args),
         }
     }
 
@@ -1041,6 +1186,448 @@ impl ToolService {
             }
         }
     }
+
+    fn dispatch_search(&self, args: &Value) -> Value {
+        let query = match args.get("query").and_then(Value::as_str) {
+            Some(q) if !q.is_empty() => q,
+            _ => return json!({"ok": false, "error": "query required"}),
+        };
+        match self.search.query(self.search_transport.as_ref(), query) {
+            Ok(hits) => json!({
+                "ok": true,
+                "query": query,
+                "count": hits.len(),
+                "results": hits,
+            }),
+            Err(e) => json!({"ok": false, "error": e}),
+        }
+    }
+
+    fn dispatch_browser(&self, id: &str, args: &Value) -> Value {
+        match id {
+            "download_file" => self.dispatch_download_file(args),
+            "save_pdf_enhanced" | "save_screenshot_enhanced" => {
+                let dir = args
+                    .get("dir")
+                    .and_then(Value::as_str)
+                    .unwrap_or("downloads");
+                let abs = match self.floor_dir(dir) {
+                    Ok(p) => p,
+                    Err(e) => return json!({"ok": false, "error": e}),
+                };
+                match &self.browser {
+                    Some(b) => {
+                        let res = if id == "save_pdf_enhanced" {
+                            b.save_pdf_enhanced(&abs)
+                        } else {
+                            let q = args.get("quality").and_then(Value::as_u64).unwrap_or(80) as u8;
+                            b.save_screenshot_enhanced(&abs, q)
+                        };
+                        match res {
+                            Ok(path) => json!({"ok": true, "path": path}),
+                            Err(e) => json!({"ok": false, "error": e}),
+                        }
+                    }
+                    None => json!({"ok": false, "error": "browser session not attached"}),
+                }
+            }
+            "navigate" | "browser.navigate" => {
+                let url = match args.get("url").and_then(Value::as_str) {
+                    Some(u) => u,
+                    None => return json!({"ok": false, "error": "url required"}),
+                };
+                match &self.browser {
+                    Some(b) => match b.navigate(url) {
+                        Ok(u) => json!({"ok": true, "url": u}),
+                        Err(e) => json!({"ok": false, "error": e}),
+                    },
+                    None => json!({"ok": false, "error": "browser session not attached"}),
+                }
+            }
+            "snapshot" | "enhanced_snapshot" => match &self.browser {
+                Some(b) => match b.snapshot() {
+                    Ok(text) => json!({"ok": true, "text": text}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                },
+                None => json!({"ok": false, "error": "browser session not attached"}),
+            },
+            "act" => {
+                let kind = args.get("kind").and_then(Value::as_str).unwrap_or("click");
+                let selector = args
+                    .get("ref")
+                    .or_else(|| args.get("ref_id"))
+                    .and_then(Value::as_str);
+                let text = args.get("text").and_then(Value::as_str);
+                match &self.browser {
+                    Some(b) => match b.act(kind, selector, text) {
+                        Ok(msg) => json!({"ok": true, "result": msg}),
+                        Err(e) => json!({"ok": false, "error": e}),
+                    },
+                    None => json!({"ok": false, "error": "browser session not attached"}),
+                }
+            }
+            _ => json!({"ok": false, "error": "browser session not attached"}),
+        }
+    }
+
+    fn dispatch_office(&mut self, id: &str, args: &Value) -> Value {
+        let path = match args.get("path").and_then(Value::as_str) {
+            Some(p) => p,
+            None => return json!({"ok": false, "error": "path required"}),
+        };
+        let abs = match self.floor_path(path) {
+            Ok(p) => p,
+            Err(e) => return json!({"ok": false, "error": e}),
+        };
+        match id {
+            "office.docx_open" => match fs::read(&abs) {
+                Ok(bytes) => match everyaios_office::DocxEngine::open(bytes) {
+                    Ok(engine) => {
+                        let blocks: Vec<Value> = engine
+                            .blocks()
+                            .iter()
+                            .map(|b| {
+                                json!({
+                                    "address": b.address,
+                                    "kind": format!("{:?}", b.kind),
+                                    "part": b.part,
+                                })
+                            })
+                            .collect();
+                        json!({
+                            "ok": true,
+                            "path": abs.display().to_string(),
+                            "text": engine.render_text(),
+                            "blocks": blocks,
+                        })
+                    }
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                },
+                Err(e) => json!({"ok": false, "error": e.to_string()}),
+            },
+            "office.docx_patch" => {
+                let address = args.get("address").and_then(Value::as_str).unwrap_or("");
+                let text = args.get("text").and_then(Value::as_str).unwrap_or("");
+                self.snapshot_file("", &abs);
+                match fs::read(&abs) {
+                    Ok(bytes) => match everyaios_office::DocxEngine::open(bytes) {
+                        Ok(mut engine) => match engine.patch_block(address, text).and_then(|_| engine.save()) {
+                            Ok(out) => match atomic_office_write(&abs, &out) {
+                                Ok(()) => json!({"ok": true, "path": abs.display().to_string(), "address": address}),
+                                Err(e) => json!({"ok": false, "error": e}),
+                            },
+                            Err(e) => json!({"ok": false, "error": e.to_string(), "refused": true}),
+                        },
+                        Err(e) => json!({"ok": false, "error": e.to_string()}),
+                    },
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                }
+            }
+            "office.xlsx_open" => {
+                match everyaios_office::xlsx::read::open(&abs) {
+                    Ok(meta) => json!({"ok": true, "path": meta.path, "sheets": meta.sheets}),
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                }
+            }
+            "office.xlsx_edit" => {
+                use everyaios_office::xlsx::address::parse_ref;
+                use everyaios_office::xlsx::dsl::{Operation as XlsxOp, Scalar, WorkbookCommandBatch};
+                use everyaios_office::xlsx::patch::apply_batch;
+                let address = args.get("address").and_then(Value::as_str).unwrap_or("");
+                let value = args.get("value").and_then(Value::as_str).unwrap_or("");
+                let sheet = args.get("sheet").and_then(Value::as_str).unwrap_or("");
+                let cell = match parse_ref(address) {
+                    Ok((_, c)) => c,
+                    Err(e) => return json!({"ok": false, "error": e.to_string()}),
+                };
+                self.snapshot_file("", &abs);
+                match fs::read(&abs) {
+                    Ok(bytes) => {
+                        let mut batch = WorkbookCommandBatch::new(0, format!("Set {address}"));
+                        let scalar = if let Ok(n) = value.parse::<f64>() {
+                            Scalar::Number(n)
+                        } else {
+                            Scalar::Text(value.to_string())
+                        };
+                        batch.operations.push(XlsxOp::SetCell {
+                            address: cell,
+                            value: scalar,
+                        });
+                        let sheet_name = if sheet.is_empty() {
+                            everyaios_office::xlsx::read::open(&abs)
+                                .ok()
+                                .and_then(|m| m.sheets.first().map(|s| s.name.clone()))
+                                .unwrap_or_else(|| "Sheet1".into())
+                        } else {
+                            sheet.to_string()
+                        };
+                        match apply_batch(&bytes, &batch, &sheet_name) {
+                            Ok(outcome) => match atomic_office_write(&abs, &outcome.bytes) {
+                                Ok(()) => json!({"ok": true, "path": abs.display().to_string(), "address": address}),
+                                Err(e) => json!({"ok": false, "error": e}),
+                            },
+                            Err(e) => json!({"ok": false, "error": e.to_string()}),
+                        }
+                    }
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                }
+            }
+            "office.pptx_open" => match fs::read(&abs) {
+                Ok(bytes) => match everyaios_office::PptxEngine::open(bytes) {
+                    Ok(mut engine) => match engine.render_deck() {
+                        Ok(deck) => json!({"ok": true, "path": abs.display().to_string(), "deck": deck}),
+                        Err(e) => json!({"ok": false, "error": e.to_string()}),
+                    },
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                },
+                Err(e) => json!({"ok": false, "error": e.to_string()}),
+            },
+            "office.pptx_patch" => {
+                let text = args.get("text").and_then(Value::as_str).unwrap_or("");
+                let part = args.get("part").and_then(Value::as_str);
+                let shape = args.get("shape").and_then(Value::as_u64).unwrap_or(0) as usize;
+                self.snapshot_file("", &abs);
+                match fs::read(&abs) {
+                    Ok(bytes) => match everyaios_office::PptxEngine::open(bytes) {
+                        Ok(mut engine) => {
+                            let part_name = match part {
+                                Some(p) => p.to_string(),
+                                None => match engine.slides().first() {
+                                    Some(s) => s.part.clone(),
+                                    None => return json!({"ok": false, "error": "no slides"}),
+                                },
+                            };
+                            let shape_addr = format!("shape{shape}");
+                            match engine.patch_shape_text(&part_name, &shape_addr, text) {
+                                Ok(()) => match engine.save() {
+                                    Ok(out) => match atomic_office_write(&abs, &out) {
+                                        Ok(()) => json!({"ok": true, "path": abs.display().to_string()}),
+                                        Err(e) => json!({"ok": false, "error": e}),
+                                    },
+                                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                                },
+                                Err(e) => json!({"ok": false, "error": e.to_string(), "refused": true}),
+                            }
+                        }
+                        Err(e) => json!({"ok": false, "error": e.to_string()}),
+                    },
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                }
+            }
+            "office.pdf_open" => match fs::read(&abs) {
+                Ok(bytes) => match everyaios_office::inspect(&bytes) {
+                    Ok(info) => json!({"ok": true, "pages": info.pages, "texts": info.texts}),
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                },
+                Err(e) => json!({"ok": false, "error": e.to_string()}),
+            },
+            "office.pdf_form_fill" => {
+                let fields_obj = args.get("fields").and_then(Value::as_object);
+                let fields: Vec<(String, String)> = fields_obj
+                    .map(|m| {
+                        m.iter()
+                            .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                self.snapshot_file("", &abs);
+                match fs::read(&abs) {
+                    Ok(bytes) => match everyaios_office::pdf::form::form_fill(&bytes, &fields) {
+                        Ok(out) => match atomic_office_write(&abs, &out) {
+                            Ok(()) => json!({"ok": true, "path": abs.display().to_string()}),
+                            Err(e) => json!({"ok": false, "error": e}),
+                        },
+                        Err(e) => json!({"ok": false, "error": e.to_string()}),
+                    },
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                }
+            }
+            "office.pdf_redact" => {
+                let page = args.get("page").and_then(Value::as_u64).unwrap_or(1) as u32;
+                let x1 = args.get("x1").and_then(Value::as_f64).unwrap_or(0.0);
+                let y1 = args.get("y1").and_then(Value::as_f64).unwrap_or(0.0);
+                let x2 = args.get("x2").and_then(Value::as_f64).unwrap_or(0.0);
+                let y2 = args.get("y2").and_then(Value::as_f64).unwrap_or(0.0);
+                self.snapshot_file("", &abs);
+                match fs::read(&abs) {
+                    Ok(bytes) => match everyaios_office::pdf::redact::redact(
+                        &bytes,
+                        &[(page, [x1 as f32, y1 as f32, x2 as f32, y2 as f32])],
+                    ) {
+                        Ok(out) => match atomic_office_write(&abs, &out) {
+                            Ok(()) => json!({"ok": true, "path": abs.display().to_string()}),
+                            Err(e) => json!({"ok": false, "error": e}),
+                        },
+                        Err(e) => json!({"ok": false, "error": e.to_string()}),
+                    },
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                }
+            }
+            "office.pdf_pages" => {
+                let op = args.get("op").and_then(Value::as_str).unwrap_or("");
+                let pages: Vec<u32> = args
+                    .get("pages")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect())
+                    .unwrap_or_default();
+                self.snapshot_file("", &abs);
+                match fs::read(&abs) {
+                    Ok(bytes) => {
+                        let result = match op {
+                            "split" if pages.len() >= 2 => {
+                                everyaios_office::split_pdf(&bytes, pages[0]..=pages[1])
+                            }
+                            "extract" => everyaios_office::extract_pages(&bytes, &pages),
+                            "reorder" => everyaios_office::reorder_pages(&bytes, &pages),
+                            "delete" => everyaios_office::delete_pages(&bytes, &pages),
+                            "rotate" => {
+                                let delta = args.get("delta").and_then(Value::as_i64).unwrap_or(90);
+                                let sel = if pages.is_empty() {
+                                    None
+                                } else {
+                                    Some(pages.as_slice())
+                                };
+                                everyaios_office::rotate_pages(&bytes, delta, sel)
+                            }
+                            "merge" => {
+                                let other = args.get("other").and_then(Value::as_str).unwrap_or("");
+                                let other_abs = match self.floor_path(other) {
+                                    Ok(p) => p,
+                                    Err(e) => return json!({"ok": false, "error": e}),
+                                };
+                                match fs::read(&other_abs) {
+                                    Ok(b2) => everyaios_office::merge_pdfs(&[bytes.clone(), b2]),
+                                    Err(e) => return json!({"ok": false, "error": e.to_string()}),
+                                }
+                            }
+                            _ => return json!({"ok": false, "error": format!("unknown pdf page op: {op}")}),
+                        };
+                        match result {
+                            Ok(out) => {
+                                let dest = args
+                                    .get("out")
+                                    .and_then(Value::as_str)
+                                    .map(PathBuf::from)
+                                    .unwrap_or(abs.clone());
+                                let dest = if dest.is_absolute() {
+                                    dest
+                                } else {
+                                    match self.floor_path(&dest.to_string_lossy()) {
+                                        Ok(p) => p,
+                                        Err(e) => return json!({"ok": false, "error": e}),
+                                    }
+                                };
+                                match atomic_office_write(&dest, &out) {
+                                    Ok(()) => json!({"ok": true, "path": dest.display().to_string()}),
+                                    Err(e) => json!({"ok": false, "error": e}),
+                                }
+                            }
+                            Err(e) => json!({"ok": false, "error": e.to_string()}),
+                        }
+                    }
+                    Err(e) => json!({"ok": false, "error": e.to_string()}),
+                }
+            }
+            _ => json!({"ok": false, "error": format!("unknown office tool: {id}")}),
+        }
+    }
+}
+
+fn atomic_office_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let dir = path.parent().ok_or("path has no parent")?;
+    let name = path.file_name().and_then(|n| n.to_str()).ok_or("path has no file name")?;
+    let tmp = dir.join(format!(".{name}.tmp-{}", std::process::id()));
+    fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
+/// Live HTTP seam for G8: SearXNG JSON at `{endpoint}/search?format=json`, DDG HTML fallback.
+struct UreqSearchTransport;
+
+impl everyaios_search::SearchTransport for UreqSearchTransport {
+    fn search(
+        &self,
+        endpoint: &str,
+        query: &str,
+    ) -> Result<Vec<everyaios_search::SearchResult>, String> {
+        let q = urlencoding::encode(query);
+        if endpoint == "ddg" {
+            let url = format!("https://html.duckduckgo.com/html/?q={q}");
+            let body = ureq::get(&url)
+                .timeout(std::time::Duration::from_secs(8))
+                .call()
+                .map_err(|e| e.to_string())?
+                .into_string()
+                .map_err(|e| e.to_string())?;
+            return Ok(parse_ddg_html(&body));
+        }
+        let base = endpoint.trim_end_matches('/');
+        let url = format!("{base}/search?q={q}&format=json");
+        let body = ureq::get(&url)
+            .timeout(std::time::Duration::from_secs(8))
+            .call()
+            .map_err(|e| e.to_string())?
+            .into_string()
+            .map_err(|e| e.to_string())?;
+        parse_searx_json(&body)
+    }
+
+    fn fetch(&self, _tier: &str, url: &str) -> Result<String, String> {
+        ureq::get(url)
+            .timeout(std::time::Duration::from_secs(8))
+            .call()
+            .map_err(|e| e.to_string())?
+            .into_string()
+            .map_err(|e| e.to_string())
+    }
+}
+
+fn parse_searx_json(body: &str) -> Result<Vec<everyaios_search::SearchResult>, String> {
+    let v: Value = serde_json::from_str(body).map_err(|e| e.to_string())?;
+    let results = v
+        .get("results")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    Ok(results
+        .iter()
+        .filter_map(|r| {
+            Some(everyaios_search::SearchResult {
+                url: r.get("url")?.as_str()?.to_string(),
+                title: r.get("title")?.as_str().unwrap_or("").to_string(),
+                snippet: r.get("content")?.as_str().unwrap_or("").to_string(),
+                source: "searxng".into(),
+            })
+        })
+        .take(8)
+        .collect())
+}
+
+fn parse_ddg_html(body: &str) -> Vec<everyaios_search::SearchResult> {
+    let mut out = Vec::new();
+    for chunk in body.split("result__a") {
+        let Some(href) = chunk.split("href=\"").nth(1).and_then(|s| s.split('"').next()) else {
+            continue;
+        };
+        let title = chunk
+            .split('>')
+            .nth(1)
+            .and_then(|s| s.split('<').next())
+            .unwrap_or("")
+            .to_string();
+        if href.starts_with("http") {
+            out.push(everyaios_search::SearchResult {
+                url: href.to_string(),
+                title,
+                snippet: String::new(),
+                source: "ddg".into(),
+            });
+        }
+        if out.len() >= 8 {
+            break;
+        }
+    }
+    out
 }
 
 /// P2.3 — derive a safe file name from a URL (last path segment). A URL with
@@ -1839,6 +2426,58 @@ mod tests {
         let restored = s.revert_last("").unwrap();
         assert!(restored.contains("w.txt"));
         assert_eq!(fs::read_to_string(dir.join("w.txt")).unwrap(), "before");
+    }
+
+    struct FakeSearch;
+    impl everyaios_search::SearchTransport for FakeSearch {
+        fn search(
+            &self,
+            endpoint: &str,
+            query: &str,
+        ) -> Result<Vec<everyaios_search::SearchResult>, String> {
+            Ok(vec![everyaios_search::SearchResult {
+                url: format!("https://example.test/{query}"),
+                title: format!("{query} via {endpoint}"),
+                snippet: "hit".into(),
+                source: endpoint.into(),
+            }])
+        }
+        fn fetch(&self, _tier: &str, _url: &str) -> Result<String, String> {
+            Ok("ok".into())
+        }
+    }
+
+    #[test]
+    fn g8_search_dispatch_returns_hits() {
+        let dir = tempfile();
+        let mut s = ToolService::new(Arc::new(Mutex::new(GuardService::new())), dir)
+            .with_search_transport(Arc::new(FakeSearch));
+        let spec = s.registry.get("search.query").unwrap().clone();
+        let out = s.dispatch(&spec, &json!({"query": "everyaios"}));
+        assert_eq!(out["ok"], true, "{out}");
+        assert_eq!(out["count"], 1);
+        assert!(out["results"][0]["url"].as_str().unwrap().contains("everyaios"));
+    }
+
+    #[test]
+    fn office_tools_are_registered() {
+        let r = ToolRegistry::new();
+        assert!(r.get("office.docx_patch").is_some());
+        assert!(r.get("office.xlsx_edit").is_some());
+        assert!(r.get("office.pdf_pages").is_some());
+    }
+
+    #[test]
+    fn office_path_floor_refuses_escape() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        let spec = s.registry.get("office.docx_open").unwrap().clone();
+        let out = s.dispatch(&spec, &json!({"path": "../../etc/passwd"}));
+        assert_eq!(out["ok"], false);
+        assert!(
+            out["error"].as_str().unwrap_or("").contains("floor"),
+            "{out}"
+        );
     }
 
     #[test]

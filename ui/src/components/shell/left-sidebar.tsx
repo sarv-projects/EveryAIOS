@@ -27,6 +27,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useAppStore, type Session, type SessionStatus } from '@/lib/store'
+import { staggerStyle } from '@/lib/stagger'
 import { cn } from '@/lib/utils'
 
 const statusMeta: Record<
@@ -303,8 +304,9 @@ export function LeftSidebar() {
           {recent
             // P11.5.1 — child sessions (forks) indent under their parent.
             .filter((s) => !s.parentId)
-            .map((s) => (
-              <div key={s.id}>
+            .map((s, i) => (
+              // P35.2 — entrance stagger on the sessions list.
+              <div key={s.id} className="enter-stagger" style={staggerStyle(i)}>
                 <WorkRow session={s} collapsed={collapsed} active={activeId === s.id} />
                 {recent
                   .filter((c) => c.parentId === s.id)

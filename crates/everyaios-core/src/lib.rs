@@ -24,6 +24,9 @@ pub mod challenge;
 pub mod chat;
 pub mod config;
 pub mod connector_hub;
+pub mod decline;
+pub mod diagnose;
+pub mod distill;
 pub mod email;
 pub mod eval_service;
 pub mod execution;
@@ -33,9 +36,20 @@ pub mod git_commit;
 pub mod guard_service;
 pub mod hooks;
 pub mod hwfit;
+pub mod inventory;
 pub mod local;
 pub mod connectors;
+pub use connectors::{
+    attach_scopes, GraphConnector, ReadFirstPolicy, SendAction, SendApproval, WorkspaceConnector,
+    SCOPE_MANIFEST,
+};
 pub mod memory_service;
+pub mod migrate;
+pub mod migration;
+pub mod native_loop;
+pub mod pairing;
+pub mod voice;
+pub mod worktree_cap;
 pub mod messaging;
 pub mod models;
 pub mod orphan;
@@ -43,6 +57,8 @@ pub mod plan_service;
 pub mod provider_ref;
 pub mod providers;
 pub mod reader;
+pub mod report;
+pub mod research;
 pub mod resources;
 pub mod rss_measure;
 pub mod routing;
@@ -52,6 +68,7 @@ pub mod sidecar_link;
 pub mod supervisor;
 pub mod sync;
 pub mod sync_transport;
+pub mod task_ledger;
 pub mod telemetry;
 pub mod tools;
 pub mod tracing;
@@ -107,12 +124,17 @@ pub use scheduler_service::SchedulerService;
 pub use sidecar_link::{Inbound, LinkError, SidecarLink, WriterHandle};
 pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};
 pub use sync::{
-    export_bundle, import_bundle, open, reconcile, seal, AeadBox, ChaChaBox, KeyExchange,
-    KeyPair, SharedSession, SyncConflict, SyncDiff, SyncEnvelope, SyncError, SyncHello, SyncItem,
-    SyncScope, SyncSet, SyncSession, SyncTransport, SYNC_MAGIC, SYNC_VERSION,
+    export_bundle, import_bundle, open, reconcile, resolve_conflicts, seal, AeadBox, ChaChaBox,
+    ConflictPolicy, KeyExchange, KeyPair, ResolvedDiff, SharedSession, SyncConflict, SyncDiff,
+    SyncEnvelope, SyncError, SyncHello, SyncItem, SyncScope, SyncSet, SyncSession, SyncTransport,
+    SYNC_MAGIC, SYNC_VERSION,
+};
+pub use task_ledger::{
+    DeliveryState, FileStore, InMemoryStore, TaskKind, TaskLedger, TaskRecord, TaskStatus,
+    TaskStore, DEFAULT_LOST_GRACE_MS, RETENTION_MS,
 };
 pub use telemetry::{Telemetry, TelemetryEventKind, TelemetryMode, TelemetrySample};
-pub use tools::{canonical_args_hash, ToolRegistry, ToolService};
+pub use tools::{canonical_args_hash, BrowserBackend, ToolRegistry, ToolService};
 pub use vault_key::{
     gate_mode, keyfile_path, needs_passphrase_gate, resolve_vault_key, setup_vault_passphrase,
     unlock_vault_passphrase, ResolvedVaultKey, VaultKeyError, VaultKeyOrigin,
@@ -132,7 +154,22 @@ pub fn default_data_dir() -> PathBuf {
     if let Ok(home) = std::env::var("EVERYAIOS_HOME") {
         return PathBuf::from(home);
     }
-    let base = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    // Bugfix 15 — Windows has no `HOME`; resolve the profile from
+    // USERPROFILE, then HOMEDRIVE+HOMEPATH. Never fall back to the cwd, or
+    // vault/config land in `./.everyaios` under the working directory; last
+    // resort is the OS temp dir.
+    let base = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .or_else(|_| {
+            let d = std::env::var("HOMEDRIVE").unwrap_or_default();
+            let p = std::env::var("HOMEPATH").unwrap_or_default();
+            if d.is_empty() || p.is_empty() {
+                Err(std::env::VarError::NotPresent)
+            } else {
+                Ok(format!("{d}{p}"))
+            }
+        })
+        .unwrap_or_else(|_| std::env::temp_dir().to_string_lossy().into_owned());
     PathBuf::from(base).join(".everyaios")
 }
 
@@ -224,6 +261,39 @@ mod tests {
         let out = boot(&["--vault".into(), vault.to_string_lossy().into()]).expect("boot ok");
         assert!(out.contains("ready"), "expected ready line, got: {out}");
         assert!(out.contains("retention_days=7"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+        std::env::remove_var("EVERYAIOS_HOME");
+        std::env::remove_var("EVERYAIOS_VAULT_KEY");
+    }
+
+    /// P39.5 — lazy-load enforcement (R6 fix #2): cold boot must not
+    /// initialize the heavy subsystems (office / IronCalc, LSP / codeintel,
+    /// graph store). The core boot surface is config + vault only; the Tauri
+    /// shell additionally holds browser/shell/MCP/ACP handles behind
+    /// `Option` (constructed on first command use). This test locks the boot
+    /// surface so a future eager-init regression is caught at the contract
+    /// level.
+    #[test]
+    fn boot_does_not_initialize_heavy_subsystems() {
+        let dir = std::env::temp_dir().join(format!("everyaios-core-lazy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::env::set_var("EVERYAIOS_HOME", &dir);
+        std::env::set_var("EVERYAIOS_VAULT_KEY", "test-key");
+
+        let vault = dir.join("vault.db");
+        let out = boot(&["--vault".into(), vault.to_string_lossy().into()]).expect("boot ok");
+        // The ready line names only the light surface.
+        assert!(out.contains("ready"), "expected ready line, got: {out}");
+        assert!(out.contains("data_dir="), "boot report must name the data dir");
+        assert!(out.contains("vault="), "boot report must name the vault");
+        // Heavy subsystems must NOT be constructed or named at boot.
+        for heavy in ["office", "ironcalc", "lsp", "codeintel", "graph", "monaco"] {
+            assert!(
+                !out.to_ascii_lowercase().contains(heavy),
+                "boot report must not mention {heavy}: {out}"
+            );
+        }
 
         let _ = std::fs::remove_dir_all(&dir);
         std::env::remove_var("EVERYAIOS_HOME");

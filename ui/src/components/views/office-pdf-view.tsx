@@ -1,6 +1,6 @@
 'use client'
 
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, MessageSquare, ScanSearch } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -8,10 +8,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { OfficeOpenBar } from './office-open-bar'
+import OfficeFileSwitcher from './office-file-switcher'
 import ChatOverlay from './chat-overlay'
-import { pdfOpen, pdfBytes, type PdfPayload } from '@/lib/office'
+import { pdfOpen, pdfBytes, pdfPageOp, officeOpenExternal, isOfficeFloorError, type PdfPayload } from '@/lib/office'
 
 const PdfCanvas = lazy(() => import('./pdf-canvas'))
+// P2.12 — pdf.js text-layer find: the lazy canvas exposes `findText` when a
+// live document is mounted; the input falls back to the extracted-text array
+// when it is not (preview / text-extraction fallback mode).
+type PdfFindHandle = { findText: (query: string) => Promise<number | null> }
 
 const FORM_FIELDS = [
   { label: 'Party A:', value: 'Acme Holdings, Inc.', top: 18 },
@@ -35,9 +40,19 @@ export default function OfficePdfView() {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const setScopedView = useAppStore((s) => s.setScopedView)
+  const setScopedDoc = useAppStore((s) => s.setScopedDoc)
   const [overlayOpen, setOverlayOpen] = useState(false)
+  const [lastAttempted, setLastAttempted] = useState<string | null>(null)
+  const pdfRef = useRef<PdfFindHandle>(null)
+  const running = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status === 'running')
+  const paused = useAppStore((s) => s.pausedSessions[s.activeSessionId])
+  // P1.9 — read-only while the agent is running (same lock as Word/Excel).
+  const locked = running && !paused
   // P4.7 — document text injected as the chat-overlay's `<user_document>`.
   const docContext = payload ? payload.texts.join('\n') : DEMO_DOC_TEXT
+  // P33 scoped-PDF fix — keep the store's scoped document in sync so the
+  // main composer's sendUserMessage can ground answers without the overlay.
+  const docTitle = payload?.path ?? 'contract.pdf'
 
   const open = async (path: string) => {
     try {
@@ -52,8 +67,48 @@ export default function OfficePdfView() {
         setDataUrl(null)
       }
     } catch (err) {
+      setLastAttempted(path)
       setError(err instanceof Error ? err.message : 'Failed to open PDF')
     }
+  }
+
+  // P2.12 — surgical content ops over `pdf_page_op` (the same engine the
+  // agent tools use). Each re-opens the file so the viewer reflects the
+  // rewrite.
+  const runPageOp = async (op: string, payloadJson: string) => {
+    if (!payload) return
+    try {
+      await pdfPageOp(payload.path, op, { other: payloadJson })
+      await open(payload.path)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+  const annotatePage = () => {
+    const text = window.prompt('Annotation text (blank = highlight on the current page):')
+    void runPageOp('annotate', JSON.stringify({ page, rect: [60, 60, 540, 90], text: text ?? '' }))
+  }
+  const redactPage = () => {
+    const raw = window.prompt('Redact rect as x1,y1,x2,y2 (page 1 = 60,60,540,90):') ?? '60,60,540,90'
+    const nums = raw.split(',').map(Number)
+    if (nums.length !== 4 || nums.some((n) => Number.isNaN(n))) {
+      setError('Redact needs exactly four numbers: x1,y1,x2,y2')
+      return
+    }
+    void runPageOp('redact', JSON.stringify([{ page, rect: nums }]))
+  }
+  const fillForm = () => {
+    const raw = window.prompt('Form fields as field=value,field2=value2:')
+    if (!raw) return
+    const fields = raw.split(',').map((kv) => {
+      const [field, ...rest] = kv.split('=')
+      return { field: field?.trim() ?? '', value: rest.join('=').trim() }
+    })
+    if (fields.some((f) => !f.field)) {
+      setError('Form fields need field=value pairs')
+      return
+    }
+    void runPageOp('form_fill', JSON.stringify(fields))
   }
 
   return (
@@ -87,7 +142,13 @@ export default function OfficePdfView() {
           variant={overlayOpen ? 'default' : 'outline'}
           onClick={() => {
             setOverlayOpen((v) => !v)
-            if (!overlayOpen) setScopedView('office-pdf')
+            if (!overlayOpen) {
+              setScopedView('office-pdf')
+              setScopedDoc({ title: docTitle, content: docContext })
+            } else {
+              setScopedView(undefined)
+              setScopedDoc(undefined)
+            }
           }}
           className={cn(
             'h-6 gap-1 px-2 text-[10px]',
@@ -101,13 +162,97 @@ export default function OfficePdfView() {
       </header>
 
       <OfficeOpenBar onOpen={open} livePath={payload?.path} />
-
-      {error && (
-        <div className="border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
-          ⚠ {error}
+      <OfficeFileSwitcher view="office-pdf" current={payload?.path} onOpen={open} />
+      {payload && (
+        <div className="flex flex-wrap items-center gap-1 border-b border-border px-3 py-1">
+          <input
+            placeholder="Find in PDF…"
+            className="h-6 flex-1 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]"
+            onChange={(e) => {
+              const q = e.target.value.toLowerCase()
+              if (!q) return
+              // Real pdf.js text-layer search when the canvas is live;
+              // extracted-text array otherwise (honest fallback).
+              if (pdfRef.current) {
+                void pdfRef.current.findText(q).then((p) => {
+                  if (p) setPage(p)
+                })
+              } else {
+                const idx = payload.texts.findIndex((t) => t.toLowerCase().includes(q))
+                if (idx >= 0) setPage(idx + 1)
+              }
+            }}
+          />
+          <Button size="sm" variant="outline" className="h-6 text-[10px]"
+            onClick={() => pdfPageOp(payload.path, 'rotate', { delta: 90 }).then(() => open(payload.path)).catch((e) => setError(String(e)))}>
+            Rotate 90°
+          </Button>
+          {/* P2.12 — surgical content ops on the same engine the agent uses */}
+          <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={locked} onClick={annotatePage} title="Add a highlight/sticky-note annotation on the current page">
+            Annotate
+          </Button>
+          <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={locked} onClick={redactPage} title="Redact a rect on the current page">
+            Redact
+          </Button>
+          <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={locked} onClick={fillForm} title="Fill AcroForm fields">
+            Fill form
+          </Button>
+          <Button size="sm" variant="outline" className="h-6 text-[10px]"
+            onClick={() => officeOpenExternal(payload.path).catch((e) => setError(String(e)))}>
+            Open in LibreOffice
+          </Button>
         </div>
       )}
 
+      {locked && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-[10px] text-amber-300">
+          Read-only while the agent is running — pause to take over
+        </div>
+      )}
+
+      {error && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] text-red-400">
+          <span>⚠ {error}</span>
+          {lastAttempted && !isOfficeFloorError(error) && (
+            <button
+              className="rounded border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/25"
+              onClick={() =>
+                officeOpenExternal(lastAttempted).catch((e) => setError(String(e)))
+              }
+            >
+              Engine refused — open in LibreOffice instead
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1">
+      {/* P2.12 — thumbnail rail (page cards from the extracted text) */}
+      {payload && (
+        <ScrollArea className="scroll-thin w-28 shrink-0 border-r border-border bg-zinc-950/40">
+          <div className="space-y-2 p-2">
+            {Array.from({ length: payload.pages }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                onClick={() => setPage(n)}
+                className={cn(
+                  'block w-full rounded border p-1 text-left transition-colors',
+                  page === n
+                    ? 'border-orange-500/60 bg-orange-500/10'
+                    : 'border-border bg-zinc-950/40 hover:border-muted-foreground',
+                )}
+              >
+                <div className="truncate text-[9px] font-medium text-foreground">
+                  {n}
+                </div>
+                <div className="mt-0.5 line-clamp-3 text-[8px] leading-tight text-muted-foreground">
+                  {payload.texts[n - 1] ?? '—'}
+                </div>
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
       <ScrollArea className="scroll-thin min-h-0 flex-1 bg-zinc-950/40">
         <div className="flex justify-center p-4">
           {payload ? (
@@ -119,7 +264,7 @@ export default function OfficePdfView() {
                   </div>
                 }
               >
-                <PdfCanvas dataUrl={dataUrl} page={page} scale={zoom / 100} />
+                <PdfCanvas ref={pdfRef} dataUrl={dataUrl} page={page} scale={zoom / 100} />
               </Suspense>
             ) : (
               <div className="w-full max-w-3xl space-y-2">
@@ -204,6 +349,7 @@ export default function OfficePdfView() {
           )}
         </div>
       </ScrollArea>
+      </div>
 
       <footer className="flex items-center justify-between border-t border-border bg-zinc-900/60 px-3 py-1.5 font-mono text-[10px] text-muted-foreground">
         <div className="flex items-center gap-2">

@@ -594,6 +594,88 @@ mod tests {
         );
     }
 
+    // ---- P10.4: system Chrome/Edge detection + fallback (all 3 platforms) --
+
+    #[test]
+    fn platform_candidates_cover_chrome_and_edge() {
+        let candidates = platform_candidates();
+        assert!(!candidates.is_empty(), "no platform candidates on this OS");
+        #[cfg(target_os = "linux")]
+        {
+            let names: Vec<String> = candidates
+                .iter()
+                .filter_map(|c| c.file_name().and_then(|n| n.to_str()))
+                .map(|s| s.to_string())
+                .collect();
+            assert!(
+                names.iter().any(|n| n.starts_with("google-chrome")
+                    || n.starts_with("chromium")),
+                "linux candidates must include chrome/chromium: {names:?}"
+            );
+            assert!(
+                names.iter().any(|n| n.starts_with("microsoft-edge")),
+                "linux candidates must include microsoft-edge: {names:?}"
+            );
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let paths: Vec<String> = candidates.iter().map(|c| c.display().to_string()).collect();
+            assert!(
+                paths.iter().any(|p| p.contains("Google Chrome.app")),
+                "macOS candidates must include Google Chrome.app: {paths:?}"
+            );
+            assert!(
+                paths.iter().any(|p| p.contains("Microsoft Edge.app")),
+                "macOS candidates must include Microsoft Edge.app: {paths:?}"
+            );
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let paths: Vec<String> = candidates.iter().map(|c| c.display().to_string()).collect();
+            assert!(
+                paths.iter().any(|p| p.contains("chrome.exe")),
+                "Windows candidates must include chrome.exe: {paths:?}"
+            );
+            assert!(
+                paths.iter().any(|p| p.contains("msedge.exe")),
+                "Windows candidates must include msedge.exe: {paths:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_override_wins_and_missing_override_is_honest() {
+        // A real file as the explicit override is preferred verbatim.
+        let dir = tempfile_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("fake-browser");
+        std::fs::write(&fake, b"#!/bin/sh\n").unwrap();
+        let located = locate_system_browser(Some(&fake)).unwrap();
+        assert_eq!(located, fake);
+        // A configured-but-missing override fails closed (no silent fallback).
+        let missing = dir.join("not-there");
+        let err = locate_system_browser(Some(&missing)).unwrap_err();
+        assert!(
+            matches!(err, CdpError::BrowserNotFound(_)),
+            "expected BrowserNotFound, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn missing_system_browser_reports_honestly() {
+        // No browser anywhere → the error names the fix, never a panic.
+        let err = locate_system_browser(None).err();
+        if let Some(e) = err {
+            let msg = e.to_string();
+            assert!(
+                msg.contains("Chrome/Edge") || msg.contains("browser"),
+                "unhelpful error: {msg}"
+            );
+        }
+        // On CI runners a browser usually exists; the honest-error path is
+        // exercised by the explicit-override test above either way.
+    }
+
     fn tempfile_dir() -> PathBuf {
         let dir =
             std::env::temp_dir().join(format!("everyaios-cdp-browser-test-{}", std::process::id()));

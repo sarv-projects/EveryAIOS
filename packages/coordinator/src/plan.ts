@@ -22,6 +22,7 @@ import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
 import { estimateTokens } from "@personal-ai/core-files";
 import type { ChatEvent, ProviderBridge, ProviderMessage, ProviderRequest } from "./chat";
 import { listedToolsToOpenAI, resolveActiveTools, ToolExecutor, type ListedTool } from "./tools";
+import { budgetJson, refRegistry } from "./budget";
 export { evaluateGuard, useTicket, guardGate } from "./guard";
 
 /**
@@ -523,7 +524,8 @@ async function runTaskTurn(
         const result = await executor.executeTool(tc.toolId, tc.args, ctx);
         results.push(result);
         executed.push(tc.toolId);
-        emitChat({ type: "tool_result", streamId, toolId: tc.toolId, result });
+        // P39.1: oversized tool results become ref + bounded preview.
+        emitChat({ type: "tool_result", streamId, toolId: tc.toolId, result: budgetJson(result, refRegistry) });
         emitChat({ type: "stage", streamId, stage: `tool:${tc.toolId}:done` });
       } catch (toolErr) {
         const message = toolErr instanceof Error ? toolErr.message : String(toolErr);
@@ -573,11 +575,31 @@ async function runTaskTurn(
         sessionId,
         messages: verifyMessages,
       };
+      let verifyReport = "";
       for await (const chunk of bridge.streamChat(verifyReq, controller.signal)) {
         if (controller.signal.aborted) break;
-        if (chunk.type === "text") batcher.pushToken(chunk.text);
-        else if (chunk.type === "done") break;
+        if (chunk.type === "text") {
+          batcher.pushToken(chunk.text);
+          verifyReport += chunk.text;
+        } else if (chunk.type === "done") break;
       }
+      // P41.4 — K1 verification surfaced as a structured receipt (inline in
+      // the editor's Diff rail): model-reported pass/fail per check, never
+      // claimed as executed. `passed` stays null unless the report is
+      // unambiguous — the honest flag.
+      const lower = verifyReport.toLowerCase();
+      const allPass =
+        (lower.includes("pass") || lower.includes("satisfied")) &&
+        !lower.includes("fail");
+      const anyFail = lower.includes("fail") || lower.includes("not satisfied");
+      emitChat({
+        type: "verification",
+        streamId,
+        taskId: task.id,
+        checks: task.verify,
+        report: verifyReport.slice(0, 2000),
+        passed: allPass ? true : anyFail ? false : null,
+      } as unknown as ChatEvent);
     }
 
     batcher.complete();

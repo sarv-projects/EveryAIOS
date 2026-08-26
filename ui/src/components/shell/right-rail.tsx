@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { Suspense } from 'react'
 import {
   Folder,
   Terminal,
@@ -22,6 +23,7 @@ import {
   HardDrive,
   GitBranch,
   GitCompare,
+  MonitorSmartphone,
   ShieldCheck,
   History,
   Check,
@@ -55,22 +57,28 @@ import { motion, AnimatePresence } from 'framer-motion'
 import FolderView from '@/components/views/folder-view'
 import ShellView from '@/components/views/shell-view'
 import BrowseView from '@/components/views/browse-view'
-import CodeView from '@/components/views/code-view'
-import { IdeWorkbench } from '@/components/views/ide/ide-workbench'
-import XlsxView from '@/components/views/office-xlsx-view'
 import DocxView from '@/components/views/office-docx-view'
 import PptxView from '@/components/views/office-pptx-view'
-import PdfView from '@/components/views/office-pdf-view'
 import ProgressView from '@/components/views/progress-view'
 import DiffView from '@/components/views/diff-view'
 import KanbanView from '@/components/views/kanban-view'
-import GenerativeView from '@/components/views/generative-view'
 import AuditView from '@/components/views/audit-view'
 import StorageView from '@/components/views/storage-view'
 import TrajectoryView from '@/components/views/trajectory-view'
 import BlueprintView from '@/components/views/blueprint-view'
 import LocalServerView from '@/components/views/local-server-view'
 import { SessionTimeline } from '@/components/chat/session-timeline'
+
+// P39.5 — heavy views load on first use, not at startup. The IDE workbench
+// pulls Monaco (~4 MB), the spreadsheet view pulls IronCalc, the PDF view
+// pulls pdf.js, and the generative view pulls the AG-UI surface — none of
+// them should parse/execute at app boot (R6 fix #2 lazy activation).
+const IdeWorkbench = React.lazy(() => import('@/components/views/ide/ide-workbench').then(m => ({ default: m.IdeWorkbench })))
+const XlsxView = React.lazy(() => import('@/components/views/office-xlsx-view'))
+const PdfView = React.lazy(() => import('@/components/views/office-pdf-view'))
+const GenerativeView = React.lazy(() => import('@/components/views/generative-view'))
+const ArtifactView = React.lazy(() => import('@/components/views/artifact-view'))
+const CodeView = React.lazy(() => import('@/components/views/code-view'))
 
 // Map viewport IDs to the task kind that determines which agent handles them
 const VIEW_TASK_MAP: Partial<Record<ViewId, TaskKind>> = {
@@ -111,10 +119,10 @@ const sessionItems: RailItem[] = [
 ]
 
 const officeFlyoutItems = [
-  { id: 'office-xlsx' as ViewId, label: 'Q3-Financials.xlsx', live: true, type: 'Sheets' },
-  { id: 'office-docx' as ViewId, label: 'exec-summary.docx', live: false, type: 'Word' },
-  { id: 'office-pptx' as ViewId, label: 'quarterly-deck.pptx', live: false, type: 'Slides' },
-  { id: 'office-pdf' as ViewId, label: 'invoice-8402.pdf', live: false, type: 'PDF' },
+  { id: 'office-xlsx' as ViewId, label: 'Sheets', live: true, type: 'Sheets' },
+  { id: 'office-docx' as ViewId, label: 'Word', live: false, type: 'Word' },
+  { id: 'office-pptx' as ViewId, label: 'Slides', live: false, type: 'Slides' },
+  { id: 'office-pdf' as ViewId, label: 'PDF', live: false, type: 'PDF' },
 ]
 
 // View metadata for the multi-view tab strip (ARCH/12 v3.0 — VS Code-style).
@@ -123,10 +131,10 @@ const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   shell: { label: 'Terminal', icon: Terminal },
   browse: { label: 'Browser', icon: Globe },
   code: { label: 'Code', icon: Code2 },
-  'office-xlsx': { label: 'Q3-Financials.xlsx', icon: Table },
-  'office-docx': { label: 'exec-summary.docx', icon: FileText },
-  'office-pptx': { label: 'quarterly-deck.pptx', icon: Presentation },
-  'office-pdf': { label: 'contract.pdf', icon: File },
+  'office-xlsx': { label: 'Sheets', icon: Table },
+  'office-docx': { label: 'Word', icon: FileText },
+  'office-pptx': { label: 'Slides', icon: Presentation },
+  'office-pdf': { label: 'PDF', icon: File },
   progress: { label: 'Progress', icon: Activity },
   diff: { label: 'Diff', icon: GitCompare },
   audit: { label: 'Audit', icon: ShieldCheck },
@@ -137,9 +145,24 @@ const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   'local-server': { label: 'Local Server', icon: FileText },
   kanban: { label: 'Kanban', icon: GitBranch },
   generative: { label: 'Generative UI', icon: Sparkles },
+  artifact: { label: 'Artifact', icon: MonitorSmartphone },
 }
 
 function ViewportContent({ view }: { view: ViewId }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground animate-pulse">
+          Loading view…
+        </div>
+      }
+    >
+      {renderView(view)}
+    </Suspense>
+  )
+}
+
+function renderView(view: ViewId) {
   switch (view) {
     case 'folder': return <FolderView />
     case 'shell': return <ShellView />
@@ -159,6 +182,7 @@ function ViewportContent({ view }: { view: ViewId }) {
     case 'local-server': return <LocalServerView />
     case 'kanban': return <KanbanView />
     case 'generative': return <GenerativeView />
+    case 'artifact': return <ArtifactView />
     default: return null
   }
 }
@@ -166,6 +190,7 @@ function ViewportContent({ view }: { view: ViewId }) {
 export function ActivityRail() {
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
+  const officePaths = useAppStore((s) => s.officePaths)
   const railCollapsed = useAppStore((s) => s.railCollapsed)
   const toggleRail = useAppStore((s) => s.toggleRail)
   const setOfficeFlyoutOpen = useAppStore((s) => s.setOfficeFlyoutOpen)
@@ -284,14 +309,23 @@ export function ActivityRail() {
                 )}
               >
                 <span className="text-[10px] font-mono text-muted-foreground w-12">{doc.type}</span>
-                <span className="flex-1 text-left truncate">{doc.label}</span>
+                <span className="flex-1 text-left truncate">
+                  {officePaths[doc.id]?.split(/[\\/]/).pop() ?? doc.label}
+                </span>
                 {doc.live && (
                   <span className="h-1.5 w-1.5 rounded-full bg-orange-500 live-dot" />
                 )}
               </button>
             ))}
             <div className="h-px bg-border my-1.5" />
-            <button className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+            <button
+              className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              onClick={() => {
+                const p = window.prompt('Path to a .docx / .xlsx / .pptx / .pdf')
+                if (p?.trim()) useAppStore.getState().openOfficeDoc(p.trim())
+                setOfficeFlyoutOpen(false)
+              }}
+            >
               <Plus className="h-3.5 w-3.5" />
               <span>Open another…</span>
             </button>
@@ -372,8 +406,14 @@ export function RightViewport() {
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const openViews = useAppStore((s) => s.openViews)
+  const officePaths = useAppStore((s) => s.officePaths)
   const addView = useAppStore((s) => s.addView)
   const closeView = useAppStore((s) => s.closeView)
+  const reorderViews = useAppStore((s) => s.reorderViews)
+
+  // P33.7 — drag-reorder state for the tab strip.
+  const [dragIndex, setDragIndex] = React.useState<number | null>(null)
+  const [dropIndex, setDropIndex] = React.useState<number | null>(null)
 
   // Resize state — percentage of total window width
   const [viewportPct, setViewportPct] = React.useState<number>(45)
@@ -529,13 +569,38 @@ export function RightViewport() {
         >
           {/* Multi-view tab strip (VS Code-style: default Terminal · Folder · Browser, "+" to add, × to close) */}
           <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto scroll-thin border-b border-border bg-sidebar/60 px-1 pt-1 no-select">
-            {openViews.map((v) => {
+            {openViews.map((v, idx) => {
               const meta = VIEW_META[v]
               const Icon = meta.icon
               const isActive = v === activeView
+              const isDragTarget = dragIndex !== null && idx === dropIndex
               return (
                 <div
                   key={v}
+                  draggable
+                  onDragStart={(e) => {
+                    setDragIndex(idx)
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    if (dragIndex !== null && idx !== dragIndex) setDropIndex(idx)
+                  }}
+                  onDragLeave={() => {
+                    if (dragIndex !== null && idx === dropIndex) setDropIndex(null)
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    if (dragIndex !== null && dropIndex !== null && dragIndex !== dropIndex) {
+                      reorderViews(dragIndex, dropIndex)
+                    }
+                    setDragIndex(null)
+                    setDropIndex(null)
+                  }}
+                  onDragEnd={() => {
+                    setDragIndex(null)
+                    setDropIndex(null)
+                  }}
                   onClick={() => setActiveView(v)}
                   className={cn(
                     'group flex cursor-pointer items-center gap-1.5 rounded-t-md border border-b-0 px-2 py-1 text-[10.5px] transition-colors',
@@ -545,7 +610,15 @@ export function RightViewport() {
                   )}
                 >
                   <Icon className={cn('h-3 w-3 shrink-0', isActive && 'text-orange-500')} />
-                  <span className="max-w-[130px] truncate">{meta.label}</span>
+                  <span
+                    className={cn(
+                      'max-w-[130px] truncate',
+                      isDragTarget && 'rounded bg-orange-500/20 ring-1 ring-orange-500/50',
+                      dragIndex === idx && 'opacity-40'
+                    )}
+                  >
+                    {officePaths[v]?.split(/[\\/]/).pop() ?? meta.label}
+                  </span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()

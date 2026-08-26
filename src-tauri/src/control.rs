@@ -123,6 +123,25 @@ pub fn undo_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Path-floor a user-chosen office/FS path: refuse `..` and symlink jumps
+/// out of the file's parent directory. Does not jail to the workspace —
+/// users open documents under home / mounts — but it closes the
+/// self-documented xlsx/office bypass of `everyaios-guard::pathfloor`.
+pub fn floor_user_file(path: &str) -> Result<PathBuf, String> {
+    use everyaios_guard::pathfloor::{enforce_floor, FloorVerdict};
+    let p = PathBuf::from(path);
+    let parent = p
+        .parent()
+        .filter(|par| !par.as_os_str().is_empty())
+        .map(|par| par.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let parent_s = parent.to_string_lossy();
+    match enforce_floor(path, &[parent_s.as_ref()]) {
+        FloorVerdict::Allowed => Ok(p),
+        other => Err(format!("path floor refused ({other:?}): {path}")),
+    }
+}
+
 pub fn snapshot_file(state: &AppState, session_id: &str, path: &str) {
     let p = PathBuf::from(path);
     let before = std::fs::read(&p).ok();

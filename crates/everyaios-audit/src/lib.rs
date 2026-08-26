@@ -15,10 +15,16 @@ use serde::{Deserialize, Serialize};
 
 pub mod cockpit;
 pub mod merkle;
+pub mod receipt;
+pub mod retention;
 pub mod repair;
 pub mod replay;
 pub mod session_log;
 
+pub use receipt::{
+    CostSummary, EvidenceRef, Provenance, ReceiptActionRef, ReceiptBuilder, VerificationSummary,
+    WorkReceipt,
+};
 pub use repair::{StartedUnknownClassification, StartedUnknownItem, started_unknown_repair};
 pub use session_log::{ProjectedMessage, ForkLineage};
 

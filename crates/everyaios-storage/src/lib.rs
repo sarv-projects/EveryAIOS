@@ -17,7 +17,9 @@
 //! - `search` — SQLite FTS5 filename index + debounced `notify` watcher.
 //! - `health` — D12 drive-threshold monitoring (90% full flag).
 
+pub mod checkpoint;
 pub mod cleanup;
+pub mod content;
 pub mod dedup;
 pub mod events;
 pub mod finder;
@@ -28,8 +30,13 @@ pub mod snapshot;
 pub mod treemap;
 pub mod trigram;
 pub mod usn;
+pub mod usn_reader;
+#[cfg(windows)]
+pub mod usn_winapi;
 pub mod walk;
 
+pub use checkpoint::{ChangeKind, CheckpointedFile, FsCheckpoint};
+pub use content::{extract_text, strip_html, ContentHit, ContentIndex, NoOcr, OcrEngine, OcrError, TesseractCli};
 pub use cleanup::{
     propose_duplicate_cleanup, propose_large_files_cleanup, CleanupAction, CleanupKind,
 };

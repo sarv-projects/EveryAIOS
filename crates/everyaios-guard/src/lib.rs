@@ -27,6 +27,7 @@
 //! Guard-2 (diff-card approval, human-in-the-loop UX) is a separate gate
 //! (P7.5).
 
+pub mod autonomy;
 pub mod blocklist;
 pub mod configscan;
 pub mod decision;
@@ -44,12 +45,15 @@ pub mod permissions;
 pub mod prescan;
 pub mod profiles;
 pub mod redteam;
+pub mod release;
 pub mod sandbox;
 pub mod seccomp;
+pub mod structural;
 pub mod ticket;
 pub mod toctou;
 pub mod urlfloor;
 
+pub use autonomy::{AutonomyPolicy, AutonomyVerdict, Mode, RiskClass};
 pub use blocklist::{blocklist_for, BlocklistCategory, BLOCKLIST};
 pub use decision::{DecisionPackage, WebActionKind};
 pub use diffcard::{render_native_card, CardAction, CardResponse, NativeCard};
@@ -70,8 +74,12 @@ pub use pathfloor::{
 pub use permissions::{Operation, PermissionsPolicy, PolicyAction, Rule};
 pub use prescan::{scan_path, scan_shell, scan_url, PreExecScan, ScanTarget};
 pub use profiles::{GateAction, Hook, Profile};
+pub use release::{
+    EgressPolicy, EgressPolicyEngine, EnforcementZone, ReleaseDecision, ReleaseReceipt,
+};
 pub use sandbox::{PathAccess, PathRule, SandboxError, SandboxProfile, SyscallGroup};
 pub use seccomp::{Action, ArgFilter, SeccompError, SeccompPolicy, SyscallRule};
+pub use structural::{contains_shell_operator, structural_verdict, StructuralVerdict, SHELL_OPERATORS};
 pub use ticket::{
     ApprovalSource, AuthorizationTicket, GuardReceipt, ReceiptAction, RiskLevel, RiskTier,
     TicketState, TicketStore,

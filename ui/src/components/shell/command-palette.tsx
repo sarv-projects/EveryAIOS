@@ -65,6 +65,7 @@ export function CommandPalette() {
   const setAutoRoute = useAppStore((s) => s.setAutoRoute)
   const autoRoute = useAppStore((s) => s.autoRoute)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
+  const officePaths = useAppStore((s) => s.officePaths)
   const { theme, toggle } = useTheme()
 
   const [query, setQuery] = React.useState('')
@@ -76,10 +77,10 @@ export function CommandPalette() {
       { id: 'shell', label: 'Shell', icon: Terminal, shortcut: 'Ctrl+`' },
       { id: 'browse', label: 'Browse', icon: Globe, shortcut: '⌘⇧B' },
       { id: 'code', label: 'Code', icon: Code2, shortcut: '⌘⇧C' },
-      { id: 'office-xlsx', label: 'Excel · Q3-Financials', icon: FileSpreadsheet, shortcut: '⌘⇧O' },
-      { id: 'office-docx', label: 'Word · exec-summary', icon: FileText, shortcut: '⌘⇧O' },
-      { id: 'office-pptx', label: 'Slides · quarterly-deck', icon: Presentation, shortcut: '⌘⇧O' },
-      { id: 'office-pdf', label: 'PDF · invoice-8402', icon: FileText, shortcut: '⌘⇧O' },
+      { id: 'office-xlsx', label: officePaths['office-xlsx'] ? `Excel · ${officePaths['office-xlsx']!.split(/[\\/]/).pop()}` : 'Excel · Q3-Financials', icon: FileSpreadsheet, shortcut: '⌘⇧O' },
+      { id: 'office-docx', label: officePaths['office-docx'] ? `Word · ${officePaths['office-docx']!.split(/[\\/]/).pop()}` : 'Word · exec-summary', icon: FileText, shortcut: '⌘⇧O' },
+      { id: 'office-pptx', label: officePaths['office-pptx'] ? `Slides · ${officePaths['office-pptx']!.split(/[\\/]/).pop()}` : 'Slides · quarterly-deck', icon: Presentation, shortcut: '⌘⇧O' },
+      { id: 'office-pdf', label: officePaths['office-pdf'] ? `PDF · ${officePaths['office-pdf']!.split(/[\\/]/).pop()}` : 'PDF · invoice-8402', icon: FileText, shortcut: '⌘⇧O' },
       { id: 'progress', label: 'Progress timeline', icon: Activity, shortcut: '⌘⇧P' },
       { id: 'audit', label: 'Audit & Replay', icon: ShieldCheck, shortcut: '' },
       { id: 'storage', label: 'Storage intelligence', icon: BarChart3, shortcut: '' },

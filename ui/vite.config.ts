@@ -30,6 +30,13 @@ export default defineConfig({
     sourcemap: false,
     chunkSizeWarningLimit: 900,
     rollupOptions: {
+      // F1 — the dedicated Guard-2 approval window is its own tiny page
+      // (guard.html + src/guard-main.ts), built as a second entry so the
+      // guard webview loads a fixed local asset, never the SPA.
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        guard: fileURLToPath(new URL("./guard.html", import.meta.url)),
+      },
       output: {
         manualChunks: {
           // Heavy vendors split out of the app chunk (Tauri caches them).
