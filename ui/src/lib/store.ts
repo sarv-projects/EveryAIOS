@@ -125,7 +125,7 @@ export interface MCQInterrupt {
   id: string
   title: string
   description: string
-  kind: 'diff' | 'permission' | 'mcq' | 'budget' | 'plan'
+  kind: 'diff' | 'permission' | 'mcq' | 'budget' | 'plan' | 'autonomy'
   diff?: { file: string; added: string[]; removed: string[] }[]
   options?: { label: string; value: string }[]
   budget?: { used: number; cap: number }
@@ -133,6 +133,38 @@ export interface MCQInterrupt {
   approvalNonce?: string
   /** P11.2 — urgency level drives the card's badge + default selection. */
   urgency?: 'low' | 'medium' | 'high'
+  /** P44.6 — autonomy-limit cards: the action that hit the frozen level and why. */
+  autonomyAction?: string
+  autonomyReason?: string
+}
+
+/** P44.6 — task-scoped autonomy elevation. `oneShot` = Do Once (consumed by
+ * the next use), task-scoped = Allow For This Task (expires at task end).
+ * `elevatedUntil` is the wall-clock expiry for the temporary elevation. */
+export interface TaskElevation {
+  level: PermissionMode
+  grantedAt: number
+  oneShot: boolean
+  /** Task-scoped elevation end (wall-clock ms); one-shots are consumed on use. */
+  elevatedUntil?: number
+}
+
+/** P44.6 — the frozen per-task autonomy snapshot. Captured at task start so a
+ * live chatbar change never mutates an in-flight Work (same principle as
+ * scheduled-run snapshots). `configHash` is the deterministic fingerprint of
+ * autonomy + mode + workspace + agent scope (mirrors the Rust
+ * `RuntimeManifest`/`execution/bind_runtime` config_hash contract). */
+export interface TaskSnapshot {
+  frozenAt: number
+  autonomyLevel: PermissionMode
+  mode: ChatMode
+  workspaceScope: string
+  agentScope: string
+  /** The session this task belongs to — a ticket from another session never
+   * mutates this task's frozen policy. */
+  sessionId: string
+  configHash: string
+  elevation?: TaskElevation
 }
 
 export interface VerificationRecord {
@@ -583,11 +615,14 @@ function patchActiveAssistant(
 // Progressive-disclosure preference (B9/P31) persisted to localStorage.
 const POWER_MODE_KEY = 'everyaios.settings.ui.powerMode'
 const readPowerMode = (): boolean => {
-  if (typeof window === 'undefined') return false
+  if (typeof window === 'undefined') return true
   try {
-    return window.localStorage.getItem(POWER_MODE_KEY) === '1'
+    const v = window.localStorage.getItem(POWER_MODE_KEY)
+    // Unset → full cockpit (the mock of the finished product). Explicit '0' is casual.
+    if (v === null) return true
+    return v === '1'
   } catch {
-    return false
+    return true
   }
 }
 const writePowerMode = (v: boolean) => {
@@ -655,6 +690,24 @@ const writePermission = (v: PermissionMode) => {
   } catch {
     /* ignore */
   }
+}
+
+/** P44.6 — deterministic FNV-1a fingerprint of the frozen task scope. Mirrors
+ * the Rust `RuntimeManifest::compute_hash` idea (SHA-256 there; the UI mirror
+ * is a stable fingerprint for display + equality checks, not the audit hash). */
+export function taskScopeHash(autonomyLevel: string, mode: string, workspace: string, agent: string): string {
+  const input = JSON.stringify({
+    autonomy: autonomyLevel,
+    mode,
+    workspace,
+    agent,
+  })
+  let h = 0x811c9dc5
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16).padStart(8, '0')
 }
 
 // === Zustand store ============================================================
@@ -797,6 +850,25 @@ interface AppState {
   setSettingsSection: (s: SettingsSectionId) => void
   permissionMode: PermissionMode
   setPermissionMode: (m: PermissionMode) => void
+  // P44.6 — frozen per-task autonomy snapshot + temporary elevation.
+  taskSnapshot?: TaskSnapshot
+  freezeTaskSnapshot: () => void
+  clearTaskSnapshot: () => void
+  /** Apply an autonomy-limit card choice (Do Once / Allow For This Task /
+   * Change Level) to the frozen task snapshot. Returns the resulting level. */
+  respondAutonomyCard: (id: string, choice: string) => PermissionMode
+  /** P44.6 — surface an autonomy-limit card (escalation) for a blocked
+   * action. Callers: the bridge when a Guard ticket arrives while a task is
+   * frozen at a lower autonomy level. */
+  pushAutonomyLimit: (opts: {
+    id: string
+    action: string
+    reason: string
+    sessionId?: string
+  }) => void
+  /** Effective level for the live indicator: elevation wins while valid,
+   * then the frozen level, then the global mode when idle. */
+  effectiveAutonomyLevel: () => PermissionMode
   composerRole: ComposerRole
   setComposerRole: (r: ComposerRole) => void
   taskIntent: TaskIntent
@@ -1212,6 +1284,123 @@ export const useAppStore = create<AppState>((set, get) => ({
     writePermission(m)
     set({ permissionMode: m })
   },
+
+  // P44.6 — freeze the autonomy scope at task start; live chatbar changes
+  // never mutate an in-flight Work (same principle as scheduled-run
+  // snapshots — the config_hash is computed once and stays put).
+  taskSnapshot: undefined,
+  freezeTaskSnapshot: () => {
+    const s = get()
+    const session = s.sessions.find((x) => x.id === s.activeSessionId)
+    const workspace = session?.folder ?? s.taskFolder ?? '~'
+    const agent = s.selectedAgentId || 'everyaios-native'
+    const configHash = taskScopeHash(s.permissionMode, s.composerMode, workspace, agent)
+    set({
+      taskSnapshot: {
+        frozenAt: Date.now(),
+        autonomyLevel: s.permissionMode,
+        mode: s.composerMode,
+        workspaceScope: workspace,
+        agentScope: agent,
+        sessionId: s.activeSessionId,
+        configHash,
+      },
+    })
+  },
+  clearTaskSnapshot: () => set({ taskSnapshot: undefined }),
+  respondAutonomyCard: (id, choice) => {
+    const snap = get().taskSnapshot
+    const base = snap?.autonomyLevel ?? get().permissionMode
+    let nextLevel: PermissionMode = base
+    const now = Date.now()
+    if (choice === 'do-once') {
+      nextLevel = 'auto'
+      set({
+        taskSnapshot: snap
+          ? {
+              ...snap,
+              elevation: { level: 'auto', grantedAt: now, oneShot: true },
+            }
+          : undefined,
+      })
+    } else if (choice === 'allow-task') {
+      nextLevel = 'auto'
+      // Temporary elevation: expires when the task snapshot is cleared at
+      // turn completion (and is wall-clock capped as a backstop).
+      set({
+        taskSnapshot: snap
+          ? {
+              ...snap,
+              elevation: {
+                level: 'auto',
+                grantedAt: now,
+                oneShot: false,
+                elevatedUntil: now + 30 * 60_000,
+              },
+            }
+          : undefined,
+      })
+    } else if (choice === 'change-level' && snap) {
+      // Change Level — pick the level from the card options; the card sends
+      // the target level as the choice value (e.g. "level:auto").
+      const target = choice.startsWith('level:') ? (choice.slice(6) as PermissionMode) : 'auto'
+      nextLevel = target
+      set({
+        permissionMode: target,
+        taskSnapshot: { ...snap, autonomyLevel: target, elevation: undefined },
+      })
+      writePermission(target)
+    }
+    // Consume the card (clear it off the message, resume the session).
+    set((s) => ({
+      sessions: s.sessions.map((x) => ({
+        ...x,
+        status: x.status === 'action-required' ? 'running' : x.status,
+        messages: x.messages
+          .map((m) => (m.mcq?.id === id ? { ...m, mcq: undefined } : m))
+          .filter((m) => m.content !== '' || m.mcq !== undefined || m.role !== 'assistant'),
+      })),
+    }))
+    return nextLevel
+  },
+  pushAutonomyLimit: (opts) => {
+    const snap = get().taskSnapshot
+    const level = snap?.autonomyLevel ?? get().permissionMode
+    get().pushMcq(
+      {
+        id: opts.id,
+        title: 'Autonomy limit',
+        description: `This action is above the frozen autonomy level (${level}) for this task.`, 
+        kind: 'autonomy',
+        autonomyAction: opts.action,
+        autonomyReason: opts.reason,
+        options: [
+          { label: 'Do Once', value: 'do-once' },
+          { label: 'Allow For This Task', value: 'allow-task' },
+          { label: 'Change Level', value: 'change-level' },
+        ],
+      },
+      opts.sessionId,
+    )
+  },
+  effectiveAutonomyLevel: () => {
+    const snap = get().taskSnapshot
+    if (!snap) return get().permissionMode
+    const el = snap.elevation
+    if (el) {
+      if (el.oneShot) {
+        // Do Once — the elevation is consumed on first use.
+        set({
+          taskSnapshot: { ...snap, elevation: undefined },
+        })
+        return el.level
+      }
+      if (!el.elevatedUntil || el.elevatedUntil > Date.now()) return el.level
+      // Wall-clock expiry backstop — elevation over.
+      set({ taskSnapshot: { ...snap, elevation: undefined } })
+    }
+    return snap.autonomyLevel
+  },
   composerRole: 'agent',
   setComposerRole: (r) => set({ composerRole: r }),
   taskIntent: 'work',
@@ -1311,6 +1500,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (done) {
       delete activeStreamMsg[sid]
       streamT0 = 0
+      // P44.6 — the turn is over: the frozen snapshot + any temporary
+      // elevation expire here (live changes never leak into the next task).
+      set((s) => ({ taskSnapshot: undefined }))
     }
   },
   /** P-bugfix 1: the `done` chat-event carries the *whole* message (fullText)
@@ -1335,6 +1527,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
     delete activeStreamMsg[sid]
     streamT0 = 0
+    // P44.6 — turn complete: the frozen task scope + elevation expire.
+    set({ taskSnapshot: undefined })
     // P11.6.4 — local UX metric: a completed turn.
     recordTurnCompleted()
   },
@@ -1358,6 +1552,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       }),
     }))
     delete activeStreamMsg[sid]
+    // P44.6 — failed turn: the frozen task scope + elevation expire.
+    set({ taskSnapshot: undefined })
   },
   streamBudgetKill: (msg, sessionId?) => {
     const sid = streamSessionId(sessionId)
@@ -1377,6 +1573,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       }),
     }))
     delete activeStreamMsg[sid]
+    // P44.6 — budget kill ends the task: frozen scope + elevation expire.
+    set({ taskSnapshot: undefined })
   },
   streamToolCall: (toolId, args, risk) => {
     if (!hasActiveStream(streamSessionId())) get().streamStart()
@@ -1533,6 +1731,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     })
   },
   respondMcq: (id, choice) => {
+    // P44.6 — autonomy-limit cards are resolved entirely in the UI: the
+    // elevation / level change lives in the frozen task snapshot, never a
+    // Guard bypass (the permission engine still evaluates every effect).
+    const autonomyKind = get().sessions
+      .flatMap((s) => s.messages)
+      .find((m) => m.mcq?.id === id)?.mcq?.kind
+    if (autonomyKind === 'autonomy') {
+      get().respondAutonomyCard(id, choice)
+      return
+    }
     void (async () => {
       // Real shell: route by card kind — permission tickets go to Guard-2,
       // P6.3 circuit-break interrupts go to the plan executor (planRespond).

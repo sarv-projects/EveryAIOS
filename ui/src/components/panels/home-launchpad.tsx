@@ -4,6 +4,7 @@ import { CheckCircle2, Circle, Folder, Sparkles } from 'lucide-react'
 import ChatComposer from '@/components/chat/chat-composer'
 import { useAppStore, type Session } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { useChatColumnClass } from '@/lib/layout'
 
 function greeting() {
   const h = new Date().getHours()
@@ -27,6 +28,7 @@ export default function HomeLaunchpad() {
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const setComposerValue = useAppStore((s) => s.setComposerValue)
   const continueWork = sessions.slice(0, 4)
+  const col = useChatColumnClass()
 
   const examples = [
     'Clean up my Downloads folder',
@@ -39,11 +41,11 @@ export default function HomeLaunchpad() {
     <div className="flex h-full w-full flex-col">
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6">
         <div className="mb-1 text-xs text-muted-foreground">{greeting()}.</div>
-        <h1 className="mb-6 text-lg font-semibold tracking-tight">What would you like to get done?</h1>
-        <div className="w-full max-w-2xl">
+        <h1 className="mb-4 text-lg font-semibold tracking-tight">What would you like to get done?</h1>
+        <div className={col}>
           <ChatComposer centered />
         </div>
-        <div className="mt-4 flex max-w-2xl flex-wrap justify-center gap-1.5">
+        <div className={cn(col, 'mt-3 flex flex-wrap justify-center gap-1.5')}>
           {examples.map((label) => (
             <button
               key={label}
@@ -57,7 +59,7 @@ export default function HomeLaunchpad() {
         </div>
 
         {continueWork.length > 0 && (
-          <div className="mt-10 w-full max-w-2xl">
+          <div className={cn(col, 'mt-6')}>
             <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
               Continue working
             </div>

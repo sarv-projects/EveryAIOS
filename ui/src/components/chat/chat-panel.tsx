@@ -47,6 +47,7 @@ import {
   type NudgeSuggestion as SchedulerNudge,
 } from '@/lib/scheduler'
 import { cn } from '@/lib/utils'
+import { useChatColumnClass } from '@/lib/layout'
 import { motion, AnimatePresence } from 'framer-motion'
 import ChatComposer from './chat-composer'
 import MessageBubble from './message-bubble'
@@ -203,6 +204,7 @@ export default function ChatPanel() {
     : messages
 
   const matchCount = query.trim() ? filteredMessages.length : 0
+  const col = useChatColumnClass()
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col bg-background">
@@ -373,9 +375,9 @@ export default function ChatPanel() {
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1" />
           <EmptyState onPick={(p) => setComposerValue(p)} />
-          <div className="mx-auto w-full max-w-3xl px-4 pb-6 pt-2">
+          <div className={cn(col, 'pb-6 pt-2')}>
             {store.streamStats.tokensPerSec > 0 && (
-              <div className="mx-auto mb-1 w-full max-w-3xl px-4 font-mono text-[9px] text-muted-foreground">
+              <div className="mb-1 font-mono text-[9px] text-muted-foreground">
                 {store.streamStats.tokensPerSec.toFixed(1)} tok/s · ctx {store.streamStats.ctxPct}%
                 {store.streamStats.activeKey ? ` · ${store.streamStats.activeKey}` : ''}
               </div>
@@ -405,7 +407,7 @@ export default function ChatPanel() {
               viewportRef={viewportRef}
               onScroll={handleViewportScroll}
             >
-              <div className="mx-auto flex max-w-3xl flex-col gap-3 px-3 py-4">
+              <div className={cn(col, 'flex flex-col gap-3 py-4')}>
                 {filteredMessages.length === 0 && query.trim()
                   ? (
                     <div className="flex flex-col items-center gap-2 py-12 text-center">
@@ -447,7 +449,7 @@ export default function ChatPanel() {
             </ScrollArea>
           </div>
 
-          <div className="shrink-0">
+          <div className={cn('shrink-0 pb-3', col)}>
             <ChatComposer
               budget={
                 store.liveBudget

@@ -177,7 +177,7 @@ export function LeftSidebar() {
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col border-r border-border bg-sidebar no-select transition-[width] duration-200',
+        'flex shrink-0 flex-col border-r border-border bg-sidebar no-select transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
         collapsed ? 'w-12' : 'w-60',
       )}
     >

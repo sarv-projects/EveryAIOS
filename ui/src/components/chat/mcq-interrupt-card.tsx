@@ -9,6 +9,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   X,
+  Zap,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -95,6 +96,29 @@ function McqOptions({
   )
 }
 
+function AutonomyBody({ mcq }: { mcq: MCQInterrupt }) {
+  const [selected, setSelected] = useState<string | null>(null)
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background/40 px-2.5 py-1.5">
+        {mcq.autonomyAction && (
+          <span className="font-mono text-[10px] text-foreground">
+            {mcq.autonomyAction}
+          </span>
+        )}
+      </div>
+      {mcq.autonomyReason && (
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          {mcq.autonomyReason}
+        </p>
+      )}
+      {mcq.options && (
+        <McqOptions options={mcq.options} selected={selected} onSelect={setSelected} />
+      )}
+    </div>
+  )
+}
+
 function BudgetBar({ used, cap }: { used: number; cap: number }) {
   const pct = Math.min(100, (used / cap) * 100)
   return (
@@ -124,6 +148,15 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
 
   const showRemember = mcq.kind === 'mcq' || mcq.kind === 'permission'
 
+  const autonomyLevelLabel =
+    (() => {
+      const snap = useAppStore.getState().taskSnapshot
+      if (!snap) return 'Ask'
+      const el = snap.elevation
+      if (el && (!el.elevatedUntil || el.elevatedUntil > Date.now()) && !el.oneShot) return el.level
+      return snap.autonomyLevel
+    })()
+
   return (
     <Card className="enter-approval gap-0 overflow-hidden border-orange-500/40 bg-orange-500/5 p-0">
       {/* header */}
@@ -140,7 +173,11 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
               variant="outline"
               className="border-orange-500/40 bg-orange-500/10 text-[9px] text-orange-300"
             >
-              {mcq.kind === 'mcq' ? 'Spec Q&A' : 'Action required'}
+              {mcq.kind === 'mcq'
+                ? 'Spec Q&A'
+                : mcq.kind === 'autonomy'
+                  ? 'Autonomy limit'
+                  : 'Action required'}
             </Badge>
             {/* P11.2 — urgency level: drives badge tint; high = orange pulse. */}
             {mcq.urgency && mcq.urgency !== 'low' && (
@@ -166,6 +203,8 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
       {/* body */}
       <div className="space-y-2.5 px-3 py-3">
         {mcq.kind === 'diff' && mcq.diff && <DiffView diff={mcq.diff} />}
+
+        {mcq.kind === 'autonomy' && <AutonomyBody mcq={mcq} />}
 
         {mcq.kind === 'permission' && (
           <div className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5">
@@ -203,7 +242,29 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
           (skip/retry/escalate/takeover → planRespond); otherwise the classic
           Approve/Reject pair for Guard-2 permission tickets. */}
       <div className="flex items-center gap-1.5 border-t border-orange-500/20 bg-zinc-950/30 px-3 py-2">
-        {mcq.kind === 'mcq' ? (
+        {mcq.kind === 'autonomy' ? (
+          <>
+            <Button
+              size="sm"
+              className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600"
+              onClick={() =>
+                respondMcq(mcq.id, selected ?? mcq.options?.[0]?.value ?? 'do-once')
+              }
+            >
+              <Zap className="h-3 w-3" />
+              Continue elevated
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 px-2.5 text-[11px] text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+              onClick={() => respondMcq(mcq.id, 'reject')}
+            >
+              <X className="h-3 w-3" />
+              Keep current level
+            </Button>
+          </>
+        ) : mcq.kind === 'mcq' ? (
           <>
             <Button
               size="sm"

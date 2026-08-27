@@ -293,22 +293,45 @@ export async function initBridge(): Promise<void> {
           if (seen.has(t.ticketId)) continue;
           seen.add(t.ticketId);
           const st = useAppStore.getState();
-          st.pushMcq(
-            {
+          // P44.6 — a Guard ticket arriving while a task is frozen at a
+          // lower autonomy level renders the Autonomy Limit escalation card
+          // (Do Once / Allow For This Task / Change Level) instead of the
+          // plain permission card. Elevation adjusts the task's frozen
+          // policy; the ticket itself is still resolved by the human in the
+          // dedicated guard window (never a Guard bypass).
+          const snap = st.taskSnapshot;
+          const frozenLow =
+            !!snap &&
+            snap.sessionId !== undefined &&
+            snap.sessionId === t.sessionId &&
+            (snap.autonomyLevel === "sandbox" || snap.autonomyLevel === "ask");
+          if (frozenLow) {
+            st.pushAutonomyLimit({
               id: t.ticketId,
-              title: `${t.operation} · ${t.paths.join(", ")}`,
-              description:
+              action: `${t.operation} · ${t.paths.join(", ")}`,
+              reason:
                 t.decision?.goal ??
-                `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk`,
-              kind: "permission",
-              approvalNonce: t.approvalNonce,
-              options: [
-                { label: "Approve & run", value: "approve" },
-                { label: "Reject", value: "reject" },
-              ],
-            },
-            t.sessionId,
-          );
+                `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk (frozen level ${snap.autonomyLevel})`,
+              sessionId: t.sessionId,
+            });
+          } else {
+            st.pushMcq(
+              {
+                id: t.ticketId,
+                title: `${t.operation} · ${t.paths.join(", ")}`,
+                description:
+                  t.decision?.goal ??
+                  `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk`,
+                kind: "permission",
+                approvalNonce: t.approvalNonce,
+                options: [
+                  { label: "Approve & run", value: "approve" },
+                  { label: "Reject", value: "reject" },
+                ],
+              },
+              t.sessionId,
+            );
+          }
         }
       } catch {
         /* shell may not be ready yet */
@@ -370,6 +393,10 @@ export async function sendUserMessage(
     effectiveContext = { title: st.scopedDoc.title, content: st.scopedDoc.content };
   }
   st.pushUserMessage(trimmed);
+  // P44.6 — freeze the autonomy scope (level + mode + workspace + agent) into
+  // the task's config_hash at start. Live chatbar changes never mutate an
+  // in-flight Work; the snapshot + any temporary elevation clear at turn end.
+  st.freezeTaskSnapshot();
 
   if (!inTauri()) {
     st.notify("Preview mode — run inside the Tauri shell for the live agent loop");

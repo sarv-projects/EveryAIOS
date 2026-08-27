@@ -15,6 +15,13 @@ interface Props {
   tokensThisTurn?: number
 }
 
+const AUTONOMY_LABEL: Record<string, { mark: string; reads: boolean; edits: boolean }> = {
+  sandbox: { mark: '🛡 Sandbox', reads: true, edits: false },
+  ask: { mark: '👀 Ask', reads: true, edits: false },
+  auto: { mark: '⚡ Auto', reads: true, edits: true },
+  full: { mark: '🚀 Maximum', reads: true, edits: true },
+}
+
 export default function NowDoingStrip({
   title,
   detail,
@@ -26,11 +33,38 @@ export default function NowDoingStrip({
   const setActiveView = useAppStore((s) => s.setActiveView)
   const agentPaused = useAppStore((s) => s.agentPaused)
   const permissionMode = useAppStore((s) => s.permissionMode)
-  const autonomyMark =
-    permissionMode === 'sandbox' ? '🛡 Sandbox'
-      : permissionMode === 'ask' ? '👀 Ask'
-        : permissionMode === 'auto' ? '⚡ Auto'
-          : '🚀 Maximum'
+  const taskSnapshot = useAppStore((s) => s.taskSnapshot)
+  const sessions = useAppStore((s) => s.sessions)
+
+  // P44.6 — the live autonomy indicator. During a task it reads the FROZEN
+  // snapshot (never the live chatbar) so it shows exactly what this task is
+  // authorized to do; temporary elevation (task-scoped) shows a ⚡ badge that
+  // disappears at task end. Read-only derivation — never consumes the
+  // one-shot elevation here (that happens when the elevated action runs).
+  const snap = taskSnapshot
+  const level =
+    snap && snap.elevation && !snap.elevation.oneShot
+      ? snap.elevation.level
+      : snap
+        ? snap.autonomyLevel
+        : permissionMode
+  const info = AUTONOMY_LABEL[level] ?? AUTONOMY_LABEL.ask!
+  const elevated = !!taskSnapshot?.elevation
+  const activeSession = sessions.find((x) => x.id === useAppStore.getState().activeSessionId)
+  const runningToolCalls = (activeSession?.messages.flatMap((m) => m.toolCalls ?? []) ?? []).filter(
+    (t) => t.status === 'running',
+  )
+  const externalCount = runningToolCalls.filter((t) =>
+    /^(search|browser|gmail|calendar|slack|drive|sheets|external|mcp)/i.test(t.toolId),
+  ).length
+  const scopeLabel = taskSnapshot
+    ? `${info.reads ? '✓ reads' : '— reads'} · ${info.edits ? '✓ edits' : '— edits'}`
+    : ''
+  const autonomyMark = taskSnapshot
+    ? `${info.mark}${elevated ? ' ⚡' : ''}${scopeLabel ? ` │ ${scopeLabel}` : ''}${
+        externalCount > 0 ? ` · ⚠ ${externalCount} external — approval required` : ''
+      }${taskSnapshot ? ` · cfg ${taskSnapshot.configHash.slice(0, 6)}` : ''}`
+    : info.mark
 
   // Live elapsed ticker (1s) so the banner feels like a real running job.
   const [tick, setTick] = useState(0)

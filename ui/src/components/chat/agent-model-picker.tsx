@@ -63,6 +63,7 @@ export default function AgentModelPicker({ compact }: Props) {
 
   const liveAgents = useAppStore((s) => s.liveAgents)
   const catalog = liveAgents.length > 0 ? liveAgents : AGENTS
+  // Fall back to the static catalog if a live row is missing name/mark.
   const [installing, setInstalling] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [connected, setConnected] = useState<string | null>(null)
@@ -74,7 +75,11 @@ export default function AgentModelPicker({ compact }: Props) {
     waitingUrl?: string
   } | null>(null)
 
-  const agent = catalog.find((a) => a.id === selectedAgentId) ?? catalog[0]
+  const agent =
+    catalog.find((a) => a.id === selectedAgentId && a.name) ??
+    catalog.find((a) => a.name) ??
+    AGENTS[0]
+  if (!agent) return null
 
   // P38 — the Dynamic Chief slot: which agent occupies the top brain by
   // default (inbuilt | ACP agent id). Resolution is fail-closed upstream.
@@ -199,21 +204,27 @@ export default function AgentModelPicker({ compact }: Props) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-label="Choose agent and model"
         className={cn(
-          'group flex items-center gap-1.5 rounded-md border bg-background/40 px-1.5 py-0.5 font-mono text-[10px] transition-all duration-200 hover:border-orange-500/40 hover:bg-orange-500/5',
+          'group flex max-w-[220px] items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] transition-all duration-200 hover:border-orange-500/40 hover:bg-orange-500/5',
           open && 'border-orange-500/60 bg-orange-500/10',
-          autoRoute && 'shadow-[0_0_6px_rgba(249,115,22,0.15)] glow-pulse',
         )}
       >
         <span key={selectedAgentId} className="agent-switch-pulse inline-flex">
           <AgentLogo agent={agent} size="sm" />
         </span>
-        <span className="flex items-baseline gap-1">
-          <span className="text-foreground">{agent.name}</span>
-          <span className="text-muted-foreground/40">·</span>
-          <span className="text-orange-300">{model?.label ?? '—'}</span>
+        <span className="flex min-w-0 items-baseline gap-1">
+          <span className={cn('truncate text-foreground', compact ? 'max-w-[7rem]' : '')}>
+            {agent.name}
+          </span>
+          {!compact && (
+            <>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="text-orange-300">{model?.label ?? '—'}</span>
+            </>
+          )}
         </span>
-        {autoRoute && (
+        {autoRoute && !compact && (
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="ml-0.5 flex items-center gap-0.5 rounded border border-orange-500/30 bg-orange-500/10 px-1 text-[8px] text-orange-300">

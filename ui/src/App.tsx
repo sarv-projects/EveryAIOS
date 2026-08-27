@@ -12,7 +12,6 @@ import { CommandPalette } from "@/components/shell/command-palette";
 import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { AiPointer } from "@/components/shell/ai-pointer";
 import { ToastBridge } from "@/components/shell/toast-bridge";
-import { useAppStore } from "@/lib/store";
 import VaultGate from "@/components/shell/vault-gate";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import NpsPrompt from "@/components/nps-prompt";
@@ -33,10 +32,6 @@ export default function App() {
     return () => document.removeEventListener("click", onClick);
   }, []);
 
-  // Progressive disclosure (B9/P31): casual users get chat only; the activity
-  // rail + right viewport reveal when the power toggle is flipped.
-  const powerMode = useAppStore((s) => s.powerMode);
-
   return (
     <VaultGate>
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden">
@@ -45,8 +40,9 @@ export default function App() {
       <main className="flex-1 min-h-0 flex">
         <LeftSidebar />
         <CenterColumn />
-        {powerMode && <ActivityRail />}
-        {powerMode && <RightViewport />}
+        {/* 48px activity rail + tool viewport are the cockpit, not a power-only extra. */}
+        <ActivityRail />
+        <RightViewport />
       </main>
       <StatusBar />
       <CommandPalette />

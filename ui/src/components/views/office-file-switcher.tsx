@@ -19,9 +19,11 @@ export default function OfficeFileSwitcher({
   current?: string | null
   onOpen: (path: string) => void
 }) {
-  const history = useAppStore((s) => s.officeHistory[view] ?? [])
+  // Do not `?? []` in the selector — a fresh [] every time is never
+  // referentially equal, so zustand re-renders forever (white screen).
+  const history = useAppStore((s) => s.officeHistory[view])
   const closeOfficeDoc = useAppStore((s) => s.closeOfficeDoc)
-  if (history.length === 0) return null
+  if (!history || history.length === 0) return null
 
   const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p
 

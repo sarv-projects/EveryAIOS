@@ -564,7 +564,7 @@ export function RightViewport() {
           initial={{ width: 0, opacity: 0 }}
           animate={{ width: `${viewportPct}%`, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
           className="border-l border-border bg-card/40 overflow-hidden flex flex-col min-w-0 relative"
         >
           {/* Multi-view tab strip (VS Code-style: default Terminal · Folder · Browser, "+" to add, × to close) */}
