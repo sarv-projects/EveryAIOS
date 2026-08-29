@@ -5,6 +5,9 @@
 //! shows the empty state instead of inventing data.
 
 use std::process::Command;
+use tauri::State;
+
+use crate::AppState;
 
 fn run_git(dir: &str, args: &[&str]) -> Result<String, String> {
     let out = Command::new("git")
@@ -79,16 +82,36 @@ pub fn git_diff(dir: String, path: Option<String>) -> Result<serde_json::Value, 
 }
 
 /// Stage all changes (`git add -A`) — SCM panel "Stage all".
+/// v3.59: human-UI path — the click is the authorization, the action is
+/// audited on the same Merkle chain as agent/ticket effects (spec §4.3 / P47.1).
 #[tauri::command]
-pub fn git_stage_all(dir: String) -> Result<serde_json::Value, String> {
+pub fn git_stage_all(
+    state: State<'_, AppState>,
+    dir: String,
+) -> Result<serde_json::Value, String> {
     run_git(&dir, &["add", "-A"])?;
+    crate::control::record_mutation(
+        &state,
+        "git.stage",
+        serde_json::json!({ "dir": dir, "scope": "all" }),
+    );
     Ok(serde_json::json!({ "staged": true }))
 }
 
 /// Commit staged changes with a message.
+/// v3.59: human-UI path — audited (see `git_stage_all`).
 #[tauri::command]
-pub fn git_commit(dir: String, message: String) -> Result<serde_json::Value, String> {
+pub fn git_commit(
+    state: State<'_, AppState>,
+    dir: String,
+    message: String,
+) -> Result<serde_json::Value, String> {
     run_git(&dir, &["commit", "-m", &message])?;
+    crate::control::record_mutation(
+        &state,
+        "git.commit",
+        serde_json::json!({ "dir": dir, "message": message }),
+    );
     Ok(serde_json::json!({ "committed": true }))
 }/// Find the nearest enclosing git root for a file/dir path (for the SCM
 /// panel when a file is open in the editor). Returns `None` honestly.
@@ -159,6 +182,7 @@ pub fn git_worktree_list(repo: String) -> Result<serde_json::Value, String> {
 /// Returns the merge commit hash.
 #[tauri::command]
 pub fn git_worktree_merge(
+    state: State<'_, AppState>,
     repo: String,
     name: String,
     target_branch: String,
@@ -180,6 +204,12 @@ pub fn git_worktree_merge(
     run_git(&repo, &["checkout", &target_branch])?;
     run_git(&repo, &["merge", "--no-ff", &name, "-m", &message])?;
     let head = run_git(&repo, &["rev-parse", "HEAD"])?;
+    // v3.59 — human-UI path audit (spec §4.3 / P47.1).
+    crate::control::record_mutation(
+        &state,
+        "git.worktree_merge",
+        serde_json::json!({ "repo": repo, "branch": name, "into": target_branch }),
+    );
     Ok(serde_json::json!({
         "merged": true,
         "branch": name,
@@ -192,11 +222,22 @@ pub fn git_worktree_merge(
 /// is the merge commit to revert (from `git_worktree_merge`); the worktree
 /// and its branch are removed afterwards.
 #[tauri::command]
-pub fn git_worktree_revert(repo: String, name: String, commit: String) -> Result<serde_json::Value, String> {
+pub fn git_worktree_revert(
+    state: State<'_, AppState>,
+    repo: String,
+    name: String,
+    commit: String,
+) -> Result<serde_json::Value, String> {
     let path = worktree_path(&repo, &name);
     run_git(&repo, &["revert", "--no-edit", &commit])?;
     run_git(&repo, &["worktree", "remove", "--force", &path])?;
     run_git(&repo, &["branch", "-D", &name])?;
+    // v3.59 — human-UI path audit (spec §4.3 / P47.1).
+    crate::control::record_mutation(
+        &state,
+        "git.worktree_revert",
+        serde_json::json!({ "repo": repo, "branch": name, "commit": commit }),
+    );
     Ok(serde_json::json!({
         "reverted": true,
         "commit": commit,

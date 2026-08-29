@@ -119,6 +119,7 @@ pub fn shell_spawn(
         }
     });
 
+    let shell_name_log = shell_name.clone();
     {
         let mut shells = state.shells.lock().map_err(|e| e.to_string())?;
         shells.insert(
@@ -130,6 +131,14 @@ pub fn shell_spawn(
             },
         );
     }
+    // v3.59 governance decision — human-UI path: the user's click/typing is
+    // the authorization; the audit invariant still holds (same Merkle chain
+    // as the agent/ticket path). See spec §4.3 / TODO P47.1.
+    crate::control::record_mutation(
+        &state,
+        "shell.spawn",
+        serde_json::json!({ "sessionId": session_id, "shell": shell_name_log }),
+    );
     Ok(session_id)
 }
 
@@ -147,6 +156,13 @@ pub fn shell_write(
     handle
         .write(&input)
         .map_err(|e| format!("write to shell: {e}"))?;
+    // v3.59 governance decision — human-UI path: the user-typed command is
+    // audited on the same Merkle chain as agent/ticket effects (P47.1).
+    crate::control::record_mutation(
+        &state,
+        "shell.command",
+        serde_json::json!({ "sessionId": session_id, "command": input }),
+    );
     Ok(serde_json::json!({ "ok": true, "echo": input }))
 }
 

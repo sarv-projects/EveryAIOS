@@ -22,13 +22,20 @@ desktop_app/
 │   ├── everyaios-search/            ← search & research (G8 cascade + circuit breaker, deep-research tree + gap-check, multi-channel adapters, cited reports, parallel fetch cascade, site TF-IDF index, repo-wide blast radius) — P8.4
 │   ├── everyaios-codeintel/          ← code intelligence (LSP framing + core types + session runtime, LSP runner live diagnostics, SCIP-style symbol index, tree-sitter-fed repo map + PageRank budget fit) — P7.1
 │   ├── everyaios-acp/                ← ACP harness bridge (ACP v1 wire types, newline-delimited JSON-RPC framing, `AcpSession` client lifecycle, `LaunchRegistry` agent catalog) — F12/J17
-│   └── everyaios-ipc/                 ← JSON-RPC over stdio (sidecar contract) + tauri command glue
-├── packages/                    ← TS workspace (NEW — reuses @personal-ai/core-* from APP/ as deps)
+│   ├── everyaios-engine/             ← engine pure-stage port (contract · plan · risk · gate — Alg #2/#17; Evidence Grounding Score v3.59)
+│   ├── everyaios-agents/             ← P31/B9 agent bundles (agent.toml schema, registry, templates, scope)
+│   ├── everyaios-catalog/            ← P14/A11 model + provider catalog (ModelEntry, ProviderRecord, probes, pricing, routing)
+│   ├── everyaios-desktop/            ← E9/P9.1 desktop computer-use (see/read/act over native windows, OCR, verify, policy)
+│   └── everyaios-ipc/                ← JSON-RPC over stdio (sidecar contract) + tauri command glue
+├── packages/                    ← TS workspace (core-* vendored in-repo + coordinator)
+│   ├── core-*/                  ← @personal-ai/core-* vendored in-repo (2026-08-29 — no ../APP sibling, no APP_CLONE_TOKEN gate)
 │   └── coordinator/             ← the Bun-compiled sidecar (agent loop, engine stages, hub, memory)
 └── ui/                          ← React SPA (webview frontend)
 ```
 
-**Reuse rule:** `@personal-ai/core-*` packages are consumed **as published workspace deps** (pnpm workspace pointing at `APP/packages/*` or a shared publish), not copied. Desktop-specific additions go in `packages/coordinator/`.
+**Workspace count (v3.59):** the Rust workspace has **21 crates** — `crates/Cargo.toml` is authoritative; this tree is the module map, not the membership list (older docs saying 17/18 predate `engine`/`agents`/`catalog`/`desktop`). A planned **`everyaios-types`** crate (shared IDs/enums, pure types) is the one structural addition the v3.59 architecture finalization queues (TODO P47.3).
+
+**Reuse rule:** `@personal-ai/core-*` packages are **vendored in-repo** under `packages/core-*` (workspace glob `packages/*`; the old `../APP` sibling + `APP_CLONE_TOKEN` gate were removed 2026-08-29 — CI/release fail loudly if the workspace is incomplete). Desktop-specific additions go in `packages/coordinator/` or the Rust crates.
 
 ## 2.2 Rust crate responsibilities (all new — source-pattern maps)
 

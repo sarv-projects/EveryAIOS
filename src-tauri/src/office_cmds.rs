@@ -7,6 +7,9 @@
 use everyaios_office::docx::DocxEngine;
 use everyaios_office::pdf;
 use everyaios_office::pptx::PptxEngine;
+use tauri::State;
+
+use crate::AppState;
 
 fn read_bytes(path: &str) -> Result<Vec<u8>, String> {
     let path = crate::control::floor_user_file(path)?;
@@ -117,8 +120,15 @@ fn base64_encode(bytes: &[u8]) -> String {
 }
 
 /// Surgical block patch (agent + Word viewer).
+/// v3.59: human-UI path — the click is the authorization, the mutation is
+/// audited on the same Merkle chain as agent/ticket effects (spec §4.3 / P47.1).
 #[tauri::command]
-pub fn docx_patch(path: String, address: String, text: String) -> Result<serde_json::Value, String> {
+pub fn docx_patch(
+    state: State<'_, AppState>,
+    path: String,
+    address: String,
+    text: String,
+) -> Result<serde_json::Value, String> {
     let path = crate::control::floor_user_file(&path)?;
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
     let mut engine = DocxEngine::open(bytes).map_err(|e| e.to_string())?;
@@ -127,6 +137,15 @@ pub fn docx_patch(path: String, address: String, text: String) -> Result<serde_j
         .map_err(|e| e.to_string())?;
     let out = engine.save().map_err(|e| e.to_string())?;
     everyaios_office::write_atomic(&path, &out).map_err(|e| e.to_string())?;
+    crate::control::record_mutation(
+        &state,
+        "office.docx_patch",
+        serde_json::json!({
+            "path": path.display().to_string(),
+            "address": address,
+            "charDelta": text.chars().count(),
+        }),
+    );
     Ok(serde_json::json!({ "ok": true, "address": address }))
 }
 
@@ -181,6 +200,7 @@ pub fn pptx_notes(path: String) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 pub fn pdf_page_op(
+    state: State<'_, AppState>,
     path: String,
     op: String,
     pages: Option<Vec<u32>>,
@@ -299,6 +319,16 @@ pub fn pdf_page_op(
         None => path.clone(),
     };
     everyaios_office::write_atomic(&dest, &result).map_err(|e| e.to_string())?;
+    // v3.59 — human-UI path audit (spec §4.3 / P47.1).
+    crate::control::record_mutation(
+        &state,
+        "office.pdf_op",
+        serde_json::json!({
+            "path": dest.display().to_string(),
+            "op": op,
+            "pages": pages,
+        }),
+    );
     Ok(serde_json::json!({ "ok": true, "path": dest.display().to_string() }))
 }
 

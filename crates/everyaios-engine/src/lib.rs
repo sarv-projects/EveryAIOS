@@ -11,8 +11,9 @@
 //! **pure stage pipeline** the engine runs *around* the stream:
 //!   - [`contract`] — `defaultContract(surface)` (surface-contract.ts)
 //!   - [`plan`]     — RetrievalPlanner + ToolPlanner (stages/)
-//!   - [`risk`]     — Algorithm #8 Hallucination Risk Compass (risk-compass.ts),
-//!     score contract exactly mirrored from the TS tests.
+//!   - [`risk`]     — Algorithm #8 Evidence Grounding Score (v3.59 rename of
+//!     "Hallucination Risk Compass", risk-compass.ts), score contract exactly
+//!     mirrored from the TS tests.
 //!   - [`gate`]     — PermissionGate (`evaluatePermissionGate`, Algorithm #12) + the
 //!     per-session approval map.
 //!

@@ -185,8 +185,11 @@ mod tests {
         // RSS fluctuates between calls (GC/alloc), so we check that the
         // tree total is in the same ballpark as self RSS (within a few MB)
         // rather than asserting a strict ordering across two separate reads.
+        // RSS only grows in-process, so sampling self *after* the tree walk
+        // (twice, taking the max) removes the load-dependent false positive
+        // where the earlier self read is lower than the tree's self component.
         let (total, count) = measure_tree();
-        let self_rss = measure_self();
+        let self_rss = measure_self().max(measure_self());
         let delta = (total as i64 - self_rss as i64).unsigned_abs();
         assert!(
             delta < 50 * 1024 * 1024,

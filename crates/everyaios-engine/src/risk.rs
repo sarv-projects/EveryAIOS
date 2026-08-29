@@ -1,4 +1,6 @@
-//! Algorithm #8 — Hallucination Risk Compass (port of risk-compass.ts).
+//! Algorithm #8 — Evidence Grounding Score (v3.59 rename of "Hallucination
+//! Risk Compass", port of risk-compass.ts — the score is an *evidence
+//! grounding* score, not a claim about the model's inner state).
 //!
 //! The TS version's score contract, mirrored exactly so the port is diffable:
 //!   base = 0.15
@@ -21,7 +23,7 @@ pub enum RiskBand {
     High,
 }
 
-/// Inputs to the compass (all cheap-to-collect inference-time signals).
+/// Inputs to the score (all cheap-to-collect inference-time signals).
 #[derive(Debug, Clone, Default)]
 pub struct RiskSignals {
     pub retrieval_confidence: f64,
@@ -59,7 +61,7 @@ impl RiskSignals {
     }
 }
 
-/// Output of the compass.
+/// Output of the grounding score.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RiskAssessment {
     pub score: f64,
@@ -74,8 +76,9 @@ fn clamp01(v: f64) -> f64 {
     v.clamp(0.0, 1.0)
 }
 
-/// `assessHallucinationRisk(signals)` — same arithmetic as the TS version.
-pub fn assess_hallucination_risk(s: RiskSignals) -> RiskAssessment {
+/// `assessHallucinationRisk(signals)` — same arithmetic as the TS version
+/// (v3.59: renamed `assess_evidence_grounding`; the contract is unchanged).
+pub fn assess_evidence_grounding(s: RiskSignals) -> RiskAssessment {
     let mut flags: Vec<String> = Vec::new();
     let rc = clamp01(s.retrieval_confidence);
     let sc = clamp01(s.source_coverage);
@@ -150,7 +153,7 @@ pub fn count_uncertainty_markers(text: &str) -> u64 {
     count
 }
 
-/// Calibration report over (score, wasCorrect) samples — a useful compass
+/// Calibration report over (score, wasCorrect) samples — a useful score
 /// must show strictly increasing error rate low → medium → high.
 #[derive(Debug, Clone, Default)]
 pub struct CalibrationReport {
@@ -233,7 +236,7 @@ mod tests {
     #[test]
     fn neutral_inputs_are_medium() {
         // rc=.5, sc=.5, no sources, 0 markers → base + no-sources bonus.
-        let a = assess_hallucination_risk(
+        let a = assess_evidence_grounding(
             RiskSignals::default()
                 .retrieval_confidence(0.5)
                 .source_coverage(0.5),
@@ -246,7 +249,7 @@ mod tests {
 
     #[test]
     fn strong_grounded_answer_is_low() {
-        let a = assess_hallucination_risk(
+        let a = assess_evidence_grounding(
             RiskSignals::default()
                 .retrieval_confidence(0.9)
                 .source_coverage(0.9)
@@ -260,7 +263,7 @@ mod tests {
 
     #[test]
     fn no_sources_and_short_is_high() {
-        let a = assess_hallucination_risk(
+        let a = assess_evidence_grounding(
             RiskSignals::default()
                 .retrieval_confidence(0.2)
                 .source_coverage(0.1)
@@ -275,7 +278,7 @@ mod tests {
 
     #[test]
     fn grounded_only_reduces_score() {
-        let a = assess_hallucination_risk(
+        let a = assess_evidence_grounding(
             RiskSignals::default()
                 .source_coverage(0.0)
                 .retrieval_confidence(0.0)
@@ -296,11 +299,11 @@ mod tests {
 
     #[test]
     fn short_nongrounded_answer_is_additionally_flagged() {
-        let a = assess_hallucination_risk(
+        let a = assess_evidence_grounding(
             RiskSignals::default().answer_length(50),
         );
         assert!(a.flags.iter().any(|f| f == "suspiciously short answer"));
-        let b = assess_hallucination_risk(
+        let b = assess_evidence_grounding(
             RiskSignals::default().answer_length(50).grounded_only(true),
         );
         assert!(!b.flags.iter().any(|f| f == "suspiciously short answer"));
@@ -308,7 +311,7 @@ mod tests {
 
     #[test]
     fn calibration_monotone_when_useful() {
-        // Low-band: mostly correct; high-band: mostly wrong → useful compass.
+        // Low-band: mostly correct; high-band: mostly wrong → useful score.
         let samples = vec![
             (0.2, true), (0.2, true), (0.2, false),
             (0.5, true), (0.5, false),
