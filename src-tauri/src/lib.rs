@@ -26,6 +26,7 @@ mod maintenance_cmds;
 mod memory_cmds;
 mod local_cmds;
 mod mcp_cmds;
+mod skills_cmds;
 mod oauth_cmds;
 mod office_cmds;
 mod replay_cmds;
@@ -761,6 +762,9 @@ pub fn run() {
             mcp_cmds::mcp_remote_status,
             mcp_cmds::mcp_remote_call,
             mcp_cmds::mcp_remote_tools,
+            skills_cmds::skills_catalog,
+            skills_cmds::skills_install,
+            skills_cmds::skills_uninstall,
             office_cmds::docx_open,
             office_cmds::docx_patch,
             office_cmds::docx_tracks,

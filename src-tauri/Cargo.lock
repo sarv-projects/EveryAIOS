@@ -1414,6 +1414,7 @@ dependencies = [
  "everyaios-acp",
  "everyaios-agents",
  "everyaios-audit",
+ "everyaios-blueprint",
  "everyaios-browser",
  "everyaios-catalog",
  "everyaios-cdp",

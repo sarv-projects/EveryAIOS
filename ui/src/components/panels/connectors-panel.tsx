@@ -23,6 +23,7 @@ import {
   type StoreEntry,
 } from '@/lib/mcp'
 import { cn } from '@/lib/utils'
+import SkillsPanel from '@/components/panels/skills-panel'
 import {
   oauthAccounts,
   oauthPollDevice,
@@ -298,6 +299,7 @@ export default function ConnectorsPanel() {
           <TabsList className="h-7">
             <TabsTrigger value="store" className="text-xs">Connect Store</TabsTrigger>
             <TabsTrigger value="mcp" className="text-xs">MCP Servers</TabsTrigger>
+            <TabsTrigger value="skills" className="text-xs">Skills</TabsTrigger>
             <TabsTrigger value="native" className="text-xs">Native</TabsTrigger>
             <TabsTrigger value="catalog" className="text-xs">Tool Catalog</TabsTrigger>
           </TabsList>
@@ -319,6 +321,8 @@ export default function ConnectorsPanel() {
               setConnectingId={setConnectingId}
               notify={notify}
             />
+          ) : tab === 'skills' ? (
+            <SkillsPanel />
           ) : tab === 'catalog' ? (
             <ToolCatalogSection catalog={catalog} />
           ) : tab === 'native' ? (

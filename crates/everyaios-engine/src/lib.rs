@@ -13,6 +13,8 @@
 //!   - [`plan`]     — RetrievalPlanner + ToolPlanner (stages/)
 //!   - [`risk`]     — Algorithm #8 Hallucination Risk Compass (risk-compass.ts),
 //!     score contract exactly mirrored from the TS tests.
+//!   - [`gate`]     — PermissionGate (`evaluatePermissionGate`, Algorithm #12) + the
+//!     per-session approval map.
 //!
 //! Everything here is idempotent, unit-testable without a model, and matches
 //! the TS scoring so the port can be diffed against the reference.
@@ -20,6 +22,7 @@
 use serde::Serialize;
 
 // Re-export submodules.
+pub mod gate;
 pub mod plan;
 pub mod risk;
 
