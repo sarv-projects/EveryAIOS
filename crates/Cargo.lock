@@ -1396,6 +1396,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "everyaios-engine"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "everyaios-eval"
 version = "0.1.0"
 dependencies = [
@@ -1434,10 +1442,13 @@ dependencies = [
 name = "everyaios-mcp"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "rand 0.8.7",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.19",
+ "ureq",
 ]
 
 [[package]]

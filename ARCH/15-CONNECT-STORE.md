@@ -18,6 +18,24 @@
 > (tools/list, tools/call). UI: **Connect Store tab** in the Connectors panel
 > renders `storeCatalog()` with live Connect buttons + plain-language scopes.
 > 5 new remote-client tests (53 mcp tests total).
+> **v1.3 (2026-08-29):** four gap-closers — (1) remote-MCP tokens now persist
+> in the vault (`OAuthManager::store_connector_token` / `load_connector_token`
+> into the SQLCipher `oauth_tokens` table; `mcp_connect_start` writes them,
+> `mcp_remote_status` / `mcp_remote_call` fall back to the vault on restart);
+> (2) `mcp_remote_tools` merges a connected server's `tools/list` into the
+> catalog surface (UI `mcpRemoteTools`); (3) flat connectors route through the
+> vault provider (`StoreSection` dispatches device-code / pkce / api-key to the
+> vault OAuth commands instead of assuming a remote MCP URL); (4) connector
+> client-ids are overridable per-provider via
+> `EVERYAIOS_OAUTH_CLIENT_ID_<UPPER_PROVIDER>` env (Slack/Notion — the
+> zero-code path until we register our own app). Vault oauth tests 110 → 113.
+> **v1.4 (2026-08-29):** skills/plugins store companion —
+> `everyaios-guard::skillstore` (P9.7): one Ed25519-signed index of skills with
+> per-entry capability demands, verified against a pinned public key, gated by
+> `RUNTIME_CAPABILITY_ALLOWLIST` and Guard-2 consent (ARCH/15 tier 3).
+> 6 new skillstore tests. **CI:** the dropped `APP_CLONE_TOKEN` gate is replaced
+> by an explicit fail-loudly step in `ci.yml` — every coordinator dep must
+> resolve to a vendored `packages/core-*` package or the workflow fails.
 
 ## The problem
 

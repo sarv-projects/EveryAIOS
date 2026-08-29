@@ -139,6 +139,36 @@ jobs:
         run: |
           npm install -g pnpm
           pnpm install
+      # Fail loudly if the reused @personal-ai/core-* engine packages are not
+      # vendored in-repo. This is the explicit replacement for the dropped
+      # APP_CLONE_TOKEN gate: building the sidecar must NEVER silently succeed
+      # against a missing/typosquatted core dependency when the workspace is
+      # incomplete. Each core-* dep below must (a) be declared in the
+      # coordinator's package.json and (b) resolve to packages/core-* in this
+      # repo — a missing dir or an external "workspace" mapping is a hard fail.
+      - name: Verify vendored core-* packages (fail loudly)
+        working-directory: desktop_app
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The coordinator's @personal-ai/* direct deps (mirrors package.json).
+          need=(core-ai core-connectors core-engine core-providers core-search)
+          err=0
+          for p in "${need[@]}"; do
+            pkg="packages/$p"
+            if [ ! -d "$pkg" ] || [ ! -f "$pkg/package.json" ]; then
+              echo "::error::vendored package '$pkg' is MISSING — the coordinator would fail only later, loudly"; err=1
+            fi
+            if ! grep -q "\"@personal-ai/$p\"" packages/coordinator/package.json; then
+              echo "::error::coordinator does not depend on '@personal-ai/$p' but vendored '$pkg' exists — mismatch"; err=1
+            fi
+          done
+          # Belt-and-suspenders: confirm the workspace glob actually resolves them.
+          if ! grep -q '"packages/\*"' pnpm-workspace.yaml; then
+            echo "::error::pnpm-workspace.yaml no longer globs 'packages/*' — vendored core-* would resolve externally"; err=1
+          fi
+          if [ "$err" -ne 0 ]; then exit 1; fi
+          echo "core-* packages verified vendored in-repo (${#need[@]})"
       - name: Coordinator typecheck
         working-directory: desktop_app/packages/coordinator
         run: bun run type-check

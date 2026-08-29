@@ -254,6 +254,7 @@ pub fn mcp_connect_start(
     let target_c = target.clone();
     let redirect_c = redirect.clone();
     let tokens = std::sync::Arc::clone(&state.mcp_remote_tokens);
+    let vault = std::sync::Arc::clone(&state.vault);
     std::thread::spawn(move || {
         let _ = listener.set_nonblocking(false);
         if let Ok((mut stream, _)) = listener.accept() {
@@ -270,7 +271,20 @@ pub fn mcp_connect_start(
                             ) {
                         Ok(tok) => {
                             if let Ok(mut t) = tokens.lock() {
-                                t.insert(store_c.clone(), tok.access_token);
+                                t.insert(store_c.clone(), tok.access_token.clone());
+                            }
+                            // Persist at rest (item: remote tokens in vault keyring),
+                            // so a restart keeps the connection. Best-effort.
+                            if let Ok(v) = vault.lock() {
+                                let _ = everyaios_vault::oauth::OAuthManager::new(&v)
+                                    .store_connector_token(
+                                        "remote-mcp",
+                                        &store_c,
+                                        &tok.access_token,
+                                        tok.refresh_token.as_deref(),
+                                        tok.expires_in,
+                                        &tok.scope,
+                                    );
                             }
                             "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body>EveryAIOS connected. You can close this tab.</body></html>".to_string()
                         }
@@ -296,18 +310,36 @@ pub fn mcp_connect_start(
     }))
 }
 
+/// Resolve a remote token: in-memory first (this session), then the vault
+/// keyring (persisted across restarts). Returns the access token or None.
+pub fn remote_access_token(
+    state: &tauri::State<'_, crate::AppState>,
+    store_id: &str,
+) -> Option<String> {
+    if let Ok(tokens) = state.mcp_remote_tokens.lock() {
+        if let Some(t) = tokens.get(store_id) {
+            return Some(t.clone());
+        }
+    }
+    // Persisted connection from a previous run.
+    if let Ok(v) = state.vault.lock() {
+        let mgr = everyaios_vault::oauth::OAuthManager::new(&v);
+        if let Ok(Some(t)) = mgr.load_connector_token("remote-mcp", store_id) {
+            return Some(t);
+        }
+    }
+    None
+}
+
 /// Status: is a remote store entry connected (has a token)?
+/// Checks the in-memory session map first, then the vault keyring.
 #[tauri::command]
 pub fn mcp_remote_status(
     state: tauri::State<'_, crate::AppState>,
     store_id: String,
 ) -> Result<serde_json::Value, String> {
-    let tokens = state
-        .mcp_remote_tokens
-        .lock()
-        .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({
-        "connected": tokens.contains_key(&store_id),
+        "connected": remote_access_token(&state, &store_id).is_some(),
     }))
 }
 
@@ -321,12 +353,7 @@ pub fn mcp_remote_call(
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let url = store_url(&store_id)?;
-    let token = state
-        .mcp_remote_tokens
-        .lock()
-        .map_err(|e| e.to_string())?
-        .get(&store_id)
-        .cloned()
+    let token = remote_access_token(&state, &store_id)
         .ok_or_else(|| format!("`{store_id}` is not connected"))?;
 
     // Reconnect (discovery + dynamic registration) — the registered client is
@@ -336,6 +363,49 @@ pub fn mcp_remote_call(
     let resp = everyaios_mcp::rpc(&target, &token, &method, params, &http)
         .map_err(|e| e.to_string())?;
     Ok(resp)
+}
+
+/// One remote tool's serializable description (drawn from a connected MCP
+/// server's `tools/list`), shaped like the native catalog so it can be merged
+/// into the same Connectors-panel list.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteToolInfo {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub input_schema: serde_json::Value,
+}
+
+/// Fetch `tools/list` from a connected remote MCP server and return the
+/// tools as rows the connector panel can render (item: merge connected tools
+/// into the agent catalog surface).
+#[tauri::command]
+pub fn mcp_remote_tools(
+    state: tauri::State<'_, crate::AppState>,
+    store_id: String,
+) -> Result<Vec<RemoteToolInfo>, String> {
+    let url = store_url(&store_id)?;
+    let token = remote_access_token(&state, &store_id)
+        .ok_or_else(|| format!("`{store_id}` is not connected"))?;
+    let http = everyaios_mcp::UreqTransport;
+    let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
+    let resp = everyaios_mcp::rpc(&target, &token, "tools/list", serde_json::json!({}), &http)
+        .map_err(|e| e.to_string())?;
+    let tools = resp
+        .get("result")
+        .and_then(|r| r.get("tools"))
+        .and_then(|t| t.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| {
+                    serde_json::from_value::<RemoteToolInfo>(t.clone()).ok()
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(tools)
 }
 
 fn parse_callback(req: &str) -> (Option<String>, Option<String>) {

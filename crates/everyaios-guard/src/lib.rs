@@ -39,6 +39,7 @@ pub mod granter;
 pub mod injection;
 pub mod loopguard;
 pub mod manifest;
+pub mod skillstore;
 pub mod path_seal;
 pub mod pathfloor;
 pub mod permissions;

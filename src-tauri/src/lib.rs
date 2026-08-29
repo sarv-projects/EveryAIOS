@@ -760,6 +760,7 @@ pub fn run() {
             mcp_cmds::mcp_connect_start,
             mcp_cmds::mcp_remote_status,
             mcp_cmds::mcp_remote_call,
+            mcp_cmds::mcp_remote_tools,
             office_cmds::docx_open,
             office_cmds::docx_patch,
             office_cmds::docx_tracks,

@@ -1,0 +1,11 @@
+[package]
+name = "everyaios-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "EveryAIOS conversation-engine core (Rust port slice) — the pure, deterministic stages of the TS ConversationEngine (surface contract, retrieval planner, tool planner, risk compass). LLM-free; the async streaming loop stays in the TS coordinator."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

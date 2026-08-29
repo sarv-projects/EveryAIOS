@@ -1471,10 +1471,13 @@ dependencies = [
 name = "everyaios-mcp"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "rand 0.8.7",
  "serde",
  "serde_json",
  "sha2",
  "thiserror 2.0.20",
+ "ureq",
 ]
 
 [[package]]

@@ -594,9 +594,24 @@ function StoreSection({
   async function connect(e: StoreEntry) {
     setConnectingId(e.id)
     try {
-      const r = await mcpConnectStart(e.id)
-      window.open(r.authUrl, '_blank')
-      notify(`${e.name} — authorize in the browser that just opened`)
+      // Flat connectors (gmail, github-raw) have no MCP server URL — route them
+      // through the vault's OAuth provider (the Connect Store names vaultProvider).
+      if (e.kind === 'connector') {
+        if (e.flow === 'device-code') {
+          const d = await oauthStartDevice(e.vaultProvider)
+          notify(`${e.name} — open ${d.verificationUri} and enter code ${d.userCode}`)
+        } else if (e.flow === 'api-key') {
+          notify(`${e.name} — paste your API key in the shell`)
+        } else {
+          const r = await oauthStartPkce(e.vaultProvider)
+          window.open(r.authUrl, '_blank')
+          notify(`${e.name} — authorize in the browser that just opened`)
+        }
+      } else {
+        const r = await mcpConnectStart(e.id)
+        window.open(r.authUrl, '_blank')
+        notify(`${e.name} — authorize in the browser that just opened`)
+      }
     } catch (err) {
       notify(`Connect ${e.name}: ${String(err)}`)
     } finally {

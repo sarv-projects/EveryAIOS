@@ -217,6 +217,29 @@ fn id_of(provider: &str) -> String {
         .unwrap_or_default()
 }
 
+const CLIENT_ID_ENV_PREFIX: &str = "EVERYAIOS_OAUTH_CLIENT_ID_";
+
+/// Allow any provider's client id to be supplied at runtime via
+/// `EVERYAIOS_OAUTH_CLIENT_ID_<UPPER_PROVIDER>` (e.g.
+/// `EVERYAIOS_OAUTH_CLIENT_ID_SLACK`, `..._NOTION`). This is the zero-code
+/// path for connectors that have no public client (Slack/Notion) until we
+/// register our own app — the operator sets one var instead of patching code.
+fn apply_client_id_env_overrides(providers: HashMap<String, ProviderSettings>) -> HashMap<String, ProviderSettings> {
+    let mut out = providers;
+    let keys: Vec<String> = out.keys().cloned().collect();
+    for provider in keys {
+        let env_key = format!("{CLIENT_ID_ENV_PREFIX}{}", provider.to_uppercase());
+        if let Ok(client_id) = std::env::var(&env_key) {
+            if !client_id.trim().is_empty() {
+                if let Some(p) = out.get_mut(&provider) {
+                    p.client_id = client_id.trim().to_string();
+                }
+            }
+        }
+    }
+    out
+}
+
 /// OAuth manager. Cheap to construct; holds a borrowed SQLCipher connection.
 /// Gate: `enabled` (env flag `EVERYAIOS_OAUTH` by default, overridable).
 #[derive(Clone)]
@@ -285,10 +308,11 @@ impl<'a> OAuthManager<'a> {
 
     /// Explicit gate — tests use this instead of mutating the environment.
     pub fn with_enabled(vault: &'a Vault, enabled: bool) -> Self {
+        let providers = apply_client_id_env_overrides(defaults());
         Self {
             conn: vault.connection(),
             enabled,
-            providers: defaults(),
+            providers,
             redirect_uri: "http://127.0.0.1:0/oauth/callback".into(),
         }
     }
@@ -730,6 +754,69 @@ impl<'a> OAuthManager<'a> {
         let ring = KeyRing::new_from_conn(self.conn);
         let _ = ring.delete_key(provider, account_id);
         Ok(())
+    }
+
+    /// Persist a remote-MCP / flat-connector bearer token (ARCH/15 Tier 2/3)
+    /// into the same SQLCipher `oauth_tokens` table as subscription tokens,
+    /// so connected tokens survive app restarts. `account_id` is the store id
+    /// (e.g. `google-drive`); provider is a stable namespace (e.g.
+    /// `remote-mcp`). Unlike PKCE flows there is no pending row or browser
+    /// round-trip here — the shell hands us the finished tokens.
+    pub fn store_connector_token(
+        &self,
+        provider: &str,
+        account_id: &str,
+        access_token: &str,
+        refresh_token: Option<&str>,
+        expires_in: i64,
+        scopes: &str,
+    ) -> Result<(), OAuthError> {
+        let now = now_ms() / 1000;
+        let expires_at = if expires_in > 0 { now + expires_in } else { now + 3600 };
+        self.conn.execute(
+            "INSERT INTO oauth_tokens
+                (provider, account_id, access_token, refresh_token, token_type, scopes,
+                 email, expires_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 'Bearer', ?5, NULL, ?6, ?7, ?7)
+             ON CONFLICT(provider, account_id) DO UPDATE SET
+                 access_token = excluded.access_token,
+                 refresh_token = excluded.refresh_token,
+                 scopes = excluded.scopes,
+                 expires_at = excluded.expires_at,
+                 updated_at = excluded.updated_at",
+            rusqlite::params![
+                provider,
+                account_id,
+                access_token.as_bytes(),
+                refresh_token.map(|r| r.as_bytes()),
+                scopes,
+                expires_at,
+                now,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Load a previously-persisted connector/remote access token (String, so
+    /// it is never held by a private zeroizing row type across the API).
+    /// Returns `Ok(Some(access))` when connected, `Ok(None)` when not.
+    pub fn load_connector_token(
+        &self,
+        provider: &str,
+        account_id: &str,
+    ) -> Result<Option<String>, OAuthError> {
+        let row: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT access_token FROM oauth_tokens
+                 WHERE provider = ?1 AND account_id = ?2",
+                rusqlite::params![provider, account_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(OAuthError::Sqlite)?
+            .map(|b: Vec<u8>| String::from_utf8_lossy(&b).into_owned());
+        Ok(row)
     }
 
     fn clear_pending(&self, provider: &str) -> Result<(), OAuthError> {

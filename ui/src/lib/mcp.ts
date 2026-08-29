@@ -73,6 +73,21 @@ export async function storeCatalog(): Promise<StoreEntry[]> {
   return invoke<StoreEntry[]>("store_catalog");
 }
 
+/** One remote tool drawn from a connected server's tools/list. */
+export interface RemoteToolInfo {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+/** Fetch tools/list from a connected remote MCP server (merge into catalog). */
+export async function mcpRemoteTools(
+  storeId: string,
+): Promise<RemoteToolInfo[]> {
+  if (!inTauri()) return [];
+  return invoke<RemoteToolInfo[]>("mcp_remote_tools", { storeId });
+}
+
 /** Start a remote-MCP OAuth 2.1 connect (discovery + PKCE) → auth URL. */
 export async function mcpConnectStart(
   storeId: string,

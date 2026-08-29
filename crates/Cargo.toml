@@ -10,6 +10,7 @@ members = [
     "everyaios-browser",
     "everyaios-script",
     "everyaios-mcp",
+    "everyaios-engine",
     "everyaios-office",
     "everyaios-storage",
     "everyaios-memory",
