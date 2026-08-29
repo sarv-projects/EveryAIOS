@@ -125,7 +125,7 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
     }
   }
 
-  const pass = candidates
+  let pass = candidates
     .map((c) => ({ c, hints: hintsFor(c.provider, c.model) }))
     .filter(({ hints }) => {
       if (needVision && !hints.supportsVision) return false;
@@ -211,7 +211,19 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
       }
     }
     // No observed candidate is healthy — fall through to the deterministic
-    // cost-sort so the turn still gets a model.
+    // cost-sort so the turn still gets a model. But live evidence wins over
+    // the sort: a candidate with a *real failed* observation (ok:false /
+    // health 0) is excluded while any unobserved candidate remains — never
+    // route to a provider we just watched fail because it is cheap. If every
+    // candidate is failed-observed, keep them all (best effort stands).
+    {
+      const failed = (p: { c: { provider: string; model: string } }): boolean => {
+        const o = opts.observations![obsKey(p.c.provider, p.c.model)];
+        return !!o && (!o.ok || o.health <= 0);
+      };
+      const alive = pass.filter((p) => !failed(p));
+      if (alive.length > 0) pass = alive;
+    }
   }
 
   pass.sort((a, b) => {

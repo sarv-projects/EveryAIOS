@@ -1,0 +1,53 @@
+
+> @personal-ai/core-ai@0.1.0 test /home/sarvesh/APP/packages/core-ai
+> vitest run
+
+
+ RUN  v3.2.6 /home/sarvesh/APP/packages/core-ai
+
+ ✓ src/__tests__/detect-artifact-intent.test.ts (10 tests) 32ms
+ ✓ src/__tests__/context-compressor.test.ts (10 tests) 24ms
+ ✓ src/__tests__/system-prompt.test.ts (9 tests) 11ms
+ ✓ src/__tests__/output-normalizer.test.ts (10 tests) 32ms
+ ✓ src/__tests__/parse-spec.test.ts (10 tests) 25ms
+ ✓ src/__tests__/retrieval-planner.test.ts (11 tests) 52ms
+ ✓ src/__tests__/prompt-guard.test.ts (6 tests) 34ms
+ ❯ src/__tests__/smart-router.test.ts (6 tests | 1 failed) 46ms
+   ✓ SmartRouter > routes weather queries to needs-web and managed free pool when no key 9ms
+   × SmartRouter > routes file questions to needs-files with retrieval plan 20ms
+     → expected 'conversational' to be 'needs-files' // Object.is equality
+   ✓ SmartRouter > routes greetings to conversational managed free pool 3ms
+   ✓ SmartRouter > routes reminders to automation draft 1ms
+   ✓ SmartRouter > returns OFFLINE when offline even for needs-web 0ms
+   ✓ SmartRouter > returns explainable reason on every decision 5ms
+ ✓ src/__tests__/handler-mapper.test.ts (12 tests) 9ms
+ ✓ src/__tests__/agents.test.ts (6 tests) 43ms
+ ✓ src/__tests__/prompt-limits.test.ts (11 tests) 8ms
+ ✓ src/__tests__/performance-stack.test.ts (2 tests) 6ms
+ ✓ src/__tests__/parse-intent.test.ts (18 tests) 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/smart-router.test.ts > SmartRouter > routes file questions to needs-files with retrieval plan
+AssertionError: expected 'conversational' to be 'needs-files' // Object.is equality
+
+Expected: [32m"needs-files"[39m
+Received: [31m"conversational"[39m
+
+ ❯ src/__tests__/smart-router.test.ts:26:38
+     24|   it('routes file questions to needs-files with retrieval plan', async…
+     25|     const decision = await router.route({ text: 'summarize my lease pd…
+     26|     expect(decision.intent.category).toBe('needs-files');
+       |                                      ^
+     27|     expect(decision.handler).toBe('BYOK');
+     28|     expect(decision.retrievalPlan?.sources).toContain('fts5');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 12 passed (13)
+      Tests  1 failed | 120 passed (121)
+   Start at  06:53:45
+   Duration  2.80s (transform 2.13s, setup 0ms, collect 5.06s, tests 330ms, environment 6ms, prepare 2.57s)
+
+ ELIFECYCLE  Test failed. See above for more details.

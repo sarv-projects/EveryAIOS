@@ -11,19 +11,15 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@personal-ai/core-agents": "workspace:*",
     "@personal-ai/core-ai": "workspace:*",
-    "@personal-ai/core-automations": "workspace:*",
     "@personal-ai/core-connectors": "workspace:*",
     "@personal-ai/core-engine": "workspace:*",
-    "@personal-ai/core-files": "workspace:*",
-    "@personal-ai/core-memory": "workspace:*",
     "@personal-ai/core-providers": "workspace:*",
-    "@personal-ai/core-search": "workspace:*",
-    "@personal-ai/core-tools": "workspace:*"
+    "@personal-ai/core-search": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",
+    "@types/node": "^22.10.0",
     "typescript": "^5.7.0"
   }
 }

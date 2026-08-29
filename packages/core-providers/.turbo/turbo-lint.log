@@ -1,0 +1,4 @@
+
+> @personal-ai/core-providers@0.1.0 lint /home/sarvesh/APP/packages/core-providers
+> pnpm --workspace-root exec eslint packages/core-providers
+

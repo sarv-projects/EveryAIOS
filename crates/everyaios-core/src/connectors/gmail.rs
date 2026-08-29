@@ -88,27 +88,38 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
         format!("{GMAIL_API_BASE}/users/{}", self.user_id)
     }
 
-    /// Build auth headers with automatic token refresh on 401.
+    /// Build auth headers for the current access token.
     fn auth_headers(&self) -> Vec<(&str, &str)> {
         vec![("Authorization", &self.access_token)]
     }
 
-    /// Execute a request with automatic 401→refresh→retry once.
-    fn exec_with_refresh<F>(&mut self, op: F) -> Result<Vec<u8>, TransportError>
-    where
-        F: Fn(&Self, &str, &[(&str, &str)]) -> Result<Vec<u8>, TransportError>,
-    {
-        let base = self.base_url();
-        let headers = self.auth_headers();
-        match op(self, &base, &headers) {
+    /// GET with automatic 401→refresh→retry once. Every read path routes
+    /// through here so an expired access token is transparently refreshed
+    /// (spec F14: read/send/modify all recover from a 401).
+    fn get_with_refresh(&mut self, url: &str) -> Result<Vec<u8>, TransportError> {
+        match self.transport.get(url, &self.auth_headers()) {
             Err(e) if e.kind == TransportErrorKind::Auth => {
-                // Token expired — refresh and retry once.
+                // Token expired — refresh once and retry.
                 self.access_token = self.refresher.refresh()?;
-                let headers = self.auth_headers();
-                op(self, &base, &headers)
+                self.transport.get(url, &self.auth_headers())
             }
-            Err(e) => Err(e),
-            Ok(v) => Ok(v),
+            other => other,
+        }
+    }
+
+    /// POST (JSON) with automatic 401→refresh→retry once. Every mutation
+    /// path (send/modify/trash) routes through here.
+    fn post_with_refresh(
+        &mut self,
+        url: &str,
+        body: &[u8],
+    ) -> Result<Vec<u8>, TransportError> {
+        match self.transport.post_json(url, &self.auth_headers(), body) {
+            Err(e) if e.kind == TransportErrorKind::Auth => {
+                self.access_token = self.refresher.refresh()?;
+                self.transport.post_json(url, &self.auth_headers(), body)
+            }
+            other => other,
         }
     }
 
@@ -116,8 +127,7 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
     pub fn list_labels(&mut self) -> Result<Vec<GmailLabel>, TransportError> {
         let base = self.base_url();
         let url = format!("{base}/labels");
-        let headers = self.auth_headers();
-        let resp = self.transport.get(&url, &headers)?;
+        let resp = self.get_with_refresh(&url)?;
         let json: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| TransportError {
                 kind: TransportErrorKind::InvalidResponse,
@@ -156,8 +166,7 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
         if let Some(pt) = page_token {
             url = format!("{url}&pageToken={pt}");
         }
-        let headers = self.auth_headers();
-        let resp = self.transport.get(&url, &headers)?;
+        let resp = self.get_with_refresh(&url)?;
         let json: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| TransportError {
                 kind: TransportErrorKind::InvalidResponse,
@@ -191,8 +200,7 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
     pub fn get_message(&mut self, message_id: &str) -> Result<GmailMessage, TransportError> {
         let base = self.base_url();
         let url = format!("{base}/messages/{message_id}?format=full");
-        let headers = self.auth_headers();
-        let resp = self.transport.get(&url, &headers)?;
+        let resp = self.get_with_refresh(&url)?;
         let json: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| TransportError {
                 kind: TransportErrorKind::InvalidResponse,
@@ -255,17 +263,8 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
             message: e.to_string(),
         })?;
         let base = self.base_url();
-        let headers = self.auth_headers();
         let url = format!("{base}/messages/send");
-        let resp = match self.transport.post_json(&url, &headers, &body_bytes) {
-            Err(e) if e.kind == TransportErrorKind::Auth => {
-                self.access_token = self.refresher.refresh()?;
-                let headers = self.auth_headers();
-                self.transport.post_json(&url, &headers, &body_bytes)?
-            }
-            Err(e) => return Err(e),
-            Ok(v) => v,
-        };
+        let resp = self.post_with_refresh(&url, &body_bytes)?;
         let json: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| TransportError {
                 kind: TransportErrorKind::InvalidResponse,
@@ -295,8 +294,7 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
         })?;
         let base = self.base_url();
         let url = format!("{base}/messages/batchModify");
-        let headers = self.auth_headers();
-        self.transport.post_json(&url, &headers, &body_bytes)?;
+        self.post_with_refresh(&url, &body_bytes)?;
         Ok(())
     }
 
@@ -304,8 +302,7 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
     pub fn trash(&mut self, message_id: &str) -> Result<(), TransportError> {
         let base = self.base_url();
         let url = format!("{base}/messages/{message_id}/trash");
-        let headers = self.auth_headers();
-        self.transport.post_json(&url, &headers, b"{}")?;
+        self.post_with_refresh(&url, b"{}")?;
         Ok(())
     }
 
@@ -524,6 +521,102 @@ mod tests {
         let result = gmail.send_message("bob@example.com", "Test", "Body");
         assert!(result.is_ok());
         assert_eq!(result.unwrap().message_id, "sent-ok");
+    }
+
+    #[test]
+    fn gmail_401_triggers_refresh_on_get_message() {
+        let msg_resp = serde_json::json!({
+            "id": "m1",
+            "threadId": "t1",
+            "snippet": "after refresh",
+            "labelIds": ["INBOX"],
+            "payload": { "mimeType": "text/plain", "headers": [], "body": {} }
+        });
+        // Pop order: refreshed GET succeeds (pop first), initial 401 (pop second).
+        let transport = MockTransport::new(vec![
+            Ok(serde_json::to_vec(&msg_resp).unwrap()),
+            Err(TransportError {
+                kind: TransportErrorKind::Auth,
+                message: "401 Unauthorized".into(),
+            }),
+        ]);
+        let mut gmail = GmailConnector::new(
+            transport,
+            MockRefresher,
+            "expired-token".into(),
+            "me".into(),
+        );
+        let result = gmail.get_message("m1");
+        assert!(result.is_ok(), "read path must recover from 401 via refresh");
+        assert_eq!(result.unwrap().snippet, "after refresh");
+    }
+
+    #[test]
+    fn gmail_401_triggers_refresh_on_list_labels() {
+        let labels_resp = serde_json::json!({
+            "labels": [{ "id": "INBOX", "name": "INBOX", "messagesUnread": 3 }]
+        });
+        let transport = MockTransport::new(vec![
+            Ok(serde_json::to_vec(&labels_resp).unwrap()),
+            Err(TransportError {
+                kind: TransportErrorKind::Auth,
+                message: "401 Unauthorized".into(),
+            }),
+        ]);
+        let mut gmail = GmailConnector::new(
+            transport,
+            MockRefresher,
+            "expired-token".into(),
+            "me".into(),
+        );
+        let result = gmail.list_labels();
+        assert!(result.is_ok(), "list_labels must recover from 401 via refresh");
+        assert_eq!(result.unwrap()[0].unread_count, 3);
+    }
+
+    #[test]
+    fn gmail_401_triggers_refresh_on_modify_labels() {
+        // Pop order: refreshed POST succeeds (pop first), initial 401 (pop second).
+        let transport = MockTransport::new(vec![
+            Ok(b"{}".to_vec()),
+            Err(TransportError {
+                kind: TransportErrorKind::Auth,
+                message: "401 Unauthorized".into(),
+            }),
+        ]);
+        let mut gmail = GmailConnector::new(
+            transport,
+            MockRefresher,
+            "expired-token".into(),
+            "me".into(),
+        );
+        let result = gmail.modify_labels(&["m1"], &["TRASH"], &["INBOX"]);
+        assert!(result.is_ok(), "modify_labels must recover from 401 via refresh");
+    }
+
+    #[test]
+    fn gmail_read_401_without_refresh_still_fails() {
+        // If refresh also fails, the error surfaces (no infinite retry).
+        struct FailRefresher;
+        impl TokenRefresher for FailRefresher {
+            fn refresh(&self) -> Result<String, TransportError> {
+                Err(TransportError {
+                    kind: TransportErrorKind::Auth,
+                    message: "refresh failed".into(),
+                })
+            }
+        }
+        let transport = MockTransport::new(vec![Err(TransportError {
+            kind: TransportErrorKind::Auth,
+            message: "401 Unauthorized".into(),
+        })]);
+        let mut gmail = GmailConnector::new(
+            transport,
+            FailRefresher,
+            "expired-token".into(),
+            "me".into(),
+        );
+        assert!(gmail.get_message("m1").is_err());
     }
 
     #[test]

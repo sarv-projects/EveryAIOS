@@ -6,7 +6,7 @@
 > live inside it — every token, component, layout and state, keyed to the
 > code that implements it. Any designer can turn it into Figma frames 1:1.
 >
-> **Status:** current as of spec v3.57 (2026-08-26) — three-control composer + honest office viewers.
+> **Status:** current as of spec v3.58 (2026-08-26) — three-control composer + honest office viewers.
 
 ## 1. Tokens (code: `src/globals.css` `:root` / `.dark`)
 

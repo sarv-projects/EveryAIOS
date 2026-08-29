@@ -1,0 +1,17 @@
+
+> @personal-ai/core-memory@0.1.0 test /home/sarvesh/APP/packages/core-memory
+> vitest run
+
+
+ RUN  v3.2.6 /home/sarvesh/APP/packages/core-memory
+
+ ✓ src/__tests__/conflict.test.ts (2 tests) 4ms
+ ✓ src/__tests__/correction-detector.test.ts (36 tests) 245ms
+ ✓ src/__tests__/categories.test.ts (3 tests) 83ms
+ ✓ src/__tests__/router-integration.test.ts (10 tests) 78ms
+
+ Test Files  4 passed (4)
+      Tests  51 passed (51)
+   Start at  06:53:23
+   Duration  2.82s (transform 1.62s, setup 0ms, collect 2.58s, tests 409ms, environment 3ms, prepare 2.32s)
+

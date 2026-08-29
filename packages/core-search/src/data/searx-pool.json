@@ -1,0 +1,91 @@
+{
+  "refreshedAt": "2026-07-04T05:32:41.144Z",
+  "source": "https://searx.space/data/instances.json",
+  "count": 12,
+  "instances": [
+    {
+      "url": "https://searx.tiekoetter.com/",
+      "label": "searx.tiekoetter.com",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2 (cd89aa143)",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://search.rhscz.eu/",
+      "label": "search.rhscz.eu",
+      "uptimeMonth": 99.86,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://searx.rhscz.eu/",
+      "label": "searx.rhscz.eu",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://searx.linxx.net/",
+      "label": "searx.linxx.net",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://searx.oloke.xyz/",
+      "label": "searx.oloke.xyz",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://searxng.website/",
+      "label": "searxng.website",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+960c89a68",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://search.bladerunn.in/",
+      "label": "search.bladerunn.in",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://searx.ononoki.org/",
+      "label": "searx.ononoki.org",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://searx.namejeff.xyz/",
+      "label": "searx.namejeff.xyz",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://search.url4irl.com/",
+      "label": "search.url4irl.com",
+      "uptimeMonth": 100,
+      "version": "2026.6.12+de8a3de15",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://search.ctq.ro/",
+      "label": "search.ctq.ro",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    },
+    {
+      "url": "https://search.root.hr/",
+      "label": "search.root.hr",
+      "uptimeMonth": 100,
+      "version": "2026.7.3+747cec4c2",
+      "jsonVerified": false
+    }
+  ]
+}

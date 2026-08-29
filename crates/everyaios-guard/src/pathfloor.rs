@@ -43,18 +43,55 @@ pub fn normalize_lexical(path: &str) -> String {
     s
 }
 
-/// Canonicalize for the floor check: lexical normalization + symlink
-/// resolution when the path (or a prefix) exists. Never follows a symlink
-/// *through* the root boundary — the final component's link target is only
-/// trusted if it stays inside.
+/// Canonicalize for the floor check **without following a symlink at the
+/// final component**. Any existing directory prefix is resolved (following
+/// intermediate directory symlinks, as canonicalizing a container must), but
+/// the leaf name is joined lexically — a symlink *at* the leaf is never
+/// silently resolved into its target path. This keeps the returned path an
+/// honest representation of "where the caller asked to act", so the floor
+/// check cannot be tricked by a leaf symlink that points outside the root.
+///
+/// Symlink *escapes* (a leaf, or an intermediate directory link, that lands
+/// outside the granted roots) are detected separately by [`leaf_symlink_target`]
+/// / [`enforce_floor`] — this function does not hide them by resolving them.
 pub fn canonicalize_no_follow(path: &str) -> String {
     let norm = normalize_lexical(path);
-    // Resolve any existing symlink prefixes via std (which follows links) —
-    // but only as an additional floor: the lexical check already ran.
-    let real = std::fs::canonicalize(&norm)
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or(norm);
-    normalize_lexical(&real)
+    let p = Path::new(&norm);
+
+    // Split into parent + final component. Canonicalize the parent (its
+    // symlinks resolve — that is correct for the container), then re-attach
+    // the leaf lexically so a leaf symlink is NOT followed.
+    match (p.parent(), p.file_name()) {
+        (Some(parent), Some(leaf)) if !parent.as_os_str().is_empty() => {
+            let real_parent = std::fs::canonicalize(parent)
+                .map(|pb| pb.to_string_lossy().to_string())
+                .unwrap_or_else(|_| parent.to_string_lossy().to_string());
+            let joined = format!(
+                "{}/{}",
+                real_parent.trim_end_matches('/'),
+                leaf.to_string_lossy()
+            );
+            normalize_lexical(&joined)
+        }
+        // Root, bare relative name, or no parent — nothing to resolve.
+        _ => norm,
+    }
+}
+
+/// If `path`'s final component is a symlink, return its resolved absolute
+/// target (lexically normalized); otherwise `None`. Used by the floor to
+/// refuse a leaf symlink that jumps outside the granted roots, without
+/// `canonicalize_no_follow` having to follow it.
+pub fn leaf_symlink_target(path: &str) -> Option<String> {
+    let norm = normalize_lexical(path);
+    let meta = std::fs::symlink_metadata(&norm).ok()?;
+    if !meta.file_type().is_symlink() {
+        return None;
+    }
+    // Fully resolve (follows the link) only to test containment — the result
+    // is never used as the acted-upon path, only as the escape check.
+    let resolved = std::fs::canonicalize(&norm).ok()?;
+    Some(normalize_lexical(&resolved.to_string_lossy()))
 }
 
 /// Is `path` (canonicalized) inside one of the granted roots?
@@ -96,15 +133,19 @@ pub fn enforce_floor(path: &str, roots: &[&str]) -> FloorVerdict {
         canonical == root || canonical.starts_with(&format!("{}/", root.trim_end_matches('/')))
     });
     if !inside {
-        // Distinguish symlink escape from plain outside-root.
-        let lexical_inside = roots.iter().any(|r| {
-            let root = normalize_lexical(r);
-            norm == root || norm.starts_with(&format!("{}/", root.trim_end_matches('/')))
+        return FloorVerdict::OutsideRoot;
+    }
+    // The lexical/parent-resolved path is inside the floor. Now make sure the
+    // leaf isn't a symlink that jumps outside the roots — canonicalize_no_follow
+    // deliberately did NOT resolve it, so we check it explicitly here.
+    if let Some(target) = leaf_symlink_target(path) {
+        let target_inside = roots.iter().any(|r| {
+            let root = canonicalize_no_follow(r);
+            target == root || target.starts_with(&format!("{}/", root.trim_end_matches('/')))
         });
-        if lexical_inside {
+        if !target_inside {
             return FloorVerdict::SymlinkEscape;
         }
-        return FloorVerdict::OutsideRoot;
     }
     FloorVerdict::Allowed
 }
@@ -406,5 +447,58 @@ mod grant_tests {
     fn is_inside_helpers() {
         assert!(is_inside_root("/workspace/a/b", &["/workspace"]));
         assert!(!is_inside_root("/home/user", &["/workspace"]));
+    }
+
+    #[test]
+    fn leaf_symlink_is_not_followed_but_escape_is_refused() {
+        use std::os::unix::fs::symlink;
+        // Build a workspace root and a secret outside it, with a leaf symlink
+        // inside the workspace pointing at the secret.
+        let base = std::env::temp_dir().join(format!("pf_test_{}", std::process::id()));
+        let ws = base.join("workspace");
+        let secret = base.join("secret");
+        let _ = std::fs::create_dir_all(&ws);
+        let _ = std::fs::create_dir_all(&secret);
+        let secret_file = secret.join("passwd");
+        std::fs::write(&secret_file, b"SECRET").unwrap();
+        let link = ws.join("link");
+        let _ = std::fs::remove_file(&link);
+        symlink(&secret_file, &link).unwrap();
+
+        let ws_s = ws.to_string_lossy().to_string();
+        let link_s = link.to_string_lossy().to_string();
+        let roots: Vec<&str> = vec![&ws_s];
+
+        // no-follow must NOT resolve the leaf symlink into the secret path.
+        let canon = canonicalize_no_follow(&link_s);
+        assert!(
+            !canon.contains("secret"),
+            "leaf symlink was followed: {canon}"
+        );
+        assert!(
+            canon.ends_with("/link"),
+            "no-follow should keep the leaf name: {canon}"
+        );
+
+        // The floor must still REFUSE it as a symlink escape.
+        assert_eq!(
+            enforce_floor(&link_s, &roots),
+            FloorVerdict::SymlinkEscape,
+            "a leaf symlink escaping the root must be refused"
+        );
+
+        // A leaf symlink that stays inside the root is allowed.
+        let inside_target = ws.join("real.txt");
+        std::fs::write(&inside_target, b"ok").unwrap();
+        let inside_link = ws.join("inside_link");
+        let _ = std::fs::remove_file(&inside_link);
+        symlink(&inside_target, &inside_link).unwrap();
+        assert_eq!(
+            enforce_floor(&inside_link.to_string_lossy(), &roots),
+            FloorVerdict::Allowed,
+            "a leaf symlink staying inside the root is allowed"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

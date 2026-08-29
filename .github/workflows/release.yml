@@ -95,8 +95,16 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
+      - name: Require APP clone token
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        run: |
+          if [ -z "$APP_CLONE_TOKEN" ]; then
+            echo "::error::APP_CLONE_TOKEN secret is required — release must include the coordinator"
+            exit 1
+          fi
+
       - name: Check out APP (core packages) — needs APP_CLONE_TOKEN
-        if: env.APP_CLONE_TOKEN != ''
         env:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         uses: actions/checkout@v4
@@ -106,7 +114,6 @@ jobs:
           token: ${{ secrets.APP_CLONE_TOKEN }}
 
       - name: Install workspace deps
-        if: env.APP_CLONE_TOKEN != ''
         env:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         run: |
@@ -114,7 +121,6 @@ jobs:
           (cd ui && npm ci)
 
       - name: Build coordinator sidecar (bun --compile)
-        if: env.APP_CLONE_TOKEN != ''
         env:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         run: pnpm --filter @everyaios/coordinator build
@@ -124,7 +130,6 @@ jobs:
       # `locate_coordinator_bin` probes the resource dir first, so the
       # packaged app spawns the sidecar from the bundle — no external path.
       - name: Inject sidecar as bundle resource
-        if: env.APP_CLONE_TOKEN != ''
         env:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         shell: bash

@@ -1,0 +1,28 @@
+
+> @personal-ai/core-providers@0.1.0 test /home/sarvesh/APP/packages/core-providers
+> vitest run
+
+
+ RUN  v3.2.6 /home/sarvesh/APP/packages/core-providers
+
+ ✓ src/__tests__/anthropic-client.test.ts (5 tests) 192ms
+stderr | src/__tests__/openai-client.test.ts > fetchAvailableModels > returns empty array on 401
+[fetchAvailableModels] https://api.example.com/v1 returned 401: {}
+
+stderr | src/__tests__/openai-client.test.ts > fetchAvailableModels > returns empty array on network error
+[fetchAvailableModels] https://api.example.com/v1 failed: Network error
+
+ ✓ src/__tests__/openai-client.test.ts (7 tests) 294ms
+ ✓ src/__tests__/live-pricing.test.ts (13 tests) 255ms
+ ✓ src/__tests__/vault.test.ts (3 tests) 384ms
+ ✓ src/__tests__/registry.test.ts (5 tests) 4ms
+ ✓ src/__tests__/vault-concurrency.test.ts (5 tests) 8358ms
+   ✓ ProviderVault concurrency > serializes concurrent saves via mutex  389ms
+   ✓ ProviderVault concurrency > handles concurrent saves of anthropic provider (uses /messages endpoint)  3743ms
+   ✓ ProviderVault concurrency > list does not return corrupted records from concurrent writes  3862ms
+
+ Test Files  6 passed (6)
+      Tests  38 passed (38)
+   Start at  06:52:41
+   Duration  18.81s (transform 3.71s, setup 0ms, collect 9.31s, tests 9.49s, environment 109ms, prepare 9.44s)
+

@@ -1,0 +1,50 @@
+
+> @personal-ai/core-search@0.1.0 test /home/sarvesh/APP/packages/core-search
+> vitest run
+
+
+ RUN  v3.2.6 /home/sarvesh/APP/packages/core-search
+
+ ✓ src/__tests__/query-rewrite.test.ts (6 tests) 22ms
+stderr | src/__tests__/searxng-pool.test.ts > SearXNGPoolProvider > opens a 5 minute cooldown after three plain failures
+[SearXNGPoolProvider] https://alpha.example/ failed: Error: SearXNG https://alpha.example/ failed: HTTP 500
+    at queryInstance [90m(/home/sarvesh/APP/packages/core-search/[39msrc/providers/searxng-pool.ts:195:13[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+stderr | src/__tests__/searxng-pool.test.ts > SearXNGPoolProvider > opens a 5 minute cooldown after three plain failures
+[SearXNGPoolProvider] https://alpha.example/ failed: Error: SearXNG https://alpha.example/ failed: HTTP 500
+    at queryInstance [90m(/home/sarvesh/APP/packages/core-search/[39msrc/providers/searxng-pool.ts:195:13[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+stderr | src/__tests__/searxng-pool.test.ts > SearXNGPoolProvider > opens a 5 minute cooldown after three plain failures
+[SearXNGPoolProvider] https://alpha.example/ failed: Error: SearXNG https://alpha.example/ failed: HTTP 500
+    at queryInstance [90m(/home/sarvesh/APP/packages/core-search/[39msrc/providers/searxng-pool.ts:195:13[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+stderr | src/__tests__/searxng-pool.test.ts > SearXNGPoolProvider > blocks an instance for 24 hours on captcha/HTML responses
+[SearXNGPoolProvider] https://alpha.example/ failed: Error: SearXNG https://alpha.example/ returned captcha/HTML
+    at queryInstance [90m(/home/sarvesh/APP/packages/core-search/[39msrc/providers/searxng-pool.ts:200:13[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+stderr | src/__tests__/searxng-pool.test.ts > SearXNGPoolProvider > blocks an instance for 24 hours on HTTP 403
+[SearXNGPoolProvider] https://alpha.example/ failed: Error: SearXNG https://alpha.example/ blocked (403)
+    at queryInstance [90m(/home/sarvesh/APP/packages/core-search/[39msrc/providers/searxng-pool.ts:181:13[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+stderr | src/__tests__/searxng-pool.test.ts > SearXNGPoolProvider > honors Retry-After on HTTP 429
+[SearXNGPoolProvider] https://alpha.example/ failed: Error: SearXNG https://alpha.example/ rate limited (429)
+    at queryInstance [90m(/home/sarvesh/APP/packages/core-search/[39msrc/providers/searxng-pool.ts:187:13[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+
+ ✓ src/__tests__/searxng-pool.test.ts (6 tests) 37ms
+ ✓ src/__tests__/search-cache.test.ts (14 tests) 32ms
+ ✓ src/__tests__/hf-providers.test.ts (25 tests) 26ms
+ ✓ src/__tests__/bm25-rerank.test.ts (4 tests) 8ms
+ ✓ src/__tests__/duckduckgo-search.test.ts (4 tests) 42ms
+ ✓ src/__tests__/cascade-order.test.ts (2 tests) 3ms
+
+ Test Files  7 passed (7)
+      Tests  61 passed (61)
+   Start at  06:53:41
+   Duration  2.68s (transform 1.03s, setup 0ms, collect 4.00s, tests 169ms, environment 3ms, prepare 1.65s)
+

@@ -136,14 +136,35 @@ const LOOP_REPEATS = 3;
 const ASK_POLL_MS = 50;
 const ASK_TIMEOUT_MS = 60_000;
 
-/** Canonical JSON (sorted keys) → SHA-256 hex. Must match Rust `canonical_args_hash`. */
+/** Canonical JSON (sorted keys) → SHA-256 hex. Must match Rust `canonical_args_hash`.
+ *
+ * Numbers are canonicalized to a runtime-independent token (`n:<f64-bits-hex>`)
+ * so this and Rust `serde_json` agree regardless of integer-vs-float formatting
+ * (`5` vs `5.0`), exponent style (`1e+21` vs `1e21`), or precision beyond 2^53.
+ * JS has one IEEE-754 number type, so the f64 bit pattern is the shared form. */
 export function canonicalArgsHash(args: unknown): string {
   const json = JSON.stringify(canonicalize(args));
   return createHash("sha256").update(json).digest("hex");
 }
 
+const _numBuf = new DataView(new ArrayBuffer(8));
+
+/** Canonicalize a number to the same `n:<f64-bits-hex>` token Rust emits. */
+function canonicalNumberToken(n: number): string {
+  // Normalize -0 → +0 so both sides hash identically (matches Rust).
+  const f = n === 0 ? 0 : n;
+  _numBuf.setFloat64(0, f, false); // big-endian, matches Rust `to_bits()` hex
+  let hex = "";
+  for (let i = 0; i < 8; i++) {
+    hex += _numBuf.getUint8(i).toString(16).padStart(2, "0");
+  }
+  return `n:${hex}`;
+}
+
 function canonicalize(v: unknown): unknown {
-  if (v === null || typeof v !== "object") return v;
+  if (v === null || v === undefined) return v;
+  if (typeof v === "number") return canonicalNumberToken(v);
+  if (typeof v !== "object") return v;
   if (Array.isArray(v)) return v.map(canonicalize);
   const obj = v as Record<string, unknown>;
   const out: Record<string, unknown> = {};

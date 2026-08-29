@@ -1,0 +1,4 @@
+
+> @personal-ai/core-search@0.1.0 lint /home/sarvesh/APP/packages/core-search
+> pnpm --workspace-root exec eslint packages/core-search
+

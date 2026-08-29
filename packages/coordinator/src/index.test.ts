@@ -146,16 +146,20 @@ describe("E2E — real child process over stdin/stdout", () => {
 
     const decoder = new FrameDecoder();
     const frames = decoder.push(new Uint8Array(stdout));
-    // session/ready (boot notification) + initialize + echo + ping.
-    expect(frames.length).toBe(4);
+    // usage/recent (P30 boot hydration request) + session/ready (boot
+    // notification) + initialize + echo + ping.
+    expect(frames.length).toBe(5);
     const results = frames.map((f) => JSON.parse(new TextDecoder().decode(f)));
-    // Frame 0 is the boot notification — no id, MUST NOT have a reply-shaped result.
-    expect(results[0]!.method).toBe("session/ready");
-    expect(results[0]!.id).toBeUndefined();
-    expect(results[0]!.params).toMatchObject({ protocolVersion: 1, status: "ready" });
-    expect(results[1]!.result).toMatchObject({ protocolVersion: 1, status: "ready" });
-    expect(results[2]!.result).toEqual({ text: "hello-everyaios", echoed: true });
-    expect(results[3]!.result).toMatchObject({ pong: true });
+    // Frame 0 is the boot hydration request — the sidecar asks the core for
+    // durable usage observations before anything else.
+    expect(results[0]!.method).toBe("usage/recent");
+    // Frame 1 is the boot notification — no id, MUST NOT have a reply-shaped result.
+    expect(results[1]!.method).toBe("session/ready");
+    expect(results[1]!.id).toBeUndefined();
+    expect(results[1]!.params).toMatchObject({ protocolVersion: 1, status: "ready" });
+    expect(results[2]!.result).toMatchObject({ protocolVersion: 1, status: "ready" });
+    expect(results[3]!.result).toEqual({ text: "hello-everyaios", echoed: true });
+    expect(results[4]!.result).toMatchObject({ pong: true });
   });
 
   test("sidecar emits session/ready on boot and periodic heartbeats", async () => {

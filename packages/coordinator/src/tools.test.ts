@@ -153,6 +153,29 @@ describe("canonicalArgsHash", () => {
     expect(canonicalArgsHash({ b: 1, a: 2 })).toBe(canonicalArgsHash({ a: 2, b: 1 }));
     expect(canonicalArgsHash({ a: 2, b: 1 })).not.toBe(canonicalArgsHash({ a: 2, b: 3 }));
   });
+
+  test("integer and float twin hash identically (single JS number type)", () => {
+    expect(canonicalArgsHash({ n: 5 })).toBe(canonicalArgsHash({ n: 5.0 }));
+    expect(canonicalArgsHash({ n: 5 })).not.toBe(canonicalArgsHash({ n: 6 }));
+    // -0 normalizes to +0
+    expect(canonicalArgsHash({ n: -0 })).toBe(canonicalArgsHash({ n: 0 }));
+  });
+
+  test("cross-runtime vector matches Rust canonical_args_hash", () => {
+    // MUST equal the Rust constant in tools.rs
+    // `canonical_hash_cross_runtime_vector`. Both sides canonicalize numbers
+    // to the f64 bit-pattern token, so the hex is identical across runtimes.
+    const v = {
+      maxResults: 50,
+      coord: 12.5,
+      big: 9007199254740993,
+      label: "café \u{1f600}",
+      nested: { z: 1, a: [1, 2.0, 3] },
+    };
+    expect(canonicalArgsHash(v)).toBe(
+      "694541888ef627ef4ed5dedf8efa323fe9f0dd32e699debbb0a155ffbe02eeac",
+    );
+  });
 });
 
 describe("sanitizeToolResult", () => {

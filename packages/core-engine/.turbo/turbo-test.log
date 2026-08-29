@@ -1,0 +1,17 @@
+
+> @personal-ai/core-engine@0.1.0 test /home/sarvesh/APP/packages/core-engine
+> vitest run
+
+
+ RUN  v3.2.6 /home/sarvesh/APP/packages/core-engine
+
+ ✓ src/__tests__/plan-executor.test.ts (9 tests) 47ms
+ ✓ src/__tests__/agent-routing.test.ts (6 tests) 25ms
+ ✓ src/__tests__/trajectory.test.ts (11 tests) 130ms
+ ✓ src/__tests__/engine.test.ts (8 tests) 206ms
+
+ Test Files  4 passed (4)
+      Tests  34 passed (34)
+   Start at  06:53:16
+   Duration  4.73s (transform 2.57s, setup 0ms, collect 7.43s, tests 409ms, environment 1ms, prepare 2.10s)
+

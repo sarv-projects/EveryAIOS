@@ -17,9 +17,11 @@
  * is the other producer feeding the same card.
  */
 
-import { StreamSession } from "@personal-ai/core-ai";
+// Vendored mirror of `@personal-ai/core-ai` StreamSession (stream-session.ts)
+// and `@personal-ai/core-files` estimateTokens (chunking.ts).
+import { StreamSession } from "./stream-session";
 import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
-import { estimateTokens } from "@personal-ai/core-files";
+import { estimateTokens } from "./chunking";
 import type { ChatEvent, ProviderBridge, ProviderMessage, ProviderRequest } from "./chat";
 import { listedToolsToOpenAI, resolveActiveTools, ToolExecutor, type ListedTool } from "./tools";
 import { budgetJson, refRegistry } from "./budget";

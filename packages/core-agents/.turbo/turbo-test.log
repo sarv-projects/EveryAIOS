@@ -1,0 +1,14 @@
+
+> @personal-ai/core-agents@0.1.0 test /home/sarvesh/APP/packages/core-agents
+> vitest run
+
+
+ RUN  v3.2.6 /home/sarvesh/APP/packages/core-agents
+
+ ✓ src/__tests__/registry.test.ts (4 tests) 9ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  06:53:02
+   Duration  4.12s (transform 1.12s, setup 0ms, collect 1.14s, tests 9ms, environment 1ms, prepare 931ms)
+

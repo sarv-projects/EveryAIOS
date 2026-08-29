@@ -1,0 +1,4 @@
+
+> @personal-ai/core-connectors@0.1.0 type-check /home/sarvesh/APP/packages/core-connectors
+> tsc --noEmit
+

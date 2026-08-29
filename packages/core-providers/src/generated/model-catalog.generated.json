@@ -1,0 +1,4167 @@
+{
+  "version": "2026-07-23",
+  "generatedAt": "2026-07-23T08:48:10.890Z",
+  "source": "https://pi.dev/api/models",
+  "providerCount": 15,
+  "modelCount": 280,
+  "providers": {
+    "nvidia-nim": {
+      "models": [
+        {
+          "id": "meta/llama-3.1-70b-instruct",
+          "name": "Llama 3.1 70b Instruct",
+          "contextWindow": 128000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "meta/llama-3.1-8b-instruct",
+          "name": "Llama 3.1 8B Instruct",
+          "contextWindow": 16000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "meta/llama-3.2-11b-vision-instruct",
+          "name": "Llama 3.2 11b Vision Instruct",
+          "contextWindow": 128000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "meta/llama-3.2-90b-vision-instruct",
+          "name": "Llama-3.2-90B-Vision-Instruct",
+          "contextWindow": 128000,
+          "maxTokens": 8192,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "meta/llama-3.3-70b-instruct",
+          "name": "Llama 3.3 70b Instruct",
+          "contextWindow": 128000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "minimaxai/minimax-m3",
+          "name": "MiniMax-M3",
+          "contextWindow": 1000000,
+          "maxTokens": 16384,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "mistralai/mistral-large-3-675b-instruct-2512",
+          "name": "Mistral Large 3 675B Instruct 2512",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "mistralai/mistral-small-4-119b-2603",
+          "name": "mistral-small-4-119b-2603",
+          "contextWindow": 128000,
+          "maxTokens": 8192,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "moonshotai/kimi-k2.6",
+          "name": "Kimi K2.6",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "nvidia/nemotron-3-nano-30b-a3b",
+          "name": "nemotron-3-nano-30b-a3b",
+          "contextWindow": 131072,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+          "name": "Nemotron 3 Nano Omni",
+          "contextWindow": 256000,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "nvidia/nemotron-3-super-120b-a12b",
+          "name": "Nemotron 3 Super",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.2,
+            "output": 0.8
+          }
+        },
+        {
+          "id": "nvidia/nemotron-3-ultra-550b-a55b",
+          "name": "Nemotron 3 Ultra 550B A55B",
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 2.5
+          }
+        },
+        {
+          "id": "nvidia/nvidia-nemotron-nano-9b-v2",
+          "name": "nvidia-nemotron-nano-9b-v2",
+          "contextWindow": 131072,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "openai/gpt-oss-120b",
+          "name": "GPT-OSS-120B",
+          "contextWindow": 128000,
+          "maxTokens": 8192,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "openai/gpt-oss-20b",
+          "name": "GPT OSS 20B",
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "stepfun-ai/step-3.5-flash",
+          "name": "Step 3.5 Flash",
+          "contextWindow": 256000,
+          "maxTokens": 16384,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "stepfun-ai/step-3.7-flash",
+          "name": "Step 3.7 Flash",
+          "contextWindow": 256000,
+          "maxTokens": 16384,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "z-ai/glm-5.2",
+          "name": "GLM-5.2",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        }
+      ]
+    },
+    "cerebras": {
+      "models": [
+        {
+          "id": "gemma-4-31b",
+          "name": "Gemma 4 31B IT",
+          "contextWindow": 131072,
+          "maxTokens": 40960,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.99,
+            "output": 1.49
+          }
+        },
+        {
+          "id": "gpt-oss-120b",
+          "name": "GPT OSS 120B",
+          "contextWindow": 131072,
+          "maxTokens": 40960,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.35,
+            "output": 0.75
+          }
+        },
+        {
+          "id": "zai-glm-4.7",
+          "name": "Z.AI GLM-4.7",
+          "contextWindow": 131072,
+          "maxTokens": 40960,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2.25,
+            "output": 2.75
+          }
+        }
+      ]
+    },
+    "google-ai-studio": {
+      "models": [
+        {
+          "id": "gemini-2.0-flash",
+          "name": "Gemini 2.0 Flash",
+          "contextWindow": 1048576,
+          "maxTokens": 8192,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.1,
+            "output": 0.4
+          }
+        },
+        {
+          "id": "gemini-2.0-flash-lite",
+          "name": "Gemini 2.0 Flash-Lite",
+          "contextWindow": 1048576,
+          "maxTokens": 8192,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.075,
+            "output": 0.3
+          }
+        },
+        {
+          "id": "gemini-2.5-flash",
+          "name": "Gemini 2.5 Flash",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 2.5
+          }
+        },
+        {
+          "id": "gemini-2.5-flash-lite",
+          "name": "Gemini 2.5 Flash-Lite",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.1,
+            "output": 0.4
+          }
+        },
+        {
+          "id": "gemini-2.5-pro",
+          "name": "Gemini 2.5 Pro",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gemini-3-flash-preview",
+          "name": "Gemini 3 Flash Preview",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 3
+          }
+        },
+        {
+          "id": "gemini-3-pro-preview",
+          "name": "Gemini 3 Pro Preview",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 12
+          }
+        },
+        {
+          "id": "gemini-3.1-flash-lite",
+          "name": "Gemini 3.1 Flash Lite",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 1.5
+          }
+        },
+        {
+          "id": "gemini-3.1-flash-lite-preview",
+          "name": "Gemini 3.1 Flash Lite Preview",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 1.5
+          }
+        },
+        {
+          "id": "gemini-3.1-pro-preview",
+          "name": "Gemini 3.1 Pro Preview",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 12
+          }
+        },
+        {
+          "id": "gemini-3.1-pro-preview-customtools",
+          "name": "Gemini 3.1 Pro Preview Custom Tools",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 12
+          }
+        },
+        {
+          "id": "gemini-3.5-flash",
+          "name": "Gemini 3.5 Flash",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.5,
+            "output": 9
+          }
+        },
+        {
+          "id": "gemini-3.5-flash-lite",
+          "name": "Gemini 3.5 Flash Lite",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 2.5
+          }
+        },
+        {
+          "id": "gemini-3.6-flash",
+          "name": "Gemini 3.6 Flash",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.5,
+            "output": 7.5
+          }
+        },
+        {
+          "id": "gemini-flash-latest",
+          "name": "Gemini Flash Latest",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.5,
+            "output": 9
+          }
+        },
+        {
+          "id": "gemini-flash-lite-latest",
+          "name": "Gemini Flash-Lite Latest",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 1.5
+          }
+        },
+        {
+          "id": "gemma-4-26b-a4b-it",
+          "name": "Gemma 4 26B A4B IT",
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "gemma-4-31b-it",
+          "name": "Gemma 4 31B IT",
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        }
+      ]
+    },
+    "openrouter": {
+      "models": [
+        {
+          "id": "ai21/jamba-large-1.7",
+          "name": "AI21: Jamba Large 1.7",
+          "contextWindow": 256000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 8
+          }
+        },
+        {
+          "id": "aion-labs/aion-2.0",
+          "name": "AionLabs: Aion-2.0",
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.8,
+            "output": 1.6
+          }
+        },
+        {
+          "id": "aion-labs/aion-3.0",
+          "name": "AionLabs: Aion-3.0",
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 6
+          }
+        },
+        {
+          "id": "aion-labs/aion-3.0-mini",
+          "name": "AionLabs: Aion-3.0-Mini",
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.7,
+            "output": 1.4
+          }
+        },
+        {
+          "id": "amazon/nova-2-lite-v1",
+          "name": "Amazon: Nova 2 Lite",
+          "contextWindow": 1000000,
+          "maxTokens": 65535,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 2.5
+          }
+        },
+        {
+          "id": "amazon/nova-lite-v1",
+          "name": "Amazon: Nova Lite 1.0",
+          "contextWindow": 300000,
+          "maxTokens": 5120,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.06,
+            "output": 0.24
+          }
+        },
+        {
+          "id": "amazon/nova-micro-v1",
+          "name": "Amazon: Nova Micro 1.0",
+          "contextWindow": 128000,
+          "maxTokens": 5120,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.035,
+            "output": 0.14
+          }
+        },
+        {
+          "id": "amazon/nova-premier-v1",
+          "name": "Amazon: Nova Premier 1.0",
+          "contextWindow": 1000000,
+          "maxTokens": 32000,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 12.5
+          }
+        },
+        {
+          "id": "amazon/nova-pro-v1",
+          "name": "Amazon: Nova Pro 1.0",
+          "contextWindow": 300000,
+          "maxTokens": 5120,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.8,
+            "output": 3.2
+          }
+        },
+        {
+          "id": "anthropic/claude-3-haiku",
+          "name": "Anthropic: Claude 3 Haiku",
+          "contextWindow": 200000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 1.25
+          }
+        },
+        {
+          "id": "anthropic/claude-fable-5",
+          "name": "Anthropic: Claude Fable 5",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 10,
+            "output": 50
+          }
+        },
+        {
+          "id": "anthropic/claude-haiku-4.5",
+          "name": "Anthropic: Claude Haiku 4.5",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1,
+            "output": 5
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-4",
+          "name": "Anthropic: Claude Opus 4",
+          "contextWindow": 200000,
+          "maxTokens": 32000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 15,
+            "output": 75
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-4.1",
+          "name": "Anthropic: Claude Opus 4.1",
+          "contextWindow": 200000,
+          "maxTokens": 32000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 15,
+            "output": 75
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-4.5",
+          "name": "Anthropic: Claude Opus 4.5",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-4.6",
+          "name": "Anthropic: Claude Opus 4.6",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-4.7",
+          "name": "Anthropic: Claude Opus 4.7",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-4.7-fast",
+          "name": "Anthropic: Claude Opus 4.7 (Fast)",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 30,
+            "output": 150
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-4.8",
+          "name": "Anthropic: Claude Opus 4.8",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-4.8-fast",
+          "name": "Anthropic: Claude Opus 4.8 (Fast)",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 10,
+            "output": 50
+          }
+        },
+        {
+          "id": "anthropic/claude-sonnet-4",
+          "name": "Anthropic: Claude Sonnet 4",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "anthropic/claude-sonnet-4.5",
+          "name": "Anthropic: Claude Sonnet 4.5",
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "anthropic/claude-sonnet-4.6",
+          "name": "Anthropic: Claude Sonnet 4.6",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "anthropic/claude-sonnet-5",
+          "name": "Anthropic: Claude Sonnet 5",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 10
+          }
+        },
+        {
+          "id": "arcee-ai/trinity-large-thinking",
+          "name": "Arcee AI: Trinity Large Thinking",
+          "contextWindow": 262144,
+          "maxTokens": 80000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 0.8
+          }
+        },
+        {
+          "id": "arcee-ai/virtuoso-large",
+          "name": "Arcee AI: Virtuoso Large",
+          "contextWindow": 131072,
+          "maxTokens": 64000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.75,
+            "output": 1.2
+          }
+        },
+        {
+          "id": "auto",
+          "name": "Auto",
+          "contextWindow": 2000000,
+          "maxTokens": 30000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "bytedance-seed/seed-1.6",
+          "name": "ByteDance Seed: Seed 1.6",
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 2
+          }
+        },
+        {
+          "id": "bytedance-seed/seed-1.6-flash",
+          "name": "ByteDance Seed: Seed 1.6 Flash",
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.075,
+            "output": 0.3
+          }
+        },
+        {
+          "id": "bytedance-seed/seed-2.0-lite",
+          "name": "ByteDance Seed: Seed-2.0-Lite",
+          "contextWindow": 262144,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 2
+          }
+        },
+        {
+          "id": "bytedance-seed/seed-2.0-mini",
+          "name": "ByteDance Seed: Seed-2.0-Mini",
+          "contextWindow": 262144,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.1,
+            "output": 0.4
+          }
+        },
+        {
+          "id": "cohere/command-r-08-2024",
+          "name": "Cohere: Command R (08-2024)",
+          "contextWindow": 128000,
+          "maxTokens": 4000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.6
+          }
+        },
+        {
+          "id": "cohere/command-r-plus-08-2024",
+          "name": "Cohere: Command R+ (08-2024)",
+          "contextWindow": 128000,
+          "maxTokens": 4000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 10
+          }
+        },
+        {
+          "id": "cohere/north-mini-code:free",
+          "name": "Cohere: North Mini Code (free)",
+          "contextWindow": 256000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "deepseek/deepseek-chat",
+          "name": "DeepSeek: DeepSeek V3",
+          "contextWindow": 128000,
+          "maxTokens": 16000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.2002,
+            "output": 0.8001
+          }
+        },
+        {
+          "id": "deepseek/deepseek-chat-v3-0324",
+          "name": "DeepSeek: DeepSeek V3 0324",
+          "contextWindow": 163840,
+          "maxTokens": 65536,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.27,
+            "output": 1.12
+          }
+        },
+        {
+          "id": "deepseek/deepseek-chat-v3.1",
+          "name": "DeepSeek: DeepSeek V3.1",
+          "contextWindow": 163840,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 0.95
+          }
+        },
+        {
+          "id": "deepseek/deepseek-r1",
+          "name": "DeepSeek: R1",
+          "contextWindow": 64000,
+          "maxTokens": 16000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.7,
+            "output": 2.5
+          }
+        },
+        {
+          "id": "deepseek/deepseek-r1-0528",
+          "name": "DeepSeek: R1 0528",
+          "contextWindow": 163840,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 2.15
+          }
+        },
+        {
+          "id": "deepseek/deepseek-v3.1-terminus",
+          "name": "DeepSeek: DeepSeek V3.1 Terminus",
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.27,
+            "output": 1
+          }
+        }
+      ]
+    },
+    "opencode-go": {
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.14,
+            "output": 0.28
+          }
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.435,
+            "output": 0.87
+          }
+        },
+        {
+          "id": "glm-5.1",
+          "name": "GLM-5.1",
+          "contextWindow": 202752,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.4,
+            "output": 4.4
+          }
+        },
+        {
+          "id": "glm-5.2",
+          "name": "GLM-5.2",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.4,
+            "output": 4.4
+          }
+        },
+        {
+          "id": "grok-4.5",
+          "name": "Grok 4.5",
+          "contextWindow": 500000,
+          "maxTokens": 500000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 6
+          }
+        },
+        {
+          "id": "kimi-k2.6",
+          "name": "Kimi K2.6",
+          "contextWindow": 262144,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.95,
+            "output": 4
+          }
+        },
+        {
+          "id": "kimi-k2.7-code",
+          "name": "Kimi K2.7 Code",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.95,
+            "output": 4
+          }
+        },
+        {
+          "id": "kimi-k3",
+          "name": "Kimi K3 (2x usage)",
+          "contextWindow": 1048576,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "mimo-v2.5",
+          "name": "MiMo V2.5",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.14,
+            "output": 0.28
+          }
+        },
+        {
+          "id": "mimo-v2.5-pro",
+          "name": "MiMo V2.5 Pro",
+          "contextWindow": 1048576,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.435,
+            "output": 0.87
+          }
+        },
+        {
+          "id": "minimax-m2.7",
+          "name": "MiniMax-M2.7",
+          "contextWindow": 204800,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 1.2
+          }
+        },
+        {
+          "id": "minimax-m3",
+          "name": "MiniMax-M3",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 1.2
+          }
+        },
+        {
+          "id": "qwen3.6-plus",
+          "name": "Qwen3.6 Plus",
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 3
+          }
+        },
+        {
+          "id": "qwen3.7-max",
+          "name": "Qwen3.7 Max",
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 7.5
+          }
+        },
+        {
+          "id": "qwen3.7-plus",
+          "name": "Qwen3.7 Plus",
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 1.6
+          }
+        }
+      ]
+    },
+    "opencode-zen": {
+      "models": [
+        {
+          "id": "big-pickle",
+          "name": "Big Pickle",
+          "contextWindow": 200000,
+          "maxTokens": 32000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "claude-fable-5",
+          "name": "Claude Fable 5",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 10,
+            "output": 50
+          }
+        },
+        {
+          "id": "claude-haiku-4-5",
+          "name": "Claude Haiku 4.5",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1,
+            "output": 5
+          }
+        },
+        {
+          "id": "claude-opus-4-1",
+          "name": "Claude Opus 4.1",
+          "contextWindow": 200000,
+          "maxTokens": 32000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 15,
+            "output": 75
+          }
+        },
+        {
+          "id": "claude-opus-4-5",
+          "name": "Claude Opus 4.5",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-opus-4-6",
+          "name": "Claude Opus 4.6",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-opus-4-7",
+          "name": "Claude Opus 4.7",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-opus-4-8",
+          "name": "Claude Opus 4.8",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-sonnet-4",
+          "name": "Claude Sonnet 4",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "name": "Claude Sonnet 4.5",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "claude-sonnet-4-6",
+          "name": "Claude Sonnet 4.6",
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "claude-sonnet-5",
+          "name": "Claude Sonnet 5",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 10
+          }
+        },
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.14,
+            "output": 0.28
+          }
+        },
+        {
+          "id": "deepseek-v4-flash-free",
+          "name": "DeepSeek V4 Flash Free",
+          "contextWindow": 200000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.74,
+            "output": 3.84
+          }
+        },
+        {
+          "id": "gemini-3-flash",
+          "name": "Gemini 3 Flash",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 3
+          }
+        },
+        {
+          "id": "gemini-3.1-pro",
+          "name": "Gemini 3.1 Pro Preview",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 12
+          }
+        },
+        {
+          "id": "gemini-3.5-flash",
+          "name": "Gemini 3.5 Flash",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.5,
+            "output": 9
+          }
+        },
+        {
+          "id": "gemini-3.5-flash-lite",
+          "name": "Gemini 3.5 Flash Lite",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 2.5
+          }
+        },
+        {
+          "id": "gemini-3.6-flash",
+          "name": "Gemini 3.6 Flash",
+          "contextWindow": 1048576,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.5,
+            "output": 7.5
+          }
+        },
+        {
+          "id": "glm-5",
+          "name": "GLM-5",
+          "contextWindow": 204800,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1,
+            "output": 3.2
+          }
+        },
+        {
+          "id": "glm-5.1",
+          "name": "GLM-5.1",
+          "contextWindow": 204800,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.4,
+            "output": 4.4
+          }
+        },
+        {
+          "id": "glm-5.2",
+          "name": "GLM-5.2",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.4,
+            "output": 4.4
+          }
+        },
+        {
+          "id": "gpt-5",
+          "name": "GPT-5",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.07,
+            "output": 8.5
+          }
+        },
+        {
+          "id": "gpt-5-codex",
+          "name": "GPT-5 Codex",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.07,
+            "output": 8.5
+          }
+        },
+        {
+          "id": "gpt-5-nano",
+          "name": "GPT-5 Nano",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.05,
+            "output": 0.4
+          }
+        },
+        {
+          "id": "gpt-5.1",
+          "name": "GPT-5.1",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.07,
+            "output": 8.5
+          }
+        },
+        {
+          "id": "gpt-5.1-codex",
+          "name": "GPT-5.1 Codex",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.07,
+            "output": 8.5
+          }
+        },
+        {
+          "id": "gpt-5.1-codex-max",
+          "name": "GPT-5.1 Codex Max",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-5.1-codex-mini",
+          "name": "GPT-5.1 Codex Mini",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 2
+          }
+        },
+        {
+          "id": "gpt-5.2",
+          "name": "GPT-5.2",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.2-codex",
+          "name": "GPT-5.2 Codex",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.3-codex",
+          "name": "GPT-5.3 Codex",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.4",
+          "name": "GPT-5.4",
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 15
+          }
+        },
+        {
+          "id": "gpt-5.4-mini",
+          "name": "GPT-5.4 Mini",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.75,
+            "output": 4.5
+          }
+        },
+        {
+          "id": "gpt-5.4-nano",
+          "name": "GPT-5.4 Nano",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.2,
+            "output": 1.25
+          }
+        },
+        {
+          "id": "gpt-5.4-pro",
+          "name": "GPT-5.4 Pro",
+          "contextWindow": 1050000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 30,
+            "output": 180
+          }
+        },
+        {
+          "id": "gpt-5.5",
+          "name": "GPT-5.5",
+          "contextWindow": 1050000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 30
+          }
+        },
+        {
+          "id": "gpt-5.5-pro",
+          "name": "GPT-5.5 Pro",
+          "contextWindow": 1050000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 30,
+            "output": 180
+          }
+        },
+        {
+          "id": "gpt-5.6-luna",
+          "name": "GPT-5.6 Luna",
+          "contextWindow": 1050000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1,
+            "output": 6
+          }
+        }
+      ]
+    },
+    "openai": {
+      "models": [
+        {
+          "id": "gpt-4",
+          "name": "GPT-4",
+          "contextWindow": 8192,
+          "maxTokens": 8192,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 30,
+            "output": 60
+          }
+        },
+        {
+          "id": "gpt-4-turbo",
+          "name": "GPT-4 Turbo",
+          "contextWindow": 128000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 10,
+            "output": 30
+          }
+        },
+        {
+          "id": "gpt-4.1",
+          "name": "GPT-4.1",
+          "contextWindow": 1047576,
+          "maxTokens": 32768,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 8
+          }
+        },
+        {
+          "id": "gpt-4.1-mini",
+          "name": "GPT-4.1 mini",
+          "contextWindow": 1047576,
+          "maxTokens": 32768,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 1.6
+          }
+        },
+        {
+          "id": "gpt-4.1-nano",
+          "name": "GPT-4.1 nano",
+          "contextWindow": 1047576,
+          "maxTokens": 32768,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.1,
+            "output": 0.4
+          }
+        },
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-4o-2024-05-13",
+          "name": "GPT-4o (2024-05-13)",
+          "contextWindow": 128000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 15
+          }
+        },
+        {
+          "id": "gpt-4o-2024-08-06",
+          "name": "GPT-4o (2024-08-06)",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-4o-2024-11-20",
+          "name": "GPT-4o (2024-11-20)",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-4o-mini",
+          "name": "GPT-4o mini",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.6
+          }
+        },
+        {
+          "id": "gpt-5",
+          "name": "GPT-5",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-5-chat-latest",
+          "name": "GPT-5 Chat Latest",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-5-codex",
+          "name": "GPT-5-Codex",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-5-mini",
+          "name": "GPT-5 Mini",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 2
+          }
+        },
+        {
+          "id": "gpt-5-nano",
+          "name": "GPT-5 Nano",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.05,
+            "output": 0.4
+          }
+        },
+        {
+          "id": "gpt-5-pro",
+          "name": "GPT-5 Pro",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 15,
+            "output": 120
+          }
+        },
+        {
+          "id": "gpt-5.1",
+          "name": "GPT-5.1",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-5.1-chat-latest",
+          "name": "GPT-5.1 Chat",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-5.1-codex",
+          "name": "GPT-5.1 Codex",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-5.1-codex-max",
+          "name": "GPT-5.1 Codex Max",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 10
+          }
+        },
+        {
+          "id": "gpt-5.1-codex-mini",
+          "name": "GPT-5.1 Codex mini",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 2
+          }
+        },
+        {
+          "id": "gpt-5.2",
+          "name": "GPT-5.2",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.2-chat-latest",
+          "name": "GPT-5.2 Chat",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.2-codex",
+          "name": "GPT-5.2 Codex",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.2-pro",
+          "name": "GPT-5.2 Pro",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 21,
+            "output": 168
+          }
+        },
+        {
+          "id": "gpt-5.3-chat-latest",
+          "name": "GPT-5.3 Chat (latest)",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.3-codex",
+          "name": "GPT-5.3 Codex",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.3-codex-spark",
+          "name": "GPT-5.3 Codex Spark",
+          "contextWindow": 128000,
+          "maxTokens": 32000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.75,
+            "output": 14
+          }
+        },
+        {
+          "id": "gpt-5.4",
+          "name": "GPT-5.4",
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 15
+          }
+        },
+        {
+          "id": "gpt-5.4-mini",
+          "name": "GPT-5.4 mini",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.75,
+            "output": 4.5
+          }
+        },
+        {
+          "id": "gpt-5.4-nano",
+          "name": "GPT-5.4 nano",
+          "contextWindow": 400000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.2,
+            "output": 1.25
+          }
+        },
+        {
+          "id": "gpt-5.4-pro",
+          "name": "GPT-5.4 Pro",
+          "contextWindow": 1050000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 30,
+            "output": 180
+          }
+        },
+        {
+          "id": "gpt-5.5",
+          "name": "GPT-5.5",
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 30
+          }
+        },
+        {
+          "id": "gpt-5.5-pro",
+          "name": "GPT-5.5 Pro",
+          "contextWindow": 1050000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 30,
+            "output": 180
+          }
+        },
+        {
+          "id": "gpt-5.6-luna",
+          "name": "GPT-5.6 Luna",
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1,
+            "output": 6
+          }
+        },
+        {
+          "id": "gpt-5.6-sol",
+          "name": "GPT-5.6 Sol",
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 30
+          }
+        },
+        {
+          "id": "gpt-5.6-terra",
+          "name": "GPT-5.6 Terra",
+          "contextWindow": 272000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2.5,
+            "output": 15
+          }
+        },
+        {
+          "id": "gpt-realtime-2.1",
+          "name": "GPT-Realtime-2.1",
+          "contextWindow": 128000,
+          "maxTokens": 32000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 4,
+            "output": 24
+          }
+        },
+        {
+          "id": "o1",
+          "name": "o1",
+          "contextWindow": 200000,
+          "maxTokens": 100000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 15,
+            "output": 60
+          }
+        },
+        {
+          "id": "o1-pro",
+          "name": "o1-pro",
+          "contextWindow": 200000,
+          "maxTokens": 100000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 150,
+            "output": 600
+          }
+        }
+      ]
+    },
+    "anthropic": {
+      "models": [
+        {
+          "id": "claude-fable-5",
+          "name": "Claude Fable 5",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 10,
+            "output": 50
+          }
+        },
+        {
+          "id": "claude-haiku-4-5",
+          "name": "Claude Haiku 4.5 (latest)",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1,
+            "output": 5
+          }
+        },
+        {
+          "id": "claude-haiku-4-5-20251001",
+          "name": "Claude Haiku 4.5",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1,
+            "output": 5
+          }
+        },
+        {
+          "id": "claude-opus-4-1",
+          "name": "Claude Opus 4.1 (latest)",
+          "contextWindow": 200000,
+          "maxTokens": 32000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 15,
+            "output": 75
+          }
+        },
+        {
+          "id": "claude-opus-4-1-20250805",
+          "name": "Claude Opus 4.1",
+          "contextWindow": 200000,
+          "maxTokens": 32000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 15,
+            "output": 75
+          }
+        },
+        {
+          "id": "claude-opus-4-5",
+          "name": "Claude Opus 4.5 (latest)",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-opus-4-5-20251101",
+          "name": "Claude Opus 4.5",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-opus-4-6",
+          "name": "Claude Opus 4.6",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-opus-4-7",
+          "name": "Claude Opus 4.7",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-opus-4-8",
+          "name": "Claude Opus 4.8",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 5,
+            "output": 25
+          }
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "name": "Claude Sonnet 4.5 (latest)",
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "claude-sonnet-4-5-20250929",
+          "name": "Claude Sonnet 4.5",
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "claude-sonnet-4-6",
+          "name": "Claude Sonnet 4.6",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 3,
+            "output": 15
+          }
+        },
+        {
+          "id": "claude-sonnet-5",
+          "name": "Claude Sonnet 5",
+          "contextWindow": 1000000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 10
+          }
+        }
+      ]
+    },
+    "mistral": {
+      "models": [
+        {
+          "id": "codestral-latest",
+          "name": "Codestral (latest)",
+          "contextWindow": 256000,
+          "maxTokens": 4096,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 0.9
+          }
+        },
+        {
+          "id": "devstral-2512",
+          "name": "Devstral 2",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 2
+          }
+        },
+        {
+          "id": "devstral-latest",
+          "name": "Devstral 2",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 2
+          }
+        },
+        {
+          "id": "devstral-medium-2507",
+          "name": "Devstral Medium",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 2
+          }
+        },
+        {
+          "id": "devstral-medium-latest",
+          "name": "Devstral 2 (latest)",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 2
+          }
+        },
+        {
+          "id": "devstral-small-2505",
+          "name": "Devstral Small 2505",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.1,
+            "output": 0.3
+          }
+        },
+        {
+          "id": "devstral-small-2507",
+          "name": "Devstral Small",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.1,
+            "output": 0.3
+          }
+        },
+        {
+          "id": "labs-devstral-small-2512",
+          "name": "Devstral Small 2",
+          "contextWindow": 256000,
+          "maxTokens": 256000,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "magistral-medium-latest",
+          "name": "Magistral Medium (latest)",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 5
+          }
+        },
+        {
+          "id": "magistral-small",
+          "name": "Magistral Small",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 1.5
+          }
+        },
+        {
+          "id": "ministral-3b-latest",
+          "name": "Ministral 3B (latest)",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.04,
+            "output": 0.04
+          }
+        },
+        {
+          "id": "ministral-8b-latest",
+          "name": "Ministral 8B (latest)",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.1,
+            "output": 0.1
+          }
+        },
+        {
+          "id": "mistral-large-2411",
+          "name": "Mistral Large 2.1",
+          "contextWindow": 131072,
+          "maxTokens": 16384,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 6
+          }
+        },
+        {
+          "id": "mistral-large-2512",
+          "name": "Mistral Large 3",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 1.5
+          }
+        },
+        {
+          "id": "mistral-large-latest",
+          "name": "Mistral Large (latest)",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 1.5
+          }
+        },
+        {
+          "id": "mistral-medium-2505",
+          "name": "Mistral Medium 3",
+          "contextWindow": 131072,
+          "maxTokens": 131072,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 2
+          }
+        },
+        {
+          "id": "mistral-medium-2508",
+          "name": "Mistral Medium 3.1",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 2
+          }
+        },
+        {
+          "id": "mistral-medium-2604",
+          "name": "Mistral Medium 3.5",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.5,
+            "output": 7.5
+          }
+        },
+        {
+          "id": "mistral-medium-3.5",
+          "name": "Mistral Medium 3.5",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.5,
+            "output": 7.5
+          }
+        },
+        {
+          "id": "mistral-medium-latest",
+          "name": "Mistral Medium (latest)",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.5,
+            "output": 7.5
+          }
+        },
+        {
+          "id": "mistral-nemo",
+          "name": "Mistral Nemo",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.15
+          }
+        },
+        {
+          "id": "mistral-small-2506",
+          "name": "Mistral Small 3.2",
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.1,
+            "output": 0.3
+          }
+        },
+        {
+          "id": "mistral-small-2603",
+          "name": "Mistral Small 4",
+          "contextWindow": 256000,
+          "maxTokens": 256000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.6
+          }
+        },
+        {
+          "id": "mistral-small-latest",
+          "name": "Mistral Small (latest)",
+          "contextWindow": 256000,
+          "maxTokens": 256000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.6
+          }
+        },
+        {
+          "id": "open-mistral-7b",
+          "name": "Mistral 7B",
+          "contextWindow": 8000,
+          "maxTokens": 8000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.25,
+            "output": 0.25
+          }
+        },
+        {
+          "id": "open-mistral-nemo",
+          "name": "Open Mistral Nemo",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.15
+          }
+        },
+        {
+          "id": "open-mixtral-8x22b",
+          "name": "Mixtral 8x22B",
+          "contextWindow": 64000,
+          "maxTokens": 64000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 6
+          }
+        },
+        {
+          "id": "open-mixtral-8x7b",
+          "name": "Mixtral 8x7B",
+          "contextWindow": 32000,
+          "maxTokens": 32000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.7,
+            "output": 0.7
+          }
+        },
+        {
+          "id": "pixtral-12b",
+          "name": "Pixtral 12B",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.15
+          }
+        },
+        {
+          "id": "pixtral-large-latest",
+          "name": "Pixtral Large (latest)",
+          "contextWindow": 128000,
+          "maxTokens": 128000,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 6
+          }
+        }
+      ]
+    },
+    "groq": {
+      "models": [
+        {
+          "id": "llama-3.1-8b-instant",
+          "name": "Llama 3.1 8B",
+          "contextWindow": 131072,
+          "maxTokens": 131072,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.05,
+            "output": 0.08
+          }
+        },
+        {
+          "id": "llama-3.3-70b-versatile",
+          "name": "Llama 3.3 70B",
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.59,
+            "output": 0.79
+          }
+        },
+        {
+          "id": "meta-llama/llama-4-scout-17b-16e-instruct",
+          "name": "Llama 4 Scout 17B 16E",
+          "contextWindow": 131072,
+          "maxTokens": 8192,
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.11,
+            "output": 0.34
+          }
+        },
+        {
+          "id": "openai/gpt-oss-120b",
+          "name": "GPT OSS 120B",
+          "contextWindow": 131072,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.6
+          }
+        },
+        {
+          "id": "openai/gpt-oss-20b",
+          "name": "GPT OSS 20B",
+          "contextWindow": 131072,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.075,
+            "output": 0.3
+          }
+        },
+        {
+          "id": "qwen/qwen3-32b",
+          "name": "Qwen3-32B",
+          "contextWindow": 131072,
+          "maxTokens": 40960,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.29,
+            "output": 0.59
+          }
+        }
+      ]
+    },
+    "together": {
+      "models": [
+        {
+          "id": "MiniMaxAI/MiniMax-M2.7",
+          "name": "MiniMax-M2.7",
+          "contextWindow": 202752,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 1.2
+          }
+        },
+        {
+          "id": "MiniMaxAI/MiniMax-M3",
+          "name": "MiniMax-M3",
+          "contextWindow": 524288,
+          "maxTokens": 250000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 1.2
+          }
+        },
+        {
+          "id": "Qwen/Qwen2.5-7B-Instruct-Turbo",
+          "name": "Qwen 2.5 7B Instruct Turbo",
+          "contextWindow": 32768,
+          "maxTokens": 32768,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 0.3
+          }
+        },
+        {
+          "id": "Qwen/Qwen3.5-9B",
+          "name": "Qwen3.5 9B",
+          "contextWindow": 262144,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.17,
+            "output": 0.25
+          }
+        },
+        {
+          "id": "Qwen/Qwen3.6-Plus",
+          "name": "Qwen3.6 Plus",
+          "contextWindow": 1000000,
+          "maxTokens": 500000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.5,
+            "output": 3
+          }
+        },
+        {
+          "id": "Qwen/Qwen3.7-Max",
+          "name": "Qwen3.7 Max",
+          "contextWindow": 1000000,
+          "maxTokens": 500000,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.25,
+            "output": 3.75
+          }
+        },
+        {
+          "id": "deepseek-ai/DeepSeek-V4-Pro",
+          "name": "DeepSeek V4 Pro",
+          "contextWindow": 512000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.74,
+            "output": 3.48
+          }
+        },
+        {
+          "id": "google/gemma-4-31B-it",
+          "name": "Gemma 4 31B Instruct",
+          "contextWindow": 262144,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.39,
+            "output": 0.97
+          }
+        },
+        {
+          "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+          "name": "Llama 3.3 70B",
+          "contextWindow": 131072,
+          "maxTokens": 131072,
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.04,
+            "output": 1.04
+          }
+        },
+        {
+          "id": "moonshotai/Kimi-K2.6",
+          "name": "Kimi K2.6",
+          "contextWindow": 262144,
+          "maxTokens": 131000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.2,
+            "output": 4.5
+          }
+        },
+        {
+          "id": "moonshotai/Kimi-K2.7-Code",
+          "name": "Kimi K2.7 Code",
+          "contextWindow": 262144,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.95,
+            "output": 4
+          }
+        },
+        {
+          "id": "nvidia/nemotron-3-ultra-550b-a55b",
+          "name": "Nemotron 3 Ultra 550B A55B",
+          "contextWindow": 512300,
+          "maxTokens": 512300,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.6,
+            "output": 3.6
+          }
+        },
+        {
+          "id": "openai/gpt-oss-120b",
+          "name": "GPT OSS 120B",
+          "contextWindow": 131072,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.6
+          }
+        },
+        {
+          "id": "openai/gpt-oss-20b",
+          "name": "GPT OSS 20B",
+          "contextWindow": 131072,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.05,
+            "output": 0.2
+          }
+        },
+        {
+          "id": "thinkingmachines/Inkling",
+          "name": "Inkling",
+          "contextWindow": 524288,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1,
+            "output": 4.05
+          }
+        },
+        {
+          "id": "zai-org/GLM-5.2",
+          "name": "GLM-5.2",
+          "contextWindow": 262144,
+          "maxTokens": 164000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.4,
+            "output": 4.4
+          }
+        }
+      ]
+    },
+    "fireworks": {
+      "models": [
+        {
+          "id": "accounts/fireworks/models/deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.14,
+            "output": 0.28
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.74,
+            "output": 3.48
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/glm-5p1",
+          "name": "GLM 5.1",
+          "contextWindow": 202800,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.4,
+            "output": 4.4
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/glm-5p2",
+          "name": "GLM 5.2",
+          "contextWindow": 1048575,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 1.4,
+            "output": 4.4
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/gpt-oss-120b",
+          "name": "GPT OSS 120B",
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.15,
+            "output": 0.6
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/gpt-oss-20b",
+          "name": "GPT OSS 20B",
+          "contextWindow": 131072,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.07,
+            "output": 0.3
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/kimi-k2p6",
+          "name": "Kimi K2.6",
+          "contextWindow": 262000,
+          "maxTokens": 262000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.95,
+            "output": 4
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/kimi-k2p7-code",
+          "name": "Kimi K2.7 Code",
+          "contextWindow": 262000,
+          "maxTokens": 262000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.95,
+            "output": 4
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/minimax-m2p7",
+          "name": "MiniMax-M2.7",
+          "contextWindow": 196608,
+          "maxTokens": 196608,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 1.2
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/minimax-m3",
+          "name": "MiniMax-M3",
+          "contextWindow": 512000,
+          "maxTokens": 512000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.3,
+            "output": 1.2
+          }
+        },
+        {
+          "id": "accounts/fireworks/models/qwen3p7-plus",
+          "name": "Qwen 3.7 Plus",
+          "contextWindow": 262144,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0.4,
+            "output": 1.6
+          }
+        },
+        {
+          "id": "accounts/fireworks/routers/glm-5p1-fast",
+          "name": "GLM 5.1 Fast",
+          "contextWindow": 202800,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2.8,
+            "output": 8.8
+          }
+        },
+        {
+          "id": "accounts/fireworks/routers/glm-5p2-fast",
+          "name": "GLM 5.2 Fast",
+          "contextWindow": 1048575,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 2.1,
+            "output": 6.6
+          }
+        },
+        {
+          "id": "accounts/fireworks/routers/kimi-k2p6-fast",
+          "name": "Kimi K2.6 Fast",
+          "contextWindow": 262000,
+          "maxTokens": 262000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 8
+          }
+        },
+        {
+          "id": "accounts/fireworks/routers/kimi-k2p6-turbo",
+          "name": "Kimi K2.6 Turbo",
+          "contextWindow": 262000,
+          "maxTokens": 262000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 2,
+            "output": 8
+          }
+        },
+        {
+          "id": "accounts/fireworks/routers/kimi-k2p7-code-fast",
+          "name": "Kimi K2.7 Code Fast",
+          "contextWindow": 262000,
+          "maxTokens": 262000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 1.9,
+            "output": 8
+          }
+        }
+      ]
+    },
+    "deepseek": {
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.14,
+            "output": 0.28
+          }
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0.435,
+            "output": 0.87
+          }
+        }
+      ]
+    },
+    "qwen": {
+      "models": [
+        {
+          "id": "MiniMax-M2.5",
+          "name": "MiniMax-M2.5",
+          "contextWindow": 196608,
+          "maxTokens": 24576,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "deepseek-v3.2",
+          "name": "DeepSeek V3.2",
+          "contextWindow": 131072,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "maxTokens": 384000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "glm-5",
+          "name": "GLM-5",
+          "contextWindow": 202752,
+          "maxTokens": 16384,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "glm-5.1",
+          "name": "GLM-5.1",
+          "contextWindow": 202752,
+          "maxTokens": 128000,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "glm-5.2",
+          "name": "GLM-5.2",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "kimi-k2.5",
+          "name": "Kimi K2.5",
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "kimi-k2.6",
+          "name": "Kimi K2.6",
+          "contextWindow": 262144,
+          "maxTokens": 16384,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "kimi-k2.7-code",
+          "name": "Kimi K2.7 Code",
+          "contextWindow": 262144,
+          "maxTokens": 262144,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "qwen3.6-flash",
+          "name": "Qwen3.6 Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "qwen3.6-plus",
+          "name": "Qwen3.6 Plus",
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "qwen3.7-max",
+          "name": "Qwen3.7 Max",
+          "contextWindow": 1000000,
+          "maxTokens": 65536,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "qwen3.7-plus",
+          "name": "Qwen3.7 Plus",
+          "contextWindow": 1000000,
+          "maxTokens": 64000,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "qwen3.8-max-preview",
+          "name": "Qwen3.8 Max Preview",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        }
+      ]
+    },
+    "zhipu": {
+      "models": [
+        {
+          "id": "glm-4.5-air",
+          "name": "GLM-4.5-Air",
+          "contextWindow": 131072,
+          "maxTokens": 98304,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "glm-4.7",
+          "name": "GLM-4.7",
+          "contextWindow": 204800,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "glm-5-turbo",
+          "name": "GLM-5-Turbo",
+          "contextWindow": 200000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "glm-5.1",
+          "name": "GLM-5.1",
+          "contextWindow": 200000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "glm-5.2",
+          "name": "GLM-5.2",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        },
+        {
+          "id": "glm-5v-turbo",
+          "name": "GLM-5V-Turbo",
+          "contextWindow": 200000,
+          "maxTokens": 131072,
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        }
+      ]
+    }
+  }
+}

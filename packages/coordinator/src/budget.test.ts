@@ -92,9 +92,9 @@ describe("RefRegistry — C10 pass-by-reference seam", () => {
     }
     expect(r.size).toBeLessThanOrEqual(MAX_REF_HANDLES);
     // Oldest 10 handles were evicted; the newest are still resolvable.
-    expect(r.take(wires[0])).toBeUndefined();
+    expect(r.take(wires[0]!)).toBeUndefined();
     for (let i = wires.length - MAX_REF_HANDLES; i < wires.length; i++) {
-      expect(r.take(wires[i])).toBeDefined();
+      expect(r.take(wires[i]!)).toBeDefined();
     }
   });
 

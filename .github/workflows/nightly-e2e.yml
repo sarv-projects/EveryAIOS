@@ -124,8 +124,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: desktop_app
+      - name: Require APP clone token
+        env:
+          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
+        run: |
+          if [ -z "$APP_CLONE_TOKEN" ]; then
+            echo "::error::APP_CLONE_TOKEN secret is required — coordinator tests must not be skipped"
+            exit 1
+          fi
       - name: Check out APP (core packages) — needs APP_CLONE_TOKEN
-        if: env.APP_CLONE_TOKEN != ''
         env:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         uses: actions/checkout@v4
@@ -138,7 +145,6 @@ jobs:
         with:
           bun-version: latest
       - name: Install workspace deps
-        if: env.APP_CLONE_TOKEN != ''
         env:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app
@@ -146,13 +152,11 @@ jobs:
           npm install -g pnpm
           pnpm install
       - name: Coordinator typecheck
-        if: env.APP_CLONE_TOKEN != ''
         env:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app/packages/coordinator
         run: bun run type-check
       - name: Coordinator tests
-        if: env.APP_CLONE_TOKEN != ''
         env:
           APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app/packages/coordinator

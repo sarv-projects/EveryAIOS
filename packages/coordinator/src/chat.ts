@@ -22,8 +22,11 @@
 
 import { ConversationEngine } from "@personal-ai/core-engine";
 import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
-import { StreamSession } from "@personal-ai/core-ai";
-import { chunkText, estimateTokens } from "@personal-ai/core-files";
+// Vendored mirror of `@personal-ai/core-ai` StreamSession (see
+// stream-session.ts) and `@personal-ai/core-files` chunkText/estimateTokens
+// (see chunking.ts) — both self-contained, no package import graph.
+import { StreamSession } from "./stream-session";
+import { chunkText, estimateTokens } from "./chunking";
 import { buildDesktopSystemPrompt, CACHE_BOUNDARY, type PersonaId } from "./prompt";
 import { notifyAgui } from "./agui";
 import {

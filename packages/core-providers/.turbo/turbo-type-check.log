@@ -1,0 +1,4 @@
+
+> @personal-ai/core-providers@0.1.0 type-check /home/sarvesh/APP/packages/core-providers
+> tsc --noEmit
+

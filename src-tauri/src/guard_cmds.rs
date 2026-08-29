@@ -217,18 +217,25 @@ pub fn guard_permissions_matrix(
     let mut cells = Vec::with_capacity(capabilities.len() * scopes.len());
     for cap in capabilities {
         for scope in scopes {
+            // Reads are read-only and auto-approved by the executor (they are
+            // never policy-gated — there is no read `Operation` variant). The
+            // matrix must show that truthfully as `allow`, not borrow the
+            // write policy (which previously made read look like it required
+            // approval when it does not).
+            if cap == "read" {
+                cells.push(MatrixCell {
+                    capability: cap.into(),
+                    scope: scope.into(),
+                    decision: "allow".into(),
+                });
+                continue;
+            }
             let op = match (cap, scope) {
                 ("write", _) => Operation::GenericWrite,
                 ("execute", "shell") => Operation::TerminalShell { destructive: true },
                 ("execute", _) => Operation::TerminalShell { destructive: false },
                 ("network", _) => Operation::ExternalNetwork { new_domain: true },
                 ("browser", _) => Operation::WebAction,
-                // There is no read-specific `Operation` variant; reads are
-                // matrix-rendered via a write-ticket for grid display only.
-                // The *actual* read path is read-only auto-approved by the Rust
-                // executor (ticket-every-effect, then Allow) — this is purely
-                // presentational, never a write entitlement.
-                ("read", _) => Operation::GenericWrite,
                 _ => Operation::GenericWrite,
             };
             let decision = match policy.evaluate(&op) {

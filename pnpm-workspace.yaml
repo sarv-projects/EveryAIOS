@@ -1,12 +1,10 @@
 # EveryAIOS desktop workspace (P0.3 task 19).
-# `packages/*` = desktop-only packages (coordinator, ui — P1.4 wires the
-# streaming UI through `ui/*`).
-# `../APP/packages/*` = the existing mobile core packages, imported as
-# workspace deps (never copied — the spec's reuse rule).
+# `packages/*` = all desktop packages: the coordinator, ui, AND the vendored
+# `@personal-ai/core-*` engine packages (copied in from the reference APP repo
+# so this repo is fully self-contained — no `../APP` sibling required).
 packages:
   - "packages/*"
   - "ui"
-  - "../APP/packages/*"
 
 # Native deps pulled in via @personal-ai/core-* — allow their build scripts
 # (better-sqlite3, onnxruntime-node, etc. are required by the engine).
@@ -17,9 +15,9 @@ allowBuilds:
   onnxruntime-node: true
   workerd: true
 
-# Force one React types version across the workspace — @personal-ai/app-mobile
-# (RN 0.76) hoists @types/react@18 to the store root, which mixes two React
-# type identities into the ui program (tsc errors in shadcn components).
+# Force one React types version across the workspace so the ui program sees a
+# single React type identity (mixing @types/react@18 and @19 breaks tsc in the
+# shadcn components).
 overrides:
   "@types/react": "^19.0.0"
   "@types/react-dom": "^19.0.0"

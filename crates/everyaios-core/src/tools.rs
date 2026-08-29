@@ -91,12 +91,30 @@ pub struct RegisteredTool {
 
 /// Canonical JSON (sorted object keys) hashed with SHA-256. Coordinator
 /// `canonicalArgsHash` must produce the same hex.
+///
+/// Numbers are canonicalized to a runtime-independent token
+/// (`n:<f64-bits-hex>`) so Rust (`serde_json`) and TS (`JSON.stringify`)
+/// agree regardless of integer-vs-float formatting (`5` vs `5.0`), exponent
+/// style (`1e+21` vs `1e21`), or precision beyond 2^53. JavaScript has a
+/// single IEEE-754 `number` type, so hashing by the f64 bit pattern is the
+/// one representation both runtimes can produce identically.
 pub fn canonical_args_hash(args: &Value) -> String {
     let canon = canonicalize(args);
     let bytes = serde_json::to_vec(&canon).unwrap_or_default();
     let mut h = Sha256::new();
     h.update(&bytes);
     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Canonicalize a JSON number to a runtime-independent string token.
+/// `NaN`/±∞ are not representable in JSON (serde emits `null`); we mirror
+/// that by tokenizing them to a stable sentinel so both sides still agree.
+fn canonical_number_token(n: &serde_json::Number) -> String {
+    let f = n.as_f64().unwrap_or(f64::NAN);
+    // Normalize -0.0 to 0.0 (JS `Object.is(-0, 0)` is false but JSON/`===`
+    // treat them equal; both runtimes hash them the same via +0.0).
+    let f = if f == 0.0 { 0.0 } else { f };
+    format!("n:{:016x}", f.to_bits())
 }
 
 fn canonicalize(v: &Value) -> Value {
@@ -111,6 +129,9 @@ fn canonicalize(v: &Value) -> Value {
             Value::Object(out)
         }
         Value::Array(items) => Value::Array(items.iter().map(canonicalize).collect()),
+        // Replace numbers with a bit-pattern token string so cross-runtime
+        // serialization can never diverge on number formatting.
+        Value::Number(n) => Value::String(canonical_number_token(n)),
         other => other.clone(),
     }
 }
@@ -1870,6 +1891,51 @@ mod tests {
         assert_eq!(canonical_args_hash(&a), canonical_args_hash(&b));
         let c = json!({"a": 2, "b": 3});
         assert_ne!(canonical_args_hash(&a), canonical_args_hash(&c));
+    }
+
+    #[test]
+    fn canonical_hash_number_forms_are_equivalent() {
+        // Integer and its float twin hash identically (JS has one number type).
+        assert_eq!(
+            canonical_args_hash(&json!({"n": 5})),
+            canonical_args_hash(&json!({"n": 5.0}))
+        );
+        // Distinct numbers hash differently.
+        assert_ne!(
+            canonical_args_hash(&json!({"n": 5})),
+            canonical_args_hash(&json!({"n": 6}))
+        );
+        // Large integers beyond 2^53 and exponent-y floats still hash stably.
+        let _ = canonical_args_hash(&json!({"big": 1e21, "coord": 12.5, "z": 0}));
+    }
+
+    /// Cross-runtime vector: these exact hex hashes must equal the coordinator
+    /// `canonicalArgsHash` output for the same inputs (see tools.test.ts
+    /// `canonicalArgsHash cross-runtime vector`). If either side changes the
+    /// canonicalization, both this test and the TS test must be updated in
+    /// lockstep — that is the guard against silent drift.
+    #[test]
+    fn canonical_hash_cross_runtime_vector() {
+        // maxResults int, a float coord, a big int, unicode, nested + array.
+        let v = json!({
+            "maxResults": 50,
+            "coord": 12.5,
+            "big": 9007199254740993u64, // 2^53 + 1
+            "label": "café \u{1f600}",
+            "nested": {"z": 1, "a": [1, 2.0, 3]}
+        });
+        // Printed so the TS side can assert the same constant.
+        let h = canonical_args_hash(&v);
+        assert_eq!(h.len(), 64);
+        // This exact hex MUST equal the coordinator `canonicalArgsHash` output
+        // (verified against tools.test.ts). Changing canonicalization on
+        // either side breaks this constant — update both in lockstep.
+        assert_eq!(
+            h,
+            "694541888ef627ef4ed5dedf8efa323fe9f0dd32e699debbb0a155ffbe02eeac"
+        );
+        // The value is stable across runs (determinism).
+        assert_eq!(h, canonical_args_hash(&v));
     }
 
     #[test]

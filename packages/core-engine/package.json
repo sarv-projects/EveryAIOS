@@ -1,0 +1,25 @@
+{
+  "name": "@personal-ai/core-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@personal-ai/core-domain": "workspace:*",
+    "@personal-ai/core-tools": "workspace:*",
+    "@personal-ai/core-providers": "workspace:*",
+    "@personal-ai/core-memory": "workspace:*",
+    "@personal-ai/core-search": "workspace:*",
+    "@stablelib/sha256": "^2.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

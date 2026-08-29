@@ -1,0 +1,4 @@
+
+> @personal-ai/core-search@0.1.0 build /home/sarvesh/APP/packages/core-search
+> tsc && mkdir -p dist/data && cp src/data/searx-pool.json dist/data/searx-pool.json
+

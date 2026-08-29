@@ -1,0 +1,4 @@
+
+> @personal-ai/core-search@0.1.0 type-check /home/sarvesh/APP/packages/core-search
+> tsc --noEmit
+

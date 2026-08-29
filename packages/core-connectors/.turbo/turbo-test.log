@@ -1,0 +1,19 @@
+
+> @personal-ai/core-connectors@0.1.0 test /home/sarvesh/APP/packages/core-connectors
+> vitest run
+
+
+ RUN  v3.2.6 /home/sarvesh/APP/packages/core-connectors
+
+ ↓ src/__tests__/integration.test.ts (3 tests | 3 skipped)
+ ✓ src/__tests__/orchestrator.test.ts (21 tests) 35ms
+ ✓ src/__tests__/mobile-connectors.test.ts (12 tests) 244ms
+ ✓ src/__tests__/batch3-connectors.test.ts (17 tests) 248ms
+ ✓ src/__tests__/adapters.test.ts (23 tests) 2245ms
+   ✓ NominatimAdapter > parses Nominatim search response into ConnectorItems  2190ms
+
+ Test Files  4 passed | 1 skipped (5)
+      Tests  73 passed | 3 skipped (76)
+   Start at  06:53:40
+   Duration  3.71s (transform 1.76s, setup 0ms, collect 3.00s, tests 2.77s, environment 5ms, prepare 1.23s)
+

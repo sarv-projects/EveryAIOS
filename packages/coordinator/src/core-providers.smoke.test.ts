@@ -1,11 +1,11 @@
 /**
- * P1.2 — smoke-import of `@personal-ai/core-providers` from APP into the
- * coordinator sidecar. Proves the workspace dep resolves, its public surface
- * is intact, and its synchronous catalog functions behave — without any
- * network call (validateApiKey/streamCompletion stay uncalled on purpose).
+ * P1.2 — smoke-import of `@personal-ai/core-providers` into the coordinator
+ * sidecar. Proves the workspace dep resolves, its public surface is intact,
+ * and its synchronous catalog functions behave — without any network call
+ * (validateApiKey/streamCompletion stay uncalled on purpose).
  *
- * The dep is a pnpm workspace link (`../APP/packages/*` in pnpm-workspace.yaml),
- * never a copy — the spec's reuse rule.
+ * The dep is a pnpm workspace link to the vendored `packages/core-providers`
+ * (copied in from the reference APP repo — this repo is self-contained).
  */
 import { describe, expect, test } from "bun:test";
 import {

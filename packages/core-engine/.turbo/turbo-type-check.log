@@ -1,0 +1,4 @@
+
+> @personal-ai/core-engine@0.1.0 type-check /home/sarvesh/APP/packages/core-engine
+> tsc --noEmit
+
