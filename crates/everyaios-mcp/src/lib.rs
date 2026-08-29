@@ -20,6 +20,7 @@ pub mod manager;
 pub mod protocol;
 pub mod record;
 pub mod server;
+pub mod store;
 
 pub use attach::{AttachError, AttachRequest, AttachedServer};
 pub use hijack::{validate_external_tool, HijackError, ToolIdentity, ToolSource};
@@ -32,6 +33,9 @@ pub use loopback::{LoopbackPool, PoolStats};
 pub use server::{
     tool_list, ExternalTool, McpServer, MrtrHandle, StatelessRequest, ToolCallHandler, ToolCatalog,
     ToolListEntry, ToolListResponse,
+};
+pub use store::{
+    ConnectConsent, ConnectFlow, StoreEntry, StoreIndex, StoreKind,
 };
 
 /// ACP tool-kind taxonomy (F9 — doc 45 §4.3): a shared vocabulary that maps

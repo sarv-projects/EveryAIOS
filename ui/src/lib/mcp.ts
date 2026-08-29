@@ -53,6 +53,70 @@ export async function mcpAttach(
   return invoke("mcp_attach", { name, command, args });
 }
 
+/** Connect-Store — the curated "click → sign in → use" connector list. */
+export interface StoreEntry {
+  id: string;
+  kind: "remote-mcp" | "connector";
+  name: string;
+  description: string;
+  url: string | null;
+  flow: "pkce" | "device-code" | "api-key";
+  vaultProvider: string;
+  toolHint: number;
+  scopesPlain: string[];
+  canMutate: boolean;
+  indexesIntoMemory: boolean;
+}
+
+export async function storeCatalog(): Promise<StoreEntry[]> {
+  if (!inTauri()) return demoStore();
+  return invoke<StoreEntry[]>("store_catalog");
+}
+
+function demoStore(): StoreEntry[] {
+  return [
+    {
+      id: "github",
+      kind: "remote-mcp",
+      name: "GitHub",
+      description: "Repos, issues, PRs via the official GitHub MCP server.",
+      url: "https://api.githubcopilot.com/mcp/",
+      flow: "device-code",
+      vaultProvider: "copilot",
+      toolHint: 30,
+      scopesPlain: ["Read your repositories, issues, and pull requests"],
+      canMutate: true,
+      indexesIntoMemory: false,
+    },
+    {
+      id: "google-drive",
+      kind: "remote-mcp",
+      name: "Google Drive",
+      description: "Read and write your Google Drive via the official Drive connector.",
+      url: "https://mcp.googleapis.com/mcp/",
+      flow: "pkce",
+      vaultProvider: "google",
+      toolHint: 12,
+      scopesPlain: ["View your Google Drive file list and metadata"],
+      canMutate: true,
+      indexesIntoMemory: false,
+    },
+    {
+      id: "microsoft-graph",
+      kind: "remote-mcp",
+      name: "Microsoft Graph",
+      description: "Outlook mail, OneDrive, and Calendar via Microsoft Graph.",
+      url: "https://mcp.microsoft.com/mcp/",
+      flow: "pkce",
+      vaultProvider: "microsoft",
+      toolHint: 20,
+      scopesPlain: ["Read your Outlook mail headers", "Read your OneDrive file list"],
+      canMutate: true,
+      indexesIntoMemory: false,
+    },
+  ];
+}
+
 function demoServers(): McpServerRow[] {
   return [
     { name: "EveryAIOS native (built-in)", status: "connected", transport: "native", tools: 42, desc: "37 browser + 5 storage tools" },

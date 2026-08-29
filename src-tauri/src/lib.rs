@@ -748,6 +748,7 @@ pub fn run() {
             mcp_cmds::mcp_catalog,
             mcp_cmds::mcp_servers,
             mcp_cmds::mcp_attach,
+            mcp_cmds::store_catalog,
             office_cmds::docx_open,
             office_cmds::docx_patch,
             office_cmds::docx_tracks,

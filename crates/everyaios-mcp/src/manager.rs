@@ -135,12 +135,14 @@ pub fn is_allowed(id: &str) -> bool {
 pub enum PlanError {
     #[error("`{0}` is not on the curated allow-list")]
     NotAllowed(String),
-    #[error("unrecognized registryType `{0}` (expected npx/uvx/binary/remote)")]
+    #[error("unrecognized registryType `{0}` (expected npx/uvx/binary)")]
     UnsupportedType(String),
     #[error("missing package identifier")]
     MissingIdentifier,
     #[error("floating unpinned package `{0}` — refusing (K6 version pinning)")]
     Floating(String),
+    #[error("remote server needs an https (or loopback) URL, got `{0}`")]
+    RemoteUrl(String),
 }
 
 /// The validated install plan (what the executor runs). For npx/uvx the
@@ -153,6 +155,44 @@ pub struct InstallPlan {
     pub args: Vec<String>,
     /// Published sha256 for binary installs ("" = n/a).
     pub sha256_pin: String,
+}
+
+/// The validated dtype for a **remote** server (`registryType: "remote"`):
+/// the app connects over HTTP/SSE with OAuth 2.1 authorization instead of
+/// spawning a child. No executable bytes cross the trust boundary — the
+/// server is a reviewed URL, not a downloaded binary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemotePlan {
+    pub id: String,
+    /// HTTPS server URL (the OAuth 2.1 protected-resource endpoint).
+    pub url: String,
+    /// Optional vault OAuth `provider` key (which ProviderSettings to route
+    /// the authorization through). Empty for public servers.
+    pub oauth_provider: String,
+}
+
+/// Validate a remote server: allow-listed AND an https (or loopback-dev)
+/// URL. `install_plan` has no URL field (stdio children), so remote targets
+/// go through `remote_plan` — the Connect-Store path.
+pub fn remote_plan(server: &RegistryServer, consent_url: &str) -> Result<RemotePlan, PlanError> {
+    if !is_allowed(&server.id) {
+        return Err(PlanError::NotAllowed(server.id.clone()));
+    }
+    if server.registry_type != "remote" {
+        return Err(PlanError::UnsupportedType(server.registry_type.clone()));
+    }
+    let url = consent_url.trim();
+    let is_https = url.starts_with("https://");
+    let is_loopback =
+        url.starts_with("http://127.0.0.1") || url.starts_with("http://localhost");
+    if url.is_empty() || !(is_https || is_loopback) {
+        return Err(PlanError::RemoteUrl(url.to_string()));
+    }
+    Ok(RemotePlan {
+        id: server.id.clone(),
+        url: url.to_string(),
+        oauth_provider: server.identifier.clone(),
+    })
 }
 
 /// Validate an install: allow-listed, recognized distribution, and for
@@ -435,10 +475,35 @@ mod tests {
             Err(PlanError::Floating(_))
         ));
         let remote = server("github", "remote", "github");
+        // A remote goes through `remote_plan`, not `install_plan`. `install_plan`
+        // still refuses it (no child executable to run).
         assert!(matches!(
             install_plan(&remote),
             Err(PlanError::UnsupportedType(_))
         ));
+        // ...but `remote_plan` accepts an https remote on the allow-list.
+        let github_https = server("github", "remote", "github");
+        let plan = remote_plan(&github_https, "https://api.githubcopilot.com/mcp/").unwrap();
+        assert_eq!(plan.url, "https://api.githubcopilot.com/mcp/");
+        assert_eq!(plan.oauth_provider, "github");
+        // Non-https remote is rejected.
+        assert!(matches!(
+            remote_plan(&github_https, "http://insecure.example.com/mcp"),
+            Err(PlanError::RemoteUrl(_))
+        ));
+    }
+
+    #[test]
+    fn remote_plan_requires_allow_list_and_https() {
+        let bad = server("some-suspicious", "remote", "x");
+        assert!(matches!(
+            remote_plan(&bad, "https://evil.com/mcp"),
+            Err(PlanError::NotAllowed(_))
+        ));
+        let ok = server("github", "remote", "github");
+        assert!(remote_plan(&ok, "https://api.githubcopilot.com/mcp/").is_ok());
+        // loopback dev is allowed too
+        assert!(remote_plan(&ok, "http://127.0.0.1:8080/mcp").is_ok());
     }
 
     #[test]

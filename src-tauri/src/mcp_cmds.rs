@@ -95,6 +95,56 @@ pub fn mcp_servers(
     Ok(rows)
 }
 
+/// Connect-Store — the curated "click → sign in → use" connector list.
+/// Remote MCP servers + flat OAuth connectors, each with the Guard-2
+/// consent payload the UI must render before the flow runs. This is the
+/// ChatGPT-connector-equivalent surface: a short vetted index, not a
+/// settings form.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreRow {
+    pub id: String,
+    pub kind: String, // remote-mcp | connector
+    pub name: String,
+    pub description: String,
+    pub url: Option<String>,
+    pub flow: String, // pkce | device-code | api-key
+    pub vault_provider: String,
+    pub tool_hint: u32,
+    pub scopes_plain: Vec<String>,
+    pub can_mutate: bool,
+    pub indexes_into_memory: bool,
+}
+
+#[tauri::command]
+pub fn store_catalog() -> Vec<StoreRow> {
+    use everyaios_mcp::{StoreIndex, StoreKind};
+    StoreIndex::bundled()
+        .entries()
+        .into_iter()
+        .map(|e| StoreRow {
+            id: e.id.clone(),
+            kind: match e.kind {
+                StoreKind::RemoteMcp => "remote-mcp".into(),
+                StoreKind::Connector => "connector".into(),
+            },
+            name: e.name.clone(),
+            description: e.description.clone(),
+            url: e.url.clone(),
+            flow: match e.flow {
+                everyaios_mcp::ConnectFlow::Pkce => "pkce".into(),
+                everyaios_mcp::ConnectFlow::DeviceCode => "device-code".into(),
+                everyaios_mcp::ConnectFlow::ApiKey => "api-key".into(),
+            },
+            vault_provider: e.vault_provider.clone(),
+            tool_hint: e.tool_hint,
+            scopes_plain: e.consent.scopes_plain.clone(),
+            can_mutate: e.consent.can_mutate,
+            indexes_into_memory: e.consent.indexes_into_memory,
+        })
+        .collect()
+}
+
 /// P11.5.8 — attach a user-supplied MCP server (stdio) and reconcile its
 /// tools into the unified catalog (native wins on name collisions). The
 /// exact-command consent is a Guard-2 card in the UI before this is called.
