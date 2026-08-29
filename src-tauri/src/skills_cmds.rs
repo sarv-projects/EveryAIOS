@@ -61,6 +61,10 @@ pub struct SkillRowView {
     pub permissions: Vec<String>,
     pub scopes_plain: Vec<String>,
     pub installed: bool,
+    /// `Some(true)` = installed skill's on-disk bytes differ from its
+    /// install-time sha-256 pin (mutated / upgraded out-of-band). `None` =
+    /// not installed or no pin (user-authored skill).
+    pub tampered: Option<bool>,
 }
 
 /// Verify the bundled signed index against the pinned key and return the rows.
@@ -90,6 +94,17 @@ fn installed_names() -> std::collections::BTreeSet<String> {
     }
 }
 
+/// doc-75 sha-pin integrity check: has the installed skill's on-disk bytes
+/// drifted from its install-time pin? `None` = not present on disk / no pin.
+fn skill_tampered(
+    store: &everyaios_blueprint::SkillStore,
+    id: &str,
+) -> Option<bool> {
+    let path = store.root().join(id).join("SKILL.md");
+    let bytes = std::fs::read(&path).ok()?;
+    store.is_tampered(id, &bytes)
+}
+
 /// P9.7 — the skills-store listing: verified index rows + install state.
 #[tauri::command]
 pub fn skills_catalog(
@@ -97,6 +112,7 @@ pub fn skills_catalog(
 ) -> Result<Vec<SkillRowView>, String> {
     let rows = verify_bundled()?;
     let installed = installed_names();
+    let store = everyaios_blueprint::SkillStore::new(skills_root());
     Ok(rows
         .into_iter()
         .map(|r| SkillRowView {
@@ -111,6 +127,7 @@ pub fn skills_catalog(
                 .map(|p| plain_language_scope(p).to_string())
                 .collect(),
             installed: installed.contains(&r.id),
+            tampered: skill_tampered(&store, &r.id),
         })
         .collect())
 }
@@ -154,6 +171,9 @@ pub fn skills_install(id: String) -> Result<serde_json::Value, String> {
 
     let store = everyaios_blueprint::SkillStore::new(skills_root());
     let path = store.save(&skill, true).map_err(|e| e.to_string())?;
+    // doc-75 sha-pinned marketplace model: pin the skill to the exact bytes we
+    // wrote, so any later on-disk mutation is detected (never silently trusted).
+    store.pin(row.id.as_str(), "everyaios-store", row.version.as_str(), skill.to_skill_md().as_bytes());
     Ok(serde_json::json!({
         "id": row.id,
         "name": row.name,
@@ -167,6 +187,7 @@ pub fn skills_install(id: String) -> Result<serde_json::Value, String> {
 pub fn skills_uninstall(name: String) -> Result<serde_json::Value, String> {
     let store = everyaios_blueprint::SkillStore::new(skills_root());
     store.delete(&name).map_err(|e| e.to_string())?;
+    store.unpin(&name);
     Ok(serde_json::json!({ "id": name, "installed": false }))
 }
 

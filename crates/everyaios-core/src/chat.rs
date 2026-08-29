@@ -1275,7 +1275,9 @@ fn stream_provider(
     }
     match broker.chat_completion_stream(&provider, &model, &session_id, body) {
         Ok(events) => {
-            let native_calls = assemble_tool_calls(&events);
+            let finished_by_length =
+                events.iter().any(|e| e.finish.as_deref() == Some("length"));
+            let native_calls = assemble_tool_calls(&events, finished_by_length);
             let text: String = events.iter().filter_map(|e| e.delta.clone()).collect();
             let json_calls = if native_calls.is_empty() && has_tools {
                 let mut calls = extract_json_tool_calls(&text);

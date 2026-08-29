@@ -12,6 +12,7 @@ export interface SkillRowView {
   permissions: string[];
   scopes_plain: string[];
   installed: boolean;
+  tampered: boolean | null;
 }
 
 export async function skillsCatalog(): Promise<SkillRowView[]> {
@@ -41,6 +42,7 @@ function demoSkills(): SkillRowView[] {
       permissions: ["fs.write", "tool.mcp"],
       scopes_plain: ["Write to your files (each write is approved)", "Call local + remote MCP tools"],
       installed: false,
+      tampered: null,
     },
     {
       id: "note-taker",
@@ -50,6 +52,7 @@ function demoSkills(): SkillRowView[] {
       permissions: ["fs.read"],
       scopes_plain: ["Read your files"],
       installed: false,
+      tampered: null,
     },
     {
       id: "doc-scanner",
@@ -59,6 +62,7 @@ function demoSkills(): SkillRowView[] {
       permissions: ["fs.read", "tool.mcp"],
       scopes_plain: ["Read your files", "Call local + remote MCP tools"],
       installed: false,
+      tampered: null,
     },
     {
       id: "email-drafter",
@@ -68,6 +72,7 @@ function demoSkills(): SkillRowView[] {
       permissions: ["fs.read", "tool.connector"],
       scopes_plain: ["Read your files", "Call your connected connectors"],
       installed: false,
+      tampered: null,
     },
   ];
 }

@@ -14,6 +14,7 @@
 //! [`grow_from_task`] implements the GenericAgent skill-tree discipline —
 //! every solved task becomes a versioned skill with ownership markers.
 
+use ::sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -391,8 +392,108 @@ impl SkillStore {
             return Err(SkillError::NotFound(name.into()));
         }
         std::fs::remove_dir_all(dir)?;
+        let _ = self.unpin(name);
         Ok(())
     }
+
+    // --- Per-install content pinning (doc 75 sha-pinned marketplace model) ---
+    //
+    // Store-installed skills are sha-256 pinned to the exact bytes written at
+    // install. A later mutation of the on-disk SKILL.md (or a malicious
+    // marketplace substituting a different file under the same slug) fails the
+    // pin, so an installed skill can never silently change capabilities. This
+    // is the "sha-pinned + immutable slug" trust model the F8/marketplace docs
+    // specify (doc 75 §3), as distinct from the single-global-key index signing
+    // in `everyaios-guard::skillstore`. User-authored / Forge-grown skills
+    // (never installed through a store) carry no pin and are trusted as before.
+
+    /// Ledger: `<root>/.installed.json` — slug → pin.
+    fn ledger_path(&self) -> std::path::PathBuf {
+        self.root.join(".installed.json")
+    }
+
+    /// Read the current pin ledger (empty map if none / unreadable).
+    pub fn pins(&self) -> std::collections::HashMap<String, SkillPin> {
+        let Ok(src) = std::fs::read_to_string(self.ledger_path()) else {
+            return std::collections::HashMap::new();
+        };
+        serde_json::from_str(&src).unwrap_or_default()
+    }
+
+    /// Write the ledger (best-effort: a pin write failure must never block
+    /// the install that already happened).
+    fn put_ledger(&self, map: &std::collections::HashMap<String, SkillPin>) {
+        std::fs::create_dir_all(&self.root).ok();
+        if serde_json::to_string_pretty(map)
+            .ok()
+            .and_then(|s| std::fs::write(self.ledger_path(), s).ok())
+            .is_none()
+        {
+            // A lost pin degrades to "no pin" → runtime treats the skill as
+            // unverifiable, never as verified.
+        }
+    }
+
+    /// Pin a store-installed skill to the exact bytes written at install.
+    pub fn pin(&self, name: &str, source: &str, version: &str, bytes: &[u8]) {
+        let mut map = self.pins();
+        map.insert(
+            name.to_string(),
+            SkillPin {
+                sha256: sha256_hex(bytes),
+                source: source.to_string(),
+                version: version.to_string(),
+            },
+        );
+        self.put_ledger(&map);
+    }
+
+    /// Remove a pin (uninstall).
+    pub fn unpin(&self, name: &str) {
+        let mut map = self.pins();
+        map.remove(name);
+        if map.is_empty() {
+            let _ = std::fs::remove_file(self.ledger_path());
+        } else {
+            self.put_ledger(&map);
+        }
+    }
+
+    /// Tamper check for one installed, pinned skill. `None` = no pin (user-
+    /// authored skill, or the ledger is absent) → no integrity claim. `Some(true)`
+    /// = on-disk bytes no longer match the install-time pin (tampered/mutated
+    /// or upgraded out-of-band).
+    pub fn is_tampered(&self, name: &str, bytes: &[u8]) -> Option<bool> {
+        let pins = self.pins();
+        let pin = pins.get(name)?;
+        Some(sha256_hex(bytes) != pin.sha256)
+    }
+}
+
+/// Install-time content pin for a store-installed skill (doc 75 sha-pinned
+/// marketplace model — immutable slug + content hash).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillPin {
+    /// hex sha-256 of the exact bytes written at install.
+    pub sha256: String,
+    /// origin, e.g. `everyaios-store` (or the marketplace id).
+    pub source: String,
+    /// pinned version at install.
+    pub version: String,
+}
+
+/// hex sha-256 of a byte slice.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    hex_of(&Sha256::digest(bytes).to_vec())
+}
+
+fn hex_of(b: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut s = String::with_capacity(b.len() * 2);
+    for byte in b {
+        write!(s, "{byte:02x}").expect("write to string");
+    }
+    s
 }
 
 /// A scored skill within the active tier.
@@ -823,6 +924,49 @@ mod tests {
         assert_eq!(t.manifest.author, "everyaios");
         assert!(t.manifest.triggers.iter().any(|x| x == "design"));
         assert!(t.body.contains("VARIANCE"));
+    }
+
+    #[test]
+    fn sha256_hex_is_stable() {
+        let a = sha256_hex(b"hello");
+        let b = sha256_hex(b"hello");
+        let c = sha256_hex(b"hello!");
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 64); // 32 bytes hex
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn pin_detects_mutation_and_survives_restart() {
+        let dir = tmpdir();
+        let store = SkillStore::new(&dir);
+        let s = sample_skill();
+        let md = s.to_skill_md();
+        store.pin("refactor-helper", "everyaios-store", "1.2.0", md.as_bytes());
+
+        // Untouched → not tampered.
+        assert_eq!(store.is_tampered("refactor-helper", md.as_bytes()), Some(false));
+
+        // "Restart" — a fresh store over the same dir sees the pin.
+        let again = SkillStore::new(&dir);
+        let running = again
+            .load("refactor-helper")
+            .unwrap_or_else(|_| {
+                // pin() alone doesn't write the SKILL.md; simulate a persisted
+                // skill by writing it through the normal install path.
+                again.save(&s, true).unwrap();
+                again.load("refactor-helper").unwrap()
+            });
+        let live = running.to_skill_md();
+        assert_eq!(again.is_tampered("refactor-helper", live.as_bytes()), Some(false));
+
+        // Mutate the installed bytes → tampered.
+        let mutated = format!("{live}\n# attacker: exfil", );
+        assert_eq!(again.is_tampered("refactor-helper", mutated.as_bytes()), Some(true));
+
+        // Unpin → no integrity claim (Some/None).
+        again.unpin("refactor-helper");
+        assert_eq!(again.is_tampered("refactor-helper", mutated.as_bytes()), None);
     }
 
     #[test]

@@ -699,7 +699,10 @@ fn parse_tool_call_delta(v: &serde_json::Value) -> Option<ToolCallDelta> {
 }
 
 /// Merge streamed `delta.tool_calls` fragments into complete (name, args) pairs.
-pub fn assemble_tool_calls(events: &[ChatStreamEvent]) -> Vec<(String, serde_json::Value)> {
+pub fn assemble_tool_calls(
+    events: &[ChatStreamEvent],
+    finished_by_length: bool,
+) -> Vec<(String, serde_json::Value)> {
     use std::collections::BTreeMap;
     let mut by_index: BTreeMap<i64, (String, String, String)> = BTreeMap::new();
     for ev in events {
@@ -728,14 +731,27 @@ pub fn assemble_tool_calls(events: &[ChatStreamEvent]) -> Vec<(String, serde_jso
             if name.is_empty() {
                 return None;
             }
-            let parsed = serde_json::from_str(&args).unwrap_or_else(|_| {
-                if args.is_empty() {
-                    serde_json::json!({})
-                } else {
-                    serde_json::json!({ "_raw": args })
+            // Empty args = a legitimate no-arg tool call → `{}`.
+            if args.is_empty() {
+                return Some((name, serde_json::json!({})));
+            }
+            let parsed = serde_json::from_str::<serde_json::Value>(&args);
+            match parsed {
+                Ok(v) => Some((name, v)),
+                Err(_) => {
+                    // Fail-closed on truncation (pi stopReason==="length" →
+                    // failToolCallsFromTruncatedMessage; spec B1 "fail truncated
+                    // tool calls"): a call whose args were cut by the context
+                    // limit is borked — never execute it, never hand it the
+                    // `_raw` garbage. On a *clean* finish the `_raw` rescue is
+                    // still a last-resort for genuinely non-JSON args.
+                    if finished_by_length {
+                        None
+                    } else {
+                        Some((name, serde_json::json!({ "_raw": args })))
+                    }
                 }
-            });
-            Some((name, parsed))
+            }
         })
         .collect()
 }
@@ -1175,7 +1191,7 @@ mod tests {
             "data: [DONE]\n",
         );
         let events = parse_sse(BufReader::new(sse.as_bytes()));
-        let calls = assemble_tool_calls(&events);
+        let calls = assemble_tool_calls(&events, false);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "search.query");
         assert_eq!(calls[0].1["q"], "hi");
@@ -1183,6 +1199,50 @@ mod tests {
             events.last().and_then(|e| e.finish.as_deref()),
             Some("tool_calls")
         );
+    }
+
+    #[test]
+    fn truncated_tool_call_dropped_on_length_finish() {
+        // finish_reason="length" with a tool call whose args are cut mid-JSON.
+        // pi / spec-B1 guard: never execute a truncated tool call, never hand
+        // the `_raw` garbage. On a clean finish the same args stay a `_raw`
+        // rescue (last resort, not silently executed as parsed args).
+        let fragment = ChatStreamEvent {
+            finish: Some("length".to_string()),
+            tool_calls: vec![ToolCallDelta {
+                index: 0,
+                id: Some("call_1".into()),
+                name: Some("file_ops.write".to_string()),
+                arguments: Some("{\"path\":\"/tmp/f".to_string()), // cut mid-JSON
+            }],
+            ..Default::default()
+        };
+        assert!(
+            assemble_tool_calls(&[fragment.clone()], true).is_empty(),
+            "length-truncated call must be dropped (fail-closed)"
+        );
+        // Same unparsable args on a clean finish stay a `_raw` rescue.
+        let calls = assemble_tool_calls(&[fragment], false);
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].1.get("_raw").is_some());
+    }
+
+    #[test]
+    fn empty_args_yield_empty_object() {
+        // A legitimate no-arg tool call (`arguments: ""`) → `{}`, both on a
+        // clean finish and regardless of the `_raw`/truncation split.
+        let ev = ChatStreamEvent {
+            tool_calls: vec![ToolCallDelta {
+                index: 0,
+                id: Some("c".into()),
+                name: Some("get.time".into()),
+                arguments: Some(String::new()),
+            }],
+            ..Default::default()
+        };
+        let calls = assemble_tool_calls(&[ev], true);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1, serde_json::json!({}));
     }
 
     #[test]

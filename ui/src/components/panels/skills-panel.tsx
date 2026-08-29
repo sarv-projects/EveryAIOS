@@ -96,6 +96,11 @@ export default function SkillsPanel() {
                     {row.installed && (
                       <Badge className="bg-emerald-500/15 text-emerald-300">installed</Badge>
                     )}
+                    {row.tampered === true && (
+                      <Badge className="bg-red-500/15 text-red-300" title="On-disk content no longer matches its signed install pin">
+                        tampered
+                      </Badge>
+                    )}
                   </div>
                   <span className="text-xs text-muted-foreground">v{row.version}</span>
                 </div>
