@@ -87,6 +87,12 @@ pub struct AppState {
     /// panel) + the live child handles (dropping the map kills the child).
     pub mcp_servers: Mutex<std::collections::HashMap<String, mcp_cmds::McpServerRow>>,
     pub mcp_live: Mutex<std::collections::HashMap<String, everyaios_mcp::attach::AttachedServer>>,
+    /// Remote-MCP OAuth 2.1: in-flight PKCE flows (store id → flow) and
+    /// connected tokens (store id → bearer). Live in the shell, not the
+    /// renderer — the coordinator never sees them.
+    pub mcp_remote_flows:
+        Arc<Mutex<std::collections::HashMap<String, mcp_cmds::RemoteFlowState>>>,
+    pub mcp_remote_tokens: Arc<Mutex<std::collections::HashMap<String, String>>>,
 }
 
 /// Monotonic stream-id source for `chat_stream` calls.
@@ -683,6 +689,8 @@ pub fn run() {
             shells: Mutex::new(std::collections::HashMap::new()),
             mcp_servers: Mutex::new(std::collections::HashMap::new()),
             mcp_live: Mutex::new(std::collections::HashMap::new()),
+            mcp_remote_flows: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            mcp_remote_tokens: Arc::new(Mutex::new(std::collections::HashMap::new())),
         })
         .invoke_handler(tauri::generate_handler![
             version,
@@ -749,6 +757,9 @@ pub fn run() {
             mcp_cmds::mcp_servers,
             mcp_cmds::mcp_attach,
             mcp_cmds::store_catalog,
+            mcp_cmds::mcp_connect_start,
+            mcp_cmds::mcp_remote_status,
+            mcp_cmds::mcp_remote_call,
             office_cmds::docx_open,
             office_cmds::docx_patch,
             office_cmds::docx_tracks,

@@ -10,6 +10,14 @@
 > (their integrations need a registered app) — set via `with_client_id`; the
 > others use community/known public client IDs (override anytime). 4 new vault
 > oauth tests (110 vault tests total).
+> **v1.2 (2026-08-29):** remote client landed — `everyaios-mcp::remote`
+> (OAuth 2.1 discovery + RFC 7591 dynamic client registration + PKCE + token
+> exchange + streamable-HTTP JSON-RPC over the `HttpTransport` seam; ureq
+> default). Tauri `mcp_connect_start` (discovery → PKCE → loopback callback
+> thread → bearer token in shell state), `mcp_remote_status`, `mcp_remote_call`
+> (tools/list, tools/call). UI: **Connect Store tab** in the Connectors panel
+> renders `storeCatalog()` with live Connect buttons + plain-language scopes.
+> 5 new remote-client tests (53 mcp tests total).
 
 ## The problem
 

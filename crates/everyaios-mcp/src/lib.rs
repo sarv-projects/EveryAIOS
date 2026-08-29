@@ -19,6 +19,7 @@ pub mod loopback;
 pub mod manager;
 pub mod protocol;
 pub mod record;
+pub mod remote;
 pub mod server;
 pub mod store;
 
@@ -33,6 +34,12 @@ pub use loopback::{LoopbackPool, PoolStats};
 pub use server::{
     tool_list, ExternalTool, McpServer, MrtrHandle, StatelessRequest, ToolCallHandler, ToolCatalog,
     ToolListEntry, ToolListResponse,
+};
+pub use remote::{
+    build_authorize_url, connect, discover_authorization_server, discover_protected_resource,
+    exchange_code, refresh_token, register_dynamic_client, rpc, AuthServerMetadata,
+    ClientRegistration, HttpTransport, PkceFlow, ProtectedResource, RemoteError, RemoteTarget,
+    TokenResponse, UreqTransport,
 };
 pub use store::{
     ConnectConsent, ConnectFlow, StoreEntry, StoreIndex, StoreKind,

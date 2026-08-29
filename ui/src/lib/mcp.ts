@@ -73,6 +73,16 @@ export async function storeCatalog(): Promise<StoreEntry[]> {
   return invoke<StoreEntry[]>("store_catalog");
 }
 
+/** Start a remote-MCP OAuth 2.1 connect (discovery + PKCE) → auth URL. */
+export async function mcpConnectStart(
+  storeId: string,
+): Promise<{ authUrl: string; state: string; redirectUri: string }> {
+  if (!inTauri()) {
+    return { authUrl: "https://example.com/oauth/authorize?demo=1", state: "demo", redirectUri: "http://127.0.0.1:0/oauth/callback" };
+  }
+  return invoke("mcp_connect_start", { storeId });
+}
+
 function demoStore(): StoreEntry[] {
   return [
     {

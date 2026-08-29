@@ -16,8 +16,11 @@ import {
   mcpAttach,
   mcpCatalog,
   mcpServers,
+  mcpConnectStart,
+  storeCatalog,
   type McpCatalog,
   type McpServerRow,
+  type StoreEntry,
 } from '@/lib/mcp'
 import { cn } from '@/lib/utils'
 import {
@@ -89,12 +92,25 @@ function initials(name: string) {
 }
 
 export default function ConnectorsPanel() {
-  const [tab, setTab] = useState('native')
+  const [tab, setTab] = useState('store')
   const [catalog, setCatalog] = useState<McpCatalog | null>(null)
   const notify = useAppStore((s) => s.notify)
   const [oauthOn, setOauthOn] = useState(false)
   const [oauthAccts, setOauthAccts] = useState<OAuthAccount[]>([])
   const [deviceHint, setDeviceHint] = useState<string | null>(null)
+  const [store, setStore] = useState<StoreEntry[]>([])
+  const [connectingId, setConnectingId] = useState<string | null>(null)
+
+  // Connect Store — the curated "click → sign in → use" list (ARCH/15).
+  useEffect(() => {
+    let alive = true
+    storeCatalog()
+      .then((s) => alive && setStore(s))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     oauthStatus()
@@ -280,6 +296,7 @@ export default function ConnectorsPanel() {
       <div className="border-b border-border px-4 py-2">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="h-7">
+            <TabsTrigger value="store" className="text-xs">Connect Store</TabsTrigger>
             <TabsTrigger value="mcp" className="text-xs">MCP Servers</TabsTrigger>
             <TabsTrigger value="native" className="text-xs">Native</TabsTrigger>
             <TabsTrigger value="catalog" className="text-xs">Tool Catalog</TabsTrigger>
@@ -295,7 +312,14 @@ export default function ConnectorsPanel() {
           transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
           className="space-y-4 p-4"
         >
-          {tab === 'catalog' ? (
+          {tab === 'store' ? (
+            <StoreSection
+              store={store}
+              connectingId={connectingId}
+              setConnectingId={setConnectingId}
+              notify={notify}
+            />
+          ) : tab === 'catalog' ? (
             <ToolCatalogSection catalog={catalog} />
           ) : tab === 'native' ? (
             <>
@@ -551,6 +575,137 @@ export default function ConnectorsPanel() {
         </p>
       </footer>
     </div>
+  )
+}
+
+function StoreSection({
+  store,
+  connectingId,
+  setConnectingId,
+  notify,
+}: {
+  store: StoreEntry[]
+  connectingId: string | null
+  setConnectingId: (id: string | null) => void
+  notify: (msg: string) => void
+}) {
+  const [connected, setConnected] = useState<Set<string>>(new Set())
+
+  async function connect(e: StoreEntry) {
+    setConnectingId(e.id)
+    try {
+      const r = await mcpConnectStart(e.id)
+      window.open(r.authUrl, '_blank')
+      notify(`${e.name} — authorize in the browser that just opened`)
+    } catch (err) {
+      notify(`Connect ${e.name}: ${String(err)}`)
+    } finally {
+      setConnectingId(null)
+    }
+  }
+
+  return (
+    <>
+      <section>
+        <div className="mb-2 flex items-center gap-1.5">
+          <Plug className="h-3.5 w-3.5 text-orange-400" />
+          <span className="text-xs font-medium text-foreground">Connect Store</span>
+          <Badge variant="secondary" className="text-[9px]">
+            click → sign in → use
+          </Badge>
+        </div>
+        <p className="mb-3 text-[10px] text-muted-foreground/70">
+          Curated remote MCP servers + OAuth connectors (ARCH/15). Each connect
+          runs OAuth 2.1 (PKCE/device flow) with your consent — tokens stay in
+          the local vault.
+        </p>
+        {store.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center">
+            <Plug className="mx-auto h-4 w-4 text-muted-foreground/50" />
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+              Store empty — no curated entries.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {store.map((e, i) => {
+              const isConnected = connected.has(e.id)
+              return (
+                <div
+                  key={e.id}
+                  className="enter-stagger flex flex-col gap-2 rounded-lg border border-border bg-card p-3"
+                  style={staggerStyle(i)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div
+                        className={cn(
+                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-background',
+                          LOGO_COLORS[i % LOGO_COLORS.length],
+                        )}
+                      >
+                        {initials(e.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[12px] font-medium text-foreground">
+                          {e.name}
+                        </div>
+                        <div className="text-[9px] text-muted-foreground/60">
+                          {e.kind === 'remote-mcp' ? 'remote MCP' : 'connector'} · {e.flow}
+                        </div>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={isConnected ? 'secondary' : 'outline'}
+                      className={cn('shrink-0 text-[8px]', isConnected && 'text-emerald-300')}
+                    >
+                      {isConnected ? 'connected' : 'not connected'}
+                    </Badge>
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-muted-foreground/80">
+                    {e.description}
+                  </p>
+                  {/* The Guard-2 consent surface: plain-language scopes. */}
+                  <ul className="space-y-0.5">
+                    {e.scopesPlain.map((s) => (
+                      <li key={s} className="flex items-start gap-1.5 text-[10px]">
+                        <span
+                          className={cn(
+                            'mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full',
+                            e.canMutate ? 'bg-amber-400' : 'bg-emerald-400/70',
+                          )}
+                        />
+                        <span className="text-muted-foreground/70">{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {e.toolHint > 0 && (
+                    <div className="font-mono text-[9px] text-muted-foreground/50">
+                      ~{e.toolHint} tools once connected
+                    </div>
+                  )}
+                  <Button
+                    size="sm"
+                    variant={isConnected ? 'outline' : 'default'}
+                    className="mt-auto h-7 gap-1.5 text-[11px]"
+                    disabled={connectingId !== null}
+                    onClick={() => (isConnected ? setConnected((s) => { const n = new Set(s); n.delete(e.id); return n }) : connect(e))}
+                  >
+                    {connectingId === e.id ? (
+                      <>Connecting…</>
+                    ) : isConnected ? (
+                      <><Check className="h-3 w-3" /> Disconnect</>
+                    ) : (
+                      <><Plug className="h-3 w-3" /> Connect</>
+                    )}
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </>
   )
 }
 

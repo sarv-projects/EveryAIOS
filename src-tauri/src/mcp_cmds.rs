@@ -5,6 +5,8 @@
 
 use everyaios_mcp::{all_tools, ToolDef};
 use serde::Serialize;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 
 /// One tool's serializable summary.
 #[derive(Debug, Serialize)]
@@ -187,4 +189,170 @@ pub fn mcp_attach(
         "tools": tools,
         "desc": desc,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Remote MCP + OAuth 2.1 (ARCH/15 Tier 2) — the Connect Store's "Connect"
+// button: discovery → dynamic client registration → PKCE loopback → token.
+// ---------------------------------------------------------------------------
+
+/// In-flight PKCE state for one store id (kept in the shell between the
+/// `mcp_connect_start` browser-open and the loopback callback).
+#[derive(Debug, Clone)]
+pub struct RemoteFlowState {
+    pub target: everyaios_mcp::RemoteTarget,
+    pub flow: everyaios_mcp::PkceFlow,
+    pub redirect_uri: String,
+}
+
+fn store_url(store_id: &str) -> Result<String, String> {
+    let store = everyaios_mcp::StoreIndex::bundled();
+    let entry = store
+        .get(store_id)
+        .ok_or_else(|| format!("store entry `{store_id}` not found"))?;
+    entry
+        .url
+        .clone()
+        .ok_or_else(|| format!("`{store_id}` is not a remote MCP server"))
+}
+
+/// Start a remote-MCP connect: discovery + dynamic client registration +
+/// PKCE authorize URL. The UI opens `authUrl` in the system browser; the
+/// loopback callback (thread spawned here) exchanges the code and stores the
+/// bearer token in the shell.
+#[tauri::command]
+pub fn mcp_connect_start(
+    state: tauri::State<'_, crate::AppState>,
+    store_id: String,
+) -> Result<serde_json::Value, String> {
+    let url = store_url(&store_id)?;
+    let http = everyaios_mcp::UreqTransport;
+    let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
+
+    // Bind a loopback listener to get the real redirect port.
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let redirect = format!("http://127.0.0.1:{port}/oauth/callback");
+    let flow = everyaios_mcp::build_authorize_url(&target, &redirect).map_err(|e| e.to_string())?;
+
+    let flow_state = RemoteFlowState {
+        target: target.clone(),
+        flow: flow.clone(),
+        redirect_uri: redirect.clone(),
+    };
+    {
+        let mut flows = state
+            .mcp_remote_flows
+            .lock()
+            .map_err(|e| e.to_string())?;
+        flows.insert(store_id.clone(), flow_state);
+    }
+
+    // The callback thread: accept once, exchange the code, store the token.
+    let store_c = store_id.clone();
+    let flow_c = flow.clone();
+    let target_c = target.clone();
+    let redirect_c = redirect.clone();
+    let tokens = std::sync::Arc::clone(&state.mcp_remote_tokens);
+    std::thread::spawn(move || {
+        let _ = listener.set_nonblocking(false);
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            let req = String::from_utf8_lossy(&buf[..n]);
+            let (code, st) = parse_callback(&req);
+            let body = if let (Some(code), Some(st)) = (code, st) {                        if st == flow_c.state {
+                            match everyaios_mcp::exchange_code(
+                                &target_c,
+                                &flow_c,
+                                &code,
+                                &everyaios_mcp::UreqTransport,
+                            ) {
+                        Ok(tok) => {
+                            if let Ok(mut t) = tokens.lock() {
+                                t.insert(store_c.clone(), tok.access_token);
+                            }
+                            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html><body>EveryAIOS connected. You can close this tab.</body></html>".to_string()
+                        }
+                        Err(_) => {
+                            "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\noauth exchange failed".to_string()
+                        }
+                    }
+                } else {
+                    "HTTP/1.1 400 Bad Request\r\n\r\nstate mismatch".to_string()
+                }
+            } else {
+                "HTTP/1.1 400 Bad Request\r\n\r\nmissing code".to_string()
+            };
+            let _ = stream.write_all(body.as_bytes());
+        }
+        let _ = redirect_c;
+    });
+
+    Ok(serde_json::json!({
+        "authUrl": flow.auth_url,
+        "state": flow.state,
+        "redirectUri": redirect,
+    }))
+}
+
+/// Status: is a remote store entry connected (has a token)?
+#[tauri::command]
+pub fn mcp_remote_status(
+    state: tauri::State<'_, crate::AppState>,
+    store_id: String,
+) -> Result<serde_json::Value, String> {
+    let tokens = state
+        .mcp_remote_tokens
+        .lock()
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "connected": tokens.contains_key(&store_id),
+    }))
+}
+
+/// Run one JSON-RPC call against a connected remote MCP server (tools/list,
+/// tools/call, …).
+#[tauri::command]
+pub fn mcp_remote_call(
+    state: tauri::State<'_, crate::AppState>,
+    store_id: String,
+    method: String,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let url = store_url(&store_id)?;
+    let token = state
+        .mcp_remote_tokens
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&store_id)
+        .cloned()
+        .ok_or_else(|| format!("`{store_id}` is not connected"))?;
+
+    // Reconnect (discovery + dynamic registration) — the registered client is
+    // per-instance; a fresh connect is the honest way to get a target.
+    let http = everyaios_mcp::UreqTransport;
+    let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
+    let resp = everyaios_mcp::rpc(&target, &token, &method, params, &http)
+        .map_err(|e| e.to_string())?;
+    Ok(resp)
+}
+
+fn parse_callback(req: &str) -> (Option<String>, Option<String>) {
+    // GET /oauth/callback?code=…&state=… HTTP/1.1
+    let line = req.lines().next().unwrap_or("");
+    let path = line.split(' ').nth(1).unwrap_or("");
+    let (_, query) = path.split_once('?').unwrap_or((path, ""));
+    let mut code = None;
+    let mut state = None;
+    for kv in query.split('&') {
+        if let Some((k, v)) = kv.split_once('=') {
+            match k {
+                "code" => code = Some(v.to_string()),
+                "state" => state = Some(v.to_string()),
+                _ => {}
+            }
+        }
+    }
+    (code, state)
 }
