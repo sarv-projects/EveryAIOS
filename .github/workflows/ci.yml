@@ -120,11 +120,9 @@ jobs:
         working-directory: ui
         run: bun test
 
-  # Sidecar: coordinator bun tests + typecheck. Needs the private APP repo
-  # (sarv-projects/APP — the @personal-ai/core-* packages) checked out as a
-  # sibling of this repo (pnpm-workspace.yaml: `../APP/packages/*`). Configure
-  # a fine-grained PAT with read access to sarv-projects/APP as the
-  # APP_CLONE_TOKEN secret; without it this required job fails loudly.
+  # Sidecar: coordinator bun tests + typecheck. The @personal-ai/core-*
+  # engine packages are vendored in-repo under packages/core-*, so this job
+  # needs no private-repo token and always runs.
   sidecar:
     name: coordinator bun test + typecheck
     runs-on: ubuntu-latest
@@ -132,44 +130,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: desktop_app
-      - name: Check out APP (core packages) — needs APP_CLONE_TOKEN
-        if: secrets.APP_CLONE_TOKEN != ''
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
-        uses: actions/checkout@v4
-        with:
-          repository: sarv-projects/APP
-          path: APP
-          token: ${{ secrets.APP_CLONE_TOKEN }}
-      - name: Require APP clone token
-        if: secrets.APP_CLONE_TOKEN == ''
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
-        run: |
-          echo "::error::APP_CLONE_TOKEN secret is required — coordinator tests must not be skipped"
-          exit 1
       - name: Setup bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       - name: Install workspace deps
-        if: secrets.APP_CLONE_TOKEN != ''
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app
         run: |
           npm install -g pnpm
           pnpm install
       - name: Coordinator typecheck
-        if: secrets.APP_CLONE_TOKEN != ''
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app/packages/coordinator
         run: bun run type-check
       - name: Coordinator tests
-        if: secrets.APP_CLONE_TOKEN != ''
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app/packages/coordinator
         run: bun test
 

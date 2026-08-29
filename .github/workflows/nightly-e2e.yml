@@ -6,8 +6,8 @@
 #     stability, stress benches) — on all 3 desktop platforms,
 #   - the P10 E2E suites (journey/memory/browser/office/sub-agent/ACP/MCP)
 #     with the office conformance oracle, on Linux,
-#   - the coordinator (sidecar) bun test + typecheck when APP_CLONE_TOKEN is
-#     configured.
+#   - the coordinator (sidecar) bun test + typecheck (packages vendored
+#     in-repo — always runs).
 #
 # This is the "test full flow on Win11 / macOS ARM / Ubuntu 24.04" mechanism:
 # every nightly run executes the same suites on the real CI OSes. Failures
@@ -124,40 +124,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: desktop_app
-      - name: Require APP clone token
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
-        run: |
-          if [ -z "$APP_CLONE_TOKEN" ]; then
-            echo "::error::APP_CLONE_TOKEN secret is required — coordinator tests must not be skipped"
-            exit 1
-          fi
-      - name: Check out APP (core packages) — needs APP_CLONE_TOKEN
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
-        uses: actions/checkout@v4
-        with:
-          repository: sarv-projects/APP
-          path: APP
-          token: ${{ secrets.APP_CLONE_TOKEN }}
       - name: Setup bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       - name: Install workspace deps
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app
         run: |
           npm install -g pnpm
           pnpm install
       - name: Coordinator typecheck
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app/packages/coordinator
         run: bun run type-check
       - name: Coordinator tests
-        env:
-          APP_CLONE_TOKEN: ${{ secrets.APP_CLONE_TOKEN }}
         working-directory: desktop_app/packages/coordinator
         run: bun test
