@@ -511,3 +511,152 @@ fn broker_oauth_failover_switches_to_next_key_on_429() {
     assert_eq!(exhausted, 1, "429 key must be in cooldown");
     assert!(info.iter().any(|k| k.success_count == 1));
 }
+
+// ---------------------------------------------------------------------------
+// Connector providers (ARCH/15 Connect Store) — github/google/microsoft/slack/notion
+// ---------------------------------------------------------------------------
+
+#[test]
+fn github_connector_device_flow_roundtrip() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    let device_base = mock_server(|_| {
+        (
+            200,
+            r#"{"device_code":"dc-gh","user_code":"GHAB-1234",
+                "verification_uri":"https://github.com/login/device",
+                "verification_uri_complete":"https://github.com/login/device?user_code=GHAB-1234",
+                "expires_in":900,"interval":5}"#
+                .into(),
+        )
+    });
+    let poll = AtomicU32::new(0);
+    let poll_base = mock_server(move |_| {
+        if poll.fetch_add(1, Ordering::SeqCst) == 0 {
+            (200, r#"{"error":"authorization_pending"}"#.into())
+        } else {
+            (
+                200,
+                r#"{"access_token":"gho_connector_tok","token_type":"bearer","scope":"repo read:user"}"#
+                    .into(),
+            )
+        }
+    });
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_device_code_url(GITHUB, &device_base)
+        .with_token_url(GITHUB, &poll_base);
+
+    let start = om.start_device(GITHUB).unwrap();
+    assert_eq!(start.user_code, "GHAB-1234");
+    assert!(start.verification_uri.contains("github.com"));
+
+    assert_eq!(
+        om.poll_device(GITHUB).unwrap(),
+        DevicePoll::Pending { interval_secs: 5 }
+    );
+    match om.poll_device(GITHUB).unwrap() {
+        DevicePoll::Approved(info) => {
+            assert!(!info.account_id.is_empty());
+            // The token lands in the key ring under the connector provider.
+            let ring = KeyRing::new(vault);
+            let keys = ring.list(GITHUB).unwrap();
+            assert_eq!(keys.len(), 1);
+            let entry = ring.get(GITHUB, &keys[0].key_id).unwrap();
+            assert_eq!(entry.value, b"gho_connector_tok");
+        }
+        other => panic!("expected Approved, got {other:?}"),
+    }
+}
+
+#[test]
+fn google_connector_pkce_roundtrip() {
+    let base = mock_server(|_| {
+        (
+            200,
+            token_json(
+                "tok_google_1",
+                "rt_google_1",
+                &fake_jwt("google-sub-1", Some("you@gmail.com")),
+            ),
+        )
+    });
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_redirect_uri("http://127.0.0.1:1/cb")
+        .with_token_url(GOOGLE, &base);
+
+    let start = om.start_pkce(GOOGLE).unwrap();
+    assert!(start.auth_url.starts_with("https://accounts.google.com/o/oauth2/v2/auth?"));
+    assert!(start.auth_url.contains("code_challenge_method=S256"));
+    assert!(start.auth_url.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb"));
+    // Google scopes are space-encoded in the authorize URL.
+    assert!(start.auth_url.contains("drive.readonly"));
+
+    let info = om.complete_pkce(GOOGLE, "code-google", &start.state).unwrap();
+    assert_eq!(info.account_id, "google-sub-1");
+    assert_eq!(info.email.as_deref(), Some("you@gmail.com"));
+
+    let ring = KeyRing::new(vault);
+    assert_eq!(ring.list(GOOGLE).unwrap().len(), 1);
+}
+
+#[test]
+fn microsoft_connector_pkce_roundtrip() {
+    let base = mock_server(|_| {
+        (
+            200,
+            token_json(
+                "tok_ms_1",
+                "rt_ms_1",
+                &fake_jwt("ms-sub-1", Some("you@outlook.com")),
+            ),
+        )
+    });
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true)
+        .with_redirect_uri("http://127.0.0.1:1/cb")
+        .with_token_url(MICROSOFT, &base);
+
+    let start = om.start_pkce(MICROSOFT).unwrap();
+    assert!(start
+        .auth_url
+        .starts_with("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?"));
+
+    let info = om
+        .complete_pkce(MICROSOFT, "code-ms", &start.state)
+        .unwrap();
+    assert_eq!(info.account_id, "ms-sub-1");
+    assert_eq!(info.email.as_deref(), Some("you@outlook.com"));
+}
+
+#[test]
+fn connector_providers_are_registered_and_routable() {
+    // Every provider the Connect Store names must resolve in the vault.
+    let vault = vault();
+    let om = OAuthManager::with_enabled(vault, true);
+    for p in [GITHUB, GOOGLE, MICROSOFT, SLACK, NOTION] {
+        // start_* only fails on disabled/missing provider — a registered
+        // provider gets past `provider()` lookup (FlowMismatch proves it's
+        // known, since the lookup happens before the flow-kind check).
+        assert!(
+            !matches!(om.provider(p), Err(OAuthError::ProviderUnsupported(_))),
+            "{p} must be a known provider"
+        );
+    }
+    // The vault-side `provider()` is private — this exercises it via
+    // `start_pkce` on a pkce provider and expects FlowMismatch only if the
+    // kind doesn't match; github is device-code so start_pkce(github) must
+    // yield FlowMismatch (proves the provider resolved AND its flow kind).
+    assert!(matches!(
+        om.start_pkce(GITHUB),
+        Err(OAuthError::FlowMismatch { .. })
+    ));
+    assert!(matches!(
+        om.start_device(GOOGLE),
+        Err(OAuthError::FlowMismatch { .. })
+    ));
+    assert!(matches!(
+        om.start_device(SLACK),
+        Err(OAuthError::FlowMismatch { .. })
+    ));
+}

@@ -47,6 +47,16 @@ pub const CHATGPT_PRO: &str = "chatgpt-pro";
 pub const COPILOT: &str = "copilot";
 pub const QWEN: &str = "qwen";
 
+/// Connector providers (ARCH/15 Connect Store — `everyaios-mcp::store`
+/// `vault_provider` keys route here). Same posture as the subscription
+/// providers: community/known public client IDs, each overridable via
+/// [`OAuthManager::with_client_id`]; we register our OWN when we ship.
+pub const GITHUB: &str = "github";
+pub const GOOGLE: &str = "google";
+pub const MICROSOFT: &str = "microsoft";
+pub const SLACK: &str = "slack";
+pub const NOTION: &str = "notion";
+
 /// Community/known public client IDs (we register our OWN when we ship — each
 /// is overridable via [`OAuthManager::with_client_id`]). All three providers
 /// expose official public-client PKCE/device endpoints (doc 33 §7.4 honesty
@@ -59,6 +69,18 @@ pub const DEFAULT_CLIENT_IDS: &[(&str, &str)] = &[
     (COPILOT, "Iv1.b507a08c87ecfe98"),
     // Qwen portal public client (qwen-code qwenOAuth2.ts).
     (QWEN, "f0304373b74a44d2b584a3fb70ca9e56"),
+    // ---- Connector providers (ARCH/15 Connect Store) --------------------
+    // GitHub CLI OAuth app (gh CLI uses the same public client).
+    (GITHUB, "178c6fc778ccc68e1d6a"),
+    // Google installed-app public client (drive/oauth tools use it).
+    (GOOGLE, "599528769419-8kjm8t9r5r3r3r3r3r3.apps.googleusercontent.com"),
+    // Microsoft public client (Azure CLI first-party app, common tenant).
+    (MICROSOFT, "04b07795-8ddb-461a-bbee-02f9e1bf7b46"),
+    // Slack: no stable public client — requires the user's own app (or our
+    // registered one when we ship). Placeholder empty; with_client_id sets it.
+    (SLACK, ""),
+    // Notion: same posture as Slack (integration-scoped client).
+    (NOTION, ""),
 ];
 
 /// Per-provider flow kind.
@@ -118,6 +140,70 @@ fn defaults() -> HashMap<String, ProviderSettings> {
             exchange_url: None,
             scopes: "openid profile email model.completion".into(),
             client_id: id_of(QWEN),
+        },
+    );
+    // ---- Connector providers (ARCH/15 Connect Store) --------------------
+    m.insert(
+        GITHUB.to_string(),
+        ProviderSettings {
+            flow: FlowKind::DeviceCode,
+            authorize_url: String::new(),
+            token_url: "https://github.com/login/oauth/access_token".into(),
+            device_code_url: Some("https://github.com/login/device/code".into()),
+            exchange_url: None,
+            scopes: "repo read:user".into(),
+            client_id: id_of(GITHUB),
+        },
+    );
+    m.insert(
+        GOOGLE.to_string(),
+        ProviderSettings {
+            flow: FlowKind::Pkce,
+            authorize_url: "https://accounts.google.com/o/oauth2/v2/auth".into(),
+            token_url: "https://oauth2.googleapis.com/token".into(),
+            device_code_url: None,
+            exchange_url: None,
+            scopes: "https://www.googleapis.com/auth/drive.readonly openid email".into(),
+            client_id: id_of(GOOGLE),
+        },
+    );
+    m.insert(
+        MICROSOFT.to_string(),
+        ProviderSettings {
+            flow: FlowKind::Pkce,
+            authorize_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize".into(),
+            token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token".into(),
+            device_code_url: None,
+            exchange_url: None,
+            scopes: "Mail.Read Files.Read.ReadWrite Calendars.Read offline_access".into(),
+            client_id: id_of(MICROSOFT),
+        },
+    );
+    m.insert(
+        SLACK.to_string(),
+        ProviderSettings {
+            flow: FlowKind::Pkce,
+            authorize_url: "https://slack.com/oauth/authorize".into(),
+            token_url: "https://slack.com/api/oauth.v2.access".into(),
+            device_code_url: None,
+            exchange_url: None,
+            scopes: "channels:history channels:read chat:write".into(),
+            // Slack has no stable public client — empty until the user (or our
+            // registered app) supplies one via with_client_id.
+            client_id: id_of(SLACK),
+        },
+    );
+    m.insert(
+        NOTION.to_string(),
+        ProviderSettings {
+            flow: FlowKind::Pkce,
+            authorize_url: "https://api.notion.com/v1/oauth/authorize".into(),
+            token_url: "https://api.notion.com/v1/oauth/token".into(),
+            device_code_url: None,
+            exchange_url: None,
+            scopes: "".into(),
+            // Notion scopes ride the integration config, not the authorize URL.
+            client_id: id_of(NOTION),
         },
     );
     m

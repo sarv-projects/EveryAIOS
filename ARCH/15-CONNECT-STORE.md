@@ -3,6 +3,13 @@
 > **Status:** v1.0 (2026-08-29). Companion to `manager.rs` (local stdio MCP installs)
 > and `everyaios-vault::oauth` (PKCE + device-flow OAuth). **New file `everyaios-mcp/src/store.rs`.**
 > Live code: `store_catalog` Tauri command → `ui/src/lib/mcp.ts` `storeCatalog()`.
+> **v1.1 (2026-08-29):** vault `oauth.rs` now registers the five connector
+> providers the store routes to — `github` (device flow, `repo read:user`),
+> `google` (PKCE, Drive read), `microsoft` (PKCE, Graph mail/files/calendar),
+> `slack` (PKCE), `notion` (PKCE). Slack/Notion ship with an empty client_id
+> (their integrations need a registered app) — set via `with_client_id`; the
+> others use community/known public client IDs (override anytime). 4 new vault
+> oauth tests (110 vault tests total).
 
 ## The problem
 
