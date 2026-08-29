@@ -179,6 +179,7 @@ pub fn xlsx_edit_commit(
 
     let audit_seq = crate::control::record_mutation(
         &*state,
+        crate::control::AuthKind::AgentTicket,
         "office.xlsx_edit",
         serde_json::json!({
             "path": path,
@@ -276,6 +277,7 @@ pub fn xlsx_batch_commit(
 
     let audit_seq = crate::control::record_mutation(
         &*state,
+        crate::control::AuthKind::AgentTicket,
         "office.xlsx_batch",
         serde_json::json!({
             "path": path,

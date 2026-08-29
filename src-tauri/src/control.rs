@@ -113,6 +113,7 @@ pub fn undo_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
         .undo(session_id);
     let seq = record_mutation(
         &state,
+        AuthKind::HumanGesture,
         "agent.undo",
         json!({ "sessionId": session_id, "restored": restored }),
     );
@@ -169,7 +170,75 @@ pub fn interrupt_response(app: &AppHandle, break_id: &str, choice: &str) -> Resu
     Ok(())
 }
 
-pub fn record_mutation(state: &AppState, kind: &str, payload: Value) -> u64 {
+/// v3.60 — how an effect was authorized (spec §4.3): the evidence-level record
+/// of the two-path governance rule. The value is set by Rust call sites only
+/// and is never read from a serde Value built from UI/agent input — so a
+/// machine cannot manufacture human authorization (the anti-impersonation
+/// invariant).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuthKind {
+    /// A Guard `AuthorizationTicket` was minted + consumed (agent/automation
+    /// path; a consumed ticket may itself carry a human approval in its
+    /// `approval_source`).
+    AgentTicket,
+    /// Scheduler/automation-initiated (lease + ticket).
+    AutomationTicket,
+    /// Human-initiated UI action — the user's own gesture is the authorization.
+    HumanGesture,
+}
+
+impl AuthKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AuthKind::AgentTicket => "agent_ticket",
+            AuthKind::AutomationTicket => "automation_ticket",
+            AuthKind::HumanGesture => "human_gesture",
+        }
+    }
+}
+
+/// Inject the authorization provenance into an audit payload. Pure + testable;
+/// the value comes from the `AuthKind` argument, never from the caller's JSON.
+fn with_authorization(authorization: AuthKind, mut payload: Value) -> Value {
+    if let Some(map) = payload.as_object_mut() {
+        map.insert(
+            "authorization".to_string(),
+            Value::String(authorization.as_str().into()),
+        );
+    }
+    payload
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authorization_is_injected_and_not_taken_from_input() {
+        // Human-gesture provenance is set by the AuthKind argument, never read
+        // from a value the caller could construct from UI/agent input — the
+        // anti-spoofing invariant of the two-path model.
+        let v = with_authorization(
+            AuthKind::HumanGesture,
+            json!({ "kind": "shell.command", "command": "rm -rf /" }),
+        );
+        assert_eq!(v["authorization"], "human_gesture");
+        assert_eq!(v["command"], "rm -rf /");
+        let a = with_authorization(AuthKind::AgentTicket, json!({ "kind": "office.xlsx_edit" }));
+        assert_eq!(a["authorization"], "agent_ticket");
+        let m = with_authorization(AuthKind::AutomationTicket, json!({ "kind": "x" }));
+        assert_eq!(m["authorization"], "automation_ticket");
+    }
+
+    #[test]
+    fn non_object_payload_is_left_intact() {
+        let v = with_authorization(AuthKind::HumanGesture, Value::String("hi".into()));
+        assert_eq!(v, Value::String("hi".into()));
+    }
+}
+
+pub fn record_mutation(state: &AppState, authorization: AuthKind, kind: &str, payload: Value) -> u64 {
+    let payload = with_authorization(authorization, payload);
     let seq = {
         let mut chain = state.audit.lock().unwrap_or_else(|e| e.into_inner());
         let seq = (chain.len() as u64) + 1;

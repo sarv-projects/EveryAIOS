@@ -139,6 +139,7 @@ pub fn docx_patch(
     everyaios_office::write_atomic(&path, &out).map_err(|e| e.to_string())?;
     crate::control::record_mutation(
         &state,
+        crate::control::AuthKind::HumanGesture,
         "office.docx_patch",
         serde_json::json!({
             "path": path.display().to_string(),
@@ -322,6 +323,7 @@ pub fn pdf_page_op(
     // v3.59 — human-UI path audit (spec §4.3 / P47.1).
     crate::control::record_mutation(
         &state,
+        crate::control::AuthKind::HumanGesture,
         "office.pdf_op",
         serde_json::json!({
             "path": dest.display().to_string(),

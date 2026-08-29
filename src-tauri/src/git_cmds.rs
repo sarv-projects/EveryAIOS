@@ -92,6 +92,7 @@ pub fn git_stage_all(
     run_git(&dir, &["add", "-A"])?;
     crate::control::record_mutation(
         &state,
+        crate::control::AuthKind::HumanGesture,
         "git.stage",
         serde_json::json!({ "dir": dir, "scope": "all" }),
     );
@@ -109,6 +110,7 @@ pub fn git_commit(
     run_git(&dir, &["commit", "-m", &message])?;
     crate::control::record_mutation(
         &state,
+        crate::control::AuthKind::HumanGesture,
         "git.commit",
         serde_json::json!({ "dir": dir, "message": message }),
     );
@@ -207,6 +209,7 @@ pub fn git_worktree_merge(
     // v3.59 — human-UI path audit (spec §4.3 / P47.1).
     crate::control::record_mutation(
         &state,
+        crate::control::AuthKind::HumanGesture,
         "git.worktree_merge",
         serde_json::json!({ "repo": repo, "branch": name, "into": target_branch }),
     );
@@ -235,6 +238,7 @@ pub fn git_worktree_revert(
     // v3.59 — human-UI path audit (spec §4.3 / P47.1).
     crate::control::record_mutation(
         &state,
+        crate::control::AuthKind::HumanGesture,
         "git.worktree_revert",
         serde_json::json!({ "repo": repo, "branch": name, "commit": commit }),
     );

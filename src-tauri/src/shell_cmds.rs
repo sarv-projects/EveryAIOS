@@ -136,6 +136,7 @@ pub fn shell_spawn(
     // as the agent/ticket path). See spec §4.3 / TODO P47.1.
     crate::control::record_mutation(
         &state,
+        crate::control::AuthKind::HumanGesture,
         "shell.spawn",
         serde_json::json!({ "sessionId": session_id, "shell": shell_name_log }),
     );
@@ -160,6 +161,7 @@ pub fn shell_write(
     // audited on the same Merkle chain as agent/ticket effects (P47.1).
     crate::control::record_mutation(
         &state,
+        crate::control::AuthKind::HumanGesture,
         "shell.command",
         serde_json::json!({ "sessionId": session_id, "command": input }),
     );

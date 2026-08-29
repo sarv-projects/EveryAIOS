@@ -375,6 +375,7 @@ pub fn acp_install_commit(
     let outcome = installer().install(&spec).map_err(|e| e.to_string())?;
     let audit_seq = crate::control::record_mutation(
         &*state,
+        crate::control::AuthKind::AgentTicket,
         "acp.install",
         serde_json::json!({
             "agentId": outcome.agent_id,
