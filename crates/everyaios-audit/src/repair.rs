@@ -4,7 +4,7 @@
 //! failure produces a named [`RepairFinding`] the coordinator can act on
 //! (resume from checkpoint, replay idempotent ops, or ask the user).
 
-use crate::session_log::{EventType, SessionEvent, IdempotencyClass};
+use crate::session_log::{EventType, IdempotencyClass, SessionEvent};
 use std::collections::HashSet;
 
 /// The seven validation phases (doc 46).
@@ -54,7 +54,11 @@ pub struct RepairFinding {
 
 impl RepairFinding {
     fn new(phase: Phase, seq: u64, message: impl Into<String>) -> Self {
-        Self { phase, seq, message: message.into() }
+        Self {
+            phase,
+            seq,
+            message: message.into(),
+        }
     }
 }
 
@@ -83,12 +87,19 @@ impl RepairReport {
             RecoveryAction::Resume
         } else if findings.iter().any(|f| f.phase == Phase::ToolPairing) {
             RecoveryAction::ReplayIdempotent
-        } else if findings.iter().any(|f| f.phase == Phase::Parse || f.phase == Phase::Sequence) {
+        } else if findings
+            .iter()
+            .any(|f| f.phase == Phase::Parse || f.phase == Phase::Sequence)
+        {
             RecoveryAction::RestoreCheckpoint
         } else {
             RecoveryAction::AskUser
         };
-        Self { findings, healthy, recommendation }
+        Self {
+            findings,
+            healthy,
+            recommendation,
+        }
     }
 }
 
@@ -110,9 +121,17 @@ pub fn validate_session(events: &[SessionEvent]) -> RepairReport {
     let mut findings = Vec::new();
 
     // Phase 1 — parse (already deserialized; a nil event is a parse failure).
-    if events.iter().any(|e| e.seq == 0 && e.event_type == EventType::UserMessageAdded && e.agent.is_empty() && events.len() > 1)
-    {
-        findings.push(RepairFinding::new(Phase::Parse, 0, "log contains a nil/unparseable event"));
+    if events.iter().any(|e| {
+        e.seq == 0
+            && e.event_type == EventType::UserMessageAdded
+            && e.agent.is_empty()
+            && events.len() > 1
+    }) {
+        findings.push(RepairFinding::new(
+            Phase::Parse,
+            0,
+            "log contains a nil/unparseable event",
+        ));
     }
 
     // Phase 2 — contiguous sequence from 1.
@@ -317,7 +336,15 @@ pub const PHASES: [Phase; 7] = [
 mod tests {
     use super::*;
 
-    fn ev(seq: u64, ts: u64, et: EventType, tool: &str, args: &str, session: &str, agent: &str) -> SessionEvent {
+    fn ev(
+        seq: u64,
+        ts: u64,
+        et: EventType,
+        tool: &str,
+        args: &str,
+        session: &str,
+        agent: &str,
+    ) -> SessionEvent {
         SessionEvent {
             seq,
             ts_ms: ts,
@@ -337,7 +364,15 @@ mod tests {
             ev(1, 100, EventType::UserMessageAdded, "", "", "s1", "a1"),
             ev(2, 101, EventType::PlanCreated, "", "", "s1", "a1"),
             ev(3, 102, EventType::ToolStarted, "fs.read", "h1", "s1", "a1"),
-            ev(4, 103, EventType::ToolCompleted, "fs.read", "h1", "s1", "a1"),
+            ev(
+                4,
+                103,
+                EventType::ToolCompleted,
+                "fs.read",
+                "h1",
+                "s1",
+                "a1",
+            ),
             ev(5, 104, EventType::CheckpointCommitted, "", "", "s1", "a1"),
         ]
     }
@@ -395,7 +430,15 @@ mod tests {
     fn unordered_completion_detected() {
         let log = vec![
             ev(1, 100, EventType::PlanCreated, "", "", "s1", "a1"),
-            ev(2, 101, EventType::ToolCompleted, "fs.read", "h1", "s1", "a1"),
+            ev(
+                2,
+                101,
+                EventType::ToolCompleted,
+                "fs.read",
+                "h1",
+                "s1",
+                "a1",
+            ),
             ev(3, 102, EventType::CheckpointCommitted, "", "", "s1", "a1"),
         ];
         let r = validate_session(&log);
@@ -406,8 +449,24 @@ mod tests {
     fn started_unknown_repair_classifies_correctly() {
         // Two incomplete tools: one safe (browser.read) and one mutation (file.write).
         let incomplete = vec![
-            ev(3, 102, EventType::ToolStarted, "browser.read", "h_read", "s1", "a1"),
-            ev(4, 103, EventType::ToolStarted, "file.write", "h_write", "s1", "a1"),
+            ev(
+                3,
+                102,
+                EventType::ToolStarted,
+                "browser.read",
+                "h_read",
+                "s1",
+                "a1",
+            ),
+            ev(
+                4,
+                103,
+                EventType::ToolStarted,
+                "file.write",
+                "h_write",
+                "s1",
+                "a1",
+            ),
         ];
         // Only file.write has dispatch evidence.
         let mut dispatch = HashSet::new();
@@ -415,34 +474,58 @@ mod tests {
         let plan = started_unknown_repair(&incomplete, &dispatch);
         assert_eq!(plan.len(), 2);
         // browser.read: no dispatch → NeverStarted, no confirmation needed.
-        assert_eq!(plan[0].classification, StartedUnknownClassification::NeverStarted);
+        assert_eq!(
+            plan[0].classification,
+            StartedUnknownClassification::NeverStarted
+        );
         assert!(!plan[0].needs_confirmation);
         // file.write: has dispatch → StartedUnknown, mutation → needs confirmation.
-        assert_eq!(plan[1].classification, StartedUnknownClassification::StartedUnknown);
+        assert_eq!(
+            plan[1].classification,
+            StartedUnknownClassification::StartedUnknown
+        );
         assert!(plan[1].needs_confirmation);
     }
 
     #[test]
     fn started_unknown_empty_dispatch_all_never_started() {
-        let incomplete = vec![
-            ev(3, 102, EventType::ToolStarted, "browser.act", "h1", "s1", "a1"),
-        ];
+        let incomplete = vec![ev(
+            3,
+            102,
+            EventType::ToolStarted,
+            "browser.act",
+            "h1",
+            "s1",
+            "a1",
+        )];
         let dispatch = HashSet::new();
         let plan = started_unknown_repair(&incomplete, &dispatch);
         assert_eq!(plan.len(), 1);
-        assert_eq!(plan[0].classification, StartedUnknownClassification::NeverStarted);
+        assert_eq!(
+            plan[0].classification,
+            StartedUnknownClassification::NeverStarted
+        );
         assert!(!plan[0].needs_confirmation);
     }
 
     #[test]
     fn started_unknown_safe_tool_with_dispatch_not_needing_confirmation() {
-        let incomplete = vec![
-            ev(3, 102, EventType::ToolStarted, "browser.read", "h1", "s1", "a1"),
-        ];
+        let incomplete = vec![ev(
+            3,
+            102,
+            EventType::ToolStarted,
+            "browser.read",
+            "h1",
+            "s1",
+            "a1",
+        )];
         let mut dispatch = HashSet::new();
         dispatch.insert(("browser.read".into(), "h1".into()));
         let plan = started_unknown_repair(&incomplete, &dispatch);
-        assert_eq!(plan[0].classification, StartedUnknownClassification::StartedUnknown);
+        assert_eq!(
+            plan[0].classification,
+            StartedUnknownClassification::StartedUnknown
+        );
         // Safe tool (read-only) → no confirmation even with dispatch evidence.
         assert!(!plan[0].needs_confirmation);
     }

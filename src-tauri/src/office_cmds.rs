@@ -76,11 +76,7 @@ pub fn pptx_open(path: String) -> Result<PptxPayload, String> {
             text: engine.render_slide(p).unwrap_or_default(),
         })
         .collect();
-    Ok(PptxPayload {
-        path,
-        slides,
-        deck,
-    })
+    Ok(PptxPayload { path, slides, deck })
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -154,7 +150,8 @@ pub fn docx_patch(
 #[tauri::command]
 pub fn docx_tracks(path: String) -> Result<serde_json::Value, String> {
     let bytes = read_bytes(&path)?;
-    let mut archive = everyaios_office::zip::OoxmlArchive::open(bytes).map_err(|e| e.to_string())?;
+    let mut archive =
+        everyaios_office::zip::OoxmlArchive::open(bytes).map_err(|e| e.to_string())?;
     let doc_xml = archive
         .read_part("word/document.xml")
         .map_err(|e| e.to_string())?;
@@ -184,7 +181,8 @@ pub fn docx_tracks(path: String) -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub fn pptx_notes(path: String) -> Result<serde_json::Value, String> {
     let bytes = read_bytes(&path)?;
-    let mut archive = everyaios_office::zip::OoxmlArchive::open(bytes).map_err(|e| e.to_string())?;
+    let mut archive =
+        everyaios_office::zip::OoxmlArchive::open(bytes).map_err(|e| e.to_string())?;
     let mut notes = Vec::new();
     for i in 1..=64 {
         let part = format!("ppt/notesSlides/notesSlide{i}.xml");
@@ -239,16 +237,23 @@ pub fn pdf_page_op(
         // tools use: `other` carries a JSON payload.
         "form_fill" => {
             let raw = other.ok_or("form_fill requires a JSON fields payload")?;
-            let fields: Vec<(String, String)> = serde_json::from_str::<Vec<serde_json::Value>>(&raw)
-                .map_err(|e| format!("form_fill payload: {e}"))?
-                .into_iter()
-                .map(|v| {
-                    (
-                        v.get("field").and_then(serde_json::Value::as_str).unwrap_or("").to_string(),
-                        v.get("value").and_then(serde_json::Value::as_str).unwrap_or("").to_string(),
-                    )
-                })
-                .collect();
+            let fields: Vec<(String, String)> =
+                serde_json::from_str::<Vec<serde_json::Value>>(&raw)
+                    .map_err(|e| format!("form_fill payload: {e}"))?
+                    .into_iter()
+                    .map(|v| {
+                        (
+                            v.get("field")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("")
+                                .to_string(),
+                            v.get("value")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("")
+                                .to_string(),
+                        )
+                    })
+                    .collect();
             if fields.is_empty() {
                 return Err("form_fill requires at least one {field, value}".into());
             }
@@ -260,7 +265,10 @@ pub fn pdf_page_op(
                 .map_err(|e| format!("redact payload: {e}"))?
                 .into_iter()
                 .map(|v| {
-                    let page = v.get("page").and_then(serde_json::Value::as_u64).unwrap_or(1) as u32;
+                    let page = v
+                        .get("page")
+                        .and_then(serde_json::Value::as_u64)
+                        .unwrap_or(1) as u32;
                     let rect = v
                         .get("rect")
                         .and_then(serde_json::Value::as_array)
@@ -284,8 +292,12 @@ pub fn pdf_page_op(
         }
         "annotate" => {
             let raw = other.ok_or("annotate requires a JSON {page, rect, text?} payload")?;
-            let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("annotate payload: {e}"))?;
-            let page = v.get("page").and_then(serde_json::Value::as_u64).unwrap_or(1) as u32;
+            let v: serde_json::Value =
+                serde_json::from_str(&raw).map_err(|e| format!("annotate payload: {e}"))?;
+            let page = v
+                .get("page")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(1) as u32;
             let rect = v
                 .get("rect")
                 .and_then(serde_json::Value::as_array)
@@ -301,13 +313,10 @@ pub fn pdf_page_op(
             }
             let rect = [rect[0], rect[1], rect[2], rect[3]];
             match v.get("text").and_then(serde_json::Value::as_str) {
-                Some(text) if !text.is_empty() => everyaios_office::pdf::annot::add_text_annotation(
-                    &bytes,
-                    page,
-                    rect,
-                    text,
-                )
-                .map_err(|e| e.to_string()),
+                Some(text) if !text.is_empty() => {
+                    everyaios_office::pdf::annot::add_text_annotation(&bytes, page, rect, text)
+                        .map_err(|e| e.to_string())
+                }
                 _ => everyaios_office::pdf::annot::add_highlight_annotation(&bytes, page, rect)
                     .map_err(|e| e.to_string()),
             }
@@ -338,8 +347,9 @@ pub fn pdf_page_op(
 #[tauri::command]
 pub fn office_open_external(path: String) -> Result<serde_json::Value, String> {
     let path = crate::control::floor_user_file(&path)?;
-    let soffice = everyaios_office::find_soffice()
-        .ok_or_else(|| "LibreOffice (soffice) is not installed — optional human-fidelity viewer".to_string())?;
+    let soffice = everyaios_office::find_soffice().ok_or_else(|| {
+        "LibreOffice (soffice) is not installed — optional human-fidelity viewer".to_string()
+    })?;
     std::process::Command::new(soffice)
         .arg(path.as_os_str())
         .spawn()

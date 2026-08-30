@@ -60,7 +60,11 @@ impl AgentScopes {
     /// Injected tool list for an agent session: intersection of this scope
     /// and what the host has available.
     pub fn tools_for(&self, host_tools: &[String]) -> Vec<String> {
-        host_tools.iter().filter(|t| self.tool_allowed(t)).cloned().collect()
+        host_tools
+            .iter()
+            .filter(|t| self.tool_allowed(t))
+            .cloned()
+            .collect()
     }
 }
 
@@ -74,7 +78,10 @@ mod tests {
         b.mcp_servers = vec!["fs".into()];
         b.connectors = vec!["gmail".into()];
         b.skills = vec!["spreadsheet".into()];
-        b.tools = ToolScope { allow: vec!["fs.read".into()], deny: vec!["fs.remove".into()] };
+        b.tools = ToolScope {
+            allow: vec!["fs.read".into()],
+            deny: vec!["fs.remove".into()],
+        };
         b
     }
 
@@ -95,8 +102,12 @@ mod tests {
         assert!(s.tool_allowed("fs.read"));
         assert!(!s.tool_allowed("fs.remove")); // explicit deny wins
         assert!(!s.tool_allowed("shell")); // not in the allow subset
-        // Injected surface = intersection.
-        let host = vec!["fs.read".to_string(), "fs.write".to_string(), "shell".to_string()];
+                                           // Injected surface = intersection.
+        let host = vec![
+            "fs.read".to_string(),
+            "fs.write".to_string(),
+            "shell".to_string(),
+        ];
         assert_eq!(s.tools_for(&host), vec!["fs.read"]);
     }
 

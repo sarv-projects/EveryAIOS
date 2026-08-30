@@ -57,7 +57,11 @@ impl everyaios_core::BrowserBackend for LoopBrowser {
         Ok(path.display().to_string())
     }
 
-    fn save_screenshot_enhanced(&self, dir: &std::path::Path, quality: u8) -> Result<String, String> {
+    fn save_screenshot_enhanced(
+        &self,
+        dir: &std::path::Path,
+        quality: u8,
+    ) -> Result<String, String> {
         let path = dir.join("shot.jpg");
         let res = self
             .client
@@ -95,14 +99,21 @@ impl everyaios_core::BrowserBackend for LoopBrowser {
         Ok(url.to_string())
     }
 
-    fn act(&self, kind: &str, selector: Option<&str>, text: Option<&str>) -> Result<String, String> {
+    fn act(
+        &self,
+        kind: &str,
+        selector: Option<&str>,
+        text: Option<&str>,
+    ) -> Result<String, String> {
         let actions = everyaios_browser::BrowserActions::new(&*self.client, Some(&self.session_id));
         let kind = kind.to_lowercase();
         match kind.as_str() {
             "click" => {
                 let r = selector.ok_or("ref required")?;
                 actions
-                    .act(everyaios_browser::ActKind::Click { ref_id: r.to_string() })
+                    .act(everyaios_browser::ActKind::Click {
+                        ref_id: r.to_string(),
+                    })
                     .map_err(|e| e.to_string())?;
             }
             "type" => {
@@ -126,9 +137,7 @@ fn lock_browser<'a>(
     state.browser.lock().map_err(|e| e.to_string())
 }
 
-fn actions(
-    b: &LiveBrowser,
-) -> everyaios_browser::BrowserActions<'_, everyaios_cdp::CdpClient> {
+fn actions(b: &LiveBrowser) -> everyaios_browser::BrowserActions<'_, everyaios_cdp::CdpClient> {
     everyaios_browser::BrowserActions::new(&*b.client, Some(&b.session_id))
 }
 
@@ -160,7 +169,9 @@ pub fn browser_start(state: State<'_, AppState>) -> Result<serde_json::Value, St
     let endpoint = child.endpoint().clone();
     let client =
         everyaios_cdp::connect_to_browser(&endpoint).map_err(|e| format!("connect: {e}"))?;
-    let targets = client.list_targets().map_err(|e| format!("list targets: {e}"))?;
+    let targets = client
+        .list_targets()
+        .map_err(|e| format!("list targets: {e}"))?;
     let page = targets
         .iter()
         .find(|t| t.target_type == everyaios_cdp::TargetType::Page)
@@ -216,7 +227,9 @@ pub fn browser_navigate(
     url: String,
 ) -> Result<serde_json::Value, String> {
     let mut guard = lock_browser(&state)?;
-    let b = guard.as_mut().ok_or("browser not attached — start it first")?;
+    let b = guard
+        .as_mut()
+        .ok_or("browser not attached — start it first")?;
     let _ = b.client.call_session(
         &b.session_id,
         "Page.navigate",
@@ -240,7 +253,9 @@ pub fn browser_navigate(
 #[tauri::command]
 pub fn browser_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let guard = lock_browser(&state)?;
-    let b = guard.as_ref().ok_or("browser not attached — start it first")?;
+    let b = guard
+        .as_ref()
+        .ok_or("browser not attached — start it first")?;
     let snap = actions(b)
         .snapshot("browse")
         .map_err(|e| format!("snapshot: {e}"))?;
@@ -255,7 +270,9 @@ pub fn browser_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value,
 #[tauri::command]
 pub fn browser_read(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let guard = lock_browser(&state)?;
-    let b = guard.as_ref().ok_or("browser not attached — start it first")?;
+    let b = guard
+        .as_ref()
+        .ok_or("browser not attached — start it first")?;
     let out = actions(b)
         .read(everyaios_browser::ReadMode::Full)
         .map_err(|e| format!("read: {e}"))?;
@@ -269,9 +286,13 @@ pub fn browser_click(
     ref_id: String,
 ) -> Result<serde_json::Value, String> {
     let guard = lock_browser(&state)?;
-    let b = guard.as_ref().ok_or("browser not attached — start it first")?;
+    let b = guard
+        .as_ref()
+        .ok_or("browser not attached — start it first")?;
     let res = actions(b)
-        .act(everyaios_browser::ActKind::Click { ref_id: ref_id.clone() })
+        .act(everyaios_browser::ActKind::Click {
+            ref_id: ref_id.clone(),
+        })
         .map_err(|e| format!("click {ref_id}: {e}"))?;
     let (added, removed) = match res.diff.as_ref() {
         Some(d) => (d.added_lines.clone(), d.removed_lines.clone()),
@@ -302,7 +323,9 @@ pub fn browser_type(
     text: String,
 ) -> Result<serde_json::Value, String> {
     let guard = lock_browser(&state)?;
-    let b = guard.as_ref().ok_or("browser not attached — start it first")?;
+    let b = guard
+        .as_ref()
+        .ok_or("browser not attached — start it first")?;
     let act = match ref_id.clone() {
         Some(id) => everyaios_browser::ActKind::Type {
             ref_id: id.clone(),

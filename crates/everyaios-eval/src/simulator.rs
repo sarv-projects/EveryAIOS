@@ -92,7 +92,10 @@ impl Simulator {
             let verdict = self.evaluate(step, fixture);
             match verdict {
                 StepVerdict::Pass => report.passed += 1,
-                StepVerdict::Fail => report.failed.push((step.index as usize, format!("{} '{}'", step.expected_kind, step.expected))),
+                StepVerdict::Fail => report.failed.push((
+                    step.index as usize,
+                    format!("{} '{}'", step.expected_kind, step.expected),
+                )),
                 StepVerdict::Uncertain => {
                     report.halted_at = Some(step.index as usize);
                     return report; // halt-over-guess: stop, never guess
@@ -137,11 +140,7 @@ impl Simulator {
 
 /// The compile function: turn a recorded demo (browser crate anchors) into a
 /// [`CompiledDemo`] — the teach→compile boundary. Deterministic.
-pub fn compile(
-    name: &str,
-    start_url: &str,
-    steps: &[CompiledStep],
-) -> CompiledDemo {
+pub fn compile(name: &str, start_url: &str, steps: &[CompiledStep]) -> CompiledDemo {
     CompiledDemo {
         name: name.into(),
         start_url: start_url.into(),
@@ -158,8 +157,26 @@ mod tests {
             "search-then-save",
             "https://example.com",
             &[
-                CompiledStep { index: 0, role: "textbox".into(), name: "Search".into(), action: "type".into(), value: "x".into(), expected_kind: "element_present".into(), expected: "Results".into(), effect_class: "reversible".into() },
-                CompiledStep { index: 1, role: "button".into(), name: "Save".into(), action: "click".into(), value: String::new(), expected_kind: "url_contains".into(), expected: "saved".into(), effect_class: "reversible".into() },
+                CompiledStep {
+                    index: 0,
+                    role: "textbox".into(),
+                    name: "Search".into(),
+                    action: "type".into(),
+                    value: "x".into(),
+                    expected_kind: "element_present".into(),
+                    expected: "Results".into(),
+                    effect_class: "reversible".into(),
+                },
+                CompiledStep {
+                    index: 1,
+                    role: "button".into(),
+                    name: "Save".into(),
+                    action: "click".into(),
+                    value: String::new(),
+                    expected_kind: "url_contains".into(),
+                    expected: "saved".into(),
+                    effect_class: "reversible".into(),
+                },
             ],
         )
     }
@@ -167,7 +184,11 @@ mod tests {
     #[test]
     fn healthy_run_is_zero_guess() {
         let fixture = SimulationFixture {
-            elements: BTreeMap::from([("Search".into(), true), ("Save".into(), true), ("Results".into(), true)]),
+            elements: BTreeMap::from([
+                ("Search".into(), true),
+                ("Save".into(), true),
+                ("Results".into(), true),
+            ]),
             url: "https://example.com/saved".into(),
             text: String::new(),
         };
@@ -181,7 +202,11 @@ mod tests {
     fn failing_evidence_is_reported() {
         let fixture = SimulationFixture {
             // Results present (step 0 passes); url diverges → step 1 fails.
-            elements: BTreeMap::from([("Search".into(), true), ("Save".into(), true), ("Results".into(), true)]),
+            elements: BTreeMap::from([
+                ("Search".into(), true),
+                ("Save".into(), true),
+                ("Results".into(), true),
+            ]),
             url: "https://example.com/other".into(),
             text: String::new(),
         };
@@ -207,9 +232,22 @@ mod tests {
         let demo = compile(
             "uncertain",
             "u",
-            &[CompiledStep { index: 0, role: "x".into(), name: "A".into(), action: "click".into(), value: String::new(), expected_kind: "model_says_ok".into(), expected: "anything".into(), effect_class: "uncertain".into() }],
+            &[CompiledStep {
+                index: 0,
+                role: "x".into(),
+                name: "A".into(),
+                action: "click".into(),
+                value: String::new(),
+                expected_kind: "model_says_ok".into(),
+                expected: "anything".into(),
+                effect_class: "uncertain".into(),
+            }],
         );
-        let fixture = SimulationFixture { elements: BTreeMap::from([("A".into(), true)]), url: "u".into(), text: String::new() };
+        let fixture = SimulationFixture {
+            elements: BTreeMap::from([("A".into(), true)]),
+            url: "u".into(),
+            text: String::new(),
+        };
         let report = Simulator.run(&demo, &fixture);
         assert_eq!(report.halted_at, Some(0));
         assert!(!report.is_healthy());

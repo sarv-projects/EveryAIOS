@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 /// The canonical CDN endpoint (doc 57 §2, doc 69 §1).
-pub const REGISTRY_URL: &str = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
+pub const REGISTRY_URL: &str =
+    "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 
 #[derive(Debug, Error)]
 pub enum FetchError {
@@ -38,7 +39,8 @@ impl Fetch for UreqFetch {
             .timeout(std::time::Duration::from_secs(30))
             .call()
             .map_err(|e| FetchError::Http(e.to_string()))?;
-        resp.into_string().map_err(|e| FetchError::Http(e.to_string()))
+        resp.into_string()
+            .map_err(|e| FetchError::Http(e.to_string()))
     }
 }
 
@@ -59,7 +61,10 @@ pub struct RegistryClient {
 
 impl RegistryClient {
     pub fn new(cache_dir: PathBuf) -> Self {
-        Self { fetch: Box::new(UreqFetch), cache_dir }
+        Self {
+            fetch: Box::new(UreqFetch),
+            cache_dir,
+        }
     }
 
     /// Test seam: inject a transport.
@@ -85,8 +90,15 @@ impl RegistryClient {
         std::fs::write(self.json_path(), &text)?;
         let fetched_at_ms = now_ms();
         let meta = serde_json::json!({ "fetchedAtMs": fetched_at_ms, "version": index.version });
-        std::fs::write(self.meta_path(), serde_json::to_string(&meta).unwrap_or_default())?;
-        Ok(RegistrySnapshot { index, fetched_at_ms, from_cache: false })
+        std::fs::write(
+            self.meta_path(),
+            serde_json::to_string(&meta).unwrap_or_default(),
+        )?;
+        Ok(RegistrySnapshot {
+            index,
+            fetched_at_ms,
+            from_cache: false,
+        })
     }
 
     /// Load the cached registry (no network). Returns `None` if never cached.
@@ -98,7 +110,11 @@ impl RegistryClient {
             .and_then(|m| serde_json::from_str::<serde_json::Value>(&m).ok())
             .and_then(|v| v.get("fetchedAtMs").and_then(|t| t.as_u64()))
             .unwrap_or(0);
-        Some(RegistrySnapshot { index, fetched_at_ms, from_cache: true })
+        Some(RegistrySnapshot {
+            index,
+            fetched_at_ms,
+            from_cache: true,
+        })
     }
 
     /// Best-effort: cached if present, else fetch. Never fails the caller on
@@ -142,7 +158,8 @@ mod tests {
     const FIXTURE: &str = r#"{"version":"1.0.0","agents":[]}"#;
 
     fn tmp_dir(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("everyaios-acp-reg-{tag}-{}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("everyaios-acp-reg-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         d
     }

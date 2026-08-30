@@ -80,16 +80,18 @@ impl<T: HttpTransport, R: TokenRefresher> WorkspaceConnector<T, R> {
     }
 
     /// `GET /drive/v3/files?q=...` — list files, `folder: true` for dirs.
-    pub fn list_files(&mut self, page_size: u32) -> Result<Vec<WorkspaceDriveFile>, TransportError> {
+    pub fn list_files(
+        &mut self,
+        page_size: u32,
+    ) -> Result<Vec<WorkspaceDriveFile>, TransportError> {
         let url = format!(
             "{DRIVE_BASE}/files?pageSize={page_size}&fields=files(id,name,mimeType,size,modifiedTime,exportLinks)"
         );
         let raw = self.get_with_refresh(&url)?;
-        let v: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("drive list: {e}"),
-            })?;
+        let v: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("drive list: {e}"),
+        })?;
         Ok(v.get("files")
             .and_then(|x| x.as_array())
             .map(|arr| {
@@ -126,11 +128,10 @@ impl<T: HttpTransport, R: TokenRefresher> WorkspaceConnector<T, R> {
             "{DRIVE_BASE}/files/{id}?fields=id,name,mimeType,size,modifiedTime,exportLinks"
         );
         let raw = self.get_with_refresh(&url)?;
-        let f: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("drive get: {e}"),
-            })?;
+        let f: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("drive get: {e}"),
+        })?;
         Ok(WorkspaceDriveFile {
             id: f["id"].as_str().unwrap_or_default().into(),
             name: f["name"].as_str().unwrap_or_default().into(),
@@ -156,11 +157,10 @@ impl<T: HttpTransport, R: TokenRefresher> WorkspaceConnector<T, R> {
     pub fn get_document(&mut self, id: &str) -> Result<WorkspaceDoc, TransportError> {
         let url = format!("{DOCS_BASE}/documents/{id}");
         let raw = self.get_with_refresh(&url)?;
-        let v: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("docs get: {e}"),
-            })?;
+        let v: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("docs get: {e}"),
+        })?;
         let title = v["title"].as_str().unwrap_or_default().to_string();
         // Flatten body content: paragraph elements → text runs, joined by \n.
         let text = v["body"]["content"]
@@ -201,11 +201,10 @@ impl<T: HttpTransport, R: TokenRefresher> WorkspaceConnector<T, R> {
     ) -> Result<WorkspaceSheetValues, TransportError> {
         let url = format!("{SHEETS_BASE}/spreadsheets/{spreadsheet_id}/values/{range}");
         let raw = self.get_with_refresh(&url)?;
-        let v: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("sheets get: {e}"),
-            })?;
+        let v: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("sheets get: {e}"),
+        })?;
         Ok(WorkspaceSheetValues {
             spreadsheet_id: spreadsheet_id.to_string(),
             range: v["range"].as_str().unwrap_or(range).to_string(),
@@ -246,8 +245,13 @@ mod tests {
     impl MockTransport {
         fn ok(json: serde_json::Value) -> Self {
             let mut q = std::collections::VecDeque::new();
-            q.push_back((serde_json::to_vec(&json).unwrap(), TransportErrorKind::Other));
-            Self { responses: std::cell::RefCell::new(q) }
+            q.push_back((
+                serde_json::to_vec(&json).unwrap(),
+                TransportErrorKind::Other,
+            ));
+            Self {
+                responses: std::cell::RefCell::new(q),
+            }
         }
         fn next(&self) -> Option<(Vec<u8>, TransportErrorKind)> {
             self.responses.borrow_mut().pop_front()
@@ -260,7 +264,10 @@ mod tests {
             _headers: &[(&str, &str)],
             _body: &[u8],
         ) -> Result<Vec<u8>, TransportError> {
-            Err(TransportError { kind: TransportErrorKind::Other, message: "no posts".into() })
+            Err(TransportError {
+                kind: TransportErrorKind::Other,
+                message: "no posts".into(),
+            })
         }
         fn get(&self, _url: &str, _headers: &[(&str, &str)]) -> Result<Vec<u8>, TransportError> {
             match self.next() {
@@ -313,7 +320,10 @@ mod tests {
         let mut c = WorkspaceConnector::new(t, NoRefresh, "Bearer tok".into());
         let f = c.get_file("doc1").unwrap();
         assert_eq!(f.name, "Plan");
-        let docx = f.export_links.iter().find(|(m, _)| m.contains("wordprocessingml"));
+        let docx = f
+            .export_links
+            .iter()
+            .find(|(m, _)| m.contains("wordprocessingml"));
         assert!(docx.is_some(), "docx OOXML export link must be surfaced");
     }
 

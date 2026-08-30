@@ -9,7 +9,9 @@
 //! registry clients use the same discipline) — the merge + gate are pure
 //! and already tested.
 
-use everyaios_catalog::{merge_refresh, refresh_plan, GateFinding, RefreshReport, Severity, SYNC_MODULES};
+use everyaios_catalog::{
+    merge_refresh, refresh_plan, GateFinding, RefreshReport, Severity, SYNC_MODULES,
+};
 use serde_json::json;
 
 /// The documented refresh plan — what one sync run would do (read-only,

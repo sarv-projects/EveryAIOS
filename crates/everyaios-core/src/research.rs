@@ -66,7 +66,11 @@ impl ResearchSession {
 /// references a selected source AND the quote is actually present in the
 /// source's content. A claim with zero citations is never counted as
 /// grounded (the "right number without evidence" chain fails here too).
-pub fn citation_fidelity(answer: &GroundedAnswer, sources: &[ResearchSource], contents: &[(String, String)]) -> CitationScore {
+pub fn citation_fidelity(
+    answer: &GroundedAnswer,
+    sources: &[ResearchSource],
+    contents: &[(String, String)],
+) -> CitationScore {
     let mut grounded = 0;
     let mut total = 0;
     for claim in &answer.claims {
@@ -85,7 +89,11 @@ pub fn citation_fidelity(answer: &GroundedAnswer, sources: &[ResearchSource], co
     CitationScore {
         grounded_claims: grounded,
         total_claims: total,
-        rate: if total == 0 { 0.0 } else { grounded as f64 / total as f64 },
+        rate: if total == 0 {
+            0.0
+        } else {
+            grounded as f64 / total as f64
+        },
     }
 }
 
@@ -105,22 +113,47 @@ mod tests {
     #[test]
     fn session_tracks_sources() {
         let mut s = ResearchSession::new();
-        s.add_source(ResearchSource { id: "f1".into(), kind: "file".into(), location: "notes.md".into() });
+        s.add_source(ResearchSource {
+            id: "f1".into(),
+            kind: "file".into(),
+            location: "notes.md".into(),
+        });
         assert_eq!(s.source_ids(), vec!["f1"]);
     }
 
     #[test]
     fn fidelity_requires_real_citations() {
-        let sources = vec![ResearchSource { id: "f1".into(), kind: "file".into(), location: "notes.md".into() }];
+        let sources = vec![ResearchSource {
+            id: "f1".into(),
+            kind: "file".into(),
+            location: "notes.md".into(),
+        }];
         let contents = vec![("f1".to_string(), "The parser is fast.".to_string())];
         let answer = GroundedAnswer {
             question: "q".into(),
             claims: vec![
-                GroundedClaim { claim: "The parser is fast".into(), citations: vec![Citation { source_id: "f1".into(), span: "notes.md:1".into(), quote: "The parser is fast.".into() }] },
+                GroundedClaim {
+                    claim: "The parser is fast".into(),
+                    citations: vec![Citation {
+                        source_id: "f1".into(),
+                        span: "notes.md:1".into(),
+                        quote: "The parser is fast.".into(),
+                    }],
+                },
                 // Uncited claim — never counts as grounded.
-                GroundedClaim { claim: "It also flies".into(), citations: vec![] },
+                GroundedClaim {
+                    claim: "It also flies".into(),
+                    citations: vec![],
+                },
                 // Quote not in the source — not grounded.
-                GroundedClaim { claim: "x".into(), citations: vec![Citation { source_id: "f1".into(), span: "notes.md:2".into(), quote: "no such line".into() }] },
+                GroundedClaim {
+                    claim: "x".into(),
+                    citations: vec![Citation {
+                        source_id: "f1".into(),
+                        span: "notes.md:2".into(),
+                        quote: "no such line".into(),
+                    }],
+                },
             ],
         };
         let score = citation_fidelity(&answer, &sources, &contents);
@@ -133,7 +166,14 @@ mod tests {
     fn citation_to_unknown_source_fails() {
         let answer = GroundedAnswer {
             question: "q".into(),
-            claims: vec![GroundedClaim { claim: "c".into(), citations: vec![Citation { source_id: "ghost".into(), span: "x".into(), quote: "y".into() }] }],
+            claims: vec![GroundedClaim {
+                claim: "c".into(),
+                citations: vec![Citation {
+                    source_id: "ghost".into(),
+                    span: "x".into(),
+                    quote: "y".into(),
+                }],
+            }],
         };
         let score = citation_fidelity(&answer, &[], &[]);
         assert_eq!(score.rate, 0.0);

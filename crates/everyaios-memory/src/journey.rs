@@ -126,7 +126,10 @@ impl Journey {
                 JourneyKind::ReviewCompleted => "reviewed",
             };
             let detail = e.detail.as_deref().unwrap_or("");
-            out.push_str(&format!("day {:>4}  {:<9} {} {}\n", e.day, label, e.subject, detail));
+            out.push_str(&format!(
+                "day {:>4}  {:<9} {} {}\n",
+                e.day, label, e.subject, detail
+            ));
         }
         out
     }

@@ -72,13 +72,22 @@ pub struct DemoRecording {
 
 impl DemoRecording {
     pub fn new(name: impl Into<String>, start_url: impl Into<String>) -> Self {
-        Self { name: name.into(), start_url: start_url.into(), steps: Vec::new() }
+        Self {
+            name: name.into(),
+            start_url: start_url.into(),
+            steps: Vec::new(),
+        }
     }
 
     /// Append a step (indices auto-assigned, deterministic).
     pub fn push(&mut self, anchor: DemoAnchor, input: DemoInput, outcome: OutcomeEvidence) {
         let index = self.steps.len() as u32;
-        self.steps.push(DemoStep { index, anchor, input, outcome });
+        self.steps.push(DemoStep {
+            index,
+            anchor,
+            input,
+            outcome,
+        });
     }
 
     pub fn len(&self) -> usize {
@@ -154,20 +163,33 @@ impl ReplayAct {
     /// anchor against the fresh snapshot (ref-id first, then role+name).
     /// Returns `None` when the anchor cannot be found — the runner treats
     /// that as drift, never a guess.
-    pub fn to_act_kind(&self, anchor: &DemoAnchor, root: &A11yNode) -> Option<crate::actions::ActKind> {
+    pub fn to_act_kind(
+        &self,
+        anchor: &DemoAnchor,
+        root: &A11yNode,
+    ) -> Option<crate::actions::ActKind> {
         let node = find_ref(root, anchor.ref_id.as_deref()?).or_else(|| {
-            let located = crate::locator::find_first(root, &crate::locator::SemanticQuery {
-                role: Some(anchor.role.clone()),
-                name: Some(anchor.name.clone()),
-            })?;
+            let located = crate::locator::find_first(
+                root,
+                &crate::locator::SemanticQuery {
+                    role: Some(anchor.role.clone()),
+                    name: Some(anchor.name.clone()),
+                },
+            )?;
             find_ref(root, located.ref_id.as_deref()?)
         });
         let ref_id = node.and_then(|n| n.ref_id.clone())?;
         Some(match self {
             ReplayAct::Click => crate::actions::ActKind::Click { ref_id },
-            ReplayAct::Type { value } => crate::actions::ActKind::Type { ref_id, text: value.clone() },
+            ReplayAct::Type { value } => crate::actions::ActKind::Type {
+                ref_id,
+                text: value.clone(),
+            },
             ReplayAct::PressKey { key } => crate::actions::ActKind::Press { key: key.clone() },
-            ReplayAct::Select { value } => crate::actions::ActKind::Select { ref_id, value: value.clone() },
+            ReplayAct::Select { value } => crate::actions::ActKind::Select {
+                ref_id,
+                value: value.clone(),
+            },
         })
     }
 }
@@ -216,9 +238,15 @@ pub fn compile(recording: &DemoRecording) -> Result<ReplayProgram, CompileError>
         }
         let act = match step.input.action.as_str() {
             "click" => ReplayAct::Click,
-            "type" => ReplayAct::Type { value: step.input.value.clone() },
-            "key" | "press" => ReplayAct::PressKey { key: step.input.value.clone() },
-            "select" => ReplayAct::Select { value: step.input.value.clone() },
+            "type" => ReplayAct::Type {
+                value: step.input.value.clone(),
+            },
+            "key" | "press" => ReplayAct::PressKey {
+                key: step.input.value.clone(),
+            },
+            "select" => ReplayAct::Select {
+                value: step.input.value.clone(),
+            },
             other => return Err(CompileError::UnknownAction(other.to_string())),
         };
         if step.outcome.kind.is_empty() {
@@ -241,7 +269,13 @@ pub fn compile(recording: &DemoRecording) -> Result<ReplayProgram, CompileError>
 
 fn slug(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .trim_matches('-')
         .to_string()
@@ -293,7 +327,14 @@ pub struct ReplayRunner {
 
 impl ReplayRunner {
     pub fn new(program: ReplayProgram, repair_budget: u32) -> Self {
-        Self { program, state: ReplayState::Running, model_calls: 0, cursor: 0, repair_budget: repair_budget.max(1), repairs_used: 0 }
+        Self {
+            program,
+            state: ReplayState::Running,
+            model_calls: 0,
+            cursor: 0,
+            repair_budget: repair_budget.max(1),
+            repairs_used: 0,
+        }
     }
 
     pub fn current_step(&self) -> Option<usize> {
@@ -378,7 +419,10 @@ impl ReplayRunner {
     /// Halt at the current step (circuit-break / user stop).
     pub fn halt(&mut self, reason: &str) {
         let step = self.cursor;
-        self.state = ReplayState::Halted { step, reason: reason.to_string() };
+        self.state = ReplayState::Halted {
+            step,
+            reason: reason.to_string(),
+        };
     }
 }
 
@@ -389,23 +433,51 @@ mod tests {
     fn recording() -> DemoRecording {
         let mut rec = DemoRecording::new("login", "https://example.com/login");
         rec.push(
-            DemoAnchor { role: "textbox".into(), name: "Username".into(), ref_id: Some("e2".into()), fallback_selector: None },
-            DemoInput { action: "type".into(), value: "alice".into() },
-            OutcomeEvidence { kind: "content_contains".into(), observed: "alice".into() },
+            DemoAnchor {
+                role: "textbox".into(),
+                name: "Username".into(),
+                ref_id: Some("e2".into()),
+                fallback_selector: None,
+            },
+            DemoInput {
+                action: "type".into(),
+                value: "alice".into(),
+            },
+            OutcomeEvidence {
+                kind: "content_contains".into(),
+                observed: "alice".into(),
+            },
         );
         rec.push(
-            DemoAnchor { role: "button".into(), name: "Sign in".into(), ref_id: Some("e7".into()), fallback_selector: None },
-            DemoInput { action: "click".into(), value: String::new() },
-            OutcomeEvidence { kind: "url".into(), observed: "/dashboard".into() },
+            DemoAnchor {
+                role: "button".into(),
+                name: "Sign in".into(),
+                ref_id: Some("e7".into()),
+                fallback_selector: None,
+            },
+            DemoInput {
+                action: "click".into(),
+                value: String::new(),
+            },
+            OutcomeEvidence {
+                kind: "url".into(),
+                observed: "/dashboard".into(),
+            },
         );
         rec
     }
 
     fn tree(after_type: bool) -> A11yNode {
         let mut root = A11yNode::new("document", "Page");
-        let mut boxed = A11yNode::new("textbox", if after_type { "alice" } else { "Username" }).with_ref("e2").with_actionable();
+        let mut boxed = A11yNode::new("textbox", if after_type { "alice" } else { "Username" })
+            .with_ref("e2")
+            .with_actionable();
         root.push(boxed);
-        root.push(A11yNode::new("button", "Sign in").with_ref("e7").with_actionable());
+        root.push(
+            A11yNode::new("button", "Sign in")
+                .with_ref("e7")
+                .with_actionable(),
+        );
         root
     }
 
@@ -418,9 +490,17 @@ mod tests {
         assert_eq!(compile(&no_url), Err(CompileError::NoStartUrl));
         let mut bad_act = recording();
         bad_act.steps[0].input.action = "drag".into();
-        assert_eq!(compile(&bad_act), Err(CompileError::UnknownAction("drag".into())));
+        assert_eq!(
+            compile(&bad_act),
+            Err(CompileError::UnknownAction("drag".into()))
+        );
         let mut no_anchor = recording();
-        no_anchor.steps[0].anchor = DemoAnchor { role: "".into(), name: "".into(), ref_id: None, fallback_selector: None };
+        no_anchor.steps[0].anchor = DemoAnchor {
+            role: "".into(),
+            name: "".into(),
+            ref_id: None,
+            fallback_selector: None,
+        };
         assert_eq!(compile(&no_anchor), Err(CompileError::UnanchoredStep(0)));
     }
 
@@ -428,7 +508,12 @@ mod tests {
     fn compile_produces_deterministic_program() {
         let program = compile(&recording()).unwrap();
         assert_eq!(program.steps.len(), 2);
-        assert_eq!(program.steps[0].act, ReplayAct::Type { value: "alice".into() });
+        assert_eq!(
+            program.steps[0].act,
+            ReplayAct::Type {
+                value: "alice".into()
+            }
+        );
         assert_eq!(program.steps[1].verify.len(), 1);
         assert_eq!(program.steps[1].verify[0].kind, "url");
         assert!(program.id.starts_with("demo-"));
@@ -458,7 +543,15 @@ mod tests {
         assert_eq!(step, 0);
         assert_eq!(runner.model_calls, 1);
         // repaired anchor (same role, fresh ref)
-        assert!(runner.apply_repair(0, DemoAnchor { role: "textbox".into(), name: "Username".into(), ref_id: Some("e2".into()), fallback_selector: None }));
+        assert!(runner.apply_repair(
+            0,
+            DemoAnchor {
+                role: "textbox".into(),
+                name: "Username".into(),
+                ref_id: Some("e2".into()),
+                fallback_selector: None
+            }
+        ));
         // now verify again with the text present
         assert!(runner.verify_and_advance(&tree(true), "https://example.com/login"));
         assert!(runner.verify_and_advance(&tree(true), "https://example.com/dashboard"));
@@ -484,12 +577,23 @@ mod tests {
     fn replay_act_lowers_onto_live_act_kind() {
         let program = compile(&recording()).unwrap();
         let tree = tree(true);
-        let kind = program.steps[0].act.to_act_kind(&program.steps[0].anchor, &tree);
-        assert!(matches!(kind, Some(crate::actions::ActKind::Type { ref_id, text }) if ref_id == "e2" && text == "alice"));
-        let click = program.steps[1].act.to_act_kind(&program.steps[1].anchor, &tree);
+        let kind = program.steps[0]
+            .act
+            .to_act_kind(&program.steps[0].anchor, &tree);
+        assert!(
+            matches!(kind, Some(crate::actions::ActKind::Type { ref_id, text }) if ref_id == "e2" && text == "alice")
+        );
+        let click = program.steps[1]
+            .act
+            .to_act_kind(&program.steps[1].anchor, &tree);
         assert!(matches!(click, Some(crate::actions::ActKind::Click { ref_id }) if ref_id == "e7"));
         // unresolved anchor → None (drift, never a guess)
-        let missing = DemoAnchor { role: "button".into(), name: "Logout".into(), ref_id: None, fallback_selector: None };
+        let missing = DemoAnchor {
+            role: "button".into(),
+            name: "Logout".into(),
+            ref_id: None,
+            fallback_selector: None,
+        };
         assert!(program.steps[1].act.to_act_kind(&missing, &tree).is_none());
     }
 }

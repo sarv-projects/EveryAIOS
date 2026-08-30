@@ -98,11 +98,8 @@ pub struct TokenResponse {
 /// so the remote-client logic is unit-testable without a socket.
 pub trait HttpTransport: Send {
     fn get_json(&self, url: &str) -> Result<serde_json::Value, RemoteError>;
-    fn post_form(
-        &self,
-        url: &str,
-        form: &[(&str, &str)],
-    ) -> Result<serde_json::Value, RemoteError>;
+    fn post_form(&self, url: &str, form: &[(&str, &str)])
+        -> Result<serde_json::Value, RemoteError>;
     fn post_json(
         &self,
         url: &str,
@@ -188,7 +185,10 @@ pub fn discover_authorization_server(
     }
     let mut last_err = None;
     for base in candidates {
-        let wk = format!("{}/.well-known/oauth-authorization-server", base.trim_end_matches('/'));
+        let wk = format!(
+            "{}/.well-known/oauth-authorization-server",
+            base.trim_end_matches('/')
+        );
         match http.get_json(&wk) {
             Ok(json) => match serde_json::from_value::<AuthServerMetadata>(json) {
                 Ok(m) => return Ok(m),
@@ -223,10 +223,7 @@ pub fn register_dynamic_client(
 
 /// Full connect handshake: discover resource → discover auth server →
 /// register client (or use a supplied one) → return the ready target.
-pub fn connect(
-    server_url: &str,
-    http: &dyn HttpTransport,
-) -> Result<RemoteTarget, RemoteError> {
+pub fn connect(server_url: &str, http: &dyn HttpTransport) -> Result<RemoteTarget, RemoteError> {
     if !(server_url.starts_with("https://")
         || server_url.starts_with("http://127.0.0.1")
         || server_url.starts_with("http://localhost"))
@@ -251,7 +248,10 @@ pub fn connect(
 
 /// Build the PKCE authorize URL + keep state/verifier (the shell stores
 /// these while the browser is open, then calls [`exchange_code`]).
-pub fn build_authorize_url(target: &RemoteTarget, redirect_uri: &str) -> Result<PkceFlow, RemoteError> {
+pub fn build_authorize_url(
+    target: &RemoteTarget,
+    redirect_uri: &str,
+) -> Result<PkceFlow, RemoteError> {
     let verifier = random_url_b64(32);
     let challenge = code_challenge(&verifier);
     let state = random_hex(16);
@@ -370,8 +370,7 @@ fn code_challenge(verifier: &str) -> String {
 }
 
 fn pct_encode(s: &str) -> String {
-    const UNRESERVED: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    const UNRESERVED: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
     let mut out = String::with_capacity(s.len() * 3);
     for &b in s.as_bytes() {
         if UNRESERVED.contains(&b) {
@@ -399,7 +398,10 @@ fn parse_tokens(json: &serde_json::Value) -> Result<TokenResponse, RemoteError> 
             .and_then(|v| v.as_str())
             .unwrap_or("Bearer")
             .to_string(),
-        expires_in: json.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(3600),
+        expires_in: json
+            .get("expires_in")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(3600),
         scope: json
             .get("scope")
             .and_then(|v| v.as_str())
@@ -523,7 +525,10 @@ mod tests {
         let t = connect("https://mcp.example.com", &http).unwrap();
         assert_eq!(t.url, "https://mcp.example.com");
         assert_eq!(t.client.client_id, "dyn-client-123");
-        assert_eq!(t.auth.authorization_endpoint, "https://auth.example.com/authorize");
+        assert_eq!(
+            t.auth.authorization_endpoint,
+            "https://auth.example.com/authorize"
+        );
     }
 
     #[test]
@@ -540,7 +545,9 @@ mod tests {
         let http = server();
         let t = connect("https://mcp.example.com", &http).unwrap();
         let flow = build_authorize_url(&t, "http://127.0.0.1:0/oauth/callback").unwrap();
-        assert!(flow.auth_url.starts_with("https://auth.example.com/authorize?"));
+        assert!(flow
+            .auth_url
+            .starts_with("https://auth.example.com/authorize?"));
         assert!(flow.auth_url.contains("code_challenge="));
         assert!(flow.auth_url.contains("code_challenge_method=S256"));
         assert!(flow.auth_url.contains("state="));
@@ -563,7 +570,14 @@ mod tests {
     fn rpc_posts_jsonrpc_and_returns_result() {
         let http = server();
         let t = connect("https://mcp.example.com", &http).unwrap();
-        let resp = rpc(&t, "tok-remote-1", "tools/list", serde_json::json!({}), &http).unwrap();
+        let resp = rpc(
+            &t,
+            "tok-remote-1",
+            "tools/list",
+            serde_json::json!({}),
+            &http,
+        )
+        .unwrap();
         assert_eq!(resp["result"]["tools"], serde_json::json!([]));
     }
 }

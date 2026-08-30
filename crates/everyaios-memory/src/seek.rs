@@ -54,8 +54,11 @@ impl QueryMode {
 
     /// Parse a planner-mode name (kebab / snake / camel tolerant).
     pub fn parse(name: &str) -> Option<QueryMode> {
-        let norm: String =
-            name.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
+        let norm: String = name
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect::<String>()
+            .to_ascii_lowercase();
         match norm.as_str() {
             "lexical" => Some(QueryMode::Lexical),
             "vector" => Some(QueryMode::Vector),
@@ -192,7 +195,10 @@ pub mod embedded {
     type IndexArc = Arc<tokio::sync::RwLock<seekstorm::index::Index>>;
 
     fn driver(index_path: PathBuf, rx: Receiver<Request>) {
-        let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+        let rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
             Ok(rt) => rt,
             Err(_) => return,
         };
@@ -208,7 +214,9 @@ pub mod embedded {
                             serde_json::json!({"body": text, "chunk_id": chunk_id}),
                         )
                         .unwrap_or_default();
-                        index.index_document(doc, seekstorm::index::FileType::None).await;
+                        index
+                            .index_document(doc, seekstorm::index::FileType::None)
+                            .await;
                     }
                     Ok(Request::Commit) => {
                         index.commit().await;
@@ -287,8 +295,15 @@ pub mod embedded {
                 .get_document(r.doc_id, false, &highlighter, &fields, &dist)
                 .await
                 .map_err(|e| e.to_string())?;
-            let chunk_id = doc.get("chunk_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            out.push(SeekHit { chunk_id, score: r.score as f64 });
+            let chunk_id = doc
+                .get("chunk_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            out.push(SeekHit {
+                chunk_id,
+                score: r.score as f64,
+            });
         }
         Ok(out)
     }
@@ -305,8 +320,14 @@ mod tests {
             let name = format!("{mode:?}");
             assert_eq!(QueryMode::parse(&name), Some(mode));
         }
-        assert_eq!(QueryMode::parse("weighted_hybrid"), Some(QueryMode::WeightedHybrid));
-        assert_eq!(QueryMode::parse("semantic-rescore"), Some(QueryMode::SemanticRescore));
+        assert_eq!(
+            QueryMode::parse("weighted_hybrid"),
+            Some(QueryMode::WeightedHybrid)
+        );
+        assert_eq!(
+            QueryMode::parse("semantic-rescore"),
+            Some(QueryMode::SemanticRescore)
+        );
         assert!(QueryMode::parse("quantum").is_none());
     }
 
@@ -344,7 +365,9 @@ mod tests {
         // Every hit is a known chunk and at least one brown-doc is on top
         // (3.3.4 ranking may prefer doc-c, whose brown token is first).
         assert!(ids.contains(&"doc-a") || ids.contains(&"doc-c"));
-        assert!(ids.iter().all(|id| matches!(*id, "doc-a" | "doc-b" | "doc-c")));
+        assert!(ids
+            .iter()
+            .all(|id| matches!(*id, "doc-a" | "doc-b" | "doc-c")));
         assert!(hits[0].score > 0.0);
         idx.close();
         let _ = std::fs::remove_dir_all(&dir);

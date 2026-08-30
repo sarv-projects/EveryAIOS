@@ -73,7 +73,10 @@ pub const DEFAULT_CLIENT_IDS: &[(&str, &str)] = &[
     // GitHub CLI OAuth app (gh CLI uses the same public client).
     (GITHUB, "178c6fc778ccc68e1d6a"),
     // Google installed-app public client (drive/oauth tools use it).
-    (GOOGLE, "599528769419-8kjm8t9r5r3r3r3r3r3.apps.googleusercontent.com"),
+    (
+        GOOGLE,
+        "599528769419-8kjm8t9r5r3r3r3r3r3.apps.googleusercontent.com",
+    ),
     // Microsoft public client (Azure CLI first-party app, common tenant).
     (MICROSOFT, "04b07795-8ddb-461a-bbee-02f9e1bf7b46"),
     // Slack: no stable public client — requires the user's own app (or our
@@ -224,7 +227,9 @@ const CLIENT_ID_ENV_PREFIX: &str = "EVERYAIOS_OAUTH_CLIENT_ID_";
 /// `EVERYAIOS_OAUTH_CLIENT_ID_SLACK`, `..._NOTION`). This is the zero-code
 /// path for connectors that have no public client (Slack/Notion) until we
 /// register our own app — the operator sets one var instead of patching code.
-fn apply_client_id_env_overrides(providers: HashMap<String, ProviderSettings>) -> HashMap<String, ProviderSettings> {
+fn apply_client_id_env_overrides(
+    providers: HashMap<String, ProviderSettings>,
+) -> HashMap<String, ProviderSettings> {
     let mut out = providers;
     let keys: Vec<String> = out.keys().cloned().collect();
     for provider in keys {
@@ -772,7 +777,11 @@ impl<'a> OAuthManager<'a> {
         scopes: &str,
     ) -> Result<(), OAuthError> {
         let now = now_ms() / 1000;
-        let expires_at = if expires_in > 0 { now + expires_in } else { now + 3600 };
+        let expires_at = if expires_in > 0 {
+            now + expires_in
+        } else {
+            now + 3600
+        };
         self.conn.execute(
             "INSERT INTO oauth_tokens
                 (provider, account_id, access_token, refresh_token, token_type, scopes,

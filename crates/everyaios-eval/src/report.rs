@@ -97,9 +97,12 @@ mod tests {
 
     #[test]
     fn missing_evidence_stays_explicit() {
-        let mut r = LoopReport::new("s1", CompletionStatus::PartiallyComplete {
-            missing: vec!["a".into()],
-        });
+        let mut r = LoopReport::new(
+            "s1",
+            CompletionStatus::PartiallyComplete {
+                missing: vec!["a".into()],
+            },
+        );
         r.push(proven_finding());
         r.push(Finding {
             evidence: vec![],

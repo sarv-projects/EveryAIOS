@@ -18,7 +18,9 @@
 //!   answers the driver's blocked permission callback (the Guard-2 seam).
 
 use crate::client::{AcpError, AcpSession, AcpTransport};
-use crate::messages::{AgentCapabilities, ClientCapabilities, ClientInfo, McpServer, PermissionDecision};
+use crate::messages::{
+    AgentCapabilities, ClientCapabilities, ClientInfo, McpServer, PermissionDecision,
+};
 use crate::registry::AuthMode;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -200,8 +202,7 @@ type InitHandler = Box<dyn FnMut(&SessionId) -> ChiefCapabilities + Send>;
 type StartHandler = Box<dyn FnMut(SessionOptions) -> Result<SessionHandle, ChiefError> + Send>;
 type SendHandler = Box<dyn FnMut(&SessionHandle, UserMessage) -> Result<(), ChiefError> + Send>;
 type StreamHandler = Box<dyn FnMut(&SessionHandle) -> EventStream + Send>;
-type PermissionHandler =
-    Box<dyn FnMut(PermissionRequest) -> Result<Approval, ChiefError> + Send>;
+type PermissionHandler = Box<dyn FnMut(PermissionRequest) -> Result<Approval, ChiefError> + Send>;
 type CancelHandler = Box<dyn FnMut(&SessionHandle) -> Result<(), ChiefError> + Send>;
 type UpdateHandler = Box<dyn FnMut(&SessionHandle) -> Result<SessionState, ChiefError> + Send>;
 
@@ -311,10 +312,7 @@ pub struct AcpChief {
 
 impl AcpChief {
     /// Spawn the driver thread over `transport` with the given client info.
-    pub fn spawn<T: AcpTransport + Send + 'static>(
-        transport: T,
-        client_info: ClientInfo,
-    ) -> Self {
+    pub fn spawn<T: AcpTransport + Send + 'static>(transport: T, client_info: ClientInfo) -> Self {
         let (cmd_tx, cmd_rx) = channel::<DriverCmd>();
         let (event_tx, event_rx) = channel::<ChiefEvent>();
         let waiters: Arc<Mutex<HashMap<String, Sender<PermissionDecision>>>> =
@@ -450,9 +448,8 @@ fn driver_loop<T: AcpTransport + Send + 'static>(
                         &res.agent_capabilities,
                         sandbox_claim,
                     );
-                    let channel_b =
-                        res.agent_capabilities.mcp_capabilities.http
-                            || res.agent_capabilities.mcp_capabilities.sse;
+                    let channel_b = res.agent_capabilities.mcp_capabilities.http
+                        || res.agent_capabilities.mcp_capabilities.sse;
                     initialized = true;
                     Ok(ChiefCapabilities {
                         governed: mode,
@@ -494,7 +491,8 @@ fn driver_loop<T: AcpTransport + Send + 'static>(
                             .to_string(),
                     }));
                     // Block until the host answers (the Guard-2 seam).
-                    rx.recv().unwrap_or(PermissionDecision::Deny { option_id: None })
+                    rx.recv()
+                        .unwrap_or(PermissionDecision::Deny { option_id: None })
                 });
                 match outcome {
                     Ok(o) => {
@@ -573,20 +571,14 @@ mod tests {
     #[test]
     fn governance_withhold_with_sandbox_is_self_contained() {
         let mode = governance_mode(false, &agent_caps(false, false), true);
-        assert_eq!(
-            mode,
-            GovernedSession::SelfContained { channel_b: false }
-        );
+        assert_eq!(mode, GovernedSession::SelfContained { channel_b: false });
         assert_eq!(mode.badge(), "Self-contained");
     }
 
     #[test]
     fn governance_withhold_with_mcp_is_self_contained_with_channel_b() {
         let mode = governance_mode(false, &agent_caps(true, false), false);
-        assert_eq!(
-            mode,
-            GovernedSession::SelfContained { channel_b: true }
-        );
+        assert_eq!(mode, GovernedSession::SelfContained { channel_b: true });
     }
 
     #[test]
@@ -745,7 +737,12 @@ mod tests {
         assert_eq!(h.session_id, "acp-1");
 
         chief
-            .send_message(&h, UserMessage { text: "fix it".into() })
+            .send_message(
+                &h,
+                UserMessage {
+                    text: "fix it".into(),
+                },
+            )
             .unwrap();
 
         // Drain events: a permission request arrives; answer it via the seam.
@@ -784,7 +781,10 @@ mod tests {
         chief.initialize(&"s1".into()).unwrap();
         // Capture the transport's sent initialize via the driver thread is
         // not exposed; instead assert governance reflects the withhold path.
-        assert_eq!(chief.capabilities().unwrap().governed, GovernedSession::NotGoverned);
+        assert_eq!(
+            chief.capabilities().unwrap().governed,
+            GovernedSession::NotGoverned
+        );
         let _ = t.sent;
         drop(chief);
     }

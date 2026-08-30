@@ -207,9 +207,15 @@ mod tests {
         assert_eq!(RiskClass::from_operation(&op("net")), RiskClass::External);
         assert_eq!(RiskClass::from_operation(&op("web")), RiskClass::External);
         assert_eq!(RiskClass::from_operation(&op("shell")), RiskClass::Exec);
-        assert_eq!(RiskClass::from_operation(&op("delete")), RiskClass::WriteLocal);
+        assert_eq!(
+            RiskClass::from_operation(&op("delete")),
+            RiskClass::WriteLocal
+        );
         assert_eq!(RiskClass::risk_tier(RiskClass::Read, false), RiskTier::R0);
-        assert_eq!(RiskClass::risk_tier(RiskClass::WriteLocal, true), RiskTier::R3);
+        assert_eq!(
+            RiskClass::risk_tier(RiskClass::WriteLocal, true),
+            RiskTier::R3
+        );
     }
 
     #[test]
@@ -245,18 +251,36 @@ mod tests {
     #[test]
     fn unattended_parks_external_and_exec() {
         let p = AutonomyPolicy::new(RiskClass::External, Mode::Auto);
-        assert_eq!(p.unattended_verdict(&op("net"), false), AutonomyVerdict::ParkInInbox);
+        assert_eq!(
+            p.unattended_verdict(&op("net"), false),
+            AutonomyVerdict::ParkInInbox
+        );
         let p = AutonomyPolicy::new(RiskClass::Exec, Mode::Auto);
-        assert_eq!(p.unattended_verdict(&op("shell"), false), AutonomyVerdict::ParkInInbox);
+        assert_eq!(
+            p.unattended_verdict(&op("shell"), false),
+            AutonomyVerdict::ParkInInbox
+        );
         let p = AutonomyPolicy::new(RiskClass::WriteLocal, Mode::Auto);
-        assert_eq!(p.unattended_verdict(&op("multi"), false), AutonomyVerdict::Act);
+        assert_eq!(
+            p.unattended_verdict(&op("multi"), false),
+            AutonomyVerdict::Act
+        );
         let p = AutonomyPolicy::new(RiskClass::Read, Mode::Auto);
-        assert_eq!(p.unattended_verdict(&op("write"), false), AutonomyVerdict::Act);
+        assert_eq!(
+            p.unattended_verdict(&op("write"), false),
+            AutonomyVerdict::Act
+        );
     }
 
     #[test]
     fn mode_parse_roundtrip() {
-        for m in [Mode::Discuss, Mode::Plan, Mode::Interactive, Mode::Auto, Mode::Custom] {
+        for m in [
+            Mode::Discuss,
+            Mode::Plan,
+            Mode::Interactive,
+            Mode::Auto,
+            Mode::Custom,
+        ] {
             assert_eq!(Mode::parse(m.as_str()), Some(m));
         }
         assert_eq!(Mode::parse("nope"), None);

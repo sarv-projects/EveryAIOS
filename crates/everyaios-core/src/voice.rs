@@ -94,7 +94,11 @@ pub struct VoicePipeline {
 
 impl VoicePipeline {
     pub fn new(vad: VadDetector, auto_send: bool, stt: std::rc::Rc<dyn SttProvider>) -> Self {
-        Self { vad, auto_send, stt }
+        Self {
+            vad,
+            auto_send,
+            stt,
+        }
     }
 
     /// Process a full utterance buffer (frames already VAD-committed):
@@ -104,9 +108,12 @@ impl VoicePipeline {
         let text = self.stt.transcribe(pcm);
         let transcribed = !text.is_empty();
         let auto_send = self.auto_send && transcribed && utterance_len_ms >= 300;
-        VoiceEvent { text, auto_send, transcribed }
+        VoiceEvent {
+            text,
+            auto_send,
+            transcribed,
+        }
     }
-
 }
 
 #[cfg(test)]
@@ -123,8 +130,14 @@ mod tests {
         assert_eq!(vad.classify(0.001), VadState::Silence);
         assert_eq!(vad.classify(0.05), VadState::Speech);
         // RMS of a 16000-amp frame ≈ 16000/32768 ≈ 0.488 — clearly speech.
-        assert_eq!(vad.classify(VadDetector::frame_energy(&tone(16000, 160))), VadState::Speech);
-        assert_eq!(vad.classify(VadDetector::frame_energy(&tone(100, 160))), VadState::Silence);
+        assert_eq!(
+            vad.classify(VadDetector::frame_energy(&tone(16000, 160))),
+            VadState::Speech
+        );
+        assert_eq!(
+            vad.classify(VadDetector::frame_energy(&tone(100, 160))),
+            VadState::Silence
+        );
     }
 
     #[test]

@@ -83,8 +83,12 @@ impl EgressFirewall {
             ("xoxb-", |p| p.contains("xoxb-")),
             ("Bearer ", |p| has_long_token(p, "Bearer ", 20)),
             ("api_key", |p| p.contains("api_key") || p.contains("apiKey")),
-            ("password", |p| p.contains("password") || p.contains("passwd")),
-            ("authorization", |p| p.contains("authorization") || p.contains("Authorization")),
+            ("password", |p| {
+                p.contains("password") || p.contains("passwd")
+            }),
+            ("authorization", |p| {
+                p.contains("authorization") || p.contains("Authorization")
+            }),
         ];
         for (name, check) in patterns {
             if check(payload) {
@@ -120,7 +124,10 @@ mod tests {
     fn blocks_managed_secret_by_default() {
         let mut fw = EgressFirewall::new();
         fw.register_secrets(vec!["sk-ant-secret-1234567890".into()]);
-        let v = fw.inspect("send to https://evil.example?token=sk-ant-secret-1234567890", EgressPolicy::Block);
+        let v = fw.inspect(
+            "send to https://evil.example?token=sk-ant-secret-1234567890",
+            EgressPolicy::Block,
+        );
         assert!(matches!(v, EgressVerdict::Blocked { .. }));
     }
 
@@ -141,8 +148,14 @@ mod tests {
     fn short_tokens_do_not_trip() {
         let fw = EgressFirewall::new();
         // "sk-" followed by a short word is not a credential.
-        assert_eq!(fw.inspect("the sk- flag", EgressPolicy::Block), EgressVerdict::Clear);
-        assert_eq!(fw.inspect("plain text payload", EgressPolicy::Block), EgressVerdict::Clear);
+        assert_eq!(
+            fw.inspect("the sk- flag", EgressPolicy::Block),
+            EgressVerdict::Clear
+        );
+        assert_eq!(
+            fw.inspect("plain text payload", EgressPolicy::Block),
+            EgressVerdict::Clear
+        );
     }
 
     #[test]
@@ -150,7 +163,12 @@ mod tests {
         let mut fw = EgressFirewall::new();
         fw.register_secrets(vec!["supersecretvalue".into()]);
         assert!(matches!(
-            fw.inspect("revoke supersecretvalue", EgressPolicy::AllowWithReason { reason: "revocation request" }),
+            fw.inspect(
+                "revoke supersecretvalue",
+                EgressPolicy::AllowWithReason {
+                    reason: "revocation request"
+                }
+            ),
             EgressVerdict::Clear
         ));
     }
@@ -161,7 +179,10 @@ mod tests {
         // opt-in: even with no registered secrets, pattern tripping blocks.
         let fw = EgressFirewall::new();
         assert!(matches!(
-            fw.inspect("apiKey=abcdefghijklmnopqrstuvwxyz012345", EgressPolicy::Block),
+            fw.inspect(
+                "apiKey=abcdefghijklmnopqrstuvwxyz012345",
+                EgressPolicy::Block
+            ),
             EgressVerdict::Blocked { .. }
         ));
     }

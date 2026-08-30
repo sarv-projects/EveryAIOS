@@ -66,11 +66,21 @@ impl TesseractCli {
             if cols[0] != "5" {
                 continue; // word rows only
             }
-            let Ok(left) = cols[6].parse::<i32>() else { continue };
-            let Ok(top) = cols[7].parse::<i32>() else { continue };
-            let Ok(width) = cols[8].parse::<u32>() else { continue };
-            let Ok(height) = cols[9].parse::<u32>() else { continue };
-            let Ok(conf) = cols[10].parse::<f64>() else { continue };
+            let Ok(left) = cols[6].parse::<i32>() else {
+                continue;
+            };
+            let Ok(top) = cols[7].parse::<i32>() else {
+                continue;
+            };
+            let Ok(width) = cols[8].parse::<u32>() else {
+                continue;
+            };
+            let Ok(height) = cols[9].parse::<u32>() else {
+                continue;
+            };
+            let Ok(conf) = cols[10].parse::<f64>() else {
+                continue;
+            };
             let text = cols[11].trim().to_string();
             if text.is_empty() {
                 continue;
@@ -99,11 +109,18 @@ impl OcrEngine for TesseractCli {
         else {
             return vec![];
         };
-        if child.stdin.as_mut().map(|s| s.write_all(image_png)).is_none() {
+        if child
+            .stdin
+            .as_mut()
+            .map(|s| s.write_all(image_png))
+            .is_none()
+        {
             return vec![];
         }
         drop(child.stdin.take());
-        let Ok(out) = child.wait_with_output() else { return vec![] };
+        let Ok(out) = child.wait_with_output() else {
+            return vec![];
+        };
         if !out.status.success() {
             return vec![];
         }
@@ -122,7 +139,12 @@ pub enum VisionHit {
     /// Click at this (window) point.
     Point { x: i32, y: i32 },
     /// The phrase spans multiple words; use the union region center.
-    RegionCenter { x: i32, y: i32, width: u32, height: u32 },
+    RegionCenter {
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    },
     /// Not found — the caller must NOT guess (halt).
     NotFound,
 }
@@ -136,10 +158,7 @@ pub fn locate_phrase(words: &[OcrWord], phrase: &str) -> VisionHit {
     }
     let lower = needle.to_ascii_lowercase();
     // Exact single-word match (case-insensitive).
-    if let Some(w) = words
-        .iter()
-        .find(|w| w.text.to_ascii_lowercase() == lower)
-    {
+    if let Some(w) = words.iter().find(|w| w.text.to_ascii_lowercase() == lower) {
         let (cx, cy) = w.center();
         return VisionHit::Point { x: cx, y: cy };
     }
@@ -234,7 +253,10 @@ mod tests {
         assert_eq!(words.len(), 2);
         assert_eq!(words[0].text, "Hello");
         assert_eq!(words[1].text, "ignored");
-        assert_eq!((words[0].x, words[0].y, words[0].width, words[0].height), (10, 20, 30, 10));
+        assert_eq!(
+            (words[0].x, words[0].y, words[0].width, words[0].height),
+            (10, 20, 30, 10)
+        );
     }
 
     #[test]
@@ -242,10 +264,7 @@ mod tests {
         let words = vec![w("Submit", 100, 100)];
         assert_eq!(
             locate_phrase(&words, "submit"),
-            VisionHit::Point {
-                x: 120,
-                y: 106
-            }
+            VisionHit::Point { x: 120, y: 106 }
         );
     }
 

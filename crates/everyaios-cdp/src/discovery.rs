@@ -208,7 +208,10 @@ pub fn probe_electron(port: u16) -> Result<ElectronApp, CdpError> {
 /// Scan a list of candidate ports for Electron apps (best-effort — dead or
 /// non-Electron ports are skipped).
 pub fn discover_electron_apps(ports: &[u16]) -> Vec<ElectronApp> {
-    ports.iter().filter_map(|&p| probe_electron(p).ok()).collect()
+    ports
+        .iter()
+        .filter_map(|&p| probe_electron(p).ok())
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +251,8 @@ mod tests {
 
     #[test]
     fn electron_from_json_rejects_remote_ws_url() {
-        let version = r#"{"Browser":"Electron/31.0.0","webSocketDebuggerUrl":"ws://evil.example:9229/x"}"#;
+        let version =
+            r#"{"Browser":"Electron/31.0.0","webSocketDebuggerUrl":"ws://evil.example:9229/x"}"#;
         let err = electron_from_json(9229, version, "[]").unwrap_err();
         assert!(matches!(err, CdpError::Security(_)), "{err:?}");
     }

@@ -93,12 +93,7 @@ impl SessionApprovals {
             .retain(|_, e| now_ms.saturating_sub(e.last_access_ms) <= APPROVAL_TTL_MS);
         // 2) If still over cap, drop oldest by insertion (HashMap is O(1) pop).
         while self.map.len() > MAX_SESSION_KEYS {
-            if let Some(key) = self
-                .map
-                .keys()
-                .next()
-                .map(|k| k.clone())
-            {
+            if let Some(key) = self.map.keys().next().map(|k| k.clone()) {
                 self.map.remove(&key);
             } else {
                 break;
@@ -127,9 +122,7 @@ impl SessionApprovals {
                 granted: false,
                 requires_confirmation: false,
                 confirmation_kind: None,
-                reason: Some(format!(
-                    "Tool not allowed on {surface} surface"
-                )),
+                reason: Some(format!("Tool not allowed on {surface} surface")),
             };
         }
 
@@ -168,7 +161,9 @@ impl SessionApprovals {
 
     fn family_approved(&self, session_id: &str, family: &str) -> bool {
         let key = format!("{session_id}:{family}");
-        self.map.get(&key).is_some_and(|e| e.risks.contains(&RiskLevel::LocalWrite))
+        self.map
+            .get(&key)
+            .is_some_and(|e| e.risks.contains(&RiskLevel::LocalWrite))
     }
 
     /// `approveRiskForSession(sessionId, family, risk)` + prune.

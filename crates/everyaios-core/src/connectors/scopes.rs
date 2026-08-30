@@ -152,12 +152,19 @@ mod tests {
 
     #[test]
     fn opt_in_outbound_adds_exactly_the_write_scopes() {
-        let ws = SCOPE_MANIFEST.iter().find(|m| m.id == "google-workspace").unwrap();
+        let ws = SCOPE_MANIFEST
+            .iter()
+            .find(|m| m.id == "google-workspace")
+            .unwrap();
         let read = attach_scopes(ws, false);
         let full = attach_scopes(ws, true);
         assert!(read.len() < full.len());
         let extra: Vec<String> = full.iter().filter(|s| !read.contains(s)).cloned().collect();
-        assert_eq!(extra.len(), 1, "gmail.send is the only opt-in write: {extra:?}");
+        assert_eq!(
+            extra.len(),
+            1,
+            "gmail.send is the only opt-in write: {extra:?}"
+        );
         assert!(extra[0].contains("gmail.send"));
     }
 

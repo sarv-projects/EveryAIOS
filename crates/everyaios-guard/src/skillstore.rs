@@ -69,9 +69,9 @@ pub struct SignedSkillIndex {
 /// Add capabilities here only after a security review.
 pub const RUNTIME_CAPABILITY_ALLOWLIST: &[&str] = &[
     "fs.read",
-    "fs.write",      // gated by an explicit write approval (Guard-2 risk card)
-    "tool.mcp",      // call {stdio,http} MCP tools
-    "tool.connector",// call a connected connector tool
+    "fs.write",       // gated by an explicit write approval (Guard-2 risk card)
+    "tool.mcp",       // call {stdio,http} MCP tools
+    "tool.connector", // call a connected connector tool
 ];
 
 /// Construct a signed index from rows.
@@ -93,23 +93,27 @@ pub fn verify_skill_index(
         .decode(public_key_b64)
         .map_err(|_| SkillStoreError::BadKey)?;
     let pk = VerifyingKey::from_bytes(
-        pk_bytes.as_slice().try_into().map_err(|_| SkillStoreError::BadKey)?,
+        pk_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| SkillStoreError::BadKey)?,
     )?;
     let sig_bytes = B64
         .decode(&signed.signature_b64)
         .map_err(|_| SkillStoreError::BadSignature)?;
-    let sig = Signature::from_bytes(sig_bytes.as_slice().try_into().map_err(|_| SkillStoreError::BadSignature)?);
+    let sig = Signature::from_bytes(
+        sig_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| SkillStoreError::BadSignature)?,
+    );
     pk.verify(signed.body.as_bytes(), &sig)?;
-    serde_json::from_str::<Vec<SkillRow>>(&signed.body)
-        .map_err(|_| SkillStoreError::MalformedBody)
+    serde_json::from_str::<Vec<SkillRow>>(&signed.body).map_err(|_| SkillStoreError::MalformedBody)
 }
 
 /// Reject an index with duplicate ids or rows that demand capabilities
 /// outside the runtime allowlist (structural + capability validation).
-pub fn validate_skill_index(
-    rows: &[SkillRow],
-    allowlist: &[&str],
-) -> Result<(), SkillStoreError> {
+pub fn validate_skill_index(rows: &[SkillRow], allowlist: &[&str]) -> Result<(), SkillStoreError> {
     let mut seen: BTreeSet<String> = BTreeSet::new();
     for row in rows {
         if row.id.trim().is_empty() {
@@ -120,7 +124,10 @@ pub fn validate_skill_index(
         }
         for p in &row.permissions {
             if !allowlist.contains(&p.as_str()) {
-                return Err(SkillStoreError::UnlistedCapability(row.name.clone(), p.clone()));
+                return Err(SkillStoreError::UnlistedCapability(
+                    row.name.clone(),
+                    p.clone(),
+                ));
             }
         }
     }
@@ -160,7 +167,10 @@ pub fn generate_store_keys() -> StoreKeys {
     use rand::rngs::OsRng;
     let signing = SigningKey::generate(&mut OsRng);
     let public_key_b64 = B64.encode(signing.verifying_key().to_bytes());
-    StoreKeys { signing, public_key_b64 }
+    StoreKeys {
+        signing,
+        public_key_b64,
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -214,10 +224,14 @@ mod tests {
     fn sign_then_verify_roundtrip() {
         let k = keys();
         let signed = sign_skill_index(&rows(), &k.signing);
-        let verified = verify_and_validate(&signed, &k.public_key_b64, RUNTIME_CAPABILITY_ALLOWLIST)
-            .expect("index verifies + validates");
+        let verified =
+            verify_and_validate(&signed, &k.public_key_b64, RUNTIME_CAPABILITY_ALLOWLIST)
+                .expect("index verifies + validates");
         assert_eq!(verified.len(), 2);
-        assert_eq!(get_skill(&verified, "note-taker").unwrap().name, "Note Taker");
+        assert_eq!(
+            get_skill(&verified, "note-taker").unwrap().name,
+            "Note Taker"
+        );
     }
 
     #[test]

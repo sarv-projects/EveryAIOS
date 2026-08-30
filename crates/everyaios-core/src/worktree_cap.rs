@@ -20,7 +20,11 @@ pub struct WorktreeCap {
 
 impl Default for WorktreeCap {
     fn default() -> Self {
-        Self { max_gib: 8, used_gib: 0, min_reserve_gib: 1 }
+        Self {
+            max_gib: 8,
+            used_gib: 0,
+            min_reserve_gib: 1,
+        }
     }
 }
 
@@ -48,7 +52,9 @@ impl WorktreeCap {
         if self.would_exceed(new_worktree_gib) {
             CapVerdict::Refused
         } else {
-            self.used_gib = self.used_gib.saturating_add(new_worktree_gib.max(self.min_reserve_gib));
+            self.used_gib = self
+                .used_gib
+                .saturating_add(new_worktree_gib.max(self.min_reserve_gib));
             CapVerdict::Allowed
         }
     }
@@ -69,7 +75,11 @@ mod tests {
 
     #[test]
     fn gate_refuses_over_cap() {
-        let mut cap = WorktreeCap { max_gib: 8, used_gib: 7, min_reserve_gib: 1 };
+        let mut cap = WorktreeCap {
+            max_gib: 8,
+            used_gib: 7,
+            min_reserve_gib: 1,
+        };
         assert!(cap.would_exceed(2));
         assert_eq!(cap.reserve(2), CapVerdict::Refused);
         assert_eq!(cap.used_gib, 7); // untouched on refusal
@@ -77,7 +87,11 @@ mod tests {
 
     #[test]
     fn min_reserve_floors_tiny_repos() {
-        let mut cap = WorktreeCap { max_gib: 2, used_gib: 1, min_reserve_gib: 1 };
+        let mut cap = WorktreeCap {
+            max_gib: 2,
+            used_gib: 1,
+            min_reserve_gib: 1,
+        };
         // A 0.1GiB repo still charges 1GiB — 3 tiny worktrees can't hide.
         assert_eq!(cap.reserve(0), CapVerdict::Allowed);
         assert_eq!(cap.used_gib, 2);

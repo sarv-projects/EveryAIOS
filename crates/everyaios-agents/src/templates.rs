@@ -66,39 +66,70 @@ impl AgentTemplate {
             Coder => {
                 b.description = "Writes and fixes code with editor + terminal access.".into();
                 b.emoji = "👨\u{200d}💻".into();
-                b.tools = ToolScope { allow: vec!["fs.read".into(), "fs.write".into(), "shell".into(), "search".into()], deny: Vec::new() };
+                b.tools = ToolScope {
+                    allow: vec![
+                        "fs.read".into(),
+                        "fs.write".into(),
+                        "shell".into(),
+                        "search".into(),
+                    ],
+                    deny: Vec::new(),
+                };
                 b.mcp_servers = vec!["filesystem".into()];
             }
             Researcher => {
                 b.description = "Deep web + document research with citation cards.".into();
                 b.emoji = "🔬".into();
-                b.tools = ToolScope { allow: vec!["search".into(), "memory.read".into()], deny: vec!["fs.write".into(), "shell".into()] };
+                b.tools = ToolScope {
+                    allow: vec!["search".into(), "memory.read".into()],
+                    deny: vec!["fs.write".into(), "shell".into()],
+                };
             }
             EmailTriager => {
-                b.description = "Triage your inbox: summarize, draft, never send without approval.".into();
+                b.description =
+                    "Triage your inbox: summarize, draft, never send without approval.".into();
                 b.emoji = "📬".into();
                 b.connectors = vec!["gmail".into()];
-                b.tools = ToolScope { allow: vec!["email.read".into(), "email.draft".into()], deny: Vec::new() };
+                b.tools = ToolScope {
+                    allow: vec!["email.read".into(), "email.draft".into()],
+                    deny: Vec::new(),
+                };
             }
             DataAnalyst => {
                 b.description = "Sum, pivot, and chart spreadsheets; never invents numbers.".into();
                 b.emoji = "📊".into();
-                b.tools = ToolScope { allow: vec!["office.read".into(), "office.write".into()], deny: vec!["shell".into()] };
+                b.tools = ToolScope {
+                    allow: vec!["office.read".into(), "office.write".into()],
+                    deny: vec!["shell".into()],
+                };
             }
             Writer => {
                 b.description = "Long-form writing and rewriting with your style memory.".into();
                 b.emoji = "✍️".into();
-                b.tools = ToolScope { allow: vec!["fs.read".into(), "fs.write".into()], deny: vec!["shell".into()] };
+                b.tools = ToolScope {
+                    allow: vec!["fs.read".into(), "fs.write".into()],
+                    deny: vec!["shell".into()],
+                };
             }
             MeetingNotes => {
                 b.description = "Turns transcripts into structured notes + action items.".into();
                 b.emoji = "📝".into();
-                b.tools = ToolScope { allow: vec!["office.write".into()], deny: Vec::new() };
+                b.tools = ToolScope {
+                    allow: vec!["office.write".into()],
+                    deny: Vec::new(),
+                };
             }
             BrowserOperator => {
                 b.description = "Drives the browser: navigate, snapshot, act, verify.".into();
                 b.emoji = "🌐".into();
-                b.tools = ToolScope { allow: vec!["browser.navigate".into(), "browser.act".into(), "browser.snapshot".into()], deny: Vec::new() };
+                b.tools = ToolScope {
+                    allow: vec![
+                        "browser.navigate".into(),
+                        "browser.act".into(),
+                        "browser.snapshot".into(),
+                    ],
+                    deny: Vec::new(),
+                };
             }
         }
         b

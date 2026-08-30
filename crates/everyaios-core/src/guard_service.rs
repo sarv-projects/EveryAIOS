@@ -739,6 +739,95 @@ mod tests {
         assert_eq!(blocked["action"], "block");
     }
 
+    // --- P48.2 adversarial two-path boundary (anti-impersonation) ---
+
+    #[test]
+    fn sidecar_cannot_self_approve_its_own_pending_ticket() {
+        // (a) + (c): a ticket minted via the sidecar path (Ask) is Pending.
+        // The sidecar surface cannot approve it (control-plane refused), so a
+        // self-issued approval is impossible — the only pre-approved tickets
+        // come from an `Allow` decision the policy authorized deterministically.
+        let mut g = GuardService::new();
+        let out = g
+            .handle_sidecar(
+                "guard/evaluate",
+                &json!({
+                    "operation": "delete", "argsHash": "h", "decision": { "risk": "high" }
+                }),
+            )
+            .unwrap();
+        let ticket_id = out["ticketId"].as_str().unwrap().to_string();
+        assert_eq!(out["action"], "ask");
+
+        // Sidecar cannot approve its own ticket by any control-plane route.
+        assert!(g
+            .handle_sidecar("guard/approve", &json!({ "ticketId": ticket_id }))
+            .is_err());
+        // And the pending ticket is not consumable until a real approval (which
+        // only the control-plane handle can reach, with the nonce).
+        assert!(g
+            .handle_sidecar(
+                "guard/use",
+                &json!({ "ticketId": ticket_id, "argsHash": "h" })
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn forged_decision_source_cannot_pre_approve_a_ticket() {
+        // (c): the decision package's `approvalSource`/risk are inputs, but the
+        // Ask-vs-Allow split is decided by POLICY + profile — a sidecar cannot
+        // smuggle "this was already approved" by setting a fake source on the
+        // decision it attaches to an Ask-scoped operation.
+        let mut g = GuardService::new();
+        let sneaky = DecisionPackage::new("rm -rf /")
+            .with_risk(RiskLevel::Medium)
+            .with_paths(vec!["/w/x".into()]);
+        // A Medium delete under default (Standard) profile is below the strict
+        // threshold — but a *delete* is still an Ask operation, never Allow,
+        // regardless of what the decision source claims.
+        let out = g
+            .handle(
+                "guard/evaluate",
+                &json!({
+                    "operation": "delete",
+                    "argsHash": "h",
+                    "decision": serde_json::to_value(&sneaky).unwrap(),
+                }),
+            )
+            .unwrap();
+        // Only the control-plane handle can evaluate; still Ask (pending).
+        assert_eq!(out["action"], "ask");
+        let ticket_id = out["ticketId"].as_str().unwrap().to_string();
+        // Not consumable without approval + nonce.
+        assert!(g
+            .handle(
+                "guard/use",
+                &json!({ "ticketId": ticket_id, "argsHash": "h" })
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn estop_cannot_be_cleared_by_sidecar() {
+        // (c): estop is a hard trip; only the control plane can pull it, and a
+        // compromised sidecar can neither pull nor clear it.
+        let mut g = GuardService::new();
+        g.handle("guard/estop", &json!({})).unwrap();
+        assert_eq!(
+            g.handle_sidecar("guard/estop_status", &json!({})).unwrap()["pulled"],
+            true
+        );
+        // Sidecar sees it pulled but cannot reset it.
+        assert!(g.handle_sidecar("guard/reset", &json!({})).is_err());
+        // Control-plane reset works (human path only).
+        g.handle("guard/reset", &json!({})).unwrap();
+        assert_eq!(
+            g.handle_sidecar("guard/estop_status", &json!({})).unwrap()["pulled"],
+            false
+        );
+    }
+
     #[test]
     fn ask_wait_unblocks_on_approve() {
         use std::sync::{Arc, Mutex};

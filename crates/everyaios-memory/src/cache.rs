@@ -79,10 +79,7 @@ impl SemanticCache {
             }
             let sim = jaccard(&tokens, &e.tokens);
             if sim >= self.sim_threshold {
-                let better = best
-                    .as_ref()
-                    .map(|(_, s)| sim > *s)
-                    .unwrap_or(true);
+                let better = best.as_ref().map(|(_, s)| sim > *s).unwrap_or(true);
                 if better {
                     best = Some((e, sim));
                 }
@@ -103,7 +100,8 @@ impl SemanticCache {
 
     fn evict_expired(&mut self, now: u64) {
         let ttl = self.ttl_secs;
-        self.entries.retain(|e| now.saturating_sub(e.created_at) < ttl);
+        self.entries
+            .retain(|e| now.saturating_sub(e.created_at) < ttl);
     }
 }
 
@@ -221,7 +219,11 @@ fn normalize(s: &str) -> String {
 fn jaccard(a: &HashSet<String>, b: &HashSet<String>) -> f64 {
     let union = a.union(b).count();
     if union == 0 {
-        return if a.is_empty() && b.is_empty() { 1.0 } else { 0.0 };
+        return if a.is_empty() && b.is_empty() {
+            1.0
+        } else {
+            0.0
+        };
     }
     a.intersection(b).count() as f64 / union as f64
 }

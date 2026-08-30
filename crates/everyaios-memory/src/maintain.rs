@@ -59,7 +59,9 @@ pub fn analyze_references(rows: &[MemoryRow]) -> MaintainReport {
         for b in rows.iter().skip(i + 1) {
             let sim = token_overlap(&a.text, &b.text);
             if sim >= 0.8 {
-                report.near_duplicates.push((a.id.clone(), b.id.clone(), sim));
+                report
+                    .near_duplicates
+                    .push((a.id.clone(), b.id.clone(), sim));
             }
         }
     }
@@ -183,8 +185,20 @@ mod tests {
     fn near_duplicate_pair() {
         let rows = vec![
             row("a", "meeting with alice about the budget plan", 5, 1, &[]),
-            row("b", "meeting with alice about the budget plan notes", 5, 1, &[]),
-            row("c", "completely unrelated shopping list milk eggs", 5, 1, &[]),
+            row(
+                "b",
+                "meeting with alice about the budget plan notes",
+                5,
+                1,
+                &[],
+            ),
+            row(
+                "c",
+                "completely unrelated shopping list milk eggs",
+                5,
+                1,
+                &[],
+            ),
         ];
         let rep = analyze_references(&rows);
         assert_eq!(rep.near_duplicates.len(), 1);
@@ -198,7 +212,10 @@ mod tests {
             row("c", "grocery shopping list", 5, 1, &[]),
         ];
         let rep = update_graph(&rows);
-        assert_eq!(rep.graph_edges_added, 1, "a↔b share rust+lifetimes; c links to nobody");
+        assert_eq!(
+            rep.graph_edges_added, 1,
+            "a↔b share rust+lifetimes; c links to nobody"
+        );
     }
 
     #[test]

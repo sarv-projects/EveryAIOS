@@ -13,6 +13,16 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  # Fix 2 — capabilities.yaml == ARCH/09 == spec §0, and TODO.md header counts
+  # match the file. Fast (no build); catches index-level drift on every PR.
+  docs-sync:
+    name: docs-sync (capability index + TODO counts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run doc-sync check
+        run: node scripts/check-doc-sync.mjs
+
   rust:
     name: cargo test/clippy/fmt (${{ matrix.os }})
     strategy:

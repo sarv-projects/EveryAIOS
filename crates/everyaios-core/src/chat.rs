@@ -290,9 +290,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             evals: Arc::new(Mutex::new(EvalService::new())),
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
             egress,
-            tasks: Arc::new(Mutex::new(crate::task_ledger::TaskLedger::new(
-                Box::new(crate::task_ledger::InMemoryStore::new()),
-            ))),
+            tasks: Arc::new(Mutex::new(crate::task_ledger::TaskLedger::new(Box::new(
+                crate::task_ledger::InMemoryStore::new(),
+            )))),
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
             agui: crate::agui::AguiRelay::new(),
         }
@@ -1275,8 +1275,7 @@ fn stream_provider(
     }
     match broker.chat_completion_stream(&provider, &model, &session_id, body) {
         Ok(events) => {
-            let finished_by_length =
-                events.iter().any(|e| e.finish.as_deref() == Some("length"));
+            let finished_by_length = events.iter().any(|e| e.finish.as_deref() == Some("length"));
             let native_calls = assemble_tool_calls(&events, finished_by_length);
             let text: String = events.iter().filter_map(|e| e.delta.clone()).collect();
             let json_calls = if native_calls.is_empty() && has_tools {

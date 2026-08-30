@@ -134,14 +134,24 @@ mod tests {
         assert!(c.allow_memory_writes);
         assert_eq!(
             c.tool_mounts,
-            vec![ToolFamily::Knowledge, ToolFamily::Automations, ToolFamily::Creation, ToolFamily::System]
+            vec![
+                ToolFamily::Knowledge,
+                ToolFamily::Automations,
+                ToolFamily::Creation,
+                ToolFamily::System
+            ]
         );
     }
 
     #[test]
     fn reader_is_source_hard_and_min_mounts() {
         let c = default_contract(SurfaceKind::Reader);
-        assert_eq!(c.scope, Scope::SourceHard { source_id: String::new() });
+        assert_eq!(
+            c.scope,
+            Scope::SourceHard {
+                source_id: String::new()
+            }
+        );
         assert_eq!(c.tool_mounts, vec![ToolFamily::Reader, ToolFamily::System]);
         assert!(!c.allow_artifacts);
     }

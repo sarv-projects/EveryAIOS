@@ -44,10 +44,7 @@ fn hash_input(prev: &str, seq: u64, kind: &str, payload: &serde_json::Value) -> 
 fn sha256(bytes: &[u8]) -> String {
     let mut h = Sha256::new();
     h.update(bytes);
-    h.finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 impl MerkleChain {
@@ -57,9 +54,17 @@ impl MerkleChain {
 
     /// Append an event, chaining to the previous row. Returns the entry's hash.
     pub fn push(&mut self, event: AuditEvent) -> String {
-        let prev = self.entries.last().map(|e| e.hash.clone()).unwrap_or_default();
+        let prev = self
+            .entries
+            .last()
+            .map(|e| e.hash.clone())
+            .unwrap_or_default();
         let hash = sha256(&hash_input(&prev, event.seq, &event.kind, &event.payload));
-        self.entries.push(ChainedEntry { event, hash: hash.clone(), prev_hash: prev });
+        self.entries.push(ChainedEntry {
+            event,
+            hash: hash.clone(),
+            prev_hash: prev,
+        });
         hash
     }
 
@@ -86,7 +91,12 @@ impl MerkleChain {
             if e.prev_hash != prev {
                 return Some(i);
             }
-            let expect = sha256(&hash_input(&prev, e.event.seq, &e.event.kind, &e.event.payload));
+            let expect = sha256(&hash_input(
+                &prev,
+                e.event.seq,
+                &e.event.kind,
+                &e.event.payload,
+            ));
             if e.hash != expect {
                 return Some(i);
             }
@@ -130,8 +140,7 @@ mod tests {
     use super::*;
 
     fn event(seq: u64, kind: &str) -> AuditEvent {
-        AuditEvent::new(kind, serde_json::json!({"n": seq}))
-            .with_trace("t", "s")
+        AuditEvent::new(kind, serde_json::json!({"n": seq})).with_trace("t", "s")
     }
 
     #[test]

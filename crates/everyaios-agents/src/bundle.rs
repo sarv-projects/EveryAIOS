@@ -40,7 +40,10 @@ impl ModelPin {
     }
 
     pub fn pinned(provider: impl Into<String>, model: impl Into<String>) -> Self {
-        Self { provider: Some(provider.into()), model: Some(model.into()) }
+        Self {
+            provider: Some(provider.into()),
+            model: Some(model.into()),
+        }
     }
 }
 

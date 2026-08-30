@@ -102,8 +102,14 @@ mod tests {
         let h1: [(String, f64); 2] = [("x".into(), 1.0), ("y".into(), 0.5)];
         let h2: [(String, f64); 1] = [("y".into(), 1.0)];
         let signals = vec![
-            crate::fusion::Signal { weight: 1.0, hits: &h1 },
-            crate::fusion::Signal { weight: 0.5, hits: &h2 },
+            crate::fusion::Signal {
+                weight: 1.0,
+                hits: &h1,
+            },
+            crate::fusion::Signal {
+                weight: 0.5,
+                hits: &h2,
+            },
         ];
         let fused = fuse_abortable(&signals, 60.0, Some(&a)).unwrap();
         assert_eq!(fused.len(), 2);
@@ -116,7 +122,10 @@ mod tests {
         let token = token();
         token.cancel();
         let h: [(String, f64); 1] = [("x".into(), 1.0)];
-        let signals = vec![crate::fusion::Signal { weight: 1.0, hits: &h }];
+        let signals = vec![crate::fusion::Signal {
+            weight: 1.0,
+            hits: &h,
+        }];
         let out = fuse_abortable(&signals, 60.0, Some(&token));
         assert_eq!(out, Err(AbortError::Cancelled));
     }
@@ -129,8 +138,14 @@ mod tests {
         let h1: [(String, f64); 1] = [("x".into(), 1.0)];
         let h2: [(String, f64); 1] = [("y".into(), 1.0)];
         let signals = vec![
-            crate::fusion::Signal { weight: 1.0, hits: &h1 },
-            crate::fusion::Signal { weight: 1.0, hits: &h2 },
+            crate::fusion::Signal {
+                weight: 1.0,
+                hits: &h1,
+            },
+            crate::fusion::Signal {
+                weight: 1.0,
+                hits: &h2,
+            },
         ];
         let per_signal = fuse_abortable(&signals[..1], 60.0, Some(&token)).unwrap();
         assert_eq!(per_signal.len(), 1);
@@ -142,7 +157,10 @@ mod tests {
     #[test]
     fn never_abort_default() {
         let h: [(String, f64); 1] = [("x".into(), 1.0)];
-        let signals = vec![crate::fusion::Signal { weight: 1.0, hits: &h }];
+        let signals = vec![crate::fusion::Signal {
+            weight: 1.0,
+            hits: &h,
+        }];
         let fused = fuse_abortable(&signals, 60.0, Some(&NeverAbort)).unwrap();
         assert_eq!(fused.len(), 1);
     }

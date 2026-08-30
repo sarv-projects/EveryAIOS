@@ -40,7 +40,13 @@ pub struct Marketplace {
 
 impl Marketplace {
     pub fn new(id: impl Into<String>, name: impl Into<String>, url: impl Into<String>) -> Self {
-        Self { id: id.into(), name: name.into(), url: url.into(), builtin: false, installed: Vec::new() }
+        Self {
+            id: id.into(),
+            name: name.into(),
+            url: url.into(),
+            builtin: false,
+            installed: Vec::new(),
+        }
     }
 
     pub fn builtin(id: impl Into<String>, name: impl Into<String>, url: impl Into<String>) -> Self {
@@ -68,7 +74,13 @@ pub struct InstalledPlugin {
 pub fn builtin_marketplaces() -> Vec<Marketplace> {
     KNOWN_MARKETPLACES
         .iter()
-        .map(|id| Marketplace::builtin(*id, id.replace('-', " "), format!("https://github.com/{id}")))
+        .map(|id| {
+            Marketplace::builtin(
+                *id,
+                id.replace('-', " "),
+                format!("https://github.com/{id}"),
+            )
+        })
         .collect()
 }
 

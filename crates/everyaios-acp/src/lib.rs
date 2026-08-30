@@ -27,13 +27,11 @@ pub mod registry;
 pub mod registry_client;
 pub mod registry_index;
 
-pub use a2a::{
-    A2aError, AgentCard, AgentCardVerifier, AgentSkill, CardTrust, SignedAgentCard,
-};
+pub use a2a::{A2aError, AgentCard, AgentCardVerifier, AgentSkill, CardTrust, SignedAgentCard};
 pub use chief::{
-    AcpChief, Approval, ChiefAdapter, ChiefCapabilities, ChiefError, ChiefEvent, DelegateChief,
-    EventStream, GovernedSession, PermissionRequest, SessionHandle, SessionOptions, SessionState,
-    UserMessage, governance_mode,
+    governance_mode, AcpChief, Approval, ChiefAdapter, ChiefCapabilities, ChiefError, ChiefEvent,
+    DelegateChief, EventStream, GovernedSession, PermissionRequest, SessionHandle, SessionOptions,
+    SessionState, UserMessage,
 };
 pub use client::{AcpError, AcpSession, AcpTransport, ProcessTransport, PromptOutcome};
 pub use frame::{decode_messages, encode_message};
@@ -41,6 +39,7 @@ pub use harness_config::{
     builtin_writers, ClaudeCodeConfig, CodexConfig, HarnessConfigError, HarnessConfigWriter,
     OpenCodeConfig, ProviderConfig,
 };
+pub use installer::{InstallError, InstallOutcome, Installer, OwnershipMarker};
 pub use messages::{
     AgentCapabilities, AgentInfo, AuthMethod, AuthMethodType, AuthenticateParams,
     AuthenticateResult, ClientCapabilities, ClientInfo, ContentBlock, FsCapabilities,
@@ -53,9 +52,8 @@ pub use messages::{
 pub use registry::{
     AuthMode, Distribution, HarnessManifest, HarnessProtocol, LaunchPlan, LaunchRegistry,
 };
+pub use registry_client::{FetchError, RegistryClient};
 pub use registry_index::{
     BinaryTarget, InstallKind, InstallSpec, Platform, PolicyVerdict, RegistryAgent,
     RegistryDistribution, RegistryIndex, RegistryPolicy,
 };
-pub use registry_client::{FetchError, RegistryClient};
-pub use installer::{InstallError, InstallOutcome, Installer, OwnershipMarker};

@@ -176,8 +176,12 @@ mod tests {
         l.register_root("a").unwrap();
         l.fork("a", "b", "t10", 1).unwrap();
         l.fork("a", "c", "t10", 2).unwrap(); // sibling branch
-        // c's recall branch is a → c; b's future is never visible to c.
-        let recall: Vec<&str> = l.recall_branch("c").iter().map(|n| n.session_id.as_str()).collect();
+                                             // c's recall branch is a → c; b's future is never visible to c.
+        let recall: Vec<&str> = l
+            .recall_branch("c")
+            .iter()
+            .map(|n| n.session_id.as_str())
+            .collect();
         assert_eq!(recall, vec!["a", "c"]);
         assert!(!recall.contains(&"b"));
     }
@@ -188,7 +192,11 @@ mod tests {
         l.register_root("a").unwrap();
         l.fork("a", "b", "t10", 1).unwrap();
         l.fork("a", "c", "t10", 2).unwrap();
-        let sibs: Vec<&str> = l.siblings("b").iter().map(|n| n.session_id.as_str()).collect();
+        let sibs: Vec<&str> = l
+            .siblings("b")
+            .iter()
+            .map(|n| n.session_id.as_str())
+            .collect();
         assert_eq!(sibs, vec!["c"]);
         assert!(l.siblings("a").is_empty()); // root has no parent
     }
@@ -197,10 +205,19 @@ mod tests {
     fn duplicate_and_unknown_parent_errors() {
         let mut l = Lineage::new();
         l.register_root("a").unwrap();
-        assert!(matches!(l.register_root("a"), Err(LineageError::DuplicateSession(_))));
-        assert!(matches!(l.fork("nope", "b", "t1", 0), Err(LineageError::UnknownParent(_))));
+        assert!(matches!(
+            l.register_root("a"),
+            Err(LineageError::DuplicateSession(_))
+        ));
+        assert!(matches!(
+            l.fork("nope", "b", "t1", 0),
+            Err(LineageError::UnknownParent(_))
+        ));
         l.fork("a", "b", "t1", 0).unwrap();
-        assert!(matches!(l.fork("a", "b", "t2", 0), Err(LineageError::DuplicateSession(_))));
+        assert!(matches!(
+            l.fork("a", "b", "t2", 0),
+            Err(LineageError::DuplicateSession(_))
+        ));
     }
 
     #[test]
@@ -208,6 +225,9 @@ mod tests {
         let mut l = Lineage::new();
         l.register_root("a").unwrap();
         l.close("a");
-        assert!(matches!(l.fork("a", "b", "t1", 0), Err(LineageError::Closed(_))));
+        assert!(matches!(
+            l.fork("a", "b", "t1", 0),
+            Err(LineageError::Closed(_))
+        ));
     }
 }

@@ -351,10 +351,7 @@ mod tests {
             KvCacheType::F16
         );
         // Unknown model size never panics and falls to the safe Q8_0.
-        assert_eq!(
-            pick_kv_cache_type(&small_machine(), 0),
-            KvCacheType::Q8_0
-        );
+        assert_eq!(pick_kv_cache_type(&small_machine(), 0), KvCacheType::Q8_0);
     }
 
     #[test]

@@ -27,9 +27,7 @@ use tauri::State;
 
 use crate::AppState;
 
-use everyaios_core::sync::{
-    self, ChaChaBox, KeyPair, SyncScope, SyncSession, SyncSet,
-};
+use everyaios_core::sync::{self, ChaChaBox, KeyPair, SyncScope, SyncSession, SyncSet};
 use everyaios_core::sync_transport::{fingerprint as fp_hex, sync_with_peer, SyncServer};
 
 use base64::Engine as _;
@@ -297,9 +295,12 @@ pub fn node_attach(
     state: State<'_, AppState>,
     control_plane: String,
 ) -> Result<serde_json::Value, String> {
-    let addr: SocketAddr = control_plane
-        .parse::<SocketAddr>()
-        .map_err(|e: std::net::AddrParseError| format!("invalid control plane {control_plane}: {e}"))?;
+    let addr: SocketAddr =
+        control_plane
+            .parse::<SocketAddr>()
+            .map_err(|e: std::net::AddrParseError| {
+                format!("invalid control plane {control_plane}: {e}")
+            })?;
     let mut session = load_or_create_state(&state);
     let outcome = sync_with_peer(addr, &mut session).map_err(|e| e.to_string())?;
     persist_state(&session);

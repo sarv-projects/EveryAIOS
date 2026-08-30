@@ -50,6 +50,17 @@
 23. **research doc 59** — OmniRoute source-level deep-dive (13-factor scoring + mode packs + budget headers + 19 strategies + provider taxonomy) → steal-spec for A2/A3/A6/A7/A9/P6.10/J11
 24. **research doc 60** — TencentDB Agent Memory deep-dive (4-asset taxonomy + L0→L3 distillation + governance + agent-loadout) → C1/C2/C3/C7/C8/I2/I7 + F12/J17, 1 repo → ledger
 
+## ADRs (accepted architecture decisions)
+
+Decisions that used to live as monolithic blockquotes in `TODO.md`'s header
+now live as numbered ADR files (Fix 2). Each is one decision + rationale +
+consequences; `TODO.md` links them instead of duplicating the text.
+
+| ADR | Decision |
+|---|---|
+| [`0001`](ADR/0001-connector-platform-mcp-first.md) | MCP is the connector platform; Composio/Zapier/Nango aggregator removed |
+| [`0002`](ADR/0002-ui-v2-cockpit-replaces-v1-router-pages.md) | UI v2 cockpit replaces v1 router pages (capability map) |
+
 ## Grounding
 
 All decisions trace to `RESEARCH/desktop_app/` docs 01–84 and the 282-repo ledger (doc 27 + doc 46 additions + docs 49–50: +22 + doc 52: +26 + doc 54: +1 + doc 55: +3 + doc 56: +4 + doc 57: +1 + doc 58: +19 + doc 60: +1 + doc 61: +8 + doc 62: +0 + doc 63: +0 + doc 64: +0 + doc 65: +19 + doc 66: +4 + doc 67: +3 + doc 83: +1 repos — doc 63 is the 37-repo steal ledger, doc 64 the giants code-level deep-dive (rustdesk/ladybird/serenity/brave/chromium cloned + source-read; pattern-sources only), doc 67 the capability-delta batch (bolt.diy/hatchet/durable-execution-the-hard-way cloned + source-read; Sites + heartbeat steals + UI/UX finalization). Key source deep-dives: 19 (BYOK providers), 28/29 (office), 32/31 (token economy), 33 (BrowserOS — browser + audit + compaction), 05/16 (agentic coding: pi/Hermes/Reasonix/opencode), 03 (vision + security + memory), 13 (connector hub), 06/09 (browser/agentic OS), 46 (Aider + Devin Cloud — UI/UX, RepoMap, edit strategies, automations), 63 (37-repo steal ledger: harness/browser/office/user-capability clusters), 64 (giants code-level: sandbox profiles, syscall broker, adblock crate, NAT traversal), 67 (Sites/heartbeat/proactivity/inline-edit/kanban deltas + activity-rail UI finalization). Final-pass SOTA: doc 34.

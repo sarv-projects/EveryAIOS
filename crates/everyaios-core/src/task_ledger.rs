@@ -186,7 +186,10 @@ impl TaskLedger {
     }
 
     #[cfg(test)]
-    pub fn with_clock(store: Box<dyn TaskStore + Send>, now: std::sync::Arc<dyn Fn() -> i64 + Send + Sync>) -> Self {
+    pub fn with_clock(
+        store: Box<dyn TaskStore + Send>,
+        now: std::sync::Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) -> Self {
         let records = store.load();
         Self {
             records,
@@ -395,12 +398,7 @@ impl TaskLedger {
 
     /// A blocked completion retries on a capped, fenced generation. The run is
     /// NOT re-reported as failed — only the delivery is re-queued.
-    pub fn retry_delivery(
-        &mut self,
-        id: &str,
-        deadline_ms: i64,
-        cap: u32,
-    ) -> Result<(), String> {
+    pub fn retry_delivery(&mut self, id: &str, deadline_ms: i64, cap: u32) -> Result<(), String> {
         let r = self.find_mut(id)?;
         if !r.status.is_terminal() {
             return Err(format!("delivery only applies to terminal tasks: {id}"));
@@ -481,8 +479,9 @@ impl TaskLedger {
             .filter(|r| r.finished_ms.unwrap_or(r.created_ms) < cutoff)
             .map(|r| r.id.clone())
             .collect();
-        self.records
-            .retain(|r| !(r.status.is_terminal() && r.finished_ms.unwrap_or(r.created_ms) < cutoff));
+        self.records.retain(|r| {
+            !(r.status.is_terminal() && r.finished_ms.unwrap_or(r.created_ms) < cutoff)
+        });
         if self.records.len() != before {
             let _ = self.persist();
         }
@@ -497,7 +496,11 @@ impl TaskLedger {
 
     /// JSON-RPC dispatch (`tasks/*` — the coordinator + Tauri shell drive the
     /// same ledger through this surface; Rust owns the state machine).
-    pub fn handle(&mut self, method: &str, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+    pub fn handle(
+        &mut self,
+        method: &str,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         use serde_json::Value;
         let id = params.get("id").and_then(Value::as_str).unwrap_or_default();
         let now = self.now();
@@ -522,11 +525,13 @@ impl TaskLedger {
                 None => Err(format!("no such task: {id}")),
             },
             "tasks/enqueue" => {
-                let kind: TaskKind = serde_json::from_value(
-                    params.get("kind").cloned().unwrap_or(Value::Null),
-                )
-                .map_err(|e| format!("bad kind: {e}"))?;
-                let title = params.get("title").and_then(Value::as_str).unwrap_or("task");
+                let kind: TaskKind =
+                    serde_json::from_value(params.get("kind").cloned().unwrap_or(Value::Null))
+                        .map_err(|e| format!("bad kind: {e}"))?;
+                let title = params
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or("task");
                 let requester = params.get("requester").and_then(Value::as_str);
                 let id = self.enqueue(kind, title, requester);
                 Ok(serde_json::json!({ "id": id }))
@@ -541,7 +546,10 @@ impl TaskLedger {
             }
             "tasks/complete" => {
                 let ok = params.get("ok").and_then(Value::as_bool).unwrap_or(false);
-                let error = params.get("error").and_then(Value::as_str).map(String::from);
+                let error = params
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .map(String::from);
                 self.complete(id, ok, error)?;
                 Ok(serde_json::json!({ "ok": true }))
             }
@@ -596,8 +604,7 @@ mod tests {
             }
         }
         fn advance(&self, ms: i64) {
-            self.now
-                .fetch_add(ms, std::sync::atomic::Ordering::SeqCst);
+            self.now.fetch_add(ms, std::sync::atomic::Ordering::SeqCst);
         }
         fn set(&self, ms: i64) {
             self.now.store(ms, std::sync::atomic::Ordering::SeqCst);
@@ -644,7 +651,8 @@ mod tests {
         let (mut l, _) = ledger();
         let id = l.enqueue(TaskKind::Acp, "harness run", None::<String>);
         l.start(&id).unwrap();
-        l.complete(&id, false, Some("timeout after 900s".into())).unwrap();
+        l.complete(&id, false, Some("timeout after 900s".into()))
+            .unwrap();
         let r = l.get(&id).unwrap();
         assert_eq!(r.status, TaskStatus::Failed);
         assert_eq!(r.error.as_deref(), Some("timeout after 900s"));
@@ -694,7 +702,7 @@ mod tests {
         let stale = l.enqueue(TaskKind::Cli, "orphan", None::<String>);
         l.start(&stale).unwrap();
         c.set(1_180_000 + 6 * 60_000); // 6 min after the stale start
-        // the live task heartbeats right before the reap — fresh turn, kept
+                                       // the live task heartbeats right before the reap — fresh turn, kept
         l.heartbeat(&live).unwrap();
         let lost = l.reap_lost(c.cur());
         assert!(lost.contains(&stale));
@@ -715,7 +723,10 @@ mod tests {
         assert_eq!(r.status, TaskStatus::Succeeded);
         assert_eq!(
             r.delivery,
-            DeliveryState::Blocked { retries: 1, deadline_ms: 1_300_000 }
+            DeliveryState::Blocked {
+                retries: 1,
+                deadline_ms: 1_300_000
+            }
         );
         l.retry_delivery(&id, 1_600_000, 3).unwrap();
         l.retry_delivery(&id, 1_900_000, 3).unwrap();

@@ -21,10 +21,7 @@ use crate::AppState;
 fn memory_arc(
     state: &State<'_, AppState>,
 ) -> Result<Arc<std::sync::Mutex<everyaios_core::MemoryService>>, String> {
-    let relay = state
-        .chat_relay
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
     let relay = relay
         .as_ref()
         .ok_or_else(|| "sidecar not connected — coordinator link not established".to_string())?;

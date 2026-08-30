@@ -12,7 +12,9 @@
 use std::io::{self, BufRead, Write};
 
 fn main() {
-    let name = std::env::args().nth(1).unwrap_or_else(|| "mock-agent-perm".into());
+    let name = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "mock-agent-perm".into());
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut session_id: Option<String> = None;
@@ -33,7 +35,10 @@ fn main() {
             Ok(v) => v,
             Err(_) => continue,
         };
-        let method = v.get("method").and_then(serde_json::Value::as_str).unwrap_or("");
+        let method = v
+            .get("method")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
         let id = v.get("id").cloned();
         let mut reply = serde_json::json!({ "jsonrpc": "2.0" });
         if let Some(id) = id.clone() {
@@ -83,11 +88,10 @@ fn main() {
                     Some(Ok(l)) => l,
                     _ => break,
                 };
-                let decided: serde_json::Value =
-                    match serde_json::from_str(&decision_line.trim()) {
-                        Ok(v) => v,
-                        Err(_) => break,
-                    };
+                let decided: serde_json::Value = match serde_json::from_str(&decision_line.trim()) {
+                    Ok(v) => v,
+                    Err(_) => break,
+                };
                 let option_id = decided
                     .get("result")
                     .and_then(|r| r.get("outcome"))

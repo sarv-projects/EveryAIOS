@@ -80,7 +80,11 @@ pub enum AcquisitionError {
 /// - `NeedsLogin` → CDP (session cookies live in the browser) — or Light if
 ///   the user opted in to light sessions.
 /// - `Interactive` → CDP always.
-pub fn pick(intent: AcquisitionIntent, url: &str, opts: &AcquisitionOptions) -> Result<AcquisitionPlan, AcquisitionError> {
+pub fn pick(
+    intent: AcquisitionIntent,
+    url: &str,
+    opts: &AcquisitionOptions,
+) -> Result<AcquisitionPlan, AcquisitionError> {
     let mut reasons = Vec::new();
     match intent {
         AcquisitionIntent::Static => {
@@ -167,7 +171,12 @@ mod tests {
 
     #[test]
     fn static_picks_http_with_escalation() {
-        let plan = pick(AcquisitionIntent::Static, "https://example.com", &AcquisitionOptions::default()).unwrap();
+        let plan = pick(
+            AcquisitionIntent::Static,
+            "https://example.com",
+            &AcquisitionOptions::default(),
+        )
+        .unwrap();
         assert_eq!(plan.kind, AcquisitionKind::Http);
         assert_eq!(plan.escalation, Some(AcquisitionKind::Light));
         assert!(!plan.needs_session);
@@ -196,9 +205,17 @@ mod tests {
 
     #[test]
     fn no_tier_fails_closed() {
-        let plan = pick(AcquisitionIntent::Interactive, "https://x", &AcquisitionOptions::default());
+        let plan = pick(
+            AcquisitionIntent::Interactive,
+            "https://x",
+            &AcquisitionOptions::default(),
+        );
         assert!(matches!(plan, Err(AcquisitionError::NoTier { .. })));
-        let plan = pick(AcquisitionIntent::NeedsJs, "https://x", &AcquisitionOptions::default());
+        let plan = pick(
+            AcquisitionIntent::NeedsJs,
+            "https://x",
+            &AcquisitionOptions::default(),
+        );
         assert!(matches!(plan, Err(AcquisitionError::NoTier { .. })));
     }
 

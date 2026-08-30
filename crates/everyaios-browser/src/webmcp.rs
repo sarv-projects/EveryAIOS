@@ -132,8 +132,7 @@ impl WebMcpRegistry {
         let parsed: Value = if input.trim().is_empty() {
             Value::Object(Default::default())
         } else {
-            serde_json::from_str(input)
-                .map_err(|e| WebMcpError::InvalidInputJson(e.to_string()))?
+            serde_json::from_str(input).map_err(|e| WebMcpError::InvalidInputJson(e.to_string()))?
         };
         if !parsed.is_object() {
             return Err(WebMcpError::InvalidInputJson(
@@ -168,7 +167,8 @@ impl InvocationTracker {
 
     /// Register a running invocation.
     pub fn start(&mut self, id: &str) {
-        self.invocations.insert(id.to_string(), InvocationState::Running);
+        self.invocations
+            .insert(id.to_string(), InvocationState::Running);
     }
 
     /// `cancelInvocation` — mark an invocation cancelled. Returns true when a
@@ -176,7 +176,8 @@ impl InvocationTracker {
     pub fn cancel(&mut self, id: &str) -> bool {
         match self.invocations.get(id) {
             Some(InvocationState::Running) => {
-                self.invocations.insert(id.to_string(), InvocationState::Cancelled);
+                self.invocations
+                    .insert(id.to_string(), InvocationState::Cancelled);
                 true
             }
             _ => false,
@@ -187,7 +188,8 @@ impl InvocationTracker {
     pub fn timeout(&mut self, id: &str) -> bool {
         match self.invocations.get(id) {
             Some(InvocationState::Running) => {
-                self.invocations.insert(id.to_string(), InvocationState::TimedOut);
+                self.invocations
+                    .insert(id.to_string(), InvocationState::TimedOut);
                 true
             }
             _ => false,
@@ -196,7 +198,8 @@ impl InvocationTracker {
 
     /// Mark an invocation as finished normally.
     pub fn finish(&mut self, id: &str) {
-        self.invocations.insert(id.to_string(), InvocationState::Done);
+        self.invocations
+            .insert(id.to_string(), InvocationState::Done);
     }
 
     /// The current state (None = never started).
@@ -245,7 +248,9 @@ mod tests {
     #[test]
     fn execute_parses_input_and_runs_executor() {
         let r = registry();
-        let res = r.execute("search", r#"{"q": "hello"}"#, &EchoExecutor).unwrap();
+        let res = r
+            .execute("search", r#"{"q": "hello"}"#, &EchoExecutor)
+            .unwrap();
         assert_eq!(res.status, "ok");
         assert_eq!(res.output["tool"], "search");
         assert_eq!(res.output["input"]["q"], "hello");

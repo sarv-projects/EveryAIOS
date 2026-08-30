@@ -27,35 +27,70 @@ pub struct RouteDecision {
 
 /// Browser-ecosystem signals that must stay on CDP.
 const BROWSER_SIGNALS: &[&str] = &[
-    "browser", "web page", "website", "http://", "https://", "chrome", "firefox", "edge",
-    "web app", "online", "url", "search the web", "google", "website form", "webmail",
+    "browser",
+    "web page",
+    "website",
+    "http://",
+    "https://",
+    "chrome",
+    "firefox",
+    "edge",
+    "web app",
+    "online",
+    "url",
+    "search the web",
+    "google",
+    "website form",
+    "webmail",
 ];
 
 /// API/first-class signals: a real engine exists for these — never GUI.
 const API_SIGNALS: &[&str] = &[
-    "file", "folder", "directory", "document", "spreadsheet", "xlsx", "docx", "pdf",
-    "pptx", "word", "excel", "powerpoint", "shell", "command", "terminal command", "script",
-    "email", "calendar", "connector", "storage", "disk", "database", "sql", "csv",
-    "search files", "rename file", "move file", "copy file", "delete file", "download",
-    "upload", "send email", "create calendar",
+    "file",
+    "folder",
+    "directory",
+    "document",
+    "spreadsheet",
+    "xlsx",
+    "docx",
+    "pdf",
+    "pptx",
+    "word",
+    "excel",
+    "powerpoint",
+    "shell",
+    "command",
+    "terminal command",
+    "script",
+    "email",
+    "calendar",
+    "connector",
+    "storage",
+    "disk",
+    "database",
+    "sql",
+    "csv",
+    "search files",
+    "rename file",
+    "move file",
+    "copy file",
+    "delete file",
+    "download",
+    "upload",
+    "send email",
+    "create calendar",
 ];
 
 /// Route a natural-language goal to the owning layer.
 pub fn route(goal: &str) -> RouteDecision {
     let g = goal.to_ascii_lowercase();
-    if BROWSER_SIGNALS
-        .iter()
-        .any(|s| g.contains(s))
-    {
+    if BROWSER_SIGNALS.iter().any(|s| g.contains(s)) {
         return RouteDecision {
             layer: Layer::BrowserCdp,
             reason: "browser-ecosystem goal — CDP stack (E1–E17), never pixel-driven".into(),
         };
     }
-    if API_SIGNALS
-        .iter()
-        .any(|s| g.contains(s))
-    {
+    if API_SIGNALS.iter().any(|s| g.contains(s)) {
         return RouteDecision {
             layer: Layer::Api,
             reason: "first-class API/engine exists for this goal — desktop GUI not needed".into(),

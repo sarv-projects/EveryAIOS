@@ -98,7 +98,8 @@ impl UsageLedger {
 
     /// Set the price (USD per Mtok) for a provider key. Input + output.
     pub fn set_price(&mut self, key: &str, input_per_mtok: f64, output_per_mtok: f64) {
-        self.prices.insert(key.to_string(), (input_per_mtok, output_per_mtok));
+        self.prices
+            .insert(key.to_string(), (input_per_mtok, output_per_mtok));
     }
 
     /// Bind the active session (subsequent `record` calls attribute to it).
@@ -115,7 +116,10 @@ impl UsageLedger {
     /// Begin a session for an agent/harness (P17): increments the agent's
     /// session count and makes subsequent `record` calls attribute to it.
     pub fn begin_session(&mut self, agent_id: &str) {
-        *self.sessions_by_agent.entry(agent_id.to_string()).or_insert(0) += 1;
+        *self
+            .sessions_by_agent
+            .entry(agent_id.to_string())
+            .or_insert(0) += 1;
         self.active_agent = Some(agent_id.to_string());
     }
 
@@ -166,7 +170,10 @@ impl UsageLedger {
 
     /// Every session with usage.
     pub fn sessions(&self) -> Vec<(String, UsageRecord)> {
-        self.by_session.iter().map(|(k, v)| (k.clone(), *v)).collect()
+        self.by_session
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect()
     }
 
     /// Per-agent/harness summary (P17): sessions + tokens + est. cost per
@@ -198,7 +205,10 @@ impl UsageLedger {
 
     /// Totals across all keys.
     pub fn total(&self) -> UsageRecord {
-        self.by_key.values().copied().fold(UsageRecord::default(), |a, r| a + r)
+        self.by_key
+            .values()
+            .copied()
+            .fold(UsageRecord::default(), |a, r| a + r)
     }
 
     /// Per-key cost using the configured prices (0 when a key has no price).

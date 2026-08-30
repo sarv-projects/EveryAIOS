@@ -39,7 +39,6 @@ pub mod granter;
 pub mod injection;
 pub mod loopguard;
 pub mod manifest;
-pub mod skillstore;
 pub mod path_seal;
 pub mod pathfloor;
 pub mod permissions;
@@ -49,6 +48,7 @@ pub mod redteam;
 pub mod release;
 pub mod sandbox;
 pub mod seccomp;
+pub mod skillstore;
 pub mod structural;
 pub mod ticket;
 pub mod toctou;
@@ -80,7 +80,9 @@ pub use release::{
 };
 pub use sandbox::{PathAccess, PathRule, SandboxError, SandboxProfile, SyscallGroup};
 pub use seccomp::{Action, ArgFilter, SeccompError, SeccompPolicy, SyscallRule};
-pub use structural::{contains_shell_operator, structural_verdict, StructuralVerdict, SHELL_OPERATORS};
+pub use structural::{
+    contains_shell_operator, structural_verdict, StructuralVerdict, SHELL_OPERATORS,
+};
 pub use ticket::{
     ApprovalSource, AuthorizationTicket, GuardReceipt, ReceiptAction, RiskLevel, RiskTier,
     TicketState, TicketStore,

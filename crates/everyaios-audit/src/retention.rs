@@ -78,7 +78,8 @@ pub fn compact(path: &Path, retention_days: u64) -> Result<CompactReport, AuditE
                 dropped_malformed: 0,
                 bytes_before: 0,
                 bytes_after: 0,
-                cutoff_ms,            });
+                cutoff_ms,
+            });
         }
         Err(e) => return Err(e.into()),
     };
@@ -187,8 +188,10 @@ mod tests {
     use std::io::BufRead;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir()
-            .join(format!("everyaios-audit-compact-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-audit-compact-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -234,7 +237,10 @@ mod tests {
         assert_eq!(report.kept_full, 3);
         assert_eq!(report.rolled_up, 5);
         assert_eq!(report.dropped_malformed, 0);
-        assert!(report.bytes_after < before, "old payloads must shrink the file");
+        assert!(
+            report.bytes_after < before,
+            "old payloads must shrink the file"
+        );
         assert!(report.bytes_after > 0);
         // Rollup header at seq 0; fresh events keep full payload; rolled-up
         // lines carry a sha256 digest and no original payload.

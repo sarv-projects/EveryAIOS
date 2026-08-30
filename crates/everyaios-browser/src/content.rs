@@ -38,7 +38,9 @@ impl Pattern {
                 (host == d || host.ends_with(&format!(".{d}"))) && path.starts_with(p.as_str())
             }
             Pattern::Substring(s) => url.contains(s.as_str()),
-            Pattern::Regex(r) => regex::Regex::new(r).map(|re| re.is_match(url)).unwrap_or(false),
+            Pattern::Regex(r) => regex::Regex::new(r)
+                .map(|re| re.is_match(url))
+                .unwrap_or(false),
         }
     }
 }
@@ -258,7 +260,10 @@ fn parse_network(line: &str) -> Option<FilterRule> {
     }
     let pattern = if let Some(body) = s.strip_prefix("||") {
         // Domain anchor with an optional path: `||host/path^`.
-        let domain: String = body.chars().take_while(|c| *c != '/' && *c != '^').collect();
+        let domain: String = body
+            .chars()
+            .take_while(|c| *c != '/' && *c != '^')
+            .collect();
         if domain.is_empty() {
             return None;
         }
@@ -388,7 +393,9 @@ mod tests {
                   We value your privacy. Accept all cookies.\n\
                   Normal content line.\n";
         let cleaned = clean_markdown(&f, "https://example.com", md);
-        assert!(cleaned.text.contains("Read [our story](https://example.com/story)"));
+        assert!(cleaned
+            .text
+            .contains("Read [our story](https://example.com/story)"));
         assert!(!cleaned.text.contains("doubleclick.net"));
         assert!(!cleaned.text.contains("tracker.io"));
         assert!(!cleaned.text.contains("Accept all cookies"));

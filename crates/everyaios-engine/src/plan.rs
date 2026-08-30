@@ -47,31 +47,30 @@ pub fn plan_retrieval(
     input: &RetrievalInput,
     sandbox: &AgentSandboxPlan,
 ) -> RetrievalPlan {
-    let scope: Scope = if contract.surface == crate::SurfaceKind::Reader
-        && input.open_document_id.is_some()
-    {
-        Scope::SourceHard {
-            source_id: input.open_document_id.clone().unwrap_or_default(),
-        }
-    } else if let Some(pid) = &input.project_id {
-        Scope::Project {
-            project_id: pid.clone(),
-        }
-    } else if let Some(ids) = &input.scope_file_ids {
-        if !ids.is_empty() {
-            Scope::Sources {
-                source_ids: ids.clone(),
+    let scope: Scope =
+        if contract.surface == crate::SurfaceKind::Reader && input.open_document_id.is_some() {
+            Scope::SourceHard {
+                source_id: input.open_document_id.clone().unwrap_or_default(),
+            }
+        } else if let Some(pid) = &input.project_id {
+            Scope::Project {
+                project_id: pid.clone(),
+            }
+        } else if let Some(ids) = &input.scope_file_ids {
+            if !ids.is_empty() {
+                Scope::Sources {
+                    source_ids: ids.clone(),
+                }
+            } else {
+                Scope::None
             }
         } else {
             Scope::None
-        }
-    } else {
-        Scope::None
-    };
+        };
 
-    let surface_allows_web = input.include_web.unwrap_or_else(|| {
-        contract.tool_mounts.contains(&ToolFamily::Knowledge)
-    });
+    let surface_allows_web = input
+        .include_web
+        .unwrap_or_else(|| contract.tool_mounts.contains(&ToolFamily::Knowledge));
     let include_web = if sandbox.web_access == Some(false) {
         false
     } else {
@@ -122,7 +121,12 @@ pub fn family_to_tools(family: ToolFamily) -> &'static [&'static str] {
             "list_automations",
             "schedule_automation",
         ],
-        ToolFamily::Creation => &["create_markdown", "create_docx", "create_pdf", "export_chat"],
+        ToolFamily::Creation => &[
+            "create_markdown",
+            "create_docx",
+            "create_pdf",
+            "export_chat",
+        ],
         ToolFamily::System => &[
             "get_device_status",
             "get_current_time",
@@ -140,10 +144,7 @@ pub struct ToolPlan {
 }
 
 /// ToolPlanner.plan — mount tools for the surface × agent sandbox.
-pub fn plan_tools(
-    contract: &SurfaceContract,
-    agent_tool_ids: &Option<Vec<String>>,
-) -> ToolPlan {
+pub fn plan_tools(contract: &SurfaceContract, agent_tool_ids: &Option<Vec<String>>) -> ToolPlan {
     let mut mounted = contract.tool_mounts.clone();
     mounted.dedup();
     let mut allowed: Vec<String> = Vec::new();
@@ -182,7 +183,11 @@ mod tests {
     #[test]
     fn chat_retrieval_defaults() {
         let contract = default_contract(SurfaceKind::Chat);
-        let p = plan_retrieval(&contract, &RetrievalInput::default(), &AgentSandboxPlan::default());
+        let p = plan_retrieval(
+            &contract,
+            &RetrievalInput::default(),
+            &AgentSandboxPlan::default(),
+        );
         assert_eq!(p.max_results, 8);
         assert!(p.include_web); // chat mounts knowledge
         assert!(p.include_memory);
@@ -228,7 +233,12 @@ mod tests {
             },
             &AgentSandboxPlan::default(),
         );
-        assert_eq!(p.scope, Scope::SourceHard { source_id: "doc-1".into() });
+        assert_eq!(
+            p.scope,
+            Scope::SourceHard {
+                source_id: "doc-1".into()
+            }
+        );
     }
 
     #[test]
@@ -243,7 +253,10 @@ mod tests {
             &contract,
             &Some(vec!["search_local_files".to_string(), "nope".to_string()]),
         );
-        assert_eq!(restricted.allowed_tool_ids, vec!["search_local_files".to_string()]);
+        assert_eq!(
+            restricted.allowed_tool_ids,
+            vec!["search_local_files".to_string()]
+        );
     }
 
     #[test]

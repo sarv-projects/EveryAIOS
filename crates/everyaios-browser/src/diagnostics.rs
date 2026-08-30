@@ -68,7 +68,12 @@ impl DiagnosticReader {
                     .as_array()
                     .map(|args| {
                         args.iter()
-                            .map(|a| a["value"].as_str().unwrap_or(&a["description"].as_str().unwrap_or("")).to_string())
+                            .map(|a| {
+                                a["value"]
+                                    .as_str()
+                                    .unwrap_or(&a["description"].as_str().unwrap_or(""))
+                                    .to_string()
+                            })
                             .filter(|s| !s.is_empty())
                             .collect::<Vec<_>>()
                             .join(" ")
@@ -85,21 +90,29 @@ impl DiagnosticReader {
                 }
             }
             "Runtime.exceptionThrown" => {
-                let desc = params["exceptionDetails"]["text"].as_str().unwrap_or("exception");
+                let desc = params["exceptionDetails"]["text"]
+                    .as_str()
+                    .unwrap_or("exception");
                 let text = format!("Uncaught {desc}");
                 self.console.push(ConsoleMessage {
                     level: "error".into(),
                     text,
                     url: params["exceptionDetails"]["url"].as_str().map(String::from),
-                    line: params["exceptionDetails"]["lineNumber"].as_u64().map(|l| l + 1),
+                    line: params["exceptionDetails"]["lineNumber"]
+                        .as_u64()
+                        .map(|l| l + 1),
                     at_ms,
                 });
             }
             "Network.requestWillBeSent" => {
                 let request_id = params["requestId"].as_str().unwrap_or("").to_string();
                 let url = params["request"]["url"].as_str().unwrap_or("").to_string();
-                let method = params["request"]["method"].as_str().unwrap_or("GET").to_string();
-                if let Some(existing) = self.network.iter_mut().find(|r| r.request_id == request_id) {
+                let method = params["request"]["method"]
+                    .as_str()
+                    .unwrap_or("GET")
+                    .to_string();
+                if let Some(existing) = self.network.iter_mut().find(|r| r.request_id == request_id)
+                {
                     existing.started_ms = Some(at_ms);
                     existing.at_ms = at_ms;
                     return;
@@ -134,8 +147,12 @@ impl DiagnosticReader {
             "Performance.metrics" => {
                 if let Some(metrics) = params["metrics"].as_array() {
                     for m in metrics {
-                        if let (Some(name), Some(value)) = (m["name"].as_str(), m["value"].as_f64()) {
-                            self.perf.push(PerfMetric { name: name.to_string(), value });
+                        if let (Some(name), Some(value)) = (m["name"].as_str(), m["value"].as_f64())
+                        {
+                            self.perf.push(PerfMetric {
+                                name: name.to_string(),
+                                value,
+                            });
                         }
                     }
                 }
@@ -146,7 +163,11 @@ impl DiagnosticReader {
 
     /// The tab's current diagnostic reads.
     pub fn snapshot(&self) -> (Vec<ConsoleMessage>, Vec<NetworkRequest>, Vec<PerfMetric>) {
-        (self.console.clone(), self.network.clone(), self.perf.clone())
+        (
+            self.console.clone(),
+            self.network.clone(),
+            self.perf.clone(),
+        )
     }
 
     /// Network requests that never completed (in-flight or failed).
@@ -179,7 +200,11 @@ mod tests {
     #[test]
     fn network_lifecycle_times() {
         let mut r = DiagnosticReader::new();
-        r.feed("Network.requestWillBeSent", &json!({"requestId": "1", "request": {"url": "https://x/a.js", "method": "GET"}}), 100);
+        r.feed(
+            "Network.requestWillBeSent",
+            &json!({"requestId": "1", "request": {"url": "https://x/a.js", "method": "GET"}}),
+            100,
+        );
         r.feed("Network.responseReceived", &json!({"requestId": "1", "response": {"status": 200, "mimeType": "application/javascript"}}), 150);
         r.feed("Network.loadingFinished", &json!({"requestId": "1"}), 300);
         let (_, net, _) = r.snapshot();
@@ -192,7 +217,11 @@ mod tests {
     #[test]
     fn in_flight_requests_flagged() {
         let mut r = DiagnosticReader::new();
-        r.feed("Network.requestWillBeSent", &json!({"requestId": "p1", "request": {"url": "https://x/pending", "method": "GET"}}), 1);
+        r.feed(
+            "Network.requestWillBeSent",
+            &json!({"requestId": "p1", "request": {"url": "https://x/pending", "method": "GET"}}),
+            1,
+        );
         assert_eq!(r.incomplete_requests().len(), 1);
     }
 

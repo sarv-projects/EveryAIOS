@@ -87,7 +87,10 @@ mod tests {
     fn empty_bundle_is_incomplete() {
         let m = manifest(vec![EvidenceRequirement::ArtifactSha256]);
         assert!(!EvidenceBundle::new().is_complete_for(&m));
-        assert_eq!(EvidenceBundle::new().missing(&m), vec![EvidenceRequirement::ArtifactSha256]);
+        assert_eq!(
+            EvidenceBundle::new().missing(&m),
+            vec![EvidenceRequirement::ArtifactSha256]
+        );
     }
 
     #[test]

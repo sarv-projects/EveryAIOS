@@ -98,7 +98,8 @@ impl UsageParser for GenericUsageParser {
 }
 
 fn num(obj: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> Option<u64> {
-    keys.iter().find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
+    keys.iter()
+        .find_map(|k| obj.get(*k).and_then(|v| v.as_u64()))
 }
 
 fn nested(
@@ -196,14 +197,45 @@ impl FromStr for TurnClass {
 
 /// Keyword sets per class, in declaration-priority order.
 const KEYWORDS: &[(TurnClass, &[&str])] = &[
-    (TurnClass::Test, &["test", "assert", "spec", "expect(", "pytest", "cargo test"]),
-    (TurnClass::Install, &["install", "npm i", "cargo add", "pip install", "setup"]),
-    (TurnClass::Git, &["git ", "commit", "rebase", "merge", "branch"]),
-    (TurnClass::Build, &["build", "compile", "bundle", "tsc", "cargo build", "typecheck"]),
-    (TurnClass::Debug, &["debug", "error", "panic", "crash", "traceback", "log"]),
-    (TurnClass::Refactor, &["refactor", "rename", "extract", "dedupe", "cleanup"]),
-    (TurnClass::Brainstorm, &["brainstorm", "idea", "proposal", "design", "option"]),
-    (TurnClass::Research, &["research", "search", "find", "investigate", "docs", "read"]),
+    (
+        TurnClass::Test,
+        &["test", "assert", "spec", "expect(", "pytest", "cargo test"],
+    ),
+    (
+        TurnClass::Install,
+        &["install", "npm i", "cargo add", "pip install", "setup"],
+    ),
+    (
+        TurnClass::Git,
+        &["git ", "commit", "rebase", "merge", "branch"],
+    ),
+    (
+        TurnClass::Build,
+        &[
+            "build",
+            "compile",
+            "bundle",
+            "tsc",
+            "cargo build",
+            "typecheck",
+        ],
+    ),
+    (
+        TurnClass::Debug,
+        &["debug", "error", "panic", "crash", "traceback", "log"],
+    ),
+    (
+        TurnClass::Refactor,
+        &["refactor", "rename", "extract", "dedupe", "cleanup"],
+    ),
+    (
+        TurnClass::Brainstorm,
+        &["brainstorm", "idea", "proposal", "design", "option"],
+    ),
+    (
+        TurnClass::Research,
+        &["research", "search", "find", "investigate", "docs", "read"],
+    ),
 ];
 
 /// J11 efficiency metrics over an eval run (doc 65 §1). The cost-vs-quality
@@ -223,7 +255,12 @@ impl EfficiencyMetrics {
     /// Compute over a run. `turns` is every turn (usage + class + whether
     /// the edit passed on its first attempt); `edits` is the count of edits
     /// that ultimately succeeded.
-    pub fn compute(turns: &[TurnStat], edits: u64, input_per_mtok: f64, output_per_mtok: f64) -> Self {
+    pub fn compute(
+        turns: &[TurnStat],
+        edits: u64,
+        input_per_mtok: f64,
+        output_per_mtok: f64,
+    ) -> Self {
         if turns.is_empty() || edits == 0 {
             return Self::default();
         }
@@ -241,9 +278,18 @@ impl EfficiencyMetrics {
                 }
             }
         }
-        let cost = tokens_in as f64 / 1e6 * input_per_mtok + tokens_out as f64 / 1e6 * output_per_mtok;
-        let one_shot_rate = if attempts == 0 { 0.0 } else { one_shot as f64 / attempts as f64 };
-        let retries_per_edit = if edits == 0 { 0.0 } else { attempts as f64 / edits as f64 };
+        let cost =
+            tokens_in as f64 / 1e6 * input_per_mtok + tokens_out as f64 / 1e6 * output_per_mtok;
+        let one_shot_rate = if attempts == 0 {
+            0.0
+        } else {
+            one_shot as f64 / attempts as f64
+        };
+        let retries_per_edit = if edits == 0 {
+            0.0
+        } else {
+            attempts as f64 / edits as f64
+        };
         Self {
             one_shot_rate,
             retries_per_edit,
@@ -283,7 +329,16 @@ mod tests {
             "tool_calls": 3
         });
         let u = GenericUsageParser.parse(&flat).unwrap();
-        assert_eq!(u, Usage { input: 100, output: 50, cache_read: 20, cache_write: 10, tool_calls: 3 });
+        assert_eq!(
+            u,
+            Usage {
+                input: 100,
+                output: 50,
+                cache_read: 20,
+                cache_write: 10,
+                tool_calls: 3
+            }
+        );
 
         let nested = serde_json::json!({
             "usage": { "prompt_tokens": 7, "completion_tokens": 3, "cached_tokens": 2 },
@@ -300,23 +355,56 @@ mod tests {
     fn registry_falls_back_to_generic() {
         let mut reg = UsageParserRegistry::new();
         reg.register(Box::new(GenericUsageParser));
-        let u = reg.parse("anthropic", &serde_json::json!({ "input_tokens": 1, "output_tokens": 1 })).unwrap();
+        let u = reg
+            .parse(
+                "anthropic",
+                &serde_json::json!({ "input_tokens": 1, "output_tokens": 1 }),
+            )
+            .unwrap();
         assert_eq!(u.total_tokens(), 2);
     }
 
     #[test]
     fn turn_class_keyword_classification() {
-        assert_eq!(TurnClass::classify("add unit tests for the parser"), TurnClass::Test);
-        assert_eq!(TurnClass::classify("rebase the feature branch onto main"), TurnClass::Git);
-        assert_eq!(TurnClass::classify("fix the panic in the transport"), TurnClass::Debug);
-        assert_eq!(TurnClass::classify("brainstorm naming options for the app"), TurnClass::Brainstorm);
+        assert_eq!(
+            TurnClass::classify("add unit tests for the parser"),
+            TurnClass::Test
+        );
+        assert_eq!(
+            TurnClass::classify("rebase the feature branch onto main"),
+            TurnClass::Git
+        );
+        assert_eq!(
+            TurnClass::classify("fix the panic in the transport"),
+            TurnClass::Debug
+        );
+        assert_eq!(
+            TurnClass::classify("brainstorm naming options for the app"),
+            TurnClass::Brainstorm
+        );
     }
 
     #[test]
     fn efficiency_metrics_compute() {
         let turns = vec![
-            TurnStat { usage: Usage { input: 100, output: 20, ..Default::default() }, kind: TurnKind::EditAttempt, first_attempt_passed: true },
-            TurnStat { usage: Usage { input: 40, output: 10, ..Default::default() }, kind: TurnKind::EditAttempt, first_attempt_passed: false },
+            TurnStat {
+                usage: Usage {
+                    input: 100,
+                    output: 20,
+                    ..Default::default()
+                },
+                kind: TurnKind::EditAttempt,
+                first_attempt_passed: true,
+            },
+            TurnStat {
+                usage: Usage {
+                    input: 40,
+                    output: 10,
+                    ..Default::default()
+                },
+                kind: TurnKind::EditAttempt,
+                first_attempt_passed: false,
+            },
         ];
         let m = EfficiencyMetrics::compute(&turns, 1, 3.0, 15.0);
         assert_eq!(m.one_shot_rate, 0.5);

@@ -29,19 +29,17 @@ pub use graph::{
 pub use gws::{GwsAction, GwsConnector, GwsError, GwsRequest};
 pub use imap_smtp::ImapSmtpConnector;
 pub use native::{
-    classify_sql, has_stacked_statements, AuditChain, AuditEntry, ColumnRedaction,
-    CostGuardError, ExplainCostGuard, SqlClass, SqlGuard, SqlGuardError,
+    classify_sql, has_stacked_statements, AuditChain, AuditEntry, ColumnRedaction, CostGuardError,
+    ExplainCostGuard, SqlClass, SqlGuard, SqlGuardError,
 };
 pub use read_first::{
     ReadFirstPolicy, SendAction, SendApproval, SendBlocked, SendClass, SendKind, VaultTokenRef,
 };
 pub use scopes::{
-    attach_scopes, ConnectorScopeManifest, ScopeEntry, SCOPE_MANIFEST, GOOGLE_WORKSPACE_SCOPES,
-    MICROSOFT_GRAPH_SCOPES,
+    attach_scopes, ConnectorScopeManifest, ScopeEntry, GOOGLE_WORKSPACE_SCOPES,
+    MICROSOFT_GRAPH_SCOPES, SCOPE_MANIFEST,
 };
-pub use workspace::{
-    WorkspaceConnector, WorkspaceDoc, WorkspaceDriveFile, WorkspaceSheetValues,
-};
+pub use workspace::{WorkspaceConnector, WorkspaceDoc, WorkspaceDriveFile, WorkspaceSheetValues};
 
 /// Injectable HTTP transport seam — all connectors call the outside world
 /// through this trait so the full protocol logic can be tested without

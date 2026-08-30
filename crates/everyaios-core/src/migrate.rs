@@ -58,7 +58,10 @@ pub fn parse_cursor_rules(source: &str) -> Vec<String> {
 /// pairs under a known namespace become env overrides; an `openai.model` /
 /// `chat.model` style key becomes the model hint.
 pub fn parse_vscode_settings(source: &str) -> MigrationArtifact {
-    let mut artifact = MigrationArtifact { source: "vscode".into(), ..Default::default() };
+    let mut artifact = MigrationArtifact {
+        source: "vscode".into(),
+        ..Default::default()
+    };
     for line in source.lines() {
         let t = line.trim();
         if let Some((k, v)) = t.split_once(':') {
@@ -144,7 +147,13 @@ mod tests {
         let src = "# Style\nPrefer 4-space indent.\nNever import unused.\n";
         let a = MigrationRegistry.parse_file(".cursorrules", src).unwrap();
         assert_eq!(a.source, "cursor");
-        assert_eq!(a.rules, vec!["Prefer 4-space indent.".to_string(), "Never import unused.".to_string()]);
+        assert_eq!(
+            a.rules,
+            vec![
+                "Prefer 4-space indent.".to_string(),
+                "Never import unused.".to_string()
+            ]
+        );
     }
 
     #[test]

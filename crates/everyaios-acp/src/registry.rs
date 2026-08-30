@@ -131,7 +131,13 @@ pub struct LaunchRegistry {
 impl LaunchRegistry {
     pub fn builtin() -> Self {
         // Compact constructors keep the 46-entry catalog readable.
-        fn acp(id: &str, name: &str, desc: &str, auth: AuthMode, dist: Distribution) -> HarnessManifest {
+        fn acp(
+            id: &str,
+            name: &str,
+            desc: &str,
+            auth: AuthMode,
+            dist: Distribution,
+        ) -> HarnessManifest {
             HarnessManifest {
                 id: id.into(),
                 name: name.into(),
@@ -145,13 +151,22 @@ impl LaunchRegistry {
             }
         }
         fn npx(pkg: &str, args: &[&str]) -> Distribution {
-            Distribution::Npx { package: pkg.into(), args: args.iter().map(|s| s.to_string()).collect() }
+            Distribution::Npx {
+                package: pkg.into(),
+                args: args.iter().map(|s| s.to_string()).collect(),
+            }
         }
         fn uvx(pkg: &str, args: &[&str]) -> Distribution {
-            Distribution::Uvx { package: pkg.into(), args: args.iter().map(|s| s.to_string()).collect() }
+            Distribution::Uvx {
+                package: pkg.into(),
+                args: args.iter().map(|s| s.to_string()).collect(),
+            }
         }
         fn bin(cmd: &str, args: &[&str]) -> Distribution {
-            Distribution::Binary { command: cmd.into(), args: args.iter().map(|s| s.to_string()).collect() }
+            Distribution::Binary {
+                command: cmd.into(),
+                args: args.iter().map(|s| s.to_string()).collect(),
+            }
         }
 
         Self {
@@ -294,13 +309,52 @@ mod tests {
     fn catalog_has_the_full_ecosystem() {
         let reg = LaunchRegistry::builtin();
         for id in [
-            "everyaios", "claude", "codex", "gemini", "copilot", "chatgpt", "grok", "cursor",
-            "devin", "junie", "kiro", "auggie", "codebuddy-code", "qoder", "poolside",
-            "cortex-code", "nova", "dimcode", "factory-droid", "cline", "opencode", "hermes",
-            "openclaw", "qwen-code", "goose", "aider", "kimi", "kilo", "glm-agent", "deepagents",
-            "fast-agent", "minion-code", "mistral-vibe", "harn", "dirac", "crow-cli", "stakpak",
-            "vtcode", "sigit", "corust-agent", "autohand", "amp", "agoragentic", "commandcode",
-            "dsh", "pi",
+            "everyaios",
+            "claude",
+            "codex",
+            "gemini",
+            "copilot",
+            "chatgpt",
+            "grok",
+            "cursor",
+            "devin",
+            "junie",
+            "kiro",
+            "auggie",
+            "codebuddy-code",
+            "qoder",
+            "poolside",
+            "cortex-code",
+            "nova",
+            "dimcode",
+            "factory-droid",
+            "cline",
+            "opencode",
+            "hermes",
+            "openclaw",
+            "qwen-code",
+            "goose",
+            "aider",
+            "kimi",
+            "kilo",
+            "glm-agent",
+            "deepagents",
+            "fast-agent",
+            "minion-code",
+            "mistral-vibe",
+            "harn",
+            "dirac",
+            "crow-cli",
+            "stakpak",
+            "vtcode",
+            "sigit",
+            "corust-agent",
+            "autohand",
+            "amp",
+            "agoragentic",
+            "commandcode",
+            "dsh",
+            "pi",
         ] {
             assert!(reg.get(id).is_some(), "missing {id}");
         }
@@ -319,26 +373,47 @@ mod tests {
         let reg = LaunchRegistry::builtin();
         let claude = reg.launch_plan("claude", None).unwrap();
         assert_eq!(claude.command, "npx");
-        assert_eq!(claude.args, vec!["-y", "@agentclientprotocol/claude-agent-acp"]);
+        assert_eq!(
+            claude.args,
+            vec!["-y", "@agentclientprotocol/claude-agent-acp"]
+        );
 
         // Codex goes through the stdio ACP adapter.
-        assert_eq!(reg.launch_plan("codex", None).unwrap().args, vec!["-y", "@agentclientprotocol/codex-acp"]);
+        assert_eq!(
+            reg.launch_plan("codex", None).unwrap().args,
+            vec!["-y", "@agentclientprotocol/codex-acp"]
+        );
 
         // Npx + args: `npx cline --acp`.
-        assert_eq!(reg.launch_plan("cline", None).unwrap().args, vec!["-y", "cline", "--acp"]);
+        assert_eq!(
+            reg.launch_plan("cline", None).unwrap().args,
+            vec!["-y", "cline", "--acp"]
+        );
 
         // Binary + args: opencode/hermes/devin/kiro use subcommand/flag.
         assert_eq!(reg.launch_plan("opencode", None).unwrap().args, vec!["acp"]);
         assert_eq!(reg.launch_plan("hermes", None).unwrap().args, vec!["acp"]);
         assert_eq!(reg.launch_plan("devin", None).unwrap().args, vec!["acp"]);
         assert_eq!(reg.launch_plan("kiro", None).unwrap().args, vec!["acp"]);
-        assert_eq!(reg.launch_plan("copilot", None).unwrap().args, vec!["-y", "@github/copilot", "--acp"]);
-        assert_eq!(reg.launch_plan("grok", None).unwrap().args, vec!["-y", "@xai-official/grok", "agent", "stdio"]);
+        assert_eq!(
+            reg.launch_plan("copilot", None).unwrap().args,
+            vec!["-y", "@github/copilot", "--acp"]
+        );
+        assert_eq!(
+            reg.launch_plan("grok", None).unwrap().args,
+            vec!["-y", "@xai-official/grok", "agent", "stdio"]
+        );
 
         // Uvx + args: `uvx minion-code acp`.
-        assert_eq!(reg.launch_plan("minion-code", None).unwrap().args, vec!["minion-code", "acp"]);
+        assert_eq!(
+            reg.launch_plan("minion-code", None).unwrap().args,
+            vec!["minion-code", "acp"]
+        );
         // Uvx plain: `uvx aider-chat`.
-        assert_eq!(reg.launch_plan("aider", None).unwrap().args, vec!["aider-chat"]);
+        assert_eq!(
+            reg.launch_plan("aider", None).unwrap().args,
+            vec!["aider-chat"]
+        );
 
         assert!(reg.launch_plan("nope", None).is_none());
     }
@@ -352,7 +427,10 @@ mod tests {
                 name: "Local Claude".into(),
                 description: "test".into(),
                 auth_mode: AuthMode::Local,
-                distribution: Distribution::Binary { command: "claude".into(), args: vec![] },
+                distribution: Distribution::Binary {
+                    command: "claude".into(),
+                    args: vec![],
+                },
                 protocol: HarnessProtocol::ModelBackend,
                 env: vec![],
                 backend_env_keys: vec!["ANTHROPIC_BASE_URL".into()],
@@ -364,7 +442,10 @@ mod tests {
             .unwrap();
         assert_eq!(
             plan.env,
-            vec![("ANTHROPIC_BASE_URL".to_string(), "http://127.0.0.1:11434".to_string())]
+            vec![(
+                "ANTHROPIC_BASE_URL".to_string(),
+                "http://127.0.0.1:11434".to_string()
+            )]
         );
         // No backend → no override (agent uses its default).
         let plan = reg.launch_plan("local-claude", None).unwrap();

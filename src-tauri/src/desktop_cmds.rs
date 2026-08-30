@@ -224,7 +224,9 @@ pub fn desktop_read(
     window_id: u64,
 ) -> Result<serde_json::Value, String> {
     let engine = get_or_attach(&state, &app)?;
-    let read = engine.read(&window_of(window_id)).map_err(|e| e.to_string())?;
+    let read = engine
+        .read(&window_of(window_id))
+        .map_err(|e| e.to_string())?;
     let text = read.tree.as_ref().map(render_tree).unwrap_or_default();
     Ok(serde_json::json!({
         "tree": text,
@@ -242,7 +244,9 @@ pub fn desktop_see(
     window_id: u64,
 ) -> Result<serde_json::Value, String> {
     let engine = get_or_attach(&state, &app)?;
-    let result = engine.see(&window_of(window_id)).map_err(|e| e.to_string())?;
+    let result = engine
+        .see(&window_of(window_id))
+        .map_err(|e| e.to_string())?;
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&result.png);
     Ok(serde_json::json!({ "png": b64, "width": result.width, "height": result.height }))
@@ -280,7 +284,9 @@ pub fn desktop_act(
         },
         other => return Err(format!("unsupported desktop act kind: {other}")),
     };
-    let outcome = engine.act(&window_of(window_id), &act, None).map_err(|e| e.to_string())?;
+    let outcome = engine
+        .act(&window_of(window_id), &act, None)
+        .map_err(|e| e.to_string())?;
 
     // Every executed-or-declined act is audited with human_gesture provenance.
     crate::control::record_mutation(

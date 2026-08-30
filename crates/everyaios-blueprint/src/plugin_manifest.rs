@@ -129,7 +129,10 @@ impl ClaudePluginManifest {
             return Err(PluginManifestError::MissingName);
         }
         let valid = self.name.len() <= 64
-            && self.name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+            && self
+                .name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
         if !valid {
             return Err(PluginManifestError::InvalidName(self.name.clone()));
         }
@@ -184,7 +187,10 @@ impl ClaudePluginManifest {
     /// skill (skill-bundle) or a single `<plugin>` component skill.
     pub fn registered_skill_names(&self) -> Vec<String> {
         if self.strict || !self.skills.is_empty() {
-            self.skills.iter().map(|s| format!("{}:{}", self.name, s.name)).collect()
+            self.skills
+                .iter()
+                .map(|s| format!("{}:{}", self.name, s.name))
+                .collect()
         } else if self.components.skills {
             vec![self.name.clone()]
         } else {
@@ -228,7 +234,10 @@ mod tests {
         assert_eq!(m.display_name.as_deref(), Some("Document Skills"));
         assert!(m.strict);
         assert_eq!(m.skills.len(), 2);
-        assert_eq!(m.registered_skill_names(), vec!["doc-skill:pdf", "doc-skill:docx"]);
+        assert_eq!(
+            m.registered_skill_names(),
+            vec!["doc-skill:pdf", "doc-skill:docx"]
+        );
         assert_eq!(m.layout_dirs(), vec!["skills"]);
     }
 
@@ -247,7 +256,9 @@ mod tests {
             Err(PluginManifestError::Empty)
         );
         assert_eq!(
-            ClaudePluginManifest::parse(r#"{"name":"Bad Name","version":"1.0.0","skills":[{"name":"x"}]}"#),
+            ClaudePluginManifest::parse(
+                r#"{"name":"Bad Name","version":"1.0.0","skills":[{"name":"x"}]}"#
+            ),
             Err(PluginManifestError::InvalidName("Bad Name".into()))
         );
         assert_eq!(

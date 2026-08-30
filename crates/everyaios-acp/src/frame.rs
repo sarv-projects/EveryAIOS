@@ -42,7 +42,10 @@ pub fn decode_messages(buf: &mut Vec<u8>) -> io::Result<Vec<String>> {
 }
 
 fn find_newline(buf: &[u8], from: usize) -> Option<usize> {
-    buf[from..].iter().position(|&b| b == b'\n').map(|i| from + i)
+    buf[from..]
+        .iter()
+        .position(|&b| b == b'\n')
+        .map(|i| from + i)
 }
 
 #[cfg(test)]

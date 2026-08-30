@@ -61,10 +61,7 @@ impl ModelRegistry {
         let mut reg = Self::new(base_dir.clone());
         if let Ok(bytes) = std::fs::read(reg.index_path()) {
             if let Ok(list) = serde_json::from_slice::<Vec<ModelEntry>>(&bytes) {
-                reg.entries = list
-                    .into_iter()
-                    .map(|e| (e.id.clone(), e))
-                    .collect();
+                reg.entries = list.into_iter().map(|e| (e.id.clone(), e)).collect();
             }
         }
         let _ = base_dir;

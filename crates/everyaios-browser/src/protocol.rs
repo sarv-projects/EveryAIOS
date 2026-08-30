@@ -31,11 +31,17 @@ pub enum ParsedAction {
     /// Click at (x, y); `count` is 1 or 2 (double-click).
     Click { x: f64, y: f64, count: u32 },
     /// Type `text`; `at = None` means "at the current focus".
-    Type { text: String, at: Option<(f64, f64)> },
+    Type {
+        text: String,
+        at: Option<(f64, f64)>,
+    },
     /// A key press (Enter, Tab, Escape, or a hotkey like `ctrl+a`).
     Press { key: String },
     /// Scroll by `amount` px in `direction` (provider default when 0).
-    Scroll { direction: ScrollDirection, amount: f64 },
+    Scroll {
+        direction: ScrollDirection,
+        amount: f64,
+    },
     /// Drag from → to.
     Drag { from: (f64, f64), to: (f64, f64) },
     /// Move the cursor to (x, y).
@@ -179,20 +185,26 @@ fn parse_anthropic_cua(input: &Value) -> Result<ParsedAction, ActionParseError> 
         .ok_or(ActionParseError::MissingField("action"))?;
     match action {
         "left_click" | "click" => {
-            let (x, y) = coord(input.get("coordinate").ok_or(ActionParseError::MissingField("coordinate"))?)?;
+            let (x, y) = coord(
+                input
+                    .get("coordinate")
+                    .ok_or(ActionParseError::MissingField("coordinate"))?,
+            )?;
             Ok(ParsedAction::Click { x, y, count: 1 })
         }
         "double_click" => {
-            let (x, y) = coord(input.get("coordinate").ok_or(ActionParseError::MissingField("coordinate"))?)?;
+            let (x, y) = coord(
+                input
+                    .get("coordinate")
+                    .ok_or(ActionParseError::MissingField("coordinate"))?,
+            )?;
             Ok(ParsedAction::Click { x, y, count: 2 })
         }
         "type" => Ok(ParsedAction::Type {
             text: text(input)?,
             at: None,
         }),
-        "key" => Ok(ParsedAction::Press {
-            key: text(input)?,
-        }),
+        "key" => Ok(ParsedAction::Press { key: text(input)? }),
         "scroll" => {
             let direction = scroll_direction(
                 input
@@ -205,7 +217,11 @@ fn parse_anthropic_cua(input: &Value) -> Result<ParsedAction, ActionParseError> 
             })
         }
         "mouse_move" | "hover" => {
-            let (x, y) = coord(input.get("coordinate").ok_or(ActionParseError::MissingField("coordinate"))?)?;
+            let (x, y) = coord(
+                input
+                    .get("coordinate")
+                    .ok_or(ActionParseError::MissingField("coordinate"))?,
+            )?;
             Ok(ParsedAction::Hover { x, y })
         }
         "screenshot" => Ok(ParsedAction::Screenshot),
@@ -301,7 +317,11 @@ fn parse_ui_tars(input: &Value) -> Result<ParsedAction, ActionParseError> {
         .ok_or(ActionParseError::MissingField("action"))?;
     match action {
         "click" => {
-            let (x, y) = coord(input.get("coordinate").ok_or(ActionParseError::MissingField("coordinate"))?)?;
+            let (x, y) = coord(
+                input
+                    .get("coordinate")
+                    .ok_or(ActionParseError::MissingField("coordinate"))?,
+            )?;
             Ok(ParsedAction::Click { x, y, count: 1 })
         }
         "type" => Ok(ParsedAction::Type {
@@ -310,7 +330,9 @@ fn parse_ui_tars(input: &Value) -> Result<ParsedAction, ActionParseError> {
         }),
         "scroll" => {
             let direction = scroll_direction(
-                input.get("direction").ok_or(ActionParseError::MissingField("direction"))?,
+                input
+                    .get("direction")
+                    .ok_or(ActionParseError::MissingField("direction"))?,
             )?;
             Ok(ParsedAction::Scroll {
                 direction,
@@ -330,12 +352,12 @@ fn parse_ui_tars(input: &Value) -> Result<ParsedAction, ActionParseError> {
             Ok(ParsedAction::Press { key })
         }
         "drag" => {
-            let from = coord(input.get("coordinate").ok_or(ActionParseError::MissingField("coordinate"))?)?;
-            let to = input
-                .get("to")
-                .map(coord)
-                .transpose()?
-                .unwrap_or(from);
+            let from = coord(
+                input
+                    .get("coordinate")
+                    .ok_or(ActionParseError::MissingField("coordinate"))?,
+            )?;
+            let to = input.get("to").map(coord).transpose()?.unwrap_or(from);
             Ok(ParsedAction::Drag { from, to })
         }
         "wait" => Ok(ParsedAction::Wait {
@@ -356,7 +378,9 @@ mod tests {
     fn native_roundtrips_act_kind() {
         let input = json!({"kind": "click_at", "x": 10.0, "y": 20.0});
         let parsed = parse_action(ActionProtocol::Native, &input).unwrap();
-        assert!(matches!(parsed, ParsedAction::Act(ActKind::ClickAt { x, y }) if x == 10.0 && y == 20.0));
+        assert!(
+            matches!(parsed, ParsedAction::Act(ActKind::ClickAt { x, y }) if x == 10.0 && y == 20.0)
+        );
     }
 
     #[test]
@@ -364,12 +388,19 @@ mod tests {
         let click = json!({"action": "left_click", "coordinate": [5.0, 6.0]});
         assert_eq!(
             parse_action(ActionProtocol::AnthropicCua, &click).unwrap(),
-            ParsedAction::Click { x: 5.0, y: 6.0, count: 1 }
+            ParsedAction::Click {
+                x: 5.0,
+                y: 6.0,
+                count: 1
+            }
         );
         let type_ = json!({"action": "type", "text": "hello"});
         assert_eq!(
             parse_action(ActionProtocol::AnthropicCua, &type_).unwrap(),
-            ParsedAction::Type { text: "hello".into(), at: None }
+            ParsedAction::Type {
+                text: "hello".into(),
+                at: None
+            }
         );
     }
 
@@ -378,12 +409,17 @@ mod tests {
         let key = json!({"action": "key", "text": "Enter"});
         assert_eq!(
             parse_action(ActionProtocol::AnthropicCua, &key).unwrap(),
-            ParsedAction::Press { key: "Enter".into() }
+            ParsedAction::Press {
+                key: "Enter".into()
+            }
         );
         let scroll = json!({"action": "scroll", "scroll_direction": "down"});
         assert_eq!(
             parse_action(ActionProtocol::AnthropicCua, &scroll).unwrap(),
-            ParsedAction::Scroll { direction: ScrollDirection::Down, amount: 0.0 }
+            ParsedAction::Scroll {
+                direction: ScrollDirection::Down,
+                amount: 0.0
+            }
         );
     }
 
@@ -401,12 +437,18 @@ mod tests {
         let click = json!({"type": "click", "x": 1.0, "y": 2.0, "button": "left"});
         assert_eq!(
             parse_action(ActionProtocol::OpenAiCua, &click).unwrap(),
-            ParsedAction::Click { x: 1.0, y: 2.0, count: 1 }
+            ParsedAction::Click {
+                x: 1.0,
+                y: 2.0,
+                count: 1
+            }
         );
         let keys = json!({"type": "keypress", "keys": ["ctrl", "a"]});
         assert_eq!(
             parse_action(ActionProtocol::OpenAiCua, &keys).unwrap(),
-            ParsedAction::Press { key: "ctrl+a".into() }
+            ParsedAction::Press {
+                key: "ctrl+a".into()
+            }
         );
     }
 
@@ -415,12 +457,18 @@ mod tests {
         let scroll = json!({"type": "scroll", "scroll_x": 0.0, "scroll_y": -100.0});
         assert_eq!(
             parse_action(ActionProtocol::OpenAiCua, &scroll).unwrap(),
-            ParsedAction::Scroll { direction: ScrollDirection::Up, amount: 100.0 }
+            ParsedAction::Scroll {
+                direction: ScrollDirection::Up,
+                amount: 100.0
+            }
         );
         let drag = json!({"type": "drag", "path": [{"x": 0.0, "y": 0.0}, {"x": 10.0, "y": 5.0}]});
         assert_eq!(
             parse_action(ActionProtocol::OpenAiCua, &drag).unwrap(),
-            ParsedAction::Drag { from: (0.0, 0.0), to: (10.0, 5.0) }
+            ParsedAction::Drag {
+                from: (0.0, 0.0),
+                to: (10.0, 5.0)
+            }
         );
     }
 
@@ -434,17 +482,26 @@ mod tests {
         let hotkey = json!({"action": "hotkey", "keys": ["ctrl", "a"]});
         assert_eq!(
             parse_action(ActionProtocol::UiTars, &hotkey).unwrap(),
-            ParsedAction::Press { key: "ctrl+a".into() }
+            ParsedAction::Press {
+                key: "ctrl+a".into()
+            }
         );
     }
 
     #[test]
     fn lower_maps_to_act_kind() {
         // Focus-based type uses the caller's cursor.
-        let p = ParsedAction::Type { text: "hi".into(), at: None };
+        let p = ParsedAction::Type {
+            text: "hi".into(),
+            at: None,
+        };
         assert_eq!(
             p.to_act_kind((7.0, 8.0)),
-            Some(ActKind::TypeAt { x: 7.0, y: 8.0, text: "hi".into() })
+            Some(ActKind::TypeAt {
+                x: 7.0,
+                y: 8.0,
+                text: "hi".into()
+            })
         );
         // Non-input actions lower to None.
         assert_eq!(ParsedAction::Screenshot.to_act_kind((0.0, 0.0)), None);

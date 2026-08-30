@@ -36,7 +36,11 @@ pub struct MemoryObservation {
 
 impl MemoryObservation {
     pub fn new(memory_id: impl Into<String>, token_cost: u64, source: ObservationSource) -> Self {
-        Self { memory_id: memory_id.into(), token_cost, source }
+        Self {
+            memory_id: memory_id.into(),
+            token_cost,
+            source,
+        }
     }
 }
 
@@ -104,8 +108,16 @@ mod tests {
     #[test]
     fn injections_credit_savings() {
         let mut l = SavedVsDiscovered::new();
-        l.record_injection(MemoryObservation::new("m1", 120, ObservationSource::Reinforced));
-        l.record_injection(MemoryObservation::new("m2", 80, ObservationSource::Retrieved));
+        l.record_injection(MemoryObservation::new(
+            "m1",
+            120,
+            ObservationSource::Reinforced,
+        ));
+        l.record_injection(MemoryObservation::new(
+            "m2",
+            80,
+            ObservationSource::Retrieved,
+        ));
         assert_eq!(l.tokens_saved, 200);
         assert_eq!(l.net_savings(), 200);
     }
@@ -113,7 +125,11 @@ mod tests {
     #[test]
     fn discovery_costs_debit() {
         let mut l = SavedVsDiscovered::new();
-        l.record_injection(MemoryObservation::new("m1", 200, ObservationSource::Retrieved));
+        l.record_injection(MemoryObservation::new(
+            "m1",
+            200,
+            ObservationSource::Retrieved,
+        ));
         l.record_discovery(150);
         assert_eq!(l.net_savings(), 50);
         assert!((l.ratio() - 4.0 / 3.0).abs() < 1e-9);
@@ -122,7 +138,11 @@ mod tests {
     #[test]
     fn losing_ledger_is_honest() {
         let mut l = SavedVsDiscovered::new();
-        l.record_injection(MemoryObservation::new("m1", 10, ObservationSource::Crystallized));
+        l.record_injection(MemoryObservation::new(
+            "m1",
+            10,
+            ObservationSource::Crystallized,
+        ));
         l.record_discovery(500);
         assert!(l.net_savings() < 0);
         assert!(l.render().contains("net -490"));
@@ -131,7 +151,11 @@ mod tests {
     #[test]
     fn render_is_deterministic() {
         let mut l = SavedVsDiscovered::new();
-        l.record_injection(MemoryObservation::new("m1", 100, ObservationSource::Reinforced));
+        l.record_injection(MemoryObservation::new(
+            "m1",
+            100,
+            ObservationSource::Reinforced,
+        ));
         l.record_discovery(50);
         assert_eq!(l.render(), l.render());
     }

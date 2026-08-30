@@ -229,17 +229,17 @@ impl CompactionCoordinator {
         summarizers: &[&Summarizer],
     ) -> Option<(String, FallbackStep)> {
         let action = decide_context_action(self.total_tokens, self.max_tokens, &self.config);
-        if !matches!(action, ContextAction::SoftCompact | ContextAction::ForceCompact) {
+        if !matches!(
+            action,
+            ContextAction::SoftCompact | ContextAction::ForceCompact
+        ) {
             return None;
         }
         let from_tokens = self.total_tokens;
-        let (out, step) = run_compaction_lifecycle(
-            text,
-            from_tokens,
-            self.max_tokens,
-            summarizers,
-            |e| self.events.push(e),
-        );
+        let (out, step) =
+            run_compaction_lifecycle(text, from_tokens, self.max_tokens, summarizers, |e| {
+                self.events.push(e)
+            });
         let to_tokens = out.chars().count() / 4;
         self.total_tokens = to_tokens;
         self.turn_tokens.clear();
@@ -310,8 +310,14 @@ pub fn truncate_with_marker(text: &str, max_tokens: usize) -> String {
     let tail_chars = max_tokens;
     let chars: Vec<char> = text.chars().collect();
     let head: String = chars.iter().take(head_chars).collect();
-    let tail: String = chars.iter().rev().take(tail_chars).collect::<Vec<_>>()
-        .into_iter().rev().collect();
+    let tail: String = chars
+        .iter()
+        .rev()
+        .take(tail_chars)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     format!(
         "{head}\n\n…[context truncated: {max_tokens} token budget — earlier turns summarized away]…\n\n{tail}"
     )
@@ -340,7 +346,10 @@ pub fn compact_with_fallback(
             return (out, step);
         }
     }
-    (truncate_with_marker(text, max_tokens), FallbackStep::TruncateWithMarker)
+    (
+        truncate_with_marker(text, max_tokens),
+        FallbackStep::TruncateWithMarker,
+    )
 }
 
 /// Drive a compaction through its lifecycle, emitting an event at each phase
@@ -431,8 +440,14 @@ mod tests {
         let (out, step) = c.maybe_compact(&text, &[failing]).unwrap();
         assert_eq!(step, FallbackStep::TruncateWithMarker);
         assert!(out.contains("y"));
-        assert!(out.contains("[context truncated"), "marker must be present: {out}");
-        assert!(out.chars().count() < 800, "truncated shorter than the input");
+        assert!(
+            out.contains("[context truncated"),
+            "marker must be present: {out}"
+        );
+        assert!(
+            out.chars().count() < 800,
+            "truncated shorter than the input"
+        );
     }
 
     #[test]
@@ -507,8 +522,7 @@ mod tests {
     fn fallback_chain_uses_first_success() {
         let primary: &dyn Fn(&str) -> Option<String> = &|_| None; // fails
         let fb: &dyn Fn(&str) -> Option<String> = &|_| Some("summary".into());
-        let (out, step) =
-            compact_with_fallback(&"x".repeat(10_000), 100, &[primary, fb]);
+        let (out, step) = compact_with_fallback(&"x".repeat(10_000), 100, &[primary, fb]);
         assert_eq!(out, "summary");
         assert_eq!(step, FallbackStep::FallbackModel(0));
     }
@@ -538,10 +552,16 @@ mod tests {
         assert_eq!(out, "compacted");
         assert_eq!(step, FallbackStep::PrimarySummarizer);
         assert_eq!(events.len(), 3);
-        assert!(matches!(events[0], CompactionEvent::PreCompact { from_tokens: 2500 }));
+        assert!(matches!(
+            events[0],
+            CompactionEvent::PreCompact { from_tokens: 2500 }
+        ));
         assert!(matches!(
             events[1],
-            CompactionEvent::Compacted { step: FallbackStep::PrimarySummarizer, .. }
+            CompactionEvent::Compacted {
+                step: FallbackStep::PrimarySummarizer,
+                ..
+            }
         ));
         assert!(matches!(events[2], CompactionEvent::PostCompact { .. }));
     }
@@ -569,7 +589,10 @@ mod tests {
         // Lifecycle events became turn items.
         let events = c.drain_events();
         assert_eq!(events.len(), 3);
-        assert!(matches!(events[0], CompactionEvent::PreCompact { from_tokens: 95 }));
+        assert!(matches!(
+            events[0],
+            CompactionEvent::PreCompact { from_tokens: 95 }
+        ));
         // Accumulation reset; total now reflects the compacted size.
         assert!(c.total_tokens() < 95);
         assert!(!c.should_notice());

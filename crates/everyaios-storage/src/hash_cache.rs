@@ -74,7 +74,8 @@ impl HashCache {
 
     pub fn remove(&mut self, p: &Path) -> rusqlite::Result<()> {
         let key = self.path_key(p);
-        self.conn.execute("DELETE FROM hash_cache WHERE path = ?1", params![key])?;
+        self.conn
+            .execute("DELETE FROM hash_cache WHERE path = ?1", params![key])?;
         Ok(())
     }
 
@@ -104,14 +105,15 @@ impl HashCache {
         let have: std::collections::HashSet<String> =
             existing.iter().map(|p| self.path_key(p)).collect();
         let stale: Vec<String> = {
-            let mut stmt = self
-                .conn
-                .prepare("SELECT path FROM hash_cache")?;
+            let mut stmt = self.conn.prepare("SELECT path FROM hash_cache")?;
             let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-            rows.filter_map(|r| r.ok()).filter(|p| !have.contains(p)).collect()
+            rows.filter_map(|r| r.ok())
+                .filter(|p| !have.contains(p))
+                .collect()
         };
         for p in stale {
-            self.conn.execute("DELETE FROM hash_cache WHERE path = ?1", params![p])?;
+            self.conn
+                .execute("DELETE FROM hash_cache WHERE path = ?1", params![p])?;
         }
         Ok(())
     }
@@ -135,13 +137,24 @@ mod tests {
         let f = root.join("a.txt");
         fs::write(&f, "hello").unwrap();
         let meta = fs::metadata(&f).unwrap();
-        let mtime = meta.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        let mtime = meta
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
         let mut cache = HashCache::open_in_memory().unwrap();
         assert!(cache.lookup(&f, meta.len(), mtime).is_none());
         cache.put(&f, meta.len(), mtime, "deadbeef").unwrap();
-        assert_eq!(cache.lookup(&f, meta.len(), mtime).as_deref(), Some("deadbeef"));
+        assert_eq!(
+            cache.lookup(&f, meta.len(), mtime).as_deref(),
+            Some("deadbeef")
+        );
         // Same size+mtime → same hash without re-hash.
-        assert_eq!(cache.lookup(&f, meta.len(), mtime).as_deref(), Some("deadbeef"));
+        assert_eq!(
+            cache.lookup(&f, meta.len(), mtime).as_deref(),
+            Some("deadbeef")
+        );
         let _ = fs::remove_dir_all(&root);
     }
 

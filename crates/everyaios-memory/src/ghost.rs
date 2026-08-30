@@ -154,7 +154,10 @@ mod tests {
 
         assert!(g.remove_id("memory://s1", "mem:1"));
         assert_eq!(g.ids_for("memory://s1"), vec!["mem:2".to_string()]);
-        assert!(!g.remove_id("memory://s1", "mem:1"), "double-remove is a no-op");
+        assert!(
+            !g.remove_id("memory://s1", "mem:1"),
+            "double-remove is a no-op"
+        );
 
         // Removing the last id drops the emptied path entirely.
         assert!(g.remove_id("memory://s1", "mem:2"));

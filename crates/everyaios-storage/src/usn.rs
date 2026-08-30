@@ -67,7 +67,11 @@ pub struct UsnCursor {
 
 impl UsnCursor {
     pub fn new(source: JournalSource) -> Self {
-        Self { source, next_usn: 0, applied: 0 }
+        Self {
+            source,
+            next_usn: 0,
+            applied: 0,
+        }
     }
 
     /// Feed a batch whose first `usn` is > `next_usn` (journal ordering).
@@ -91,7 +95,11 @@ mod tests {
     use super::*;
 
     fn rec(usn: u64) -> UsnRecord {
-        UsnRecord { usn, reason: UsnReason::DataOverwrite, path: PathBuf::from("/tmp/f.txt") }
+        UsnRecord {
+            usn,
+            reason: UsnReason::DataOverwrite,
+            path: PathBuf::from("/tmp/f.txt"),
+        }
     }
 
     #[test]

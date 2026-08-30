@@ -110,7 +110,11 @@ impl MCPServerRecord {
     pub fn enable_for(&mut self, consumer: &str) {
         self.enabled_consumers.insert(
             consumer.to_string(),
-            ConsumerEnable { consumer: consumer.to_string(), enabled: true, last_health: None },
+            ConsumerEnable {
+                consumer: consumer.to_string(),
+                enabled: true,
+                last_health: None,
+            },
         );
     }
 
@@ -121,7 +125,9 @@ impl MCPServerRecord {
     }
 
     pub fn is_enabled_for(&self, consumer: &str) -> bool {
-        self.enabled_consumers.get(consumer).is_some_and(|e| e.enabled)
+        self.enabled_consumers
+            .get(consumer)
+            .is_some_and(|e| e.enabled)
     }
 
     pub fn consumers(&self) -> Vec<String> {

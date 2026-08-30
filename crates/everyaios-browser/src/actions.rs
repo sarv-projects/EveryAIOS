@@ -895,7 +895,8 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
         let snap = self.snapshot(document_id)?;
         let mut labels = Vec::new();
         collect_actionable(&snap.root, &mut |node| {
-            let (Some(ref_id), Some(backend)) = (node.ref_id.clone(), node.backend_dom_node_id) else {
+            let (Some(ref_id), Some(backend)) = (node.ref_id.clone(), node.backend_dom_node_id)
+            else {
                 return;
             };
             // Geometry can be missing for off-screen/display:none nodes — skip
@@ -1029,10 +1030,7 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
             "DOM.resolveNode",
             json!({ "backendNodeId": backend_node_id }),
         )?;
-        let object_id = match resolved
-            .pointer("/object/objectId")
-            .and_then(Value::as_str)
-        {
+        let object_id = match resolved.pointer("/object/objectId").and_then(Value::as_str) {
             Some(id) => id,
             None => return Ok(false),
         };

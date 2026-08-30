@@ -152,11 +152,9 @@ pub fn storage_duplicates(
             nlink: r.nlink,
         })
         .collect();
-    let groups = everyaios_storage::find_duplicates(
-        &cands,
-        &everyaios_storage::DedupOptions::default(),
-    )
-    .map_err(|e| e.to_string())?;
+    let groups =
+        everyaios_storage::find_duplicates(&cands, &everyaios_storage::DedupOptions::default())
+            .map_err(|e| e.to_string())?;
     let reclaimable: u64 = groups.iter().map(|g| g.wasted_bytes).sum();
     let listed: Vec<serde_json::Value> = groups
         .iter()
@@ -191,10 +189,7 @@ pub fn storage_cleanup_proposals(
     let records = everyaios_storage::scan(&root, &scan_opts()).map_err(|e| e.to_string())?;
     let arena = everyaios_storage::build_arena(records, &root);
     let proposals = everyaios_storage::propose_large_files_cleanup(&arena, top_n.unwrap_or(10));
-    let listed: Vec<serde_json::Value> = proposals
-        .iter()
-        .map(|p| p.decision_package())
-        .collect();
+    let listed: Vec<serde_json::Value> = proposals.iter().map(|p| p.decision_package()).collect();
     Ok(serde_json::json!({ "deferred": false, "proposals": listed }))
 }
 

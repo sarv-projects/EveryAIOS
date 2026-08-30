@@ -77,8 +77,16 @@ fn author_list(authors: &[String], style: CslStyle) -> String {
 /// In-text citation (e.g. "(Smith, 2024)" APA / "[1]" IEEE / "Smith 2024" Chicago).
 pub fn render_citation(reference: &Reference, style: CslStyle) -> String {
     match style {
-        CslStyle::Apa => format!("({}, {})", author_list(&reference.authors, style), reference.year),
-        CslStyle::Chicago => format!("{} {}", author_list(&reference.authors, style), reference.year),
+        CslStyle::Apa => format!(
+            "({}, {})",
+            author_list(&reference.authors, style),
+            reference.year
+        ),
+        CslStyle::Chicago => format!(
+            "{} {}",
+            author_list(&reference.authors, style),
+            reference.year
+        ),
         CslStyle::Ieee => format!("[{}]", reference.id),
     }
 }
@@ -177,15 +185,20 @@ impl ReferenceLibrary {
             .iter()
             .map(|r| {
                 let haystack = format!("{} {}", r.title, r.authors.join(" ")).to_lowercase();
-                let hits = terms.iter().filter(|t| haystack.contains(t.as_str())).count();
+                let hits = terms
+                    .iter()
+                    .filter(|t| haystack.contains(t.as_str()))
+                    .count();
                 (hits, r)
             })
             .collect();
-        scored.sort_by(|(a, ra), (b, rb)| {
-            b.cmp(a).then_with(|| ra.title.cmp(&rb.title))
-        });
+        scored.sort_by(|(a, ra), (b, rb)| b.cmp(a).then_with(|| ra.title.cmp(&rb.title)));
         // Only references with at least one matching term are results.
-        scored.into_iter().filter(|(hits, _)| *hits > 0).map(|(_, r)| r).collect()
+        scored
+            .into_iter()
+            .filter(|(hits, _)| *hits > 0)
+            .map(|(_, r)| r)
+            .collect()
     }
 }
 
@@ -266,7 +279,10 @@ mod tests {
             publisher: Some("J. AI".into()),
             url: None,
         };
-        assert_eq!(render_reference(&r, CslStyle::Ieee), "G. Hopper, \"On Retrieval,\" J. AI, 2023.");
+        assert_eq!(
+            render_reference(&r, CslStyle::Ieee),
+            "G. Hopper, \"On Retrieval,\" J. AI, 2023."
+        );
     }
 
     #[test]
@@ -344,11 +360,9 @@ mod tests {
 
     #[test]
     fn insert_citation_appends_paragraph_before_sectpr() {
-        let out = insert_citation_into_docx(
-            &crate::zip::tests::sample_docx(),
-            "(Lovelace, A., 2024)",
-        )
-        .unwrap();
+        let out =
+            insert_citation_into_docx(&crate::zip::tests::sample_docx(), "(Lovelace, A., 2024)")
+                .unwrap();
         let mut a = crate::zip::OoxmlArchive::open(out).unwrap();
         let xml = String::from_utf8(a.read_part("word/document.xml").unwrap()).unwrap();
         // The citation paragraph lands before the sectPr, body intact.
@@ -360,7 +374,8 @@ mod tests {
 
     #[test]
     fn insert_citation_escapes_text() {
-        let out = insert_citation_into_docx(&crate::zip::tests::sample_docx(), "A & B <C>").unwrap();
+        let out =
+            insert_citation_into_docx(&crate::zip::tests::sample_docx(), "A & B <C>").unwrap();
         let mut a = crate::zip::OoxmlArchive::open(out).unwrap();
         let xml = String::from_utf8(a.read_part("word/document.xml").unwrap()).unwrap();
         assert!(xml.contains("A &amp; B &lt;C&gt;"));

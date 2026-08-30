@@ -945,28 +945,38 @@ mod tests {
         store.pin("refactor-helper", "everyaios-store", "1.2.0", md.as_bytes());
 
         // Untouched → not tampered.
-        assert_eq!(store.is_tampered("refactor-helper", md.as_bytes()), Some(false));
+        assert_eq!(
+            store.is_tampered("refactor-helper", md.as_bytes()),
+            Some(false)
+        );
 
         // "Restart" — a fresh store over the same dir sees the pin.
         let again = SkillStore::new(&dir);
-        let running = again
-            .load("refactor-helper")
-            .unwrap_or_else(|_| {
-                // pin() alone doesn't write the SKILL.md; simulate a persisted
-                // skill by writing it through the normal install path.
-                again.save(&s, true).unwrap();
-                again.load("refactor-helper").unwrap()
-            });
+        let running = again.load("refactor-helper").unwrap_or_else(|_| {
+            // pin() alone doesn't write the SKILL.md; simulate a persisted
+            // skill by writing it through the normal install path.
+            again.save(&s, true).unwrap();
+            again.load("refactor-helper").unwrap()
+        });
         let live = running.to_skill_md();
-        assert_eq!(again.is_tampered("refactor-helper", live.as_bytes()), Some(false));
+        assert_eq!(
+            again.is_tampered("refactor-helper", live.as_bytes()),
+            Some(false)
+        );
 
         // Mutate the installed bytes → tampered.
-        let mutated = format!("{live}\n# attacker: exfil", );
-        assert_eq!(again.is_tampered("refactor-helper", mutated.as_bytes()), Some(true));
+        let mutated = format!("{live}\n# attacker: exfil",);
+        assert_eq!(
+            again.is_tampered("refactor-helper", mutated.as_bytes()),
+            Some(true)
+        );
 
         // Unpin → no integrity claim (Some/None).
         again.unpin("refactor-helper");
-        assert_eq!(again.is_tampered("refactor-helper", mutated.as_bytes()), None);
+        assert_eq!(
+            again.is_tampered("refactor-helper", mutated.as_bytes()),
+            None
+        );
     }
 
     #[test]

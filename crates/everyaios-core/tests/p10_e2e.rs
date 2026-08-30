@@ -22,16 +22,16 @@ use everyaios_blueprint::crystallize::{
 };
 use everyaios_blueprint::spec::TaskSpec;
 use everyaios_blueprint::subagent::{SubAgentLimits, SubAgentRuntime, SubAgentSpec};
-use everyaios_blueprint::{TaskStatus, ScriptLanguage};
+use everyaios_blueprint::{ScriptLanguage, TaskStatus};
 use everyaios_core::chat::{ChatRelay, ChatStreamParams, ChatWireEvent};
 use everyaios_core::connector_hub::{ConnectorHub, Engine};
 use everyaios_core::connectors::gmail::GmailConnector;
 use everyaios_core::connectors::{HttpTransport, TransportError, TransportErrorKind};
+use everyaios_core::guard_service::GuardService;
 use everyaios_core::memory_service::MemoryService;
 use everyaios_core::messaging::{InboundMessage, MessageDispatcher, StubAdapter};
 use everyaios_core::providers::{ProviderConfig, ProviderKey, ProvidersFile};
 use everyaios_core::scheduler_service::{RunState, SchedulePolicy, SchedulerService, TriggerSpec};
-use everyaios_core::guard_service::GuardService;
 use everyaios_core::sidecar_link::SidecarLink;
 use everyaios_core::tools::ToolService;
 use everyaios_guard::granter::{CapabilityGranter, GrantRequest, HostGrant, TrustFlags};
@@ -149,9 +149,9 @@ fn journey_install_byok_chat_tool_call() {
             let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
             if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
                 let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-                let reply =
-                    serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
-                let _ = everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
+                let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
+                let _ =
+                    everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
                 let n = serde_json::json!({
                     "jsonrpc": "2.0", "method": "chat/batch",
                     "params": { "streamId": "st-1", "text": "hi", "tokenCount": 1 },
@@ -244,7 +244,10 @@ fn memory_persists_across_restart() {
         let mut mem = MemoryService::new();
         let written = mem.write(
             "s1",
-            &["the project is called everyaios".to_string(), "the vault is sqlcipher-encrypted".to_string()],
+            &[
+                "the project is called everyaios".to_string(),
+                "the vault is sqlcipher-encrypted".to_string(),
+            ],
         );
         assert_eq!(written, 2);
         mem.save_to(&db).unwrap();
@@ -254,7 +257,10 @@ fn memory_persists_across_restart() {
     // returns the matched fact ids; the persisted content is intact.
     let reopened = MemoryService::load_from(&db).unwrap();
     let hits = reopened.read("everyaios", 5);
-    assert!(!hits.is_empty(), "recall returns matching fact ids: {hits:?}");
+    assert!(
+        !hits.is_empty(),
+        "recall returns matching fact ids: {hits:?}"
+    );
     let facts = reopened.core_facts();
     assert!(
         facts.iter().any(|f| f.contains("called everyaios")),
@@ -288,7 +294,9 @@ fn subagent_planner_two_agents_merge_results() {
         "/tmp/work",
     )
     .with_parent("planner");
-    runtime.spawn(SubAgentSpec::new(planner, "nvidia", "/tmp/work")).unwrap();
+    runtime
+        .spawn(SubAgentSpec::new(planner, "nvidia", "/tmp/work"))
+        .unwrap();
     runtime.spawn(child_a).unwrap();
     runtime.spawn(child_b).unwrap();
     assert_eq!(runtime.active_count(), 3);
@@ -299,10 +307,20 @@ fn subagent_planner_two_agents_merge_results() {
 
     // Both children complete with summaries + artifacts.
     runtime
-        .complete("child-a", "storage uses FTS5 + trigram", TaskStatus::Done, vec!["storage.md".into()])
+        .complete(
+            "child-a",
+            "storage uses FTS5 + trigram",
+            TaskStatus::Done,
+            vec!["storage.md".into()],
+        )
         .unwrap();
     runtime
-        .complete("child-b", "guard uses tickets + nonce", TaskStatus::Done, vec!["guard.md".into()])
+        .complete(
+            "child-b",
+            "guard uses tickets + nonce",
+            TaskStatus::Done,
+            vec!["guard.md".into()],
+        )
         .unwrap();
 
     // The planner (parent) sees mergeable summaries — never raw child context.
@@ -325,8 +343,16 @@ fn crystallization_fourth_run_is_zero_token() {
     // The workflow: 3 identical successful runs of (transform → notify).
     let steps = || {
         vec![
-            WorkflowStep { tool: "file_ops.write".into(), args: r#"{"path":"r.txt","content":"ok"}"#.into(), class: StepClass::Transform },
-            WorkflowStep { tool: "notify".into(), args: r#"{"to":"me"}"#.into(), class: StepClass::Notify },
+            WorkflowStep {
+                tool: "file_ops.write".into(),
+                args: r#"{"path":"r.txt","content":"ok"}"#.into(),
+                class: StepClass::Transform,
+            },
+            WorkflowStep {
+                tool: "notify".into(),
+                args: r#"{"to":"me"}"#.into(),
+                class: StepClass::Notify,
+            },
         ]
     };
 
@@ -336,9 +362,16 @@ fn crystallization_fourth_run_is_zero_token() {
     }
     // After 3 identical successes the workflow is a crystallization candidate.
     let candidates = detector.candidates();
-    assert_eq!(candidates.len(), 1, "third identical success promotes the workflow");
+    assert_eq!(
+        candidates.len(),
+        1,
+        "third identical success promotes the workflow"
+    );
     assert!(
-        candidates[0].steps.iter().all(|s| s.class.is_crystallizable()),
+        candidates[0]
+            .steps
+            .iter()
+            .all(|s| s.class.is_crystallizable()),
         "no cognitive step → crystallizable"
     );
     assert_eq!(candidates[0].successes, 3);
@@ -349,7 +382,10 @@ fn crystallization_fourth_run_is_zero_token() {
     assert!(skill.source.contains("file_ops_write"));
     // The compiled run produces the recorded expected output → no drift, so
     // the 4th run executes the script instead of calling the model.
-    assert_eq!(decrystallize_check(&skill, &skill.expected_output), everyaios_blueprint::crystallize::Drift::Match);
+    assert_eq!(
+        decrystallize_check(&skill, &skill.expected_output),
+        everyaios_blueprint::crystallize::Drift::Match
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +399,9 @@ struct MockTransport {
 
 impl MockTransport {
     fn new(responses: Vec<Result<Vec<u8>, TransportError>>) -> Self {
-        Self { responses: std::cell::RefCell::new(responses) }
+        Self {
+            responses: std::cell::RefCell::new(responses),
+        }
     }
 }
 
@@ -374,16 +412,22 @@ impl HttpTransport for MockTransport {
         _headers: &[(&str, &str)],
         _body: &[u8],
     ) -> Result<Vec<u8>, TransportError> {
-        self.responses.borrow_mut().pop().unwrap_or(Err(TransportError {
-            kind: TransportErrorKind::Other,
-            message: "no more mock responses".into(),
-        }))
+        self.responses
+            .borrow_mut()
+            .pop()
+            .unwrap_or(Err(TransportError {
+                kind: TransportErrorKind::Other,
+                message: "no more mock responses".into(),
+            }))
     }
     fn get(&self, _url: &str, _headers: &[(&str, &str)]) -> Result<Vec<u8>, TransportError> {
-        self.responses.borrow_mut().pop().unwrap_or(Err(TransportError {
-            kind: TransportErrorKind::Other,
-            message: "no more mock responses".into(),
-        }))
+        self.responses
+            .borrow_mut()
+            .pop()
+            .unwrap_or(Err(TransportError {
+                kind: TransportErrorKind::Other,
+                message: "no more mock responses".into(),
+            }))
     }
 }
 
@@ -398,7 +442,9 @@ impl everyaios_core::connectors::gmail::TokenRefresher for MockRefresher {
 fn connector_hub_gmail_read_respond() {
     // Register the connection in the hub (browser-session engine).
     let mut hub = ConnectorHub::new();
-    let id = hub.connect("gmail", "me@example.com", Engine::BrowserSession).unwrap();
+    let id = hub
+        .connect("gmail", "me@example.com", Engine::BrowserSession)
+        .unwrap();
     assert!(hub.is_connected("gmail", "me@example.com"));
     assert_eq!(hub.get(&id).unwrap().engine.as_str(), "browser_session");
 
@@ -426,13 +472,18 @@ fn connector_hub_gmail_read_respond() {
     let found = gmail.search("from:boss", 5, None).unwrap();
     assert_eq!(found.messages.len(), 1);
     assert_eq!(found.messages[0].subject, "Re: status");
-    assert_eq!(found.messages[0].body_plain.as_deref(), Some("need the report"));
+    assert_eq!(
+        found.messages[0].body_plain.as_deref(),
+        Some("need the report")
+    );
 
     // Respond: send a reply through the same connector.
     let send_resp = serde_json::json!({ "id": "sent-1", "threadId": "t1" });
     let send_transport = MockTransport::new(vec![Ok(serde_json::to_vec(&send_resp).unwrap())]);
     let mut gmail2 = GmailConnector::new(send_transport, MockRefresher, "tok".into(), "me".into());
-    let sent = gmail2.send_message("boss@example.com", "Re: status", "report attached").unwrap();
+    let sent = gmail2
+        .send_message("boss@example.com", "Re: status", "report attached")
+        .unwrap();
     assert_eq!(sent.message_id, "sent-1");
 }
 
@@ -448,7 +499,9 @@ fn scheduled_task_fires_headless() {
         "job-cron",
         "nightly digest",
         "s-headless",
-        TriggerSpec::Cron { expr: "* * * * *".into() },
+        TriggerSpec::Cron {
+            expr: "* * * * *".into(),
+        },
         vec![],
         Some(SchedulePolicy::default()),
         1_700_000_000,
@@ -465,7 +518,10 @@ fn scheduled_task_fires_headless() {
 
     // Headless daemon tick: jobs due at `now` are returned, leases taken.
     let due = sched.due(1_700_000_060);
-    assert!(due.contains(&"job-cron".to_string()), "cron due at minute boundary: {due:?}");
+    assert!(
+        due.contains(&"job-cron".to_string()),
+        "cron due at minute boundary: {due:?}"
+    );
     assert!(due.contains(&"job-int".to_string()));
 
     let lease = sched.lease_start("job-cron", 1_700_000_060).unwrap();
@@ -473,11 +529,16 @@ fn scheduled_task_fires_headless() {
     assert_eq!(lease["ok"], true);
     // Advance the checkpoint (step 1 of N) then finish the run.
     sched.lease_checkpoint("job-cron", 1, Some(&fence)).unwrap();
-    sched.lease_finish("job-cron", true, 1_700_000_060, Some(&fence)).unwrap();
+    sched
+        .lease_finish("job-cron", true, 1_700_000_060, Some(&fence))
+        .unwrap();
     let job = sched.get("job-cron").unwrap();
     assert_eq!(job.successes, 1);
     assert_eq!(job.runs, 1);
-    assert!(matches!(job.state, RunState::Idle), "finished run returns to idle");
+    assert!(
+        matches!(job.state, RunState::Idle),
+        "finished run returns to idle"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -551,9 +612,15 @@ bind = ["data-agent"]
     assert!(scanned.contains(&"csv-tools".to_string()));
     assert_eq!(registry.names(), vec!["csv-tools".to_string()]);
     let registered = registry.get("csv-tools").unwrap();
-    assert_eq!(registered.state, everyaios_blueprint::plugin::PluginState::Registered);
+    assert_eq!(
+        registered.state,
+        everyaios_blueprint::plugin::PluginState::Registered
+    );
     let entry = registry.activate("csv-tools").unwrap();
-    assert_eq!(entry.state, everyaios_blueprint::plugin::PluginState::Activated);
+    assert_eq!(
+        entry.state,
+        everyaios_blueprint::plugin::PluginState::Activated
+    );
 
     // The host grants only a narrow set; the granter refines to the manifest's
     // allow ∩ host ∩ (allow − deny).
@@ -570,7 +637,10 @@ bind = ["data-agent"]
     let granter = CapabilityGranter::new(host);
     let granted = granter.grant(&entry.manifest.grant_request()).unwrap();
     // The plugin may read /tmp but the explicit deny on /etc wins.
-    assert!(CapabilityGranter::granted_has(&granted, "fs.read:/tmp/x.csv"));
+    assert!(CapabilityGranter::granted_has(
+        &granted,
+        "fs.read:/tmp/x.csv"
+    ));
     assert!(
         !CapabilityGranter::granted_has(&granted, "fs.read:/etc/shadow"),
         "explicit deny must win"
@@ -584,12 +654,21 @@ bind = ["data-agent"]
     let greedy = GrantRequest {
         name: "greedy".into(),
         agent_bindings: vec!["data-agent".into()],
-        trust: TrustFlags { network: true, shell: true, files_write: true, approval_required: false, sandboxed: false },
+        trust: TrustFlags {
+            network: true,
+            shell: true,
+            files_write: true,
+            approval_required: false,
+            sandboxed: false,
+        },
         capabilities_allow: vec!["fs.write:/".into(), "shell".into(), "network:https".into()],
         capabilities_deny: vec![],
     };
     let denied = granter.grant(&greedy);
-    assert!(denied.is_err(), "capabilities outside the host grant must be refused");
+    assert!(
+        denied.is_err(),
+        "capabilities outside the host grant must be refused"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

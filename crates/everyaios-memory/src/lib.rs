@@ -85,60 +85,60 @@ pub use actr::{
     activation, derive_queries, forget_sweep, is_protected, keyword_hits, recall_score, recency,
     Memory, RecallWeights, DEFAULT_IMPORTANCE_FLOOR,
 };
+pub use bm25::{
+    fuse_signals, run_signals_parallel, tokenize, Bm25Doc, Bm25Index, Hit, SignalKind, SignalRank,
+    SignalSource,
+};
+pub use cache::{ResultCache, SemanticCache};
+pub use classify::{classify, parallel_groups, plan_execution, ExecutionPlan, Intent, IntentKind};
+pub use cognee::{CogneeMemory, RecallResult};
 pub use compaction::{
     compact_with_fallback, decide_context_action, find_safe_split, persist_decision, prune_protect,
     run_compaction_lifecycle, should_snip, sliding_window, snip_anchor, summarize_or_passthrough,
     truncate_with_marker, CacheBreak, CompactionConfig, CompactionCoordinator, CompactionEvent,
     ContextAction, FallbackStep, PersistDecision, PrefixCache, Summarizer,
 };
+pub use embedding::{
+    cosine, dot, hamming, l2, quantize_binary, quantize_int8, BinaryVector, Embedder,
+    EmbeddingIndex, Int8Vector,
+};
+pub use fsrs::{
+    simulate, Fsrs, FsrsError, ItemState, MemoryState, NextStates, Rating, SimulationConfig,
+    SimulationReport, DEFAULT_PARAMETERS, FSRS5_DEFAULT_DECAY, FSRS6_DEFAULT_DECAY,
+};
 pub use fusion::{
     approx_tokens, budget_tokens, cap_text, dedupe, merge_small_chunks, rrf_fuse, smart_snippets,
     ContentType, Signal,
 };
 pub use ghost::{FsEvent, GhostIndex};
-pub use graph::{Edge, EdgeType, GraphBackend, GraphStore, Node, NodeKind, DEFAULT_MAX_DEPTH, DEFAULT_TOP_K};
+pub use graph::OPEN;
+pub use graph::{
+    Edge, EdgeType, GraphBackend, GraphStore, Node, NodeKind, DEFAULT_MAX_DEPTH, DEFAULT_TOP_K,
+};
+pub use janus::{ast_prune, dedup, regex_collapse, run_janus, PassResult};
+pub use journey::{Journey, JourneyEvent, JourneyKind};
 pub use lazy_graph::{
     extract_concepts, lexical_similarity, LazyConceptGraph, LazyGraphRag, RelevanceAssessor,
-    RetrieveOptions, RetrievedChunk, RetrievalReport, SimilarityScorer,
+    RetrievalReport, RetrieveOptions, RetrievedChunk, SimilarityScorer,
 };
 pub use paging::{MemoryEntry, PagedMemory, Surface, CORE_BUDGET_TOKENS};
-pub use classify::{classify, plan_execution, parallel_groups, ExecutionPlan, Intent, IntentKind};
-pub use fsrs::{
-    simulate, Fsrs, FsrsError, ItemState, MemoryState, NextStates, Rating, SimulationConfig,
-    SimulationReport, DEFAULT_PARAMETERS, FSRS5_DEFAULT_DECAY, FSRS6_DEFAULT_DECAY,
-};
+pub use passport::{ContextPassport, PassportEntry, PassportScope};
+pub use planner::{BudgetResult, ContextPlanner, PlannerConfig, PlannerDecision};
 pub use reference::{
     bounded_preview, make_ref_handle, query_ref, RefHandle, RefKind, PREVIEW_BUDGET_TOKENS,
 };
 pub use reinforce::{
     extract_candidates, split_sentences, ReviewCandidate, ReviewCard, ReviewQueue,
 };
-pub use bm25::{
-    fuse_signals, run_signals_parallel, tokenize, Bm25Doc, Bm25Index, Hit, SignalKind,
-    SignalRank, SignalSource,
-};
-pub use cognee::{CogneeMemory, RecallResult};
-pub use janus::{ast_prune, dedup, regex_collapse, run_janus, PassResult};
-pub use planner::{
-    BudgetResult, ContextPlanner, PlannerConfig, PlannerDecision,
-};
-pub use journey::{Journey, JourneyEvent, JourneyKind};
-pub use passport::{ContextPassport, PassportEntry, PassportScope};
-pub use rtk::{compress, kind_for, CommandKind, CompressedOutput};
-pub use saved::{MemoryObservation, ObservationSource, SavedVsDiscovered};
-pub use usage::{AgentSessionMetrics, UsageLedger, UsageRecord};
-pub use cache::{ResultCache, SemanticCache};
-pub use embedding::{
-    cosine, dot, hamming, l2, quantize_binary, quantize_int8, BinaryVector, Embedder,
-    EmbeddingIndex, Int8Vector,
-};
 pub use repair::{repair_tool_json, Repair};
 pub use rerank::{rerank, Candidate, LexicalReranker, RankedHit, Reranker};
-pub use graph::OPEN;
+pub use rtk::{compress, kind_for, CommandKind, CompressedOutput};
+pub use saved::{MemoryObservation, ObservationSource, SavedVsDiscovered};
 pub use summary::{
     answer_over_summaries, index_summaries, summarize_directory, summarize_file, FileSummary,
 };
 pub use taste::{TasteRule, TasteStore};
+pub use usage::{AgentSessionMetrics, UsageLedger, UsageRecord};
 
 use thiserror::Error;
 

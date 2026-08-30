@@ -66,9 +66,15 @@ pub struct PkgSpec {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RegistryDistribution {
-    Npx { npx: PkgSpec },
-    Uvx { uvx: PkgSpec },
-    Binary { binary: HashMap<String, BinaryTarget> },
+    Npx {
+        npx: PkgSpec,
+    },
+    Uvx {
+        uvx: PkgSpec,
+    },
+    Binary {
+        binary: HashMap<String, BinaryTarget>,
+    },
 }
 
 /// A platform binary target (`binary.<platform>` in the registry).
@@ -256,7 +262,12 @@ impl RegistryPolicy {
 
 fn is_open_license(license: &str) -> bool {
     let l = license.to_ascii_lowercase();
-    l.contains("apache") || l.contains("mit") || l.contains("gpl") || l.contains("agpl") || l.contains("bsd") || l.contains("mpl")
+    l.contains("apache")
+        || l.contains("mit")
+        || l.contains("gpl")
+        || l.contains("agpl")
+        || l.contains("bsd")
+        || l.contains("mpl")
 }
 
 impl RegistryIndex {
@@ -317,11 +328,17 @@ impl RegistryIndex {
             let auth = auth_from_license(&a.license);
             let (dist, desc) = match &a.distribution {
                 RegistryDistribution::Npx { npx } => (
-                    Distribution::Npx { package: npx.package.clone(), args: npx.args.clone() },
+                    Distribution::Npx {
+                        package: npx.package.clone(),
+                        args: npx.args.clone(),
+                    },
                     with_env_note(a, &npx.env),
                 ),
                 RegistryDistribution::Uvx { uvx } => (
-                    Distribution::Uvx { package: uvx.package.clone(), args: uvx.args.clone() },
+                    Distribution::Uvx {
+                        package: uvx.package.clone(),
+                        args: uvx.args.clone(),
+                    },
                     with_env_note(a, &uvx.env),
                 ),
                 RegistryDistribution::Binary { binary } => {
@@ -330,7 +347,10 @@ impl RegistryIndex {
                         .map(|t| basename_cmd(&t.cmd))
                         .unwrap_or_else(|| basename_cmd(&a.id));
                     let args = t.map(|t| t.args.clone()).unwrap_or_default();
-                    (Distribution::Binary { command: cmd, args }, a.description.clone())
+                    (
+                        Distribution::Binary { command: cmd, args },
+                        a.description.clone(),
+                    )
                 }
             };
             let manifest = HarnessManifest {
@@ -389,7 +409,10 @@ fn auth_from_license(license: &str) -> AuthMode {
 }
 
 fn env_to_vec(env: &HashMap<String, String>) -> Vec<(String, String)> {
-    let mut v: Vec<(String, String)> = env.iter().map(|(k, val)| (k.clone(), val.clone())).collect();
+    let mut v: Vec<(String, String)> = env
+        .iter()
+        .map(|(k, val)| (k.clone(), val.clone()))
+        .collect();
     v.sort();
     v
 }
@@ -440,7 +463,9 @@ mod tests {
         assert!(idx.get("claude-acp").is_some());
 
         // Npx: version-pinned package resolves to a self-installing plan.
-        let plan = idx.install_plan("claude-acp", Platform::LinuxX86_64).unwrap();
+        let plan = idx
+            .install_plan("claude-acp", Platform::LinuxX86_64)
+            .unwrap();
         match plan.kind {
             InstallKind::Npx { package, .. } => {
                 assert_eq!(package, "@agentclientprotocol/claude-agent-acp@0.69.0");
@@ -451,8 +476,17 @@ mod tests {
         // Binary: platform-specific archive + cmd + sha256.
         let plan = idx.install_plan("devin", Platform::LinuxX86_64).unwrap();
         match plan.kind {
-            InstallKind::Binary { archive, cmd, sha256, args, .. } => {
-                assert_eq!(archive, "https://static.devin.ai/cli/3000.4.25/devin-linux.tar.gz");
+            InstallKind::Binary {
+                archive,
+                cmd,
+                sha256,
+                args,
+                ..
+            } => {
+                assert_eq!(
+                    archive,
+                    "https://static.devin.ai/cli/3000.4.25/devin-linux.tar.gz"
+                );
                 assert_eq!(cmd, "./bin/devin");
                 assert_eq!(args, vec!["acp"]);
                 assert_eq!(sha256, "abc");
@@ -469,7 +503,9 @@ mod tests {
         let idx: RegistryIndex = RegistryIndex::parse(FIXTURE).unwrap();
         let mut reg = LaunchRegistry::builtin();
         let before = reg.get("claude").cloned().unwrap();
-        assert!(matches!(&before.distribution, Distribution::Npx { package, .. } if package == "@agentclientprotocol/claude-agent-acp"));
+        assert!(
+            matches!(&before.distribution, Distribution::Npx { package, .. } if package == "@agentclientprotocol/claude-agent-acp")
+        );
 
         idx.merge_into(&mut reg, Platform::LinuxX86_64);
 
@@ -482,11 +518,15 @@ mod tests {
 
         // Cline's args survived the merge.
         let cline = reg.get("cline").unwrap();
-        assert!(matches!(&cline.distribution, Distribution::Npx { args, .. } if args == &vec!["--acp".to_string()]));
+        assert!(
+            matches!(&cline.distribution, Distribution::Npx { args, .. } if args == &vec!["--acp".to_string()])
+        );
 
         // Devin (binary) keeps a PATH command; the default (inbuilt) is untouched.
         let devin = reg.get("devin").unwrap();
-        assert!(matches!(&devin.distribution, Distribution::Binary { command, .. } if command == "devin"));
+        assert!(
+            matches!(&devin.distribution, Distribution::Binary { command, .. } if command == "devin")
+        );
         assert!(reg.default_manifest().unwrap().is_default);
     }
 
@@ -495,7 +535,10 @@ mod tests {
         let p = RegistryPolicy::builtin();
         assert_eq!(p.evaluate("opencode", "MIT"), PolicyVerdict::Allow);
         // Open license not on the allow-list still auto-allows.
-        assert_eq!(p.evaluate("some-new-open", "Apache-2.0"), PolicyVerdict::Allow);
+        assert_eq!(
+            p.evaluate("some-new-open", "Apache-2.0"),
+            PolicyVerdict::Allow
+        );
         // Proprietary off-list → ask.
         assert_eq!(p.evaluate("claude-acp", "proprietary"), PolicyVerdict::Ask);
         // Denylist wins.

@@ -46,10 +46,10 @@ fn spawned_mock_cli_full_handshake() {
         .prompt("hello mock", |_| everyaios_acp::PermissionDecision::allow())
         .expect("prompt turn over the real process");
     assert!(
-        outcome
-            .updates
+        outcome.updates.iter().any(|u| u
+            .content
             .iter()
-            .any(|u| u.content.iter().any(|c| c.text.contains("echo: hello mock"))),
+            .any(|c| c.text.contains("echo: hello mock"))),
         "expected echo update, got {:?}",
         outcome.updates
     );
@@ -70,15 +70,24 @@ fn live_claude_agent_acp_initialize() {
     // on PATH). Initialize needs no credentials, so this is a real spawn of
     // the official CLI without any subscription.
     let (command, args) = if which("claude").is_some() {
-        ("claude".to_string(), vec!["--protocol".to_string(), "acp".to_string()])
+        (
+            "claude".to_string(),
+            vec!["--protocol".to_string(), "acp".to_string()],
+        )
     } else {
         (
             "npx".to_string(),
-            vec!["-y".to_string(), "@agentclientprotocol/claude-agent-acp".to_string()],
+            vec![
+                "-y".to_string(),
+                "@agentclientprotocol/claude-agent-acp".to_string(),
+            ],
         )
     };
-    let Ok(transport) = ProcessTransport::spawn(&command, &args.iter().map(String::as_str).collect::<Vec<_>>(), &[])
-    else {
+    let Ok(transport) = ProcessTransport::spawn(
+        &command,
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+        &[],
+    ) else {
         eprintln!("skipped: {command} not resolvable");
         return;
     };

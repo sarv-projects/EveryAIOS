@@ -80,7 +80,9 @@ pub fn run_outcome_check(check: &OutcomeCheck, base_dir: &Path) -> OutcomeCheckR
             }
         }
         OutcomeCheck::FileHash {
-            algorithm, expected, ..
+            algorithm,
+            expected,
+            ..
         } => match std::fs::read(&path) {
             Ok(bytes) => {
                 let hex = match algorithm {
@@ -191,8 +193,16 @@ pub fn verify_with_policy(
         } else {
             passed as f32 / total as f32
         },
-        constraints: if policy_violations.is_empty() { 1.0 } else { 0.0 },
-        safety: if policy_violations.is_empty() { 1.0 } else { 0.0 },
+        constraints: if policy_violations.is_empty() {
+            1.0
+        } else {
+            0.0
+        },
+        safety: if policy_violations.is_empty() {
+            1.0
+        } else {
+            0.0
+        },
     };
 
     VerificationReport {
@@ -217,10 +227,7 @@ mod tests {
     /// A unique, per-test temp dir (parallel-safe).
     fn temp_dir() -> PathBuf {
         let n = DIR_SEQ.fetch_add(1, Ordering::SeqCst);
-        std::env::temp_dir().join(format!(
-            "everyaios-eval-{}-{n}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("everyaios-eval-{}-{n}", std::process::id()))
     }
 
     fn manifest(checks: Vec<OutcomeCheck>) -> TaskManifest {
@@ -241,7 +248,12 @@ mod tests {
         let path = dir.join("out.txt");
         fs::write(&path, "hello").unwrap();
 
-        let r = run_outcome_check(&OutcomeCheck::FileExists { path: "out.txt".into() }, &dir);
+        let r = run_outcome_check(
+            &OutcomeCheck::FileExists {
+                path: "out.txt".into(),
+            },
+            &dir,
+        );
         assert!(r.passed);
         let r2 = run_outcome_check(
             &OutcomeCheck::FileExists {

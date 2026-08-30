@@ -92,17 +92,16 @@ pub fn xlsx_edit_request(
 ) -> Result<serde_json::Value, String> {
     // Validate the address up-front so the card never shows a bad ref.
     parse_ref(&address).map_err(|e| e.to_string())?;
-    let path = crate::control::floor_user_file(&path)?.display().to_string();
+    let path = crate::control::floor_user_file(&path)?
+        .display()
+        .to_string();
 
     let decision = DecisionPackage::new(format!("Set {address} to {value}"))
         .with_risk(RiskLevel::Medium)
         .with_paths(vec![path.clone()]);
 
     let args_hash = edit_args_hash(&path, &sheet, &address, &value);
-    let mut guard = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     let verdict = guard.evaluate(
         "office",
         "everyaios",
@@ -151,16 +150,15 @@ pub fn xlsx_edit_commit(
     value: String,
     ticket_id: String,
 ) -> Result<serde_json::Value, String> {
-    let path = crate::control::floor_user_file(&path)?.display().to_string();
+    let path = crate::control::floor_user_file(&path)?
+        .display()
+        .to_string();
     let (_, cell) = parse_ref(&address).map_err(|e| e.to_string())?;
 
     // The ticket is mandatory: no ticket, no mutation. `use_ticket` enforces
     // approval + single-use + args-hash match in one call.
     let args_hash = edit_args_hash(&path, &sheet, &address, &value);
-    let mut guard = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     guard
         .use_ticket(&ticket_id, &args_hash)
         .map_err(|e| format!("edit ticket not consumable: {e}"))?;
@@ -207,16 +205,15 @@ pub fn xlsx_batch_request(
     sheet: String,
     batch: WorkbookCommandBatch,
 ) -> Result<serde_json::Value, String> {
-    let path = crate::control::floor_user_file(&path)?.display().to_string();
+    let path = crate::control::floor_user_file(&path)?
+        .display()
+        .to_string();
     let decision = DecisionPackage::new(batch.summary.clone())
         .with_risk(RiskLevel::Medium)
         .with_paths(vec![path.clone()]);
 
     let args_hash = batch_args_hash(&sheet, &batch);
-    let mut guard = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     let verdict = guard.evaluate(
         "office",
         "everyaios",
@@ -259,12 +256,11 @@ pub fn xlsx_batch_commit(
     batch: WorkbookCommandBatch,
     ticket_id: String,
 ) -> Result<serde_json::Value, String> {
-    let path = crate::control::floor_user_file(&path)?.display().to_string();
+    let path = crate::control::floor_user_file(&path)?
+        .display()
+        .to_string();
     let args_hash = batch_args_hash(&sheet, &batch);
-    let mut guard = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     guard
         .use_ticket(&ticket_id, &args_hash)
         .map_err(|e| format!("batch ticket not consumable: {e}"))?;
@@ -302,12 +298,9 @@ fn atomic_write(path: &str, bytes: &[u8]) -> Result<(), std::io::Error> {
     let dir = p.parent().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no parent")
     })?;
-    let file_name = p
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name")
-        })?;
+    let file_name = p.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name")
+    })?;
     let tmp = dir.join(format!(".{file_name}.tmp-{}", std::process::id()));
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, p)
@@ -332,8 +325,7 @@ pub fn xlsx_pivot(
         "count" => PivotAgg::Count,
         _ => PivotAgg::Avg,
     };
-    let rows =
-        read::read_range(path.as_path(), &sheet, &range).map_err(|e| e.to_string())?;
+    let rows = read::read_range(path.as_path(), &sheet, &range).map_err(|e| e.to_string())?;
     let out = pivot_result(&rows, group_by, aggregate, agg);
     serde_json::to_value(&out).map_err(|e| e.to_string())
 }
@@ -370,7 +362,9 @@ fn batch_args_hash(sheet: &str, batch: &WorkbookCommandBatch) -> String {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     "office.xlsx_batch".hash(&mut h);
     sheet.hash(&mut h);
-    serde_json::to_string(batch).unwrap_or_default().hash(&mut h);
+    serde_json::to_string(batch)
+        .unwrap_or_default()
+        .hash(&mut h);
     format!("{:016x}", h.finish())
 }
 
@@ -424,8 +418,17 @@ mod tests {
             value: Some(Scalar::Number(6.0)),
         };
 
-        assert_eq!(batch_args_hash("Sheet1", &b1), batch_args_hash("Sheet1", &b1));
-        assert_ne!(batch_args_hash("Sheet1", &b1), batch_args_hash("Sheet2", &b1));
-        assert_ne!(batch_args_hash("Sheet1", &b1), batch_args_hash("Sheet1", &b2));
+        assert_eq!(
+            batch_args_hash("Sheet1", &b1),
+            batch_args_hash("Sheet1", &b1)
+        );
+        assert_ne!(
+            batch_args_hash("Sheet1", &b1),
+            batch_args_hash("Sheet2", &b1)
+        );
+        assert_ne!(
+            batch_args_hash("Sheet1", &b1),
+            batch_args_hash("Sheet1", &b2)
+        );
     }
 }

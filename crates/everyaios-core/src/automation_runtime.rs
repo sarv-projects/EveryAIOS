@@ -321,8 +321,8 @@ mod tests {
 
     #[test]
     fn connector_writes_emit_audit_when_hook_attached() {
-        use std::sync::Mutex;
         use std::sync::Arc;
+        use std::sync::Mutex;
 
         #[derive(Default)]
         struct FakeAudit(Arc<Mutex<Vec<String>>>);
@@ -348,7 +348,10 @@ mod tests {
             });
         assert!(runtime.run(&automation, true).is_ok());
         let ev = events.lock().unwrap();
-        assert_eq!(ev.as_slice(), &["automation.email_sent", "automation.calendar_created"]);
+        assert_eq!(
+            ev.as_slice(),
+            &["automation.email_sent", "automation.calendar_created"]
+        );
     }
 
     #[test]

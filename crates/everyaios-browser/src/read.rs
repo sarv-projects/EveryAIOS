@@ -100,11 +100,8 @@ pub fn read_http(
     let markdown = apply_options(&markdown, opts);
     // G9 read-cleaner (P2.11): strip ad/tracker links + consent walls with the
     // deterministic default filter set before the text reaches the model.
-    let cleaned = crate::content::clean_markdown(
-        &crate::content::default_filter_set(),
-        base_url,
-        &markdown,
-    );
+    let cleaned =
+        crate::content::clean_markdown(&crate::content::default_filter_set(), base_url, &markdown);
     Ok(HttpReadResult {
         markdown: cleaned.text,
         source,

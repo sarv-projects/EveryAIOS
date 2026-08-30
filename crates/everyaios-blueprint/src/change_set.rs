@@ -116,10 +116,10 @@ impl ChangeSet {
         let Some(rec) = self.get(id) else {
             return false;
         };
-        rec.change
-            .depends_on
-            .iter()
-            .all(|d| self.get(d).map_or(false, |r| r.state == ChangeState::Committed))
+        rec.change.depends_on.iter().all(|d| {
+            self.get(d)
+                .map_or(false, |r| r.state == ChangeState::Committed)
+        })
     }
 
     /// The ready, not-yet-committed changes in plan order (the executor's
@@ -135,14 +135,23 @@ impl ChangeSet {
     /// Commit a change (idempotent by key: re-committing the same key is a
     /// no-op — the "no duplicate" half of the acceptance test).
     pub fn commit(&mut self, id: &str, at_ms: u64) -> Result<ChangeState, String> {
-        if self
-            .changes
-            .iter()
-            .any(|r| r.change.idempotency_key == self.get(id).map(|r| r.change.idempotency_key.clone()).unwrap_or_default() && r.state == ChangeState::Committed && r.change.id != id)
-        {
-            return Err(format!("idempotency key already committed (duplicate prevented)"));
+        if self.changes.iter().any(|r| {
+            r.change.idempotency_key
+                == self
+                    .get(id)
+                    .map(|r| r.change.idempotency_key.clone())
+                    .unwrap_or_default()
+                && r.state == ChangeState::Committed
+                && r.change.id != id
+        }) {
+            return Err(format!(
+                "idempotency key already committed (duplicate prevented)"
+            ));
         }
-        let idx = *self.by_id.get(id).ok_or_else(|| format!("unknown change `{id}`"))?;
+        let idx = *self
+            .by_id
+            .get(id)
+            .ok_or_else(|| format!("unknown change `{id}`"))?;
         if !self.ready(id) {
             return Err(format!("change `{id}` has uncommitted dependencies"));
         }
@@ -229,8 +238,10 @@ mod tests {
     #[test]
     fn ready_queue_respects_dependencies() {
         let mut cs = ChangeSet::new();
-        cs.plan(change("a", EffectClass::Reversible, vec![], "k-a")).unwrap();
-        cs.plan(change("b", EffectClass::Reversible, vec!["a"], "k-b")).unwrap();
+        cs.plan(change("a", EffectClass::Reversible, vec![], "k-a"))
+            .unwrap();
+        cs.plan(change("b", EffectClass::Reversible, vec!["a"], "k-b"))
+            .unwrap();
         // Only a is ready first.
         let q: Vec<&str> = cs.ready_queue().iter().map(|c| c.id.as_str()).collect();
         assert_eq!(q, vec!["a"]);
@@ -242,8 +253,10 @@ mod tests {
     #[test]
     fn commit_requires_ready_deps() {
         let mut cs = ChangeSet::new();
-        cs.plan(change("a", EffectClass::Reversible, vec![], "k-a")).unwrap();
-        cs.plan(change("b", EffectClass::Reversible, vec!["a"], "k-b")).unwrap();
+        cs.plan(change("a", EffectClass::Reversible, vec![], "k-a"))
+            .unwrap();
+        cs.plan(change("b", EffectClass::Reversible, vec!["a"], "k-b"))
+            .unwrap();
         assert!(cs.commit("b", 1).is_err());
         cs.commit("a", 1).unwrap();
         assert!(cs.commit("b", 2).is_ok());
@@ -252,9 +265,12 @@ mod tests {
     #[test]
     fn recover_rolls_back_reversible_and_reports_unrecoverable() {
         let mut cs = ChangeSet::new();
-        cs.plan(change("w", EffectClass::Reversible, vec![], "k-w")).unwrap();
-        cs.plan(change("g", EffectClass::Compensatable, vec![], "k-g")).unwrap();
-        cs.plan(change("del", EffectClass::Irreversible, vec![], "k-d")).unwrap();
+        cs.plan(change("w", EffectClass::Reversible, vec![], "k-w"))
+            .unwrap();
+        cs.plan(change("g", EffectClass::Compensatable, vec![], "k-g"))
+            .unwrap();
+        cs.plan(change("del", EffectClass::Irreversible, vec![], "k-d"))
+            .unwrap();
         cs.commit("w", 1).unwrap();
         cs.commit("g", 2).unwrap();
         cs.commit("del", 3).unwrap();
@@ -270,8 +286,10 @@ mod tests {
     #[test]
     fn idempotency_key_prevents_duplicate() {
         let mut cs = ChangeSet::new();
-        cs.plan(change("a", EffectClass::Reversible, vec![], "same-key")).unwrap();
-        cs.plan(change("b", EffectClass::Reversible, vec![], "same-key")).unwrap();
+        cs.plan(change("a", EffectClass::Reversible, vec![], "same-key"))
+            .unwrap();
+        cs.plan(change("b", EffectClass::Reversible, vec![], "same-key"))
+            .unwrap();
         cs.commit("a", 1).unwrap();
         assert!(cs.commit("b", 2).is_err()); // duplicate key — refused
     }

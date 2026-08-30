@@ -78,6 +78,7 @@ pub fn vault_key_remove(
 ) -> Result<serde_json::Value, String> {
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
     let ring = KeyRing::new(&vault);
-    ring.delete_key(&provider, &key_id).map_err(|e| e.to_string())?;
+    ring.delete_key(&provider, &key_id)
+        .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "ok": true, "provider": provider, "keyId": key_id }))
 }

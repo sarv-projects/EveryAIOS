@@ -15,10 +15,7 @@ use crate::AppState;
 /// network destinations, web action) so the user can judge it at a glance.
 #[tauri::command]
 pub fn guard_tickets(state: State<'_, AppState>) -> Result<Vec<PendingGuardCard>, String> {
-    let svc = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let svc = state.guard_service.lock().map_err(|e| e.to_string())?;
     Ok(svc.pending())
 }
 
@@ -45,10 +42,7 @@ pub fn guard_respond(
             "Guard-2 approvals only from the dedicated approval window ({GUARD_WINDOW_LABEL}); main renderer cannot approve"
         ));
     }
-    let mut svc = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
     match action.as_str() {
         "approve" => Ok(svc.approve_with_nonce(&ticket_id, &approval_nonce)),
         "reject" => Ok(svc.reject_with_nonce(&ticket_id, &approval_nonce)),
@@ -70,20 +64,14 @@ pub fn guard_open_window(app: AppHandle) -> Result<(), String> {
 pub fn guard_receipts(
     state: State<'_, AppState>,
 ) -> Result<Vec<everyaios_guard::GuardReceipt>, String> {
-    let svc = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let svc = state.guard_service.lock().map_err(|e| e.to_string())?;
     Ok(svc.receipts())
 }
 
 /// The current Guard-2 policy + profile + estop summary (Settings guard panel).
 #[tauri::command]
 pub fn guard_policy(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let mut svc = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
     svc.handle("guard/policy", &serde_json::json!({}))
         .map_err(|e| e.to_string())
 }
@@ -91,14 +79,8 @@ pub fn guard_policy(state: State<'_, AppState>) -> Result<serde_json::Value, Str
 /// Pull (estop) or reset the global emergency stop. `estop` blocks every
 /// subsequent privileged action until reset.
 #[tauri::command]
-pub fn guard_estop(
-    state: State<'_, AppState>,
-    pulled: bool,
-) -> Result<bool, String> {
-    let svc = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+pub fn guard_estop(state: State<'_, AppState>, pulled: bool) -> Result<bool, String> {
+    let svc = state.guard_service.lock().map_err(|e| e.to_string())?;
     if pulled {
         svc.estop().pull();
     } else {
@@ -168,10 +150,7 @@ pub fn guard_activity(
 
     // 2) Fallback: the in-memory approve/reject receipt trail (guard_receipts).
     if rows.is_empty() {
-        let svc = state
-            .guard_service
-            .lock()
-            .map_err(|e| e.to_string())?;
+        let svc = state.guard_service.lock().map_err(|e| e.to_string())?;
         use everyaios_guard::ReceiptAction;
         for r in svc.receipts().iter().rev().take(limit) {
             let approved = r.action == ReceiptAction::Approve;
@@ -201,14 +180,9 @@ pub struct MatrixCell {
 /// canonical capability×scope grid). Replaces the hardcoded `MATRIX` array in
 /// guard-panel.tsx.
 #[tauri::command]
-pub fn guard_permissions_matrix(
-    state: State<'_, AppState>,
-) -> Result<Vec<MatrixCell>, String> {
+pub fn guard_permissions_matrix(state: State<'_, AppState>) -> Result<Vec<MatrixCell>, String> {
     use everyaios_guard::{Operation, PolicyAction};
-    let svc = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let svc = state.guard_service.lock().map_err(|e| e.to_string())?;
     let policy = svc.policy();
 
     // Capabilities (rows) × scopes (columns), matching the UI's 5×5 grid.

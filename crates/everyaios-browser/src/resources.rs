@@ -29,7 +29,10 @@ impl ResourceDropPolicy {
     /// cleaner): major ad/tracker networks blocked, media + fonts dropped.
     pub fn lean() -> Self {
         Self {
-            block_ads: DEFAULT_AD_NETWORKS.iter().map(|d| Domain(d.to_string())).collect(),
+            block_ads: DEFAULT_AD_NETWORKS
+                .iter()
+                .map(|d| Domain(d.to_string()))
+                .collect(),
             drop_media: true,
             drop_fonts: true,
         }
@@ -74,15 +77,7 @@ const DEFAULT_AD_NETWORKS: &[&str] = &[
 ];
 
 const MEDIA_EXTENSIONS: &[&str] = &[
-    ".mp4",
-    ".webm",
-    ".ogg",
-    ".mp3",
-    ".wav",
-    ".m4a",
-    ".avi",
-    ".mov",
-    ".m3u8",
+    ".mp4", ".webm", ".ogg", ".mp3", ".wav", ".m4a", ".avi", ".mov", ".m3u8",
 ];
 
 const FONT_EXTENSIONS: &[&str] = &[".woff", ".woff2", ".ttf", ".otf", ".eot"];

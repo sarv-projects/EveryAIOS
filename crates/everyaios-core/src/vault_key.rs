@@ -256,7 +256,8 @@ fn open_keyfile(path: &Path) -> Result<ResolvedVaultKey, VaultKeyError> {
     }
     // Prefer the thread-local unlock passphrase (bugfix 16 — never leaked into
     // the environment); env fallback remains for env-driven/test flows.
-    let pass = UNLOCK_PASSPHRASE.with(|c| c.borrow().clone())
+    let pass = UNLOCK_PASSPHRASE
+        .with(|c| c.borrow().clone())
         .or_else(|| std::env::var("EVERYAIOS_VAULT_PASSPHRASE").ok())
         .ok_or(VaultKeyError::NeedsSetup)?;
     let salt = unhex(&rec.salt_hex).map_err(VaultKeyError::Kdf)?;

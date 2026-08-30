@@ -18,7 +18,10 @@ pub type AnnotationStorage = BTreeMap<String, String>;
 /// Write every storage entry onto its matching AcroForm field (`/V`).
 /// Returns `(updated, missing)`: fields updated vs. names in storage with no
 /// matching form field. A storage write must never create fields.
-pub fn persist_storage(doc: &mut Document, storage: &AnnotationStorage) -> Result<(u32, u32), PdfError> {
+pub fn persist_storage(
+    doc: &mut Document,
+    storage: &AnnotationStorage,
+) -> Result<(u32, u32), PdfError> {
     let mut updated = 0u32;
     let mut missing = 0u32;
 
@@ -29,7 +32,10 @@ pub fn persist_storage(doc: &mut Document, storage: &AnnotationStorage) -> Resul
             let dotted = format!(".{name}");
             if field_name == *name || field_name.ends_with(&dotted) {
                 let d = doc.get_dictionary_mut(id)?;
-                d.set("V", Object::String(value.as_bytes().to_vec(), lopdf::StringFormat::Literal));
+                d.set(
+                    "V",
+                    Object::String(value.as_bytes().to_vec(), lopdf::StringFormat::Literal),
+                );
                 found = true;
                 updated += 1;
                 break;
@@ -97,7 +103,8 @@ mod tests {
     #[test]
     fn empty_storage_is_noop() {
         let mut d = Document::with_version("1.7");
-        let (updated, missing) = persist_storage(&mut d, &AnnotationStorage::new()).unwrap_or((0, 0));
+        let (updated, missing) =
+            persist_storage(&mut d, &AnnotationStorage::new()).unwrap_or((0, 0));
         assert_eq!(updated, 0);
         assert_eq!(missing, 0);
     }

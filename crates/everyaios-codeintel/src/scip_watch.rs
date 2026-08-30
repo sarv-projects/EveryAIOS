@@ -89,8 +89,7 @@ pub fn scan_dir(
     };
 
     // Remove artifacts that no longer exist.
-    let live: std::collections::HashSet<String> =
-        found.iter().map(|p| rel(p, root)).collect();
+    let live: std::collections::HashSet<String> = found.iter().map(|p| rel(p, root)).collect();
     let removed: Vec<String> = state
         .artifacts
         .keys()
@@ -185,7 +184,10 @@ fn merge_into(target: &mut SemanticIndex, src: SemanticIndex) {
 }
 
 /// Convenience: full build from a directory (fresh state + fresh index).
-pub fn build_index(root: &Path, recursive: bool) -> (SemanticIndex, ScipWatchState, ScipScanReport) {
+pub fn build_index(
+    root: &Path,
+    recursive: bool,
+) -> (SemanticIndex, ScipWatchState, ScipScanReport) {
     let mut state = ScipWatchState::default();
     let mut index = SemanticIndex::default();
     let report = scan_dir(root, recursive, &mut state, &mut index);
@@ -243,7 +245,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let scip_path = root.join("index.scip");
-        std::fs::write(&scip_path, scip_bytes("rust", "src/main.rs", "scip-rust . pkg \"main\"")).unwrap();
+        std::fs::write(
+            &scip_path,
+            scip_bytes("rust", "src/main.rs", "scip-rust . pkg \"main\""),
+        )
+        .unwrap();
 
         // Pass 1: added.
         let mut state = ScipWatchState::default();
@@ -258,7 +264,11 @@ mod tests {
         assert_eq!(r2.added, 0);
 
         // Change content → changed re-ingest.
-        std::fs::write(&scip_path, scip_bytes("rust", "src/main.rs", "scip-rust . pkg \"other\"")).unwrap();
+        std::fs::write(
+            &scip_path,
+            scip_bytes("rust", "src/main.rs", "scip-rust . pkg \"other\""),
+        )
+        .unwrap();
         let r3 = scan_dir(&root, false, &mut state, &mut index);
         assert_eq!(r3.changed, 1);
         assert!(index.symbols.iter().any(|s| s.name.contains("other")));
@@ -277,7 +287,11 @@ mod tests {
         let root = std::env::temp_dir().join(format!("scip-watch-rec-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("crates/a")).unwrap();
-        std::fs::write(root.join("index.scip"), scip_bytes("rust", "top.rs", "scip-rust . pkg \"top\"")).unwrap();
+        std::fs::write(
+            root.join("index.scip"),
+            scip_bytes("rust", "top.rs", "scip-rust . pkg \"top\""),
+        )
+        .unwrap();
         std::fs::write(
             root.join("crates/a/index.scip"),
             scip_bytes("rust", "a.rs", "scip-rust . pkg \"a\" \"fn\" \"a_fun\""),

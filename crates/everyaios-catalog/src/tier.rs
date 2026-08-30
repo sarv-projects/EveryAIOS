@@ -92,7 +92,8 @@ mod tests {
             "pricing": { "prompt": 0.000015, "completion": 0.000075 },
             "top_provider": { "context_length": 200000, "max_completion_tokens": 32000 },
             "supported_parameters": { "tools": true }
-        })).unwrap()
+        }))
+        .unwrap()
     }
 
     #[test]
@@ -101,11 +102,21 @@ mod tests {
         let over = ProviderOverride {
             id: "bedrock/claude-opus-4-6".into(),
             base_model: "anthropic/claude-opus-4-6".into(),
-            pricing: crate::model::Pricing { prompt: 0.00002, completion: 0.0001, ..Default::default() },
-            top_provider: crate::model::TopProvider { max_completion_tokens: 16000, ..Default::default() },
+            pricing: crate::model::Pricing {
+                prompt: 0.00002,
+                completion: 0.0001,
+                ..Default::default()
+            },
+            top_provider: crate::model::TopProvider {
+                max_completion_tokens: 16000,
+                ..Default::default()
+            },
             deprecated: false,
         };
-        let r = ResolvedModel { base, override_: Some(over) };
+        let r = ResolvedModel {
+            base,
+            override_: Some(over),
+        };
         assert_eq!(r.pricing().prompt, 0.00002); // override wins
         assert_eq!(r.top_provider().max_completion_tokens, 16000);
         assert!(r.supports_tools()); // capability from the base
@@ -127,8 +138,13 @@ mod tests {
             base_model: Some("anthropic/claude-opus-4-6".into()),
             ..lab()
         };
-        let v = validate_tiers(&[lab_entry, missing, dangling, ok], &["anthropic/claude-opus-4-6"]);
-        assert!(v.iter().any(|s| s.contains("bedrock/claude-opus-4-6") && s.contains("no base_model")));
+        let v = validate_tiers(
+            &[lab_entry, missing, dangling, ok],
+            &["anthropic/claude-opus-4-6"],
+        );
+        assert!(v
+            .iter()
+            .any(|s| s.contains("bedrock/claude-opus-4-6") && s.contains("no base_model")));
         assert!(v.iter().any(|s| s.contains("ghost/x")));
     }
 }

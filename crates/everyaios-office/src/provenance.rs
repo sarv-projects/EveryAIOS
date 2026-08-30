@@ -50,7 +50,11 @@ pub struct DocumentAsset {
 }
 
 impl DocumentAsset {
-    pub fn new(media_type: impl Into<String>, source_hash: Option<String>, extracted_hash: impl Into<String>) -> Self {
+    pub fn new(
+        media_type: impl Into<String>,
+        source_hash: Option<String>,
+        extracted_hash: impl Into<String>,
+    ) -> Self {
         Self {
             source_uri: None,
             media_type: media_type.into(),
@@ -73,7 +77,14 @@ impl DocumentAsset {
 
     /// Record one mutate step. Mutate advances the extracted hash; render
     /// never does (the honest boundary).
-    pub fn record_mutation(&mut self, version: u64, at_ms: u64, by: &str, what: &str, extracted_hash: &str) {
+    pub fn record_mutation(
+        &mut self,
+        version: u64,
+        at_ms: u64,
+        by: &str,
+        what: &str,
+        extracted_hash: &str,
+    ) {
         self.versions.push(AssetVersion {
             version,
             at_ms,
@@ -97,7 +108,11 @@ mod tests {
 
     #[test]
     fn ingest_mutate_render_distinct() {
-        let mut a = DocumentAsset::new("application/vnd.openxmlformats-officedocument.wordprocessingml.document", Some("src-hash".to_string()), "h1");
+        let mut a = DocumentAsset::new(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            Some("src-hash".to_string()),
+            "h1",
+        );
         a.record_mutation(1, 100, "agent-x", "patch paragraph 3", "h2");
         assert_eq!(a.extracted_hash, "h2");
         assert_eq!(a.versions.len(), 1);
@@ -112,7 +127,8 @@ mod tests {
 
     #[test]
     fn legacy_converter_recorded() {
-        let a = DocumentAsset::new("text/markdown", None, "h").with_converter(Converter::Legacy(LegacyKind::Doc));
+        let a = DocumentAsset::new("text/markdown", None, "h")
+            .with_converter(Converter::Legacy(LegacyKind::Doc));
         assert!(matches!(a.converter, Converter::Legacy(LegacyKind::Doc)));
     }
 

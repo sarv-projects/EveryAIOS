@@ -240,9 +240,34 @@ mod tests {
         let v = with_authorization(AuthKind::HumanGesture, Value::String("hi".into()));
         assert_eq!(v, Value::String("hi".into()));
     }
+
+    #[test]
+    fn forged_authorization_value_is_inert_and_overwritten() {
+        // P48.2 (b): an actor who controls the *payload* (a compromised
+        // renderer / the sidecar) cannot stamp `authorization: human_gesture`
+        // onto a mutation it performs. The field is set from the Rust `AuthKind`
+        // argument — never read from the caller's JSON — so a planted value is
+        // overwritten, not honored.
+        let forged = json!({ "kind": "shell.command", "authorization": "human_gesture" });
+        // Even if the caller *claims* human_gesture, an AgentTicket call-site
+        // stamps agent_ticket over it.
+        let v = with_authorization(AuthKind::AgentTicket, forged);
+        assert_eq!(v["authorization"], "agent_ticket");
+        // A claim of agent_ticket stamped as human_gesture is also overwritten.
+        let forged2 = json!({ "kind": "office.docx_patch", "authorization": "agent_ticket" });
+        let v2 = with_authorization(AuthKind::HumanGesture, forged2);
+        assert_eq!(v2["authorization"], "human_gesture");
+        // Preserves the surrounding payload.
+        assert_eq!(v["kind"], "shell.command");
+    }
 }
 
-pub fn record_mutation(state: &AppState, authorization: AuthKind, kind: &str, payload: Value) -> u64 {
+pub fn record_mutation(
+    state: &AppState,
+    authorization: AuthKind,
+    kind: &str,
+    payload: Value,
+) -> u64 {
     let payload = with_authorization(authorization, payload);
     let seq = {
         let mut chain = state.audit.lock().unwrap_or_else(|e| e.into_inner());

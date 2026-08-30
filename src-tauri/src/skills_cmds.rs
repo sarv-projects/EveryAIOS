@@ -36,12 +36,8 @@ pub const STORE_INDEX_SIGNATURE_B64: &str =
 
 /// The capability floor a skill may not exceed (mirrors
 /// `everyaios_guard::skillstore::RUNTIME_CAPABILITY_ALLOWLIST`).
-pub const RUNTIME_CAPABILITY_ALLOWLIST: &[&str] = &[
-    "fs.read",
-    "fs.write",
-    "tool.mcp",
-    "tool.connector",
-];
+pub const RUNTIME_CAPABILITY_ALLOWLIST: &[&str] =
+    &["fs.read", "fs.write", "tool.mcp", "tool.connector"];
 
 /// Resolve the skill-store root. Prefer `EVERYAIOS_SKILLS_DIR`; fall back to
 /// the blueprint default home (`~/.everyaios/skills`).
@@ -86,20 +82,14 @@ fn verify_bundled() -> Result<Vec<everyaios_guard::skillstore::SkillRow>, String
 fn installed_names() -> std::collections::BTreeSet<String> {
     let store = everyaios_blueprint::SkillStore::new(skills_root());
     match store.scan() {
-        Ok(skills) => skills
-            .into_iter()
-            .map(|s| s.manifest.name)
-            .collect(),
+        Ok(skills) => skills.into_iter().map(|s| s.manifest.name).collect(),
         Err(_) => std::collections::BTreeSet::new(),
     }
 }
 
 /// doc-75 sha-pin integrity check: has the installed skill's on-disk bytes
 /// drifted from its install-time pin? `None` = not present on disk / no pin.
-fn skill_tampered(
-    store: &everyaios_blueprint::SkillStore,
-    id: &str,
-) -> Option<bool> {
+fn skill_tampered(store: &everyaios_blueprint::SkillStore, id: &str) -> Option<bool> {
     let path = store.root().join(id).join("SKILL.md");
     let bytes = std::fs::read(&path).ok()?;
     store.is_tampered(id, &bytes)
@@ -173,7 +163,12 @@ pub fn skills_install(id: String) -> Result<serde_json::Value, String> {
     let path = store.save(&skill, true).map_err(|e| e.to_string())?;
     // doc-75 sha-pinned marketplace model: pin the skill to the exact bytes we
     // wrote, so any later on-disk mutation is detected (never silently trusted).
-    store.pin(row.id.as_str(), "everyaios-store", row.version.as_str(), skill.to_skill_md().as_bytes());
+    store.pin(
+        row.id.as_str(),
+        "everyaios-store",
+        row.version.as_str(),
+        skill.to_skill_md().as_bytes(),
+    );
     Ok(serde_json::json!({
         "id": row.id,
         "name": row.name,
@@ -231,7 +226,9 @@ mod tests {
                 .to_string(),
             signature_b64: STORE_INDEX_SIGNATURE_B64.to_string(),
         };
-        assert!(everyaios_guard::skillstore::verify_skill_index(&bad, STORE_PUBLIC_KEY_B64).is_err());
+        assert!(
+            everyaios_guard::skillstore::verify_skill_index(&bad, STORE_PUBLIC_KEY_B64).is_err()
+        );
     }
 }
 

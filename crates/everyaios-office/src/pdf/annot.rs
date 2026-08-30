@@ -12,11 +12,7 @@ enum AnnotsLoc {
     Missing(ObjectId),
 }
 
-fn append_annotation(
-    doc: &mut Document,
-    page: u32,
-    annot: Object,
-) -> Result<(), PdfError> {
+fn append_annotation(doc: &mut Document, page: u32, annot: Object) -> Result<(), PdfError> {
     let pages: Vec<ObjectId> = doc.page_iter().collect();
     let page_id = pages
         .get((page as usize).saturating_sub(1))
@@ -130,7 +126,10 @@ mod tests {
         let resources_id = doc.add_object(dictionary! {
             "Font" => dictionary! { "F1" => font_id },
         });
-        let content = lopdf::Stream::new(dictionary! {}, b"BT /F1 12 Tf 72 720 Td (Hello) Tj ET".to_vec());
+        let content = lopdf::Stream::new(
+            dictionary! {},
+            b"BT /F1 12 Tf 72 720 Td (Hello) Tj ET".to_vec(),
+        );
         let content_id = doc.add_object(content);
         let page_id = doc.add_object(dictionary! {
             "Type" => "Page",

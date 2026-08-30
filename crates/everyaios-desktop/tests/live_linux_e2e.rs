@@ -97,7 +97,11 @@ fn live_x11_list_capture_ocr_act_verify() {
 
     // 4. OCR the capture — the fixture text must be readable.
     let words = tesseract.ocr(&see.png);
-    let joined: String = words.iter().map(|w| w.text.clone()).collect::<Vec<_>>().join(" ");
+    let joined: String = words
+        .iter()
+        .map(|w| w.text.clone())
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
         joined.contains("E9") || joined.contains("OK") || joined.contains("hello"),
         "OCR did not read the fixture text, got: {joined:?}"
@@ -108,13 +112,21 @@ fn live_x11_list_capture_ocr_act_verify() {
     let hit = locate_phrase(&words, "GO");
     let (cx, cy) = match hit {
         VisionHit::Point { x, y } => (x, y),
-        VisionHit::RegionCenter { x, y, width, height } => {
-            (x + width as i32 / 2, y + height as i32 / 2)
-        }
+        VisionHit::RegionCenter {
+            x,
+            y,
+            width,
+            height,
+        } => (x + width as i32 / 2, y + height as i32 / 2),
         VisionHit::NotFound => panic!("GO button not found via OCR (words: {joined:?})"),
     };
     backend
-        .act(target, &ActKind::ActivateWindow { window_id: target.id })
+        .act(
+            target,
+            &ActKind::ActivateWindow {
+                window_id: target.id,
+            },
+        )
         .expect("activate");
     std::thread::sleep(std::time::Duration::from_millis(300));
     // ActKind::Click takes window-relative coords (the backend adds the
@@ -130,7 +142,11 @@ fn live_x11_list_capture_ocr_act_verify() {
         .see(target, Region::full(target.width, target.height))
         .expect("see2");
     let words2 = tesseract.ocr(&see2.png);
-    let joined2: String = words2.iter().map(|w| w.text.clone()).collect::<Vec<_>>().join(" ");
+    let joined2: String = words2
+        .iter()
+        .map(|w| w.text.clone())
+        .collect::<Vec<_>>()
+        .join(" ");
     assert!(
         joined2.contains("CLICKED"),
         "click did not flip the label, OCR after: {joined2:?}"

@@ -186,8 +186,7 @@ impl ModelsRuntime {
             .unwrap_or(Path::new("."))
             .join(format!("Modelfile.{name}"));
         let from_line = OLLAMA_MODELFILE.replace("{path}", &entry.path);
-        std::fs::write(&modelfile, from_line)
-            .map_err(|e| ModelsError::Io(e.to_string()))?;
+        std::fs::write(&modelfile, from_line).map_err(|e| ModelsError::Io(e.to_string()))?;
         let status = Command::new("ollama")
             .arg("create")
             .arg(name)

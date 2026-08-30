@@ -57,7 +57,10 @@ impl RouteFilters {
     }
 
     /// The surviving candidates (the router's hard-filter pass).
-    pub fn filter<'a>(&self, candidates: impl Iterator<Item = &'a ModelEntry>) -> Vec<&'a ModelEntry> {
+    pub fn filter<'a>(
+        &self,
+        candidates: impl Iterator<Item = &'a ModelEntry>,
+    ) -> Vec<&'a ModelEntry> {
         candidates.filter(|m| self.matches(m)).collect()
     }
 }
@@ -76,7 +79,11 @@ pub fn rejection_reasons(filters: &RouteFilters, m: &ModelEntry) -> Vec<String> 
         reasons.push("no reasoning".into());
     }
     if m.effective_context() < filters.min_context {
-        reasons.push(format!("context {} < {min}", m.effective_context(), min = filters.min_context));
+        reasons.push(format!(
+            "context {} < {min}",
+            m.effective_context(),
+            min = filters.min_context
+        ));
     }
     for mod_ in &filters.input_modalities {
         if !m.accepts_input_modality(mod_) {
@@ -95,7 +102,14 @@ pub fn rejection_reasons(filters: &RouteFilters, m: &ModelEntry) -> Vec<String> 
 mod tests {
     use super::*;
 
-    fn entry(tools: bool, structured: bool, reasoning: bool, context: u64, max_out: u64, input: &[&str]) -> ModelEntry {
+    fn entry(
+        tools: bool,
+        structured: bool,
+        reasoning: bool,
+        context: u64,
+        max_out: u64,
+        input: &[&str],
+    ) -> ModelEntry {
         serde_json::from_value(serde_json::json!({
             "id": "p/m",
             "context_length": context,
@@ -123,7 +137,11 @@ mod tests {
         assert!(f.matches(&capable));
         assert!(!f.matches(&no_tools));
         assert!(!f.matches(&small_ctx));
-        assert_eq!(f.filter(vec![&capable, &no_tools, &small_ctx].into_iter()).len(), 1);
+        assert_eq!(
+            f.filter(vec![&capable, &no_tools, &small_ctx].into_iter())
+                .len(),
+            1
+        );
         assert!(rejection_reasons(&f, &no_tools).contains(&"no tools".to_string()));
     }
 }

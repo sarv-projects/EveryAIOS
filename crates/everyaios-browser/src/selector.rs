@@ -36,10 +36,18 @@ pub struct SemanticTarget {
 
 impl SemanticTarget {
     pub fn role(role: impl Into<String>) -> Self {
-        Self { role: Some(role.into()), name: None, index: 0 }
+        Self {
+            role: Some(role.into()),
+            name: None,
+            index: 0,
+        }
     }
     pub fn name(name: impl Into<String>) -> Self {
-        Self { role: None, name: Some(name.into()), index: 0 }
+        Self {
+            role: None,
+            name: Some(name.into()),
+            index: 0,
+        }
     }
 }
 
@@ -71,7 +79,10 @@ impl SelectorResolver {
             .split_whitespace()
             .filter(|w| w.chars().count() >= 3)
             .max_by_key(|w| w.chars().count())?;
-        let loose = SemanticTarget { name: Some(word.to_string()), ..target.clone() };
+        let loose = SemanticTarget {
+            name: Some(word.to_string()),
+            ..target.clone()
+        };
         self.resolve(root, &loose)
     }
 
@@ -90,15 +101,15 @@ impl SelectorResolver {
         } else {
             format!("[role='{role}'][aria-label='{name}']")
         };
-        CssOrXPath { xpath, css, ref_id: node.ref_id.clone() }
+        CssOrXPath {
+            xpath,
+            css,
+            ref_id: node.ref_id.clone(),
+        }
     }
 }
 
-fn collect_matches<'a>(
-    node: &'a A11yNode,
-    target: &SemanticTarget,
-    out: &mut Vec<&'a A11yNode>,
-) {
+fn collect_matches<'a>(node: &'a A11yNode, target: &SemanticTarget, out: &mut Vec<&'a A11yNode>) {
     if matches(node, target) {
         out.push(node);
     }
@@ -118,7 +129,10 @@ fn matches(node: &A11yNode, target: &SemanticTarget) -> bool {
         if needle.is_empty() {
             return true;
         }
-        if !normalize(&node.name).to_lowercase().contains(&needle.to_lowercase()) {
+        if !normalize(&node.name)
+            .to_lowercase()
+            .contains(&needle.to_lowercase())
+        {
             return false;
         }
     }
@@ -165,7 +179,9 @@ mod tests {
     #[test]
     fn resolves_by_role_and_name() {
         let r = SelectorResolver;
-        let s = r.resolve(&tree(), &SemanticTarget::name("Save changes")).unwrap();
+        let s = r
+            .resolve(&tree(), &SemanticTarget::name("Save changes"))
+            .unwrap();
         assert!(s.xpath.contains("@role='button'"));
         assert!(s.xpath.contains("Save changes"));
         assert_eq!(s.ref_id.as_deref(), Some("e7"));
@@ -184,9 +200,15 @@ mod tests {
     #[test]
     fn role_only_and_index() {
         let r = SelectorResolver;
-        let s = r.resolve(&tree(), &SemanticTarget::role("textbox")).unwrap();
+        let s = r
+            .resolve(&tree(), &SemanticTarget::role("textbox"))
+            .unwrap();
         assert!(s.css.contains("textbox"));
-        let idx = SemanticTarget { role: Some("textbox".into()), name: None, index: 1 };
+        let idx = SemanticTarget {
+            role: Some("textbox".into()),
+            name: None,
+            index: 1,
+        };
         assert!(r.resolve(&tree(), &idx).is_none()); // only one textbox
     }
 }

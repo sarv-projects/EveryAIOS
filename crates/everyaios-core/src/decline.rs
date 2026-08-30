@@ -137,24 +137,55 @@ mod tests {
     #[test]
     fn teach_once_is_gated_on_simulator() {
         let g = DeclineGuard;
-        assert_eq!(g.claim("teach once", GateState::default()), DeclineVerdict::Gated { gate: ClaimGate::D });
-        assert_eq!(g.claim("teach once", GateState { d: true, ..Default::default() }), DeclineVerdict::Allowed);
+        assert_eq!(
+            g.claim("teach once", GateState::default()),
+            DeclineVerdict::Gated { gate: ClaimGate::D }
+        );
+        assert_eq!(
+            g.claim(
+                "teach once",
+                GateState {
+                    d: true,
+                    ..Default::default()
+                }
+            ),
+            DeclineVerdict::Allowed
+        );
     }
 
     #[test]
     fn control_plane_claim_needs_a_and_b() {
         let g = DeclineGuard;
         let none = GateState::default();
-        assert_eq!(g.claim("broadest control plane", none), DeclineVerdict::Gated { gate: ClaimGate::A });
-        let a_only = GateState { a: true, ..Default::default() };
-        assert_eq!(g.claim("broadest control plane", a_only), DeclineVerdict::Gated { gate: ClaimGate::B });
-        let ab = GateState { a: true, b: true, ..Default::default() };
-        assert_eq!(g.claim("broadest control plane", ab), DeclineVerdict::Allowed);
+        assert_eq!(
+            g.claim("broadest control plane", none),
+            DeclineVerdict::Gated { gate: ClaimGate::A }
+        );
+        let a_only = GateState {
+            a: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            g.claim("broadest control plane", a_only),
+            DeclineVerdict::Gated { gate: ClaimGate::B }
+        );
+        let ab = GateState {
+            a: true,
+            b: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            g.claim("broadest control plane", ab),
+            DeclineVerdict::Allowed
+        );
     }
 
     #[test]
     fn unlisted_claims_are_allowed() {
         let g = DeclineGuard;
-        assert_eq!(g.claim("local-first", GateState::default()), DeclineVerdict::Allowed);
+        assert_eq!(
+            g.claim("local-first", GateState::default()),
+            DeclineVerdict::Allowed
+        );
     }
 }

@@ -36,7 +36,8 @@ impl ExternalClient {
 
     /// Send one newline-delimited JSON-RPC request and read its response.
     fn rpc(&mut self, id: u64, method: &str, params: serde_json::Value) -> serde_json::Value {
-        let req = serde_json::json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
+        let req =
+            serde_json::json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
         {
             // Stdin is only readable while the child lives; write and flush.
             let stdin = self.child.stdin.as_mut().expect("stdin");
@@ -84,7 +85,10 @@ fn server_serves_external_client_snapshot_call() {
     // brittle exact count).
     let list = client.rpc(2, "tools/list", serde_json::json!({}));
     let tools = list["result"]["tools"].as_array().expect("tools array");
-    assert!(tools.len() >= 40, "real native catalog served to external client");
+    assert!(
+        tools.len() >= 40,
+        "real native catalog served to external client"
+    );
     for expected in ["snapshot", "search_web", "office_edit", "memory_retrieve"] {
         assert!(
             tools.iter().any(|t| t["name"] == expected),
@@ -104,9 +108,15 @@ fn server_serves_external_client_snapshot_call() {
         "structuredContent carried: {}",
         call
     );
-    assert_eq!(call["result"]["structuredContent"]["mode"], "standalone-test-harness");
+    assert_eq!(
+        call["result"]["structuredContent"]["mode"],
+        "standalone-test-harness"
+    );
     assert!(
-        call["result"]["structuredContent"]["catalog_size"].as_u64().unwrap_or(0) >= 40,
+        call["result"]["structuredContent"]["catalog_size"]
+            .as_u64()
+            .unwrap_or(0)
+            >= 40,
         "catalog_size reflects the real native catalog"
     );
 }

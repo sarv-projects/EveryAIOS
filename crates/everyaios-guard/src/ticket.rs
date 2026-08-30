@@ -559,10 +559,19 @@ mod tests {
         assert!(store.use_ticket(&id, "h1").is_ok());
         // Ask → mints Pending (human decision still required).
         let id2 = store.mint_gated(ticket("ask"), GateAction::Ask).unwrap();
-        assert!(matches!(store.use_ticket(&id2, "h1"), Err(TicketError::NotApproved)));
+        assert!(matches!(
+            store.use_ticket(&id2, "h1"),
+            Err(TicketError::NotApproved)
+        ));
         // Block → no ticket exists at all.
-        assert!(matches!(store.mint_gated(ticket("block"), GateAction::Block), Err(TicketError::Blocked)));
-        assert!(matches!(store.use_ticket("block", "h1"), Err(TicketError::Unknown)));
+        assert!(matches!(
+            store.mint_gated(ticket("block"), GateAction::Block),
+            Err(TicketError::Blocked)
+        ));
+        assert!(matches!(
+            store.use_ticket("block", "h1"),
+            Err(TicketError::Unknown)
+        ));
     }
 
     #[test]

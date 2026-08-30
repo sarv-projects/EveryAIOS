@@ -193,16 +193,28 @@ mod tests {
     fn ledger_has_all_11_tiers() {
         let l = MigrationLedger::current();
         assert_eq!(l.tiers.len(), 11);
-        for id in ["1a", "1b", "1c", "2a", "2b", "2c", "2d", "3a", "3b", "3c", "exit"] {
+        for id in [
+            "1a", "1b", "1c", "2a", "2b", "2c", "2d", "3a", "3b", "3c", "exit",
+        ] {
             assert!(l.tier(id).is_some(), "missing tier {id}");
         }
     }
 
     #[test]
     fn exit_criterion_is_strict() {
-        let partial = ExitCriterion { test_parity: true, warm_rss_mb: 200.0, no_plaintext_key: true, no_capability_regression: true };
+        let partial = ExitCriterion {
+            test_parity: true,
+            warm_rss_mb: 200.0,
+            no_plaintext_key: true,
+            no_capability_regression: true,
+        };
         assert!(!partial.met());
-        let met = ExitCriterion { test_parity: true, warm_rss_mb: 95.0, no_plaintext_key: true, no_capability_regression: true };
+        let met = ExitCriterion {
+            test_parity: true,
+            warm_rss_mb: 95.0,
+            no_plaintext_key: true,
+            no_capability_regression: true,
+        };
         assert!(met.met());
         assert!(met.render().contains("EXIT MET"));
     }

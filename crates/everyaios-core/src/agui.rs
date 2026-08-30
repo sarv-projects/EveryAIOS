@@ -79,7 +79,12 @@ impl AguiRelay {
 
     /// Forward one encoded envelope line to the UI (fire-and-forget).
     pub fn forward(&self, line: &str) {
-        if let Some(sink) = self.on_event.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        if let Some(sink) = self
+            .on_event
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+        {
             sink(line.to_string());
         }
     }
@@ -141,7 +146,12 @@ mod tests {
         let got2 = Arc::clone(&got);
         relay.attach(move |line| got2.lock().unwrap().push(line));
         relay.forward("{\"type\":\"done\"}");
-        relay.forward_envelope(&envelope("session_created", "s1", "t", serde_json::json!({})));
+        relay.forward_envelope(&envelope(
+            "session_created",
+            "s1",
+            "t",
+            serde_json::json!({}),
+        ));
         let lines = got.lock().unwrap();
         assert_eq!(lines.len(), 2);
         assert!(lines[1].contains("session_created"));
@@ -149,7 +159,12 @@ mod tests {
 
     #[test]
     fn unknown_event_types_still_decode() {
-        let line = encode_agui("brand_new_event_kind", "x", "t", serde_json::json!({ "a": 1 }));
+        let line = encode_agui(
+            "brand_new_event_kind",
+            "x",
+            "t",
+            serde_json::json!({ "a": 1 }),
+        );
         let env = decode_agui(&line).unwrap();
         assert_eq!(env.r#type, "brand_new_event_kind");
     }

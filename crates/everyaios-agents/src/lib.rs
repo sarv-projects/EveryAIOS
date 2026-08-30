@@ -27,7 +27,8 @@ mod tests {
     #[test]
     fn end_to_end_bundle_to_scope() {
         // General → Coder template → save → load → scopes.
-        let root = std::env::temp_dir().join(format!("everyaios-agents-e2e-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("everyaios-agents-e2e-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let reg = AgentRegistry::new(root.clone());
         let coder = AgentTemplate::Coder.bundle();

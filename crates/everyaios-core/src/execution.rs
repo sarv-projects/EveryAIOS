@@ -246,10 +246,7 @@ impl Execution {
     /// v3.39 — resolve (approve or reject) a pending approval. Clears the
     /// pending field and transitions back to Running on approval, or Failed
     /// on rejection. Returns the approval for the caller to forward.
-    pub fn resolve_pending_approval(
-        &mut self,
-        approved: bool,
-    ) -> Result<PendingApproval, String> {
+    pub fn resolve_pending_approval(&mut self, approved: bool) -> Result<PendingApproval, String> {
         let approval = self
             .pending_approval
             .take()
@@ -268,7 +265,14 @@ impl Execution {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// H3 — the in-memory Execution kernel, made durable for P48.4. The whole
+/// kernel serializes (plain `BTreeMap<String, Execution>` + counter + aliases)
+/// so a [`ExecutionKernel::snapshot`] is the crash-checkpoint and
+/// [`ExecutionKernel::recover`] is the resume-from-disk half. Recovery resumes
+/// from the last checkpoint and never replays a completed effect, because an
+/// execution's `checkpoint`/`state`/`idempotency_key` are persisted with it.
+#[serde(rename_all = "camelCase")]
 pub struct ExecutionKernel {
     executions: BTreeMap<String, Execution>,
     aliases: BTreeMap<String, String>,
@@ -378,6 +382,52 @@ impl ExecutionKernel {
         Ok(())
     }
 
+    /// P48.4 — serialize the whole kernel to a JSON string. This is the
+    /// crash-checkpoint payload: every execution, its phase/checkpoint,
+    /// pending approval, and the monotonic counter, all in one blob.
+    pub fn snapshot_to_string(&self) -> Result<String, String> {
+        serde_json::to_string_pretty(self).map_err(|e| format!("kernel snapshot: {e}"))
+    }
+
+    /// P48.4 — atomically persist the kernel to `path` via temp-file + rename
+    /// so a crash mid-write can never leave a torn checkpoint on disk.
+    pub fn persist_to(&self, path: &std::path::Path) -> Result<(), String> {
+        let data = self.snapshot_to_string()?;
+        let tmp = path.with_extension(format!("tmp{}x", std::process::id()));
+        std::fs::write(&tmp, data).map_err(|e| format!("write checkpoint: {e}"))?;
+        std::fs::rename(&tmp, path).map_err(|e| format!("swap checkpoint: {e}"))?;
+        Ok(())
+    }
+
+    /// P48.4 — restore a kernel from a persisted snapshot. Missing file is a
+    /// fresh kernel (no crash recovery needed); a corrupt snapshot is an error
+    /// (fail-closed: refuse to resume on ambiguous state).
+    pub fn recover_from(path: &std::path::Path) -> Result<Self, String> {
+        let data = match std::fs::read_to_string(path) {
+            Ok(d) => d,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self::default());
+            }
+            Err(e) => return Err(format!("read checkpoint: {e}")),
+        };
+        serde_json::from_str(&data).map_err(|e| format!("parse checkpoint: {e}"))
+    }
+
+    /// Number of live executions (drives the fork/replay surface + tests).
+    pub fn len(&self) -> usize {
+        self.executions.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.executions.is_empty()
+    }
+
+    /// Expose the monotonic counter so a recovered kernel continues numbering
+    /// (never reuses an id after a restart).
+    pub fn counter(&self) -> u64 {
+        self.counter
+    }
+
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
         match method {
             "execution/begin" => {
@@ -477,12 +527,22 @@ impl ExecutionKernel {
                     permissions: params
                         .get("permissions")
                         .and_then(Value::as_array)
-                        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_string)
+                                .collect()
+                        })
                         .unwrap_or_default(),
                     tools: params
                         .get("tools")
                         .and_then(Value::as_array)
-                        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_string)
+                                .collect()
+                        })
                         .unwrap_or_default(),
                     env_summary: params.get("env").cloned().unwrap_or(Value::Null),
                 };
@@ -655,24 +715,49 @@ mod tests {
 
     #[test]
     fn runtime_manifest_deterministic() {
-        let m1 = RuntimeManifest { model: "a".into(), provider: "p".into(), permissions: vec![], tools: vec![], env_summary: Value::Null };
-        let m2 = RuntimeManifest { model: "a".into(), provider: "p".into(), permissions: vec![], tools: vec![], env_summary: Value::Null };
+        let m1 = RuntimeManifest {
+            model: "a".into(),
+            provider: "p".into(),
+            permissions: vec![],
+            tools: vec![],
+            env_summary: Value::Null,
+        };
+        let m2 = RuntimeManifest {
+            model: "a".into(),
+            provider: "p".into(),
+            permissions: vec![],
+            tools: vec![],
+            env_summary: Value::Null,
+        };
         assert_eq!(m1.compute_hash(), m2.compute_hash());
-        let m3 = RuntimeManifest { model: "b".into(), provider: "p".into(), permissions: vec![], tools: vec![], env_summary: Value::Null };
+        let m3 = RuntimeManifest {
+            model: "b".into(),
+            provider: "p".into(),
+            permissions: vec![],
+            tools: vec![],
+            env_summary: Value::Null,
+        };
         assert_ne!(m1.compute_hash(), m3.compute_hash());
     }
 
     #[test]
     fn pending_approval_record_and_resolve() {
-        let mut ex = Execution::new("ex:1".into(), ExecutionTrigger::Chat, "s".into(), "t".into());
+        let mut ex = Execution::new(
+            "ex:1".into(),
+            ExecutionTrigger::Chat,
+            "s".into(),
+            "t".into(),
+        );
         // Cannot record in non-WaitingApproval state.
-        assert!(ex.record_pending_approval(PendingApproval {
-            ticket_id: "t1".into(),
-            tool_id: "browser.act".into(),
-            args_hash: "h1".into(),
-            requested_at_ms: 100,
-            risk_tier: "R2".into(),
-        }).is_err());
+        assert!(ex
+            .record_pending_approval(PendingApproval {
+                ticket_id: "t1".into(),
+                tool_id: "browser.act".into(),
+                args_hash: "h1".into(),
+                requested_at_ms: 100,
+                risk_tier: "R2".into(),
+            })
+            .is_err());
         ex.state = ExecutionPhase::WaitingApproval;
         ex.record_pending_approval(PendingApproval {
             ticket_id: "t1".into(),
@@ -680,7 +765,8 @@ mod tests {
             args_hash: "h1".into(),
             requested_at_ms: 100,
             risk_tier: "R2".into(),
-        }).unwrap();
+        })
+        .unwrap();
         assert_eq!(ex.approval_refs.len(), 1);
         assert!(ex.pending_approval.is_some());
         // Approve → Running.
@@ -692,7 +778,12 @@ mod tests {
 
     #[test]
     fn pending_approval_reject_transitions_to_failed() {
-        let mut ex = Execution::new("ex:2".into(), ExecutionTrigger::Plan, "s".into(), "t".into());
+        let mut ex = Execution::new(
+            "ex:2".into(),
+            ExecutionTrigger::Plan,
+            "s".into(),
+            "t".into(),
+        );
         ex.state = ExecutionPhase::WaitingApproval;
         ex.record_pending_approval(PendingApproval {
             ticket_id: "t2".into(),
@@ -700,7 +791,8 @@ mod tests {
             args_hash: "h2".into(),
             requested_at_ms: 200,
             risk_tier: "R3".into(),
-        }).unwrap();
+        })
+        .unwrap();
         let resolved = ex.resolve_pending_approval(false).unwrap();
         assert_eq!(resolved.ticket_id, "t2");
         assert_eq!(ex.state, ExecutionPhase::Failed);
@@ -708,14 +800,24 @@ mod tests {
 
     #[test]
     fn pending_approval_nothing_to_resolve_errors() {
-        let mut ex = Execution::new("ex:3".into(), ExecutionTrigger::Chat, "s".into(), "t".into());
+        let mut ex = Execution::new(
+            "ex:3".into(),
+            ExecutionTrigger::Chat,
+            "s".into(),
+            "t".into(),
+        );
         ex.state = ExecutionPhase::WaitingApproval;
         assert!(ex.resolve_pending_approval(true).is_err());
     }
 
     #[test]
     fn approval_survives_serialization_roundtrip() {
-        let mut ex = Execution::new("ex:4".into(), ExecutionTrigger::Chat, "s".into(), "t".into());
+        let mut ex = Execution::new(
+            "ex:4".into(),
+            ExecutionTrigger::Chat,
+            "s".into(),
+            "t".into(),
+        );
         ex.state = ExecutionPhase::WaitingApproval;
         ex.record_pending_approval(PendingApproval {
             ticket_id: "t4".into(),
@@ -723,11 +825,165 @@ mod tests {
             args_hash: "h4".into(),
             requested_at_ms: 300,
             risk_tier: "R2".into(),
-        }).unwrap();
+        })
+        .unwrap();
         let j = serde_json::to_string(&ex).unwrap();
         let restored: Execution = serde_json::from_str(&j).unwrap();
         assert!(restored.pending_approval.is_some());
         assert_eq!(restored.pending_approval.unwrap().ticket_id, "t4");
         assert_eq!(restored.config_hash, "");
+    }
+
+    /// P48.4 — a fresh execution advanced through several phases, checkpointed,
+    /// dropped (simulated crash), and recovered. The phase, checkpoint counter,
+    /// event stream, and monotonic id counter all survive; the resumed kernel
+    /// never re-issues the same execution id.
+    #[test]
+    fn kernel_roundtrip_persist_and_recover_resumes_from_checkpoint() {
+        let dir = std::env::temp_dir().join(format!("everyaios-exec-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("checkpoint.json");
+
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Scheduler,
+            "s1",
+            "sync the digest",
+            None,
+            "pol".into(),
+            "ctx".into(),
+            vec!["storage.read"].into_iter().map(String::from).collect(),
+        );
+        // `begin` already lands at Ready; drive Ready→Running→Verifying→Completed
+        // (all legal transitions) and attach the receipt BEFORE the checkpoint.
+        k.transition(&ex.id, ExecutionPhase::Running).unwrap();
+        k.attach_receipt(&ex.id, json!({ "ok": true, "effect": "appended" }))
+            .unwrap();
+        k.transition(&ex.id, ExecutionPhase::Verifying).unwrap();
+        k.transition(&ex.id, ExecutionPhase::Completed).unwrap();
+        assert_eq!(k.counter(), 1);
+
+        k.persist_to(&path).unwrap();
+        drop(k); // simulate the process dying.
+
+        let mut recovered = ExecutionKernel::recover_from(&path).unwrap();
+        let ex2 = recovered.get(&ex.id).unwrap();
+        // Phase, checkpoint, receipt survive; we resume from where we were, not
+        // re-ran from Created.
+        assert_eq!(ex2.state, ExecutionPhase::Completed);
+        assert_eq!(ex2.receipt.as_ref().unwrap()["effect"], "appended");
+        assert!(!recovered.is_empty());
+        assert_eq!(recovered.counter(), 1);
+        // New executions continue the id sequence (no reuse → no hash collision).
+        let ex3 = recovered.begin(
+            ExecutionTrigger::Chat,
+            "s2",
+            "next",
+            None,
+            String::new(),
+            String::new(),
+            Vec::new(),
+        );
+        assert_eq!(ex3.id, "ex:2");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P48.4 — the idempotency guard: an execution that reached a terminal
+    /// state before the crash is recovered as terminal, so its already-applied
+    /// effect is never re-dispatched on resume.
+    #[test]
+    fn recovered_terminal_execution_is_never_replayed() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-exec-replay-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("checkpoint.json");
+
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Acp,
+            "s",
+            "apply the patch",
+            None,
+            String::new(),
+            String::new(),
+            Vec::new(),
+        );
+        // `begin` lands at Ready → Running then Completed (legal chain).
+        k.transition(&ex.id, ExecutionPhase::Running).unwrap();
+        k.attach_receipt(&ex.id, json!({ "ok": true, "op": "git.commit" }))
+            .unwrap();
+        k.transition(&ex.id, ExecutionPhase::Verifying).unwrap();
+        k.transition(&ex.id, ExecutionPhase::Completed).unwrap();
+        k.persist_to(&path).unwrap();
+
+        let recovered = ExecutionKernel::recover_from(&path).unwrap();
+        let ex2 = recovered.get(&ex.id).unwrap();
+        // Terminal + receipt present ⇒ a resume loop must skip it, not re-run it.
+        assert_eq!(ex2.state, ExecutionPhase::Completed);
+        assert!(ex2.receipt.is_some());
+        assert_eq!(ex2.idempotency_key, "exec:ex:1");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P48.4 — a crash mid-effect leaves the execution at a non-terminal,
+    /// recoverable phase that a repair pass classifies honestly (never claims
+    /// the ambiguous effect succeeded).
+    #[test]
+    fn recovered_inflight_execution_is_classified_not_fabricated() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-exec-inflight-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("checkpoint.json");
+
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Chat,
+            "s",
+            "rename the column",
+            None,
+            String::new(),
+            String::new(),
+            Vec::new(),
+        );
+        k.transition(&ex.id, ExecutionPhase::Running).unwrap();
+        // No receipt: the effect never completed before the crash.
+        k.persist_to(&path).unwrap();
+
+        let recovered = ExecutionKernel::recover_from(&path).unwrap();
+        let ex2 = recovered.get(&ex.id).unwrap();
+        assert_eq!(ex2.state, ExecutionPhase::Running);
+        assert!(ex2.receipt.is_none());
+        // Idempotency key is preserved so a retry with the same args is refused
+        // by the executor, or classified rather than blindly re-run (P48.2).
+        assert!(!ex2.idempotency_key.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P48.4 — a missing checkpoint is a fresh kernel (cold boot, no recovery),
+    /// and a corrupt checkpoint fails closed instead of resuming on garbage.
+    #[test]
+    fn missing_checkpoint_is_fresh_and_corrupt_checkpoint_fails_closed() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-exec-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Missing file ⇒ empty kernel, not an error.
+        let fresh = ExecutionKernel::recover_from(&dir.join("nope.json")).unwrap();
+        assert!(fresh.is_empty());
+        assert_eq!(fresh.counter(), 0);
+
+        // Corrupt file ⇒ hard error (refuse to resume on ambiguous state).
+        let bad = dir.join("bad.json");
+        std::fs::write(&bad, "{ not json ").unwrap();
+        assert!(ExecutionKernel::recover_from(&bad).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

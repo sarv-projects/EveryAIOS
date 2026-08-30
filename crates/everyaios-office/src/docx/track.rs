@@ -69,7 +69,10 @@ pub fn extract_tracked_changes(document_xml: &str) -> Result<Vec<TrackedChange>,
         if let Some(kind) = kind {
             out.push(TrackedChange {
                 kind,
-                author: node.attribute((W, "author")).unwrap_or_default().to_string(),
+                author: node
+                    .attribute((W, "author"))
+                    .unwrap_or_default()
+                    .to_string(),
                 date: node.attribute((W, "date")).map(str::to_string),
                 text: collect_text(node),
             });
@@ -89,7 +92,10 @@ pub fn extract_comments(comments_xml: &str) -> Result<Vec<Comment>, TrackError> 
         {
             out.push(Comment {
                 id: node.attribute((W, "id")).unwrap_or_default().to_string(),
-                author: node.attribute((W, "author")).unwrap_or_default().to_string(),
+                author: node
+                    .attribute((W, "author"))
+                    .unwrap_or_default()
+                    .to_string(),
                 date: node.attribute((W, "date")).map(str::to_string),
                 text: collect_text(node),
             });
@@ -174,11 +180,7 @@ pub fn render_del_run(text: &str, author: &TrackAuthor) -> String {
 /// non-empty) — the standard Word "replace with tracked changes" form. Both
 /// runs sit inside a `<w:p>` wrapper so the caller can splice the paragraph
 /// into a document.
-pub fn emit_tracked_change(
-    old_text: &str,
-    new_text: &str,
-    author: &TrackAuthor,
-) -> String {
+pub fn emit_tracked_change(old_text: &str, new_text: &str, author: &TrackAuthor) -> String {
     let mut runs = String::new();
     if !old_text.is_empty() {
         runs.push_str(&render_del_run(old_text, author));
@@ -247,9 +249,15 @@ mod tests {
         let author = TrackAuthor::new("alice", "2026-01-01T00:00:00Z");
         let para = emit_tracked_change("old wording", "new wording", &author);
         assert!(para.contains("<w:del"), "{para}");
-        assert!(para.contains("<w:delText xml:space=\"preserve\">old wording</w:delText>"), "{para}");
+        assert!(
+            para.contains("<w:delText xml:space=\"preserve\">old wording</w:delText>"),
+            "{para}"
+        );
         assert!(para.contains("<w:ins"), "{para}");
-        assert!(para.contains("<w:t xml:space=\"preserve\">new wording</w:t>"), "{para}");
+        assert!(
+            para.contains("<w:t xml:space=\"preserve\">new wording</w:t>"),
+            "{para}"
+        );
         assert!(para.contains("w:author=\"alice\""));
         assert!(para.contains("w:date=\"2026-01-01T00:00:00Z\""));
         // Re-parses as valid XML (the fragment needs the w: namespace).

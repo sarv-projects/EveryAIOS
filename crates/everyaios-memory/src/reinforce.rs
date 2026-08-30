@@ -84,11 +84,7 @@ impl ReviewQueue {
 
     /// Review prompts due on `day`, most important first.
     pub fn due(&self, day: u32) -> Vec<&ReviewCard> {
-        let mut cards: Vec<&ReviewCard> = self
-            .cards
-            .iter()
-            .filter(|c| c.due_day <= day)
-            .collect();
+        let mut cards: Vec<&ReviewCard> = self.cards.iter().filter(|c| c.due_day <= day).collect();
         cards.sort_by(|a, b| {
             b.importance
                 .partial_cmp(&a.importance)
@@ -154,7 +150,9 @@ pub fn split_sentences(text: &str) -> Vec<String> {
         if matches!(b, b'.' | b'!' | b'?') {
             let after = bytes.get(i + 1).copied();
             let end_of_text = after.is_none();
-            let boundary = after.map_or(true, |a| a == b' ' || a == b'\n' || a == b'\r' || a == b'\t');
+            let boundary = after.map_or(true, |a| {
+                a == b' ' || a == b'\n' || a == b'\r' || a == b'\t'
+            });
             if end_of_text || boundary {
                 let sentence = text[start..=i].trim();
                 if !sentence.is_empty() {
@@ -173,9 +171,22 @@ pub fn split_sentences(text: &str) -> Vec<String> {
 
 /// Fact-pattern markers that make a sentence a reinforcement candidate.
 const FACT_MARKERS: &[&str] = &[
-    " is ", " are ", " means ", " refers to ", " learned that ", " remember that ",
-    " important", " key ", "key:", " note:", "fact:", "definition:", " stands for ",
-    " equals ", " consists of ", " example:",
+    " is ",
+    " are ",
+    " means ",
+    " refers to ",
+    " learned that ",
+    " remember that ",
+    " important",
+    " key ",
+    "key:",
+    " note:",
+    "fact:",
+    "definition:",
+    " stands for ",
+    " equals ",
+    " consists of ",
+    " example:",
 ];
 
 /// Heuristic importance from keywords (0.5 baseline, boosted by salience).
@@ -299,7 +310,10 @@ mod tests {
         let before = q.cards[0].state.stability;
         let after_again = q.review("a", Rating::Again, day).unwrap();
         let _ = after_again;
-        assert!(q.cards[0].state.stability < before, "lapse lowers stability");
+        assert!(
+            q.cards[0].state.stability < before,
+            "lapse lowers stability"
+        );
     }
 
     #[test]
@@ -332,7 +346,10 @@ mod tests {
         let again = extract_candidates(text);
         assert_eq!(cands[0].id, again[0].id);
         // Importance boosted by "important".
-        let important = cands.iter().find(|c| c.content.contains("context windows")).unwrap();
+        let important = cands
+            .iter()
+            .find(|c| c.content.contains("context windows"))
+            .unwrap();
         assert_eq!(important.importance, 1.0);
     }
 

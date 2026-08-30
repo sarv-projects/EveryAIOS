@@ -33,9 +33,7 @@ pub enum HttpParseError {
 /// Parse an HTTP request into (method, path, body). Handles `Content-Length`
 /// bodies; returns `Ok(None)` for a partial request (caller waits for more)
 /// and `Err` for a request whose declared body exceeds [`MAX_BODY_BYTES`].
-pub fn parse_http_request(
-    raw: &str,
-) -> Result<Option<(String, String, String)>, HttpParseError> {
+pub fn parse_http_request(raw: &str) -> Result<Option<(String, String, String)>, HttpParseError> {
     let header_end = match raw.find("\r\n\r\n") {
         Some(h) => h,
         None => return Ok(None),
@@ -135,7 +133,10 @@ pub fn handle_mcp_request(
                     })
                 })
                 .collect();
-            http_response("200 OK", &json!({ "jsonrpc": "2.0", "result": { "tools": tools } }).to_string())
+            http_response(
+                "200 OK",
+                &json!({ "jsonrpc": "2.0", "result": { "tools": tools } }).to_string(),
+            )
         }
         "POST" => {
             let req: Value = match serde_json::from_str(body) {
@@ -185,7 +186,10 @@ pub fn handle_mcp_request(
             };
             http_response("200 OK", &result.to_string())
         }
-        _ => http_response("405 Method Not Allowed", r#"{"error":"method not allowed"}"#),
+        _ => http_response(
+            "405 Method Not Allowed",
+            r#"{"error":"method not allowed"}"#,
+        ),
     }
 }
 
@@ -260,12 +264,16 @@ fn handle_stream(
     let mut chunk = [0u8; 4096];
     loop {
         if buf.len() > MAX_REQUEST_BYTES {
-            let _ = stream.write_all(http_plain("413 Payload Too Large", "request too large").as_bytes());
+            let _ = stream
+                .write_all(http_plain("413 Payload Too Large", "request too large").as_bytes());
             return Ok(());
         }
         let n = match stream.read(&mut chunk) {
             Ok(n) => n,
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
                 return Ok(()); // idle/timeout — drop quietly
             }
             Err(e) => return Err(e),
@@ -280,7 +288,10 @@ fn handle_stream(
                 // The tool manifest is public; every mutating POST must carry
                 // the per-process bearer token.
                 if method == "POST" && bearer_token(&raw).as_deref() != Some(token) {
-                    let _ = stream.write_all(http_plain("401 Unauthorized", "missing or invalid bearer token").as_bytes());
+                    let _ = stream.write_all(
+                        http_plain("401 Unauthorized", "missing or invalid bearer token")
+                            .as_bytes(),
+                    );
                     return Ok(());
                 }
                 let resp = handle_mcp_request(&method, &path, &body, registry, executor);
@@ -290,7 +301,9 @@ fn handle_stream(
             }
             Ok(None) => { /* partial — keep reading */ }
             Err(HttpParseError::BodyTooLarge) => {
-                let _ = stream.write_all(http_plain("413 Payload Too Large", "body exceeds limit").as_bytes());
+                let _ = stream.write_all(
+                    http_plain("413 Payload Too Large", "body exceeds limit").as_bytes(),
+                );
                 return Ok(());
             }
         }
@@ -346,7 +359,13 @@ mod tests {
 
     #[test]
     fn get_returns_tool_manifest() {
-        let resp = handle_mcp_request("GET", "/mcp", "", &registry(), &CountingExecutor(Arc::new(AtomicUsize::new(0))));
+        let resp = handle_mcp_request(
+            "GET",
+            "/mcp",
+            "",
+            &registry(),
+            &CountingExecutor(Arc::new(AtomicUsize::new(0))),
+        );
         assert!(resp.starts_with("HTTP/1.1 200 OK"));
         let body = resp.split("\r\n\r\n").nth(1).unwrap();
         let v: Value = serde_json::from_str(body).unwrap();
@@ -356,7 +375,13 @@ mod tests {
     #[test]
     fn post_tools_list_returns_manifest() {
         let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
-        let resp = handle_mcp_request("POST", "/mcp", body, &registry(), &CountingExecutor(Arc::new(AtomicUsize::new(0))));
+        let resp = handle_mcp_request(
+            "POST",
+            "/mcp",
+            body,
+            &registry(),
+            &CountingExecutor(Arc::new(AtomicUsize::new(0))),
+        );
         let v: Value = serde_json::from_str(resp.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(v["result"]["tools"][0]["name"], "search");
         assert_eq!(v["id"], 1);
@@ -371,13 +396,22 @@ mod tests {
         let v: Value = serde_json::from_str(resp.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(v["result"]["isError"], false);
-        assert!(v["result"]["content"][0]["text"].as_str().unwrap().contains("\"tool\":\"search\""));
+        assert!(v["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("\"tool\":\"search\""));
     }
 
     #[test]
     fn unknown_method_returns_jsonrpc_error() {
         let body = r#"{"jsonrpc":"2.0","id":3,"method":"bogus"}"#;
-        let resp = handle_mcp_request("POST", "/mcp", body, &registry(), &CountingExecutor(Arc::new(AtomicUsize::new(0))));
+        let resp = handle_mcp_request(
+            "POST",
+            "/mcp",
+            body,
+            &registry(),
+            &CountingExecutor(Arc::new(AtomicUsize::new(0))),
+        );
         let v: Value = serde_json::from_str(resp.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(v["error"]["code"], -32601);
     }
@@ -400,10 +434,14 @@ mod tests {
         let raw2 = "POST /mcp HTTP/1.1\r\nContent-Length: 10\r\n\r\nhello";
         assert!(parse_http_request(raw2).unwrap().is_none());
         // Oversized declared body → Err.
-        let raw3 = format!("POST /mcp HTTP/1.1\r\nContent-Length: {}\r\n\r\n", MAX_BODY_BYTES + 1);
+        let raw3 = format!(
+            "POST /mcp HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+            MAX_BODY_BYTES + 1
+        );
         assert!(parse_http_request(&raw3).is_err());
         // Bearer token extraction.
-        let raw4 = "POST /mcp HTTP/1.1\r\nAuthorization: Bearer secret\r\nContent-Length: 0\r\n\r\n";
+        let raw4 =
+            "POST /mcp HTTP/1.1\r\nAuthorization: Bearer secret\r\nContent-Length: 0\r\n\r\n";
         assert_eq!(bearer_token(raw4).as_deref(), Some("secret"));
         assert!(bearer_token("GET /mcp HTTP/1.1\r\n\r\n").is_none());
     }

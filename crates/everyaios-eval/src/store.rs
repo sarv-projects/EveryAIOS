@@ -34,7 +34,13 @@ impl EvidenceStore {
     fn path_for(&self, task_id: &str) -> PathBuf {
         let safe: String = task_id
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         self.root.join(format!("{safe}.{EXT}"))
     }
@@ -137,7 +143,10 @@ mod tests {
         let store = EvidenceStore::new(&root).unwrap();
         store.save("a", &bundle()).unwrap();
         store.save("b", &bundle()).unwrap();
-        assert_eq!(store.list().unwrap(), vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(
+            store.list().unwrap(),
+            vec!["a".to_string(), "b".to_string()]
+        );
         assert!(store.delete("a").unwrap());
         assert!(!store.delete("a").unwrap());
         assert_eq!(store.list().unwrap(), vec!["b".to_string()]);

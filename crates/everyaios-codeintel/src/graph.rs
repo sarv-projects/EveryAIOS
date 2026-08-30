@@ -102,10 +102,10 @@ impl SymbolGraph {
     /// Full rebuild from a semantic index (SCIP/lexical projection). Drops
     /// and re-populates — the fallback when an incremental base is missing.
     pub fn rebuild(&mut self, symbols: &[GraphSymbol], edges: &[GraphEdge]) -> Result<(), String> {
-        self.conn.execute_batch("DELETE FROM symbols; DELETE FROM edges;").map_err(|e| e.to_string())?;
         self.conn
-            .execute("BEGIN", [])
+            .execute_batch("DELETE FROM symbols; DELETE FROM edges;")
             .map_err(|e| e.to_string())?;
+        self.conn.execute("BEGIN", []).map_err(|e| e.to_string())?;
         let r = self.upsert_all(symbols, edges);
         self.conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
         r
@@ -182,20 +182,18 @@ impl SymbolGraph {
             .query_row(
                 "SELECT name, kind, file, line, language FROM symbols WHERE name = ?1",
                 [name],
-                |r| {
-                    Ok((
-                        r.get(0)?,
-                        r.get(1)?,
-                        r.get(2)?,
-                        r.get(3)?,
-                        r.get(4)?,
-                    ))
-                },
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
             .optional()
             .map_err(|e| e.to_string())?;
         if let Some((name, kind, file, line, language)) = symbol {
-            out.symbol = Some(GraphSymbol { name, kind, file, line, language });
+            out.symbol = Some(GraphSymbol {
+                name,
+                kind,
+                file,
+                line,
+                language,
+            });
         } else {
             return Ok(out);
         }
@@ -204,13 +202,15 @@ impl SymbolGraph {
             .prepare("SELECT source, target, kind FROM edges WHERE target = ?1")
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([name], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-            })
+            .query_map([name], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .map_err(|e| e.to_string())?;
         for row in rows {
             let (source, target, kind) = row.map_err(|e| e.to_string())?;
-            out.incoming.push(GraphEdge { source, target, kind });
+            out.incoming.push(GraphEdge {
+                source,
+                target,
+                kind,
+            });
         }
         drop(stmt);
         let mut stmt = self
@@ -218,13 +218,15 @@ impl SymbolGraph {
             .prepare("SELECT source, target, kind FROM edges WHERE source = ?1")
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([name], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-            })
+            .query_map([name], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .map_err(|e| e.to_string())?;
         for row in rows {
             let (source, target, kind) = row.map_err(|e| e.to_string())?;
-            out.outgoing.push(GraphEdge { source, target, kind });
+            out.outgoing.push(GraphEdge {
+                source,
+                target,
+                kind,
+            });
         }
         // Persisted savings: the answer stands in for re-reading the file.
         let next = self.context_savings_total() + 1;
@@ -252,7 +254,11 @@ impl SymbolGraph {
         let rows = stmt.query_map([name], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)));
         if let Ok(rows) = rows {
             for row in rows.flatten() {
-                out.push(GraphEdge { source: row.0, target: row.1, kind: row.2 });
+                out.push(GraphEdge {
+                    source: row.0,
+                    target: row.1,
+                    kind: row.2,
+                });
             }
         }
         out
@@ -274,18 +280,47 @@ mod tests {
     fn tmpdb() -> std::path::PathBuf {
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::SeqCst);
-        std::env::temp_dir().join(format!("everyaios-graph-test-{}-{n}.db", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "everyaios-graph-test-{}-{n}.db",
+            std::process::id()
+        ))
     }
 
     fn sample() -> (Vec<GraphSymbol>, Vec<GraphEdge>) {
         let symbols = vec![
-            GraphSymbol { name: "parse".into(), kind: "function".into(), file: "src/a.rs".into(), line: 3, language: "rust".into() },
-            GraphSymbol { name: "tokenize".into(), kind: "function".into(), file: "src/a.rs".into(), line: 10, language: "rust".into() },
-            GraphSymbol { name: "main".into(), kind: "function".into(), file: "src/main.rs".into(), line: 1, language: "rust".into() },
+            GraphSymbol {
+                name: "parse".into(),
+                kind: "function".into(),
+                file: "src/a.rs".into(),
+                line: 3,
+                language: "rust".into(),
+            },
+            GraphSymbol {
+                name: "tokenize".into(),
+                kind: "function".into(),
+                file: "src/a.rs".into(),
+                line: 10,
+                language: "rust".into(),
+            },
+            GraphSymbol {
+                name: "main".into(),
+                kind: "function".into(),
+                file: "src/main.rs".into(),
+                line: 1,
+                language: "rust".into(),
+            },
         ];
         let edges = vec![
-            GraphEdge { source: "parse".into(), target: "tokenize".into(), kind: "call".into() },
-            GraphEdge { source: "main".into(), target: "parse".into(), kind: "call".into() },
+            GraphEdge {
+                source: "parse".into(),
+                target: "tokenize".into(),
+                kind: "call".into(),
+            },
+            GraphEdge {
+                source: "main".into(),
+                target: "parse".into(),
+                kind: "call".into(),
+            },
         ];
         (symbols, edges)
     }
@@ -333,10 +368,16 @@ mod tests {
         g.rebuild(&symbols, &edges).unwrap();
 
         // main.rs changed: re-index with a moved line number.
-        let updated = vec![
-            GraphSymbol { name: "main".into(), kind: "function".into(), file: "src/main.rs".into(), line: 7, language: "rust".into() },
-        ];
-        let changed = g.incremental_rebuild(&updated, &[], &["src/main.rs".into()]).unwrap();
+        let updated = vec![GraphSymbol {
+            name: "main".into(),
+            kind: "function".into(),
+            file: "src/main.rs".into(),
+            line: 7,
+            language: "rust".into(),
+        }];
+        let changed = g
+            .incremental_rebuild(&updated, &[], &["src/main.rs".into()])
+            .unwrap();
         assert_eq!(changed, 1); // only the one changed-file symbol re-indexed
 
         let q = g.query("main").unwrap();

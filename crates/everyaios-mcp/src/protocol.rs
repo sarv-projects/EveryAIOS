@@ -114,7 +114,13 @@ impl RootSpec {
         }
         let canon = p.canonicalize().ok()?;
         // No path traversal: parent of the floor is never a floor.
-        Some(Self { name: canon.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "root".into()), path: canon.to_string_lossy().into_owned() })
+        Some(Self {
+            name: canon
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "root".into()),
+            path: canon.to_string_lossy().into_owned(),
+        })
     }
 }
 
@@ -150,7 +156,10 @@ mod tests {
             request_id: "op-1".into(),
             kind: InputRequiredKind::Confirm,
             prompt: "Apply the diff to 3 files?".into(),
-            options: vec![InputOption { label: "Apply".into(), value: "yes".into() }],
+            options: vec![InputOption {
+                label: "Apply".into(),
+                value: "yes".into(),
+            }],
             idempotency_key: Some("key-1".into()),
         };
         let json = serde_json::to_string(&ir).unwrap();

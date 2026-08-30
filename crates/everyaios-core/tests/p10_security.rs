@@ -11,12 +11,14 @@ use std::time::{Duration, Instant};
 
 use everyaios_blueprint::plugin::PluginManifest;
 use everyaios_blueprint::skill_store::Skill;
+use everyaios_core::guard_service::{GuardDecision, GuardService};
 use everyaios_guard::granter::{CapabilityGranter, HostGrant};
-use everyaios_guard::injection::{has_injection_marker, sanitize_tool_result, scan_context, wrap_user_document};
+use everyaios_guard::injection::{
+    has_injection_marker, sanitize_tool_result, scan_context, wrap_user_document,
+};
 use everyaios_guard::pathfloor::{enforce_floor, FloorVerdict};
 use everyaios_guard::redteam::{run_red_team, RED_TEAM_CORPUS};
 use everyaios_guard::{DecisionPackage, Operation};
-use everyaios_core::guard_service::{GuardDecision, GuardService};
 use everyaios_vault::{KeyRing, KeySpec, KeyStatus, RoutingPolicy, Vault};
 
 fn temp_dir(tag: &str) -> PathBuf {
@@ -111,7 +113,11 @@ fn prompt_injection_corpus_50_plus_all_detected() {
     // scan_context returns the flagged lines for the audit trail.
     let page = corpus.join("\n");
     let flagged = scan_context(&page, usize::MAX);
-    assert_eq!(flagged.len(), corpus.len(), "scan_context must flag every line");
+    assert_eq!(
+        flagged.len(),
+        corpus.len(),
+        "scan_context must flag every line"
+    );
 
     // Wrapping + sanitization neutralize the payloads for the model.
     let wrapped = wrap_user_document(&page);
@@ -135,7 +141,10 @@ fn prompt_injection_corpus_50_plus_all_detected() {
 struct Lcg(u64);
 impl Lcg {
     fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.0 >> 33
     }
 }
@@ -143,13 +152,34 @@ impl Lcg {
 fn traversal_corpus() -> Vec<String> {
     let mut v = everyaios_guard::pathfloor::adversarial_paths();
     let segs = [
-        "..", "../", "../../", "../../../", "../../../../", "..%2f", "..%5c", ".../", "....//",
-        "%2e%2e%2f", "%252e%252e%252f", ".%2e/", "..//", "../..//", "..\\", "..\\\\",
-        "..%c0%af", "..%c1%9c",
+        "..",
+        "../",
+        "../../",
+        "../../../",
+        "../../../../",
+        "..%2f",
+        "..%5c",
+        ".../",
+        "....//",
+        "%2e%2e%2f",
+        "%252e%252e%252f",
+        ".%2e/",
+        "..//",
+        "../..//",
+        "..\\",
+        "..\\\\",
+        "..%c0%af",
+        "..%c1%9c",
     ];
     let targets = [
-        "etc/passwd", "etc/shadow", "home/user/.ssh/id_rsa", ".env", "proc/self/environ",
-        "var/run/secrets", "tmp/x", "opt/app/config",
+        "etc/passwd",
+        "etc/shadow",
+        "home/user/.ssh/id_rsa",
+        ".env",
+        "proc/self/environ",
+        "var/run/secrets",
+        "tmp/x",
+        "opt/app/config",
     ];
     let bases = ["/workspace", "/workspace/sub", "workspace", "/"];
     let mut rng = Lcg(0x5eed);
@@ -185,7 +215,10 @@ fn path_traversal_fuzz_10000_no_escape() {
         }
     }
     // The corpus genuinely contains escape attempts (not a vacuous pass).
-    assert!(escapes > 100, "fuzz corpus should contain real escape attempts: {escapes}");
+    assert!(
+        escapes > 100,
+        "fuzz corpus should contain real escape attempts: {escapes}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -265,19 +298,28 @@ fn revoked_key_suspension_and_failover() {
     ring.add_key(spec("k2", KeyStatus::Standby)).unwrap();
 
     // Primary is selected first.
-    ring.select("nvidia", "m", "s", RoutingPolicy::Priority).unwrap();
+    ring.select("nvidia", "m", "s", RoutingPolicy::Priority)
+        .unwrap();
 
     // Revoke (suspend) the primary → the next request fails over (still Ok).
-    ring.set_status("nvidia", "k1", KeyStatus::Suspended).unwrap();
-    ring.select("nvidia", "m", "s", RoutingPolicy::Priority).unwrap();
+    ring.set_status("nvidia", "k1", KeyStatus::Suspended)
+        .unwrap();
+    ring.select("nvidia", "m", "s", RoutingPolicy::Priority)
+        .unwrap();
     let infos = ring.list("nvidia").unwrap();
     assert_eq!(infos.len(), 2);
-    assert_eq!(infos.iter().find(|k| k.key_id == "k1").unwrap().status, "suspended");
+    assert_eq!(
+        infos.iter().find(|k| k.key_id == "k1").unwrap().status,
+        "suspended"
+    );
 
     // Suspend the standby too → selection fails (all keys exhausted) — the
     // "user alert + failover" surface the broker turns into an alert.
-    ring.set_status("nvidia", "k2", KeyStatus::Suspended).unwrap();
-    assert!(ring.select("nvidia", "m", "s", RoutingPolicy::Priority).is_err());
+    ring.set_status("nvidia", "k2", KeyStatus::Suspended)
+        .unwrap();
+    assert!(ring
+        .select("nvidia", "m", "s", RoutingPolicy::Priority)
+        .is_err());
 }
 
 // ---------------------------------------------------------------------------
@@ -401,10 +443,7 @@ fn malicious_skill_md_audit_blocks_execution() {
     // (c) A skill script that calls a privileged browser primitive is refused
     // by the sandbox (the inner-call hook denies every primitive).
     let host = Arc::new(DenyAllBrowser);
-    let sb = everyaios_script::Sandbox::new(
-        everyaios_script::SandboxLimits::default(),
-        host,
-    );
+    let sb = everyaios_script::Sandbox::new(everyaios_script::SandboxLimits::default(), host);
     let malicious = r#"
         const p = await browser.pages.newPage("https://evil.example");
         await browser.nav(p.id).goto("https://evil.example");

@@ -73,7 +73,11 @@ impl SignedManifest {
     pub fn sign(body: ManifestBody, key: &[u8]) -> Self {
         let d = digest(&body);
         let signature = hmac_sha256(key, d.as_bytes());
-        Self { body, digest: d, signature }
+        Self {
+            body,
+            digest: d,
+            signature,
+        }
     }
 
     /// Verify: digest matches the body AND the signature verifies under the
@@ -126,7 +130,10 @@ impl SupplyChainPolicy {
     }
 
     pub fn quarantine(&mut self, id: &str, reason: &str) {
-        self.quarantine.push(QuarantineEntry { id: id.into(), reason: reason.into() });
+        self.quarantine.push(QuarantineEntry {
+            id: id.into(),
+            reason: reason.into(),
+        });
     }
 
     pub fn quarantine_list(&self) -> &[QuarantineEntry] {
@@ -206,7 +213,10 @@ mod tests {
         assert_eq!(p.quarantine_list().len(), 1);
         p.allow_key(KEY);
         // Now the pin is the gate: unpinned → refuse.
-        assert_eq!(p.evaluate(&m, KEY), SupplyVerdict::Refuse("unpinned (floating) version".into()));
+        assert_eq!(
+            p.evaluate(&m, KEY),
+            SupplyVerdict::Refuse("unpinned (floating) version".into())
+        );
         p.pin("skill-a", "1.0.0");
         assert_eq!(p.evaluate(&m, KEY), SupplyVerdict::Activate);
     }

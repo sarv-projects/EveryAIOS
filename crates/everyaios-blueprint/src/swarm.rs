@@ -45,8 +45,19 @@ fn default_rounds() -> u32 {
 }
 
 impl SwarmSpec {
-    pub fn new(name: impl Into<String>, prompt: impl Into<String>, agents: Vec<String>, mode: SwarmMode) -> Self {
-        Self { name: name.into(), prompt: prompt.into(), agents, mode, max_rounds: default_rounds() }
+    pub fn new(
+        name: impl Into<String>,
+        prompt: impl Into<String>,
+        agents: Vec<String>,
+        mode: SwarmMode,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            prompt: prompt.into(),
+            agents,
+            mode,
+            max_rounds: default_rounds(),
+        }
     }
 
     /// Reject empty prompts / empty or duplicate members.
@@ -122,7 +133,11 @@ impl SwarmSession {
         if !self.spec.agents.contains(&outcome.agent_id) {
             return Err(SwarmError::UnknownMember(outcome.agent_id.clone()));
         }
-        if self.member_results.iter().any(|m| m.agent_id == outcome.agent_id) {
+        if self
+            .member_results
+            .iter()
+            .any(|m| m.agent_id == outcome.agent_id)
+        {
             return Ok(()); // first report wins — no double counting
         }
         self.member_results.push(outcome);
@@ -154,7 +169,11 @@ impl SwarmSession {
         if self.verdict_reached {
             return;
         }
-        let reported: Vec<String> = self.member_results.iter().map(|m| m.agent_id.clone()).collect();
+        let reported: Vec<String> = self
+            .member_results
+            .iter()
+            .map(|m| m.agent_id.clone())
+            .collect();
         let all_done = self.spec.agents.iter().all(|a| reported.contains(a));
         if !all_done {
             return;
@@ -176,10 +195,18 @@ impl SwarmSession {
                 counts
                     .into_iter()
                     .max_by(|a, b| {
-                        a.1 .0.cmp(&b.1 .0).then_with(|| a.1 .1.partial_cmp(&b.1 .1).unwrap_or(std::cmp::Ordering::Equal))
+                        a.1 .0.cmp(&b.1 .0).then_with(|| {
+                            a.1 .1
+                                .partial_cmp(&b.1 .1)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        })
                     })
                     .map(|(answer, _)| {
-                        healthy.iter().find(|m| m.answer == answer).map(|m| m.agent_id.clone()).unwrap_or_default()
+                        healthy
+                            .iter()
+                            .find(|m| m.answer == answer)
+                            .map(|m| m.agent_id.clone())
+                            .unwrap_or_default()
                     })
             }
             SwarmMode::Ensemble => healthy.iter().map(|m| m.agent_id.clone()).next(),
@@ -212,7 +239,12 @@ mod tests {
     use super::*;
 
     fn outcome(agent: &str, answer: &str, score: f64, ok: bool) -> MemberOutcome {
-        MemberOutcome { agent_id: agent.into(), answer: answer.into(), score, ok }
+        MemberOutcome {
+            agent_id: agent.into(),
+            answer: answer.into(),
+            score,
+            ok,
+        }
     }
 
     fn spec(mode: SwarmMode) -> SwarmSpec {
@@ -226,10 +258,20 @@ mod tests {
 
     #[test]
     fn spec_validation() {
-        assert!(SwarmSpec::new("x", "", vec![], SwarmMode::Race).validate().is_err());
-        assert!(SwarmSpec::new("x", "p", vec![], SwarmMode::Race).validate().is_err());
-        assert!(SwarmSpec::new("x", "p", vec!["a".into(), "a".into()], SwarmMode::Race).validate().is_err());
-        assert!(SwarmSpec::new("x", "p", vec!["a".into()], SwarmMode::Race).validate().is_ok());
+        assert!(SwarmSpec::new("x", "", vec![], SwarmMode::Race)
+            .validate()
+            .is_err());
+        assert!(SwarmSpec::new("x", "p", vec![], SwarmMode::Race)
+            .validate()
+            .is_err());
+        assert!(
+            SwarmSpec::new("x", "p", vec!["a".into(), "a".into()], SwarmMode::Race)
+                .validate()
+                .is_err()
+        );
+        assert!(SwarmSpec::new("x", "p", vec!["a".into()], SwarmMode::Race)
+            .validate()
+            .is_ok());
     }
 
     #[test]

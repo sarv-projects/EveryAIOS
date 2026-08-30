@@ -57,7 +57,12 @@ pub trait BrowserBackend: Send + Sync {
         Err("browser session not attached".into())
     }
     /// Click / type against an a11y ref (`[ref=eN]`).
-    fn act(&self, _kind: &str, _selector: Option<&str>, _text: Option<&str>) -> Result<String, String> {
+    fn act(
+        &self,
+        _kind: &str,
+        _selector: Option<&str>,
+        _text: Option<&str>,
+    ) -> Result<String, String> {
         Err("browser session not attached".into())
     }
 }
@@ -1332,9 +1337,14 @@ impl ToolService {
                 self.snapshot_file("", &abs);
                 match fs::read(&abs) {
                     Ok(bytes) => match everyaios_office::DocxEngine::open(bytes) {
-                        Ok(mut engine) => match engine.patch_block(address, text).and_then(|_| engine.save()) {
+                        Ok(mut engine) => match engine
+                            .patch_block(address, text)
+                            .and_then(|_| engine.save())
+                        {
                             Ok(out) => match atomic_office_write(&abs, &out) {
-                                Ok(()) => json!({"ok": true, "path": abs.display().to_string(), "address": address}),
+                                Ok(()) => {
+                                    json!({"ok": true, "path": abs.display().to_string(), "address": address})
+                                }
                                 Err(e) => json!({"ok": false, "error": e}),
                             },
                             Err(e) => json!({"ok": false, "error": e.to_string(), "refused": true}),
@@ -1344,15 +1354,15 @@ impl ToolService {
                     Err(e) => json!({"ok": false, "error": e.to_string()}),
                 }
             }
-            "office.xlsx_open" => {
-                match everyaios_office::xlsx::read::open(&abs) {
-                    Ok(meta) => json!({"ok": true, "path": meta.path, "sheets": meta.sheets}),
-                    Err(e) => json!({"ok": false, "error": e.to_string()}),
-                }
-            }
+            "office.xlsx_open" => match everyaios_office::xlsx::read::open(&abs) {
+                Ok(meta) => json!({"ok": true, "path": meta.path, "sheets": meta.sheets}),
+                Err(e) => json!({"ok": false, "error": e.to_string()}),
+            },
             "office.xlsx_edit" => {
                 use everyaios_office::xlsx::address::parse_ref;
-                use everyaios_office::xlsx::dsl::{Operation as XlsxOp, Scalar, WorkbookCommandBatch};
+                use everyaios_office::xlsx::dsl::{
+                    Operation as XlsxOp, Scalar, WorkbookCommandBatch,
+                };
                 use everyaios_office::xlsx::patch::apply_batch;
                 let address = args.get("address").and_then(Value::as_str).unwrap_or("");
                 let value = args.get("value").and_then(Value::as_str).unwrap_or("");
@@ -1384,7 +1394,9 @@ impl ToolService {
                         };
                         match apply_batch(&bytes, &batch, &sheet_name) {
                             Ok(outcome) => match atomic_office_write(&abs, &outcome.bytes) {
-                                Ok(()) => json!({"ok": true, "path": abs.display().to_string(), "address": address}),
+                                Ok(()) => {
+                                    json!({"ok": true, "path": abs.display().to_string(), "address": address})
+                                }
                                 Err(e) => json!({"ok": false, "error": e}),
                             },
                             Err(e) => json!({"ok": false, "error": e.to_string()}),
@@ -1396,7 +1408,9 @@ impl ToolService {
             "office.pptx_open" => match fs::read(&abs) {
                 Ok(bytes) => match everyaios_office::PptxEngine::open(bytes) {
                     Ok(mut engine) => match engine.render_deck() {
-                        Ok(deck) => json!({"ok": true, "path": abs.display().to_string(), "deck": deck}),
+                        Ok(deck) => {
+                            json!({"ok": true, "path": abs.display().to_string(), "deck": deck})
+                        }
                         Err(e) => json!({"ok": false, "error": e.to_string()}),
                     },
                     Err(e) => json!({"ok": false, "error": e.to_string()}),
@@ -1422,12 +1436,16 @@ impl ToolService {
                             match engine.patch_shape_text(&part_name, &shape_addr, text) {
                                 Ok(()) => match engine.save() {
                                     Ok(out) => match atomic_office_write(&abs, &out) {
-                                        Ok(()) => json!({"ok": true, "path": abs.display().to_string()}),
+                                        Ok(()) => {
+                                            json!({"ok": true, "path": abs.display().to_string()})
+                                        }
                                         Err(e) => json!({"ok": false, "error": e}),
                                     },
                                     Err(e) => json!({"ok": false, "error": e.to_string()}),
                                 },
-                                Err(e) => json!({"ok": false, "error": e.to_string(), "refused": true}),
+                                Err(e) => {
+                                    json!({"ok": false, "error": e.to_string(), "refused": true})
+                                }
                             }
                         }
                         Err(e) => json!({"ok": false, "error": e.to_string()}),
@@ -1489,7 +1507,11 @@ impl ToolService {
                 let pages: Vec<u32> = args
                     .get("pages")
                     .and_then(Value::as_array)
-                    .map(|a| a.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_u64().map(|n| n as u32))
+                            .collect()
+                    })
                     .unwrap_or_default();
                 self.snapshot_file("", &abs);
                 match fs::read(&abs) {
@@ -1521,7 +1543,9 @@ impl ToolService {
                                     Err(e) => return json!({"ok": false, "error": e.to_string()}),
                                 }
                             }
-                            _ => return json!({"ok": false, "error": format!("unknown pdf page op: {op}")}),
+                            _ => {
+                                return json!({"ok": false, "error": format!("unknown pdf page op: {op}")})
+                            }
                         };
                         match result {
                             Ok(out) => {
@@ -1539,7 +1563,9 @@ impl ToolService {
                                     }
                                 };
                                 match atomic_office_write(&dest, &out) {
-                                    Ok(()) => json!({"ok": true, "path": dest.display().to_string()}),
+                                    Ok(()) => {
+                                        json!({"ok": true, "path": dest.display().to_string()})
+                                    }
                                     Err(e) => json!({"ok": false, "error": e}),
                                 }
                             }
@@ -1556,7 +1582,10 @@ impl ToolService {
 
 fn atomic_office_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let dir = path.parent().ok_or("path has no parent")?;
-    let name = path.file_name().and_then(|n| n.to_str()).ok_or("path has no file name")?;
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("path has no file name")?;
     let tmp = dir.join(format!(".{name}.tmp-{}", std::process::id()));
     fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
     fs::rename(&tmp, path).map_err(|e| e.to_string())
@@ -1627,7 +1656,11 @@ fn parse_searx_json(body: &str) -> Result<Vec<everyaios_search::SearchResult>, S
 fn parse_ddg_html(body: &str) -> Vec<everyaios_search::SearchResult> {
     let mut out = Vec::new();
     for chunk in body.split("result__a") {
-        let Some(href) = chunk.split("href=\"").nth(1).and_then(|s| s.split('"').next()) else {
+        let Some(href) = chunk
+            .split("href=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+        else {
             continue;
         };
         let title = chunk
@@ -2522,7 +2555,10 @@ mod tests {
         let out = s.dispatch(&spec, &json!({"query": "everyaios"}));
         assert_eq!(out["ok"], true, "{out}");
         assert_eq!(out["count"], 1);
-        assert!(out["results"][0]["url"].as_str().unwrap().contains("everyaios"));
+        assert!(out["results"][0]["url"]
+            .as_str()
+            .unwrap()
+            .contains("everyaios"));
     }
 
     #[test]

@@ -183,8 +183,7 @@ pub fn remote_plan(server: &RegistryServer, consent_url: &str) -> Result<RemoteP
     }
     let url = consent_url.trim();
     let is_https = url.starts_with("https://");
-    let is_loopback =
-        url.starts_with("http://127.0.0.1") || url.starts_with("http://localhost");
+    let is_loopback = url.starts_with("http://127.0.0.1") || url.starts_with("http://localhost");
     if url.is_empty() || !(is_https || is_loopback) {
         return Err(PlanError::RemoteUrl(url.to_string()));
     }
@@ -287,7 +286,10 @@ impl ServerSpawner for ProcessSpawner {
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .spawn()?;
-        Ok(ChildHandle { pid: child.id(), alive: true })
+        Ok(ChildHandle {
+            pid: child.id(),
+            alive: true,
+        })
     }
 }
 
@@ -334,7 +336,11 @@ pub fn merge_into_catalog(
         .iter()
         .map(|t| ToolSurface {
             name: t.name.clone(),
-            kind: if t.read_only { "read".into() } else { "write".into() },
+            kind: if t.read_only {
+                "read".into()
+            } else {
+                "write".into()
+            },
             read_only: t.read_only,
             open_world: t.open_world,
             profile: default_profile.to_string(),
@@ -356,7 +362,12 @@ pub struct McpServerManager<S: ServerSpawner = ProcessSpawner> {
 
 impl<S: ServerSpawner> McpServerManager<S> {
     pub fn new(index: RegistryIndex, spawner: S) -> Self {
-        Self { index, spawner, installed: BTreeMap::new(), quarantined: Vec::new() }
+        Self {
+            index,
+            spawner,
+            installed: BTreeMap::new(),
+            quarantined: Vec::new(),
+        }
     }
 
     pub fn index(&self) -> &RegistryIndex {
@@ -391,7 +402,11 @@ impl<S: ServerSpawner> McpServerManager<S> {
         let plan = install_plan(server)?;
         self.installed.insert(
             id.to_string(),
-            ManagedServer { id: id.to_string(), plan: plan.clone(), state: ServerState::Installed },
+            ManagedServer {
+                id: id.to_string(),
+                plan: plan.clone(),
+                state: ServerState::Installed,
+            },
         );
         Ok(plan)
     }
@@ -438,7 +453,11 @@ mod tests {
     #[test]
     fn index_searches_and_paginates() {
         let idx = RegistryIndex::parse(&[
-            server("filesystem", "npx", "@modelcontextprotocol/server-filesystem@0.6.2"),
+            server(
+                "filesystem",
+                "npx",
+                "@modelcontextprotocol/server-filesystem@0.6.2",
+            ),
             server("github", "remote", "github"),
             server("postgres", "binary", "/usr/local/bin/mcp-postgres"),
         ]);
@@ -456,15 +475,16 @@ mod tests {
             RegistryIndex::parse(&[server("bad", "npx", "bad@1.0.0")]),
             ProcessSpawner,
         );
-        assert!(matches!(
-            m.install("bad"),
-            Err(PlanError::NotAllowed(_))
-        ));
+        assert!(matches!(m.install("bad"), Err(PlanError::NotAllowed(_))));
     }
 
     #[test]
     fn plan_refuses_floating_and_unknown_types() {
-        let floating = server("filesystem", "npx", "@modelcontextprotocol/server-filesystem");
+        let floating = server(
+            "filesystem",
+            "npx",
+            "@modelcontextprotocol/server-filesystem",
+        );
         assert!(matches!(
             install_plan(&floating),
             Err(PlanError::Floating(_))
@@ -508,10 +528,17 @@ mod tests {
 
     #[test]
     fn pinned_npx_plan_is_ok() {
-        let s = server("filesystem", "npx", "@modelcontextprotocol/server-filesystem@0.6.2");
+        let s = server(
+            "filesystem",
+            "npx",
+            "@modelcontextprotocol/server-filesystem@0.6.2",
+        );
         let plan = install_plan(&s).unwrap();
         assert_eq!(plan.command, "npx");
-        assert_eq!(plan.args[0], "@modelcontextprotocol/server-filesystem@0.6.2");
+        assert_eq!(
+            plan.args[0],
+            "@modelcontextprotocol/server-filesystem@0.6.2"
+        );
     }
 
     #[test]
@@ -530,7 +557,10 @@ mod tests {
         struct FakeSpawner;
         impl ServerSpawner for FakeSpawner {
             fn spawn(&mut self, _c: &str, _a: &[String]) -> Result<ChildHandle, SpawnError> {
-                Ok(ChildHandle { pid: 4242, alive: true })
+                Ok(ChildHandle {
+                    pid: 4242,
+                    alive: true,
+                })
             }
         }
         let idx = RegistryIndex::parse(&[server(

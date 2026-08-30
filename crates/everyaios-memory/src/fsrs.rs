@@ -25,8 +25,27 @@ pub const FSRS6_DEFAULT_DECAY: f32 = 0.1542;
 
 /// The default parameters — fit to the average person's learning habits.
 pub const DEFAULT_PARAMETERS: [f32; 21] = [
-    0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835,
-    0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, FSRS6_DEFAULT_DECAY,
+    0.212,
+    1.2931,
+    2.3065,
+    8.2956,
+    6.4133,
+    0.8334,
+    3.0194,
+    0.001,
+    1.8722,
+    0.1666,
+    0.796,
+    1.4835,
+    0.0614,
+    0.2629,
+    1.6483,
+    0.6014,
+    1.8729,
+    0.5425,
+    0.0912,
+    0.0658,
+    FSRS6_DEFAULT_DECAY,
 ];
 
 /// Clamp bounds (fsrs-rs `simulation.rs`).
@@ -268,7 +287,8 @@ fn step(w: &[f32; 21], delta_t: f32, rating: f32, state: MemoryState, nth: usize
     let last_s = state.stability.clamp(S_MIN, S_MAX);
     let last_d = state.difficulty.clamp(D_MIN, D_MAX);
     let retrievability = power_forgetting_curve(w, delta_t, last_s);
-    let stability_after_success = stability_after_success(w, last_s, last_d, retrievability, rating);
+    let stability_after_success =
+        stability_after_success(w, last_s, last_d, retrievability, rating);
     let stability_after_failure = stability_after_failure(w, last_s, last_d, retrievability);
     let stability_short_term = stability_short_term(w, last_s, rating);
     let mut new_s = if rating == 1.0 {
@@ -388,12 +408,20 @@ pub fn simulate(fsrs: &Fsrs, config: &SimulationConfig) -> SimulationReport {
     for day in 0..config.days {
         // Introduce new cards (initial Good state).
         for _ in 0..config.new_cards_per_day {
-            let state = fsrs.next_states(None, config.desired_retention, 0).good.memory;
+            let state = fsrs
+                .next_states(None, config.desired_retention, 0)
+                .good
+                .memory;
             cards.push(SimCard {
                 state,
-                due_day: day + fsrs
-                    .next_interval(Some(state.stability), config.desired_retention, Rating::Good)
-                    .ceil() as u32,
+                due_day: day
+                    + fsrs
+                        .next_interval(
+                            Some(state.stability),
+                            config.desired_retention,
+                            Rating::Good,
+                        )
+                        .ceil() as u32,
                 last_review_day: day as i32,
             });
         }
@@ -407,12 +435,17 @@ pub fn simulate(fsrs: &Fsrs, config: &SimulationConfig) -> SimulationReport {
             let r = fsrs.current_retrievability(card.state, elapsed);
             mean_r_sum += r;
             review_count += 1;
-            let states = fsrs.next_states(Some(card.state), config.desired_retention, elapsed as u32);
+            let states =
+                fsrs.next_states(Some(card.state), config.desired_retention, elapsed as u32);
             card.state = states.good.memory;
             card.last_review_day = day as i32;
             card.due_day = day
                 + fsrs
-                    .next_interval(Some(card.state.stability), config.desired_retention, Rating::Good)
+                    .next_interval(
+                        Some(card.state.stability),
+                        config.desired_retention,
+                        Rating::Good,
+                    )
                     .ceil() as u32;
             day_reviews += 1;
         }
@@ -488,7 +521,10 @@ mod tests {
             let state = MemoryState::new(s, 5.0);
             let interval = fsrs.next_interval(Some(s), r, Rating::Good);
             let back = fsrs.current_retrievability(state, interval);
-            assert!((back - r).abs() < 1e-3, "s={s} r={r}: interval {interval} → R {back}");
+            assert!(
+                (back - r).abs() < 1e-3,
+                "s={s} r={r}: interval {interval} → R {back}"
+            );
         }
     }
 
@@ -506,7 +542,10 @@ mod tests {
             1.26, 0.29, 2.61, 0.0, 0.0, 0.0, 0.5,
         ];
         for (i, (got, want)) in p.iter().zip(&expected).enumerate() {
-            assert!((got - want).abs() < 1e-5, "param[{i}]: got {got}, want {want}");
+            assert!(
+                (got - want).abs() < 1e-5,
+                "param[{i}]: got {got}, want {want}"
+            );
         }
     }
 
@@ -523,7 +562,10 @@ mod tests {
         ));
         let mut bad = [0.0f32; 21];
         bad[0] = f32::NAN;
-        assert!(matches!(Fsrs::new(&bad), Err(FsrsError::NonFiniteParameter)));
+        assert!(matches!(
+            Fsrs::new(&bad),
+            Err(FsrsError::NonFiniteParameter)
+        ));
     }
 
     #[test]
@@ -583,6 +625,9 @@ mod tests {
                 .ceil() as u32;
             state = fsrs.next_states(Some(state), 0.9, interval).good.memory;
         }
-        assert!(state.stability > s0, "stability should grow with good reviews");
+        assert!(
+            state.stability > s0,
+            "stability should grow with good reviews"
+        );
     }
 }

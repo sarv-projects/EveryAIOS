@@ -110,7 +110,10 @@ mod tests {
     fn appear_builds_set_to_visible() {
         let xml = build_timing_xml("3", AnimationEffect::Appear, 100).unwrap();
         assert!(xml.contains("<p:set>"), "{xml}");
-        assert!(xml.contains("<p:attrName>style.visibility</p:attrName>"), "{xml}");
+        assert!(
+            xml.contains("<p:attrName>style.visibility</p:attrName>"),
+            "{xml}"
+        );
         assert!(xml.contains("<p:strVal val=\"visible\"/>"), "{xml}");
         assert!(!xml.contains("<p:anim effect"), "{xml}");
     }

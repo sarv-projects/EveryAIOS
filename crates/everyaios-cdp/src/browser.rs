@@ -608,8 +608,9 @@ mod tests {
                 .map(|s| s.to_string())
                 .collect();
             assert!(
-                names.iter().any(|n| n.starts_with("google-chrome")
-                    || n.starts_with("chromium")),
+                names
+                    .iter()
+                    .any(|n| n.starts_with("google-chrome") || n.starts_with("chromium")),
                 "linux candidates must include chrome/chromium: {names:?}"
             );
             assert!(

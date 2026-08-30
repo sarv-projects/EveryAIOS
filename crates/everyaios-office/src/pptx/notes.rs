@@ -37,7 +37,9 @@ pub fn extract_notes_text(notes_slide_xml: &str) -> Result<String, NotesError> {
     let doc = Document::parse(notes_slide_xml)?;
     let mut parts: Vec<&str> = Vec::new();
     for node in doc.descendants() {
-        if node.is_element() && node.tag_name().namespace() == Some(A) && node.tag_name().name() == "t"
+        if node.is_element()
+            && node.tag_name().namespace() == Some(A)
+            && node.tag_name().name() == "t"
         {
             if let Some(t) = node.text() {
                 parts.push(t);
@@ -55,7 +57,10 @@ pub fn extract_notes_text(notes_slide_xml: &str) -> Result<String, NotesError> {
 /// Validate that the speaker-notes array stays in sync with the deck's slide
 /// ids: every slide must have a notes entry and every notes entry must map to
 /// a real slide. Returns the list of problems (empty = synced).
-pub fn validate_slides_notes_sync(slide_ids: &[String], notes: &[SpeakerNotesEntry]) -> Vec<String> {
+pub fn validate_slides_notes_sync(
+    slide_ids: &[String],
+    notes: &[SpeakerNotesEntry],
+) -> Vec<String> {
     let mut problems = Vec::new();
     let notes_ids: std::collections::HashSet<&str> =
         notes.iter().map(|n| n.slide_id.as_str()).collect();
@@ -195,8 +200,12 @@ mod tests {
         });
         let problems = validate_slides_notes_sync(&slides, &notes);
         assert_eq!(problems.len(), 2);
-        assert!(problems.iter().any(|p| p.contains("s2 has no speaker notes")));
-        assert!(problems.iter().any(|p| p.contains("s9") && p.contains("does not match")));
+        assert!(problems
+            .iter()
+            .any(|p| p.contains("s2 has no speaker notes")));
+        assert!(problems
+            .iter()
+            .any(|p| p.contains("s9") && p.contains("does not match")));
     }
 
     #[test]
@@ -212,14 +221,20 @@ mod tests {
         let mut notes = build_speaker_notes(&[("s1".into(), "T".into(), "".into())]);
         notes[0].minutes = Some(2);
         let problems = validate_slides_notes_sync(&slides, &notes);
-        assert!(problems.iter().any(|p| p.contains("minutes but no talk text")));
+        assert!(problems
+            .iter()
+            .any(|p| p.contains("minutes but no talk text")));
     }
 
     #[test]
     fn rehearsal_timing_from_word_count() {
         let notes = build_speaker_notes(&[
             ("s1".into(), "Intro".into(), "Welcome to the review.".into()),
-            ("s2".into(), "Deep".into(), "This section has exactly ten words here for timing.".into()),
+            (
+                "s2".into(),
+                "Deep".into(),
+                "This section has exactly ten words here for timing.".into(),
+            ),
         ]);
         let plan = plan_rehearsal(&notes, 10); // 10 wpm for easy math
         assert_eq!(plan.per_slide_minutes, vec![1, 1]); // 5 words→1, 10 words→1

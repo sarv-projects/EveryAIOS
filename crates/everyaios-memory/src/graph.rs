@@ -93,7 +93,10 @@ pub struct SourceSpan {
 
 impl SourceSpan {
     pub fn file_line(file: &str, line: u32) -> Self {
-        Self { file: Some(file.to_string()), line: Some(line) }
+        Self {
+            file: Some(file.to_string()),
+            line: Some(line),
+        }
     }
 }
 
@@ -132,14 +135,7 @@ impl Edge {
 /// edges), so a future backend is a drop-in, never a rewrite.
 pub trait GraphBackend {
     fn add_node(&mut self, id: &str, kind: NodeKind, label: &str);
-    fn add_edge(
-        &mut self,
-        src: &str,
-        dst: &str,
-        ty: EdgeType,
-        weight: f64,
-        at_time: u64,
-    ) -> usize;
+    fn add_edge(&mut self, src: &str, dst: &str, ty: EdgeType, weight: f64, at_time: u64) -> usize;
     fn node_count(&self) -> usize;
     fn edge_count(&self) -> usize;
     fn neighbors(&self, id: &str, at_time: u64) -> Vec<(String, EdgeType, f64)>;
@@ -414,7 +410,7 @@ impl GraphStore {
     }
 
     /// Depth-capped BFS over active edges (default d=2).
-    pub    fn query_depth(
+    pub fn query_depth(
         &self,
         source: &str,
         max_depth: usize,
@@ -451,14 +447,7 @@ impl GraphBackend for GraphStore {
         GraphStore::add_node(self, id, kind, label);
     }
 
-    fn add_edge(
-        &mut self,
-        src: &str,
-        dst: &str,
-        ty: EdgeType,
-        weight: f64,
-        at_time: u64,
-    ) -> usize {
+    fn add_edge(&mut self, src: &str, dst: &str, ty: EdgeType, weight: f64, at_time: u64) -> usize {
         GraphStore::add_edge(self, src, dst, ty, weight, at_time)
     }
 
@@ -605,7 +594,7 @@ mod tests {
         g.add_node_at("a", NodeKind::Entity, "A", 0, 0);
         g.add_node_at("b", NodeKind::Entity, "B", 5, 3); // recorded at 3
         g.add_node_at("c", NodeKind::Entity, "C", 0, 10); // recorded at 10
-        // At (valid=5, recorded=5): a and b, but not c (recorded later).
+                                                          // At (valid=5, recorded=5): a and b, but not c (recorded later).
         let snapshot = g.nodes_active_at(5, 5);
         let ids: Vec<&str> = snapshot.iter().map(|n| n.id.as_str()).collect();
         assert!(ids.contains(&"a"));

@@ -220,7 +220,8 @@ fn shell(
     // its inherited entries — landed in `doc` under a fresh id).
     let root = copied_root(doc, page_ids).unwrap_or_else(|| {
         let id = doc.new_object_id();
-        doc.objects.insert(id, Object::Dictionary(dictionary! { "Type" => "Pages" }));
+        doc.objects
+            .insert(id, Object::Dictionary(dictionary! { "Type" => "Pages" }));
         id
     });
     set_kids(doc, root, page_ids)?;
@@ -247,7 +248,8 @@ fn rebuild_flat(doc: &mut Document, page_ids: Vec<ObjectId>) -> Result<(), PageO
         Some(id) => id,
         None => {
             let id = doc.new_object_id();
-            doc.objects.insert(id, Object::Dictionary(dictionary! { "Type" => "Pages" }));
+            doc.objects
+                .insert(id, Object::Dictionary(dictionary! { "Type" => "Pages" }));
             let catalog = doc.catalog_mut()?;
             catalog.set("Pages", id);
             id
@@ -258,11 +260,7 @@ fn rebuild_flat(doc: &mut Document, page_ids: Vec<ObjectId>) -> Result<(), PageO
     Ok(())
 }
 
-fn set_kids(
-    doc: &mut Document,
-    node: ObjectId,
-    page_ids: &[ObjectId],
-) -> Result<(), PageOpError> {
+fn set_kids(doc: &mut Document, node: ObjectId, page_ids: &[ObjectId]) -> Result<(), PageOpError> {
     let kids: Vec<Object> = page_ids.iter().map(|id| Object::Reference(*id)).collect();
     let dict = doc.get_dictionary_mut(node)?;
     dict.set("Type", "Pages");
@@ -295,7 +293,10 @@ fn materialize_inherited(doc: &mut Document, page_ids: &[ObjectId]) {
         return;
     };
     let (resources, media_box) = match doc.get_dictionary(root) {
-        Ok(rd) => (rd.get(b"Resources").ok().cloned(), rd.get(b"MediaBox").ok().cloned()),
+        Ok(rd) => (
+            rd.get(b"Resources").ok().cloned(),
+            rd.get(b"MediaBox").ok().cloned(),
+        ),
         Err(_) => (None, None),
     };
     for id in page_ids {
@@ -321,7 +322,10 @@ fn materialize_inherited(doc: &mut Document, page_ids: &[ObjectId]) {
 /// references ride along; nothing else is copied.
 fn copy_subgraph(src: &Document, roots: &[ObjectId], dst: &mut Document) -> Vec<ObjectId> {
     let mut map: HashMap<ObjectId, ObjectId> = HashMap::new();
-    roots.iter().map(|id| copy_one(src, *id, dst, &mut map)).collect()
+    roots
+        .iter()
+        .map(|id| copy_one(src, *id, dst, &mut map))
+        .collect()
 }
 
 fn copy_one(
@@ -378,21 +382,13 @@ fn remap_object(
 
 /// Walk the `/Pages` tree recording each page's **effective** rotation
 /// (inherited `/Rotate` from ancestor nodes summed with the page's own).
-fn walk_rotation(
-    doc: &Document,
-    node: ObjectId,
-    inherited: i64,
-    out: &mut HashMap<ObjectId, i64>,
-) {
+fn walk_rotation(doc: &Document, node: ObjectId, inherited: i64, out: &mut HashMap<ObjectId, i64>) {
     let Ok(dict) = doc.get_dictionary(node) else {
         return;
     };
     let own = dict.get(b"Rotate").and_then(Object::as_i64).unwrap_or(0);
     let effective = inherited + own;
-    let is_page = dict
-        .get_type()
-        .map(|t| t == b"Page")
-        .unwrap_or(false);
+    let is_page = dict.get_type().map(|t| t == b"Page").unwrap_or(false);
     if is_page {
         out.insert(node, effective);
         return;
@@ -470,7 +466,10 @@ mod tests {
         let doc = Document::load_mem(&out).unwrap();
         let by_num = doc.get_pages();
         let page1 = doc.get_dictionary(by_num[&1]).unwrap();
-        assert_eq!(page1.get(b"Rotate").ok().and_then(|o| o.as_i64().ok()), Some(90));
+        assert_eq!(
+            page1.get(b"Rotate").ok().and_then(|o| o.as_i64().ok()),
+            Some(90)
+        );
         // page 2 untouched
         let page2 = doc.get_dictionary(by_num[&2]).unwrap();
         assert_eq!(page2.get(b"Rotate").ok(), None);

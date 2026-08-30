@@ -13,9 +13,28 @@ pub struct FileSummary {
 
 /// Key marker lines kept by `summarize_file` beyond the head (code + prose).
 const KEY_MARKERS: &[&str] = &[
-    "fn ", "def ", "class ", "struct ", "enum ", "impl ", "pub ", "func ", "function ",
-    "import ", "export ", "# ", "## ", "### ", "type ", "interface ", "const ", "let ",
-    "todo", "fixme", "warning", "error",
+    "fn ",
+    "def ",
+    "class ",
+    "struct ",
+    "enum ",
+    "impl ",
+    "pub ",
+    "func ",
+    "function ",
+    "import ",
+    "export ",
+    "# ",
+    "## ",
+    "### ",
+    "type ",
+    "interface ",
+    "const ",
+    "let ",
+    "todo",
+    "fixme",
+    "warning",
+    "error",
 ];
 
 /// Summarize a file: keep the first `head_lines` lines + any key marker lines
@@ -82,11 +101,7 @@ fn relevance_score(summary: &str, query_terms: &[String]) -> usize {
 
 /// Answer over summaries: rank files by query-term overlap and return the
 /// top `top_k` (most relevant first).
-pub fn answer_over_summaries(
-    files: &[FileSummary],
-    query: &str,
-    top_k: usize,
-) -> Vec<FileSummary> {
+pub fn answer_over_summaries(files: &[FileSummary], query: &str, top_k: usize) -> Vec<FileSummary> {
     let terms: Vec<String> = query
         .split(|c: char| !c.is_alphanumeric())
         .filter(|t| t.len() >= 3)

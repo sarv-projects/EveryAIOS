@@ -99,7 +99,6 @@ pub fn parse_record_stream(buf: &[u8]) -> (Vec<UsnRawRecord>, u64) {
     (out, next_usn)
 }
 
-
 /// Parse one `USN_RECORD_V2` (60-byte fixed header + UTF-16 name + padding).
 fn parse_one_record(rec: &[u8]) -> Option<UsnRawRecord> {
     // Header field offsets (all little-endian):
@@ -144,7 +143,13 @@ fn parse_one_record(rec: &[u8]) -> Option<UsnRawRecord> {
         }
     }
     let reason = reason_from_bits(reason_bits)?;
-    Some(UsnRawRecord { usn, file_ref, parent_ref, reason, name })
+    Some(UsnRawRecord {
+        usn,
+        file_ref,
+        parent_ref,
+        reason,
+        name,
+    })
 }
 
 /// Assemble an absolute `PathBuf` from a chain of names (root-first).
@@ -167,7 +172,11 @@ pub fn to_usn_record(volume: &str, raw: &UsnRawRecord, parent_chain: &[&str]) ->
     let mut chain: Vec<&str> = parent_chain.to_vec();
     chain.push(&raw.name);
     let path = assemble_path(volume, &chain);
-    UsnRecord { usn: raw.usn, reason: raw.reason, path }
+    UsnRecord {
+        usn: raw.usn,
+        reason: raw.reason,
+        path,
+    }
 }
 
 #[cfg(test)]
@@ -249,8 +258,14 @@ mod tests {
 
     #[test]
     fn reason_priority_and_close_bit() {
-        assert_eq!(reason_from_bits(0x0100 | 0x8000_0000), Some(UsnReason::Create));
-        assert_eq!(reason_from_bits(0x2000 | 0x1000), Some(UsnReason::RenameOld));
+        assert_eq!(
+            reason_from_bits(0x0100 | 0x8000_0000),
+            Some(UsnReason::Create)
+        );
+        assert_eq!(
+            reason_from_bits(0x2000 | 0x1000),
+            Some(UsnReason::RenameOld)
+        );
         assert_eq!(reason_from_bits(0x8000_0000), None); // close-only → filtered
         assert_eq!(reason_from_bits(0x0000), None);
         assert_eq!(reason_from_bits(0x4000), None); // EAs_CHANGE — not indexed
@@ -279,9 +294,15 @@ mod tests {
 
     #[test]
     fn assemble_path_joins_chain() {
-        assert_eq!(assemble_path("C:\\", &["Users", "alice"]), std::path::PathBuf::from("C:/Users/alice"));
+        assert_eq!(
+            assemble_path("C:\\", &["Users", "alice"]),
+            std::path::PathBuf::from("C:/Users/alice")
+        );
         assert_eq!(assemble_path("C:\\", &[]), std::path::PathBuf::from("C:"));
-        assert_eq!(assemble_path("D:", &["a"]), std::path::PathBuf::from("D:/a"));
+        assert_eq!(
+            assemble_path("D:", &["a"]),
+            std::path::PathBuf::from("D:/a")
+        );
     }
 
     #[test]
@@ -294,7 +315,10 @@ mod tests {
             name: "report.docx".into(),
         };
         let rec = to_usn_record("C:\\", &raw, &["Users", "alice"]);
-        assert_eq!(rec.path, std::path::PathBuf::from("C:/Users/alice/report.docx"));
+        assert_eq!(
+            rec.path,
+            std::path::PathBuf::from("C:/Users/alice/report.docx")
+        );
         assert_eq!(rec.reason, UsnReason::DataExtend);
         assert_eq!(rec.usn, 42);
     }

@@ -39,9 +39,15 @@ impl TrigramIndex {
     }
 
     pub fn insert(&mut self, path: &Path) -> Result<()> {
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         if name.len() >= 3 {
-            self.conn.execute("INSERT OR REPLACE INTO filenames(name) VALUES (?1)", params![name])?;
+            self.conn.execute(
+                "INSERT OR REPLACE INTO filenames(name) VALUES (?1)",
+                params![name],
+            )?;
         }
         Ok(())
     }
@@ -65,7 +71,12 @@ impl TrigramIndex {
             .prepare("SELECT name, bm25(filenames) AS b FROM filenames WHERE filenames MATCH ?1 ORDER BY b LIMIT ?2")?;
         // The trigram tokenizer accepts the literal substring quoted.
         let q = format!("\"{needle}\"");
-        let rows = stmt.query_map(params![q, limit as i64], |r| Ok(TrigramHit { path: PathBuf::from(r.get::<_, String>(0)?), score: r.get(1)? }))?;
+        let rows = stmt.query_map(params![q, limit as i64], |r| {
+            Ok(TrigramHit {
+                path: PathBuf::from(r.get::<_, String>(0)?),
+                score: r.get(1)?,
+            })
+        })?;
         rows.collect()
     }
 
@@ -75,7 +86,10 @@ impl TrigramIndex {
             .prepare("SELECT name FROM filenames WHERE name LIKE ?1 LIMIT ?2")?;
         let pat = format!("%{}%", needle.replace('%', "\\%"));
         let rows = stmt.query_map(params![pat, limit as i64], |r| {
-            Ok(TrigramHit { path: PathBuf::from(r.get::<_, String>(0)?), score: 1.0 })
+            Ok(TrigramHit {
+                path: PathBuf::from(r.get::<_, String>(0)?),
+                score: 1.0,
+            })
         })?;
         rows.collect()
     }
@@ -98,7 +112,10 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn tmp() -> std::path::PathBuf {
-        let n = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         std::env::temp_dir().join(format!("everyaios-trigram-{}-{n}", std::process::id()))
     }
 
@@ -109,9 +126,15 @@ mod tests {
         idx.insert(Path::new("/tmp/notes.txt")).unwrap();
         idx.insert(Path::new("/tmp/budget.xlsx")).unwrap();
         let hits = idx.search("report", 10).unwrap();
-        assert!(hits.iter().any(|h| h.path.ends_with("2024-report-final.pdf")));
+        assert!(hits
+            .iter()
+            .any(|h| h.path.ends_with("2024-report-final.pdf")));
         let hits = idx.search("2024", 10).unwrap();
-        assert!(hits.iter().any(|h| h.path.ends_with("2024-report-final.pdf")), "mid-string 2024 must match");
+        assert!(
+            hits.iter()
+                .any(|h| h.path.ends_with("2024-report-final.pdf")),
+            "mid-string 2024 must match"
+        );
         let _ = fs::remove_dir_all(tmp());
     }
 
