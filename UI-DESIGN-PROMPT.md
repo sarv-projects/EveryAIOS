@@ -7,7 +7,7 @@
 
 ## 1. What the app is
 
-EveryAIOS is a single-window **agent workspace cockpit**. One session, one ticket, one event log, one timeline: you describe work in the center chat, and the right viewport is the *live window into the real tool* — a browser navigating, a spreadsheet recalculating, code being diffed, a PDF being signed. Multiple agent runtimes (Claude Code, Codex CLI, Grok Build, Gemini CLI, Aider, OpenCode, and the inbuilt EveryAIOS orchestrator) share the same session, the same approval model, and the same viewport. The user never chases tabs across apps; the cockpit is one surface that shows whatever is happening right now.
+EveryAIOS is a single-window **agent workspace cockpit**. One durable Work, one session, one effect-authorization model, one event log, one timeline: you describe work in the center chat, and the right viewport is the *live window into the real tool* — a browser navigating, a spreadsheet recalculating, code being diffed, a PDF being signed. Multiple agent runtimes (Claude Code, Codex CLI, Grok Build, Gemini CLI, Aider, OpenCode, and the inbuilt EveryAIOS orchestrator) share the same session, the same approval model, and the same viewport. The user never chases tabs across apps; the cockpit is one surface that shows whatever is happening right now.
 
 Two modes serve two audiences (progressive disclosure, B9/P31):
 - **Casual (default)** — a 240px **work** sidebar (Search · New work · Home · Activity · Projects · Files · Automations · Recent-as-work-state). Home is a launchpad (“What would you like to get done?”), not a metrics dashboard. Guard/Memory/Connectors/Skills/Marketplace live in Settings (Control Center) or the title-bar Guard chip. Right rail stays hidden until Pro.
