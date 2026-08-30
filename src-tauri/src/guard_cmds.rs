@@ -43,9 +43,23 @@ pub fn guard_respond(
         ));
     }
     let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
+    // P47.6 — the ticket may be a single-op ticket or a BatchTicket (UC-1
+    // "approve all"): route by store. The nonce rule is identical either way.
     match action.as_str() {
-        "approve" => Ok(svc.approve_with_nonce(&ticket_id, &approval_nonce)),
-        "reject" => Ok(svc.reject_with_nonce(&ticket_id, &approval_nonce)),
+        "approve" => {
+            if svc.batch_approval_nonce(&ticket_id).is_some() {
+                Ok(svc.approve_batch_with_nonce(&ticket_id, &approval_nonce))
+            } else {
+                Ok(svc.approve_with_nonce(&ticket_id, &approval_nonce))
+            }
+        }
+        "reject" => {
+            if svc.batch_approval_nonce(&ticket_id).is_some() {
+                Ok(svc.reject_batch_with_nonce(&ticket_id, &approval_nonce))
+            } else {
+                Ok(svc.reject_with_nonce(&ticket_id, &approval_nonce))
+            }
+        }
         other => Err(format!("unknown guard action: {other}")),
     }
 }
@@ -68,11 +82,38 @@ pub fn guard_receipts(
     Ok(svc.receipts())
 }
 
-/// The current Guard-2 policy + profile + estop summary (Settings guard panel).
+/// The current Guard-2 policy + profile + estop summary (Settings guard panel),
+/// incl. the applied H34 autonomy level.
 #[tauri::command]
 pub fn guard_policy(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
     svc.handle("guard/policy", &serde_json::json!({}))
+        .map_err(|e| e.to_string())
+}
+
+/// P44.5 — the currently applied H34 autonomy level + its confidence floor.
+/// This is the value the composer's live autonomy indicator must read (the
+/// Rust preset is authoritative — the UI never guesses the level from
+/// localStorage).
+#[tauri::command]
+pub fn guard_autonomy(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
+    svc.handle("guard/autonomy", &serde_json::json!({}))
+        .map_err(|e| e.to_string())
+}
+
+/// P44.5 — apply an H34 autonomy level (`sandbox` | `ask` | `auto` |
+/// `maximum`) as a permissions.toml preset on the live GuardService. Never a
+/// Guard bypass: the hard floors (destructive, financial, new-domain
+/// external, high-risk shell) stay Ask/Block in every preset. Returns the
+/// applied level + floor so the UI can confirm the switch.
+#[tauri::command]
+pub fn guard_set_autonomy(
+    state: State<'_, AppState>,
+    level: String,
+) -> Result<serde_json::Value, String> {
+    let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
+    svc.handle("guard/set_autonomy", &serde_json::json!({ "level": level }))
         .map_err(|e| e.to_string())
 }
 

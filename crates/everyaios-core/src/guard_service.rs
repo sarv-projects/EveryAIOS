@@ -336,14 +336,18 @@ impl GuardService {
         self.batches
             .use_batch_ticket(ticket_id, change_set_hash)
             .map_err(|e| e.to_string())
-    }
-
-    /// The approved change-set hash for a batch ticket (the executor presents
+    }    /// The approved change-set hash for a batch ticket (the executor presents
     /// it back at consume time; the card renders it for the human).
     pub fn batch_change_set_hash(&self, ticket_id: &str) -> Option<String> {
+        self.batches.get(ticket_id).map(|t| t.change_set_hash.clone())
+    }
+
+    /// The card-bound approval nonce for a batch ticket (same P10.2 rule as
+    /// single tickets — the card bridge presents it back to approve).
+    pub fn batch_approval_nonce(&self, ticket_id: &str) -> Option<String> {
         self.batches
             .get(ticket_id)
-            .map(|t| t.change_set_hash.clone())
+            .map(|t| t.approval_nonce.clone())
     }
 
     pub fn set_ticket_bindings(
@@ -593,12 +597,36 @@ impl GuardService {
                 }
             }
             "guard/policy" => {
-                // Summary of the loaded policy (for the Settings guard panel).
+                // Summary of the loaded policy (for the Settings guard panel),
+                // incl. the applied H34 autonomy level (P44.5).
                 Ok(json!({
                     "minConfidenceForAuto": self.policy.min_confidence_for_auto,
                     "userFeedbackLearning": self.policy.user_feedback_learning,
                     "profile": self.profile().as_str(),
                     "estopPulled": self.estop.is_pulled(),
+                    "autonomyLevel": self.autonomy_level().as_str(),
+                }))
+            }
+            "guard/autonomy" => {
+                // The currently applied H34 autonomy level (P44.5 preset) +
+                // its confidence floor — what the UI indicator must read.
+                let level = self.autonomy_level();
+                Ok(json!({
+                    "autonomyLevel": level.as_str(),
+                    "minConfidenceForAuto": self.policy.min_confidence_for_auto,
+                }))
+            }
+            "guard/set_autonomy" => {
+                // Apply an H34 level as a permissions.toml preset (never a
+                // Guard bypass — the hard floors stay). Returns the applied
+                // level + floor so the UI can confirm.
+                let name = str_param(params, "level").ok_or("guard/set_autonomy requires level")?;
+                let level = everyaios_guard::AutonomyPreset::parse(name)
+                    .ok_or_else(|| format!("unknown autonomy level: {name}"))?;
+                self.set_autonomy_level(level);
+                Ok(json!({
+                    "autonomyLevel": level.as_str(),
+                    "minConfidenceForAuto": self.policy.min_confidence_for_auto,
                 }))
             }
             "guard/ticket_status" => {
@@ -1118,5 +1146,52 @@ mod tests {
             0,
         );
         assert!(matches!(d, GuardDecision::Ask { .. }));
+    }
+
+    #[test]
+    fn autonomy_handle_methods_report_and_apply_presets() {
+        let mut g = GuardService::new();
+        // Default = Ask preset.
+        let out = g.handle("guard/autonomy", &json!({})).unwrap();
+        assert_eq!(out["autonomyLevel"], "ask");
+        assert_eq!(out["minConfidenceForAuto"], 0.85);
+
+        // Apply auto → reported + floor drops.
+        let out = g
+            .handle("guard/set_autonomy", &json!({ "level": "auto" }))
+            .unwrap();
+        assert_eq!(out["autonomyLevel"], "auto");
+        assert_eq!(out["minConfidenceForAuto"], 0.75);
+        assert_eq!(g.autonomy_level(), everyaios_guard::AutonomyPreset::Auto);
+
+        // Maximum maps through the wire name.
+        let out = g
+            .handle("guard/set_autonomy", &json!({ "level": "maximum" }))
+            .unwrap();
+        assert_eq!(out["autonomyLevel"], "maximum");
+        assert_eq!(out["minConfidenceForAuto"], 0.6);
+
+        // Sandbox blocks a write outright (the preset is live on the gate).
+        g.handle("guard/set_autonomy", &json!({ "level": "sandbox" }))
+            .unwrap();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &[]),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Block { .. }));
+
+        // Unknown level refuses.
+        assert!(g
+            .handle("guard/set_autonomy", &json!({ "level": "bogus" }))
+            .is_err());
+
+        // guard/policy now carries the autonomy level too.
+        let out = g.handle("guard/policy", &json!({})).unwrap();
+        assert_eq!(out["autonomyLevel"], "sandbox");
     }
 }
