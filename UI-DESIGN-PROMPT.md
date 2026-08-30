@@ -1,6 +1,6 @@
 # EveryAIOS — Production UI Design Specification
 
-> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). The `ui/` tree is the **mock of the finished product** — explorable in a plain browser (`npm run dev`) with demo fallbacks, and live-wired inside Tauri. This file describes that mock as it should look at the end state (spec v3.58), not a wishlist of unbuilt chrome.
+> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). The `ui/` tree is the **mock of the finished product** — explorable in a plain browser (`npm run dev`) with demo fallbacks, and live-wired inside Tauri. This file describes that mock as it should look at the end state (spec v3.66 — architecture frozen), not a wishlist of unbuilt chrome.
 > **v3.57 (2026-08-26):** composer is **three independent controls** — **Agent ▾ (WHO)** · **Work Mode ▾ (WHAT: 🤖 Auto · 📐 Plan · 🔨 Build · 🔎 Research)** · **Autonomy ▾ (HOW MUCH: 🛡 Sandbox · 👀 Ask · ⚡ Auto · 🚀 Maximum)**. Default chips `[🤖 Auto] [🛡 Ask]`. Code/browser/Office/terminal are capabilities *inside Build*, never extra modes (OpenCode Plan/Build + Cowork Chat/Cowork + Hermes sandbox/ask — we did not copy their chrome). Office views are **honest engines** (block list / formula bar / slides+notes / pdf.js+ops), not Microsoft ribbon clones. Guard-2 v1 = webview + nonce. P42 Graph/Workspace rows stay **not attached**. Version badge in the title/status bars is `v3.57`.
 
 ---
