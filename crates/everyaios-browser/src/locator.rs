@@ -99,11 +99,7 @@ pub fn find_semantic(root: &A11yNode, query: &SemanticQuery) -> Vec<Located> {
     out
 }
 
-fn find_semantic_into(
-    node: &A11yNode,
-    query: &SemanticQuery,
-    out: &mut Vec<Located>,
-) {
+fn find_semantic_into(node: &A11yNode, query: &SemanticQuery, out: &mut Vec<Located>) {
     if query.matches(node) {
         out.push(Located::from(node));
     }
@@ -277,11 +273,10 @@ impl std::fmt::Display for BatchParseError {
 /// the offending index so the caller can report which line was malformed
 /// instead of rejecting the whole batch silently.
 pub fn parse_batch(json: &str) -> Result<Vec<ActKind>, BatchParseError> {
-    let values: Vec<Value> = serde_json::from_str(json)
-        .map_err(|e| BatchParseError {
-            index: 0,
-            message: format!("batch is not a JSON array: {e}"),
-        })?;
+    let values: Vec<Value> = serde_json::from_str(json).map_err(|e| BatchParseError {
+        index: 0,
+        message: format!("batch is not a JSON array: {e}"),
+    })?;
     values
         .into_iter()
         .enumerate()
@@ -307,8 +302,14 @@ mod tests {
         let mut search = A11yNode::new("searchbox", "Search the site")
             .with_ref("e1")
             .with_actionable();
-        search.push(A11yNode::new("button", "Clear search").with_ref("e2").with_actionable());
-        let email = A11yNode::new("textbox", "Email").with_ref("e3").with_actionable();
+        search.push(
+            A11yNode::new("button", "Clear search")
+                .with_ref("e2")
+                .with_actionable(),
+        );
+        let email = A11yNode::new("textbox", "Email")
+            .with_ref("e3")
+            .with_actionable();
         let img = A11yNode::new("img", "");
         root.push(search);
         root.push(email);
@@ -356,8 +357,16 @@ mod tests {
     #[test]
     fn audit_flags_duplicate_ref() {
         let mut root = A11yNode::new("WebArea", "");
-        root.push(A11yNode::new("button", "A").with_ref("e1").with_actionable());
-        root.push(A11yNode::new("button", "B").with_ref("e1").with_actionable());
+        root.push(
+            A11yNode::new("button", "A")
+                .with_ref("e1")
+                .with_actionable(),
+        );
+        root.push(
+            A11yNode::new("button", "B")
+                .with_ref("e1")
+                .with_actionable(),
+        );
         let issues = a11y_audit(&root);
         assert!(issues.iter().any(|i| i.rule == "duplicate_ref"));
     }
@@ -370,7 +379,12 @@ mod tests {
         ]"#;
         let cmds = parse_batch(json).unwrap();
         assert_eq!(cmds.len(), 2);
-        assert_eq!(cmds[0], ActKind::Click { ref_id: "e1".into() });
+        assert_eq!(
+            cmds[0],
+            ActKind::Click {
+                ref_id: "e1".into()
+            }
+        );
         assert_eq!(
             cmds[1],
             ActKind::Type {

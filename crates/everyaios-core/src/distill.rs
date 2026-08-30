@@ -103,10 +103,7 @@ fn approx_tokens(chars: usize) -> usize {
 /// Distill a context. Disabled config (the default) returns a pass-through
 /// with no gap. When enabled, each block over its proportional budget keeps
 /// its leading span and digests the pruned tail.
-pub fn distill_context(
-    blocks: &[ContextBlock],
-    cfg: &DistillConfig,
-) -> DistilledContext {
+pub fn distill_context(blocks: &[ContextBlock], cfg: &DistillConfig) -> DistilledContext {
     if !cfg.should_distill() {
         return DistilledContext {
             blocks: blocks
@@ -212,10 +209,7 @@ mod tests {
         let cfg = DistillConfig::enabled(0.5);
         let long = "A".repeat(1_000);
         let short = "B".repeat(10);
-        let out = distill_context(
-            &[block("long", &long), block("short", &short)],
-            &cfg,
-        );
+        let out = distill_context(&[block("long", &long), block("short", &short)], &cfg);
         assert!(out.has_gap);
         let long_block = out.blocks.iter().find(|b| b.id == "long").unwrap();
         assert!(long_block.has_gap);

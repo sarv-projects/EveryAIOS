@@ -15,8 +15,13 @@ use tauri_plugin_updater::UpdaterExt;
 /// `{ available, currentVersion?, version?, notes? }`.
 #[tauri::command]
 pub async fn updater_check(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let updater = app.updater().map_err(|e| format!("updater unavailable: {e}"))?;
-    let update = updater.check().await.map_err(|e| format!("update check failed: {e}"))?;
+    let updater = app
+        .updater()
+        .map_err(|e| format!("updater unavailable: {e}"))?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("update check failed: {e}"))?;
     Ok(match update {
         Some(u) => json!({
             "available": true,
@@ -34,8 +39,13 @@ pub async fn updater_check(app: tauri::AppHandle) -> Result<serde_json::Value, S
 /// pending.
 #[tauri::command]
 pub async fn updater_install(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let updater = app.updater().map_err(|e| format!("updater unavailable: {e}"))?;
-    let update = updater.check().await.map_err(|e| format!("update check failed: {e}"))?;
+    let updater = app
+        .updater()
+        .map_err(|e| format!("updater unavailable: {e}"))?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("update check failed: {e}"))?;
     let Some(update) = update else {
         return Ok(json!({ "installed": false, "reason": "no-update" }));
     };

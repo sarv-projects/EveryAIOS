@@ -12,11 +12,9 @@
 //! [`SendApproval`] verified by [`ReadFirstPolicy`] — single-use, bound to the
 //! exact payload hash, never auto-approved.
 
-use super::read_first::{
-    ReadFirstPolicy, SendAction, SendApproval, SendBlocked, SendKind,
-};
-use super::{HttpTransport, TransportError, TransportErrorKind};
 use super::gmail::TokenRefresher;
+use super::read_first::{ReadFirstPolicy, SendAction, SendApproval, SendBlocked, SendKind};
+use super::{HttpTransport, TransportError, TransportErrorKind};
 
 /// Simplified mail message for agent consumption.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -98,10 +96,7 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
     }
 
     /// Execute a GET with 401 → refresh → retry once.
-    fn get_with_refresh(
-        &mut self,
-        url: &str,
-    ) -> Result<Vec<u8>, TransportError> {
+    fn get_with_refresh(&mut self, url: &str) -> Result<Vec<u8>, TransportError> {
         let headers = self.auth_headers();
         match self.transport.get(url, &headers) {
             Err(e) if e.kind == TransportErrorKind::Auth => {
@@ -133,13 +128,15 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
 
     /// `GET /me/messages?$top=N` — inbox mail, newest first.
     pub fn list_mail(&mut self, top: u32) -> Result<Vec<GraphMailMessage>, TransportError> {
-        let url = format!("{GRAPH_API_BASE}/{}/messages?$top={top}&$orderby=receivedDateTime%20desc", self.principal);
+        let url = format!(
+            "{GRAPH_API_BASE}/{}/messages?$top={top}&$orderby=receivedDateTime%20desc",
+            self.principal
+        );
         let raw = self.get_with_refresh(&url)?;
-        let v: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("graph mail list: {e}"),
-            })?;
+        let v: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("graph mail list: {e}"),
+        })?;
         let items = v.get("value").cloned().unwrap_or(serde_json::json!([]));
         let msgs: Vec<GraphMailMessage> = items
             .as_array()
@@ -174,15 +171,16 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
     pub fn get_mail(&mut self, id: &str) -> Result<GraphMailMessage, TransportError> {
         let url = format!("{GRAPH_API_BASE}/{}/messages/{id}", self.principal);
         let raw = self.get_with_refresh(&url)?;
-        let m: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("graph mail get: {e}"),
-            })?;
+        let m: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("graph mail get: {e}"),
+        })?;
         Ok(GraphMailMessage {
             id: m["id"].as_str().unwrap_or_default().into(),
             subject: m["subject"].as_str().unwrap_or_default().into(),
-            from: m["from"]["emailAddress"]["address"].as_str().map(String::from),
+            from: m["from"]["emailAddress"]["address"]
+                .as_str()
+                .map(String::from),
             to: m["toRecipients"]
                 .as_array()
                 .map(|arr| {
@@ -209,11 +207,10 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
             self.principal
         );
         let raw = self.get_with_refresh(&url)?;
-        let v: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("graph calendar: {e}"),
-            })?;
+        let v: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("graph calendar: {e}"),
+        })?;
         Ok(v.get("value")
             .and_then(|x| x.as_array())
             .map(|arr| {
@@ -224,9 +221,7 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
                         start: e["start"]["dateTime"].as_str().map(String::from),
                         end: e["end"]["dateTime"].as_str().map(String::from),
                         location: e["location"]["displayName"].as_str().map(String::from),
-                        is_online_meeting: e["isOnlineMeeting"]
-                            .as_bool()
-                            .unwrap_or(false),
+                        is_online_meeting: e["isOnlineMeeting"].as_bool().unwrap_or(false),
                     })
                     .collect()
             })
@@ -237,11 +232,10 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
     pub fn list_drive_children(&mut self) -> Result<Vec<GraphDriveItem>, TransportError> {
         let url = format!("{GRAPH_API_BASE}/{}/drive/root/children", self.principal);
         let raw = self.get_with_refresh(&url)?;
-        let v: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("graph drive: {e}"),
-            })?;
+        let v: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("graph drive: {e}"),
+        })?;
         Ok(v.get("value")
             .and_then(|x| x.as_array())
             .map(|arr| {
@@ -251,9 +245,7 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
                         name: f["name"].as_str().unwrap_or_default().into(),
                         folder: f["folder"].is_object(),
                         size: f["size"].as_u64(),
-                        download_url: f["@microsoft.graph.downloadUrl"]
-                            .as_str()
-                            .map(String::from),
+                        download_url: f["@microsoft.graph.downloadUrl"].as_str().map(String::from),
                     })
                     .collect()
             })
@@ -264,11 +256,10 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
     pub fn get_drive_file(&mut self, id: &str) -> Result<GraphDriveItem, TransportError> {
         let url = format!("{GRAPH_API_BASE}/{}/drive/items/{id}", self.principal);
         let raw = self.get_with_refresh(&url)?;
-        let f: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("graph drive get: {e}"),
-            })?;
+        let f: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("graph drive get: {e}"),
+        })?;
         Ok(GraphDriveItem {
             id: f["id"].as_str().unwrap_or_default().into(),
             name: f["name"].as_str().unwrap_or_default().into(),
@@ -282,11 +273,10 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
     pub fn list_chats(&mut self) -> Result<Vec<GraphChat>, TransportError> {
         let url = format!("{GRAPH_API_BASE}/{}/chats", self.principal);
         let raw = self.get_with_refresh(&url)?;
-        let v: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("graph chats: {e}"),
-            })?;
+        let v: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("graph chats: {e}"),
+        })?;
         Ok(v.get("value")
             .and_then(|x| x.as_array())
             .map(|arr| {
@@ -306,13 +296,15 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
         &mut self,
         chat_id: &str,
     ) -> Result<Vec<GraphChatMessage>, TransportError> {
-        let url = format!("{GRAPH_API_BASE}/{}/chats/{chat_id}/messages", self.principal);
+        let url = format!(
+            "{GRAPH_API_BASE}/{}/chats/{chat_id}/messages",
+            self.principal
+        );
         let raw = self.get_with_refresh(&url)?;
-        let v: serde_json::Value = serde_json::from_slice(&raw)
-            .map_err(|e| TransportError {
-                kind: TransportErrorKind::InvalidResponse,
-                message: format!("graph chat messages: {e}"),
-            })?;
+        let v: serde_json::Value = serde_json::from_slice(&raw).map_err(|e| TransportError {
+            kind: TransportErrorKind::InvalidResponse,
+            message: format!("graph chat messages: {e}"),
+        })?;
         Ok(v.get("value")
             .and_then(|x| x.as_array())
             .map(|arr| {
@@ -360,9 +352,7 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
             "saveToSentItems": true,
         });
         let url = format!("{GRAPH_API_BASE}/{}/sendMail", self.principal);
-        let body = serde_json::to_vec(&payload).map_err(|_e| {
-            SendBlocked::NoApproval
-        })?;
+        let body = serde_json::to_vec(&payload).map_err(|_e| SendBlocked::NoApproval)?;
         self.post_json_with_refresh(&url, &body)
             .map_err(|_e| SendBlocked::NoApproval)?;
         Ok(action.args_hash)
@@ -391,8 +381,7 @@ impl<T: HttpTransport, R: TokenRefresher> GraphConnector<T, R> {
             "end": { "dateTime": end, "timeZone": "UTC" },
         });
         let url = format!("{GRAPH_API_BASE}/{}/events", self.principal);
-        let body = serde_json::to_vec(&payload)
-            .map_err(|_e| SendBlocked::NoApproval)?;
+        let body = serde_json::to_vec(&payload).map_err(|_e| SendBlocked::NoApproval)?;
         self.post_json_with_refresh(&url, &body)
             .map_err(|_e| SendBlocked::NoApproval)?;
         Ok(action.args_hash)
@@ -412,14 +401,23 @@ mod tests {
     impl MockTransport {
         fn ok(json: serde_json::Value) -> Self {
             let mut q = std::collections::VecDeque::new();
-            q.push_back((serde_json::to_vec(&json).unwrap(), TransportErrorKind::Other));
-            Self { responses: std::cell::RefCell::new(q), requests: std::sync::Mutex::new(Vec::new()) }
+            q.push_back((
+                serde_json::to_vec(&json).unwrap(),
+                TransportErrorKind::Other,
+            ));
+            Self {
+                responses: std::cell::RefCell::new(q),
+                requests: std::sync::Mutex::new(Vec::new()),
+            }
         }
         fn auth_then_ok(ok: serde_json::Value) -> Self {
             let mut q = std::collections::VecDeque::new();
             q.push_back((Vec::new(), TransportErrorKind::Auth));
             q.push_back((serde_json::to_vec(&ok).unwrap(), TransportErrorKind::Other));
-            Self { responses: std::cell::RefCell::new(q), requests: std::sync::Mutex::new(Vec::new()) }
+            Self {
+                responses: std::cell::RefCell::new(q),
+                requests: std::sync::Mutex::new(Vec::new()),
+            }
         }
         fn next(&self) -> Option<(Vec<u8>, TransportErrorKind)> {
             self.responses.borrow_mut().pop_front()
@@ -517,7 +515,10 @@ mod tests {
         // matching approval → allowed (hash over the exact payload the
         // connector hashes: to.join(";"), subject, body)
         let action = SendAction {
-            kind: SendKind::Email { to: "a@example.com".into(), subject: "hi".into() },
+            kind: SendKind::Email {
+                to: "a@example.com".into(),
+                subject: "hi".into(),
+            },
             args_hash: SendAction::hash_payload(&["a@example.com", "hi", "body"]),
             open_world: false,
         };
@@ -526,7 +527,9 @@ mod tests {
             bound_args_hash: action.args_hash.clone(),
             reason: "user confirmed".into(),
         };
-        let hash = c.send_mail(&mut policy, &to, "hi", "body", false, Some(&approval)).unwrap();
+        let hash = c
+            .send_mail(&mut policy, &to, "hi", "body", false, Some(&approval))
+            .unwrap();
         assert_eq!(hash, action.args_hash);
         // single-use: replaying the same ticket fails
         assert!(matches!(
@@ -540,14 +543,26 @@ mod tests {
         let empty = serde_json::json!({ "value": [] });
         let t = MockTransport {
             responses: std::cell::RefCell::new(std::collections::VecDeque::from(vec![
-                (serde_json::to_vec(&empty).unwrap(), TransportErrorKind::Other),
-                (serde_json::to_vec(&empty).unwrap(), TransportErrorKind::Other),
-                (serde_json::to_vec(&empty).unwrap(), TransportErrorKind::Other),
+                (
+                    serde_json::to_vec(&empty).unwrap(),
+                    TransportErrorKind::Other,
+                ),
+                (
+                    serde_json::to_vec(&empty).unwrap(),
+                    TransportErrorKind::Other,
+                ),
+                (
+                    serde_json::to_vec(&empty).unwrap(),
+                    TransportErrorKind::Other,
+                ),
             ])),
             requests: std::sync::Mutex::new(Vec::new()),
         };
         let mut c = GraphConnector::new(t, NoRefresh, "Bearer tok".into());
-        assert!(c.list_calendar_events("2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z").unwrap().is_empty());
+        assert!(c
+            .list_calendar_events("2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z")
+            .unwrap()
+            .is_empty());
         assert!(c.list_drive_children().unwrap().is_empty());
         assert!(c.list_chats().unwrap().is_empty());
     }

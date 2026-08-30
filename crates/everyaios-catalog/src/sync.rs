@@ -31,16 +31,71 @@ pub struct SyncSpec {
 /// The per-provider refresh modules the maintenance loop runs (post-v1 —
 /// the vendored baseline ships static today).
 pub const SYNC_MODULES: &[SyncSpec] = &[
-    SyncSpec { provider: "anthropic", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters", "context_length"] },
-    SyncSpec { provider: "openai", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters", "context_length"] },
-    SyncSpec { provider: "google", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters", "context_length"] },
-    SyncSpec { provider: "mistral", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters"] },
-    SyncSpec { provider: "meta", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters"] },
-    SyncSpec { provider: "cohere", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters"] },
-    SyncSpec { provider: "xai", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters"] },
-    SyncSpec { provider: "deepseek", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters"] },
-    SyncSpec { provider: "qwen", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters"] },
-    SyncSpec { provider: "groq", source: "https://models.dev/api", writable_fields: &["pricing", "top_provider", "supported_parameters"] },
+    SyncSpec {
+        provider: "anthropic",
+        source: "https://models.dev/api",
+        writable_fields: &[
+            "pricing",
+            "top_provider",
+            "supported_parameters",
+            "context_length",
+        ],
+    },
+    SyncSpec {
+        provider: "openai",
+        source: "https://models.dev/api",
+        writable_fields: &[
+            "pricing",
+            "top_provider",
+            "supported_parameters",
+            "context_length",
+        ],
+    },
+    SyncSpec {
+        provider: "google",
+        source: "https://models.dev/api",
+        writable_fields: &[
+            "pricing",
+            "top_provider",
+            "supported_parameters",
+            "context_length",
+        ],
+    },
+    SyncSpec {
+        provider: "mistral",
+        source: "https://models.dev/api",
+        writable_fields: &["pricing", "top_provider", "supported_parameters"],
+    },
+    SyncSpec {
+        provider: "meta",
+        source: "https://models.dev/api",
+        writable_fields: &["pricing", "top_provider", "supported_parameters"],
+    },
+    SyncSpec {
+        provider: "cohere",
+        source: "https://models.dev/api",
+        writable_fields: &["pricing", "top_provider", "supported_parameters"],
+    },
+    SyncSpec {
+        provider: "xai",
+        source: "https://models.dev/api",
+        writable_fields: &["pricing", "top_provider", "supported_parameters"],
+    },
+    SyncSpec {
+        provider: "deepseek",
+        source: "https://models.dev/api",
+        writable_fields: &["pricing", "top_provider", "supported_parameters"],
+    },
+    SyncSpec {
+        provider: "qwen",
+        source: "https://models.dev/api",
+        writable_fields: &["pricing", "top_provider", "supported_parameters"],
+    },
+    SyncSpec {
+        provider: "groq",
+        source: "https://models.dev/api",
+        writable_fields: &["pricing", "top_provider", "supported_parameters"],
+    },
 ];
 
 /// A single gate finding (the `bun validate` output line).
@@ -67,7 +122,10 @@ pub fn validate_vendored(entries: &[ModelEntry], known_labs: &[&str]) -> Vec<Gat
 
     for e in entries {
         if e.id.is_empty() {
-            findings.push(GateFinding { severity: Severity::Error, message: "empty id row".into() });
+            findings.push(GateFinding {
+                severity: Severity::Error,
+                message: "empty id row".into(),
+            });
             continue;
         }
         if !seen.insert(&e.id) {
@@ -100,7 +158,10 @@ pub fn validate_vendored(entries: &[ModelEntry], known_labs: &[&str]) -> Vec<Gat
     // resolvable base_model (reuses tier validation against the canonical
     // lab set).
     for v in validate_tiers(entries, known_labs) {
-        findings.push(GateFinding { severity: Severity::Error, message: v });
+        findings.push(GateFinding {
+            severity: Severity::Error,
+            message: v,
+        });
     }
 
     findings
@@ -118,7 +179,12 @@ pub fn gate_passes(findings: &[GateFinding]) -> bool {
 pub fn refresh_plan() -> Vec<String> {
     SYNC_MODULES
         .iter()
-        .map(|s| format!("fetch {} from {} → gate → merge baseline", s.provider, s.source))
+        .map(|s| {
+            format!(
+                "fetch {} from {} → gate → merge baseline",
+                s.provider, s.source
+            )
+        })
         .collect()
 }
 
@@ -187,7 +253,11 @@ pub fn merge_refresh(
         fetched_providers: fetched_providers.len(),
         findings,
         accepted,
-        accepted_entries: if accepted { merged.len() } else { baseline.len() },
+        accepted_entries: if accepted {
+            merged.len()
+        } else {
+            baseline.len()
+        },
         rejected_providers,
     }
 }
@@ -219,12 +289,12 @@ mod tests {
     #[test]
     fn gate_catches_duplicates_negatives_and_empties() {
         let entries = vec![
-            entry("", 200_000, 1e-5, 1e-4),                       // empty id
-            entry("x/a", 0, 1e-5, 1e-4),                          // no context
-            entry("x/b", 10_000, -1.0, 1e-4),                     // negative price
-            entry("y/c", 10_000, 1e-5, 1e-4),                     // fine
-            entry("y/c", 10_000, 1e-5, 1e-4),                     // duplicate id
-            entry("x/a", 200_000, 1e-5, 1e-4),                    // dup of x/a (dup context)
+            entry("", 200_000, 1e-5, 1e-4),    // empty id
+            entry("x/a", 0, 1e-5, 1e-4),       // no context
+            entry("x/b", 10_000, -1.0, 1e-4),  // negative price
+            entry("y/c", 10_000, 1e-5, 1e-4),  // fine
+            entry("y/c", 10_000, 1e-5, 1e-4),  // duplicate id
+            entry("x/a", 200_000, 1e-5, 1e-4), // dup of x/a (dup context)
         ];
         let findings = validate_vendored(&entries, &[]);
         assert!(!gate_passes(&findings));
@@ -261,7 +331,11 @@ mod tests {
         let report = merge_refresh(
             &baseline,
             &fetched,
-            &["anthropic/claude-opus-4-6", "openai/gpt-5", "deepseek/deepseek-v4"],
+            &[
+                "anthropic/claude-opus-4-6",
+                "openai/gpt-5",
+                "deepseek/deepseek-v4",
+            ],
         );
         assert!(report.accepted, "{report:?}");
         assert_eq!(report.fetched_providers, 2);
@@ -277,7 +351,10 @@ mod tests {
         let fetched = vec![entry("bedrock/claude-x", 200_000, 1e-5, 1e-4)];
         let report = merge_refresh(&baseline, &fetched, &["anthropic/claude-opus-4-6"]);
         assert!(!report.accepted);
-        assert!(report.findings.iter().any(|f| f.message.contains("base_model")));
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.message.contains("base_model")));
         // the baseline is untouched on rejection
         assert_eq!(report.accepted_entries, baseline.len());
     }

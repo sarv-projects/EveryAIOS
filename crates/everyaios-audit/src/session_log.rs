@@ -56,8 +56,13 @@ impl EventType {
 }
 
 /// The canonical context-injection sources the Trajectory (J5) view filters by.
-pub const CONTEXT_SOURCES: [&str; 5] =
-    ["persona", "user_document", "memory", "tool_result", "blueprint"];
+pub const CONTEXT_SOURCES: [&str; 5] = [
+    "persona",
+    "user_document",
+    "memory",
+    "tool_result",
+    "blueprint",
+];
 
 /// Is `source` one of the canonical injection sources (J5)?
 pub fn is_context_source(source: &str) -> bool {
@@ -262,9 +267,7 @@ impl SessionLog {
     /// Trajectory view filters by source). Empty when no injections were
     /// recorded; unknown/missing sources are preserved as-is (the view groups
     /// them under an `other` bucket).
-    pub fn context_injections(
-        &self,
-    ) -> Result<Vec<ContextInjectionRecord>, SessionLogError> {
+    pub fn context_injections(&self) -> Result<Vec<ContextInjectionRecord>, SessionLogError> {
         let events = self.events()?;
         Ok(events
             .into_iter()
@@ -276,10 +279,7 @@ impl SessionLog {
                     .and_then(Value::as_str)
                     .unwrap_or("other")
                     .to_string();
-                let tokens = e
-                    .result_meta
-                    .get("tokens")
-                    .and_then(Value::as_u64);
+                let tokens = e.result_meta.get("tokens").and_then(Value::as_u64);
                 let ref_id = e
                     .result_meta
                     .get("refId")
@@ -437,15 +437,9 @@ impl SessionLog {
         // Write the forked events to a new session log.
         // self.path is base_dir/sessions/<id>.ndjson; we need base_dir (two
         // levels up: file → sessions/ → base_dir).
-        let base = self
-            .path
-            .parent()
-            .and_then(|p| p.parent())
-            .ok_or_else(|| {
-                SessionLogError::Io(io::Error::other(
-                    "cannot determine base directory",
-                ))
-            })?;
+        let base = self.path.parent().and_then(|p| p.parent()).ok_or_else(|| {
+            SessionLogError::Io(io::Error::other("cannot determine base directory"))
+        })?;
         let mut new_log = SessionLog::open(base, new_session_id)?;
         for ev in forked_events {
             new_log.append(EventInput {
@@ -863,8 +857,12 @@ mod tests {
         let dir = tmp_dir("project");
         let mut log = SessionLog::open(&dir, "proj-sess").unwrap();
         // Turn 1: user message + tool call + assistant reply.
-        log.append(EventInput::new(EventType::UserMessageAdded, "proj-sess", "agent"))
-            .unwrap();
+        log.append(EventInput::new(
+            EventType::UserMessageAdded,
+            "proj-sess",
+            "agent",
+        ))
+        .unwrap();
         let mut tool_started = EventInput::new(EventType::ToolStarted, "proj-sess", "agent");
         tool_started.tool = "browser.read".into();
         tool_started.args_hash = "h1".into();
@@ -877,8 +875,12 @@ mod tests {
         reply.result_meta = serde_json::json!({"content": "hello there"});
         log.append(reply).unwrap();
         // Turn 2: user message + assistant reply (no tools).
-        log.append(EventInput::new(EventType::UserMessageAdded, "proj-sess", "agent"))
-            .unwrap();
+        log.append(EventInput::new(
+            EventType::UserMessageAdded,
+            "proj-sess",
+            "agent",
+        ))
+        .unwrap();
         let mut reply2 = EventInput::new(EventType::ModelTurnCompleted, "proj-sess", "agent");
         reply2.result_meta = serde_json::json!({"content": "second reply"});
         log.append(reply2).unwrap();
@@ -909,15 +911,31 @@ mod tests {
         let dir = tmp_dir("fork");
         let mut log = SessionLog::open(&dir, "src-sess").unwrap();
         // Turn 1: user + assistant.
-        log.append(EventInput::new(EventType::UserMessageAdded, "src-sess", "a"))
-            .unwrap();
-        log.append(EventInput::new(EventType::ModelTurnCompleted, "src-sess", "a"))
-            .unwrap();
+        log.append(EventInput::new(
+            EventType::UserMessageAdded,
+            "src-sess",
+            "a",
+        ))
+        .unwrap();
+        log.append(EventInput::new(
+            EventType::ModelTurnCompleted,
+            "src-sess",
+            "a",
+        ))
+        .unwrap();
         // Turn 2: user + assistant.
-        log.append(EventInput::new(EventType::UserMessageAdded, "src-sess", "a"))
-            .unwrap();
-        log.append(EventInput::new(EventType::ModelTurnCompleted, "src-sess", "a"))
-            .unwrap();
+        log.append(EventInput::new(
+            EventType::UserMessageAdded,
+            "src-sess",
+            "a",
+        ))
+        .unwrap();
+        log.append(EventInput::new(
+            EventType::ModelTurnCompleted,
+            "src-sess",
+            "a",
+        ))
+        .unwrap();
         // Fork at turn 1.
         let lineage = log.fork_at_turn(1, "fork-sess").unwrap();
         assert_eq!(lineage.source_session, "src-sess");

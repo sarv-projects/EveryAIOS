@@ -338,8 +338,14 @@ impl ProviderRegistry {
         };
         let rec = self.by_id.get(&id)?;
         let advertised = crate::probe::AdvertisedHardCaps {
-            tools: rec.capabilities.iter().any(|c| c.eq_ignore_ascii_case("tools") || c.eq_ignore_ascii_case("tool_calling")),
-            structured_output: rec.capabilities.iter().any(|c| c.eq_ignore_ascii_case("structured_output") || c.eq_ignore_ascii_case("structured_outputs")),
+            tools: rec
+                .capabilities
+                .iter()
+                .any(|c| c.eq_ignore_ascii_case("tools") || c.eq_ignore_ascii_case("tool_calling")),
+            structured_output: rec.capabilities.iter().any(|c| {
+                c.eq_ignore_ascii_case("structured_output")
+                    || c.eq_ignore_ascii_case("structured_outputs")
+            }),
             codex_responses: rec.transport == Some(Transport::CodexResponses),
         };
         let report = crate::probe::verify_report(&advertised, observed);
@@ -360,14 +366,13 @@ impl ProviderRegistry {
     fn rebuild_alias_index(&mut self) {
         self.by_alias.clear();
         for (id, rec) in &self.by_id {
-            self.by_id
-                .values()
-                .filter(|r| r.id == *id)
-                .for_each(|r| {
-                    for a in &r.aliases {
-                        self.by_alias.entry(normalize(a)).or_insert_with(|| id.clone());
-                    }
-                });
+            self.by_id.values().filter(|r| r.id == *id).for_each(|r| {
+                for a in &r.aliases {
+                    self.by_alias
+                        .entry(normalize(a))
+                        .or_insert_with(|| id.clone());
+                }
+            });
             let _ = rec;
         }
     }
@@ -442,9 +447,17 @@ pub const ALIASES: &[(&str, &str)] = &[
 pub const OPENAI_COMPATIBLE_PROFILES: &[(&str, &str, &str)] = &[
     ("baseten", "Baseten", "https://inference.baseten.co/v1"),
     ("cerebras", "Cerebras", "https://api.cerebras.ai/v1"),
-    ("deepinfra", "Deep Infra", "https://api.deepinfra.com/v1/openai"),
+    (
+        "deepinfra",
+        "Deep Infra",
+        "https://api.deepinfra.com/v1/openai",
+    ),
     ("deepseek", "DeepSeek", "https://api.deepseek.com/v1"),
-    ("fireworks", "Fireworks AI", "https://api.fireworks.ai/inference/v1"),
+    (
+        "fireworks",
+        "Fireworks AI",
+        "https://api.fireworks.ai/inference/v1",
+    ),
     ("groq", "Groq", "https://api.groq.com/openai/v1"),
     ("openrouter", "OpenRouter", "https://openrouter.ai/api/v1"),
     ("togetherai", "Together AI", "https://api.together.xyz/v1"),
@@ -461,7 +474,11 @@ impl ProviderRegistry {
         self.by_id
             .get(&id)
             .cloned()
-            .unwrap_or_else(|| ProviderRecord { auth: Auth::ApiKeyEnv, id: id.clone(), ..Default::default() })
+            .unwrap_or_else(|| ProviderRecord {
+                auth: Auth::ApiKeyEnv,
+                id: id.clone(),
+                ..Default::default()
+            })
     }
 
     fn insert_for_seed(&mut self, rec: ProviderRecord) {
@@ -511,21 +528,71 @@ pub fn base_registry() -> ProviderRegistry {
     // 3. Non-OpenAI-protocol families (the distinct wire transports) — the
     //    ids that don't ride the shared transport.
     let distinct = [
-        ("anthropic", "Anthropic", Transport::AnthropicMessages, Auth::ApiKeyEnv),
+        (
+            "anthropic",
+            "Anthropic",
+            Transport::AnthropicMessages,
+            Auth::ApiKeyEnv,
+        ),
         ("openai", "OpenAI", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("openai-api", "OpenAI API", Transport::CodexResponses, Auth::ApiKeyEnv),
-        ("bedrock", "Amazon Bedrock", Transport::BedrockConverse, Auth::AwsSdk),
-        ("vertex", "Google Vertex", Transport::OpenaiChat, Auth::Vertex),
+        (
+            "openai-api",
+            "OpenAI API",
+            Transport::CodexResponses,
+            Auth::ApiKeyEnv,
+        ),
+        (
+            "bedrock",
+            "Amazon Bedrock",
+            Transport::BedrockConverse,
+            Auth::AwsSdk,
+        ),
+        (
+            "vertex",
+            "Google Vertex",
+            Transport::OpenaiChat,
+            Auth::Vertex,
+        ),
         ("nous", "Nous", Transport::OpenaiChat, Auth::OAuthDeviceCode),
-        ("opencode", "OpenCode Zen", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("opencode-free", "OpenCode Free", Transport::OpenaiChat, Auth::Keyless),
-        ("kimi-for-coding", "Moonshot Kimi", Transport::OpenaiChat, Auth::ApiKeyEnv),
+        (
+            "opencode",
+            "OpenCode Zen",
+            Transport::OpenaiChat,
+            Auth::ApiKeyEnv,
+        ),
+        (
+            "opencode-free",
+            "OpenCode Free",
+            Transport::OpenaiChat,
+            Auth::Keyless,
+        ),
+        (
+            "kimi-for-coding",
+            "Moonshot Kimi",
+            Transport::OpenaiChat,
+            Auth::ApiKeyEnv,
+        ),
         ("zai", "Z.ai", Transport::OpenaiChat, Auth::ApiKeyEnv),
         ("nvidia", "NVIDIA", Transport::OpenaiChat, Auth::ApiKeyEnv),
         ("alibaba", "Alibaba", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("huggingface", "HuggingFace", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("vercel", "Vercel AI Gateway", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("local", "Local runtime", Transport::OpenaiChat, Auth::Keyless),
+        (
+            "huggingface",
+            "HuggingFace",
+            Transport::OpenaiChat,
+            Auth::ApiKeyEnv,
+        ),
+        (
+            "vercel",
+            "Vercel AI Gateway",
+            Transport::OpenaiChat,
+            Auth::ApiKeyEnv,
+        ),
+        (
+            "local",
+            "Local runtime",
+            Transport::OpenaiChat,
+            Auth::Keyless,
+        ),
     ];
     for (id, name, transport, auth) in distinct {
         let rec = ProviderRecord {
@@ -542,9 +609,15 @@ pub fn base_registry() -> ProviderRegistry {
     // Aggregator classification (used so the enum is real, and so routing
     // treats these specially): OpenRouter is a passthrough aggregator;
     // OpenCode Zen/Go is a flat-namespace reseller.
-    r.by_id.get_mut("openrouter").map(|rec| rec.aggregator = Some(AggregatorKind::IsAggregator));
-    r.by_id.get_mut("opencode").map(|rec| rec.aggregator = Some(AggregatorKind::IsRoutingAggregator));
-    r.by_id.get_mut("opencode-go").map(|rec| rec.aggregator = Some(AggregatorKind::IsRoutingAggregator));
+    r.by_id
+        .get_mut("openrouter")
+        .map(|rec| rec.aggregator = Some(AggregatorKind::IsAggregator));
+    r.by_id
+        .get_mut("opencode")
+        .map(|rec| rec.aggregator = Some(AggregatorKind::IsRoutingAggregator));
+    r.by_id
+        .get_mut("opencode-go")
+        .map(|rec| rec.aggregator = Some(AggregatorKind::IsRoutingAggregator));
 
     r.finalize();
     r
@@ -606,7 +679,10 @@ mod tests {
         assert_eq!(r.canonical_id("nim"), Some("nvidia"));
         assert_eq!(r.canonical_id("qwen"), Some("alibaba"));
         assert_eq!(r.canonical_id("Amazon-Bedrock"), Some("bedrock"));
-        assert_eq!(r.resolve("claude").map(|p| p.id.as_str()), Some("anthropic"));
+        assert_eq!(
+            r.resolve("claude").map(|p| p.id.as_str()),
+            Some("anthropic")
+        );
     }
 
     #[test]
@@ -630,7 +706,10 @@ mod tests {
             source: DiscoverySource::UserConfig,
             ..Default::default()
         });
-        assert_eq!(rr.resolve("groq").unwrap().effective_base_url(), Some("http://127.0.0.1:8080/v1"));
+        assert_eq!(
+            rr.resolve("groq").unwrap().effective_base_url(),
+            Some("http://127.0.0.1:8080/v1")
+        );
     }
 
     #[test]
@@ -639,14 +718,26 @@ mod tests {
         assert!(r.mark_verified("anthropic", "t0"));
         assert!(!r.mark_verified("anthropic", "t0"));
         assert!(r.mark_verified("claude", "t1")); // alias resolves
-        assert_eq!(r.get("anthropic").unwrap().capabilities_verified_at.as_deref(), Some("t1"));
+        assert_eq!(
+            r.get("anthropic")
+                .unwrap()
+                .capabilities_verified_at
+                .as_deref(),
+            Some("t1")
+        );
     }
 
     #[test]
     fn distinct_transports_registered() {
         let r = base_registry();
-        assert_eq!(r.get("anthropic").unwrap().transport, Some(Transport::AnthropicMessages));
-        assert_eq!(r.get("bedrock").unwrap().transport, Some(Transport::BedrockConverse));
+        assert_eq!(
+            r.get("anthropic").unwrap().transport,
+            Some(Transport::AnthropicMessages)
+        );
+        assert_eq!(
+            r.get("bedrock").unwrap().transport,
+            Some(Transport::BedrockConverse)
+        );
         assert_eq!(r.get("vertex").unwrap().auth, Auth::Vertex);
         assert_eq!(r.get("opencode-free").unwrap().auth, Auth::Keyless);
 
@@ -654,7 +745,21 @@ mod tests {
         // must be present.
         let mut expected: Vec<&str> = ALIASES.iter().map(|(_, c)| *c).collect();
         expected.extend(OPENAI_COMPATIBLE_PROFILES.iter().map(|(id, _, _)| *id));
-        expected.extend(["anthropic", "openai", "openai-api", "bedrock", "vertex", "nous", "kimi-for-coding", "zai", "nvidia", "alibaba", "huggingface", "vercel", "local"]);
+        expected.extend([
+            "anthropic",
+            "openai",
+            "openai-api",
+            "bedrock",
+            "vertex",
+            "nous",
+            "kimi-for-coding",
+            "zai",
+            "nvidia",
+            "alibaba",
+            "huggingface",
+            "vercel",
+            "local",
+        ]);
         expected.sort_unstable();
         expected.dedup();
         for canonical in expected {

@@ -1441,12 +1441,18 @@ mod tests {
     #[test]
     fn graph_snapshot_lists_the_real_store() {
         let mut m = MemoryService::new();
-        m.write("s1", &["Revenue grew 20% QoQ.".into(), "Churn fell to 2.1%.".into()]);
+        m.write(
+            "s1",
+            &["Revenue grew 20% QoQ.".into(), "Churn fell to 2.1%.".into()],
+        );
         m.write("s2", &["User prefers pnpm.".into()]);
 
         let out = m.handle("memory/graph", &json!({})).unwrap();
         assert_eq!(out["nodeCount"], 3, "one Episodic node per fact");
-        assert_eq!(out["edgeCount"], 3, "one session→fact DerivedFrom edge per fact");
+        assert_eq!(
+            out["edgeCount"], 3,
+            "one session→fact DerivedFrom edge per fact"
+        );
         let nodes = out["nodes"].as_array().unwrap();
         assert!(nodes.iter().all(|n| n["kind"] == "episodic"));
         let edges = out["edges"].as_array().unwrap();

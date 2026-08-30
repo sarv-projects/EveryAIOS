@@ -1,0 +1,947 @@
+# EveryAIOS capability index — MACHINE-READABLE SOURCE OF TRUTH (Fix 2).
+#
+# Extracted from ARCH/09-FEATURE-MATRIX.md on 2026-08-30. This file is the
+# canonical row list for the doc-sync CI check (scripts/check-doc-sync.mjs).
+# When a capability row is added/removed/re-scoped, edit THIS file and
+# regenerate ARCH/09 + DESKTOP-APP-SPEC.md §0 with scripts/gen-matrix.mjs
+# (or accept the CI failure until the docs catch up).
+#
+# Fields: id (stable, append-only), layer (A..K), name (short display),
+# post_v1 (bool — ⚪ in ARCH/09 status = later/optional, not v1 scope),
+# source (research doc reference).
+
+- id: A1
+  layer: A
+  name: Multi-provider BYOK
+  post_v1: false
+  source: doc 19
+
+- id: A2
+  layer: A
+  name: Multi-key per provider
+  post_v1: false
+  source: ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch
+
+- id: A3
+  layer: A
+  name: Auto-failover rotation
+  post_v1: false
+  source: ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch
+
+- id: A4
+  layer: A
+  name: OAuth subscriptions
+  post_v1: false
+  source: 33 §7.4, 13 §5.5
+
+- id: A5
+  layer: A
+  name: Local models
+  post_v1: false
+  source: 34 §2 + 33 §7.4 + 61 + 79
+
+- id: A6
+  layer: A
+  name: Model catalog + hints
+  post_v1: false
+  source: doc 19 + core-providers pi.dev catalog (15 prov / 280 models) + 66 §1 + 68 §4
+
+- id: A7
+  layer: A
+  name: Asymmetric tiering
+  post_v1: false
+  source: doc 16/05 + 65 §5 (career-ops weighted A-F scoring → routing scores) + 68 §4 + 59
+
+- id: A8
+  layer: A
+  name: Local OpenAI-compatible server
+  post_v1: true
+  source: v2.0 §P3 · **P9.5 post-v1 — zero work yet; 🟡 corrected to ⚪ 2026-08-18**
+
+- id: A9
+  layer: A
+  name: Cache-aware costs
+  post_v1: false
+  source: doc 05 + ARCH/05 + 65 §1 (codeburn usage-parser registry + efficiency metrics) + 66 §1
+
+- id: A10
+  layer: A
+  name: Image generation
+  post_v1: true
+  source: doc 50
+
+- id: A11
+  layer: A
+  name: Provider Record + alias layer (v3.56)
+  post_v1: false
+  source: Hermes `hermes_cli/providers.py` (source-read 2026-08-26) + opencode.ai/docs/providers + doc 66 §1
+
+- id: B1
+  layer: B
+  name: Agent loop (pi-style)
+  post_v1: false
+  source: doc 05/16
+
+- id: B2
+  layer: B
+  name: Spec-driven blueprints
+  post_v1: false
+  source: v2.0 §P2, doc 03 + 67 §2.2
+
+- id: B3
+  layer: B
+  name: Sub-agents
+  post_v1: false
+  source: doc 16
+
+- id: B4
+  layer: B
+  name: Inter-agent messaging
+  post_v1: false
+  source: doc 03
+
+- id: B5
+  layer: B
+  name: Grammar-enforced extraction
+  post_v1: false
+  source: v2.0 §P3
+
+- id: B6
+  layer: B
+  name: Iteration budgets
+  post_v1: false
+  source: doc 16 + 65 §9 (loop-engineering budget-guard / early-exit)
+
+- id: B7
+  layer: B
+  name: Scheduled tasks
+  post_v1: false
+  source: **✅ P6.4 landed (2026-08-18): `everyaios-core::scheduler_service`** — 5-field `CronExpr` + `TriggerSpec::{Cron,Interval,Event,Webhook}`, `EventKind` (Gartner: CI-fail/test-regression/repo-change/ticket-assign/telemetry-threshold) w/ filter+scope+rolling-1h frequency cap, battery suppression, HITL `Paused{resume_deadline}` state, retry backoff+jitter+clamp, **heartbeat lease (30s) + missed-heartbeat reassignment + checkpoint resume** (non-determinism guard = completed steps never re-executed), nudge sentinels (3-day rule → `NudgeSuggestion` cron); coordinator `scheduler.ts` (due-ticker, lease heartbeats, `Bun.serve` loopback webhook, session reawakening via `surface:'automation'`); tray 'Run automations now' (`tick_scheduler`); Tauri `scheduler_*` commands; H14 UI (AutomationsPanel live + nudge cards in composer). 17 scheduler tests + relay dispatch + 5 coordinator executor tests
+
+- id: B8
+  layer: B
+  name: Crystallization
+  post_v1: false
+  source: v2.0 §P7 + doc 63
+
+- id: B9
+  layer: B
+  name: Custom Agent Builder (agent-authoring)
+  post_v1: false
+  source: ACP) — chief picker + Work-survives-Chief. UI wiring complete; live agent runs = coordinator seam.**
+
+- id: C1
+  layer: C
+  name: C-series memory/context plane + 34-algorithm index
+  post_v1: false
+  source: 07, v2.0 §3
+
+- id: C2
+  layer: C
+  name: Multi-tier memory
+  post_v1: false
+  source: 07, 34 §2
+
+- id: C3
+  layer: C
+  name: Multi-signal retrieval
+  post_v1: false
+  source: **✅ P5.1: `everyaios-memory::fusion` — weighted RRF (`rrf_fuse`), dedupe, smart snippets, per-type budget caps, chunk-min-size merge. Cross-encoder rerank (#19) still open.**
+
+- id: C4
+  layer: C
+  name: Vectorless default
+  post_v1: false
+  source: 32, 34
+
+- id: C5
+  layer: C
+  name: Embeddings (optional)
+  post_v1: false
+  source: v2.0 §P4
+
+- id: C6
+  layer: C
+  name: Knowledge graph store
+  post_v1: false
+  source: **✅ P5.2: `graph` — Rust-native `GraphStore` (entity/epigraph nodes + typed supports/contradicts/derived-from edges, temporal `valid_from`/`valid_to` versioning, `spreading_activation` Alg #6, `query_depth` d=2/top-k=15). LadybugDB C++ FFI deferred (same schema, swap-in backend). v3.51: optional **lazy concept-graph mode** (LazyGraphRAG pattern — MSR 2025, search-verified) — query-time concept graph (NLP noun-phrase + co-occurrence, iterative-deepening search, `relevance_budget` knob) → indexing ≈ vector RAG, ~0.1% of full GraphRAG index cost; tracked as TODO P5.12.**
+
+- id: C7
+  layer: C
+  name: Memory injection
+  post_v1: false
+  source: 07 + 65 §10 (claude-mem saved-vs-discovered token economics)
+
+- id: C8
+  layer: C
+  name: Sync/export/wipe
+  post_v1: false
+  source: **✅ P8.9 landed 2026-08-22: `everyaios-core::export` — `render_markdown_export`/`render_json_export`, `MemoryMirror` Obsidian `[[wiki-link]]` notes (view surface, not a second store), `WipeScope` + `wipe_facts`/`wipe_messages` per-scope wipe (no-silent-nuke). E2E sync now **landed, not just a seam**: `everyaios-core::sync` — ChaCha20-Poly1305 AEAD envelope (header-as-AAD), X25519 `KeyPair`/`KeyExchange` + confirm handshake, version vectors + tombstones, 3-way `reconcile` → `SyncDiff`, **F2 conflict policy landed 2026-08-25** (`ConflictPolicy` Manual/LWW/KeepBoth + `resolve_conflicts` + `reconcile_with_policy` + `SyncItem::ts_ms`, 6 tests — 25 total), `SyncBundle` export/import, `SyncTransport` seam (25 tests) — + `sync_transport.rs` live TCP transport (length-prefixed framing, ECDH handshake, `SyncServer` on 47615, `sync_with_peer`, LAN/Tailscale) + 8 Tauri commands + Settings → Connections UI.**
+
+- id: C9
+  layer: C
+  name: Taste profile
+  post_v1: false
+  source: **✅ P5.6: `everyaios-memory::taste` — `TasteStore` (confidence-scored rules, `observe_accept/reject/edit`, `inject_stable_prefix`, markdown round-trip, dir save/load).**
+
+- id: C10
+  layer: C
+  name: Pass-by-reference context
+  post_v1: false
+  source: **✅ P5.8: `reference` — `RefHandle` (kind/size/row metadata) + `bounded_preview`/`make_ref_handle` (≤2K tokens; 10MB→≤2K test). E4 script-eval query path = follow-up.**
+
+- id: C11
+  layer: C
+  name: Temporal knowledge graph
+  post_v1: false
+  source: doc 46 (Graphiti)
+
+- id: C12
+  layer: C
+  name: Full-stack memory on Postgres/SQLite
+  post_v1: false
+  source: doc 46 (Cognee) + 61 + A-MEM (NeurIPS 2025)
+
+- id: C13
+  layer: C
+  name: Spaced-repetition (FSRS)
+  post_v1: false
+  source: **✅ landed: `everyaios-memory::fsrs` (state prediction + next-interval scheduling) + simulator; `reinforce` (candidate extraction + due-review queue) + `bm25` signal + `planner` (C7) + `janus` structural passes + `cognee` graph API + `rtk` output compression + `usage` ledger; numbered **Algorithm #34** (v3.51); FSRS-7 upstream line (2025) tracked as adopt-when-shipped watch item (permissive fsrs-rs v6.x doesn't carry it yet)**
+
+- id: D1
+  layer: D
+  name: Word open+edit
+  post_v1: false
+  source: **✅ P4.1 landed: `crates/everyaios-office` — `OoxmlArchive` (ZIP open, parts index, `save` with `raw_copy_file` verbatim untouched entries — byte-stability proven by raw compressed-payload comparison) + `docx/` block-patch engine (anchored block tree w/ addresses `p1`/`t1:r1c2:p1`/`hdr1:p1`/`sec1` over body+headers/footers, plain-text render, minimal `w:t` prefix/suffix patch via byte-surgery with entity/UTF-8-aware splits, safety fallbacks NoTextAnchor/StaleEdit/PatchAcrossMarker). 30 tests — 393 ws tests (363 + 30), clippy 0, fmt clean. LibreOffice headless oracle → P4.5.**
+
+- id: D2
+  layer: D
+  name: Excel open+edit
+  post_v1: false
+  source: **✅ P4.2 landed: `crates/everyaios-office/src/xlsx/` — `read.rs` (calamine 0.30 windowed reads), `recalc.rs` (ironcalc 0.8.3 truth engine — every computed number engine-made (deterministic recalc, never LLM-invented)), `dsl.rs` (WorkbookCommandBatch + Excel-accurate formula-shift: `$` doesn't pin, deleted→`#REF!`, shrink, LOG10/string/sheet-prefix protection), `planner.rs` (regex NLP → DSL, zero-LLM; `NeedsLlm` fallback), `patch.rs` (surgical sheetN.xml/sharedStrings.xml + workbook rename, byte-stable); `src-tauri xlsx_open` (windowed) + `ui/pages/Spreadsheet.tsx` virtualized 100K+ row grid. 64 office tests (+34), 427 ws tests, clippy 0, fmt clean. Univer = H5 view (P4.7), IronCalc = the one calc truth engine (doc 58).**
+
+- id: D3
+  layer: D
+  name: PPT open+edit
+  post_v1: false
+  source: **✅ P4.3 landed: `crates/everyaios-office/src/pptx/` — `parts.rs` (content types + presentation rels + `<p:sldIdLst>` slide order), `text.rs` (addressable `<p:sp>` shapes → `<a:p>` → `<a:r>` → `<a:t>`; render + minimal `<a:t>` byte-surgery patch, bullets `<a:buChar>`/`<a:buAutoNum>` as read-only markers, multi-byte/entity-aware; NoTextAnchor/PatchAcrossMarker fallbacks), `mod.rs` `PptxEngine` (render/patch + `add_slide` clone part+rels+`[Content_Types].xml` registration + `remove_slide` deregistration; `zip::save_changes(modified, added, deleted)` so untouched parts stay verbatim). 80 office tests (+16), 443 ws tests, clippy 0, fmt clean.**
+
+- id: D4
+  layer: D
+  name: PDF open+edit
+  post_v1: false
+  source: **✅ P4.4 landed (engine): `pdf/` — `form::form_fill` (lopdf 0.36, AcroForm `/V` + hierarchical field walk), `replace_text` (exact-match `Tj`), `redact::redact` (`/Redact` annotations), `author::author_pages` (re-author new PDF). 6 pdf tests (100 office), 463 ws tests, clippy 0, fmt clean. pdf.js renderer landed (P4.7: `pdf_bytes` base64 + `PdfViewer.tsx` canvas draw + page nav/zoom, React.lazy code-split); free-text/highlight annotation → follow-up.**
+
+- id: D5
+  layer: D
+  name: Universal read/ingest
+  post_v1: false
+  source: v2.0 §P1
+
+- id: D6
+  layer: D
+  name: Round-trip conformance
+  post_v1: false
+  source: **✅ P4.5 landed: `conformance.rs` — `parts_diff` (changed/added/removed zip parts, decompressed compare) + `LibreOfficeOracle` (`find_soffice` PATH+install-dirs, `check_opens` = `soffice --headless --convert-to pdf`, fails on repair/damaged warnings; gated `#[ignore]` live test).**
+
+- id: D7
+  layer: D
+  name: Rollback
+  post_v1: false
+  source: **✅ P4.5 landed: `atomic.rs` `write_atomic` (temp → fsync → rename + dir fsync) + `rollback.rs` `Snapshot` (capture/record_save/undo/dirty — snapshotBefore).**
+
+- id: D8
+  layer: D
+  name: Legacy formats
+  post_v1: false
+  source: **✅ P4.6 landed: `legacy.rs` — `LegacyKind` (.doc/.xls/.ppt), `convert_to_modern` (headless soffice → .docx/.xlsx/.pptx), `LegacyOpen` read-only + edit-as-new. 94 office tests (+14), 457 ws tests, clippy 0, fmt clean.**
+
+- id: D9
+  layer: D
+  name: Storage intelligence
+  post_v1: false
+  source: **✅ P4.8 landed: `everyaios-storage` — `walk` (per-thread `crossbeam_deque::Worker` + steal loop, symlink-skip + `same_filesystem` device guard, `build_arena` u32-indexed `FileNode` arena w/ bottom-up aggregation), `snapshot` (arc_swap store + zstd round-trip), `treemap` (Bruls–van Wijk `squarify` + `treemap_for_dir` + xxHash3→HSL `color_for`), `dedup` (7-stage size→xxHash3→BLAKE3, hardlink-aware, reflink-eligible), `finder` (top-N size/age + ext filters), `cleanup` (Guard-2 decision-package proposals — crate never deletes), `search` (FTS5 prefix index + debounced notify watcher), `health` (90% threshold + sysinfo `Disks`). 15 tests, 479 ws tests, clippy 0, fmt clean.**
+
+- id: D10
+  layer: D
+  name: Duplicate detection by hash
+  post_v1: false
+  source: **✅ P4.8: `dedup::find_duplicates` (size→xxHash3 prefix/suffix→BLAKE3→hardlink dev+ino→reflink-eligible→wasted-bytes, fclones ordering).**
+
+- id: D11
+  layer: D
+  name: Large-file finder
+  post_v1: false
+  source: **✅ P4.8: `finder::find_large_files` (`SortBy::{SizeDesc,AgeNewest,AgeOldest}` + include/exclude extensions + min-size/max-age).**
+
+- id: D12
+  layer: D
+  name: Storage health & analytics
+  post_v1: false
+  source: **✅ P4.8: `health` (`over_threshold` 90% + `check_health` via sysinfo `Disks`) + `cleanup::propose_*` plan inputs; storage tools runtime dispatch + Tauri `storage_cmds` + J16 battery gating + live `storage-view.tsx` dashboard landed 2026-08-20.**
+
+- id: E1
+  layer: E
+  name: CDP child browser
+  post_v1: false
+  source: 33, 34, 08
+
+- id: E2
+  layer: E
+  name: 37-tool catalog (34 core + 3 file_ops)
+  post_v1: false
+  source: 33 §6, 46, 55
+
+- id: E3
+  layer: E
+  name: A11y snapshot/diff
+  post_v1: false
+  source: 33 §5, 55, 08
+
+- id: E4
+  layer: E
+  name: Script-eval (run)
+  post_v1: false
+  source: **✅ P7.8 FS syscall broker for E4: `everyaios-guard::fs_broker` (BrokerHost + BrokerOp over BrokerTransport — path floor → profile rule → create-parent; `InProcessBroker`; IPC wiring = runtime)**
+
+- id: E5
+  layer: E
+  name: Session replay
+  post_v1: false
+  source: **✅ P2.10 landed: `everyaios-browser/src/replay.rs` injected recorder (CDP `Page.addScriptToEvaluateOnNewDocument`; click/input/keydown/scroll/mutation capture; `x-recording-*` header contract; failed flush → sticky gap) + `everyaios-audit/src/replay.rs` ingest (`ingest_ndjson`/`ingest_batch`, chrome doc-id validation, dedupe-stable receipts, sticky `has_gap`, SQLite index one-tx commit with file-rollback, `ReplayStore` NDJSON + screenshot JPEGs, 7-day `retention_sweep` + `wipe`) + `session_log.rs` durable event log (10 §4.2 types) + idempotency classes (safe/unsafe/same-key/confirm) + `recovery_plan`. 16 audit + 5 browser tests; scrubber/audit UI = P3.1 landed.**
+
+- id: E6
+  layer: E
+  name: Tab ownership
+  post_v1: false
+  source: 33, 08
+
+- id: E7
+  layer: E
+  name: Login import/sessions
+  post_v1: false
+  source: 33 §3.2, 08 §8.9
+
+- id: E8
+  layer: E
+  name: Authenticated scraping
+  post_v1: false
+  source: 01/06
+
+- id: E9
+  layer: E
+  name: Desktop computer-use (native + vision)
+  post_v1: false
+  source: 09, 48, 52 + ChatGPT Computer Use + Claude CUA + Hermes computer_use (2026-08-26)
+
+- id: E10
+  layer: E
+  name: Lightweight engine tier
+  post_v1: false
+  source: **✅ P2.4 landed: `everyaios-browser/src/tiers.rs` — `TieredEngine` (tier 0 `read_http`+`html2md` with SSRF/file://domain guards; tier 1 Lightpanda/Obscura `serve` spawn with `--block-private-networks`/`--disable-workers`/bounded connections; tier 2 Chrome `--disable-features=WebRTC`), E8 escalation loop. LIVE-verified: static→Lightpanda→Chrome against example.com; Obscura binary absent → clean BinaryNotFound → escalates. 355 ws tests (246 at P2.4 + 24 P2.5/P2.6 + 44 P2.7/P2.8 + 12 P2.9 + 18 P2.10 + 3 P3.1 + 8 P3.3), 5/5 live, clippy 0.**
+
+- id: E11
+  layer: E
+  name: Session Vault
+  post_v1: false
+  source: **✅ P2.7 landed: `everyaios-vault/src/session.rs` `SessionVault` (schema v5, capture/grant/inject/rotate/expiry/audit) + `everyaios-browser/src/session.rs` cookie glue (`get_cookies`/`set_cookies`, `seal_session`/`inject_session`, `inherit_cookies_from_chrome` + `group_cookies_by_site`) — 11 vault + 10 browser tests, agent-never-sees-cookies + inject-without-grant-denied + E13 LIVE-verified. localStorage/IndexedDB capture is the CDP `DOMStorage`/`IndexedDB` follow-on.**
+
+- id: E12
+  layer: E
+  name: Challenge handler
+  post_v1: false
+  source: **✅ P2.8 landed: `everyaios-core/src/challenge.rs` — PoW `solve_pow`/`verify_pow`, human-in-loop single-use registry (`surface`/`resolve_human`/`pending`), visual-grounding contract (`route_visual` + `grounding_request` + `parse_grounding_choice`), BYO solver HTTP (`solve_captcha`/`create_task`/`poll_task`, `UreqHttp` transport, key via A2/A3 keyring) + 23 tests. Turnstile (incl. hidden) is Cloudflare-managed → NOT locally solvable (honest route). The sidecar makes the actual LLM grounding call; the UI consumes `resolve_human`.**
+
+- id: E13
+  layer: E
+  name: Session inheritance
+  post_v1: false
+  source: **P2.7 landed: `everyaios-browser/src/session.rs` `inherit_cookies_from_chrome(port)` — `probe_browser` (loopback-guarded) → `connect_to_browser` → `Storage.getCookies` (modern browser-target method; `Browser.getCookies` is gone in current Chrome) → `group_cookies_by_site`. Unit-tested via mock CDP transport (round-trip/normalization/malformed-cookie) — **a real Chrome debug-port attach is a manual live-verification step, not yet in the test suite (annotation corrected 2026-08-18; previous 'LIVE-verified' overclaimed)**.**
+
+- id: E14
+  layer: E
+  name: Behavioral realism
+  post_v1: false
+  source: **✅ P2.9 landed: `everyaios-browser/src/humanize.rs` — `BehaviorProfile` (Bézier `mouse_path` + per-key `typing_delays`, host allow-list, seeded RNG) wired into `BrowserActions::with_behavior`; off by default, per-site gated via `site_enabled(url)`; click/hover/drag take real `mouseMoved` paths (drag releases exactly), typing emits per-char `dispatchKeyEvent` with cadence. 12 tests: deterministic path, jittered endpoint, word pauses, host gating, plain-click has 0 moves, per-key sequence, exact drag target — 355 ws tests (246 + 24 + 44 + 12 + 18 + 3 + 8), clippy 0, fmt clean.**
+
+- id: E15
+  layer: E
+  name: Electron-app CDP automation
+  post_v1: false
+  source: **✅ landed: `everyaios-cdp::discovery` (probe_electron/discover_electron_apps/is_electron_version, loopback-guarded) + `everyaios-browser::electron` (`ElectronHandle::attach(port)` → snapshot/click/fill/read/screenshot)**
+
+- id: E16
+  layer: E
+  name: Slim snapshots + WebMCP
+  post_v1: false
+  source: **✅ landed: slim = `tree.rs` `SnapshotMode::Interactive` (~90% token cut) + `everyaios-browser::webmcp` (handshake) + `webmcp_http` (HTTP transport, tools/list + tools/call)**
+
+- id: E17
+  layer: E
+  name: Multi-protocol action parsing
+  post_v1: false
+  source: **✅ landed (Rust half): `everyaios-browser::protocol` — `parse_action` for Native/Anthropic CUA/OpenAI CUA/UI-TARS → canonical `ParsedAction` → `to_act_kind`**
+
+- id: F1
+  layer: F
+  name: Hub routing
+  post_v1: false
+  source: **✅ routing core + coordinator APP-registry bridge landed; external account attach remains credential/provider gated.**
+
+- id: F2
+  layer: F
+  name: Native adapters
+  post_v1: false
+  source: **✅ APP `core-connectors` is now a live lazy coordinator dependency (`connector/list` + read/query plan); vault token resolver and write execution remain host-gated.**
+
+- id: F3
+  layer: F
+  name: Browser-session connectors
+  post_v1: false
+  source: **✅ `connectors::browser_session` — `BrowserSessionConnector<S: CdpSession>` with Gmail inbox / Notion page / Linear issues / Outlook inbox readers, click_element, type_text — all over mock CdpSession seam, 7 tests green. Live Chrome 136+ isolated profile is the runtime seam.**
+
+- id: F4
+  layer: F
+  name: Local Auth Bridge
+  post_v1: false
+  source: **✅ `everyaios-vault::auth_bridge` — S256 PKCE + single-use state + loopback token manager → key ring (loopback mock-token E2E); live Google OAuth round-trip remains account-gated.**
+
+- id: F5
+  layer: F
+  name: Composio/Zapier/Nango
+  post_v1: true
+  source: decision 2026-08-16
+
+- id: F6
+  layer: F
+  name: MCP client (consume)
+  post_v1: false
+  source: **✅ APP MCP client is lazily consumed through coordinator `mcp/search` with HTTPS/loopback validation; live user-server availability remains external.**
+
+- id: F7
+  layer: F
+  name: MCP server (serve)
+  post_v1: false
+  source: **✅ host-owned `tools/list`/`tools/call` protocol core over stdio + authenticated loopback HTTP, 42 native tools + reconciled externals, loopback E2E; production supervisor/external Claude-Code E2E remains open.**
+
+- id: F8
+  layer: F
+  name: Harness installer
+  post_v1: false
+  source: 33 §8, 45, 52, 56, 57, 69 + 65 §6 (skills_index.json discovery manifest + compose_stack read-only validation)
+
+- id: F9
+  layer: F
+  name: Unified Tool Registry
+  post_v1: false
+  source: 10, 45
+
+- id: F10
+  layer: F
+  name: WSL/POSIX bridge
+  post_v1: false
+  source: **✅ P8.6: `everyaios-core::wsl` — `translate_windows_to_linux`/`translate_linux_to_windows` (+ legacy `\\wsl$\`, drive→`/mnt`), `ExecEnvironment` + `detect_environment`, `WslRunner` over the injected `CommandRunner` seam, `WslFrame` length-prefixed loopback IPC framing. Transport + real `wsl.exe` stay runtime wiring.**
+
+- id: F11
+  layer: F
+  name: Port/network hooks
+  post_v1: false
+  source: **✅ webhook ingress half landed (2026-08-18): coordinator `Bun.serve` loopback listener (127.0.0.1, POST → `scheduler/fire_webhook` path+required-keys validation + optional token) — the browser network-containment half is the E-rows/browser crate scope**
+
+- id: F12
+  layer: F
+  name: Harness-driving
+  post_v1: false
+  source: doc 35 §C, 45, 52, 56, 57 + 65 §11 + 68 §4 + 2026-08-23 live-verified repos
+
+- id: F13
+  layer: F
+  name: Messaging bridges
+  post_v1: false
+  source: **✅ normalized adapter + dedupe/memory + one-shot reminder queue; Telegram/WhatsApp/email adapter contracts landed (Telegram = ureq HTTP core, loopback-tested) — real network delivery (bot tokens / WhatsApp Cloud API) remains open.**
+
+- id: F14
+  layer: F
+  name: Email connector
+  post_v1: false
+  source: **✅ guard-ticketed `Mailbox`/`EmailService` tool core + `connectors::gmail` (`GmailConnector<T,R>`: list_labels, search, get_message, send_message with 401→refresh→retry, modify_labels, trash, unread_counts — 9 tests) + `connectors::imap_smtp` (`ImapSmtpConnector<T>`: search, read, send, reply, archive, trash — 7 tests). All over injectable seams; live account is the runtime seam.**
+
+- id: F15
+  layer: F
+  name: Calendar connector
+  post_v1: false
+  source: **✅ `connectors::calendar` (`CalendarConnector<T>`: list_events, get_event, create_event, update_event, delete_event, free_busy, export_ics — 4 tests) + deterministic `suggest_nudge` for B7. All over injectable `HttpTransport` seam; live Google account is the runtime seam.**
+
+- id: G1
+  layer: G
+  name: Free search surface (no API key)
+  post_v1: false
+  source: **not a second cascade — engine tiers = G8**
+
+- id: G2
+  layer: G
+  name: Deep research
+  post_v1: false
+  source: **✅ P8.4: `DeepResearch` (build tree, `all_learnings`, `gap_check`) + `CitedReport` (assemble + render_markdown, confidence metrics).**
+
+- id: G3
+  layer: G
+  name: Multi-channel search
+  post_v1: false
+  source: **✅ P8.4: `Channel` enum (query builders + payload normalizers, pure).**
+
+- id: G4
+  layer: G
+  name: Data-analysis REPL
+  post_v1: false
+  source: **P8.4: runtime seam — the rquickjs sandbox is the execution surface; a Python/numpy REPL needs an install-gated sandbox.**
+
+- id: G5
+  layer: G
+  name: Repo-wide engineering
+  post_v1: false
+  source: **✅ P8.4: `RepoWideScan` (`dependency_map` + transitive `blast_radius`).**
+
+- id: G6
+  layer: G
+  name: Site/domain search
+  post_v1: false
+  source: **✅ P8.4: `SiteIndex` TF-IDF inverted index.**
+
+- id: G7
+  layer: G
+  name: Instant filename/content search
+  post_v1: false
+  source: **✅ P4.8: `search::SearchIndex` (FTS5 prefix query) + `Debouncer`/`watch` (notify thread); OS-native hooks stay optional accelerators. 2026-08-24: USN raw WinAPI reader landed (`everyaios-storage::usn_reader` pure `USN_RECORD_V2` parse + `usn_winapi` CreateFileW→FSCTL_QUERY/READ/ENUM_USN_*, FRN→path cache; compile-verified x86_64-pc-windows-msvc; live kernel read = Windows-CI work).**
+
+- id: G8
+  layer: G
+  name: Tiered search cascade & cache
+  post_v1: false
+  source: **✅ LIVE on the ticket path (2026-08-25):** `search.query` dispatches `everyaios-search::G8Cascade` (TTL cache → health-gated SearXNG with failure-threshold + cooldown → DDG circuit-breaker fallback) through the Stage-0 executor (`tools.rs` `g8_search_dispatch_returns_hits`); WebSurfx Rust fast tier + live `searx.space`/SQLite-cache runtime wiring remain transport seams (P8.4) — **G1 is its no-key user surface**
+
+- id: G9
+  layer: G
+  name: Read-cleaner / content filter (doc 64 §4)
+  post_v1: false
+  source: **✅ DONE (P7.8) — `content.rs` `FilterSet`/`is_blocked`/`cosmetic_selectors`/`clean_markdown`; full brave `adblock` crate = documented swap-in; F11 containment feed = follow-on**
+
+- id: H1
+  layer: H
+  name: Chat
+  post_v1: false
+  source: v2.0 §P1
+
+- id: H2
+  layer: H
+  name: Cockpit dashboard
+  post_v1: false
+  source: **✅ P3.2 landed: `everyaios-audit/src/cockpit.rs` — `CockpitState`/`AgentCard`/`InterruptCard` (status/model/provider, token counters, capped action trail, `quiet_status()` single-sentence line, MCQ interrupt lifecycle, stop/undo; +8 tests) + Tauri `cockpit_cmds.rs` (`cockpit_snapshot`/`activity`/`tokens`/`upsert_agent` feed seams, `cockpit_quiet` → tray tooltip + window hide, `agent_undo` + `interrupt_respond` JSON-RPC over the unix control channel) + `ui/src/pages/Cockpit.tsx` flight deck (Running-now cards w/ LIVE chip + STOP/UNDO, slide-over panel w/ action cards + token totals, MCQ interrupt cards, quiet toggle, 2s poll). 393 ws tests (355 + 8 + 30 office), clippy 0, fmt clean.**
+
+- id: H3
+  layer: H
+  name: Audit + replay UI
+  post_v1: false
+  source: **✅ P3.1 landed: `everyaios-audit` replay query layer (`search_sessions` substring filter, `timeline` = segment+events+screenshot steps, `screenshot_steps`/`screenshot_path`, `events_since` watch tail; +3 tests) + Tauri commands (`replay_sessions`/`replay_timeline`/`replay_screenshot` base64 data-URL/`watch_events`/`agent_stop` JSON-RPC over unix control channel) + `ui/src/pages/Audit.tsx` (scrubber bar, screenshot strip, searchable sessions, 2s watch poll, Stop button). 393 ws tests, clippy 0, fmt clean.**
+
+- id: H4
+  layer: H
+  name: Blueprint editor
+  post_v1: false
+  source: **✅ P8.5: `blueprint-view.tsx` (spec.md-style editor, task status + dep check + progress).**
+
+- id: H5
+  layer: H
+  name: Office editors
+  post_v1: false
+  source: **✅ P4.7 landed: `office_cmds` (docx_open/pptx_open/pdf_open) + `ui/pages/{DocxViewer,PptxViewer,PdfViewer}.tsx` + `ChatOverlay` + formula bar/cell selection on the P4.2 sheets grid. Univer embed → deferred (OSS/Pro split + lossy-reserialize risk); pdf.js canvas renderer landed (`PdfViewer.tsx` + `pdf_bytes` + page nav/zoom/Canvas-Text toggle); notes panel + docx image render → follow-up.**
+
+- id: H6
+  layer: H
+  name: Reader
+  post_v1: false
+  source: **✅ P8.1: `everyaios-core::reader` — `extract_text` (markdown/plain/html zero-dep; PDF/EPUB explicit seams) + `ReaderIndex` chunked RAG with `chat_overlay` citations. UI surface stays open.**
+
+- id: H7
+  layer: H
+  name: Math + code rendering
+  post_v1: false
+  source: v2.0 §P1
+
+- id: H8
+  layer: H
+  name: Permission cards
+  post_v1: false
+  source: 06
+
+- id: H9
+  layer: H
+  name: Token/cost analytics
+  post_v1: false
+  source: 05 §5.6
+
+- id: H10
+  layer: H
+  name: Personality
+  post_v1: false
+  source: **✅ P8.3: `everyaios-blueprint::persona` — `load_persona` SOUL.md parsing, `TonePreset` + `PersonaConfig::custom_override`, `CORE_RULES` always emitted first + fail-closed override-scan.**
+
+- id: H11
+  layer: H
+  name: Tray daemon
+  post_v1: false
+  source: **✅ headless-execution half landed (2026-08-18): the coordinator's due-ticker runs with the window hidden; tray gained 'Run automations now' → `tick_scheduler` → `scheduler/execute` one-pass (watchers/office daemons remain the browser/storage crates' scope)**
+
+- id: H12
+  layer: H
+  name: Telemetry
+  post_v1: false
+  source: **✅ P8.7: `everyaios-core::telemetry` — `Telemetry` single choke point, `TelemetryEventKind` enumerated buckets only, `TelemetrySample` has no content-bearing field, off-by-default + cold-boot no-request tests.**
+
+- id: H13
+  layer: H
+  name: Local OpenAI-compatible server UI (deferred with A8; no standalone server assumed in current runtime)
+  post_v1: false
+  source: **✅ P8.5: `local-server-view.tsx` (start/stop, port, endpoint URLs, VS Code/Cursor hint).**
+
+- id: H14
+  layer: H
+  name: Scheduled tasks UI
+  post_v1: false
+  source: **✅ landed (2026-08-18): AutomationsPanel live-wired to `scheduler_list` (run-now/pause/resume/delete/enable + paused/running/retrying badges + last-run) + nudge cards in the chat EmptyState (session-open proactivity hook, doc 67 §3); NL create-from-chat wizard = the H22 automation-builder queue**
+
+- id: H15
+  layer: H
+  name: Voice input (VAD)
+  post_v1: true
+  source: 33 §10, doc 50
+
+- id: H16
+  layer: H
+  name: Magic-completion
+  post_v1: true
+  source: 01
+
+- id: H17
+  layer: H
+  name: Widget cards
+  post_v1: false
+  source: **✅ P8.2: `everyaios-core::widgets` — `MathWidget` safe calculator, `LookupWidget`, `WeatherWidget`/`StockWidget` cards + TTL cache (live APIs as seams). Inline UI render stays open.**
+
+- id: H18
+  layer: H
+  name: Remote session handoff + mobile companion
+  post_v1: true
+  source: doc 35 §C + 68 §3
+
+- id: H19
+  layer: H
+  name: Progress steps panel (unified timeline, clickable, timestamps)
+  post_v1: false
+  source: doc 46 (Devin)
+
+- id: H20
+  layer: H
+  name: Activity rail + multi-view viewport (work cockpit — v3.0)
+  post_v1: false
+  source: doc 67 §6 + ARCH/12 v3.0 + v3.53 (Cursor-class dual-mode)
+
+- id: H21
+  layer: H
+  name: Takeover/resume flow
+  post_v1: false
+  source: doc 46 (Devin)
+
+- id: H22
+  layer: H
+  name: Automation builder (NL + templates)
+  post_v1: false
+  source: **PARTIAL — editor + list landed (P11.5.5); template gallery + NL creation NOT DONE (annotated 2026-08-18)**
+
+- id: H23
+  layer: H
+  name: Knowledge browser (trigger+macro)
+  post_v1: false
+  source: doc 46 (Devin)
+
+- id: H24
+  layer: H
+  name: MCP marketplace
+  post_v1: false
+  source: doc 46 (Devin)
+
+- id: H25
+  layer: H
+  name: Generative UI (AG-UI)
+  post_v1: false
+  source: doc 50
+
+- id: H26
+  layer: H
+  name: Clipboard tool
+  post_v1: true
+  source: doc 50
+
+- id: H27
+  layer: H
+  name: Resumable streams
+  post_v1: true
+  source: doc 50
+
+- id: H28
+  layer: H
+  name: Voice output (TTS)
+  post_v1: true
+  source: doc 50
+
+- id: H29
+  layer: H
+  name: Local dashboard artifacts (the local-first "Sites")
+  post_v1: false
+  source: doc 67 §1 (stackblitz-labs/bolt.diy)
+
+- id: H30
+  layer: H
+  name: Voice memo → structured report
+  post_v1: true
+  source: doc 68 §3 (Cowork help center)
+
+- id: H31
+  layer: H
+  name: Corpus-first research surface + audio digest
+  post_v1: false
+  source: doc 68 §2.2 (Gemini Notebook / NotebookLM)
+
+- id: H32
+  layer: H
+  name: Agent picker + agent-native command surface
+  post_v1: false
+  source: doc 68 §4 (ACP spec + registry)
+
+- id: H33
+  layer: H
+  name: User-operated always-on executor node (post-v1)
+  post_v1: true
+  source: OpenClaw deploy pattern (2026) + 2026-08-23 review
+
+- id: H34
+  layer: H
+  name: Autonomy Level — chatbar approval control (v3.56 — elevates the H32 chip to a first-class subsystem; UI half landed 2026-08-26: three-control composer + per-task `config_hash` freeze + Autonomy Limit escalation card + temporary elevation + live indicator + 7 store tests — Rust `permissions.toml` preset maps remain P44.5)
+  post_v1: false
+  source: Hermes/OpenCode agent UX (source-read 2026-08-26) + doc 52 §2 + doc 84
+
+- id: H35
+  layer: H
+  name: CLI/doctor/admin surface
+  post_v1: true
+  source: **v3.57 added; 2026-08-26: doctor promoted to v1 (queued), full CLI stays post-v1**
+
+- id: I1
+  layer: I
+  name: Code synthesis loop
+  post_v1: false
+  source: **✅ P7.1: `everyaios-core::forge::ForgeRuntime` — `iterate` (write→test→rewrite, SHA-256 loop guard + budget) + `tdd_loop` (RED→GREEN) + `run_js` (rquickjs `everyaios-script`) + `DockerSandbox` (mounts/network/limits → `docker run`); live execution stays executor-bound.**
+
+- id: I2
+  layer: I
+  name: Skill registry
+  post_v1: false
+  source: **✅ P7.2: `everyaios-blueprint::skill_store` — scanner, SKILL.md manifest + ownership, `SkillIndex` (scoring + MAX_ACTIVE_SKILLS=20 + planner-tier render), restart-survival, `taste_skill`, `grow_from_task`.**
+
+- id: I3
+  layer: I
+  name: WASM fuel-metered sandbox
+  post_v1: true
+  source: 09
+
+- id: I4
+  layer: I
+  name: TDD loop
+  post_v1: false
+  source: **✅ P7.1: `ForgeRuntime::tdd_loop` — write test → prove RED → iterate implementation until GREEN over the `CommandRunner` seam.**
+
+- id: I5
+  layer: I
+  name: ECC guardrails
+  post_v1: false
+  source: 09
+
+- id: I6
+  layer: I
+  name: Extension/plugin ABI
+  post_v1: false
+  source: **✅ P7.3: `everyaios-guard::granter` (`CapabilityGranter` — manifest allow-list ∧ host grant, `wildcard_match` `*`/`**`, fail-closed `TrustFlags` + sandbox/approval required for dangerous powers, agent-binding, deny-narrows-allow refinement) + `everyaios-blueprint::plugin` (`PluginManifest` manifest.toml schema + validation, `PluginRegistry` scan + lazy activation, `HostFacades` ctx.llm/files/approval, `first_party_catalog` + `dogfood_rule`).**
+
+- id: I7
+  layer: I
+  name: RepoMap (tree-sitter + PageRank) + Warp semantic index (doc 56)
+  post_v1: false
+  source: doc 46 (Aider), 56 + 65 §3 (xerj autoindex) + 65 §7 (code-review-graph persistent graph + git-diff rebuild)
+
+- id: I8
+  layer: I
+  name: Edit strategy pattern (per-model)
+  post_v1: false
+  source: doc 46 (Aider)
+
+- id: I9
+  layer: I
+  name: Architect mode (two-pass)
+  post_v1: false
+  source: doc 46 (Aider), 51, 52
+
+- id: I10
+  layer: I
+  name: File watcher + AI comments
+  post_v1: false
+  source: doc 46 (Aider)
+
+- id: I11
+  layer: I
+  name: LSP code-intel
+  post_v1: false
+  source: **✅ landed: `everyaios-codeintel` — `lsp` framing/types + `session` (transport trait, stdio spawn + keep-alive, initialize lifecycle) + `semantic` (symbol_where/callers/unused_exports) + `scip` (protobuf wire reader) + `repomap` (PageRank + budget fit, TagSource plug-in) + **P7.1 live diagnostics: `lsp_runner::LspRunner` spawns a configured server (`lsp-config.json`) and collects `publishDiagnostics` (process E2E via `mock-lsp-server`);guard ticket call-site = harness wiring**
+
+- id: I12
+  layer: I
+  name: Zed-class Rust IDE capability (post-v1 — one capability behind the Code rail, not the main product)
+  post_v1: true
+  source: **✅ P41.1 landed (2026-08-23):** **Monaco embed** (MIT — VS Code's own editor component; CodeMirror-6 lock superseded) + VS Code-style workbench `ide-workbench.tsx` (activity bar · Explorer over real `fs_cmds` · SCM over real `git_cmds` · Problems over real I11 `LspRunner` diagnostics via `lsp_cmds` · editor tabs · bottom panel · status bar) + offline `?worker` bundling (5 workers, own cacheable chunk) — P41.2 worktrees / P41.3 ticketed writes / P41.4 receipts all landed 2026-08-24 (`fleet.ts` worktree planning + `worktree_cap.rs` disk cap; `fs.ts` P41.3 ticket split pair; receipts/verify inline in the IDE Diff rail)
+
+- id: I13
+  layer: I
+  name: Knowledge → Skill Compiler (`/learn`, post-v1)
+  post_v1: true
+  source: **v3.57 added — post-v1**
+
+- id: J1
+  layer: J
+  name: Trust Ladder
+  post_v1: false
+  source: 06
+
+- id: J2
+  layer: J
+  name: Guard-1 regex interceptors
+  post_v1: false
+  source: **✅ P7.4 landed: `everyaios-guard` — `blocklist` (40+ patterns / 8 categories) + `prescan` (`scan_shell`/`scan_path`/`scan_url`/`scan_all`) + `urlfloor` (file:// inside granted roots, scheme guard) + `redteam` gate (35/35 blocked)**
+
+- id: J3
+  layer: J
+  name: Guard-2 diff cards
+  post_v1: false
+  source: **✅ P7.5 + P10.2 nonce hardening + F1 landed:** `DecisionPackage` → `PendingGuardCard` over Tauri IPC; `guard_respond` requires the rendered card nonce **and the `guard` window label** — the main webview (browser views / generative UI / plugin content) is refused outright, so a compromised main renderer can no longer draw a fake card over a real ticket. The consent surface is now the dedicated always-on-top `guard` window (`src-tauri/src/guard_window.rs` + `ui/guard.html`, a minimal dependency-free page that only ever renders tickets from Rust IPC; `guard_open_window` brings it up from cards/panels/Excel). `everyaios-guard::diffcard::NativeCard` is a Rust-owned serializable card shape, not an OS-native dialog; the true OS-native card remains a hardening item.**
+
+- id: J4
+  layer: J
+  name: Path/scope hard-floors
+  post_v1: false
+  source: **✅ P7.7 landed: `pathfloor` — `normalize_lexical` + `canonicalize_no_follow`, `enforce_floor` (Allowed/ParentEscape/SymlinkEscape/OutsideRoot), adversarial fuzz gate (Allowed ⟹ inside) + P7.8 6-axis `PathGrant`/`GrantAxis` (read_only_recursive/read_write_create/… feeding permissions.toml, 0-escape invariant)**
+
+- id: J5
+  layer: J
+  name: Audit trail
+  post_v1: false
+  source: 33 §9, 06, 53, 61
+
+- id: J6
+  layer: J
+  name: Prompt-injection defense
+  post_v1: false
+  source: **✅ P7.6 landed (Rust half): `everyaios-guard::injection` — `scan_context`, `wrap_user_document`, `sanitize_tool_result`, `Estop`; sidecar ingest call-site remains P7 wiring**
+
+- id: J7
+  layer: J
+  name: ProcessSupervisor
+  post_v1: false
+  source: v2.0 §4.3
+
+- id: J8
+  layer: J
+  name: Key vault
+  post_v1: false
+  source: 06 §6.8
+
+- id: J9
+  layer: J
+  name: Config-as-files
+  post_v1: false
+  source: v2.0 §7.6
+
+- id: J10
+  layer: J
+  name: Watchdog
+  post_v1: false
+  source: 28 §3
+
+- id: J11
+  layer: J
+  name: Hard $ budget per session
+  post_v1: false
+  source: 43 + 65 §1 (codeburn efficiency metrics) + 65 §9 (loop-engineering budget-guard)
+
+- id: J12
+  layer: J
+  name: Orphan-prevention on Rust death
+  post_v1: false
+  source: 43
+
+- id: J13
+  layer: J
+  name: Sidecar heap safety
+  post_v1: false
+  source: 43
+
+- id: J14
+  layer: J
+  name: Distributed tracing
+  post_v1: false
+  source: **✅ P3.3 landed: `everyaios-core/src/tracing.rs` — `TraceContext` (root/child spans, opentelemetry 0.27 `TraceId`/`SpanId`/`TraceFlags`), W3C `traceparent` wire format (the header `@opentelemetry/sdk-node` reads) + `inject_headers`/`extract_headers` for the Rust→sidecar→provider→sandbox boundaries, `SpanRecord`/`SpanAttrs` (all doc-43 fields), `TraceReporter` (console + `<data_dir>/traces/traces.ndjson` NDJSON; not-sampled dropped; OTLP/Jaeger post-v1) + `AuditEvent`/`SessionEvent` `trace_id`+`span_id` columns (`write_traced`, serde-default legacy compat). 8 tests — 393 ws tests, clippy 0, fmt clean.**
+
+- id: J15
+  layer: J
+  name: Length-prefixed IPC framing
+  post_v1: false
+  source: 43
+
+- id: J16
+  layer: J
+  name: Process lifecycle hardening
+  post_v1: false
+  source: 43
+
+- id: J17
+  layer: J
+  name: ACP harness bridge
+  post_v1: false
+  source: 45, 57, 61, 69 + 2026-08-23 ACP-spec + codeg/vscode-acp/registry live verification
+
+- id: J18
+  layer: J
+  name: Profile-gated security profiles
+  post_v1: false
+  source: **✅ P7.7 landed: `everyaios-guard::profiles` — `Profile` (minimal/standard/strict, approval thresholds Strict<Standard<Minimal) + `gate(profile, hook)` over 7 profile gates (Allow/Ask/Block)**
+
+- id: J19
+  layer: J
+  name: Merkle hash-chain audit
+  post_v1: false
+  source: **✅ P7.7 landed: `everyaios-audit::merkle` — SHA-256 chained rows, `verify` → first-bad-row, `verify_against_head` catches truncation**
+
+- id: J20
+  layer: J
+  name: AgentShield config scanning
+  post_v1: false
+  source: **✅ P7.7 landed: `everyaios-guard::configscan` — guard-disable keys, destructive config, callbacks, injection markers, malformed-TOML finding**
+
+- id: J21
+  layer: J
+  name: Escalation rules & decision packages
+  post_v1: false
+  source: **✅ landed: `everyaios-guard::permissions::PermissionsPolicy` (`parse` TOML → `Rule::{AlwaysAsk,AlwaysAllow,Block,AskIfGt,AskIfNewDomain,AskIfDestructive}` + `evaluate(Operation)` + `min_confidence_for_auto`/`user_feedback_learning`) + `everyaios-guard::decision::DecisionPackage` + `everyaios-core::guard_service::GuardService` (estop→policy→profile→ticket; `evaluate` + `use_ticket` executor call-site; `guard/*` JSON-RPC into `ChatRelay::spawn`) + coordinator `guard.ts` + Cockpit diff card/estop strip/receipts; the live tool-executor invocation is now wired (Stage 0 landed 2026-08-20 — `tool/exec` → evaluate → ticket → `tool/commit` → Merkle audit)**
+
+- id: J24
+  layer: J
+  name: Credential-provider abstraction (post-v1 — user-controlled credential fill without secret exposure)
+  post_v1: true
+  source: **v3.57 added — post-v1**

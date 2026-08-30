@@ -130,12 +130,20 @@ pub fn chunks_for(path: &str, text: &str, mode: ChunkMode) -> Vec<Chunk> {
 
 /// The [`WarpIndex`] drives: only chunks whose file content hash changed
 /// (or whose chunk hash differs from the stored state) are returned.
-pub fn sync_changed(index: &WarpIndex, path: &str, text: &str, mode: ChunkMode) -> Vec<ChangedChunk> {
+pub fn sync_changed(
+    index: &WarpIndex,
+    path: &str,
+    text: &str,
+    mode: ChunkMode,
+) -> Vec<ChangedChunk> {
     let content_hash = hash_of_bytes(text.as_bytes());
     let stored = index.files.get(path);
 
     // Fast path: file byte-identical → nothing changed (top-level merkle node).
-    if stored.as_ref().is_some_and(|s| s.content_hash == content_hash) {
+    if stored
+        .as_ref()
+        .is_some_and(|s| s.content_hash == content_hash)
+    {
         return Vec::new();
     }
 
@@ -198,7 +206,12 @@ mod tests {
         fn embed(&self, text: &str) -> Vec<f32> {
             // Deterministic fake: 4 dims, seeded by length + bytes.
             let n = text.len() as f32;
-            vec![n, n / 2.0, 1.0, text.bytes().map(|b| f32::from(b)).sum::<f32>() % 7.0]
+            vec![
+                n,
+                n / 2.0,
+                1.0,
+                text.bytes().map(|b| f32::from(b)).sum::<f32>() % 7.0,
+            ]
         }
     }
 
@@ -218,7 +231,12 @@ mod tests {
         let mut idx = WarpIndex::default();
         let v1 = "line one\nline two\nline three\nline four\n".to_string();
         let v2 = "line one\nline two\nCHANGED\nline four\n".to_string();
-        embed_sync(&mut idx, &StubEmbedder, &[("f.rs".to_string(), v1)], ChunkMode::Lines(2));
+        embed_sync(
+            &mut idx,
+            &StubEmbedder,
+            &[("f.rs".to_string(), v1)],
+            ChunkMode::Lines(2),
+        );
         // v2 differs only in chunk index 1 (lines 3-4) of two line-pairs.
         let changed = sync_changed(&idx, "f.rs", &v2, ChunkMode::Lines(2));
         assert_eq!(changed.len(), 1, "only the touched chunk is dirty");
@@ -246,7 +264,12 @@ mod tests {
     fn new_file_embeds_all_and_records_state() {
         let mut idx = WarpIndex::default();
         let text = "fn a() {}\nfn b() {}\n".to_string();
-        let fresh = embed_sync(&mut idx, &StubEmbedder, &[("lib.rs".to_string(), text.clone())], ChunkMode::Lines(10));
+        let fresh = embed_sync(
+            &mut idx,
+            &StubEmbedder,
+            &[("lib.rs".to_string(), text.clone())],
+            ChunkMode::Lines(10),
+        );
         assert_eq!(fresh.len(), 1);
         let state = idx.files.get("lib.rs").expect("state recorded");
         assert_eq!(state.chunk_hashes.len(), 1);

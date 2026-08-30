@@ -56,7 +56,9 @@ impl MoACatalog {
             presets: vec![
                 MoAPreset {
                     id: "bounded".into(),
-                    description: "Two agents, parallel, cheapest first — the default multi-brain route.".into(),
+                    description:
+                        "Two agents, parallel, cheapest first — the default multi-brain route."
+                            .into(),
                     agents: vec!["everyaios-inbuilt".into(), "claude".into()],
                     routing: Routing::Parallel,
                     fusion: Fusion::Select,
@@ -64,7 +66,8 @@ impl MoACatalog {
                 },
                 MoAPreset {
                     id: "diverse".into(),
-                    description: "Three different-model agents for divergent drafts, then synthesize.".into(),
+                    description:
+                        "Three different-model agents for divergent drafts, then synthesize.".into(),
                     agents: vec!["claude".into(), "grok".into(), "qwen-code".into()],
                     routing: Routing::Parallel,
                     fusion: Fusion::Synthesize,
@@ -72,7 +75,8 @@ impl MoACatalog {
                 },
                 MoAPreset {
                     id: "depth".into(),
-                    description: "Sequential deepening — each agent builds on the previous draft.".into(),
+                    description: "Sequential deepening — each agent builds on the previous draft."
+                        .into(),
                     agents: vec!["everyaios-inbuilt".into(), "claude".into(), "codex".into()],
                     routing: Routing::Sequential,
                     fusion: Fusion::Synthesize,
@@ -81,7 +85,11 @@ impl MoACatalog {
                 MoAPreset {
                     id: "review".into(),
                     description: "One drafter, one critic, one finalizer (delegated).".into(),
-                    agents: vec!["claude".into(), "opencode".into(), "everyaios-inbuilt".into()],
+                    agents: vec![
+                        "claude".into(),
+                        "opencode".into(),
+                        "everyaios-inbuilt".into(),
+                    ],
                     routing: Routing::Delegated,
                     fusion: Fusion::Select,
                     max_turns: 80,
@@ -101,7 +109,9 @@ impl MoACatalog {
     /// Validate a lineup against the registry of known agent ids: unknown
     /// agents are reported, never silently dropped.
     pub fn validate(&self, preset_id: &str, known_agents: &[String]) -> Result<(), Vec<String>> {
-        let preset = self.find(preset_id).ok_or_else(|| vec![preset_id.to_string()])?;
+        let preset = self
+            .find(preset_id)
+            .ok_or_else(|| vec![preset_id.to_string()])?;
         let unknown: Vec<String> = preset
             .agents
             .iter()
@@ -133,7 +143,9 @@ mod tests {
     #[test]
     fn validate_reports_unknown_agents() {
         let c = MoACatalog::builtin();
-        assert!(c.validate("bounded", &["everyaios-inbuilt".into(), "claude".into()]).is_ok());
+        assert!(c
+            .validate("bounded", &["everyaios-inbuilt".into(), "claude".into()])
+            .is_ok());
         let err = c
             .validate("bounded", &["everyaios-inbuilt".into()])
             .unwrap_err();
@@ -146,6 +158,9 @@ mod tests {
         let a = MoACatalog::builtin();
         let b = MoACatalog::builtin();
         assert_eq!(a, b);
-        assert_eq!(serde_json::to_string(&a).unwrap(), serde_json::to_string(&b).unwrap());
+        assert_eq!(
+            serde_json::to_string(&a).unwrap(),
+            serde_json::to_string(&b).unwrap()
+        );
     }
 }

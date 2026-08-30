@@ -546,7 +546,12 @@ fn rpc_error(id: Value, code: i64, message: &str) -> String {
         .to_string()
 }
 
-fn write_http_bytes(stream: &mut TcpStream, status: u16, body: &[u8], keep_alive: bool) -> std::io::Result<()> {
+fn write_http_bytes(
+    stream: &mut TcpStream,
+    status: u16,
+    body: &[u8],
+    keep_alive: bool,
+) -> std::io::Result<()> {
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",

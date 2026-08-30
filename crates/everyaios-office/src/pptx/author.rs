@@ -26,8 +26,7 @@ const R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relations
 const CT_RELS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
 const CT_OFFICE_DOC: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
-const CT_SLIDE: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+const CT_SLIDE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 const CT_SLIDE_MASTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 const CT_SLIDE_LAYOUT: &str =
@@ -270,8 +269,8 @@ fn slide_rels() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::transition::{extract_transition, TransitionKind};
+    use super::*;
     use crate::pptx::PptxEngine;
 
     fn brief() -> DeckBrief {

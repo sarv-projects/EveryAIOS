@@ -99,13 +99,20 @@ mod tests {
     use super::*;
 
     fn removed(p: &str) -> FileEvent {
-        FileEvent::Removed { path: PathBuf::from(p) }
+        FileEvent::Removed {
+            path: PathBuf::from(p),
+        }
     }
     fn renamed(from: &str, to: &str) -> FileEvent {
-        FileEvent::Renamed { from: PathBuf::from(from), to: PathBuf::from(to) }
+        FileEvent::Renamed {
+            from: PathBuf::from(from),
+            to: PathBuf::from(to),
+        }
     }
     fn modified(p: &str) -> FileEvent {
-        FileEvent::Modified { path: PathBuf::from(p) }
+        FileEvent::Modified {
+            path: PathBuf::from(p),
+        }
     }
 
     #[test]
@@ -116,7 +123,10 @@ mod tests {
         );
         assert_eq!(
             to_fs_event(&renamed("/tmp/old.rs", "/tmp/new.rs")),
-            FsEvent::Renamed { from: "/tmp/old.rs".into(), to: "/tmp/new.rs".into() }
+            FsEvent::Renamed {
+                from: "/tmp/old.rs".into(),
+                to: "/tmp/new.rs".into()
+            }
         );
         assert_eq!(
             to_fs_event(&modified("/tmp/a.rs")),

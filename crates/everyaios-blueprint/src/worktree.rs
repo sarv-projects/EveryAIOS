@@ -31,7 +31,9 @@ impl WorktreeSpec {
     /// The conventional worktree path (`.fleet/agent-<id>` under the repo —
     /// matches the P17 `fleet/` branch convention).
     pub fn worktree_path(&self) -> PathBuf {
-        self.repo.join(".fleet").join(format!("agent-{}", self.agent_id))
+        self.repo
+            .join(".fleet")
+            .join(format!("agent-{}", self.agent_id))
     }
 
     /// The branch the agent's worktree rides on.
@@ -68,7 +70,13 @@ pub struct FileReview {
 
 impl FileReview {
     fn unset(path: String, additions: u32, removals: u32) -> Self {
-        Self { path, additions, removals, verdict: ReviewVerdict::Unset, note: None }
+        Self {
+            path,
+            additions,
+            removals,
+            verdict: ReviewVerdict::Unset,
+            note: None,
+        }
     }
 }
 
@@ -83,15 +91,18 @@ pub struct WorktreeReview {
 
 impl WorktreeReview {
     pub fn new(spec: WorktreeSpec) -> Self {
-        Self { spec, changed: Vec::new(), reviewed: false }
+        Self {
+            spec,
+            changed: Vec::new(),
+            reviewed: false,
+        }
     }
 
     /// Collect the diff against the base branch. Real git, best-effort —
     /// a missing binary or broken repo yields an empty diff, never a panic.
     pub fn refresh_diff(&mut self) {
         let wt = self.spec.worktree_path();
-        let output = git(&wt, &["diff", "--numstat", &self.spec.base_branch])
-            .unwrap_or_default();
+        let output = git(&wt, &["diff", "--numstat", &self.spec.base_branch]).unwrap_or_default();
         self.changed = parse_numstat(&output);
     }
 
@@ -127,9 +138,10 @@ impl WorktreeReview {
 
     /// Mergeable as-is? (nothing pending Changes-requested or Unset)
     pub fn mergeable(&self) -> bool {
-        !self.changed.iter().any(|f| {
-            f.verdict == ReviewVerdict::Changed || f.verdict == ReviewVerdict::Unset
-        })
+        !self
+            .changed
+            .iter()
+            .any(|f| f.verdict == ReviewVerdict::Changed || f.verdict == ReviewVerdict::Unset)
     }
 
     /// The open-in-editor payload (Diff view + Code view seam).
@@ -150,10 +162,17 @@ pub struct EditorOpen {
 
 /// Run `git <args>` in `cwd`; stdout on success, Err(stderr/io) otherwise.
 fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let out = std::process::Command::new("git").args(args).current_dir(cwd).output();
+    let out = std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output();
     match out {
         Ok(o) if o.status.success() => Ok(String::from_utf8_lossy(&o.stdout).into_owned()),
-        Ok(o) => Err(format!("git {} → {}", args.join(" "), String::from_utf8_lossy(&o.stderr).trim())),
+        Ok(o) => Err(format!(
+            "git {} → {}",
+            args.join(" "),
+            String::from_utf8_lossy(&o.stderr).trim()
+        )),
         Err(e) => Err(e.to_string()),
     }
 }
@@ -186,7 +205,10 @@ pub fn ensure_worktree(spec: &WorktreeSpec) -> Result<PathBuf, String> {
         return Ok(wt);
     }
     // Ensure the fleet branch exists (start = base branch), then branch off.
-    let _ = git(&spec.repo, &["branch", &spec.branch(), spec.base_branch.as_str()]);
+    let _ = git(
+        &spec.repo,
+        &["branch", &spec.branch(), spec.base_branch.as_str()],
+    );
     git(
         &spec.repo,
         &["worktree", "add", wt.to_str().unwrap_or(""), &spec.branch()],
@@ -197,7 +219,10 @@ pub fn ensure_worktree(spec: &WorktreeSpec) -> Result<PathBuf, String> {
 /// Remove the worktree and its branch once the run is reviewed/merged.
 pub fn remove_worktree(spec: &WorktreeSpec) -> Result<(), String> {
     let wt = spec.worktree_path();
-    let _ = git(&spec.repo, &["worktree", "remove", "--force", wt.to_str().unwrap_or("")]);
+    let _ = git(
+        &spec.repo,
+        &["worktree", "remove", "--force", wt.to_str().unwrap_or("")],
+    );
     let _ = git(&spec.repo, &["branch", "-D", &spec.branch()]);
     Ok(())
 }
@@ -220,7 +245,10 @@ mod tests {
             repo: PathBuf::from("/repo"),
             base_branch: "main".into(),
         };
-        assert_eq!(spec.worktree_path(), PathBuf::from("/repo/.fleet/agent-alice"));
+        assert_eq!(
+            spec.worktree_path(),
+            PathBuf::from("/repo/.fleet/agent-alice")
+        );
         assert_eq!(spec.branch(), "fleet/alice");
     }
 
@@ -286,13 +314,25 @@ mod tests {
             eprintln!("git unavailable — skipping live worktree test");
             return;
         }
-        std::process::Command::new("git").args(["config", "user.email", "t@t"]).current_dir(&root).status().unwrap();
-        std::process::Command::new("git").args(["config", "user.name", "t"]).current_dir(&root).status().unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.email", "t@t"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["config", "user.name", "t"])
+            .current_dir(&root)
+            .status()
+            .unwrap();
         std::fs::write(root.join("one.txt"), "one\n").unwrap();
         run_git(&root, &["add", "one.txt"]);
         run_git(&root, &["commit", "-qm", "base"]);
 
-        let spec = WorktreeSpec { agent_id: "alice".into(), repo: root.clone(), base_branch: "main".into() };
+        let spec = WorktreeSpec {
+            agent_id: "alice".into(),
+            repo: root.clone(),
+            base_branch: "main".into(),
+        };
         let wt = ensure_worktree(&spec).unwrap();
         assert!(wt.is_dir());
         // The agent edits in its own worktree.
@@ -315,7 +355,11 @@ mod tests {
     }
 
     fn run_git(cwd: &Path, args: &[&str]) {
-        let s = std::process::Command::new("git").args(args).current_dir(cwd).status().unwrap();
+        let s = std::process::Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .unwrap();
         assert!(s.success(), "git {args:?} failed in {cwd:?}");
     }
 }

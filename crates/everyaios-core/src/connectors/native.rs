@@ -32,9 +32,7 @@ pub fn classify_sql(sql: &str) -> SqlClass {
     match first_word.as_str() {
         "SELECT" | "SHOW" | "EXPLAIN" | "DESCRIBE" | "PRAGMA" | "VALUES" => SqlClass::Read,
         "INSERT" | "UPDATE" | "DELETE" | "MERGE" | "UPSERT" => SqlClass::Write,
-        "CREATE" | "DROP" | "ALTER" | "TRUNCATE" | "GRANT" | "REVOKE" | "CALL" => {
-            SqlClass::Write
-        }
+        "CREATE" | "DROP" | "ALTER" | "TRUNCATE" | "GRANT" | "REVOKE" | "CALL" => SqlClass::Write,
         _ => SqlClass::Unrecognized,
     }
 }
@@ -147,7 +145,10 @@ pub enum SqlGuardError {
 
 impl SqlGuard {
     pub fn new() -> Self {
-        Self { read_only_default: true, statement_timeout_ms: 5_000 }
+        Self {
+            read_only_default: true,
+            statement_timeout_ms: 5_000,
+        }
     }
 
     /// Gate a statement before it runs. Returns the session preamble
@@ -254,7 +255,10 @@ impl ExplainCostGuard {
     pub fn check(&self, explain: &str) -> Result<(), CostGuardError> {
         match Self::parse_cost(explain) {
             Some(cost) if cost <= self.max_cost => Ok(()),
-            Some(cost) => Err(CostGuardError::OverBudget { cost, max: self.max_cost }),
+            Some(cost) => Err(CostGuardError::OverBudget {
+                cost,
+                max: self.max_cost,
+            }),
             None => Err(CostGuardError::NoPlan),
         }
     }
@@ -288,7 +292,9 @@ pub struct AuditChain {
 
 impl AuditChain {
     pub fn new() -> Self {
-        Self { entries: Vec::new() }
+        Self {
+            entries: Vec::new(),
+        }
     }
 
     /// The genesis hash (no predecessor).
@@ -298,7 +304,11 @@ impl AuditChain {
 
     pub fn push(&mut self, action: &str, statement: &str, ts_ms: u64) -> String {
         let seq = self.entries.len() as u64;
-        let prev = self.entries.last().map(|e| e.hash.clone()).unwrap_or_else(Self::genesis);
+        let prev = self
+            .entries
+            .last()
+            .map(|e| e.hash.clone())
+            .unwrap_or_else(Self::genesis);
         let hash = Self::hash(&prev, action, statement, ts_ms);
         self.entries.push(AuditEntry {
             seq,
@@ -361,8 +371,14 @@ mod tests {
         assert!(has_stacked_statements("SELECT 1; DROP TABLE t"));
         assert!(!has_stacked_statements("SELECT 'a;b' AS x"));
         let guard = SqlGuard::new();
-        assert!(matches!(guard.check("SELECT 1; DELETE FROM t", true), Err(SqlGuardError::Stacked)));
-        assert!(matches!(guard.check("VACUUM", true), Err(SqlGuardError::Unrecognized)));
+        assert!(matches!(
+            guard.check("SELECT 1; DELETE FROM t", true),
+            Err(SqlGuardError::Stacked)
+        ));
+        assert!(matches!(
+            guard.check("VACUUM", true),
+            Err(SqlGuardError::Unrecognized)
+        ));
     }
 
     #[test]
@@ -377,7 +393,9 @@ mod tests {
     fn escaped_quotes_do_not_break_the_state_machine() {
         // Bugfix 17 — SQL `''` is an escaped literal quote inside a string.
         assert!(!has_stacked_statements("SELECT 'O''Brien' AS name"));
-        assert!(!has_stacked_statements("SELECT 'it''s; still one string' AS x"));
+        assert!(!has_stacked_statements(
+            "SELECT 'it''s; still one string' AS x"
+        ));
         // A real stacked statement after an escaped-quote string is still caught.
         assert!(has_stacked_statements("SELECT 'x''y' AS a; DROP TABLE t"));
     }
@@ -414,13 +432,21 @@ mod tests {
     #[test]
     fn explain_cost_guard_budgets_on_upper_bound() {
         let guard = ExplainCostGuard::new(50.0);
-        assert!(guard.check("Seq Scan on t (cost=0.00..42.50 rows=10)").is_ok());
+        assert!(guard
+            .check("Seq Scan on t (cost=0.00..42.50 rows=10)")
+            .is_ok());
         assert!(matches!(
             guard.check("Nested Loop (cost=10.00..99.00 rows=1000)"),
             Err(CostGuardError::OverBudget { .. })
         ));
-        assert!(matches!(guard.check("no cost here"), Err(CostGuardError::NoPlan)));
-        assert_eq!(ExplainCostGuard::parse_cost("Seq Scan (cost=0.00..42.50)"), Some(42.5));
+        assert!(matches!(
+            guard.check("no cost here"),
+            Err(CostGuardError::NoPlan)
+        ));
+        assert_eq!(
+            ExplainCostGuard::parse_cost("Seq Scan (cost=0.00..42.50)"),
+            Some(42.5)
+        );
     }
 
     #[test]

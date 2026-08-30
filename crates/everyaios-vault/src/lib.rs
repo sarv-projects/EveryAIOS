@@ -516,10 +516,8 @@ mod tests {
     /// platforms — "copy vault.db between OS" is the same bytes + the same key.
     #[test]
     fn portable_encrypted_bytes_reopen_with_only_the_key() {
-        let dir = std::env::temp_dir().join(format!(
-            "everyaios-vault-portable-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-vault-portable-{}", std::process::id()));
         let path = dir.join("vault.db");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -727,7 +725,9 @@ mod tests {
         assert_eq!(rows[1].in_tokens, 104); // newest openai call
         assert_eq!(rows[0].provider, "deepseek");
         // Provider/model columns are present — the ring's durable key.
-        assert!(rows.iter().all(|r| !r.provider.is_empty() && !r.model.is_empty()));
+        assert!(rows
+            .iter()
+            .all(|r| !r.provider.is_empty() && !r.model.is_empty()));
 
         // Limit clamps: 0 → 1, huge → 500.
         assert_eq!(vault.recent_usage(0).unwrap().len(), 1);

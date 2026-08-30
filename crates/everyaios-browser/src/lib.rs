@@ -50,10 +50,22 @@ pub use actions::{
 };
 pub use ax::{AxNode, INTERACTIVE_ROLES};
 pub use capture::{CdpSession, SnapshotEngine, MAX_FRAME_DEPTH};
+pub use content::{clean_markdown, CleanedText, FilterSet, RuleKind};
+pub use demo::{
+    anchor_from_node, outcome_holds, DemoAnchor, DemoInput, DemoRecording, DemoStep,
+    OutcomeEvidence,
+};
 pub use diff::{diff_snapshots, snapshot_lines};
+pub use electron::ElectronHandle;
+pub use locator::{
+    a11y_audit, find_first, find_semantic, first_actionable_ref, parse_batch, A11yIssue,
+    A11ySeverity, BatchParseError, Located, SemanticQuery,
+};
 pub use ownership::{OwnershipError, TabClaim, TabOwner, TabRecord, TabRegistry};
 pub use protocol::{parse_action, ActionParseError, ActionProtocol, ParsedAction};
 pub use read::{read_http, ReadOptions, ReadSource};
+pub use resources::{Domain, ResourceDropPolicy};
+pub use selector::{CssOrXPath, SelectorResolver, SemanticTarget};
 pub use session::{
     cookie_from_cdp, cookie_to_cdp, get_cookies, group_cookies_by_site,
     inherit_cookies_from_chrome, inject_session, seal_session, set_cookies, SessionBridgeError,
@@ -62,25 +74,13 @@ pub use tiers::{
     EngineConfig, EngineError, EngineResult, EngineTier, FetchIntent, LightEngine, TieredEngine,
 };
 pub use tree::{build_tree, RefMinter, TreeOptions};
-pub use electron::ElectronHandle;
 pub use webmcp::{
     InvocationState, InvocationTracker, WebMcpError, WebMcpExecutor, WebMcpRegistry, WebMcpResult,
     WebMcpTool,
 };
 pub use webmcp_http::{
-    bearer_token, fresh_token, handle_mcp_request, parse_http_request, HttpParseError, McpHttpServer,
-    MCP_PATH, MAX_BODY_BYTES,
-};
-pub use content::{clean_markdown, CleanedText, FilterSet, RuleKind};
-pub use demo::{
-    anchor_from_node, outcome_holds, DemoAnchor, DemoInput, DemoRecording, DemoStep,
-    OutcomeEvidence,
-};
-pub use resources::{Domain, ResourceDropPolicy};
-pub use selector::{CssOrXPath, SelectorResolver, SemanticTarget};
-pub use locator::{
-    a11y_audit, find_first, find_semantic, first_actionable_ref, parse_batch, A11yIssue,
-    A11ySeverity, BatchParseError, Located, SemanticQuery,
+    bearer_token, fresh_token, handle_mcp_request, parse_http_request, HttpParseError,
+    McpHttpServer, MAX_BODY_BYTES, MCP_PATH,
 };
 
 use serde::{Deserialize, Serialize};

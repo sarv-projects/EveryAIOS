@@ -61,11 +61,15 @@ pub fn agent_registry_remove(id: String) -> Result<(), String> {
 /// Duplicate an agent under a new name (wizard "make a copy").
 #[tauri::command]
 pub fn agent_registry_duplicate(id: String, new_name: String) -> Result<String, String> {
-    registry().duplicate(&id, &new_name).map_err(|e| e.to_string())
+    registry()
+        .duplicate(&id, &new_name)
+        .map_err(|e| e.to_string())
 }
 
 /// Toggle an agent's disabled flag (registry filter, not delete).
 #[tauri::command]
 pub fn agent_registry_set_disabled(id: String, disabled: bool) -> Result<(), String> {
-    registry().set_disabled(&id, disabled).map_err(|e| e.to_string())
+    registry()
+        .set_disabled(&id, disabled)
+        .map_err(|e| e.to_string())
 }

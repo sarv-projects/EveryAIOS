@@ -13,7 +13,10 @@ pub enum Locator {
     /// A named a11y node should exist (UIA tree).
     UiName(String),
     /// OCR text should appear in the given window region.
-    OcrText { text: String, region: crate::types::Region },
+    OcrText {
+        text: String,
+        region: crate::types::Region,
+    },
     /// A named node should be gone (e.g. the dialog closed).
     UiGone(String),
 }
@@ -58,12 +61,8 @@ impl Verifier {
     /// Check the locator against one observation.
     pub fn satisfied(locator: &Locator, tree: Option<&ReadNode>, words: &[OcrWord]) -> bool {
         match locator {
-            Locator::UiName(name) => tree
-                .and_then(|t| t.find_by_name(name))
-                .is_some(),
-            Locator::UiGone(name) => tree
-                .and_then(|t| t.find_by_name(name))
-                .is_none(),
+            Locator::UiName(name) => tree.and_then(|t| t.find_by_name(name)).is_some(),
+            Locator::UiGone(name) => tree.and_then(|t| t.find_by_name(name)).is_none(),
             Locator::OcrText { text, region } => {
                 let needle = text.to_ascii_lowercase();
                 words
@@ -76,7 +75,12 @@ impl Verifier {
 
     /// Run the cascade: poll the observer until the locator is satisfied or
     /// attempts are exhausted → `Halt` (never guess).
-    pub fn verify(&self, window_id: u64, locator: &Locator, observer: &dyn Observer) -> VerifyOutcome {
+    pub fn verify(
+        &self,
+        window_id: u64,
+        locator: &Locator,
+        observer: &dyn Observer,
+    ) -> VerifyOutcome {
         for attempt in 1..=self.max_attempts {
             let tree = observer.read_tree(window_id);
             let words = observer.ocr(window_id);
@@ -93,7 +97,10 @@ impl Verifier {
         }
         VerifyOutcome::Halt {
             attempts: self.max_attempts,
-            reason: format!("locator {locator:?} not satisfied after {} attempts", self.max_attempts),
+            reason: format!(
+                "locator {locator:?} not satisfied after {} attempts",
+                self.max_attempts
+            ),
         }
     }
 
@@ -207,7 +214,14 @@ mod tests {
             height: 500,
         };
         assert_eq!(
-            v.verify(1, &Locator::OcrText { text: "submit".into(), region }, &obs),
+            v.verify(
+                1,
+                &Locator::OcrText {
+                    text: "submit".into(),
+                    region
+                },
+                &obs
+            ),
             VerifyOutcome::Confirmed
         );
     }
@@ -225,7 +239,14 @@ mod tests {
             width: 10,
             height: 10,
         };
-        let out = v.verify(1, &Locator::OcrText { text: "submit".into(), region: far }, &obs);
+        let out = v.verify(
+            1,
+            &Locator::OcrText {
+                text: "submit".into(),
+                region: far,
+            },
+            &obs,
+        );
         assert!(matches!(out, VerifyOutcome::Halt { .. }));
     }
 

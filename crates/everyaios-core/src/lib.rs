@@ -16,7 +16,6 @@ use std::path::PathBuf;
 pub mod adapter;
 pub mod agui;
 pub mod ai_marker;
-pub mod watcher_glue;
 pub mod automation_runtime;
 pub mod blueprint;
 pub mod capability_manifest;
@@ -24,6 +23,7 @@ pub mod challenge;
 pub mod chat;
 pub mod config;
 pub mod connector_hub;
+pub mod connectors;
 pub mod decline;
 pub mod diagnose;
 pub mod distill;
@@ -38,21 +38,19 @@ pub mod hooks;
 pub mod hwfit;
 pub mod inventory;
 pub mod local;
-pub mod connectors;
+pub mod watcher_glue;
 pub use connectors::{
     attach_scopes, GraphConnector, ReadFirstPolicy, SendAction, SendApproval, WorkspaceConnector,
     SCOPE_MANIFEST,
 };
 pub mod memory_service;
+pub mod messaging;
 pub mod migrate;
 pub mod migration;
-pub mod native_loop;
-pub mod pairing;
-pub mod voice;
-pub mod worktree_cap;
-pub mod messaging;
 pub mod models;
+pub mod native_loop;
 pub mod orphan;
+pub mod pairing;
 pub mod plan_service;
 pub mod provider_ref;
 pub mod providers;
@@ -60,8 +58,8 @@ pub mod reader;
 pub mod report;
 pub mod research;
 pub mod resources;
-pub mod rss_measure;
 pub mod routing;
+pub mod rss_measure;
 pub mod scheduler_service;
 pub mod self_audit;
 pub mod sidecar_link;
@@ -74,8 +72,10 @@ pub mod tools;
 pub mod tracing;
 pub mod vault_key;
 pub mod version;
+pub mod voice;
 pub mod widgets;
 pub mod worker_pool;
+pub mod worktree_cap;
 pub mod wsl;
 
 pub use adapter::{exact_command_consent, is_install_script, Stage0Adapter};
@@ -94,9 +94,8 @@ pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserD
 pub use config::{Config, ConfigError};
 pub use eval_service::EvalService;
 pub use execution::{
-    Execution, ExecutionKernel, ExecutionPhase, ExecutionTrigger,
-    RuntimeManifest, PendingApproval, RepairClassification, RepairPlanItem,
-    ProjectedMessage, ForkLineage,
+    Execution, ExecutionKernel, ExecutionPhase, ExecutionTrigger, ForkLineage, PendingApproval,
+    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest,
 };
 pub use export::{
     render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
@@ -126,7 +125,7 @@ pub use supervisor::{ProcessSupervisor, SupervisorError, SupervisorState};
 pub use sync::{
     export_bundle, import_bundle, open, reconcile, resolve_conflicts, seal, AeadBox, ChaChaBox,
     ConflictPolicy, KeyExchange, KeyPair, ResolvedDiff, SharedSession, SyncConflict, SyncDiff,
-    SyncEnvelope, SyncError, SyncHello, SyncItem, SyncScope, SyncSet, SyncSession, SyncTransport,
+    SyncEnvelope, SyncError, SyncHello, SyncItem, SyncScope, SyncSession, SyncSet, SyncTransport,
     SYNC_MAGIC, SYNC_VERSION,
 };
 pub use task_ledger::{
@@ -285,7 +284,10 @@ mod tests {
         let out = boot(&["--vault".into(), vault.to_string_lossy().into()]).expect("boot ok");
         // The ready line names only the light surface.
         assert!(out.contains("ready"), "expected ready line, got: {out}");
-        assert!(out.contains("data_dir="), "boot report must name the data dir");
+        assert!(
+            out.contains("data_dir="),
+            "boot report must name the data dir"
+        );
         assert!(out.contains("vault="), "boot report must name the vault");
         // Heavy subsystems must NOT be constructed or named at boot.
         for heavy in ["office", "ironcalc", "lsp", "codeintel", "graph", "monaco"] {

@@ -44,7 +44,12 @@ impl FsCheckpoint {
         let mut cp = FsCheckpoint::default();
         for p in paths {
             if p.is_file() {
-                cp.files.insert(p.clone(), CheckpointedFile { original: std::fs::read(p)? });
+                cp.files.insert(
+                    p.clone(),
+                    CheckpointedFile {
+                        original: std::fs::read(p)?,
+                    },
+                );
             }
         }
         Ok(cp)
@@ -55,7 +60,12 @@ impl FsCheckpoint {
     pub fn capture_dir(dir: &Path) -> Result<Self, StorageError> {
         let mut cp = FsCheckpoint::default();
         for entry in walk_files(dir)? {
-            cp.files.insert(entry.clone(), CheckpointedFile { original: std::fs::read(&entry)? });
+            cp.files.insert(
+                entry.clone(),
+                CheckpointedFile {
+                    original: std::fs::read(&entry)?,
+                },
+            );
         }
         Ok(cp)
     }
@@ -83,11 +93,7 @@ impl FsCheckpoint {
         }
         // Added files: present on disk under a captured parent but not in
         // the checkpoint.
-        let parents: Vec<&Path> = self
-            .files
-            .keys()
-            .filter_map(|p| p.parent())
-            .collect();
+        let parents: Vec<&Path> = self.files.keys().filter_map(|p| p.parent()).collect();
         for parent in parents {
             if let Ok(entries) = std::fs::read_dir(parent) {
                 for e in entries.flatten() {

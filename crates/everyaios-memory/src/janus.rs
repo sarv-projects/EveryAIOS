@@ -62,7 +62,9 @@ pub fn dedup(input: &str) -> PassResult {
 /// the first line + a count marker. No user regexes needed.
 pub fn regex_collapse(input: &str, min_repeat: usize) -> PassResult {
     let skeleton = |l: &str| -> String {
-        l.chars().map(|c| if c.is_alphanumeric() { 'x' } else { c }).collect()
+        l.chars()
+            .map(|c| if c.is_alphanumeric() { 'x' } else { c })
+            .collect()
     };
     let lines: Vec<&str> = input.lines().collect();
     let mut out: Vec<String> = Vec::new();
@@ -150,7 +152,10 @@ pub fn run_janus(input: &str, min_repeat: usize, max_depth: usize) -> PassResult
 
 /// Split into blank-line-separated blocks.
 fn split_blocks(input: &str) -> Vec<&str> {
-    input.split("\n\n").filter(|b| !b.trim().is_empty()).collect()
+    input
+        .split("\n\n")
+        .filter(|b| !b.trim().is_empty())
+        .collect()
 }
 
 #[cfg(test)]

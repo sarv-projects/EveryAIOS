@@ -22,15 +22,15 @@ pub use browser::{
     default_profile_dir, install_chrome_for_testing, locate_system_browser, spawn_browser,
     BrowserChild, LaunchOptions,
 };
-pub use fingerprint::{defaults as default_fingerprints, FingerprintProfile, RotationSet};
-pub use pairing::{
-    assert_attach_allowed, chrome_default_user_data_dirs, chrome_major_version,
-    is_default_chrome_profile, is_everyaios_isolated_profile, ProfilePairing, ProfilePairingStore,
-};
 pub use discovery::{
     assert_loopback, connect_to_browser, discover_electron_apps, electron_from_json,
     fetch_targets_http, is_electron_version, probe_browser, probe_electron,
     read_devtools_active_port, ElectronApp,
+};
+pub use fingerprint::{defaults as default_fingerprints, FingerprintProfile, RotationSet};
+pub use pairing::{
+    assert_attach_allowed, chrome_default_user_data_dirs, chrome_major_version,
+    is_default_chrome_profile, is_everyaios_isolated_profile, ProfilePairing, ProfilePairingStore,
 };
 pub use transport::{AttachMode, CdpClient, CdpEvent, DEFAULT_CALL_TIMEOUT};
 

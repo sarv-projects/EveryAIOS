@@ -23,7 +23,7 @@ pub struct HardwareInfo {
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct DiscoveredRuntime {
-    pub name: String,     // "ollama" | "llamafile" | "llama.cpp" | ...
+    pub name: String, // "ollama" | "llamafile" | "llama.cpp" | ...
     pub pid: Option<u32>,
     pub endpoint: Option<String>, // OpenAI-compatible base URL when probed
 }
@@ -78,7 +78,13 @@ fn probe_nvidia_vram() -> Option<u64> {
     Some((mb * 1024.0 * 1024.0) as u64)
 }
 
-const RUNTIME_NAMES: &[&str] = &["ollama", "llamafile", "llama-server", "llama.cpp", "llama-cli"];
+const RUNTIME_NAMES: &[&str] = &[
+    "ollama",
+    "llamafile",
+    "llama-server",
+    "llama.cpp",
+    "llama-cli",
+];
 
 /// Process-table scan for local AI runtimes (Linux `/proc`, best-effort).
 pub fn find_runtime_processes() -> Vec<DiscoveredRuntime> {
@@ -155,11 +161,17 @@ impl ProbeCache {
 }
 
 /// Full discovery: process table + endpoint probes, TTL-cached.
-pub fn discover_runtimes(cache: &mut ProbeCache, candidate_bases: &[String]) -> Vec<DiscoveredRuntime> {
+pub fn discover_runtimes(
+    cache: &mut ProbeCache,
+    candidate_bases: &[String],
+) -> Vec<DiscoveredRuntime> {
     let mut out = find_runtime_processes();
     for base in candidate_bases {
         if cache.probe(base) {
-            if let Some(existing) = out.iter_mut().find(|r| r.name == "ollama" && base.contains("11434")) {
+            if let Some(existing) = out
+                .iter_mut()
+                .find(|r| r.name == "ollama" && base.contains("11434"))
+            {
                 existing.endpoint = Some(base.clone());
             } else if let Some(existing) = out.iter_mut().find(|r| r.name == "llamafile") {
                 existing.endpoint = Some(base.clone());

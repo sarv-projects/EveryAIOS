@@ -8,7 +8,7 @@
 //! `evidence` define and check; `runner` actually runs a task end-to-end in
 //! a disposable workspace.
 
-use crate::evidence::{ArtifactHash, ApprovalEvent, EvidenceBundle};
+use crate::evidence::{ApprovalEvent, ArtifactHash, EvidenceBundle};
 use crate::manifest::{HashAlgorithm, OutcomeCheck, TaskManifest};
 use crate::suite::{AdversarialTask, FaultInjection};
 use crate::verifier::{verify_with_policy, VerificationReport};
@@ -193,7 +193,11 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) -> i
         if path.is_dir() {
             collect_files(root, &path, out)?;
         } else if path.is_file() {
-            let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().to_string();
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .to_string();
             out.push((rel, path));
         }
     }
@@ -274,10 +278,7 @@ mod tests {
 
     fn temp_root() -> PathBuf {
         let n = DIR_SEQ.fetch_add(1, Ordering::SeqCst);
-        std::env::temp_dir().join(format!(
-            "everyaios-eval-runner-{}-{n}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("everyaios-eval-runner-{}-{n}", std::process::id()))
     }
 
     /// A fake agent that writes the required "done" file (happy path).
@@ -336,9 +337,11 @@ mod tests {
     fn good_agent_verifies_complete() {
         let root = temp_root();
         let t = task();
-        let out = SandboxRunner::run(&t, &fixture(), &root, &mut GoodAgent, |_, _| Ok(()))
-            .unwrap();
-        assert_eq!(out.report.status, crate::status::CompletionStatus::VerifiedComplete);
+        let out = SandboxRunner::run(&t, &fixture(), &root, &mut GoodAgent, |_, _| Ok(())).unwrap();
+        assert_eq!(
+            out.report.status,
+            crate::status::CompletionStatus::VerifiedComplete
+        );
         assert!(out.state_changed); // agent wrote done.txt
         assert!(out.evidence.is_complete_for(&t.manifest));
         SandboxRunner::reset(&root, &t.manifest.task_id).unwrap();
@@ -349,8 +352,8 @@ mod tests {
     fn lying_agent_is_not_complete() {
         let root = temp_root();
         let t = task();
-        let out = SandboxRunner::run(&t, &fixture(), &root, &mut LyingAgent, |_, _| Ok(()))
-            .unwrap();
+        let out =
+            SandboxRunner::run(&t, &fixture(), &root, &mut LyingAgent, |_, _| Ok(())).unwrap();
         assert!(!out.report.status.is_complete());
         assert!(matches!(
             out.report.status,
@@ -371,8 +374,8 @@ mod tests {
         }
         let root = temp_root();
         let t = task();
-        let out = SandboxRunner::run(&t, &fixture(), &root, &mut ViolatingAgent, |_, _| Ok(()))
-            .unwrap();
+        let out =
+            SandboxRunner::run(&t, &fixture(), &root, &mut ViolatingAgent, |_, _| Ok(())).unwrap();
         assert!(matches!(
             out.report.status,
             crate::status::CompletionStatus::FailedUnsafely { .. }
@@ -394,8 +397,14 @@ mod tests {
         }
         let root = temp_root();
         let t = task();
-        let out = SandboxRunner::run(&t, &fixture(), &root, &mut IdleAgent, apply_filesystem_fault)
-            .unwrap();
+        let out = SandboxRunner::run(
+            &t,
+            &fixture(),
+            &root,
+            &mut IdleAgent,
+            apply_filesystem_fault,
+        )
+        .unwrap();
         assert!(out.state_changed);
         assert_eq!(out.fault.unwrap().kind, FaultKind::FileRenamed);
         SandboxRunner::reset(&root, &t.manifest.task_id).unwrap();
@@ -406,11 +415,11 @@ mod tests {
     fn fresh_workspace_is_reprovisioned_between_runs() {
         let root = temp_root();
         let t = task();
-        let first = SandboxRunner::run(&t, &fixture(), &root, &mut GoodAgent, |_, _| Ok(()))
-            .unwrap();
+        let first =
+            SandboxRunner::run(&t, &fixture(), &root, &mut GoodAgent, |_, _| Ok(())).unwrap();
         // Second run must reset the workspace (done.txt removed first).
-        let second = SandboxRunner::run(&t, &fixture(), &root, &mut LyingAgent, |_, _| Ok(()))
-            .unwrap();
+        let second =
+            SandboxRunner::run(&t, &fixture(), &root, &mut LyingAgent, |_, _| Ok(())).unwrap();
         assert!(first.report.status.is_complete());
         assert!(!second.report.status.is_complete()); // liar finds a clean slate
         SandboxRunner::reset(&root, &t.manifest.task_id).unwrap();

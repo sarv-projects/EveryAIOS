@@ -155,12 +155,7 @@ mod tests {
 
     #[test]
     fn max_markers_caps_batch() {
-        let lines: Vec<&str> = vec![
-            "// ai! one",
-            "// ai! two",
-            "// ai! three",
-            "// ai! four",
-        ];
+        let lines: Vec<&str> = vec!["// ai! one", "// ai! two", "// ai! three", "// ai! four"];
         let marks = scan_markers(&lines, 0, 2);
         assert_eq!(marks.len(), 2);
         assert_eq!(marks[0].instruction, "one");

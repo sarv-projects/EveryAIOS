@@ -125,7 +125,13 @@ pub struct LifecycleEvent {
 }
 
 impl<R> ManagedResource<R> {
-    pub fn new(id: impl Into<String>, kind: ResourceKind, config_hash: impl Into<String>, version: impl Into<String>, record: R) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        kind: ResourceKind,
+        config_hash: impl Into<String>,
+        version: impl Into<String>,
+        record: R,
+    ) -> Self {
         Self {
             id: id.into(),
             kind,
@@ -144,7 +150,14 @@ impl<R> ManagedResource<R> {
 
     /// Transition with an explicit event. Rejects illegal hops — the state
     /// machine is the kernel's guard against "started but never installed".
-    pub fn transition(&mut self, next: ResourcePhase, what: &str, ok: bool, detail: Option<String>, at_ms: u64) -> Result<(), String> {
+    pub fn transition(
+        &mut self,
+        next: ResourcePhase,
+        what: &str,
+        ok: bool,
+        detail: Option<String>,
+        at_ms: u64,
+    ) -> Result<(), String> {
         if !self.phase.can_transition(next) {
             return Err(format!(
                 "illegal resource transition {:?} -> {:?} for {}",
@@ -193,7 +206,9 @@ impl<R> ManagedResource<R> {
     /// Install ≠ enable ≠ running ≠ healthy — a resource can be installed but
     /// disabled, running but degraded.
     pub fn running_and_healthy(&self) -> bool {
-        self.enabled && self.phase == ResourcePhase::Started && self.health == ResourceHealth::Healthy
+        self.enabled
+            && self.phase == ResourcePhase::Started
+            && self.health == ResourceHealth::Healthy
     }
 }
 
@@ -232,13 +247,24 @@ impl ResourceManager {
         &self.resources
     }
 
-    pub fn list_kind(&self, kind: ResourceKind) -> impl Iterator<Item = &ManagedResource<serde_json::Value>> {
+    pub fn list_kind(
+        &self,
+        kind: ResourceKind,
+    ) -> impl Iterator<Item = &ManagedResource<serde_json::Value>> {
         self.resources.iter().filter(move |r| r.kind == kind)
     }
 
-    pub fn transition(&mut self, id: &str, next: ResourcePhase, what: &str, at_ms: u64) -> Result<(), String> {
+    pub fn transition(
+        &mut self,
+        id: &str,
+        next: ResourcePhase,
+        what: &str,
+        at_ms: u64,
+    ) -> Result<(), String> {
         {
-            let res = self.get_mut(id).ok_or_else(|| format!("no resource {id}"))?;
+            let res = self
+                .get_mut(id)
+                .ok_or_else(|| format!("no resource {id}"))?;
             res.transition(next, what, true, None, at_ms)?;
         }
         self.audit_event(id, what, true);
@@ -265,7 +291,12 @@ mod tests {
         let mut mgr = ResourceManager::new();
         let audits = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let audits_clone = audits.clone();
-        mgr.audit = Some(Box::new(move |id, what, _ok| audits_clone.lock().unwrap().push((id.to_string(), what.to_string()))));
+        mgr.audit = Some(Box::new(move |id, what, _ok| {
+            audits_clone
+                .lock()
+                .unwrap()
+                .push((id.to_string(), what.to_string()))
+        }));
         let res = ManagedResource::new(
             "mcp-filesystem",
             ResourceKind::McpServer,
@@ -290,7 +321,8 @@ mod tests {
 
     #[test]
     fn install_is_not_running_is_not_healthy() {
-        let mut r = ManagedResource::new("x", ResourceKind::Worker, "h", "1", serde_json::Value::Null);
+        let mut r =
+            ManagedResource::new("x", ResourceKind::Worker, "h", "1", serde_json::Value::Null);
         r.step(ResourcePhase::Validated, "v", at()).unwrap();
         r.step(ResourcePhase::Installed, "i", at()).unwrap();
         r.step(ResourcePhase::Enabled, "e", at()).unwrap();
@@ -305,14 +337,21 @@ mod tests {
 
     #[test]
     fn illegal_transition_rejected() {
-        let mut r = ManagedResource::new("y", ResourceKind::Worker, "h", "1", serde_json::Value::Null);
+        let mut r =
+            ManagedResource::new("y", ResourceKind::Worker, "h", "1", serde_json::Value::Null);
         // Started before installed is illegal
         assert!(r.step(ResourcePhase::Started, "start", at()).is_err());
     }
 
     #[test]
     fn removed_is_terminal() {
-        let mut r = ManagedResource::new("z", ResourceKind::Sandbox, "h", "1", serde_json::Value::Null);
+        let mut r = ManagedResource::new(
+            "z",
+            ResourceKind::Sandbox,
+            "h",
+            "1",
+            serde_json::Value::Null,
+        );
         r.step(ResourcePhase::Validated, "v", at()).unwrap();
         r.step(ResourcePhase::Installed, "i", at()).unwrap();
         r.step(ResourcePhase::Enabled, "e", at()).unwrap();
@@ -323,8 +362,19 @@ mod tests {
 
     #[test]
     fn faulted_can_restart_or_remove() {
-        let mut r = ManagedResource::new("f", ResourceKind::BrowserChild, "h", "1", serde_json::Value::Null);
-        for p in [ResourcePhase::Validated, ResourcePhase::Installed, ResourcePhase::Enabled, ResourcePhase::Started] {
+        let mut r = ManagedResource::new(
+            "f",
+            ResourceKind::BrowserChild,
+            "h",
+            "1",
+            serde_json::Value::Null,
+        );
+        for p in [
+            ResourcePhase::Validated,
+            ResourcePhase::Installed,
+            ResourcePhase::Enabled,
+            ResourcePhase::Started,
+        ] {
             r.step(p, "step", at()).unwrap();
         }
         r.step(ResourcePhase::Faulted, "crash", at()).unwrap();

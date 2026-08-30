@@ -21,10 +21,7 @@ pub struct CostBreakdown {
 
 impl CostBreakdown {
     pub fn total(&self) -> f64 {
-        self.uncached_input_cost
-            + self.cache_read_cost
-            + self.cache_write_cost
-            + self.output_cost
+        self.uncached_input_cost + self.cache_read_cost + self.cache_write_cost + self.output_cost
     }
 }
 
@@ -50,7 +47,11 @@ pub fn cost_for(
 
 /// The cache-aware estimate: given total input tokens + a cache-hit
 /// fraction (0..=1) and the write fraction, split the input.
-pub fn split_input(total_input: u64, cache_read_frac: f64, cache_write_frac: f64) -> (u64, u64, u64) {
+pub fn split_input(
+    total_input: u64,
+    cache_read_frac: f64,
+    cache_write_frac: f64,
+) -> (u64, u64, u64) {
     let read = (total_input as f64 * cache_read_frac.clamp(0.0, 1.0)) as u64;
     let write = (total_input as f64 * cache_write_frac.clamp(0.0, 1.0)) as u64;
     let uncached = total_input.saturating_sub(read).saturating_sub(write);
@@ -63,7 +64,13 @@ mod tests {
 
     #[test]
     fn cache_read_is_cheaper_than_fresh_input() {
-        let p = Pricing { prompt: 3e-6, completion: 15e-6, input_cache_read: 0.3e-6, input_cache_write: 2e-6, ..Default::default() };
+        let p = Pricing {
+            prompt: 3e-6,
+            completion: 15e-6,
+            input_cache_read: 0.3e-6,
+            input_cache_write: 2e-6,
+            ..Default::default()
+        };
         let fresh = cost_for(p, 1_000_000, 0, 0, 0);
         let cached = cost_for(p, 0, 1_000_000, 0, 0);
         assert!(cached.total() < fresh.total());
@@ -79,7 +86,13 @@ mod tests {
 
     #[test]
     fn total_is_the_sum() {
-        let p = Pricing { prompt: 1e-6, completion: 1e-6, input_cache_read: 0.5e-6, input_cache_write: 1e-6, ..Default::default() };
+        let p = Pricing {
+            prompt: 1e-6,
+            completion: 1e-6,
+            input_cache_read: 0.5e-6,
+            input_cache_write: 1e-6,
+            ..Default::default()
+        };
         let b = cost_for(p, 100, 200, 300, 400);
         let manual = 100e-6 * 1.0 + 200e-6 * 0.5 + 300e-6 * 1.0 + 400e-6 * 1.0;
         assert!((b.total() - manual).abs() < 1e-12);

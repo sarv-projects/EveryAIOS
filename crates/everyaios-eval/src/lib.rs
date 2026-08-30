@@ -48,6 +48,10 @@ pub mod usage;
 pub mod verifier;
 
 pub use batch::{run_retrieval_batch, run_suite, RetrievalBatchReport, SuiteReport};
+pub use corpus::{
+    builtin_fixtures, builtin_retrieval_cases, builtin_retrieval_corpus,
+    builtin_retrieval_questions, RetrievalCase,
+};
 pub use evidence::{ApprovalEvent, ArtifactHash, EvidenceBundle};
 pub use manifest::{
     Budgets, Constraint, EvidenceRequirement, HashAlgorithm, OutcomeCheck, TaskManifest,
@@ -57,16 +61,10 @@ pub use retrieval::{
     score_retrieval, EvidenceSpan, ExpectedAnswer, RetrievalDocument, RetrievalQuestion,
     RetrievalResult, RetrievalScores,
 };
-pub use runner::{
-    apply_filesystem_fault, Agent, Fixture, FixtureFile, RunOutcome, SandboxRunner,
-};
+pub use runner::{apply_filesystem_fault, Agent, Fixture, FixtureFile, RunOutcome, SandboxRunner};
 pub use simulator::{
     compile as compile_demo, CompiledDemo, CompiledStep, SimulationFixture, SimulationReport,
     Simulator, StepVerdict,
-};
-pub use corpus::{
-    builtin_fixtures, builtin_retrieval_cases, builtin_retrieval_corpus,
-    builtin_retrieval_questions, RetrievalCase,
 };
 pub use status::{CompletionStatus, Score};
 pub use store::EvidenceStore;

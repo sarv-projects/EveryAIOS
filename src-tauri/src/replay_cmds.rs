@@ -67,11 +67,9 @@ pub fn watch_events(
 
 /// Stop button (P3.1): cancel in-flight streams for the session.
 #[tauri::command]
-pub fn agent_stop(
-    app: tauri::AppHandle,
-    session_id: String,
-) -> Result<serde_json::Value, String> {
-    crate::control::stop_session(&app, &session_id).map(|ids| serde_json::json!({ "cancelled": ids }))
+pub fn agent_stop(app: tauri::AppHandle, session_id: String) -> Result<serde_json::Value, String> {
+    crate::control::stop_session(&app, &session_id)
+        .map(|ids| serde_json::json!({ "cancelled": ids }))
 }
 
 fn base64_encode(bytes: &[u8]) -> String {

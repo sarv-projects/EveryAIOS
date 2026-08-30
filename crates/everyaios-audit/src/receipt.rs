@@ -22,6 +22,10 @@ pub struct WorkReceipt {
     pub plan: Vec<String>,
     /// Every action taken (tool calls with their ticket ids).
     pub actions: Vec<ReceiptActionRef>,
+    /// K1 per-effect proofs (P47.5) — the nested receipt layer. Present for
+    /// real-world effects; empty for read-only work.
+    #[serde(default)]
+    pub effects: Vec<EffectReceipt>,
     /// EV1 evidence (hashes, validator reports, screenshots).
     pub evidence: Vec<EvidenceRef>,
     /// Verification result (what proved completion).
@@ -46,6 +50,92 @@ pub struct ReceiptActionRef {
     pub args_hash: String,
     /// Effect class (doc-53 idempotency) — set by the change-set layer.
     pub effect_class: String,
+}
+
+/// K1 per-effect proof (P47.5). The nested layer of a [`WorkReceipt`]: a
+/// machine-checkable record of ONE real-world effect — what was requested,
+/// what was actually authorized and applied, the resource before/after, the
+/// diff, the rollback handle, and an honest `has_gap` flag when the change
+/// could not be fully verified. This is the evidence behind every claim the
+/// agent makes, per effect, not just a per-work summary.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EffectReceipt {
+    pub effect_id: String,
+    pub tool_id: String,
+    pub ticket_id: String,
+    pub args_hash: String,
+    /// The operation the coordinator/agent requested.
+    pub requested: String,
+    /// The operation a Guard ticket actually authorized (should match
+    /// `requested`; a mismatch is a red flag an audit reader must see).
+    pub authorized: String,
+    pub resource: Option<String>,
+    /// Pre-condition hash / snapshot reference (for reversible effects).
+    pub before_ref: Option<String>,
+    /// Post-condition hash / snapshot reference.
+    pub after_ref: Option<String>,
+    pub diff: Option<String>,
+    /// Rollback handle (snapshot id / undo entry) if the effect is reversible.
+    pub rollback_ref: Option<String>,
+    /// Honesty invariant (doc 05/EV1): true when the effect could not be fully
+    /// observed, so the reader must not assume it happened exactly as claimed.
+    pub has_gap: bool,
+    /// The uncertainty reason when `has_gap` is true (else None).
+    pub uncertainty: Option<String>,
+}
+
+impl EffectReceipt {
+    /// Build with required fields; the honesty fields default to closed.
+    pub fn new(
+        effect_id: impl Into<String>,
+        tool_id: impl Into<String>,
+        ticket_id: impl Into<String>,
+        args_hash: impl Into<String>,
+        requested: impl Into<String>,
+        authorized: impl Into<String>,
+    ) -> Self {
+        Self {
+            effect_id: effect_id.into(),
+            tool_id: tool_id.into(),
+            ticket_id: ticket_id.into(),
+            args_hash: args_hash.into(),
+            requested: requested.into(),
+            authorized: authorized.into(),
+            resource: None,
+            before_ref: None,
+            after_ref: None,
+            diff: None,
+            rollback_ref: None,
+            has_gap: false,
+            uncertainty: None,
+        }
+    }
+
+    /// Set the resource + before/after snapshot refs.
+    pub fn with_resource(mut self, resource: impl Into<String>) -> Self {
+        self.resource = Some(resource.into());
+        self
+    }
+    pub fn with_refs(mut self, before: impl Into<String>, after: impl Into<String>) -> Self {
+        self.before_ref = Some(before.into());
+        self.after_ref = Some(after.into());
+        self
+    }
+    pub fn with_diff(mut self, diff: impl Into<String>) -> Self {
+        self.diff = Some(diff.into());
+        self
+    }
+    pub fn with_rollback(mut self, rollback: impl Into<String>) -> Self {
+        self.rollback_ref = Some(rollback.into());
+        self
+    }
+
+    /// Mark the effect partially-observed (K1 has_gap honesty).
+    pub fn gap(mut self, reason: impl Into<String>) -> Self {
+        self.has_gap = true;
+        self.uncertainty = Some(reason.into());
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,6 +189,7 @@ impl WorkReceipt {
              ## Inputs\n{inputs}\n\
              ## Plan\n{plan}\n\
              ## Actions ({n})\n{actions}\n\
+             ## Effects ({ne})\n{effects}\n\
              ## Evidence\n{evidence}\n\
              ## Verification\n{status} — {checks}\n\
              ## Provenance\nagent {agent} · session {session} · chain {chain}\n\
@@ -111,27 +202,76 @@ impl WorkReceipt {
             inputs = bullet(&self.inputs),
             plan = bullet(&self.plan),
             n = self.actions.len(),
-            actions = bullet(&self
-                .actions
-                .iter()
-                .map(|a| format!("{} (ticket {}) [{}]", a.tool_id, a.ticket_id, a.effect_class))
-                .collect::<Vec<_>>()),
-            evidence = bullet(&self
-                .evidence
-                .iter()
-                .map(|e| format!("{}: {} ({})", e.kind, e.description, &e.hash[..e.hash.len().min(12)]))
-                .collect::<Vec<_>>()),
+            actions = bullet(
+                &self
+                    .actions
+                    .iter()
+                    .map(|a| format!(
+                        "{} (ticket {}) [{}]",
+                        a.tool_id, a.ticket_id, a.effect_class
+                    ))
+                    .collect::<Vec<_>>()
+            ),
+            effects = if self.effects.is_empty() {
+                "(no side-effecting effects)".into()
+            } else {
+                self.effects
+                    .iter()
+                    .map(|e| {
+                        let gap = if e.has_gap {
+                            format!(
+                                " \u{26a0} has_gap{}",
+                                e.uncertainty
+                                    .as_ref()
+                                    .map(|u| format!(" ({u})"))
+                                    .unwrap_or_default()
+                            )
+                        } else {
+                            "".into()
+                        };
+                        format!(
+                            "- {}: req={} auth={}{}{}",
+                            e.tool_id,
+                            e.requested,
+                            e.authorized,
+                            e.resource
+                                .as_ref()
+                                .map(|r| format!(" \u{2192} {r}"))
+                                .unwrap_or_default(),
+                            gap
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            },
+            evidence = bullet(
+                &self
+                    .evidence
+                    .iter()
+                    .map(|e| format!(
+                        "{}: {} ({})",
+                        e.kind,
+                        e.description,
+                        &e.hash[..e.hash.len().min(12)]
+                    ))
+                    .collect::<Vec<_>>()
+            ),
             status = self.verification.status,
             checks = self.verification.checks.join("; "),
             agent = self.provenance.agent_id,
             session = self.provenance.session_id,
-            chain = if self.provenance.chain_root.is_empty() { "unanchored".into() } else { self.provenance.chain_root.clone() },
+            chain = if self.provenance.chain_root.is_empty() {
+                "unanchored".into()
+            } else {
+                self.provenance.chain_root.clone()
+            },
             policy = self.policy,
             reproduction = bullet(&self.reproduction),
             in_tok = self.cost.tokens_in,
             out_tok = self.cost.tokens_out,
             cost = self.cost.est_cost_usd,
             result = bullet(&self.result_state),
+            ne = self.effects.len(),
         )
     }
 }
@@ -140,7 +280,11 @@ fn bullet(items: &[String]) -> String {
     if items.is_empty() {
         "(none)".into()
     } else {
-        items.iter().map(|i| format!("- {i}")).collect::<Vec<_>>().join("\n")
+        items
+            .iter()
+            .map(|i| format!("- {i}"))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -152,6 +296,7 @@ pub struct ReceiptBuilder {
     inputs: Vec<String>,
     plan: Vec<String>,
     actions: Vec<ReceiptActionRef>,
+    effects: Vec<EffectReceipt>,
     evidence: Vec<EvidenceRef>,
     verification: Option<VerificationSummary>,
     provenance: Option<Provenance>,
@@ -164,6 +309,12 @@ pub struct ReceiptBuilder {
 impl ReceiptBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Attach one per-effect receipt (K1 P47.5).
+    pub fn effect(mut self, e: EffectReceipt) -> Self {
+        self.effects.push(e);
+        self
     }
     pub fn goal(mut self, goal: impl Into<String>) -> Self {
         self.goal = goal.into();
@@ -223,6 +374,7 @@ impl ReceiptBuilder {
             inputs: self.inputs,
             plan: self.plan,
             actions: self.actions,
+            effects: self.effects,
             evidence: self.evidence,
             verification,
             provenance,
@@ -266,7 +418,11 @@ mod tests {
             })
             .policy("profile=standard")
             .reproduction("cargo test --fixture n1")
-            .cost(CostSummary { tokens_in: 1000, tokens_out: 200, est_cost_usd: 0.003 })
+            .cost(CostSummary {
+                tokens_in: 1000,
+                tokens_out: 200,
+                est_cost_usd: 0.003,
+            })
             .result("src/parser.rs changed (1 file)")
             .build("r-1")
             .unwrap()
@@ -288,7 +444,10 @@ mod tests {
         assert!(ReceiptBuilder::new().goal("x").build("r").is_err());
         assert!(ReceiptBuilder::new()
             .goal("x")
-            .verification(VerificationSummary { status: "v".into(), checks: vec![] })
+            .verification(VerificationSummary {
+                status: "v".into(),
+                checks: vec![]
+            })
             .build("r")
             .is_err());
     }
@@ -297,10 +456,92 @@ mod tests {
     fn render_answers_the_five_questions() {
         let r = sample();
         let md = r.render();
-        for needle in ["## Goal", "## Actions", "## Evidence", "## Verification", "## Reproduction", "## Cost"] {
+        for needle in [
+            "## Goal",
+            "## Actions",
+            "## Evidence",
+            "## Verification",
+            "## Reproduction",
+            "## Cost",
+        ] {
             assert!(md.contains(needle), "missing {needle}");
         }
         assert!(md.contains("verified_complete"));
         assert!(md.contains("merkle-root-1"));
+    }
+
+    // --- P47.5 per-effect receipts (K1 layer) ---
+
+    fn sample_effect() -> EffectReceipt {
+        EffectReceipt::new(
+            "e-1",
+            "fs.write",
+            "t-1",
+            "abc123",
+            "write src/parser.rs",
+            "write src/parser.rs",
+        )
+        .with_resource("src/parser.rs")
+        .with_refs("sha-before-1", "sha-after-1")
+        .with_diff("@@ -12,4 +12,4 @@")
+        .with_rollback("snap-7")
+    }
+
+    #[test]
+    fn effect_receipt_records_requested_authorized_and_refs() {
+        let e = sample_effect();
+        assert_eq!(e.requested, "write src/parser.rs");
+        assert_eq!(e.authorized, e.requested);
+        assert_eq!(e.resource.as_deref(), Some("src/parser.rs"));
+        assert_eq!(e.before_ref.as_deref(), Some("sha-before-1"));
+        assert_eq!(e.after_ref.as_deref(), Some("sha-after-1"));
+        assert_eq!(e.rollback_ref.as_deref(), Some("snap-7"));
+        // Honesty defaults closed.
+        assert!(!e.has_gap);
+        assert!(e.uncertainty.is_none());
+    }
+
+    #[test]
+    fn effect_receipt_has_gap_marks_uncertainty() {
+        let mut e = sample_effect();
+        e = e.gap("network payload could not be captured");
+        assert!(e.has_gap);
+        assert_eq!(
+            e.uncertainty.as_deref(),
+            Some("network payload could not be captured")
+        );
+        // A with a gap must not look like a fully-verified effect.
+        assert_ne!(e.before_ref, e.after_ref);
+    }
+
+    #[test]
+    fn work_receipt_carries_nested_effect_receipts_in_hash_and_render() {
+        let mut r = sample();
+        r.effects.push(sample_effect());
+
+        // The nested layer is integral to the receipt's self-hash: tampering
+        // with an effect proof breaks the whole receipt.
+        let h = r.hash();
+        let mut r2 = r.clone();
+        r2.effects[0].authorized = "write DIFFERENT file".into();
+        assert_ne!(h, r2.hash());
+        assert!(WorkReceipt::verify(&h, &r));
+        assert!(!WorkReceipt::verify(&h, &r2));
+
+        // The render surfaces the per-effect proof + has_gap honesty.
+        let md = r.render();
+        assert!(md.contains("## Effects (1)"));
+        assert!(md.contains("req=write src/parser.rs"));
+        assert!(md.contains("auth=write src/parser.rs"));
+
+        // An effect marked with a gap renders the honesty flag so a reader
+        // never mistakes an unverified effect for one that provably happened.
+        let mut gappy = sample();
+        gappy
+            .effects
+            .push(sample_effect().gap("payload not captured"));
+        let gmd = gappy.render();
+        assert!(gmd.contains("has_gap"));
+        assert!(gmd.contains("payload not captured"));
     }
 }

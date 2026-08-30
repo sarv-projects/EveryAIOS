@@ -78,7 +78,10 @@ fn inspector_cli_lists_catalog_over_stdio() {
         .map(|t| t["name"].as_str().unwrap_or_default())
         .collect();
     assert!(names.contains(&"snapshot"), "snapshot in catalog");
-    assert!(names.contains(&"filename_search"), "storage tool in catalog");
+    assert!(
+        names.contains(&"filename_search"),
+        "storage tool in catalog"
+    );
     // Wire shape is camelCase (the MCP spec) — a real client keeps entries
     // only when `inputSchema` is present; annotations/ttlMs/etag are stripped
     // by the SDK's result validation (covered by crate unit tests).
@@ -116,7 +119,8 @@ fn inspector_cli_calls_snapshot_tool_over_stdio() {
         "echoed tool name"
     );
     assert_eq!(
-        v["result"]["structuredContent"]["mode"], "standalone-test-harness"
+        v["result"]["structuredContent"]["mode"],
+        "standalone-test-harness"
     );
     assert!(!v["result"]["content"]
         .as_array()

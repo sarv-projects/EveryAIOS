@@ -8,8 +8,8 @@
 //! fallback — joint lexical evidence (exact phrase > bigram > unigram
 //! overlap) — that keeps the rerank stage testable with no model loaded.
 
-use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 
 use crate::bm25::tokenize;
 
@@ -64,7 +64,11 @@ impl Reranker for LexicalReranker {
         let c = candidate.to_lowercase();
 
         // Exact contiguous phrase match (the strongest joint evidence).
-        let phrase = if q.is_empty() || !c.contains(&q) { 0.0 } else { 1.0 };
+        let phrase = if q.is_empty() || !c.contains(&q) {
+            0.0
+        } else {
+            1.0
+        };
 
         let qt = tokenize(query);
         let ct = tokenize(candidate);
@@ -84,11 +88,13 @@ impl Reranker for LexicalReranker {
         let cset: HashSet<&String> = ct.iter().collect();
         let union = qset.union(&cset).count();
         let inter = qset.intersection(&cset).count();
-        let unigram = if union == 0 { 0.0 } else { inter as f64 / union as f64 };
+        let unigram = if union == 0 {
+            0.0
+        } else {
+            inter as f64 / union as f64
+        };
 
-        (self.phrase_weight * phrase
-            + self.bigram_weight * bigram
-            + self.unigram_weight * unigram)
+        (self.phrase_weight * phrase + self.bigram_weight * bigram + self.unigram_weight * unigram)
             .clamp(0.0, 1.0)
     }
 }
@@ -139,9 +145,15 @@ mod tests {
     #[test]
     fn lexical_ranker_prefers_exact_phrase() {
         let r = LexicalReranker::new();
-        let exact = r.score("rust memory safety", "we talk about rust memory safety here");
+        let exact = r.score(
+            "rust memory safety",
+            "we talk about rust memory safety here",
+        );
         let scattered = r.score("rust memory safety", "memory is safe but rust is elsewhere");
-        assert!(exact > scattered, "exact {exact} should beat scattered {scattered}");
+        assert!(
+            exact > scattered,
+            "exact {exact} should beat scattered {scattered}"
+        );
         assert!((0.0..=1.0).contains(&exact));
     }
 
@@ -165,12 +177,26 @@ mod tests {
         // The retriever ranked A first, but the cross-encoder strongly prefers
         // B — a blended score can reorder them when beta dominates.
         let candidates = vec![
-            Candidate { id: "a".into(), text: "generic filler content".to_string() },
-            Candidate { id: "b".into(), text: "rust borrow checker memory safety".to_string() },
+            Candidate {
+                id: "a".into(),
+                text: "generic filler content".to_string(),
+            },
+            Candidate {
+                id: "b".into(),
+                text: "rust borrow checker memory safety".to_string(),
+            },
         ];
         let retrieval = retrieval_map(&[("a", 0.9), ("b", 0.5)]);
         let reranker = LexicalReranker::new();
-        let hits = rerank(&candidates, &retrieval, &reranker, "rust borrow checker", 0.2, 0.8, 2);
+        let hits = rerank(
+            &candidates,
+            &retrieval,
+            &reranker,
+            "rust borrow checker",
+            0.2,
+            0.8,
+            2,
+        );
         assert_eq!(hits[0].id, "b", "cross-encoder evidence should dominate");
         assert!(hits[0].score <= 1.0);
     }
@@ -178,20 +204,45 @@ mod tests {
     #[test]
     fn rerank_truncates_to_top_k() {
         let candidates: Vec<Candidate> = (0..5)
-            .map(|i| Candidate { id: format!("d{i}"), text: format!("doc {i}") })
+            .map(|i| Candidate {
+                id: format!("d{i}"),
+                text: format!("doc {i}"),
+            })
             .collect();
         let retrieval = retrieval_map(&[]);
-        let hits = rerank(&candidates, &retrieval, &LexicalReranker::new(), "doc", 0.5, 0.5, 3);
+        let hits = rerank(
+            &candidates,
+            &retrieval,
+            &LexicalReranker::new(),
+            "doc",
+            0.5,
+            0.5,
+            3,
+        );
         assert_eq!(hits.len(), 3);
     }
 
     #[test]
     fn rerank_deterministic_tie_break() {
         let candidates = vec![
-            Candidate { id: "b".into(), text: "x".to_string() },
-            Candidate { id: "a".into(), text: "x".to_string() },
+            Candidate {
+                id: "b".into(),
+                text: "x".to_string(),
+            },
+            Candidate {
+                id: "a".into(),
+                text: "x".to_string(),
+            },
         ];
-        let hits = rerank(&candidates, &retrieval_map(&[]), &LexicalReranker::new(), "x", 0.0, 0.0, 2);
+        let hits = rerank(
+            &candidates,
+            &retrieval_map(&[]),
+            &LexicalReranker::new(),
+            "x",
+            0.0,
+            0.0,
+            2,
+        );
         assert_eq!(hits[0].id, "a");
         assert_eq!(hits[1].id, "b");
     }

@@ -85,10 +85,7 @@ pub fn git_diff(dir: String, path: Option<String>) -> Result<serde_json::Value, 
 /// v3.59: human-UI path — the click is the authorization, the action is
 /// audited on the same Merkle chain as agent/ticket effects (spec §4.3 / P47.1).
 #[tauri::command]
-pub fn git_stage_all(
-    state: State<'_, AppState>,
-    dir: String,
-) -> Result<serde_json::Value, String> {
+pub fn git_stage_all(state: State<'_, AppState>, dir: String) -> Result<serde_json::Value, String> {
     run_git(&dir, &["add", "-A"])?;
     crate::control::record_mutation(
         &state,
@@ -115,7 +112,8 @@ pub fn git_commit(
         serde_json::json!({ "dir": dir, "message": message }),
     );
     Ok(serde_json::json!({ "committed": true }))
-}/// Find the nearest enclosing git root for a file/dir path (for the SCM
+}
+/// Find the nearest enclosing git root for a file/dir path (for the SCM
 /// panel when a file is open in the editor). Returns `None` honestly.
 #[tauri::command]
 pub fn git_root(start: String) -> Result<serde_json::Value, String> {
@@ -130,7 +128,9 @@ pub fn git_root(start: String) -> Result<serde_json::Value, String> {
         return Ok(serde_json::json!({ "root": null }));
     }
     let root = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    Ok(serde_json::json!({ "root": if root.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(root) } }))
+    Ok(
+        serde_json::json!({ "root": if root.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(root) } }),
+    )
 }
 
 /// P41.2 — worktree path convention: `<repo>/.worktrees/<name>`.
@@ -143,7 +143,11 @@ fn worktree_path(repo: &str, name: &str) -> String {
 /// works in its own checkout so N agents never share a dirty working tree
 /// (Codex-app pattern). The worktree branch is named `<name>`.
 #[tauri::command]
-pub fn git_worktree_add(repo: String, name: String, base: String) -> Result<serde_json::Value, String> {
+pub fn git_worktree_add(
+    repo: String,
+    name: String,
+    base: String,
+) -> Result<serde_json::Value, String> {
     let path = worktree_path(&repo, &name);
     // `git worktree add -b <name> <path> <base>` — a fresh branch off base.
     run_git(&repo, &["worktree", "add", "-b", &name, &path, &base])?;

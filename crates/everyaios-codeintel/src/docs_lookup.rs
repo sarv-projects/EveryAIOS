@@ -21,11 +21,17 @@ pub struct LibraryRef {
 
 impl LibraryRef {
     pub fn latest(slug: &str) -> Self {
-        Self { slug: slug.to_string(), version: "latest".into() }
+        Self {
+            slug: slug.to_string(),
+            version: "latest".into(),
+        }
     }
 
     pub fn pinned(slug: &str, version: &str) -> Self {
-        Self { slug: slug.to_string(), version: version.to_string() }
+        Self {
+            slug: slug.to_string(),
+            version: version.to_string(),
+        }
     }
 }
 
@@ -59,8 +65,12 @@ pub struct DocExcerpt {
 /// The injectable fetch seam — tests inject a fake; the real implementation
 /// (Context7 API or a local docs index) is runtime wiring.
 pub trait DocsFetcher {
-    fn fetch(&self, library: &LibraryRef, query: DocsQuery, budget_chars: usize)
-        -> Result<DocsResult, DocsLookupError>;
+    fn fetch(
+        &self,
+        library: &LibraryRef,
+        query: DocsQuery,
+        budget_chars: usize,
+    ) -> Result<DocsResult, DocsLookupError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -105,8 +115,14 @@ mod tests {
                 library: library.clone(),
                 budget_chars,
                 excerpts: vec![
-                    DocExcerpt { anchor: "send".into(), text: "send({ to, subject })".into() },
-                    DocExcerpt { anchor: "reply".into(), text: "reply({ to, inReplyTo })".into() },
+                    DocExcerpt {
+                        anchor: "send".into(),
+                        text: "send({ to, subject })".into(),
+                    },
+                    DocExcerpt {
+                        anchor: "reply".into(),
+                        text: "reply({ to, inReplyTo })".into(),
+                    },
                 ],
             })
         }
@@ -127,7 +143,9 @@ mod tests {
             f.fetch(&LibraryRef::latest("ghost"), DocsQuery::Symbol, 1000),
             Err(DocsLookupError::UnknownLibrary(_))
         ));
-        let ok = f.fetch(&LibraryRef::latest("sst"), DocsQuery::Symbol, 1000).unwrap();
+        let ok = f
+            .fetch(&LibraryRef::latest("sst"), DocsQuery::Symbol, 1000)
+            .unwrap();
         assert_eq!(ok.excerpts.len(), 2);
     }
 
@@ -137,8 +155,14 @@ mod tests {
             library: LibraryRef::latest("sst"),
             budget_chars: 30, // fits the first excerpt (29 chars), not both
             excerpts: vec![
-                DocExcerpt { anchor: "a".into(), text: "send({ to, subject })".into() },
-                DocExcerpt { anchor: "b".into(), text: "reply({ to, inReplyTo })".into() },
+                DocExcerpt {
+                    anchor: "a".into(),
+                    text: "send({ to, subject })".into(),
+                },
+                DocExcerpt {
+                    anchor: "b".into(),
+                    text: "reply({ to, inReplyTo })".into(),
+                },
             ],
         };
         fit_budget(&mut result);

@@ -33,7 +33,9 @@ pub enum ChartError {
 /// The first `c:v` text under a node (used for the series name `c:tx`).
 fn first_v_text(node: roxmltree::Node) -> Option<String> {
     node.descendants()
-        .find(|d| d.is_element() && d.tag_name().namespace() == Some(C) && d.tag_name().name() == "v")
+        .find(|d| {
+            d.is_element() && d.tag_name().namespace() == Some(C) && d.tag_name().name() == "v"
+        })
         .and_then(|v| v.text())
         .map(str::to_string)
 }
@@ -41,7 +43,9 @@ fn first_v_text(node: roxmltree::Node) -> Option<String> {
 /// The `c:f` formula text under a node (category/value range reference).
 fn f_text(node: roxmltree::Node) -> Option<String> {
     node.descendants()
-        .find(|d| d.is_element() && d.tag_name().namespace() == Some(C) && d.tag_name().name() == "f")
+        .find(|d| {
+            d.is_element() && d.tag_name().namespace() == Some(C) && d.tag_name().name() == "f"
+        })
         .and_then(|v| v.text())
         .map(str::to_string)
 }
@@ -158,7 +162,9 @@ pub fn extract_chart_series(chart_xml: &str) -> Result<Vec<ChartSeries>, ChartEr
     let mut out = Vec::new();
     for (index, ser) in doc
         .descendants()
-        .filter(|d| d.is_element() && d.tag_name().namespace() == Some(C) && d.tag_name().name() == "ser")
+        .filter(|d| {
+            d.is_element() && d.tag_name().namespace() == Some(C) && d.tag_name().name() == "ser"
+        })
         .enumerate()
     {
         let name = ser
@@ -203,7 +209,10 @@ mod tests {
         assert_eq!(series.len(), 1);
         assert_eq!(series[0].index, 0);
         assert_eq!(series[0].name, "Sales");
-        assert_eq!(series[0].categories_ref.as_deref(), Some("Sheet1!$A$2:$A$5"));
+        assert_eq!(
+            series[0].categories_ref.as_deref(),
+            Some("Sheet1!$A$2:$A$5")
+        );
         assert_eq!(series[0].values_ref.as_deref(), Some("Sheet1!$B$2:$B$5"));
     }
 
@@ -218,7 +227,11 @@ mod tests {
         let xml = build_chart_part(
             ChartKind::Bar,
             "Sales by quarter",
-            &[ChartSeriesSpec::new("Sales", "Sheet1!$A$2:$A$5", "Sheet1!$B$2:$B$5")],
+            &[ChartSeriesSpec::new(
+                "Sales",
+                "Sheet1!$A$2:$A$5",
+                "Sheet1!$B$2:$B$5",
+            )],
         );
         assert!(xml.contains("<c:barChart>"), "{xml}");
         assert!(xml.contains("<c:v>Sales</c:v>"), "{xml}");
@@ -229,7 +242,10 @@ mod tests {
         let series = extract_chart_series(&xml).unwrap();
         assert_eq!(series.len(), 1);
         assert_eq!(series[0].name, "Sales");
-        assert_eq!(series[0].categories_ref.as_deref(), Some("Sheet1!$A$2:$A$5"));
+        assert_eq!(
+            series[0].categories_ref.as_deref(),
+            Some("Sheet1!$A$2:$A$5")
+        );
         assert_eq!(series[0].values_ref.as_deref(), Some("Sheet1!$B$2:$B$5"));
     }
 
@@ -256,7 +272,9 @@ mod tests {
     fn registration_fragments_are_wellformed() {
         let rel = chart_rel_fragment("rId10", "../charts/chart1.xml");
         assert!(rel.contains("Id=\"rId10\""));
-        assert!(rel.contains("Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\""));
+        assert!(rel.contains(
+            "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\""
+        ));
         assert!(rel.contains("Target=\"../charts/chart1.xml\""));
         let ovr = chart_content_type_override("xl/charts/chart1.xml");
         assert!(ovr.contains("PartName=\"/xl/charts/chart1.xml\""));

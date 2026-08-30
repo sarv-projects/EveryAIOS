@@ -51,7 +51,12 @@ impl SkillsIndexFile {
 
     /// Build the index from a store scan (pure — only reads the store).
     pub fn from_skills(skills: &[Skill]) -> Self {
-        Self::new(skills.iter().map(|s| IndexEntry::from(&s.manifest)).collect())
+        Self::new(
+            skills
+                .iter()
+                .map(|s| IndexEntry::from(&s.manifest))
+                .collect(),
+        )
     }
 
     /// Write the index file. Sorted by name for deterministic diffs.
@@ -135,12 +140,16 @@ pub fn compose_stack(
     let mut seen: Vec<&str> = Vec::new();
     for name in stack {
         if seen.contains(&name.as_str()) {
-            outcome.rejected.push((name.clone(), RejectionReason::Duplicate));
+            outcome
+                .rejected
+                .push((name.clone(), RejectionReason::Duplicate));
             continue;
         }
         seen.push(name);
         let Some(entry) = index.get(name) else {
-            outcome.rejected.push((name.clone(), RejectionReason::Unknown));
+            outcome
+                .rejected
+                .push((name.clone(), RejectionReason::Unknown));
             continue;
         };
         // Conflict check: a selected skill whose tags collide with an
@@ -149,10 +158,14 @@ pub fn compose_stack(
             outcome
                 .selected
                 .iter()
-                .find(|s| s.name != *name && index.get(&s.name).map_or(false, |e| e.tags.contains(t)))
+                .find(|s| {
+                    s.name != *name && index.get(&s.name).map_or(false, |e| e.tags.contains(t))
+                })
                 .map(|s| s.name.clone())
         }) {
-            outcome.rejected.push((name.clone(), RejectionReason::Conflict { with: other }));
+            outcome
+                .rejected
+                .push((name.clone(), RejectionReason::Conflict { with: other }));
             continue;
         }
         let score = relevance(entry, query);
@@ -262,13 +275,21 @@ mod tests {
         // Unknown + duplicate.
         let out = compose_stack(
             &idx,
-            &["refactor-helper".into(), "nope".into(), "refactor-helper".into()],
+            &[
+                "refactor-helper".into(),
+                "nope".into(),
+                "refactor-helper".into(),
+            ],
             &[],
             "x",
         );
         assert!(!out.is_valid());
-        assert!(out.rejected.contains(&("nope".into(), RejectionReason::Unknown)));
-        assert!(out.rejected.contains(&("refactor-helper".into(), RejectionReason::Duplicate)));
+        assert!(out
+            .rejected
+            .contains(&("nope".into(), RejectionReason::Unknown)));
+        assert!(out
+            .rejected
+            .contains(&("refactor-helper".into(), RejectionReason::Duplicate)));
         // Conflict: a skill sharing the `refactor` tag collides with the
         // already-selected one.
         let clash = SkillsIndexFile::new(vec![
@@ -288,7 +309,9 @@ mod tests {
             },
         ]);
         let out = compose_stack(&clash, &["a".into(), "b".into()], &[], "refactor");
-        assert!(out.rejected.contains(&("b".into(), RejectionReason::Conflict { with: "a".into() })));
+        assert!(out
+            .rejected
+            .contains(&("b".into(), RejectionReason::Conflict { with: "a".into() })));
     }
 
     #[test]

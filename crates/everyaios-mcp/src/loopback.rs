@@ -183,7 +183,9 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         let handle = thread::spawn(move || {
             for _ in 0..connections {
-                let Ok((mut stream, _)) = listener.accept() else { continue };
+                let Ok((mut stream, _)) = listener.accept() else {
+                    continue;
+                };
                 let mut server = McpServer::new(Fake);
                 if let Some(token) = bearer.as_deref() {
                     server = server.with_bearer_token(token);

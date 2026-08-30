@@ -67,7 +67,11 @@ pub struct DesktopEngine {
 impl DesktopEngine {
     /// Construct the engine for the current platform with the given Guard-2
     /// policy/gate/audit wiring.
-    pub fn new(policy: AppPolicy, gate: Box<dyn PermissionGate>, sink: Box<dyn policy::AuditSink>) -> Result<Self> {
+    pub fn new(
+        policy: AppPolicy,
+        gate: Box<dyn PermissionGate>,
+        sink: Box<dyn policy::AuditSink>,
+    ) -> Result<Self> {
         let backend = platform::PlatformBackend::current()?;
         let ocr: Arc<dyn OcrEngine> = if ocr::TesseractCli::default().available() {
             Arc::new(ocr::TesseractCli::default())
@@ -118,7 +122,10 @@ impl DesktopEngine {
 
     /// Capture a window (or a sub-region — Claude-class region zoom).
     pub fn see(&self, window: &WindowInfo) -> Result<SeeResult> {
-        self.see_region(window, Region::full(window.width.max(1), window.height.max(1)))
+        self.see_region(
+            window,
+            Region::full(window.width.max(1), window.height.max(1)),
+        )
     }
 
     pub fn see_region(&self, window: &WindowInfo, region: Region) -> Result<SeeResult> {
@@ -213,10 +220,14 @@ impl DesktopEngine {
                 self.act(window, &ActKind::Click { x, y }, None)
             }
             ocr::VisionHit::NotFound => Ok(ActOutcome {
-                kind: ActKind::ClickByName { name: phrase.into() },
+                kind: ActKind::ClickByName {
+                    name: phrase.into(),
+                },
                 ok: false,
                 verification: None,
-                error: Some(format!("phrase {phrase:?} not found in OCR — halting, not guessing")),
+                error: Some(format!(
+                    "phrase {phrase:?} not found in OCR — halting, not guessing"
+                )),
             }),
         }
     }

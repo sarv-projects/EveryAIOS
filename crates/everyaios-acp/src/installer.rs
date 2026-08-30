@@ -70,7 +70,10 @@ impl Installer {
                     binary_path: None,
                     env: env.clone(),
                 };
-                self.record(&outcome, &Ownership::new(package, String::new(), args.clone()))?;
+                self.record(
+                    &outcome,
+                    &Ownership::new(package, String::new(), args.clone()),
+                )?;
                 Ok(outcome)
             }
             InstallKind::Uvx { package, args, env } => {
@@ -81,10 +84,19 @@ impl Installer {
                     binary_path: None,
                     env: env.clone(),
                 };
-                self.record(&outcome, &Ownership::new(package, String::new(), args.clone()))?;
+                self.record(
+                    &outcome,
+                    &Ownership::new(package, String::new(), args.clone()),
+                )?;
                 Ok(outcome)
             }
-            InstallKind::Binary { archive, cmd, args, sha256, env } => {
+            InstallKind::Binary {
+                archive,
+                cmd,
+                args,
+                sha256,
+                env,
+            } => {
                 // Fail closed: a registry binary install without a published
                 // sha256 is never verified, so refuse before downloading at
                 // all (bugfix 11). Unverified bytes must never reach disk.
@@ -105,7 +117,10 @@ impl Installer {
                     binary_path: Some(binary_path.clone()),
                     env: env.clone(),
                 };
-                self.record(&outcome, &Ownership::new(archive, sha256.clone(), args.clone()))?;
+                self.record(
+                    &outcome,
+                    &Ownership::new(archive, sha256.clone(), args.clone()),
+                )?;
                 Ok(outcome)
             }
         }
@@ -115,10 +130,15 @@ impl Installer {
     pub fn installed(&self, agent_id: &str) -> Option<InstallOutcome> {
         let dir = self.install_root.join(agent_id);
         let state: InstallState =
-            serde_json::from_str(&std::fs::read_to_string(dir.join("installed.json")).ok()?).ok()?;
+            serde_json::from_str(&std::fs::read_to_string(dir.join("installed.json")).ok()?)
+                .ok()?;
         let binary_path = state.binary_path.map(|p| {
             let p = PathBuf::from(p);
-            if p.is_absolute() { p } else { dir.join(p) }
+            if p.is_absolute() {
+                p
+            } else {
+                dir.join(p)
+            }
         });
         Some(InstallOutcome {
             agent_id: agent_id.to_string(),
@@ -144,11 +164,7 @@ impl Installer {
         Ok(buf)
     }
 
-    fn record(
-        &self,
-        outcome: &InstallOutcome,
-        ownership: &Ownership,
-    ) -> Result<(), InstallError> {
+    fn record(&self, outcome: &InstallOutcome, ownership: &Ownership) -> Result<(), InstallError> {
         // The "current" pointer lives at `<root>/<agent>/installed.json`;
         // versioned binary packages live at `<root>/<agent>/<version>/pkg`.
         let agent_dir = self.install_root.join(&outcome.agent_id);
@@ -398,7 +414,8 @@ mod tests {
     use std::io::Write;
 
     fn tmp_root(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("everyaios-acp-inst-{tag}-{}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("everyaios-acp-inst-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         d
     }
@@ -505,7 +522,10 @@ mod tests {
         let evil_zip = zip_bytes(&[("../evil", b"bad"), ("bin/ok", b"ok")]);
         let err = extract_archive(&evil_zip, "https://x/evil.zip", &dest).unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("traversal") || msg.contains("escape"), "got: {msg}");
+        assert!(
+            msg.contains("traversal") || msg.contains("escape"),
+            "got: {msg}"
+        );
         assert!(!dest.join("evil").exists());
         assert!(!root.join("evil").exists());
         // The safe member inside the same archive should never have been

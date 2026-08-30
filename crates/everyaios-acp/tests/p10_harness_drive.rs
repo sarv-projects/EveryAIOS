@@ -39,13 +39,17 @@ fn harness_drives_agent_permission_audit_stop() {
     // Drive one prompt; the agent requests permission to write a file.
     // The harness decides: allow option "allow" (the Guard-2 approval path).
     let outcome = session
-        .prompt("write the test file", |_req| {
-            PermissionDecision::Allow { option_id: Some("allow".into()) }
+        .prompt("write the test file", |_req| PermissionDecision::Allow {
+            option_id: Some("allow".into()),
         })
         .unwrap();
 
     // Audit: the permission request + our decision were both recorded.
-    assert_eq!(outcome.permissions.len(), 1, "permission request must be audited");
+    assert_eq!(
+        outcome.permissions.len(),
+        1,
+        "permission request must be audited"
+    );
     assert_eq!(outcome.permissions[0].tool_call.title, "write test file");
     assert_eq!(outcome.permission_decisions.len(), 1);
     assert!(matches!(

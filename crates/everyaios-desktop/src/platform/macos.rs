@@ -83,7 +83,12 @@ impl MacBackend {
         // space, so the caller must pass a real CGWindowID in window.id.
         let tmp = std::env::temp_dir().join(format!("everyaios-see-{}.png", window.id));
         let status = Command::new("screencapture")
-            .args(["-l", &window.id.to_string(), "-x", tmp.to_str().unwrap_or("/tmp/e9.png")])
+            .args([
+                "-l",
+                &window.id.to_string(),
+                "-x",
+                tmp.to_str().unwrap_or("/tmp/e9.png"),
+            ])
             .status()
             .map_err(|e| DesktopError::Platform(format!("screencapture: {e}")))?;
         if !status.success() {

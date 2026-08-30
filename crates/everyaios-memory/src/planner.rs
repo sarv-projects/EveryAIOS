@@ -4,7 +4,7 @@
 //! budget, and a scope-leakage floor rejects signals that would blow the
 //! window. Deterministic — the coordinator feeds it per-turn token counts.
 
-use crate::paging::{CORE_BUDGET_TOKENS, PagedMemory};
+use crate::paging::{PagedMemory, CORE_BUDGET_TOKENS};
 
 /// Planner budget knobs.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -77,7 +77,9 @@ impl ContextPlanner {
 
     /// Remaining budget after the warm set.
     pub fn remaining(&self) -> usize {
-        self.config.context_budget_tokens.saturating_sub(self.committed)
+        self.config
+            .context_budget_tokens
+            .saturating_sub(self.committed)
     }
 
     /// Plan admission of a `candidate_tokens` chunk (retrieval evidence or

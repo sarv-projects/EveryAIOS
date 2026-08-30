@@ -49,7 +49,11 @@ pub trait HarnessConfigWriter {
 
     /// Rewrite the document with `provider` applied. Returns the new
     /// document, preserving everything else.
-    fn set_provider(&self, doc: &str, provider: &ProviderConfig) -> Result<String, HarnessConfigError>;
+    fn set_provider(
+        &self,
+        doc: &str,
+        provider: &ProviderConfig,
+    ) -> Result<String, HarnessConfigError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,15 +91,22 @@ impl HarnessConfigWriter for ClaudeCodeConfig {
         })
     }
 
-    fn set_provider(&self, doc: &str, provider: &ProviderConfig) -> Result<String, HarnessConfigError> {
+    fn set_provider(
+        &self,
+        doc: &str,
+        provider: &ProviderConfig,
+    ) -> Result<String, HarnessConfigError> {
         let mut v: Value = if doc.trim().is_empty() {
             json!({})
         } else {
-            serde_json::from_str(doc).map_err(|e| HarnessConfigError::InvalidDocument(e.to_string()))?
+            serde_json::from_str(doc)
+                .map_err(|e| HarnessConfigError::InvalidDocument(e.to_string()))?
         };
         let env = v
             .as_object_mut()
-            .ok_or_else(|| HarnessConfigError::InvalidDocument("settings.json must be a JSON object".into()))?
+            .ok_or_else(|| {
+                HarnessConfigError::InvalidDocument("settings.json must be a JSON object".into())
+            })?
             .entry("env")
             .or_insert_with(|| json!({}));
         let env = env
@@ -110,7 +121,8 @@ impl HarnessConfigWriter for ClaudeCodeConfig {
         if let Some(k) = &provider.api_key_env {
             env.insert("ANTHROPIC_API_KEY".into(), json!(k));
         }
-        serde_json::to_string_pretty(&v).map_err(|e| HarnessConfigError::InvalidDocument(e.to_string()))
+        serde_json::to_string_pretty(&v)
+            .map_err(|e| HarnessConfigError::InvalidDocument(e.to_string()))
     }
 }
 
@@ -140,7 +152,11 @@ impl HarnessConfigWriter for CodexConfig {
         })
     }
 
-    fn set_provider(&self, doc: &str, provider: &ProviderConfig) -> Result<String, HarnessConfigError> {
+    fn set_provider(
+        &self,
+        doc: &str,
+        provider: &ProviderConfig,
+    ) -> Result<String, HarnessConfigError> {
         let mut lines = doc.lines().map(|l| l.to_string()).collect::<Vec<_>>();
         if let Some(m) = &provider.model {
             set_toml_key(&mut lines, "model", m)?;
@@ -215,26 +231,33 @@ impl HarnessConfigWriter for OpenCodeConfig {
         })
     }
 
-    fn set_provider(&self, doc: &str, provider: &ProviderConfig) -> Result<String, HarnessConfigError> {
+    fn set_provider(
+        &self,
+        doc: &str,
+        provider: &ProviderConfig,
+    ) -> Result<String, HarnessConfigError> {
         let mut v: Value = if doc.trim().is_empty() {
             json!({})
         } else {
-            serde_json::from_str(doc).map_err(|e| HarnessConfigError::InvalidDocument(e.to_string()))?
+            serde_json::from_str(doc)
+                .map_err(|e| HarnessConfigError::InvalidDocument(e.to_string()))?
         };
-        let obj = v
-            .as_object_mut()
-            .ok_or_else(|| HarnessConfigError::InvalidDocument("opencode.json must be a JSON object".into()))?;
+        let obj = v.as_object_mut().ok_or_else(|| {
+            HarnessConfigError::InvalidDocument("opencode.json must be a JSON object".into())
+        })?;
         let providers = obj.entry("provider").or_insert_with(|| json!({}));
-        let providers = providers
-            .as_object_mut()
-            .ok_or_else(|| HarnessConfigError::InvalidDocument("provider must be an object".into()))?;
+        let providers = providers.as_object_mut().ok_or_else(|| {
+            HarnessConfigError::InvalidDocument("provider must be an object".into())
+        })?;
         let entry = providers
             .entry(provider.provider_id.clone())
             .or_insert_with(|| json!({}));
         if let Some(m) = &provider.model {
             let models = entry
                 .as_object_mut()
-                .ok_or_else(|| HarnessConfigError::InvalidDocument("provider body must be an object".into()))?
+                .ok_or_else(|| {
+                    HarnessConfigError::InvalidDocument("provider body must be an object".into())
+                })?
                 .entry("models")
                 .or_insert_with(|| json!([]));
             if let Some(arr) = models.as_array_mut() {
@@ -245,7 +268,8 @@ impl HarnessConfigWriter for OpenCodeConfig {
                 }
             }
         }
-        serde_json::to_string_pretty(&v).map_err(|e| HarnessConfigError::InvalidDocument(e.to_string()))
+        serde_json::to_string_pretty(&v)
+            .map_err(|e| HarnessConfigError::InvalidDocument(e.to_string()))
     }
 }
 

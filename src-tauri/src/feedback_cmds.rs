@@ -33,7 +33,9 @@ fn write_feedback(
     category: Option<&str>,
 ) -> Result<String, String> {
     if !matches!(kind, "bug" | "feature") {
-        return Err(format!("unknown feedback kind: {kind} (expected bug|feature)"));
+        return Err(format!(
+            "unknown feedback kind: {kind} (expected bug|feature)"
+        ));
     }
     if title.trim().is_empty() {
         return Err("feedback title is required".to_string());
@@ -48,7 +50,9 @@ fn write_feedback(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    let category = category.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+    let category = category
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty());
 
     let mut entry = String::new();
     entry.push_str(&format!("## {} — {}\n\n", kind, title.trim()));
@@ -76,7 +80,10 @@ mod tests {
     use super::write_feedback;
 
     fn temp_dir(tag: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("everyaios-feedback-test-{tag}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!(
+            "everyaios-feedback-test-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

@@ -85,7 +85,8 @@ impl WorkspaceHelpers {
             return Err(HelperError::Exists(helper.name));
         }
         fs::create_dir_all(&self.root).map_err(|e| HelperError::Io(e.to_string()))?;
-        let json = serde_json::to_string_pretty(&helper).map_err(|e| HelperError::Io(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(&helper).map_err(|e| HelperError::Io(e.to_string()))?;
         fs::write(&path, json).map_err(|e| HelperError::Io(e.to_string()))
     }
 
@@ -138,7 +139,8 @@ mod tests {
     use super::*;
 
     fn tmp(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("everyaios-helpers-{}-{}", std::process::id(), tag));
+        let d =
+            std::env::temp_dir().join(format!("everyaios-helpers-{}-{}", std::process::id(), tag));
         let _ = fs::remove_dir_all(&d);
         d
     }
@@ -174,7 +176,10 @@ mod tests {
         let root = tmp("overwrite");
         let mut store = WorkspaceHelpers::new(root.clone());
         store.install(helper("a"), false).unwrap();
-        assert!(matches!(store.install(helper("a"), false), Err(HelperError::Exists(_))));
+        assert!(matches!(
+            store.install(helper("a"), false),
+            Err(HelperError::Exists(_))
+        ));
         let mut h = helper("a");
         h.version = "1.1.0".into();
         store.install(h, true).unwrap();
@@ -200,8 +205,14 @@ mod tests {
         let root = tmp("errors");
         let store = WorkspaceHelpers::new(root.clone());
         assert!(matches!(store.load("nope"), Err(HelperError::NotFound(_))));
-        assert!(matches!(store.remove("nope"), Err(HelperError::NotFound(_))));
+        assert!(matches!(
+            store.remove("nope"),
+            Err(HelperError::NotFound(_))
+        ));
         let mut store = WorkspaceHelpers::new(root);
-        assert!(matches!(store.install(helper("bad/name"), false), Err(HelperError::InvalidName(_))));
+        assert!(matches!(
+            store.install(helper("bad/name"), false),
+            Err(HelperError::InvalidName(_))
+        ));
     }
 }

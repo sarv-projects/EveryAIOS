@@ -75,7 +75,10 @@ fn rel(root: &Path, p: &Path) -> String {
 }
 
 fn is_rules_file(name: &str) -> bool {
-    matches!(name, "CLAUDE.md" | "AGENTS.md" | ".cursorrules" | "QAGENTS.md" | "settings.json")
+    matches!(
+        name,
+        "CLAUDE.md" | "AGENTS.md" | ".cursorrules" | "QAGENTS.md" | "settings.json"
+    )
 }
 
 /// Build the AGENTS.md / CLAUDE.md body from an inventory + user rules —
@@ -89,7 +92,12 @@ pub fn rules_file_content(inventory: &FolderInventory, rules: &[String]) -> Stri
     for f in &inventory.rules_files {
         out.push_str(&format!("- rules: {f}\n"));
     }
-    out.push_str(&format!("- {} files, {} dirs, {:.1} KiB total\n", inventory.files.len(), inventory.dirs.len(), inventory.total_bytes as f64 / 1024.0));
+    out.push_str(&format!(
+        "- {} files, {} dirs, {:.1} KiB total\n",
+        inventory.files.len(),
+        inventory.dirs.len(),
+        inventory.total_bytes as f64 / 1024.0
+    ));
     out
 }
 

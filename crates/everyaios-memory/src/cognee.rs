@@ -45,12 +45,7 @@ impl CogneeMemory {
     /// `recall` — retrieve memories relevant to `query` (importance-ordered
     /// substring matches; the BM25/vector signals layer on top via `bm25`).
     pub fn recall(&self, query: &str) -> RecallResult {
-        let entries: Vec<MemoryEntry> = self
-            .store
-            .search(query)
-            .into_iter()
-            .cloned()
-            .collect();
+        let entries: Vec<MemoryEntry> = self.store.search(query).into_iter().cloned().collect();
         RecallResult { entries }
     }
 

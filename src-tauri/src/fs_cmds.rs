@@ -153,13 +153,18 @@ pub fn fs_write_ticket(
     use std::hash::{Hash, Hasher};
 
     // The before-image (for the diff card); missing file = creation.
-    let path = crate::control::floor_user_file(&path)?.display().to_string();
+    let path = crate::control::floor_user_file(&path)?
+        .display()
+        .to_string();
     let before = std::fs::read_to_string(&path).unwrap_or_default();
     let preview = diff_preview(&before, &content);
 
     let decision = everyaios_guard::DecisionPackage::new(format!(
         "Write {}",
-        std::path::Path::new(&path).file_name().unwrap_or_default().to_string_lossy()
+        std::path::Path::new(&path)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
     ))
     .with_risk(RiskLevel::Medium)
     .with_paths(vec![path.clone()]);
@@ -223,7 +228,9 @@ pub fn fs_write_commit(
     let args_hash = format!("{:016x}", h.finish());
 
     let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
-    guard.use_ticket(&ticket_id, &args_hash).map_err(|e| e.to_string())?;
+    guard
+        .use_ticket(&ticket_id, &args_hash)
+        .map_err(|e| e.to_string())?;
     drop(guard); // never hold the guard lock across a disk write
 
     let p = std::path::PathBuf::from(&path);

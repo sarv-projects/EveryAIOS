@@ -111,7 +111,13 @@ impl SyncItem {
     }
 
     /// `live` with a wall-clock timestamp (the LWW tie-break input).
-    pub fn live_at(scope: SyncScope, key: impl Into<String>, rev: u64, ts_ms: u64, payload: Vec<u8>) -> Self {
+    pub fn live_at(
+        scope: SyncScope,
+        key: impl Into<String>,
+        rev: u64,
+        ts_ms: u64,
+        payload: Vec<u8>,
+    ) -> Self {
         Self {
             scope,
             key: key.into(),
@@ -147,9 +153,7 @@ impl SyncSet {
     }
 
     pub fn get(&self, scope: SyncScope, key: &str) -> Option<&SyncItem> {
-        self.items
-            .iter()
-            .find(|i| i.scope == scope && i.key == key)
+        self.items.iter().find(|i| i.scope == scope && i.key == key)
     }
 
     /// Insert or replace an item (last-writer-wins by caller-supplied rev).
@@ -281,7 +285,9 @@ impl ConflictPolicy {
     /// conservative default for unknown scopes.
     pub fn for_scope(scope: SyncScope) -> Self {
         match scope {
-            SyncScope::Messages | SyncScope::Memory | SyncScope::Connector => ConflictPolicy::LastWriteWins,
+            SyncScope::Messages | SyncScope::Memory | SyncScope::Connector => {
+                ConflictPolicy::LastWriteWins
+            }
         }
     }
 }
@@ -649,7 +655,12 @@ impl SharedSession {
     /// MAC alone authenticates it — no device-id check is needed (and the
     /// sender labels differ between the two sides' views).
     pub fn confirm_token(&self) -> Result<SyncEnvelope, SyncError> {
-        seal(&self.box_, &self.peer_device, SyncScope::Memory, b"EAIOS-CONFIRM")
+        seal(
+            &self.box_,
+            &self.peer_device,
+            SyncScope::Memory,
+            b"EAIOS-CONFIRM",
+        )
     }
 
     /// Verify a peer's confirm token: MAC-verified (proves key possession).
@@ -739,7 +750,11 @@ impl SyncSession {
     /// are applied locally, `Manual` conflicts stay in `remaining` for the
     /// caller. Use [`ConflictPolicy::for_scope`] for the state-plane rule;
     /// effect-plane records must stay `Manual`.
-    pub fn reconcile_with_policy(&mut self, remote: &SyncSet, policy: ConflictPolicy) -> ResolvedDiff {
+    pub fn reconcile_with_policy(
+        &mut self,
+        remote: &SyncSet,
+        policy: ConflictPolicy,
+    ) -> ResolvedDiff {
         let diff = reconcile(&self.set, remote);
         let resolved = resolve_conflicts(diff, policy, &self.set, remote);
         for item in &resolved.apply {
@@ -790,7 +805,10 @@ mod tests {
         let mut env = seal(&box_, "dev-a", SyncScope::Memory, b"secret").unwrap();
         let last = env.ciphertext.len() - 1;
         env.ciphertext[last] ^= 0x01;
-        assert!(matches!(open(&box_, &env, Some("dev-a")), Err(SyncError::Decrypt)));
+        assert!(matches!(
+            open(&box_, &env, Some("dev-a")),
+            Err(SyncError::Decrypt)
+        ));
     }
 
     #[test]
@@ -800,7 +818,10 @@ mod tests {
         env.sender_device = "dev-evil".into();
         // Wrong sender is rejected outright, and the AAD bind means the MAC
         // would fail even if the sender matched.
-        assert!(matches!(open(&box_, &env, Some("dev-a")), Err(SyncError::Decrypt)));
+        assert!(matches!(
+            open(&box_, &env, Some("dev-a")),
+            Err(SyncError::Decrypt)
+        ));
     }
 
     #[test]
@@ -819,17 +840,30 @@ mod tests {
         let box_ = ChaChaBox::new(test_key());
         let mut env = seal(&box_, "dev-a", SyncScope::Messages, b"hi").unwrap();
         env.magic = *b"NOPE----";
-        assert!(matches!(open(&box_, &env, Some("dev-a")), Err(SyncError::BadMagic)));
+        assert!(matches!(
+            open(&box_, &env, Some("dev-a")),
+            Err(SyncError::BadMagic)
+        ));
     }
 
     #[test]
     fn reconcile_merges_both_directions() {
         let mut local = SyncSet::new();
-        local.upsert(SyncItem::live(SyncScope::Memory, "a", 1, b"local-a".to_vec()));
+        local.upsert(SyncItem::live(
+            SyncScope::Memory,
+            "a",
+            1,
+            b"local-a".to_vec(),
+        ));
         local.upsert(SyncItem::live(SyncScope::Memory, "b", 2, b"b".to_vec()));
 
         let mut remote = SyncSet::new();
-        remote.upsert(SyncItem::live(SyncScope::Memory, "a", 1, b"local-a".to_vec()));
+        remote.upsert(SyncItem::live(
+            SyncScope::Memory,
+            "a",
+            1,
+            b"local-a".to_vec(),
+        ));
         remote.upsert(SyncItem::live(SyncScope::Memory, "c", 1, b"c".to_vec()));
         // remote is ahead on b
         remote.upsert(SyncItem::live(SyncScope::Memory, "b", 3, b"b-v3".to_vec()));
@@ -837,14 +871,8 @@ mod tests {
         let diff = reconcile(&local, &remote);
         // local pulls remote-only "c" + remote-ahead "b"
         assert_eq!(diff.apply.len(), 2);
-        assert!(diff
-            .apply
-            .iter()
-            .any(|i| i.key == "c" && i.rev == 1));
-        assert!(diff
-            .apply
-            .iter()
-            .any(|i| i.key == "b" && i.rev == 3));
+        assert!(diff.apply.iter().any(|i| i.key == "c" && i.rev == 1));
+        assert!(diff.apply.iter().any(|i| i.key == "b" && i.rev == 3));
         // remote pulls nothing local-ahead (a is equal, b remote is ahead)
         assert_eq!(diff.push.len(), 0);
         assert!(diff.conflicts.is_empty());
@@ -853,16 +881,23 @@ mod tests {
     #[test]
     fn reconcile_pushes_local_ahead_items() {
         let mut local = SyncSet::new();
-        local.upsert(SyncItem::live(SyncScope::Messages, "m", 5, b"m-v5".to_vec()));
+        local.upsert(SyncItem::live(
+            SyncScope::Messages,
+            "m",
+            5,
+            b"m-v5".to_vec(),
+        ));
         let mut remote = SyncSet::new();
-        remote.upsert(SyncItem::live(SyncScope::Messages, "m", 3, b"m-v3".to_vec()));
+        remote.upsert(SyncItem::live(
+            SyncScope::Messages,
+            "m",
+            3,
+            b"m-v3".to_vec(),
+        ));
         remote.upsert(SyncItem::live(SyncScope::Messages, "n", 1, b"n".to_vec()));
 
         let diff = reconcile(&local, &remote);
-        assert!(diff
-            .push
-            .iter()
-            .any(|i| i.key == "m" && i.rev == 5));
+        assert!(diff.push.iter().any(|i| i.key == "m" && i.rev == 5));
         assert!(diff.apply.iter().any(|i| i.key == "n"));
         assert!(diff.conflicts.is_empty());
     }
@@ -885,7 +920,12 @@ mod tests {
     #[test]
     fn tombstones_propagate() {
         let mut local = SyncSet::new();
-        local.upsert(SyncItem::live(SyncScope::Memory, "gone", 1, b"data".to_vec()));
+        local.upsert(SyncItem::live(
+            SyncScope::Memory,
+            "gone",
+            1,
+            b"data".to_vec(),
+        ));
         let mut remote = local.clone();
         remote.tombstone(SyncScope::Memory, "gone", 1);
 
@@ -938,7 +978,10 @@ mod tests {
         s.upsert(SyncScope::Messages, "sess-1", 1, b"message".to_vec());
 
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("everyaios-sync-test-{}.eaiossync", std::process::id()));
+        let path = dir.join(format!(
+            "everyaios-sync-test-{}.eaiossync",
+            std::process::id()
+        ));
         s.export_to(&path).unwrap();
 
         // A second device with the same key reads + merges.
@@ -958,7 +1001,10 @@ mod tests {
         let mut s = SyncSession::new("dev-a", test_key());
         s.upsert(SyncScope::Memory, "f", 1, b"x".to_vec());
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("everyaios-sync-wrongkey-{}.eaiossync", std::process::id()));
+        let path = dir.join(format!(
+            "everyaios-sync-wrongkey-{}.eaiossync",
+            std::process::id()
+        ));
         s.export_to(&path).unwrap();
 
         let mut other = SyncSession::new("dev-a", [9u8; 32]);
@@ -987,10 +1033,22 @@ mod tests {
     #[test]
     fn lww_resolves_by_timestamp() {
         let local = SyncSet {
-            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 100, b"older".to_vec())],
+            items: vec![SyncItem::live_at(
+                SyncScope::Memory,
+                "x",
+                1,
+                100,
+                b"older".to_vec(),
+            )],
         };
         let remote = SyncSet {
-            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 200, b"newer".to_vec())],
+            items: vec![SyncItem::live_at(
+                SyncScope::Memory,
+                "x",
+                1,
+                200,
+                b"newer".to_vec(),
+            )],
         };
         let diff = reconcile(&local, &remote);
         let resolved = resolve_conflicts(diff, ConflictPolicy::LastWriteWins, &local, &remote);
@@ -1010,21 +1068,55 @@ mod tests {
 
         // Node A: local = alpha, remote = bravo.
         let local_a = SyncSet {
-            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 5, a_payload.clone())],
+            items: vec![SyncItem::live_at(
+                SyncScope::Memory,
+                "x",
+                1,
+                5,
+                a_payload.clone(),
+            )],
         };
         let remote_a = SyncSet {
-            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 5, b_payload.clone())],
+            items: vec![SyncItem::live_at(
+                SyncScope::Memory,
+                "x",
+                1,
+                5,
+                b_payload.clone(),
+            )],
         };
-        let ra = resolve_conflicts(reconcile(&local_a, &remote_a), ConflictPolicy::LastWriteWins, &local_a, &remote_a);
+        let ra = resolve_conflicts(
+            reconcile(&local_a, &remote_a),
+            ConflictPolicy::LastWriteWins,
+            &local_a,
+            &remote_a,
+        );
 
         // Node B: local = bravo, remote = alpha.
         let local_b = SyncSet {
-            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 5, b_payload.clone())],
+            items: vec![SyncItem::live_at(
+                SyncScope::Memory,
+                "x",
+                1,
+                5,
+                b_payload.clone(),
+            )],
         };
         let remote_b = SyncSet {
-            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 5, a_payload.clone())],
+            items: vec![SyncItem::live_at(
+                SyncScope::Memory,
+                "x",
+                1,
+                5,
+                a_payload.clone(),
+            )],
         };
-        let rb = resolve_conflicts(reconcile(&local_b, &remote_b), ConflictPolicy::LastWriteWins, &local_b, &remote_b);
+        let rb = resolve_conflicts(
+            reconcile(&local_b, &remote_b),
+            ConflictPolicy::LastWriteWins,
+            &local_b,
+            &remote_b,
+        );
         assert!(ra.remaining.is_empty() && rb.remaining.is_empty());
 
         // Node A pulls "bravo"; node B already holds "bravo" locally and
@@ -1044,8 +1136,14 @@ mod tests {
         for i in &rb.apply {
             set_b.upsert(i.clone());
         }
-        assert_eq!(set_a.get(SyncScope::Memory, "x").unwrap().payload, b_payload);
-        assert_eq!(set_b.get(SyncScope::Memory, "x").unwrap().payload, b_payload);
+        assert_eq!(
+            set_a.get(SyncScope::Memory, "x").unwrap().payload,
+            b_payload
+        );
+        assert_eq!(
+            set_b.get(SyncScope::Memory, "x").unwrap().payload,
+            b_payload
+        );
     }
 
     #[test]
@@ -1074,7 +1172,8 @@ mod tests {
         remote.upsert(SyncItem::live(SyncScope::Memory, "k", 2, b"v2".to_vec()));
         remote.upsert(SyncItem::live(SyncScope::Memory, "k2", 1, b"new".to_vec()));
 
-        let resolved = s.reconcile_with_policy(&remote, ConflictPolicy::for_scope(SyncScope::Memory));
+        let resolved =
+            s.reconcile_with_policy(&remote, ConflictPolicy::for_scope(SyncScope::Memory));
         assert!(resolved.remaining.is_empty());
         assert_eq!(resolved.apply.len(), 2);
         assert_eq!(s.set.get(SyncScope::Memory, "k").unwrap().rev, 2);
@@ -1086,12 +1185,28 @@ mod tests {
         // Wire compat: items written before ts tracking (ts_ms = None) must
         // lose to any timestamped peer at equal rev.
         let local = SyncSet {
-            items: vec![SyncItem::live(SyncScope::Memory, "x", 1, b"legacy".to_vec())],
+            items: vec![SyncItem::live(
+                SyncScope::Memory,
+                "x",
+                1,
+                b"legacy".to_vec(),
+            )],
         };
         let remote = SyncSet {
-            items: vec![SyncItem::live_at(SyncScope::Memory, "x", 1, 10, b"modern".to_vec())],
+            items: vec![SyncItem::live_at(
+                SyncScope::Memory,
+                "x",
+                1,
+                10,
+                b"modern".to_vec(),
+            )],
         };
-        let resolved = resolve_conflicts(reconcile(&local, &remote), ConflictPolicy::LastWriteWins, &local, &remote);
+        let resolved = resolve_conflicts(
+            reconcile(&local, &remote),
+            ConflictPolicy::LastWriteWins,
+            &local,
+            &remote,
+        );
         assert_eq!(resolved.apply.len(), 1);
         assert_eq!(resolved.apply[0].payload, b"modern");
     }

@@ -115,7 +115,9 @@ pub fn run_retrieval_batch(cases: &[RetrievalCase], answer: &mut AnswerFn) -> Re
     for case in cases {
         let result = answer(&case.question, &case.corpus);
         let scores = score_retrieval(&case.question, &result, &case.corpus);
-        report.case_scores.push((case.question.question.clone(), scores));
+        report
+            .case_scores
+            .push((case.question.question.clone(), scores));
     }
     // Mean of each metric across cases (0 cases → all zeros).
     let n = cases.len().max(1) as f32;
@@ -151,10 +153,7 @@ mod tests {
 
     fn temp_root() -> std::path::PathBuf {
         let n = DIR_SEQ.fetch_add(1, Ordering::SeqCst);
-        std::env::temp_dir().join(format!(
-            "everyaios-eval-batch-{}-{n}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("everyaios-eval-batch-{}-{n}", std::process::id()))
     }
 
     fn single_task() -> (AdversarialTask, Fixture) {
@@ -203,14 +202,17 @@ mod tests {
     fn run_suite_aggregates_single_task() {
         let (task, fixture) = single_task();
         let root = temp_root();
-        let report = run_suite(&[task], &[fixture], &root, &mut GoodAgent, apply_filesystem_fault)
-            .unwrap();
+        let report = run_suite(
+            &[task],
+            &[fixture],
+            &root,
+            &mut GoodAgent,
+            apply_filesystem_fault,
+        )
+        .unwrap();
         assert_eq!(report.total, 1);
         assert_eq!(report.verified_complete, 1);
-        assert_eq!(
-            report.by_status.get("verified_complete"),
-            Some(&1)
-        );
+        assert_eq!(report.by_status.get("verified_complete"), Some(&1));
         assert!((report.completion_rate() - 1.0).abs() < 1e-9);
         std::fs::remove_dir_all(&root).ok();
     }
@@ -219,8 +221,14 @@ mod tests {
     fn run_suite_counts_lying_agent_as_not_verified() {
         let (task, fixture) = single_task();
         let root = temp_root();
-        let report = run_suite(&[task], &[fixture], &root, &mut LyingAgent, apply_filesystem_fault)
-            .unwrap();
+        let report = run_suite(
+            &[task],
+            &[fixture],
+            &root,
+            &mut LyingAgent,
+            apply_filesystem_fault,
+        )
+        .unwrap();
         assert_eq!(report.verified_complete, 0);
         assert_eq!(report.completion_rate(), 0.0);
         assert!(report.by_status.contains_key("failed_safely"));
@@ -240,8 +248,14 @@ mod tests {
         let tasks = builtin_suite();
         let fixtures = builtin_fixtures();
         let root = temp_root();
-        let report = run_suite(&tasks, &fixtures, &root, &mut IdleAgent, apply_filesystem_fault)
-            .unwrap();
+        let report = run_suite(
+            &tasks,
+            &fixtures,
+            &root,
+            &mut IdleAgent,
+            apply_filesystem_fault,
+        )
+        .unwrap();
         assert_eq!(report.total, 30);
         assert_eq!(report.outcomes.len(), 30);
         std::fs::remove_dir_all(&root).ok();
@@ -251,7 +265,10 @@ mod tests {
     fn retrieval_batch_aggregates_scores() {
         let cases = builtin_retrieval_cases();
         let mut perfect = |_q: &RetrievalQuestion, _c: &[RetrievalDocument]| RetrievalResult {
-            retrieved_docs: vec!["travel_policy_v3.pdf".into(), "expense_report_may.xlsx".into()],
+            retrieved_docs: vec![
+                "travel_policy_v3.pdf".into(),
+                "expense_report_may.xlsx".into(),
+            ],
             cited_spans: vec![
                 crate::retrieval::EvidenceSpan {
                     document_id: "travel_policy_v3.pdf".into(),
@@ -283,7 +300,10 @@ mod tests {
         let report = run_retrieval_batch(&cases, &mut empty);
         assert_eq!(report.total_cases, 3);
         // An empty result is never verified-complete on the chain.
-        assert!(report.case_scores.iter().all(|(_, s)| s.evidence_recall == 0.0));
+        assert!(report
+            .case_scores
+            .iter()
+            .all(|(_, s)| s.evidence_recall == 0.0));
         assert_eq!(report.totals.evidence_recall, 0.0);
     }
 }

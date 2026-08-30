@@ -32,11 +32,11 @@ use std::sync::Arc;
 
 use everyaios_acp::{
     AcpSession, AuthMethod, ClientInfo, HarnessManifest, Installer, LaunchRegistry,
-    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, RegistryClient,
-    RegistryPolicy, ToolCall, ToolKind,
+    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, RegistryClient, RegistryPolicy,
+    ToolCall, ToolKind,
 };
-use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
 use everyaios_core::config::Config;
+use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
 use everyaios_guard::{DecisionPackage, Operation, RiskLevel};
 use serde::Serialize;
 use tauri::State;
@@ -265,7 +265,11 @@ pub fn acp_install_request(
     .with_paths(vec![spec
         .install_dir
         .clone()
-        .unwrap_or_else(|| everyaios_core::default_data_dir().join("agents").join(&agent_id))
+        .unwrap_or_else(|| {
+            everyaios_core::default_data_dir()
+                .join("agents")
+                .join(&agent_id)
+        })
         .to_string_lossy()
         .into_owned()]);
     let exact_command: Vec<String> = match &spec.kind {
@@ -275,7 +279,9 @@ pub fn acp_install_request(
         everyaios_acp::InstallKind::Uvx { package, .. } => {
             vec!["uvx".into(), package.clone()]
         }
-        everyaios_acp::InstallKind::Binary { archive, sha256, .. } => {
+        everyaios_acp::InstallKind::Binary {
+            archive, sha256, ..
+        } => {
             vec![
                 "everyaios-installer".into(),
                 "download".into(),
@@ -288,22 +294,27 @@ pub fn acp_install_request(
 
     decision = match &spec.kind {
         everyaios_acp::InstallKind::Npx { package, .. } => decision
-            .with_script(
-                vec![format!("npx -y {package}")],
-                "npx",
-            )
+            .with_script(vec![format!("npx -y {package}")], "npx")
             .with_network(vec!["registry.npmjs.org".into()]),
         everyaios_acp::InstallKind::Uvx { package, .. } => decision
             .with_script(vec![format!("uvx {package}")], "uvx")
             .with_network(vec!["pypi.org".into()]),
-        everyaios_acp::InstallKind::Binary { archive, sha256, .. } => {
+        everyaios_acp::InstallKind::Binary {
+            archive, sha256, ..
+        } => {
             let host = url_host(archive);
             decision
                 .with_script(
                     vec![
                         format!("download {archive}"),
                         format!("sha256 verify {sha256}"),
-                        format!("extract → {}", spec.install_dir.as_ref().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default()),
+                        format!(
+                            "extract → {}",
+                            spec.install_dir
+                                .as_ref()
+                                .map(|p| p.to_string_lossy().into_owned())
+                                .unwrap_or_default()
+                        ),
                     ],
                     "everyaios-installer",
                 )
@@ -312,10 +323,7 @@ pub fn acp_install_request(
     };
 
     let args_hash = install_args_hash(&agent_id, &spec.version);
-    let mut guard = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     match guard.evaluate(
         "install",
         &agent_id,
@@ -363,10 +371,7 @@ pub fn acp_install_commit(
 ) -> Result<serde_json::Value, String> {
     let spec = resolve_spec(&agent_id)?;
     let args_hash = install_args_hash(&agent_id, &spec.version);
-    let mut guard = state
-        .guard_service
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     guard
         .use_ticket(&ticket_id, &args_hash)
         .map_err(|e| format!("install ticket not consumable: {e}"))?;
@@ -532,10 +537,7 @@ pub fn acp_authenticate(
     handle: String,
     method_id: String,
 ) -> Result<serde_json::Value, String> {
-    let mut sessions = state
-        .acp_sessions
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     let entry = sessions
         .get_mut(&handle)
         .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
@@ -573,10 +575,7 @@ pub fn acp_prompt(
     handle: String,
     text: String,
 ) -> Result<serde_json::Value, String> {
-    let mut sessions = state
-        .acp_sessions
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     let entry = sessions
         .get_mut(&handle)
         .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
@@ -609,10 +608,7 @@ pub fn acp_prompt(
         })
     };
 
-    let mut sessions = state
-        .acp_sessions
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     let entry = sessions
         .get_mut(&handle)
         .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
@@ -707,10 +703,7 @@ pub fn acp_prompt(
 /// Interrupt the ongoing ACP turn (`session/cancel` notification).
 #[tauri::command]
 pub fn acp_cancel(state: State<'_, AppState>, handle: String) -> Result<(), String> {
-    let mut sessions = state
-        .acp_sessions
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     let entry = sessions
         .get_mut(&handle)
         .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
@@ -720,10 +713,7 @@ pub fn acp_cancel(state: State<'_, AppState>, handle: String) -> Result<(), Stri
 /// Tear an ACP session down (kill + reap) and drop its handle.
 #[tauri::command]
 pub fn acp_shutdown(state: State<'_, AppState>, handle: String) -> Result<bool, String> {
-    let mut sessions = state
-        .acp_sessions
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     match sessions.remove(&handle) {
         Some(mut entry) => {
             entry.session.shutdown();
@@ -736,10 +726,7 @@ pub fn acp_shutdown(state: State<'_, AppState>, handle: String) -> Result<bool, 
 /// Live ACP handles (the harness list in the cockpit).
 #[tauri::command]
 pub fn acp_sessions(state: State<'_, AppState>) -> Result<Vec<AcpHandleInfo>, String> {
-    let sessions = state
-        .acp_sessions
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     Ok(sessions
         .iter()
         .map(|(handle, entry)| AcpHandleInfo::from((entry, handle.as_str())))
@@ -765,9 +752,7 @@ fn map_tool_call(tc: &ToolCall) -> (Operation, RiskLevel) {
     match tc.kind {
         Some(ToolKind::Delete) => (Operation::DeleteFiles, RiskLevel::High),
         Some(ToolKind::Execute) => (
-            Operation::TerminalShell {
-                destructive: false,
-            },
+            Operation::TerminalShell { destructive: false },
             RiskLevel::High,
         ),
         Some(ToolKind::Edit) | Some(ToolKind::Move) => (Operation::GenericWrite, RiskLevel::Medium),

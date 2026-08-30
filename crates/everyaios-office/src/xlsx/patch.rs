@@ -900,7 +900,14 @@ fn rewrite_row_rows(raw: &str, kind: ShiftKind, at: u32, count: u32) -> Option<S
             if let Ok((_, cref)) = crate::xlsx::address::parse_ref(attr.value()) {
                 if let Some(nr) = row_after(cref.row, kind, at, count) {
                     if nr != cref.row {
-                        let newref = format_ref(None, CellRef { row: nr, col: cref.col }, false);
+                        let newref = format_ref(
+                            None,
+                            CellRef {
+                                row: nr,
+                                col: cref.col,
+                            },
+                            false,
+                        );
                         let rng = attr.range_value();
                         ops.push((rng.start, rng.end, newref));
                     }
@@ -932,7 +939,14 @@ fn rewrite_row_cols(raw: &str, kind: ShiftKind, at: u32, count: u32) -> String {
             if let Ok((_, cref)) = crate::xlsx::address::parse_ref(attr.value()) {
                 match col_after(cref.col, kind, at, count) {
                     Some(nc) if nc != cref.col => {
-                        let newref = format_ref(None, CellRef { row: cref.row, col: nc }, false);
+                        let newref = format_ref(
+                            None,
+                            CellRef {
+                                row: cref.row,
+                                col: nc,
+                            },
+                            false,
+                        );
                         let rng = attr.range_value();
                         ops.push((rng.start, rng.end, newref));
                     }
@@ -966,9 +980,12 @@ fn replace_sheet_data(
         )))?;
     let range = sd.range();
     let raw = &text[range.clone()];
-    let open_end = raw.find('>').map(|i| i + 1).ok_or(PatchError::Xml(
-        crate::xml::OfficeXmlError::Parse(roxmltree::Error::NoRootNode),
-    ))?;
+    let open_end =
+        raw.find('>')
+            .map(|i| i + 1)
+            .ok_or(PatchError::Xml(crate::xml::OfficeXmlError::Parse(
+                roxmltree::Error::NoRootNode,
+            )))?;
     let self_closing = raw[..open_end].trim_end().ends_with("/>");
     let open_tag = if self_closing {
         format!("{}>", raw[..open_end].trim_end_matches('/').trim_end())

@@ -504,7 +504,10 @@ mod tests {
     #[test]
     fn tool_kind_and_stop_reason_use_snake_case() {
         assert_eq!(serde_json::to_value(ToolKind::Edit).unwrap(), "edit");
-        assert_eq!(serde_json::to_value(StopReason::EndTurn).unwrap(), "end_turn");
+        assert_eq!(
+            serde_json::to_value(StopReason::EndTurn).unwrap(),
+            "end_turn"
+        );
         assert_eq!(
             serde_json::from_value::<ToolKind>(serde_json::json!("delete")).unwrap(),
             ToolKind::Delete

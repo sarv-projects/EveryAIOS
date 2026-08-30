@@ -180,9 +180,8 @@ pub fn parse_frontmatter(fm: &str) -> Result<AgentConfig, FrontmatterError> {
                 }
                 "background" => config.background = Some(value.to_string()),
                 "isolation" => {
-                    config.isolation = Isolation::parse(value).ok_or_else(|| {
-                        FrontmatterError::UnknownIsolation(value.to_string())
-                    })?;
+                    config.isolation = Isolation::parse(value)
+                        .ok_or_else(|| FrontmatterError::UnknownIsolation(value.to_string()))?;
                 }
                 _ => {}
             }

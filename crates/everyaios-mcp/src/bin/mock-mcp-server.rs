@@ -23,7 +23,10 @@ fn main() {
             Err(_) => continue,
         };
         let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
-        let method = v.get("method").and_then(serde_json::Value::as_str).unwrap_or("");
+        let method = v
+            .get("method")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
         let mut reply = serde_json::json!({ "jsonrpc": "2.0", "id": id });
         match method {
             "initialize" => {
@@ -42,7 +45,8 @@ fn main() {
                 });
             }
             _ => {
-                reply["error"] = serde_json::json!({ "code": -32601, "message": "method not found" });
+                reply["error"] =
+                    serde_json::json!({ "code": -32601, "message": "method not found" });
             }
         }
         let _ = writeln!(stdout, "{}", reply.to_string());

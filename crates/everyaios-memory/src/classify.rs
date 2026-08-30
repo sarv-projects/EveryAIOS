@@ -63,9 +63,29 @@ pub fn classify(query: &str) -> Intent {
     intent.needs_tools = contains_any(
         &lower,
         &[
-            "open ", "edit ", "create ", "make ", "send ", "rename ", "move ", "delete ", "run ",
-            "search ", "find ", "download", "upload", "install", "uninstall", "write ", "append",
-            "organize", "sort ", "clean up", "extract", "convert", "generate ",
+            "open ",
+            "edit ",
+            "create ",
+            "make ",
+            "send ",
+            "rename ",
+            "move ",
+            "delete ",
+            "run ",
+            "search ",
+            "find ",
+            "download",
+            "upload",
+            "install",
+            "uninstall",
+            "write ",
+            "append",
+            "organize",
+            "sort ",
+            "clean up",
+            "extract",
+            "convert",
+            "generate ",
         ],
     );
 
@@ -73,8 +93,20 @@ pub fn classify(query: &str) -> Intent {
     intent.needs_research = contains_any(
         &lower,
         &[
-            "what is", "what are", "how do", "how does", "why ", "compare", "best ", "latest",
-            "research", "find out", "explain", "difference between", "vs ", "versus",
+            "what is",
+            "what are",
+            "how do",
+            "how does",
+            "why ",
+            "compare",
+            "best ",
+            "latest",
+            "research",
+            "find out",
+            "explain",
+            "difference between",
+            "vs ",
+            "versus",
         ],
     );
 
@@ -82,8 +114,16 @@ pub fn classify(query: &str) -> Intent {
     intent.needs_widgets = contains_any(
         &lower,
         &[
-            "chart", "plot", "graph", "table", "dashboard", "visualize", "show me", "display",
-            "histogram", "pie ",
+            "chart",
+            "plot",
+            "graph",
+            "table",
+            "dashboard",
+            "visualize",
+            "show me",
+            "display",
+            "histogram",
+            "pie ",
         ],
     );
 
@@ -154,8 +194,16 @@ fn classify_kind(lower: &str) -> IntentKind {
     if contains_any(
         lower,
         &[
-            "remember", "what did i say", "what did i do", "my notes", "recall", "what do i know",
-            "previous", "last time", "earlier session", "my memory",
+            "remember",
+            "what did i say",
+            "what did i do",
+            "my notes",
+            "recall",
+            "what do i know",
+            "previous",
+            "last time",
+            "earlier session",
+            "my memory",
         ],
     ) {
         return IntentKind::Memory;
@@ -163,9 +211,24 @@ fn classify_kind(lower: &str) -> IntentKind {
     if contains_any(
         lower,
         &[
-            "schedule", "meeting", "appointment", "remind", "tomorrow", "next week", "deadline",
-            "calendar", "event", "at 3", "at 5pm", "on monday", "on tuesday", "on wednesday",
-            "on thursday", "on friday", "by friday", "due ",
+            "schedule",
+            "meeting",
+            "appointment",
+            "remind",
+            "tomorrow",
+            "next week",
+            "deadline",
+            "calendar",
+            "event",
+            "at 3",
+            "at 5pm",
+            "on monday",
+            "on tuesday",
+            "on wednesday",
+            "on thursday",
+            "on friday",
+            "by friday",
+            "due ",
         ],
     ) {
         return IntentKind::Event;
@@ -173,9 +236,24 @@ fn classify_kind(lower: &str) -> IntentKind {
     if contains_any(
         lower,
         &[
-            ".pdf", ".docx", ".xlsx", ".pptx", ".md", ".txt", ".csv", "file ", "document",
-            "report", "spreadsheet", "slides", "folder", "the file", "in the doc", "attachment",
-            "my document", "my report",
+            ".pdf",
+            ".docx",
+            ".xlsx",
+            ".pptx",
+            ".md",
+            ".txt",
+            ".csv",
+            "file ",
+            "document",
+            "report",
+            "spreadsheet",
+            "slides",
+            "folder",
+            "the file",
+            "in the doc",
+            "attachment",
+            "my document",
+            "my report",
         ],
     ) {
         return IntentKind::Document;
@@ -188,8 +266,16 @@ fn classify_kind(lower: &str) -> IntentKind {
 fn rewrite_query(query: &str) -> Option<String> {
     let lower = query.to_lowercase();
     let prefixes: &[&str] = &[
-        "please ", "could you ", "can you ", "would you ", "hey ", "hey, ", "hi ", "ok ",
-        "okay ", "so ",
+        "please ",
+        "could you ",
+        "can you ",
+        "would you ",
+        "hey ",
+        "hey, ",
+        "hi ",
+        "ok ",
+        "okay ",
+        "so ",
     ];
     for p in prefixes {
         if lower.starts_with(p) {

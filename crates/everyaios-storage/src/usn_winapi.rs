@@ -26,11 +26,11 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
-use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::{
     FSCTL_ENUM_USN_DATA, FSCTL_QUERY_USN_JOURNAL, FSCTL_READ_USN_JOURNAL, MFT_ENUM_DATA_V0,
     READ_USN_JOURNAL_DATA_V0, USN_JOURNAL_DATA_V0,
 };
+use windows_sys::Win32::System::IO::DeviceIoControl;
 
 use crate::usn::UsnRecord;
 use crate::usn_reader::{assemble_path, parse_record_stream, UsnRawRecord};
@@ -42,7 +42,11 @@ const BUFFER_BYTES: u32 = 64 * 1024;
 /// Open the volume (e.g. `C:\` or `\\.\C:`) with backup semantics so admin
 /// rights are not required to read the journal.
 fn open_volume(volume: &str) -> Result<HANDLE, String> {
-    let wide: Vec<u16> = Path::new(volume).as_os_str().encode_wide().chain(Some(0)).collect();
+    let wide: Vec<u16> = Path::new(volume)
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
     // SAFETY: CreateFileW with a NUL-terminated wide path; null security
     // attributes; no template file. FILE_FLAG_BACKUP_SEMANTICS lets us open
     // directories/volumes without admin rights.
@@ -58,7 +62,10 @@ fn open_volume(volume: &str) -> Result<HANDLE, String> {
         )
     };
     if h == INVALID_HANDLE_VALUE {
-        Err(format!("CreateFileW({volume}) failed: {}", std::io::Error::last_os_error()))
+        Err(format!(
+            "CreateFileW({volume}) failed: {}",
+            std::io::Error::last_os_error()
+        ))
     } else {
         Ok(h)
     }
@@ -82,7 +89,10 @@ fn query_journal(h: HANDLE) -> Result<USN_JOURNAL_DATA_V0, String> {
         )
     };
     if ok == 0 {
-        Err(format!("FSCTL_QUERY_USN_JOURNAL failed: {}", std::io::Error::last_os_error()))
+        Err(format!(
+            "FSCTL_QUERY_USN_JOURNAL failed: {}",
+            std::io::Error::last_os_error()
+        ))
     } else {
         Ok(data)
     }
@@ -122,7 +132,10 @@ fn read_journal_chunk(
         )
     };
     if ok == 0 {
-        return Err(format!("FSCTL_READ_USN_JOURNAL failed: {}", std::io::Error::last_os_error()));
+        return Err(format!(
+            "FSCTL_READ_USN_JOURNAL failed: {}",
+            std::io::Error::last_os_error()
+        ));
     }
     let (records, next_usn) = parse_record_stream(&buffer[..bytes as usize]);
     Ok((records, next_usn))
@@ -147,7 +160,10 @@ struct FrnIndex {
 
 impl FrnIndex {
     fn new(volume: &str) -> Self {
-        Self { volume: volume.trim_end_matches('\\').to_string(), ..Default::default() }
+        Self {
+            volume: volume.trim_end_matches('\\').to_string(),
+            ..Default::default()
+        }
     }
 
     /// Walk the MFT once (or from `start_frn`) to fill entries.
@@ -185,7 +201,8 @@ impl FrnIndex {
                 return Ok(()); // no progress → done
             }
             for rec in &records {
-                self.entry_by_frn.insert(rec.file_ref, (rec.name.clone(), rec.parent_ref));
+                self.entry_by_frn
+                    .insert(rec.file_ref, (rec.name.clone(), rec.parent_ref));
             }
             start = next_frn;
         }
@@ -222,7 +239,8 @@ impl FrnIndex {
             self.enumerate(h, 0)?;
         }
         for rec in records {
-            self.entry_by_frn.insert(rec.file_ref, (rec.name.clone(), rec.parent_ref));
+            self.entry_by_frn
+                .insert(rec.file_ref, (rec.name.clone(), rec.parent_ref));
         }
         Ok(())
     }
@@ -279,11 +297,18 @@ impl NtfsJournalReader {
         self.frn.learn(self.handle, &raws)?;
         let mut out = Vec::with_capacity(raws.len());
         for raw in raws {
-            let path = self.frn.path_of(raw.file_ref, &raw.name).unwrap_or_else(|| {
-                // Unresolvable parent chain — raw name at the volume root.
-                PathBuf::from(format!("{}\\{}", self.frn.volume, raw.name))
+            let path = self
+                .frn
+                .path_of(raw.file_ref, &raw.name)
+                .unwrap_or_else(|| {
+                    // Unresolvable parent chain — raw name at the volume root.
+                    PathBuf::from(format!("{}\\{}", self.frn.volume, raw.name))
+                });
+            out.push(UsnRecord {
+                usn: raw.usn,
+                reason: raw.reason,
+                path,
             });
-            out.push(UsnRecord { usn: raw.usn, reason: raw.reason, path });
         }
         Ok((out, next_usn))
     }

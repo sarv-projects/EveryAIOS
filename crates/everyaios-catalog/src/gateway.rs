@@ -72,7 +72,11 @@ struct RouteCache {
 
 impl RouteCache {
     fn new(capacity: usize) -> Self {
-        Self { capacity: capacity.max(1), order: VecDeque::new(), entries: Vec::new() }
+        Self {
+            capacity: capacity.max(1),
+            order: VecDeque::new(),
+            entries: Vec::new(),
+        }
     }
 
     fn get(&mut self, key: &RouteKey) -> Option<RouteResult> {
@@ -121,7 +125,11 @@ pub struct GatewayRouter {
 
 impl GatewayRouter {
     pub fn new(catalog: ModelCatalog, cache_capacity: usize) -> Self {
-        Self { catalog, cache: RouteCache::new(cache_capacity), stats: GatewayStats::default() }
+        Self {
+            catalog,
+            cache: RouteCache::new(cache_capacity),
+            stats: GatewayStats::default(),
+        }
     }
 
     pub fn stats(&self) -> &GatewayStats {
@@ -150,7 +158,10 @@ impl GatewayRouter {
         };
         if let Some(hit) = self.cache.get(&key) {
             self.stats.hits += 1;
-            return Ok(RouteResult { from_cache: true, ..hit });
+            return Ok(RouteResult {
+                from_cache: true,
+                ..hit
+            });
         }
         self.stats.misses += 1;
 
@@ -198,14 +209,22 @@ impl GatewayRouter {
         let mut out: Vec<&ModelEntry> = self.catalog.all().filter(|m| m.id == alias).collect();
         // Long-tail: entries whose base_model is the alias (doc 66 §1.1
         // override-only inheritance) are valid fallbacks for the family.
-        out.extend(self.catalog.all().filter(|m| m.base_model.as_deref() == Some(alias)));
+        out.extend(
+            self.catalog
+                .all()
+                .filter(|m| m.base_model.as_deref() == Some(alias)),
+        );
         out
     }
 
     /// Explicit route invalidation (alias set changed at runtime).
     pub fn invalidate(&mut self, alias: &str) {
-        self.cache.order.retain(|k| !k.alias.eq_ignore_ascii_case(alias));
-        self.cache.entries.retain(|(k, _)| !k.alias.eq_ignore_ascii_case(alias));
+        self.cache
+            .order
+            .retain(|k| !k.alias.eq_ignore_ascii_case(alias));
+        self.cache
+            .entries
+            .retain(|(k, _)| !k.alias.eq_ignore_ascii_case(alias));
     }
 }
 
@@ -262,7 +281,9 @@ mod tests {
     #[test]
     fn cheapest_capable_wins() {
         let mut router = GatewayRouter::new(sample_catalog(), 8);
-        let route = router.resolve("acme/cheap", TaskHint::Tools, false, false).unwrap();
+        let route = router
+            .resolve("acme/cheap", TaskHint::Tools, false, false)
+            .unwrap();
         assert_eq!(route.provider, "acme");
         assert_eq!(route.model, "cheap");
         assert!(!route.from_cache);
@@ -274,15 +295,18 @@ mod tests {
         // `acme/cheap-vision` rides the same family; resolve the alias
         // directly (it exists) — and the family fallback covers long-tail
         // aliases whose entries live only as base_model.
-        let route = router.resolve("acme/cheap-vision", TaskHint::Vision, false, true).unwrap();
+        let route = router
+            .resolve("acme/cheap-vision", TaskHint::Vision, false, true)
+            .unwrap();
         assert_eq!(route.model, "cheap-vision");
     }
 
     #[test]
     fn vision_requirement_rejects_visionless() {
         let mut router = GatewayRouter::new(sample_catalog(), 8);
-        let route =
-            router.resolve("acme/cheap", TaskHint::Vision, false, true).unwrap();
+        let route = router
+            .resolve("acme/cheap", TaskHint::Vision, false, true)
+            .unwrap();
         // cheap itself can't see images; the base_model override can.
         assert_eq!(route.model, "cheap-vision");
     }
@@ -290,9 +314,13 @@ mod tests {
     #[test]
     fn cache_hit_skips_resolution() {
         let mut router = GatewayRouter::new(sample_catalog(), 8);
-        let first = router.resolve("acme/cheap", TaskHint::Tools, false, false).unwrap();
+        let first = router
+            .resolve("acme/cheap", TaskHint::Tools, false, false)
+            .unwrap();
         assert!(!first.from_cache);
-        let second = router.resolve("acme/cheap", TaskHint::Tools, false, false).unwrap();
+        let second = router
+            .resolve("acme/cheap", TaskHint::Tools, false, false)
+            .unwrap();
         assert!(second.from_cache);
         let mut second_no_flag = second.clone();
         second_no_flag.from_cache = false;
@@ -304,7 +332,9 @@ mod tests {
     #[test]
     fn requirement_change_breaks_cache_key() {
         let mut router = GatewayRouter::new(sample_catalog(), 8);
-        let r1 = router.resolve("acme/cheap", TaskHint::Chat, false, false).unwrap();
+        let r1 = router
+            .resolve("acme/cheap", TaskHint::Chat, false, false)
+            .unwrap();
         let r2 = router.resolve("acme/cheap", TaskHint::Chat, true, false);
         assert!(!r2.unwrap().from_cache, "different filters must re-resolve");
         assert_eq!(router.stats().misses, 2);
@@ -314,15 +344,25 @@ mod tests {
     #[test]
     fn lru_eviction_and_invalidation() {
         let mut router = GatewayRouter::new(sample_catalog(), 2);
-        let _ = router.resolve("acme/cheap", TaskHint::Chat, false, false).unwrap();
-        let _ = router.resolve("acme/expensive", TaskHint::Chat, false, false).unwrap();
-        let _ = router.resolve("acme/visionless", TaskHint::Chat, false, false).unwrap();
+        let _ = router
+            .resolve("acme/cheap", TaskHint::Chat, false, false)
+            .unwrap();
+        let _ = router
+            .resolve("acme/expensive", TaskHint::Chat, false, false)
+            .unwrap();
+        let _ = router
+            .resolve("acme/visionless", TaskHint::Chat, false, false)
+            .unwrap();
         assert_eq!(router.cache_len(), 2); // cheapest evicted
-        let again = router.resolve("acme/cheap", TaskHint::Chat, false, false).unwrap();
+        let again = router
+            .resolve("acme/cheap", TaskHint::Chat, false, false)
+            .unwrap();
         assert!(!again.from_cache); // re-resolved after eviction
 
         router.invalidate("acme/expensive");
-        let again2 = router.resolve("acme/expensive", TaskHint::Chat, false, false).unwrap();
+        let again2 = router
+            .resolve("acme/expensive", TaskHint::Chat, false, false)
+            .unwrap();
         assert!(!again2.from_cache);
     }
 
@@ -330,7 +370,10 @@ mod tests {
     fn unknown_alias_is_rejected() {
         let mut router = GatewayRouter::new(sample_catalog(), 8);
         let err = router.resolve("acme/not-a-model", TaskHint::Chat, false, false);
-        assert_eq!(err, Err(GatewayError::NoCapableRoute("acme/not-a-model".into())));
+        assert_eq!(
+            err,
+            Err(GatewayError::NoCapableRoute("acme/not-a-model".into()))
+        );
         assert_eq!(router.stats().rejected, 0); // stats: rejections counted on requirement-fails only
     }
 }

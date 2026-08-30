@@ -60,7 +60,7 @@ pub fn mcp_catalog() -> McpCatalog {
 #[serde(rename_all = "camelCase")]
 pub struct McpServerRow {
     pub name: String,
-    pub status: String, // connected | disconnected
+    pub status: String,    // connected | disconnected
     pub transport: String, // stdio | http
     pub tools: usize,
     pub desc: String,
@@ -70,21 +70,19 @@ pub struct McpServerRow {
 /// (native, always connected) + user-attached stdio servers tracked in the
 /// shell. Replaces the hardcoded `MCP_SERVERS` rows in connectors-panel.tsx.
 #[tauri::command]
-pub fn mcp_servers(
-    state: tauri::State<'_, crate::AppState>,
-) -> Result<Vec<McpServerRow>, String> {
+pub fn mcp_servers(state: tauri::State<'_, crate::AppState>) -> Result<Vec<McpServerRow>, String> {
     let catalog = mcp_catalog();
     let mut rows = vec![McpServerRow {
         name: "EveryAIOS native (built-in)".into(),
         status: "connected".into(),
         transport: "native".into(),
         tools: catalog.total,
-        desc: format!("{} browser + {} storage tools", catalog.browser, catalog.storage),
+        desc: format!(
+            "{} browser + {} storage tools",
+            catalog.browser, catalog.storage
+        ),
     }];
-    let attached = state
-        .mcp_servers
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
     for (name, info) in attached.iter() {
         rows.push(McpServerRow {
             name: name.clone(),
@@ -164,16 +162,10 @@ pub fn mcp_attach(
     let desc = format!("user-supplied: {} {}", command, args.join(" "));
     // Keep the child alive for the session (the live map owns it; dropping
     // the map entry on shutdown kills the child).
-    let mut live = state
-        .mcp_live
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut live = state.mcp_live.lock().map_err(|e| e.to_string())?;
     live.insert(name.clone(), server);
     drop(live);
-    let mut attached = state
-        .mcp_servers
-        .lock()
-        .map_err(|e| e.to_string())?;
+    let mut attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
     attached.insert(
         name.clone(),
         McpServerRow {
@@ -241,10 +233,7 @@ pub fn mcp_connect_start(
         redirect_uri: redirect.clone(),
     };
     {
-        let mut flows = state
-            .mcp_remote_flows
-            .lock()
-            .map_err(|e| e.to_string())?;
+        let mut flows = state.mcp_remote_flows.lock().map_err(|e| e.to_string())?;
         flows.insert(store_id.clone(), flow_state);
     }
 
@@ -262,8 +251,9 @@ pub fn mcp_connect_start(
             let n = stream.read(&mut buf).unwrap_or(0);
             let req = String::from_utf8_lossy(&buf[..n]);
             let (code, st) = parse_callback(&req);
-            let body = if let (Some(code), Some(st)) = (code, st) {                        if st == flow_c.state {
-                            match everyaios_mcp::exchange_code(
+            let body = if let (Some(code), Some(st)) = (code, st) {
+                if st == flow_c.state {
+                    match everyaios_mcp::exchange_code(
                                 &target_c,
                                 &flow_c,
                                 &code,
@@ -360,8 +350,8 @@ pub fn mcp_remote_call(
     // per-instance; a fresh connect is the honest way to get a target.
     let http = everyaios_mcp::UreqTransport;
     let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
-    let resp = everyaios_mcp::rpc(&target, &token, &method, params, &http)
-        .map_err(|e| e.to_string())?;
+    let resp =
+        everyaios_mcp::rpc(&target, &token, &method, params, &http).map_err(|e| e.to_string())?;
     Ok(resp)
 }
 
@@ -399,9 +389,7 @@ pub fn mcp_remote_tools(
         .and_then(|t| t.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|t| {
-                    serde_json::from_value::<RemoteToolInfo>(t.clone()).ok()
-                })
+                .filter_map(|t| serde_json::from_value::<RemoteToolInfo>(t.clone()).ok())
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();

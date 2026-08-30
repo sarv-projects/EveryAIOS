@@ -32,16 +32,15 @@ pub use edit::{
     parse_verify, replace_body, safe_delete, DeleteVerdict, EditRegion, LspCapabilities,
     LspServerCatalog, LspServerEntry,
 };
+pub use graph::{GraphEdge, GraphSymbol, SymbolGraph, SymbolQueryResult};
 pub use graphify::{KnowledgeEdge, KnowledgeGraph, KnowledgeKind, KnowledgeNode};
-pub use graph::{
-    GraphEdge, GraphSymbol, SymbolGraph, SymbolQueryResult,
-};
 pub use lsp::{
     decode_messages, encode_message, CodeAction, Diagnostic, FramingError, Hover, HoverContents,
     InlayHint, Location, LspRequest, LspResponse, Position, Range, TextEdit, WorkspaceEdit,
 };
 pub use lsp_config::{DiagnosticBatch, DiagnosticsService, LspConfig, LspServerConfig};
 pub use lsp_runner::{LspRunner, LspRunnerError};
+pub use repo_cache::{map_hash, CachedRow, RepoMapCache};
 pub use repomap::{
     build_repo_map, build_repo_map_with, extract_tags, extract_tags_with, fit_budget, page_rank,
     rank_tags, CompositeTagSource, LexicalTagSource, RepoMap, Tag, TagKind, TagSource,
@@ -49,15 +48,14 @@ pub use repomap::{
 pub use scip::{
     parse_document, to_semantic_index, ScipDocument, ScipError, ScipOccurrence, ScipSymbol,
 };
-pub use semantic::{
-    OccurrenceRole, RelationKind, Relationship, SemanticIndex, Symbol, SymbolKind, SymbolOccurrence,
-};
-pub use repo_cache::{map_hash, CachedRow, RepoMapCache};
 pub use scip_watch::{
     build_index, find_scip_files, scan_dir, symbol_heat, ScipScanReport, ScipWatchState,
 };
+pub use semantic::{
+    OccurrenceRole, RelationKind, Relationship, SemanticIndex, Symbol, SymbolKind, SymbolOccurrence,
+};
 pub use session::{LspSession, LspSessionError, LspTransport, ProcessTransport};
 pub use warp::{
-    chunk_text, chunks_for, embed_sync, sync_changed, Chunk, ChunkMode, ChangedChunk, Embedder,
+    chunk_text, chunks_for, embed_sync, sync_changed, ChangedChunk, Chunk, ChunkMode, Embedder,
     FileState, WarpIndex,
 };

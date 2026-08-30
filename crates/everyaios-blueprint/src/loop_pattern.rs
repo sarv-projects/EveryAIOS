@@ -94,7 +94,8 @@ impl LoopPatternRegistry {
         Self::new(vec![
             LoopPattern {
                 id: "budget-guard".into(),
-                description: "Slow the loop before the budget runs out; interrupt on runaway cost.".into(),
+                description: "Slow the loop before the budget runs out; interrupt on runaway cost."
+                    .into(),
                 triggers: vec![Condition::BudgetUsedAbove { fraction: 0.8 }],
                 guards: vec![
                     Condition::CostPerEditAbove { usd: 0.02 },
@@ -104,7 +105,8 @@ impl LoopPatternRegistry {
             },
             LoopPattern {
                 id: "run-log".into(),
-                description: "Detect a repeating sequence and force divergence or escalation.".into(),
+                description: "Detect a repeating sequence and force divergence or escalation."
+                    .into(),
                 triggers: vec![Condition::RepeatsAbove { count: 3 }],
                 guards: vec![Condition::NoProgressFor { turns: 4 }],
                 exit_conditions: vec![
@@ -114,7 +116,8 @@ impl LoopPatternRegistry {
             },
             LoopPattern {
                 id: "early-exit".into(),
-                description: "Stop as soon as verification passes — never burn turns after done.".into(),
+                description: "Stop as soon as verification passes — never burn turns after done."
+                    .into(),
                 triggers: vec![Condition::VerifiedComplete],
                 guards: vec![],
                 exit_conditions: vec![Condition::VerifiedComplete],
@@ -128,20 +131,25 @@ impl LoopPatternRegistry {
 
     /// Patterns engaged by the snapshot, in registry order.
     pub fn engaged(&self, s: &LoopSnapshot) -> Vec<&LoopPattern> {
-        self.patterns.iter().filter(|p| p.triggers.iter().any(|c| c.holds(s))).collect()
+        self.patterns
+            .iter()
+            .filter(|p| p.triggers.iter().any(|c| c.holds(s)))
+            .collect()
     }
 
     /// The first violated guard across engaged patterns (the hard interrupt
     /// the loop must act on), if any.
     pub fn violated_guard(&self, s: &LoopSnapshot) -> Option<(&LoopPattern, Condition)> {
-        self.engaged(s).into_iter().find_map(|p| {
-            p.guards.iter().find(|c| c.holds(s)).map(|c| (p, *c))
-        })
+        self.engaged(s)
+            .into_iter()
+            .find_map(|p| p.guards.iter().find(|c| c.holds(s)).map(|c| (p, *c)))
     }
 
     /// Whether any engaged pattern says the loop may exit cleanly.
     pub fn may_exit(&self, s: &LoopSnapshot) -> bool {
-        self.engaged(s).iter().any(|p| p.exit_conditions.iter().any(|c| c.holds(s)))
+        self.engaged(s)
+            .iter()
+            .any(|p| p.exit_conditions.iter().any(|c| c.holds(s)))
     }
 }
 
@@ -157,7 +165,10 @@ mod tests {
     fn budget_guard_engages_at_threshold() {
         let reg = LoopPatternRegistry::builtin();
         assert!(reg.engaged(&snapshot()).is_empty());
-        let s = LoopSnapshot { budget_used: 0.85, ..snapshot() };
+        let s = LoopSnapshot {
+            budget_used: 0.85,
+            ..snapshot()
+        };
         let engaged = reg.engaged(&s);
         assert!(engaged.iter().any(|p| p.id == "budget-guard"));
     }
@@ -165,7 +176,11 @@ mod tests {
     #[test]
     fn run_log_trips_on_repeats_without_progress() {
         let reg = LoopPatternRegistry::builtin();
-        let s = LoopSnapshot { repeat_count: 4, turns_since_progress: 6, ..snapshot() };
+        let s = LoopSnapshot {
+            repeat_count: 4,
+            turns_since_progress: 6,
+            ..snapshot()
+        };
         let (p, _c) = reg.violated_guard(&s).unwrap();
         assert_eq!(p.id, "run-log");
     }
@@ -173,7 +188,10 @@ mod tests {
     #[test]
     fn early_exit_allows_clean_stop() {
         let reg = LoopPatternRegistry::builtin();
-        let s = LoopSnapshot { verified_complete: true, ..snapshot() };
+        let s = LoopSnapshot {
+            verified_complete: true,
+            ..snapshot()
+        };
         assert!(reg.may_exit(&s));
         assert!(!reg.may_exit(&snapshot()));
     }
@@ -182,7 +200,10 @@ mod tests {
     fn guards_do_not_fire_before_trigger() {
         let reg = LoopPatternRegistry::builtin();
         // Cost over cap but budget untouched — no pattern engaged, no interrupt.
-        let s = LoopSnapshot { cost_per_edit_usd: 0.5, ..snapshot() };
+        let s = LoopSnapshot {
+            cost_per_edit_usd: 0.5,
+            ..snapshot()
+        };
         assert!(reg.engaged(&s).is_empty());
         assert!(reg.violated_guard(&s).is_none());
     }

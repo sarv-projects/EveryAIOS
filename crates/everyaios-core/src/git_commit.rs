@@ -56,7 +56,9 @@ where
     F: FnOnce() -> bool,
 {
     if files.is_empty() {
-        return Err(CommitError::VerificationFailed("no edited files listed".into()));
+        return Err(CommitError::VerificationFailed(
+            "no edited files listed".into(),
+        ));
     }
     if !verify() {
         return Err(CommitError::VerificationFailed(

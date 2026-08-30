@@ -54,7 +54,9 @@ impl ContextPassport {
     /// workspace matches. Fail-closed: unknown workspace or disallowed agent
     /// → refused, never silently widened.
     pub fn honors(&self, agent: &str, workspace: &str) -> bool {
-        if !self.scope.allowed_agents.is_empty() && !self.scope.allowed_agents.iter().any(|a| a == agent) {
+        if !self.scope.allowed_agents.is_empty()
+            && !self.scope.allowed_agents.iter().any(|a| a == agent)
+        {
             return false;
         }
         if !self.scope.workspace.is_empty() && self.scope.workspace != workspace {
@@ -78,7 +80,11 @@ impl ContextPassport {
         let mut out = format!(
             "# Context passport {}\nworkspace: {} · agent: {}\n",
             self.id,
-            if self.scope.workspace.is_empty() { "(global)" } else { &self.scope.workspace },
+            if self.scope.workspace.is_empty() {
+                "(global)"
+            } else {
+                &self.scope.workspace
+            },
             agent,
         );
         if self.honors(agent, workspace) {
@@ -115,7 +121,14 @@ mod tests {
             entries: vec![PassportEntry {
                 label: "config".into(),
                 kind: "file".into(),
-                handle: make_ref_handle("config.json", "config.json", RefKind::File, "{\"k\":\"v\"}", 11, None),
+                handle: make_ref_handle(
+                    "config.json",
+                    "config.json",
+                    RefKind::File,
+                    "{\"k\":\"v\"}",
+                    11,
+                    None,
+                ),
                 graph_node: "n1".into(),
                 symbol: "Config".into(),
             }],

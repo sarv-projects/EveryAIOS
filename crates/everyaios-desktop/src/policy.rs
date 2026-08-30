@@ -39,33 +39,62 @@ impl ConfirmClass {
         let k = key.map(|s| s.to_ascii_lowercase()).unwrap_or_default();
         let hay = format!("{t} {k}");
         // Hard safety first: nothing below can override these.
-        if ["delete", "remove", "uninstall", "format", "erase", "overwrite", "trash", "purge"]
-            .iter()
-            .any(|w| hay.contains(w))
+        if [
+            "delete",
+            "remove",
+            "uninstall",
+            "format",
+            "erase",
+            "overwrite",
+            "trash",
+            "purge",
+        ]
+        .iter()
+        .any(|w| hay.contains(w))
         {
             return ConfirmClass::Delete;
         }
-        if ["buy", "purchase", "checkout", "pay", "payment", "transfer", "send money", "$", "price", "checkout"]
-            .iter()
-            .any(|w| hay.contains(w))
+        if [
+            "buy",
+            "purchase",
+            "checkout",
+            "pay",
+            "payment",
+            "transfer",
+            "send money",
+            "$",
+            "price",
+            "checkout",
+        ]
+        .iter()
+        .any(|w| hay.contains(w))
         {
             return ConfirmClass::Money;
         }
-        if ["install", "setup", "update", "upgrade", "elevate", "sudo", "admin"]
-            .iter()
-            .any(|w| hay.contains(w))
+        if [
+            "install", "setup", "update", "upgrade", "elevate", "sudo", "admin",
+        ]
+        .iter()
+        .any(|w| hay.contains(w))
         {
             return ConfirmClass::Install;
         }
-        if ["captcha", "verify you are human", "i am not a robot", "challenge"]
-            .iter()
-            .any(|w| hay.contains(w))
+        if [
+            "captcha",
+            "verify you are human",
+            "i am not a robot",
+            "challenge",
+        ]
+        .iter()
+        .any(|w| hay.contains(w))
         {
             return ConfirmClass::Captcha;
         }
-        if ["send", "submit", "post", "upload", "share", "email", "publish", "transfer", "export"]
-            .iter()
-            .any(|w| hay.contains(w))
+        if [
+            "send", "submit", "post", "upload", "share", "email", "publish", "transfer", "export",
+        ]
+        .iter()
+        .any(|w| hay.contains(w))
         {
             return ConfirmClass::Transmit;
         }
@@ -95,7 +124,15 @@ const HARD_DENY_APP: &[&str] = &[
 const EVERYAIOS_APP_NAMES: &[&str] = &["everyaios", "everyaios desktop"];
 
 /// Keys that are never synthesised (Win-key, lock, UAC combos…).
-const HARD_DENY_KEY: &[&str] = &["super", "super_l", "super_r", "win", "ctrl+alt+del", "lock", "print"];
+const HARD_DENY_KEY: &[&str] = &[
+    "super",
+    "super_l",
+    "super_r",
+    "win",
+    "ctrl+alt+del",
+    "lock",
+    "print",
+];
 
 /// Confirm classes that always need a human before execution.
 const ALWAYS_CONFIRM: &[ConfirmClass] = &[
@@ -188,10 +225,7 @@ impl AppPolicy {
     /// lock screen / EveryAIOS itself, regardless of the allow-list.
     pub fn hard_deny(app: &str, key: Option<&str>) -> Option<String> {
         let app = app.to_ascii_lowercase();
-        if HARD_DENY_APP
-            .iter()
-            .any(|h| app.contains(h))
-        {
+        if HARD_DENY_APP.iter().any(|h| app.contains(h)) {
             return Some(format!("app \"{app}\" is on the hard-deny list"));
         }
         if EVERYAIOS_APP_NAMES.iter().any(|e| app.contains(e)) {
@@ -207,7 +241,12 @@ impl AppPolicy {
     }
 
     /// Classify one action against policy → the gate decision to surface.
-    pub fn evaluate(&self, app: &str, act: &ActKind, key: Option<&str>) -> Result<GateDecision, String> {
+    pub fn evaluate(
+        &self,
+        app: &str,
+        act: &ActKind,
+        key: Option<&str>,
+    ) -> Result<GateDecision, String> {
         if let Some(reason) = Self::hard_deny(app, key) {
             return Err(reason);
         }
@@ -335,11 +374,16 @@ impl DesktopGuard {
 
     /// Full pre-action gate: kill switch → rate limit → policy → human gate →
     /// audit. Returns the decision; on Allow the caller executes.
-    pub fn preflight(&self, app: &str, act: &ActKind, key: Option<&str>) -> Result<GateDecision, String> {
+    pub fn preflight(
+        &self,
+        app: &str,
+        act: &ActKind,
+        key: Option<&str>,
+    ) -> Result<GateDecision, String> {
         self.kill.check()?;
-        self.limiter.allow().map_err(|retry_after| {
-            format!("rate limit: retry in {:?}", retry_after)
-        })?;
+        self.limiter
+            .allow()
+            .map_err(|retry_after| format!("rate limit: retry in {:?}", retry_after))?;
         let decision = self.policy.evaluate(app, act, key)?;
         let final_decision = match decision {
             GateDecision::Confirm(class) => self.gate.request(act, class),
@@ -392,12 +436,27 @@ mod tests {
 
     #[test]
     fn taxonomy_classifies_risky_targets() {
-        assert_eq!(ConfirmClass::classify("Delete file", None), ConfirmClass::Delete);
+        assert_eq!(
+            ConfirmClass::classify("Delete file", None),
+            ConfirmClass::Delete
+        );
         assert_eq!(ConfirmClass::classify("Buy now", None), ConfirmClass::Money);
-        assert_eq!(ConfirmClass::classify("Install package", None), ConfirmClass::Install);
-        assert_eq!(ConfirmClass::classify("I am not a robot", None), ConfirmClass::Captcha);
-        assert_eq!(ConfirmClass::classify("Send email", None), ConfirmClass::Transmit);
-        assert_eq!(ConfirmClass::classify("Save document", None), ConfirmClass::Routine);
+        assert_eq!(
+            ConfirmClass::classify("Install package", None),
+            ConfirmClass::Install
+        );
+        assert_eq!(
+            ConfirmClass::classify("I am not a robot", None),
+            ConfirmClass::Captcha
+        );
+        assert_eq!(
+            ConfirmClass::classify("Send email", None),
+            ConfirmClass::Transmit
+        );
+        assert_eq!(
+            ConfirmClass::classify("Save document", None),
+            ConfirmClass::Routine
+        );
     }
 
     #[test]
@@ -502,9 +561,13 @@ mod tests {
     fn kill_switch_fails_closed() {
         let g = gate_allow();
         g.kill.stop();
-        assert!(g.preflight("notepad", &ActKind::Click { x: 1, y: 1 }, None).is_err());
+        assert!(g
+            .preflight("notepad", &ActKind::Click { x: 1, y: 1 }, None)
+            .is_err());
         g.kill.resume();
-        assert!(g.preflight("notepad", &ActKind::Click { x: 1, y: 1 }, None).is_ok());
+        assert!(g
+            .preflight("notepad", &ActKind::Click { x: 1, y: 1 }, None)
+            .is_ok());
     }
 
     #[test]
@@ -521,7 +584,13 @@ mod tests {
     fn hard_deny_evaluates_to_error_not_confirm() {
         let g = gate_allow();
         let err = g
-            .preflight("Windows Terminal", &ActKind::Type { text: "rm -rf /".into() }, None)
+            .preflight(
+                "Windows Terminal",
+                &ActKind::Type {
+                    text: "rm -rf /".into(),
+                },
+                None,
+            )
             .unwrap_err();
         assert!(err.contains("hard-deny"));
     }

@@ -74,7 +74,12 @@ pub fn compile_report(memo: &MemoInput, format: ReportFormat) -> StructuredRepor
             body: p.to_string(),
         });
     }
-    StructuredReport { title, format, sections, had_content: true }
+    StructuredReport {
+        title,
+        format,
+        sections,
+        had_content: true,
+    }
 }
 
 /// Render the report in its format's shell (markdown/email are text;
@@ -130,7 +135,13 @@ mod tests {
 
     #[test]
     fn empty_memo_reports_gap() {
-        let r = compile_report(&MemoInput { audio_ref: "a.wav".into(), transcript: "".into() }, ReportFormat::Markdown);
+        let r = compile_report(
+            &MemoInput {
+                audio_ref: "a.wav".into(),
+                transcript: "".into(),
+            },
+            ReportFormat::Markdown,
+        );
         assert!(!r.had_content);
         assert!(r.sections.is_empty());
     }
@@ -139,7 +150,9 @@ mod tests {
     fn transcript_becomes_structured_report() {
         let memo = MemoInput {
             audio_ref: "memo1.wav".into(),
-            transcript: "Weekly status update.\n\nShipped the parser fix.\n\nNext: wire the connector.".into(),
+            transcript:
+                "Weekly status update.\n\nShipped the parser fix.\n\nNext: wire the connector."
+                    .into(),
         };
         let r = compile_report(&memo, ReportFormat::Markdown);
         assert!(r.had_content);
@@ -152,14 +165,20 @@ mod tests {
 
     #[test]
     fn email_format_uses_subject() {
-        let memo = MemoInput { audio_ref: String::new(), transcript: "Quick note.\n\nAll good." .into() };
+        let memo = MemoInput {
+            audio_ref: String::new(),
+            transcript: "Quick note.\n\nAll good.".into(),
+        };
         let r = compile_report(&memo, ReportFormat::Email);
         assert!(render(&r).starts_with("Subject: Quick Note"));
     }
 
     #[test]
     fn deterministic() {
-        let memo = MemoInput { audio_ref: "x".into(), transcript: "One.\n\nTwo." .into() };
+        let memo = MemoInput {
+            audio_ref: "x".into(),
+            transcript: "One.\n\nTwo.".into(),
+        };
         let a = compile_report(&memo, ReportFormat::Markdown);
         let b = compile_report(&memo, ReportFormat::Markdown);
         assert_eq!(a, b);

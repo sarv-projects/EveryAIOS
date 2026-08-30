@@ -7,8 +7,8 @@
 //! audit row, (c) page-creations claimed — scripts cannot bypass the audit
 //! trail or touch foreign tabs.
 
-mod sandbox;
 pub mod artifact;
+mod sandbox;
 pub mod selfheal;
 
 use serde::{Deserialize, Serialize};

@@ -62,7 +62,10 @@ fn bench_cold_start_boot_path() {
     let _ = relay.guard();
     let elapsed = start.elapsed();
     eprintln!("[bench] cold-start boot path: {elapsed:?}");
-    assert!(elapsed < Duration::from_secs(2), "cold start exceeded 2s: {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "cold start exceeded 2s: {elapsed:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +89,9 @@ fn bench_idle_rss_published() {
 fn bench_warm_rss_published() {
     // Do real work so the process has warm allocations, then measure.
     let mut mem = MemoryService::new();
-    let facts: Vec<String> = (0..5_000).map(|i| format!("fact number {i} about topic alpha")).collect();
+    let facts: Vec<String> = (0..5_000)
+        .map(|i| format!("fact number {i} about topic alpha"))
+        .collect();
     mem.write("warm", &facts);
     let _ = mem.read("alpha", 10);
     let _ = mem.consolidate();
@@ -110,7 +115,8 @@ fn bench_ipc_roundtrip_latency() {
     let mut server = b;
     let client = std::thread::spawn(move || {
         let mut s = a;
-        let payload = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "ping", "params": {} });
+        let payload =
+            serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "ping", "params": {} });
         let bytes = serde_json::to_vec(&payload).unwrap();
         let n = 1_000;
         let start = Instant::now();
@@ -197,7 +203,10 @@ fn bench_browser_snapshot_tree_build() {
     let elapsed = start.elapsed();
     eprintln!("[bench] browser snapshot (5,000 nodes): {elapsed:?}");
     let _ = root;
-    assert!(elapsed < Duration::from_millis(500), "snapshot exceeded 500ms: {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_millis(500),
+        "snapshot exceeded 500ms: {elapsed:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -214,9 +223,15 @@ fn bench_memory_retrieval_10k_facts() {
     let start = Instant::now();
     let hits = mem.read("paris", 10);
     let elapsed = start.elapsed();
-    eprintln!("[bench] memory retrieval over 10K facts: {elapsed:?} ({} hits)", hits.len());
+    eprintln!(
+        "[bench] memory retrieval over 10K facts: {elapsed:?} ({} hits)",
+        hits.len()
+    );
     assert!(!hits.is_empty());
-    assert!(elapsed < Duration::from_millis(100), "retrieval exceeded 100ms: {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_millis(100),
+        "retrieval exceeded 100ms: {elapsed:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +260,10 @@ fn bench_fts5_query_100k_chunks() {
         hits.len()
     );
     assert!(!hits.is_empty());
-    assert!(elapsed < Duration::from_secs(1), "FTS5 query regression: {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(1),
+        "FTS5 query regression: {elapsed:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -267,8 +285,14 @@ fn bench_compaction_200k_tokens() {
     let start = Instant::now();
     let action = c.maybe_compact(&turn, no_summarizers);
     let elapsed = start.elapsed();
-    eprintln!("[bench] compaction of 200K-token context: {elapsed:?} (decided: {:?})", action.as_ref().map(|a| a.1.clone()));
-    assert!(elapsed < Duration::from_secs(3), "compaction exceeded 3s: {elapsed:?}");
+    eprintln!(
+        "[bench] compaction of 200K-token context: {elapsed:?} (decided: {:?})",
+        action.as_ref().map(|a| a.1.clone())
+    );
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "compaction exceeded 3s: {elapsed:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -319,7 +343,10 @@ fn stress_50_concurrent_tool_calls() {
     }
     let elapsed = start.elapsed();
     eprintln!("[bench] 50 concurrent tool calls: {elapsed:?}");
-    assert!(elapsed < Duration::from_secs(30), "50 concurrent calls took too long: {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(30),
+        "50 concurrent calls took too long: {elapsed:?}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -356,7 +383,10 @@ fn stress_ten_tabs_three_agents_ownership_isolation() {
         let tab = format!("tab-{i}");
         let owner = agents[(i as usize) % 3];
         let other = agents[((i as usize) + 1) % 3];
-        assert!(registry.can_close(&tab, owner).is_ok(), "{tab} closable by its owner");
+        assert!(
+            registry.can_close(&tab, owner).is_ok(),
+            "{tab} closable by its owner"
+        );
         assert!(
             registry.can_close(&tab, other).is_err(),
             "{tab} must NOT be closable by a non-owner agent"
@@ -389,7 +419,9 @@ fn stress_hundred_scheduled_tasks() {
     for id in &due {
         let lease = sched.lease_start(id, 1_700_000_060).unwrap();
         let fence = lease["fence"].as_str().unwrap().to_string();
-        sched.lease_finish(id, true, 1_700_000_060, Some(&fence)).unwrap();
+        sched
+            .lease_finish(id, true, 1_700_000_060, Some(&fence))
+            .unwrap();
     }
     let elapsed = start.elapsed();
     eprintln!("[bench] 100 scheduled tasks fired: {elapsed:?}");
@@ -414,18 +446,31 @@ fn stress_heap_30min_stays_under_512mb() {
     }
     let mut mem = MemoryService::new();
     let mut sched = SchedulerService::new();
-    sched.upsert("job", "t", "s", TriggerSpec::Interval { secs: 5 }, vec![], Some(SchedulePolicy::default()), 0);
+    sched.upsert(
+        "job",
+        "t",
+        "s",
+        TriggerSpec::Interval { secs: 5 },
+        vec![],
+        Some(SchedulePolicy::default()),
+        0,
+    );
     let deadline = Instant::now() + Duration::from_secs(30 * 60);
     let mut iterations = 0u64;
     while Instant::now() < deadline {
-        let facts: Vec<String> = (0..100).map(|i| format!("iter {iterations} fact {i}")).collect();
+        let facts: Vec<String> = (0..100)
+            .map(|i| format!("iter {iterations} fact {i}"))
+            .collect();
         mem.write("heap", &facts);
         let _ = mem.read("iter", 5);
         let _ = sched.due(iterations);
         iterations += 1;
         if iterations % 1_000 == 0 {
             if let Some(mb) = rss_mb() {
-                assert!(mb < 512.0, "heap exceeded 512MB at iter {iterations}: {mb:.1} MB");
+                assert!(
+                    mb < 512.0,
+                    "heap exceeded 512MB at iter {iterations}: {mb:.1} MB"
+                );
             }
         }
     }
@@ -474,7 +519,9 @@ fn battery_drain_1hr_active() {
             let pct = (a0.saturating_sub(a1)) as f64 / full as f64 * 100.0;
             eprintln!("[bench] battery drain after 1hr active: {pct:.2}% ({spins} spins)");
         }
-        None => eprintln!("[bench] battery drain: no battery present — measurement skipped honestly"),
+        None => {
+            eprintln!("[bench] battery drain: no battery present — measurement skipped honestly")
+        }
     }
 }
 
@@ -495,10 +542,20 @@ fn stability_4hr_no_leak_no_corruption() {
     };
     let mut mem = MemoryService::new();
     let mut sched = SchedulerService::new();
-    sched.upsert("job", "t", "s", TriggerSpec::Interval { secs: 1 }, vec![], Some(SchedulePolicy::default()), 0);
+    sched.upsert(
+        "job",
+        "t",
+        "s",
+        TriggerSpec::Interval { secs: 1 },
+        vec![],
+        Some(SchedulePolicy::default()),
+        0,
+    );
     let mut iterations = 0u64;
     while Instant::now() < deadline {
-        let facts: Vec<String> = (0..50).map(|i| format!("stable {iterations} {i}")).collect();
+        let facts: Vec<String> = (0..50)
+            .map(|i| format!("stable {iterations} {i}"))
+            .collect();
         mem.write("stable", &facts);
         let _ = mem.read("stable", 5);
         let _ = sched.due(iterations);

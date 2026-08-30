@@ -37,8 +37,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId,
-    IsWindowVisible, SetCursorPos, SetForegroundWindow,
-    ShowWindow, SW_RESTORE,
+    IsWindowVisible, SetCursorPos, SetForegroundWindow, ShowWindow, SW_RESTORE,
 };
 
 use crate::types::{ActKind, ReadNode, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
@@ -77,13 +76,20 @@ unsafe fn element_to_node(
         return None;
     }
     *budget -= 1;
-    let name = element.CurrentName().map(|b| b.to_string()).unwrap_or_default();
+    let name = element
+        .CurrentName()
+        .map(|b| b.to_string())
+        .unwrap_or_default();
     let role = control_type_name(element.CurrentControlType().map(|c| c.0).unwrap_or(0));
     let automation_id = element
         .CurrentAutomationId()
         .map(|b| {
             let s = b.to_string();
-            if s.is_empty() { None } else { Some(s) }
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
         })
         .unwrap_or(None);
     let mut rect: RECT = std::mem::zeroed();
@@ -109,9 +115,13 @@ unsafe fn element_to_node(
     };
     let mut i = 0usize;
     while !child.as_raw().is_null() && *budget > 0 {
-        if let Some(child_node) =
-            element_to_node(walker, &child, &format!("{path}.{}", i + 1), depth + 1, budget)
-        {
+        if let Some(child_node) = element_to_node(
+            walker,
+            &child,
+            &format!("{path}.{}", i + 1),
+            depth + 1,
+            budget,
+        ) {
             node.children.push(child_node);
         }
         i += 1;
@@ -170,8 +180,7 @@ impl WinUia {
 
     pub fn send_click(&self, x: i32, y: i32) -> Result<(), DesktopError> {
         unsafe {
-            SetCursorPos(x, y)
-                .map_err(|e| DesktopError::Platform(format!("SetCursorPos: {e}")))?;
+            SetCursorPos(x, y).map_err(|e| DesktopError::Platform(format!("SetCursorPos: {e}")))?;
             mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
         }
@@ -303,7 +312,11 @@ unsafe fn capture_screen_dc(hwnd: HWND, width: u32, height: u32) -> Option<Vec<u
 unsafe fn dib_to_png(dc: HDC, width: u32, height: u32) -> Option<Vec<u8>> {
     let mut bm: BITMAP = BITMAP::default();
     let bmp = GetCurrentObject(dc, OBJ_BITMAP);
-    GetObjectW(bmp, std::mem::size_of::<BITMAP>() as i32, Some(&mut bm as *mut _ as *mut _));
+    GetObjectW(
+        bmp,
+        std::mem::size_of::<BITMAP>() as i32,
+        Some(&mut bm as *mut _ as *mut _),
+    );
     let mut info: BITMAPINFO = BITMAPINFO::default();
     info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
     info.bmiHeader.biWidth = width as i32;
@@ -357,7 +370,11 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     };
     let mut pid = 0u32;
     GetWindowThreadProcessId(hwnd, Some(&mut pid));
-    let app = if pid > 0 { class_name } else { "unknown".into() };
+    let app = if pid > 0 {
+        class_name
+    } else {
+        "unknown".into()
+    };
     let mut rect: RECT = std::mem::zeroed();
     let _ = GetWindowRect(hwnd, &mut rect);
     out.push(WindowInfo {
@@ -473,7 +490,9 @@ pub fn act(window: &WindowInfo, act: &ActKind, uia: Option<&WinUia>) -> Result<(
                         unsafe {
                             value_pattern
                                 .SetValue(&windows::core::BSTR::from(value.as_str()))
-                                .map_err(|e| DesktopError::Platform(format!("UIA SetValue: {e}")))?;
+                                .map_err(|e| {
+                                    DesktopError::Platform(format!("UIA SetValue: {e}"))
+                                })?;
                         }
                         return Ok(());
                     }
@@ -537,7 +556,10 @@ pub fn act(window: &WindowInfo, act: &ActKind, uia: Option<&WinUia>) -> Result<(
         },
         ActKind::ActivateWindow { window_id } => unsafe {
             let _ = SetForegroundWindow(HWND(*window_id as usize as *mut core::ffi::c_void));
-            let _ = ShowWindow(HWND(*window_id as usize as *mut core::ffi::c_void), SW_RESTORE);
+            let _ = ShowWindow(
+                HWND(*window_id as usize as *mut core::ffi::c_void),
+                SW_RESTORE,
+            );
             Ok(())
         },
         ActKind::LaunchApp { app } => {

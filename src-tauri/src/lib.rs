@@ -11,28 +11,31 @@ use std::sync::{Arc, Mutex};
 
 mod acp_cmds;
 mod agent_cmds;
+mod boot;
 mod browser_cmds;
 mod catalog_cmds;
 mod cockpit_cmds;
 mod codeintel_cmds;
+mod commands;
 mod control;
 mod desktop_cmds;
+mod feedback_cmds;
 mod fs_cmds;
 mod git_cmds;
-mod feedback_cmds;
 mod guard_cmds;
 mod guard_window;
+mod local_cmds;
 mod lsp_cmds;
 mod maintenance_cmds;
-mod memory_cmds;
-mod local_cmds;
 mod mcp_cmds;
-mod skills_cmds;
+mod memory_cmds;
 mod oauth_cmds;
 mod office_cmds;
 mod replay_cmds;
 mod scheduler_cmds;
 mod shell_cmds;
+mod skills_cmds;
+mod state;
 mod storage_cmds;
 mod sync_cmds;
 mod tasks_cmds;
@@ -40,66 +43,14 @@ mod trajectory_cmds;
 mod updater_cmds;
 mod vault_cmds;
 
+pub use state::AppState;
+
 use everyaios_core::GuardService;
-use everyaios_guard::prescan::{guard as compiled_guard, Guard};
+use everyaios_guard::prescan::guard as compiled_guard;
 use everyaios_vault::Vault;
 
 pub mod xlsx_cmds;
 use tauri::{AppHandle, Emitter, Manager, State};
-
-pub struct AppState {
-    /// P0.2: the boot report line from `everyaios-core::boot`.
-    pub boot_report: Mutex<String>,
-    /// P0.2: an initialized Guard-1 scanner (stub blocklist until P7.4).
-    pub guard: Guard,
-    /// The encrypted vault (opened at boot; shared with the chat relay).
-    pub vault: Arc<Mutex<Vault>>,
-    /// P1.4: the chat relay over the coordinator link. `None` until the
-    /// supervisor hands the sidecar's stdio pipes to a `SidecarLink` (the
-    /// integration seam — the relay + protocol are fully built + tested).
-    pub chat_relay:
-        Mutex<Option<everyaios_core::ChatRelay<ChildStdin, ChildStdout>>>,
-    /// P3.1: the replay store base dir (replays/ + screenshots/ + index).
-    pub replay_dir: PathBuf,
-    /// P3.2: the cockpit / ambient flight-deck live state (agent cards,
-    /// interrupts, quiet flag) — fed by the coordinator via the feed seams,
-    /// polled by the UI.
-    pub cockpit: Arc<Mutex<everyaios_audit::cockpit::CockpitState>>,
-    /// P7.5/J21 (Guard-2): the shared pre-flight service (tickets + policy +
-    /// estop + profile) — minted by the coordinator over `guard/*`, rendered
-    /// + approved/rejected by the cards here, consumed by the executor.
-    pub guard_service: Arc<Mutex<GuardService>>,
-    /// F12/J17 (ACP harness bridge): live ACP agent sessions keyed by handle
-    /// id — spawned via `acp_launch`, driven via `acp_prompt`/`acp_cancel`.
-    pub(crate) acp_sessions: Mutex<std::collections::HashMap<String, acp_cmds::AcpHandle>>,
-    /// H4: Merkle chain of mutations (Excel / ACP-install / undo).
-    pub audit: Mutex<everyaios_audit::merkle::MerkleChain>,
-    /// Durable NDJSON audit log (best-effort; None if the file couldn't open).
-    pub audit_log: Mutex<Option<everyaios_audit::AuditWriter>>,
-    /// File snapshots for agent undo (xlsx + other shell mutations).
-    pub file_undos: Mutex<Vec<control::FileUndo>>,
-    /// J16: whether the device is on battery (heavy storage scans defer).
-    pub battery: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// P11.5.3: the live CDP browser session for the browse view (None until
-    /// `browser_start`). Dropping it kills the Chrome child.
-    pub browser: Mutex<Option<browser_cmds::LiveBrowser>>,
-    /// P11.5.3: live shell processes keyed by session id (shell view).
-    pub shells: Mutex<std::collections::HashMap<String, shell_cmds::ShellHandle>>,
-    /// P11.5.8: attached user-supplied MCP servers (rows for the Connectors
-    /// panel) + the live child handles (dropping the map kills the child).
-    pub mcp_servers: Mutex<std::collections::HashMap<String, mcp_cmds::McpServerRow>>,
-    pub mcp_live: Mutex<std::collections::HashMap<String, everyaios_mcp::attach::AttachedServer>>,
-    /// Remote-MCP OAuth 2.1: in-flight PKCE flows (store id → flow) and
-    /// connected tokens (store id → bearer). Live in the shell, not the
-    /// renderer — the coordinator never sees them.
-    pub mcp_remote_flows:
-        Arc<Mutex<std::collections::HashMap<String, mcp_cmds::RemoteFlowState>>>,
-    pub mcp_remote_tokens: Arc<Mutex<std::collections::HashMap<String, String>>>,
-    /// P48.3 (E9): the lazily-attached native desktop engine (None until first
-    /// use; honest-fail on headless / no display). Engine + audit bridge live
-    /// here — never in the renderer or the coordinator.
-    pub desktop: Mutex<desktop_cmds::DesktopSlot>,
-}
 
 /// Monotonic stream-id source for `chat_stream` calls.
 static STREAM_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -185,9 +136,7 @@ fn connect_chat_relay(
     if let Some(ep) = mgr.endpoint_for("ollama") {
         relay.with_local("ollama", ep);
     }
-    if mgr.find_llamafile(&cfg.data_dir).is_some()
-        || std::env::var("EVERYAIOS_LLAMAFILE").is_ok()
-    {
+    if mgr.find_llamafile(&cfg.data_dir).is_some() || std::env::var("EVERYAIOS_LLAMAFILE").is_ok() {
         if let Some(ep) = mgr.endpoint_for("llamafile") {
             relay.with_local("llamafile", ep);
         }
@@ -196,14 +145,16 @@ fn connect_chat_relay(
     // task ledger wakes the UI via a `task-update` event (never polling).
     {
         let h = app.clone();
-        relay.tasks().lock().unwrap_or_else(|e| e.into_inner()).watch(Box::new(
-            move |record: &everyaios_core::TaskRecord| {
+        relay
+            .tasks()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .watch(Box::new(move |record: &everyaios_core::TaskRecord| {
                 let _ = h.emit(
                     "task-update",
                     serde_json::to_value(record).unwrap_or_else(|_| serde_json::json!({})),
                 );
-            },
-        ));
+            }));
     }
     relay.spawn();
     *state.chat_relay.lock().expect("chat_relay poisoned") = Some(relay);
@@ -230,6 +181,11 @@ fn scan_text(state: State<'_, AppState>, text: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+// `chat_stream` is the IPC boundary: Tauri matches each argument BY NAME against
+// the renderer's invoke (see ui/src/lib/tauri.ts). Folding the ten optionals into
+// a single struct would flatten the contract and force a rename. The wide
+// signature is intrinsic to a Tauri command, so suppress the lint deliberately.
+#[allow(clippy::too_many_arguments)]
 fn chat_stream(
     state: State<'_, AppState>,
     session_id: String,
@@ -305,12 +261,18 @@ fn plan_execute(
 /// Stage-0 (P6.3): forward the user's MCQ card choice back to the coordinator's
 /// plan executor (which is waiting on that circuit-break interrupt).
 #[tauri::command]
-fn plan_respond(state: State<'_, AppState>, break_id: String, choice: String) -> Result<(), String> {
+fn plan_respond(
+    state: State<'_, AppState>,
+    break_id: String,
+    choice: String,
+) -> Result<(), String> {
     let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
     let relay = relay
         .as_ref()
         .ok_or_else(|| "sidecar not connected".to_string())?;
-    relay.respond_plan(&break_id, &choice).map_err(|e| e.to_string())
+    relay
+        .respond_plan(&break_id, &choice)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -330,7 +292,9 @@ fn usage_snapshot(state: State<'_, AppState>) -> Result<serde_json::Value, Strin
 /// P5.9 — per-session cost/token breakdown (the durable `token_usage` ledger,
 /// grouped by session). Feeds the analytics cost table.
 #[tauri::command]
-fn session_totals(state: State<'_, AppState>) -> Result<Vec<everyaios_vault::SessionTotal>, String> {
+fn session_totals(
+    state: State<'_, AppState>,
+) -> Result<Vec<everyaios_vault::SessionTotal>, String> {
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
     vault.session_totals().map_err(|e| e.to_string())
 }
@@ -360,13 +324,7 @@ fn chat_tool_retry(
         .as_ref()
         .ok_or_else(|| "sidecar not connected".to_string())?;
     relay
-        .retry_tool(
-            &session_id,
-            &stream_id,
-            &tool_id,
-            args,
-            agent_id.as_deref(),
-        )
+        .retry_tool(&session_id, &stream_id, &tool_id, args, agent_id.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -415,12 +373,13 @@ fn reopen_disk_vault(state: &AppState, key: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn vault_setup(state: State<'_, AppState>, passphrase: String) -> Result<serde_json::Value, String> {
-    let r = everyaios_core::setup_vault_passphrase(
-        &everyaios_core::default_data_dir(),
-        &passphrase,
-    )
-    .map_err(|e| e.to_string())?;
+fn vault_setup(
+    state: State<'_, AppState>,
+    passphrase: String,
+) -> Result<serde_json::Value, String> {
+    let r =
+        everyaios_core::setup_vault_passphrase(&everyaios_core::default_data_dir(), &passphrase)
+            .map_err(|e| e.to_string())?;
     let status = reopen_disk_vault(&state, &r.key)?;
     Ok(serde_json::json!({
         "ok": true,
@@ -432,12 +391,13 @@ fn vault_setup(state: State<'_, AppState>, passphrase: String) -> Result<serde_j
 }
 
 #[tauri::command]
-fn vault_unlock(state: State<'_, AppState>, passphrase: String) -> Result<serde_json::Value, String> {
-    let r = everyaios_core::unlock_vault_passphrase(
-        &everyaios_core::default_data_dir(),
-        &passphrase,
-    )
-    .map_err(|e| e.to_string())?;
+fn vault_unlock(
+    state: State<'_, AppState>,
+    passphrase: String,
+) -> Result<serde_json::Value, String> {
+    let r =
+        everyaios_core::unlock_vault_passphrase(&everyaios_core::default_data_dir(), &passphrase)
+            .map_err(|e| e.to_string())?;
     let status = reopen_disk_vault(&state, &r.key)?;
     Ok(serde_json::json!({
         "ok": true,
@@ -467,13 +427,17 @@ fn session_put(state: State<'_, AppState>, session: serde_json::Value) -> Result
         .to_string();
     let payload = serde_json::to_string(&session).map_err(|e| e.to_string())?;
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
-    vault.put_ui_session(&id, &payload).map_err(|e| e.to_string())
+    vault
+        .put_ui_session(&id, &payload)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn session_delete(state: State<'_, AppState>, session_id: String) -> Result<(), String> {
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
-    vault.delete_ui_session(&session_id).map_err(|e| e.to_string())
+    vault
+        .delete_ui_session(&session_id)
+        .map_err(|e| e.to_string())
 }
 
 /// Locate the coordinator sidecar binary. `EVERYAIOS_COORDINATOR_BIN` wins;
@@ -489,7 +453,12 @@ fn locate_coordinator_bin(app: &AppHandle) -> Option<PathBuf> {
     }
     // Packaged app: the sidecar is a bundle resource (`bin/coordinator`).
     if let Ok(res) = app.path().resource_dir() {
-        for rel in ["bin/coordinator", "bin/coordinator.exe", "coordinator", "coordinator.exe"] {
+        for rel in [
+            "bin/coordinator",
+            "bin/coordinator.exe",
+            "coordinator",
+            "coordinator.exe",
+        ] {
             let p = res.join(rel);
             if p.is_file() {
                 return Some(p);
@@ -539,71 +508,6 @@ fn pre_spawn_coordinator(app: AppHandle) {
     });
 }
 
-/// P2.11 (E16) — spawn the WebMCP HTTP server on a loopback port so browser
-/// sessions can serve MCP tools (`tools/list` + `tools/call`) to any local
-/// HTTP client. The registry mirrors the 37-tool browser catalog; tool calls
-/// fail honestly until a live browser session is attached (the executor is a
-/// "not attached" stub — the engine itself lives in `everyaios-browser`).
-fn spawn_webmcp_server() {
-    use everyaios_browser::webmcp::{WebMcpExecutor, WebMcpRegistry, WebMcpResult, WebMcpTool};
-    use everyaios_mcp::ArgKind;
-    use serde_json::json;
-
-    let mut registry = WebMcpRegistry::new();
-    for def in everyaios_mcp::BROWSER_TOOLS {
-        let mut properties = serde_json::Map::new();
-        let mut required = Vec::new();
-        for a in def.args {
-            let ty = match a.kind {
-                ArgKind::String => "string",
-                ArgKind::Number => "number",
-                ArgKind::Bool => "boolean",
-                ArgKind::StringArray => "array",
-                ArgKind::Object => "object",
-            };
-            let mut spec = json!({ "type": ty, "description": a.description });
-            if a.kind == ArgKind::StringArray {
-                spec["items"] = json!({ "type": "string" });
-            }
-            properties.insert(a.name.to_string(), spec);
-            if a.required {
-                required.push(serde_json::Value::String(a.name.to_string()));
-            }
-        }
-        registry.register(WebMcpTool {
-            name: def.name.to_string(),
-            description: def.description.to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": properties,
-                "required": required,
-            }),
-        });
-    }
-
-    struct NotAttached;
-    impl WebMcpExecutor for NotAttached {
-        fn execute(&self, tool: &WebMcpTool, _input: serde_json::Value) -> WebMcpResult {
-            WebMcpResult::err(format!(
-                "browser session not attached — {} is catalog-only until a CDP session is wired",
-                tool.name
-            ))
-        }
-    }
-
-    match everyaios_browser::webmcp_http::McpHttpServer::serve(
-        "127.0.0.1:0",
-        registry,
-        std::sync::Arc::new(NotAttached),
-    ) {
-        Ok(server) => match server.local_addr() {
-            Ok(addr) => eprintln!("everyaios-desktop: WebMCP HTTP listening on http://{addr}/mcp (token {})", server.token()),
-            Err(e) => eprintln!("everyaios-desktop: WebMCP addr lookup failed: {e}"),
-        },
-        Err(e) => eprintln!("everyaios-desktop: WebMCP server spawn failed (continuing): {e}"),
-    }
-}
-
 /// J16: bind the UNIX-domain socket control channel and dispatch
 /// `agent/stop` / `agent/undo` / `agent/interrupt-response`.
 #[cfg(unix)]
@@ -625,7 +529,10 @@ fn serve_unix_control_channel(app: AppHandle) {
                     let parsed: serde_json::Value =
                         serde_json::from_slice(&payload).unwrap_or_default();
                     let method = parsed.get("method").and_then(|m| m.as_str()).unwrap_or("");
-                    let params = parsed.get("params").cloned().unwrap_or(serde_json::json!({}));
+                    let params = parsed
+                        .get("params")
+                        .cloned()
+                        .unwrap_or(serde_json::json!({}));
                     let result = control::dispatch(&app, method, &params);
                     let reply = serde_json::json!({
                         "jsonrpc": "2.0",
@@ -647,7 +554,8 @@ fn serve_unix_control_channel(app: AppHandle) {
 pub fn run() {
     // Build the initial state exactly like the headless binary would.
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let mut boot_report = everyaios_core::boot(&args).unwrap_or_else(|e| format!("boot failed: {e}"));
+    let mut boot_report =
+        everyaios_core::boot(&args).unwrap_or_else(|e| format!("boot failed: {e}"));
     let guard = compiled_guard().clone();
     let data_dir = everyaios_core::default_data_dir();
     let resolved = everyaios_core::resolve_vault_key(&data_dir);
@@ -699,211 +607,14 @@ pub fn run() {
             mcp_remote_tokens: Arc::new(Mutex::new(std::collections::HashMap::new())),
             desktop: Mutex::new(desktop_cmds::DesktopSlot::default()),
         })
-        .invoke_handler(tauri::generate_handler![
-            version,
-            catalog_cmds::catalog_sync_plan,
-            catalog_cmds::catalog_sync_refresh,
-            core_boot_report,
-            scan_text,
-            probe_vault,
-            vault_key_status,
-            vault_setup,
-            vault_unlock,
-            session_list,
-            session_put,
-            session_delete,
-            oauth_cmds::oauth_status,
-            oauth_cmds::oauth_accounts,
-            oauth_cmds::oauth_start_pkce,
-            oauth_cmds::oauth_start_device,
-            oauth_cmds::oauth_poll_device,
-            oauth_cmds::oauth_revoke,
-            local_cmds::local_models,
-            local_cmds::local_ensure,
-            local_cmds::local_hardware,
-            chat_stream,
-            agui_send,
-            agui_listen,
-            chat_cancel,
-            chat_tool_retry,
-            plan_execute,
-            plan_respond,
-            usage_snapshot,
-            session_totals,
-            replay_cmds::replay_sessions,
-            replay_cmds::replay_timeline,
-            replay_cmds::replay_screenshot,
-            replay_cmds::watch_events,
-            replay_cmds::agent_stop,
-            trajectory_cmds::trajectory_sessions,
-            trajectory_cmds::trajectory_snapshot,
-            guard_cmds::guard_tickets,
-            feedback_cmds::feedback_submit,
-            guard_cmds::guard_respond,
-            guard_cmds::guard_open_window,
-            guard_cmds::guard_receipts,
-            guard_cmds::guard_policy,
-            guard_cmds::guard_estop,
-            guard_cmds::guard_activity,
-            guard_cmds::guard_permissions_matrix,
-            cockpit_cmds::cockpit_snapshot,
-            cockpit_cmds::cockpit_activity,
-            cockpit_cmds::cockpit_tokens,
-            cockpit_cmds::cockpit_quiet,
-            cockpit_cmds::agent_undo,
-            cockpit_cmds::interrupt_respond,
-            cockpit_cmds::cockpit_upsert_agent,
-            xlsx_cmds::xlsx_open,
-            xlsx_cmds::xlsx_recalc,
-            xlsx_cmds::xlsx_edit_request,
-            xlsx_cmds::xlsx_edit_commit,
-            xlsx_cmds::xlsx_batch_request,
-            xlsx_cmds::xlsx_batch_commit,
-            xlsx_cmds::xlsx_pivot,
-            mcp_cmds::mcp_catalog,
-            mcp_cmds::mcp_servers,
-            mcp_cmds::mcp_attach,
-            mcp_cmds::store_catalog,
-            mcp_cmds::mcp_connect_start,
-            mcp_cmds::mcp_remote_status,
-            mcp_cmds::mcp_remote_call,
-            mcp_cmds::mcp_remote_tools,
-            skills_cmds::skills_catalog,
-            skills_cmds::skills_install,
-            skills_cmds::skills_uninstall,
-            office_cmds::docx_open,
-            office_cmds::docx_patch,
-            office_cmds::docx_tracks,
-            office_cmds::pptx_open,
-            office_cmds::pptx_notes,
-            office_cmds::pdf_open,
-            office_cmds::pdf_bytes,
-            office_cmds::pdf_page_op,
-            office_cmds::office_open_external,
-            vault_cmds::vault_keys_list,
-            vault_cmds::vault_key_add,
-            vault_cmds::vault_key_remove,
-            acp_cmds::chief_default_get,
-            acp_cmds::chief_default_set,
-            agent_cmds::agent_registry_list,
-            agent_cmds::agent_registry_save,
-            agent_cmds::agent_registry_get,
-            agent_cmds::agent_registry_remove,
-            agent_cmds::agent_registry_duplicate,
-            agent_cmds::agent_registry_set_disabled,
-            acp_cmds::acp_agents,
-            acp_cmds::acp_launch,
-            acp_cmds::acp_prompt,
-            acp_cmds::acp_cancel,
-            acp_cmds::acp_shutdown,
-            acp_cmds::acp_sessions,
-            acp_cmds::acp_registry_refresh,
-            acp_cmds::acp_registry_status,
-            acp_cmds::acp_registry_install_plan,
-            acp_cmds::acp_install_status,
-            acp_cmds::acp_install_request,
-            acp_cmds::acp_install_commit,
-            acp_cmds::acp_install,
-            acp_cmds::acp_authenticate,
-            // Maintenance: audit retention sweep (ledger-growth fault line).
-            maintenance_cmds::audit_compact,
-            // P6.4 (B7): scheduled tasks.
-            scheduler_cmds::scheduler_list,
-            scheduler_cmds::scheduler_create,
-            scheduler_cmds::scheduler_delete,
-            scheduler_cmds::scheduler_enable,
-            scheduler_cmds::scheduler_pause,
-            scheduler_cmds::scheduler_pause_session,
-            scheduler_cmds::scheduler_resume,
-            scheduler_cmds::scheduler_run_now,
-            scheduler_cmds::scheduler_battery,
-            scheduler_cmds::scheduler_fire_event,
-            scheduler_cmds::scheduler_fire_webhook,
-            scheduler_cmds::scheduler_nudges,
-            scheduler_cmds::scheduler_nudge,
-            tasks_cmds::tasks_list,
-            tasks_cmds::tasks_show,
-            tasks_cmds::tasks_cancel,
-            tasks_cmds::tasks_retry,
-            tasks_cmds::tasks_enqueue,
-            tasks_cmds::tasks_start,
-            tasks_cmds::tasks_complete,
-            tasks_cmds::tasks_sweep,
-            storage_cmds::storage_health,
-            storage_cmds::storage_scan,
-            storage_cmds::storage_large_files,
-            storage_cmds::storage_duplicates,
-            storage_cmds::storage_cleanup_proposals,
-            storage_cmds::storage_battery,
-            // P8.9 sync: encrypted bundle export/import + live TCP transport
-            // (direct ip:port — LAN + Tailscale; explicit trigger, default 47615).
-            sync_cmds::sync_export_bundle,
-            sync_cmds::sync_import_bundle,
-            sync_cmds::sync_keypair_generate,
-            sync_cmds::sync_public_key,
-            sync_cmds::sync_serve_start,
-            sync_cmds::sync_serve_stop,
-            sync_cmds::sync_serve_status,
-            sync_cmds::sync_peer_sync,
-            sync_cmds::node_attach,
-            sync_cmds::sync_fingerprint,
-            // P8.8: auto-updater check + install/relaunch.
-            updater_cmds::updater_check,
-            updater_cmds::updater_install,
-            // P11.5.3: real FS / shell / CDP-browser / memory views.
-            fs_cmds::fs_home,
-            fs_cmds::fs_list_dir,
-            fs_cmds::fs_read_file,
-            fs_cmds::fs_write_file,
-            fs_cmds::fs_write_ticket,
-            fs_cmds::fs_write_commit,
-            fs_cmds::fs_undo_list,
-            shell_cmds::shell_spawn,
-            shell_cmds::shell_write,
-            shell_cmds::shell_kill,
-            shell_cmds::shell_status,
-            browser_cmds::browser_start,
-            browser_cmds::browser_navigate,
-            browser_cmds::browser_snapshot,
-            browser_cmds::browser_read,
-            browser_cmds::browser_click,
-            browser_cmds::browser_type,
-            browser_cmds::browser_stop,
-            browser_cmds::browser_status,
-            memory_cmds::memory_request,
-            memory_cmds::memory_read,
-            // P11.5.3 IDE: git SCM + LSP diagnostics.
-            git_cmds::git_status,
-            git_cmds::git_log,
-            git_cmds::git_diff,
-            git_cmds::git_stage_all,
-            git_cmds::git_commit,
-            git_cmds::git_root,
-            git_cmds::git_worktree_add,
-            git_cmds::git_worktree_list,
-            git_cmds::git_worktree_merge,
-            git_cmds::git_worktree_revert,
-            lsp_cmds::lsp_diagnostics,
-            // P11.5.9: repo-map / file-outline / MODEL_ALIASES / ai! markers.
-            codeintel_cmds::repomap_build,
-            codeintel_cmds::file_outline,
-            codeintel_cmds::model_aliases_resolve,
-            codeintel_cmds::ai_markers_scan,
-            // P48.3 (E9): desktop computer-use through the effect funnel.
-            desktop_cmds::desktop_status,
-            desktop_cmds::desktop_windows,
-            desktop_cmds::desktop_read,
-            desktop_cmds::desktop_see,
-            desktop_cmds::desktop_act,
-            desktop_cmds::desktop_stop
-        ])
+        .invoke_handler(commands::handler())
         // P8.8: auto-updater (checks + downloads against the configured
         // endpoints; signing key is the release secret).
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray
             // support the app should still start (just without a tray icon).
-            if let Err(e) = setup_tray(app.handle()) {
+            if let Err(e) = boot::setup_tray(app.handle()) {
                 eprintln!("everyaios-desktop: tray setup failed (continuing): {e}");
             }
             // J16: pre-spawn the coordinator + bind the unix control socket.
@@ -911,7 +622,7 @@ pub fn run() {
             #[cfg(unix)]
             serve_unix_control_channel(app.handle().clone());
             // P2.11 (E16): serve the WebMCP tool catalog over loopback HTTP.
-            spawn_webmcp_server();
+            boot::spawn_webmcp_server();
             // Ledger-growth fault line: enforce ARCH/06's configurable audit
             // retention — compact the NDJSON log at most once per day
             // (writer-quiescent window; marker-gated; non-fatal).
@@ -929,51 +640,4 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running EveryAIOS");
-}
-
-/// System tray (P0.2 task 17 / H11): status icon + Show/Run-automations/Quit
-/// menu. Scheduled tasks execute headless via the coordinator's own due-loop;
-/// the tray item just forces a manual tick (works with the window hidden).
-fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
-    use tauri::menu::{Menu, MenuItem};
-    use tauri::tray::TrayIconBuilder;
-
-    let show = MenuItem::with_id(app, "show", "Show EveryAIOS", true, None::<&str>)?;
-    let run = MenuItem::with_id(app, "run-automations", "Run automations now", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &run, &quit])?;
-
-    let mut builder = TrayIconBuilder::with_id("main-tray");
-    if let Some(icon) = app.default_window_icon().cloned() {
-        builder = builder.icon(icon);
-    }
-    let _tray = builder
-        .menu(&menu)
-        .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => {
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.show();
-                    let _ = win.unminimize();
-                    let _ = win.set_focus();
-                }
-            }
-            // H11: force a due-check + execution pass headless (no window).
-            // The tick is fire-and-forget — the coordinator acks its own
-            // executed-job list; failures surface in the sidecar log.
-            "run-automations" => {
-                let state = app.state::<AppState>();
-                let Ok(guard) = state.chat_relay.lock() else {
-                    return;
-                };
-                if let Some(relay) = guard.as_ref() {
-                    let _ = relay.tick_scheduler();
-                }
-            }
-            "quit" => app.exit(0),
-            _ => {}
-        })
-        .build(app)?;
-
-    Ok(())
 }

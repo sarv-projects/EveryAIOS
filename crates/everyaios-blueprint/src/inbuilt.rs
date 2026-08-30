@@ -128,14 +128,24 @@ fn make(
         tools: tools.iter().map(|s| s.to_string()).collect(),
         triggers: triggers.iter().map(|s| s.to_string()).collect(),
         when_to_use: Vec::new(),
-        scripts: vec![SkillScript { name: "help".into(), command: "cat SKILL.md".into(), lazy: true }],
+        scripts: vec![SkillScript {
+            name: "help".into(),
+            command: "cat SKILL.md".into(),
+            lazy: true,
+        }],
         references: Vec::new(),
         assets: Vec::new(),
         author: "everyaios".into(),
         created: "2026-08-24".into(),
         version: "1.0.0".into(),
     };
-    (name.into(), Skill { manifest, body: body.into() })
+    (
+        name.into(),
+        Skill {
+            manifest,
+            body: body.into(),
+        },
+    )
 }
 
 /// The doc-75 license-boundary record (source-available, never copied).
@@ -169,12 +179,15 @@ mod tests {
         assert_eq!(first.len(), INBUILT_SKILL_NAMES.len());
         let second = seed_inbuilt(&root).unwrap();
         assert!(second.is_empty()); // already present
-        // user copy wins
+                                    // user copy wins
         let dir = root.join("office-documents");
         std::fs::write(dir.join("SKILL.md"), "user's own").unwrap();
         let third = seed_inbuilt(&root).unwrap();
         assert!(!third.contains(&"office-documents".to_string()));
-        assert_eq!(std::fs::read_to_string(dir.join("SKILL.md")).unwrap(), "user's own");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("SKILL.md")).unwrap(),
+            "user's own"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -182,9 +195,17 @@ mod tests {
     fn covers_every_named_surface() {
         let names: Vec<String> = all_inbuilt().iter().map(|(n, _)| n.clone()).collect();
         for expected in [
-            "office-documents", "browser-automation", "storage-intelligence", "code-intelligence",
-            "document-creation", "skill-creator", "ui-ux-pro-max", "design-system",
-            "engineering-exit-criteria", "graphwork", "jobs",
+            "office-documents",
+            "browser-automation",
+            "storage-intelligence",
+            "code-intelligence",
+            "document-creation",
+            "skill-creator",
+            "ui-ux-pro-max",
+            "design-system",
+            "engineering-exit-criteria",
+            "graphwork",
+            "jobs",
         ] {
             assert!(names.contains(&expected.to_string()), "missing {expected}");
         }

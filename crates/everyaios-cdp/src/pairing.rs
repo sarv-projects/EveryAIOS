@@ -40,13 +40,19 @@ impl ProfilePairingStore {
 
     pub fn is_paired_dir(&self, user_data_dir: &Path) -> bool {
         let want = canonicalize_dir(user_data_dir);
-        self.by_id.values().any(|p| canonicalize_dir(Path::new(&p.user_data_dir)) == want)
+        self.by_id
+            .values()
+            .any(|p| canonicalize_dir(Path::new(&p.user_data_dir)) == want)
     }
 
     /// Pair a user-launched non-default profile. Default Chrome/Chromium
     /// dirs are refused (Chrome 136+ CDP on those dirs is inert and a
     /// cookie-jar attack surface).
-    pub fn pair(&mut self, user_data_dir: &Path, pid: Option<u32>) -> Result<ProfilePairing, CdpError> {
+    pub fn pair(
+        &mut self,
+        user_data_dir: &Path,
+        pid: Option<u32>,
+    ) -> Result<ProfilePairing, CdpError> {
         if is_default_chrome_profile(user_data_dir) {
             return Err(CdpError::Security(
                 "refusing to pair Chrome/Chromium default profile (Chrome 136+ CDP is not attachable; use an isolated profile)".into(),
@@ -120,7 +126,9 @@ pub fn is_everyaios_isolated_profile(dir: &Path) -> bool {
     s.ends_with("browser-profile")
         && (s.contains(".everyaios")
             || s.contains("EVERYAIOS")
-            || std::env::var("EVERYAIOS_HOME").ok().is_some_and(|h| s.contains(&h)))
+            || std::env::var("EVERYAIOS_HOME")
+                .ok()
+                .is_some_and(|h| s.contains(&h)))
 }
 
 /// Parse a Chrome `Browser` version string (`Chrome/136.0.7103.92`) → major.
@@ -176,7 +184,10 @@ mod tests {
     #[test]
     fn default_profile_is_detected() {
         let dirs = chrome_default_user_data_dirs();
-        assert!(!dirs.is_empty() || std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none());
+        assert!(
+            !dirs.is_empty()
+                || std::env::var_os("HOME").is_none() && std::env::var_os("USERPROFILE").is_none()
+        );
         if let Some(d) = dirs.first() {
             assert!(is_default_chrome_profile(d));
         }
@@ -221,7 +232,10 @@ mod tests {
     fn missing_dir_refused_no_cookie_fallback() {
         let err = assert_attach_allowed("Chrome/141.0.0.0", None, false).unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("raw-cookie") || msg.contains("user-data-dir"), "{msg}");
+        assert!(
+            msg.contains("raw-cookie") || msg.contains("user-data-dir"),
+            "{msg}"
+        );
     }
 
     #[test]

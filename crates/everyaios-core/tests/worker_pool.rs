@@ -16,7 +16,11 @@ fn pre_spawns_warm_workers_with_profile_flags() {
     let mut got = Vec::new();
     for w in &mut pool.workers {
         assert!(w.is_alive());
-        got.push(format!("{}:{}", w.profile, w.scratch.clone().unwrap_or_default()));
+        got.push(format!(
+            "{}:{}",
+            w.profile,
+            w.scratch.clone().unwrap_or_default()
+        ));
     }
     got.sort();
     assert_eq!(got, vec!["worker:/tmp/w-scratch", "worker:/tmp/w-scratch"]);

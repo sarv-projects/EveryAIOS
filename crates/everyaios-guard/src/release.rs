@@ -95,7 +95,10 @@ pub struct EgressPolicyEngine {
 
 impl EgressPolicyEngine {
     pub fn new(policies: Vec<EgressPolicy>) -> Self {
-        Self { policies, receipts: Vec::new() }
+        Self {
+            policies,
+            receipts: Vec::new(),
+        }
     }
 
     pub fn receipts(&self) -> &[ReleaseReceipt] {
@@ -120,24 +123,63 @@ impl EgressPolicyEngine {
         at_ms: u64,
     ) -> ReleaseDecision {
         let Some(policy) = self.policies.iter().find(|p| p.profile == profile) else {
-            self.receipt(profile, destination, payload_desc, zone, ReleaseDecision::Deny, scan_signal, at_ms);
+            self.receipt(
+                profile,
+                destination,
+                payload_desc,
+                zone,
+                ReleaseDecision::Deny,
+                scan_signal,
+                at_ms,
+            );
             return ReleaseDecision::Deny;
         };
         if !policy.allowed_zones.contains(&zone) {
-            self.receipt(profile, destination, payload_desc, zone, ReleaseDecision::Deny, scan_signal, at_ms);
+            self.receipt(
+                profile,
+                destination,
+                payload_desc,
+                zone,
+                ReleaseDecision::Deny,
+                scan_signal,
+                at_ms,
+            );
             return ReleaseDecision::Deny;
         }
-        if policy.deny_destinations.iter().any(|d| destination.contains(d)) {
-            self.receipt(profile, destination, payload_desc, zone, ReleaseDecision::Deny, scan_signal, at_ms);
+        if policy
+            .deny_destinations
+            .iter()
+            .any(|d| destination.contains(d))
+        {
+            self.receipt(
+                profile,
+                destination,
+                payload_desc,
+                zone,
+                ReleaseDecision::Deny,
+                scan_signal,
+                at_ms,
+            );
             return ReleaseDecision::Deny;
         }
-        let redact = policy.redact_destinations.iter().any(|d| destination.contains(d));
+        let redact = policy
+            .redact_destinations
+            .iter()
+            .any(|d| destination.contains(d));
         let decision = if redact || scan_signal.is_some() {
             ReleaseDecision::Redact
         } else {
             ReleaseDecision::Allow
         };
-        self.receipt(profile, destination, payload_desc, zone, decision, scan_signal, at_ms);
+        self.receipt(
+            profile,
+            destination,
+            payload_desc,
+            zone,
+            decision,
+            scan_signal,
+            at_ms,
+        );
         decision
     }
 
@@ -172,7 +214,14 @@ mod tests {
     #[test]
     fn standard_allows_mediated_clean() {
         let mut eng = EgressPolicyEngine::new(vec![EgressPolicy::standard()]);
-        let d = eng.evaluate("standard", "api.anthropic.com", "chat request", EnforcementZone::Mediated, None, 1);
+        let d = eng.evaluate(
+            "standard",
+            "api.anthropic.com",
+            "chat request",
+            EnforcementZone::Mediated,
+            None,
+            1,
+        );
         assert_eq!(d, ReleaseDecision::Allow);
         assert_eq!(eng.receipts().len(), 1);
     }
@@ -180,21 +229,38 @@ mod tests {
     #[test]
     fn strict_refuses_os_egress_zone() {
         let mut eng = EgressPolicyEngine::new(vec![EgressPolicy::strict()]);
-        let d = eng.evaluate("strict", "external-agent.example", "acp tool call", EnforcementZone::OsEgress, None, 1);
+        let d = eng.evaluate(
+            "strict",
+            "external-agent.example",
+            "acp tool call",
+            EnforcementZone::OsEgress,
+            None,
+            1,
+        );
         assert_eq!(d, ReleaseDecision::Deny);
     }
 
     #[test]
     fn scan_signal_downgrades_to_redact() {
         let mut eng = EgressPolicyEngine::new(vec![EgressPolicy::standard()]);
-        let d = eng.evaluate("standard", "api.x.com", "payload", EnforcementZone::Mediated, Some("managed secret present".into()), 1);
+        let d = eng.evaluate(
+            "standard",
+            "api.x.com",
+            "payload",
+            EnforcementZone::Mediated,
+            Some("managed secret present".into()),
+            1,
+        );
         assert_eq!(d, ReleaseDecision::Redact);
     }
 
     #[test]
     fn unknown_profile_fails_closed() {
         let mut eng = EgressPolicyEngine::new(vec![EgressPolicy::standard()]);
-        assert_eq!(eng.evaluate("nope", "any", "p", EnforcementZone::Mediated, None, 1), ReleaseDecision::Deny);
+        assert_eq!(
+            eng.evaluate("nope", "any", "p", EnforcementZone::Mediated, None, 1),
+            ReleaseDecision::Deny
+        );
     }
 
     #[test]

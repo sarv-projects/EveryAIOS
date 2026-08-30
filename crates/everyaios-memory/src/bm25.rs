@@ -73,7 +73,12 @@ impl Bm25Index {
         let avg_len = if n == 0.0 { 0.0 } else { total_len as f64 / n };
         let idf: HashMap<String, f64> = df
             .iter()
-            .map(|(t, d)| (t.clone(), ((n - *d as f64 + 0.5) / (*d as f64 + 0.5) + 1.0).ln()))
+            .map(|(t, d)| {
+                (
+                    t.clone(),
+                    ((n - *d as f64 + 0.5) / (*d as f64 + 0.5) + 1.0).ln(),
+                )
+            })
             .collect();
         self.docs = docs;
         self.df = df;
@@ -97,7 +102,9 @@ impl Bm25Index {
         let tf = &self.tf[doc_idx];
         let mut score = 0.0;
         for t in query_terms {
-            let Some(&idf) = self.idf.get(t) else { continue };
+            let Some(&idf) = self.idf.get(t) else {
+                continue;
+            };
             let f = *tf.get(t).unwrap_or(&0) as f64;
             let denom = f + K1 * (1.0 - B + B * doc_len / self.avg_len.max(1.0));
             score += idf * (f * (K1 + 1.0)) / denom;
@@ -200,7 +207,11 @@ pub fn fuse_signals(sources: &[(SignalRank, Vec<Hit>)], k: usize) -> Vec<Hit> {
             confidence: score,
         })
         .collect();
-    out.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    out.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let max = out.first().map(|h| h.confidence).unwrap_or(0.0).max(1e-9);
     for h in &mut out {
         h.confidence /= max;

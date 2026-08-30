@@ -109,11 +109,7 @@ impl<T: HttpTransport, R: TokenRefresher> GmailConnector<T, R> {
 
     /// POST (JSON) with automatic 401→refresh→retry once. Every mutation
     /// path (send/modify/trash) routes through here.
-    fn post_with_refresh(
-        &mut self,
-        url: &str,
-        body: &[u8],
-    ) -> Result<Vec<u8>, TransportError> {
+    fn post_with_refresh(&mut self, url: &str, body: &[u8]) -> Result<Vec<u8>, TransportError> {
         match self.transport.post_json(url, &self.auth_headers(), body) {
             Err(e) if e.kind == TransportErrorKind::Auth => {
                 self.access_token = self.refresher.refresh()?;
@@ -547,7 +543,10 @@ mod tests {
             "me".into(),
         );
         let result = gmail.get_message("m1");
-        assert!(result.is_ok(), "read path must recover from 401 via refresh");
+        assert!(
+            result.is_ok(),
+            "read path must recover from 401 via refresh"
+        );
         assert_eq!(result.unwrap().snippet, "after refresh");
     }
 
@@ -570,7 +569,10 @@ mod tests {
             "me".into(),
         );
         let result = gmail.list_labels();
-        assert!(result.is_ok(), "list_labels must recover from 401 via refresh");
+        assert!(
+            result.is_ok(),
+            "list_labels must recover from 401 via refresh"
+        );
         assert_eq!(result.unwrap()[0].unread_count, 3);
     }
 
@@ -591,7 +593,10 @@ mod tests {
             "me".into(),
         );
         let result = gmail.modify_labels(&["m1"], &["TRASH"], &["INBOX"]);
-        assert!(result.is_ok(), "modify_labels must recover from 401 via refresh");
+        assert!(
+            result.is_ok(),
+            "modify_labels must recover from 401 via refresh"
+        );
     }
 
     #[test]

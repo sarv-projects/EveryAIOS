@@ -114,7 +114,9 @@ where
             match rx.recv_timeout(quiet) {
                 Ok(Ok(event)) => {
                     let now = std::time::Instant::now();
-                    let quiet_elapsed = last.map(|l| now.duration_since(l) >= quiet).unwrap_or(false);
+                    let quiet_elapsed = last
+                        .map(|l| now.duration_since(l) >= quiet)
+                        .unwrap_or(false);
                     pending.extend(FileEvent::from_notify(&event.kind, &event.paths));
                     if quiet_elapsed {
                         flush(&mut pending);
@@ -143,10 +145,7 @@ mod tests {
 
     #[test]
     fn remove_maps_to_removed() {
-        let ev = FileEvent::from_notify(
-            &EventKind::Remove(RemoveKind::File),
-            &[p("/a/b.md")],
-        );
+        let ev = FileEvent::from_notify(&EventKind::Remove(RemoveKind::File), &[p("/a/b.md")]);
         assert_eq!(ev, vec![FileEvent::Removed { path: p("/a/b.md") }]);
     }
 
@@ -173,7 +172,12 @@ mod tests {
             &EventKind::Modify(ModifyKind::Name(RenameMode::From)),
             &[p("/a/old.md")],
         );
-        assert_eq!(ev, vec![FileEvent::Modified { path: p("/a/old.md") }]);
+        assert_eq!(
+            ev,
+            vec![FileEvent::Modified {
+                path: p("/a/old.md")
+            }]
+        );
     }
 
     #[test]
@@ -182,7 +186,12 @@ mod tests {
             &EventKind::Create(notify::event::CreateKind::File),
             &[p("/a/new.md")],
         );
-        assert_eq!(ev, vec![FileEvent::Modified { path: p("/a/new.md") }]);
+        assert_eq!(
+            ev,
+            vec![FileEvent::Modified {
+                path: p("/a/new.md")
+            }]
+        );
     }
 
     #[test]

@@ -84,9 +84,7 @@ pub fn builtin_retrieval_questions() -> Vec<RetrievalQuestion> {
                 span: "p4:per-diem".into(),
             }],
             forbidden_evidence: vec!["travel_policy_draft_old.pdf".into()],
-            expected_answer: ExpectedAnswer::Text {
-                text: "42".into(),
-            },
+            expected_answer: ExpectedAnswer::Text { text: "42".into() },
             authorization: vec!["travel_policy_v3.pdf".into()],
         },
         // Injection trap: the correct answer must come only from authorized
@@ -138,10 +136,8 @@ pub fn builtin_fixtures() -> Vec<Fixture> {
             for constraint in &task.manifest.constraints {
                 if let crate::manifest::Constraint::DoNotModify { paths } = constraint {
                     for path in paths {
-                        let marker = format!(
-                            "SOURCE DATA (do not modify): {}\n",
-                            task.manifest.task_id
-                        );
+                        let marker =
+                            format!("SOURCE DATA (do not modify): {}\n", task.manifest.task_id);
                         let clean = path.trim_end_matches('/');
                         let file_path = if clean.ends_with(".xlsx")
                             || clean.ends_with(".docx")
@@ -190,7 +186,9 @@ mod tests {
         assert_eq!(qs.len(), 3);
         let multi = &qs[0];
         assert_eq!(multi.required_evidence.len(), 2);
-        assert!(multi.forbidden_evidence.contains(&"travel_policy_draft_old.pdf".to_string()));
+        assert!(multi
+            .forbidden_evidence
+            .contains(&"travel_policy_draft_old.pdf".to_string()));
         // The first question authorizes only the two required docs.
         assert_eq!(multi.authorization.len(), 2);
     }
@@ -218,17 +216,18 @@ mod tests {
             .iter()
             .find(|f| f.task_id == files_task.manifest.task_id)
             .unwrap();
-        assert!(fx.files.iter().any(|f| f.path.starts_with("/workspace/raw/")));
+        assert!(fx
+            .files
+            .iter()
+            .any(|f| f.path.starts_with("/workspace/raw/")));
         // Email tasks seed nothing to modify, but still produce a fixture.
         let email_task = suite
             .iter()
             .find(|t| t.category == TaskCategory::EmailDraft)
             .unwrap();
-        assert!(
-            fixtures
-                .iter()
-                .any(|f| f.task_id == email_task.manifest.task_id)
-        );
+        assert!(fixtures
+            .iter()
+            .any(|f| f.task_id == email_task.manifest.task_id));
     }
 
     #[test]

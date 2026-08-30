@@ -168,7 +168,12 @@ pub struct ScoutSpec {
 
 impl ScoutSpec {
     pub fn new(spec: TaskSpec, cache_root: impl Into<String>, model: impl Into<String>) -> Self {
-        Self { spec, cache_root: cache_root.into(), model: model.into(), depth: 0 }
+        Self {
+            spec,
+            cache_root: cache_root.into(),
+            model: model.into(),
+            depth: 0,
+        }
     }
 
     /// Scouts are structurally read-only: the returned read set is the only

@@ -75,9 +75,7 @@ impl FromStr for LocalUrl {
     type Err = LocalUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let rest = s
-            .strip_prefix("local://")
-            .ok_or(LocalUrlError::NotLocal)?;
+        let rest = s.strip_prefix("local://").ok_or(LocalUrlError::NotLocal)?;
         let (scheme, body) = rest.split_once('/').unwrap_or((rest, ""));
         match scheme {
             "hf" => {

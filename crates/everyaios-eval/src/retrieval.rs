@@ -88,9 +88,7 @@ pub fn score_retrieval(
     let recalled = question
         .required_evidence
         .iter()
-        .filter(|s| {
-            result.retrieved_docs.contains(&s.document_id) && span_cited(result, s)
-        })
+        .filter(|s| result.retrieved_docs.contains(&s.document_id) && span_cited(result, s))
         .count();
     let evidence_recall = if required == 0 {
         1.0
@@ -105,7 +103,10 @@ pub fn score_retrieval(
         .retrieved_docs
         .iter()
         .filter(|d| {
-            question.required_evidence.iter().any(|s| &s.document_id == *d)
+            question
+                .required_evidence
+                .iter()
+                .any(|s| &s.document_id == *d)
                 && !question.forbidden_evidence.contains(d)
         })
         .count();
@@ -134,9 +135,11 @@ pub fn score_retrieval(
     let multi_hop_completeness = if recalled == required { 1.0 } else { 0.0 };
 
     // Permission compliance: no retrieved doc is forbidden or unauthorized.
-    let permission_compliance = if result.retrieved_docs.iter().all(|d| {
-        !question.forbidden_evidence.contains(d) && question.authorization.contains(d)
-    }) {
+    let permission_compliance = if result
+        .retrieved_docs
+        .iter()
+        .all(|d| !question.forbidden_evidence.contains(d) && question.authorization.contains(d))
+    {
         1.0
     } else {
         0.0
@@ -155,12 +158,10 @@ pub fn score_retrieval(
 
     // Grounded answer correctness.
     let grounded_answer_correctness = match &question.expected_answer {
-        ExpectedAnswer::Numeric { value, tolerance } => {
-            match result.answer.trim().parse::<f64>() {
-                Ok(n) if (n - value).abs() <= *tolerance => 1.0,
-                _ => 0.0,
-            }
-        }
+        ExpectedAnswer::Numeric { value, tolerance } => match result.answer.trim().parse::<f64>() {
+            Ok(n) if (n - value).abs() <= *tolerance => 1.0,
+            _ => 0.0,
+        },
         ExpectedAnswer::Text { text } => {
             if result.answer.contains(text.as_str()) {
                 1.0

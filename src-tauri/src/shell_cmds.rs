@@ -79,7 +79,9 @@ pub fn shell_spawn(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| format!("spawn {shell_name}: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("spawn {shell_name}: {e}"))?;
     let stdin = child.stdin.take();
 
     let stdout = child.stdout.take().ok_or("no stdout")?;

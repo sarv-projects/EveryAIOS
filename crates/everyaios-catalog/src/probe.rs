@@ -140,7 +140,10 @@ impl AdvertisedHardCaps {
 /// capability. **Fails closed** — a hard capability the catalog claims but the
 /// probe did not confirm is `Unverified`. Soft facts (model list, context
 /// ceiling) are recorded without failing the provider.
-pub fn verify_report(advertised: &AdvertisedHardCaps, observed: &ProbeResult) -> VerificationReport {
+pub fn verify_report(
+    advertised: &AdvertisedHardCaps,
+    observed: &ProbeResult,
+) -> VerificationReport {
     // For each hard capability: confirmed → Verified; advertised-but-not-
     // confirmed → Unverified; neither advertised nor observed → Unadvertised.
     let verdicts = vec![
@@ -152,12 +155,20 @@ pub fn verify_report(advertised: &AdvertisedHardCaps, observed: &ProbeResult) ->
         CapabilityVerdict {
             capability: Capability::StructuredOutput,
             verdict: hard_verdict(advertised.structured_output, observed.structured_output_ok),
-            evidence: evidence_for(Capability::StructuredOutput, advertised.structured_output, observed.structured_output_ok),
+            evidence: evidence_for(
+                Capability::StructuredOutput,
+                advertised.structured_output,
+                observed.structured_output_ok,
+            ),
         },
         CapabilityVerdict {
             capability: Capability::CodexResponses,
             verdict: hard_verdict(advertised.codex_responses, observed.codex_ok),
-            evidence: evidence_for(Capability::CodexResponses, advertised.codex_responses, observed.codex_ok),
+            evidence: evidence_for(
+                Capability::CodexResponses,
+                advertised.codex_responses,
+                observed.codex_ok,
+            ),
         },
     ];
     // Fully verified only when nothing advertised sits in the Unverified
@@ -190,16 +201,20 @@ fn evidence_for(cap: Capability, advertised: bool, observed: Option<bool>) -> St
             Capability::StructuredOutput => "structured-output round-trip succeeded".into(),
             Capability::CodexResponses => "codex/responses round-trip succeeded".into(),
         },
-        Some(false) => if advertised {
-            format!("advertised {cap:?} but probe observed a failure")
-        } else {
-            format!("{cap:?} probe failed (not advertised)")
-        },
-        None => if advertised {
-            format!("advertised {cap:?} but probe did not confirm")
-        } else {
-            "not advertised, not probed".into()
-        },
+        Some(false) => {
+            if advertised {
+                format!("advertised {cap:?} but probe observed a failure")
+            } else {
+                format!("{cap:?} probe failed (not advertised)")
+            }
+        }
+        None => {
+            if advertised {
+                format!("advertised {cap:?} but probe did not confirm")
+            } else {
+                "not advertised, not probed".into()
+            }
+        }
     }
 }
 
@@ -221,7 +236,11 @@ mod tests {
     use super::*;
 
     fn advertised(tools: bool, structured: bool, codex: bool) -> AdvertisedHardCaps {
-        AdvertisedHardCaps { tools, structured_output: structured, codex_responses: codex }
+        AdvertisedHardCaps {
+            tools,
+            structured_output: structured,
+            codex_responses: codex,
+        }
     }
 
     #[test]
@@ -236,11 +255,19 @@ mod tests {
         assert!(report.is_fully_verified());
         assert_eq!(report.capability_verdicts.len(), 3); // all three hard caps get a row
         assert_eq!(
-            report.capability_verdicts.iter().filter(|v| v.verdict == Verdict::Verified).count(),
+            report
+                .capability_verdicts
+                .iter()
+                .filter(|v| v.verdict == Verdict::Verified)
+                .count(),
             2
         );
         // codex was never advertised/observed → Unadvertised (honest, not trusted)
-        let codex = report.capability_verdicts.iter().find(|v| v.capability == Capability::CodexResponses).unwrap();
+        let codex = report
+            .capability_verdicts
+            .iter()
+            .find(|v| v.capability == Capability::CodexResponses)
+            .unwrap();
         assert_eq!(codex.verdict, Verdict::Unadvertised);
         assert_eq!(trusted_capabilities(&report).len(), 2);
     }
@@ -249,7 +276,10 @@ mod tests {
     fn unverified_when_advertised_tools_probe_missing() {
         // advertised tools but the probe never confirmed → fail closed
         let advert = advertised(true, false, false);
-        let observed = ProbeResult { tool_call_ok: Some(false), ..Default::default() };
+        let observed = ProbeResult {
+            tool_call_ok: Some(false),
+            ..Default::default()
+        };
         let report = verify_report(&advert, &observed);
         assert!(!report.is_fully_verified());
         let tools = report
@@ -274,7 +304,10 @@ mod tests {
     #[test]
     fn observes_beyond_advert_as_verified_not_unadvertised() {
         let advert = advertised(false, false, false);
-        let observed = ProbeResult { structured_output_ok: Some(true), ..Default::default() };
+        let observed = ProbeResult {
+            structured_output_ok: Some(true),
+            ..Default::default()
+        };
         let report = verify_report(&advert, &observed);
         assert!(report.is_fully_verified()); // nothing advertised → nothing to fail
         assert!(trusted_capabilities(&report).contains(&Capability::StructuredOutput));
@@ -293,6 +326,9 @@ mod tests {
         assert!(report.is_fully_verified());
         assert_eq!(report.observed_model_ids.len(), 2);
         assert_eq!(report.observed_context_len, Some(32_000));
-        assert!(report.capability_verdicts.iter().any(|v| v.capability == Capability::StructuredOutput));
+        assert!(report
+            .capability_verdicts
+            .iter()
+            .any(|v| v.capability == Capability::StructuredOutput));
     }
 }

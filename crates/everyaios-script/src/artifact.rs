@@ -118,7 +118,10 @@ pub enum ActionState {
 
 impl ActionState {
     pub fn is_terminal(&self) -> bool {
-        matches!(self, ActionState::Complete | ActionState::Aborted | ActionState::Failed { .. })
+        matches!(
+            self,
+            ActionState::Complete | ActionState::Aborted | ActionState::Failed { .. }
+        )
     }
 }
 
@@ -144,9 +147,16 @@ impl ActionRunner {
         let rows = actions
             .into_iter()
             .enumerate()
-            .map(|(index, action)| ActionRow { index, action, state: ActionState::Pending })
+            .map(|(index, action)| ActionRow {
+                index,
+                action,
+                state: ActionState::Pending,
+            })
             .collect();
-        Self { rows, aborted: false }
+        Self {
+            rows,
+            aborted: false,
+        }
     }
 
     pub fn rows(&self) -> &[ActionRow] {
@@ -168,7 +178,10 @@ impl ActionRunner {
 
     /// Mark a row running. Errors if it is already terminal.
     pub fn begin(&mut self, index: usize) -> Result<(), String> {
-        let row = self.rows.get_mut(index).ok_or_else(|| format!("no such action {index}"))?;
+        let row = self
+            .rows
+            .get_mut(index)
+            .ok_or_else(|| format!("no such action {index}"))?;
         if row.state.is_terminal() {
             return Err(format!(
                 "action {index} already {}",
@@ -181,7 +194,10 @@ impl ActionRunner {
 
     /// Mark a row complete. Aborted rows stay aborted (output is discarded).
     pub fn finish(&mut self, index: usize) -> Result<(), String> {
-        let row = self.rows.get_mut(index).ok_or_else(|| format!("no such action {index}"))?;
+        let row = self
+            .rows
+            .get_mut(index)
+            .ok_or_else(|| format!("no such action {index}"))?;
         if row.state == ActionState::Aborted {
             return Ok(());
         }
@@ -191,7 +207,10 @@ impl ActionRunner {
 
     /// Fail a row with a formatted error payload.
     pub fn fail(&mut self, index: usize, formatted: String) -> Result<(), String> {
-        let row = self.rows.get_mut(index).ok_or_else(|| format!("no such action {index}"))?;
+        let row = self
+            .rows
+            .get_mut(index)
+            .ok_or_else(|| format!("no such action {index}"))?;
         row.state = ActionState::Failed { formatted };
         Ok(())
     }
@@ -350,7 +369,10 @@ pub fn serve(workspace: &Path) -> Result<ServerHandle, ArtifactError> {
     let root = std::fs::canonicalize(workspace).map_err(|e| ArtifactError::Io(e.to_string()))?;
     let listener =
         TcpListener::bind("127.0.0.1:0").map_err(|e| ArtifactError::Server(e.to_string()))?;
-    let port = listener.local_addr().map_err(|e| ArtifactError::Server(e.to_string()))?.port();
+    let port = listener
+        .local_addr()
+        .map_err(|e| ArtifactError::Server(e.to_string()))?
+        .port();
     let stop = Arc::new(AtomicBool::new(false));
     let stop_thread = stop.clone();
     let thread = std::thread::spawn(move || {
@@ -371,7 +393,11 @@ pub fn serve(workspace: &Path) -> Result<ServerHandle, ArtifactError> {
             }
         }
     });
-    Ok(ServerHandle { port, stop, thread: Some(thread) })
+    Ok(ServerHandle {
+        port,
+        stop,
+        thread: Some(thread),
+    })
 }
 
 fn handle_connection(mut stream: TcpStream, root: &Path) {
@@ -391,16 +417,26 @@ fn handle_connection(mut stream: TcpStream, root: &Path) {
         .split('?')
         .next()
         .unwrap_or("/");
-    let rel = if path_part == "/" { "index.html" } else { path_part.trim_start_matches('/') };
+    let rel = if path_part == "/" {
+        "index.html"
+    } else {
+        path_part.trim_start_matches('/')
+    };
 
     if !get {
-        let _ = write_response(&mut stream, "405 Method Not Allowed", "text/plain", b"GET only");
+        let _ = write_response(
+            &mut stream,
+            "405 Method Not Allowed",
+            "text/plain",
+            b"GET only",
+        );
         return;
     }
     // Path floor: refuse `..`, absolute, and anything not Normal/CurDir.
     let rel_path = Path::new(rel);
-    let safe =
-        rel_path.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
+    let safe = rel_path
+        .components()
+        .all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
     if !safe {
         let _ = write_response(&mut stream, "404 Not Found", "text/plain", b"not found");
         return;
@@ -457,9 +493,15 @@ mod tests {
     fn parses_action_stream_jsonl() {
         let actions = parse_action_stream(stream()).unwrap();
         assert_eq!(actions.len(), 4);
-        assert!(matches!(actions[0], ArtifactAction::FileWrite { path: ref p, complete: false, .. } if p == "index.html"));
-        assert!(matches!(actions[1], ArtifactAction::ShellCommand { ref command } if command == "echo built"));
-        assert!(matches!(actions[2], ArtifactAction::Start { entry: ref e, .. } if e == "index.html"));
+        assert!(
+            matches!(actions[0], ArtifactAction::FileWrite { path: ref p, complete: false, .. } if p == "index.html")
+        );
+        assert!(
+            matches!(actions[1], ArtifactAction::ShellCommand { ref command } if command == "echo built")
+        );
+        assert!(
+            matches!(actions[2], ArtifactAction::Start { entry: ref e, .. } if e == "index.html")
+        );
         assert!(matches!(actions[3], ArtifactAction::Complete { .. }));
         assert_eq!(actions[0].label(), "write index.html");
     }
@@ -494,7 +536,9 @@ mod tests {
 
         runner.begin(1).unwrap();
         runner.fail(1, "exit 1: command not found".into()).unwrap();
-        assert!(matches!(runner.rows()[1].state, ActionState::Failed { ref formatted } if formatted == "exit 1: command not found"));
+        assert!(
+            matches!(runner.rows()[1].state, ActionState::Failed { ref formatted } if formatted == "exit 1: command not found")
+        );
         assert_eq!(runner.summary(), "2/4 · 1 failed");
 
         runner.abort();
@@ -568,8 +612,12 @@ mod tests {
             None => (rest, "/"),
         };
         let (host, port) = host_port.rsplit_once(':').unwrap();
-        let mut stream = std::net::TcpStream::connect((host, port.parse::<u16>().unwrap())).unwrap();
-        let req = format!("GET {} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n", if path.is_empty() { "/" } else { path });
+        let mut stream =
+            std::net::TcpStream::connect((host, port.parse::<u16>().unwrap())).unwrap();
+        let req = format!(
+            "GET {} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n",
+            if path.is_empty() { "/" } else { path }
+        );
         let _ = stream.write_all(req.as_bytes());
         let mut out = String::new();
         let _ = stream.read_to_string(&mut out);

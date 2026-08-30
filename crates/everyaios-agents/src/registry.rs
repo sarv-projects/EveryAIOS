@@ -37,7 +37,9 @@ pub struct AgentMeta {
 fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 48
-        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// The registry. `~/.everyaios/agents/<id>/agent.toml` per agent — one
@@ -56,7 +58,9 @@ impl AgentRegistry {
         std::env::var_os("EVERYAIOS_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
-                let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("~"));
+                let home = std::env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("~"));
                 home.join(".everyaios")
             })
             .join("agents")
@@ -146,7 +150,8 @@ impl AgentRegistry {
 
     /// Export the `agent.toml` bytes (sharing = the file, future K6).
     pub fn export(&self, id: &str) -> Result<String, RegistryError> {
-        fs::read_to_string(self.bundle_path(id)).map_err(|_| RegistryError::NotFound(id.to_string()))
+        fs::read_to_string(self.bundle_path(id))
+            .map_err(|_| RegistryError::NotFound(id.to_string()))
     }
 
     pub fn removes(&self, id: &str) -> Result<(), RegistryError> {
@@ -169,7 +174,11 @@ pub fn slug(name: &str) -> String {
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect();
     let trimmed = base.trim_matches('-').to_string();
-    if trimmed.is_empty() { "agent".to_string() } else { trimmed }
+    if trimmed.is_empty() {
+        "agent".to_string()
+    } else {
+        trimmed
+    }
 }
 
 #[cfg(test)]
@@ -204,7 +213,10 @@ mod tests {
         let new_id = reg.duplicate("coder", "Coder v2").unwrap();
         assert_eq!(new_id, "coder-v2");
         assert_eq!(reg.list().len(), 2);
-        assert!(matches!(reg.duplicate("coder", "Coder v2"), Err(RegistryError::Duplicate(_))));
+        assert!(matches!(
+            reg.duplicate("coder", "Coder v2"),
+            Err(RegistryError::Duplicate(_))
+        ));
         let _ = fs::remove_dir_all(&root);
     }
 

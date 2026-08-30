@@ -151,7 +151,12 @@ impl X11Backend {
             if !seen.insert(window) {
                 continue;
             }
-            let Some(reply) = self.conn.query_tree(window).ok().and_then(|c| c.reply().ok()) else {
+            let Some(reply) = self
+                .conn
+                .query_tree(window)
+                .ok()
+                .and_then(|c| c.reply().ok())
+            else {
                 continue;
             };
             let children: Vec<Window> = reply.children;
@@ -307,13 +312,17 @@ impl X11Backend {
         };
         xtest::fake_input(&self.conn, event, button, 0, self.root, x, y, 0)
             .map_err(|e| DesktopError::Platform(format!("xtest button: {e}")))?;
-        self.conn.flush().map_err(|e| DesktopError::Platform(format!("flush: {e}")))
+        self.conn
+            .flush()
+            .map_err(|e| DesktopError::Platform(format!("flush: {e}")))
     }
 
     fn fake_motion(&self, x: i16, y: i16) -> Result<(), DesktopError> {
         xtest::fake_input(&self.conn, MOTION_NOTIFY_EVENT, 0, 0, self.root, x, y, 0)
             .map_err(|e| DesktopError::Platform(format!("xtest motion: {e}")))?;
-        self.conn.flush().map_err(|e| DesktopError::Platform(format!("flush: {e}")))
+        self.conn
+            .flush()
+            .map_err(|e| DesktopError::Platform(format!("flush: {e}")))
     }
 
     /// Resolve a keysym → (keycode, needs_shift) via GetKeyboardMapping.
@@ -321,7 +330,12 @@ impl X11Backend {
         let setup = self.conn.setup();
         let min = setup.min_keycode;
         let count = setup.max_keycode - min;
-        let reply = self.conn.get_keyboard_mapping(min, count).ok()?.reply().ok()?;
+        let reply = self
+            .conn
+            .get_keyboard_mapping(min, count)
+            .ok()?
+            .reply()
+            .ok()?;
         let per = reply.keysyms_per_keycode as usize;
         let min = min as usize;
         for (i, chunk) in reply.keysyms.chunks(per).enumerate() {
@@ -342,21 +356,50 @@ impl X11Backend {
         if needs_shift {
             // Shift_L = 0xffe1
             if let Some((shift_code, _)) = self.keysym_to_keycode(0xffe1) {
-                xtest::fake_input(&self.conn, KEY_PRESS_EVENT, shift_code, 0, self.root, 0, 0, 0)
-                    .map_err(|e| DesktopError::Platform(format!("xtest shift: {e}")))?;
+                xtest::fake_input(
+                    &self.conn,
+                    KEY_PRESS_EVENT,
+                    shift_code,
+                    0,
+                    self.root,
+                    0,
+                    0,
+                    0,
+                )
+                .map_err(|e| DesktopError::Platform(format!("xtest shift: {e}")))?;
             }
         }
         xtest::fake_input(&self.conn, KEY_PRESS_EVENT, keycode, 0, self.root, 0, 0, 0)
             .map_err(|e| DesktopError::Platform(format!("xtest key: {e}")))?;
-        xtest::fake_input(&self.conn, KEY_RELEASE_EVENT, keycode, 0, self.root, 0, 0, 0)
-            .map_err(|e| DesktopError::Platform(format!("xtest key: {e}")))?;
+        xtest::fake_input(
+            &self.conn,
+            KEY_RELEASE_EVENT,
+            keycode,
+            0,
+            self.root,
+            0,
+            0,
+            0,
+        )
+        .map_err(|e| DesktopError::Platform(format!("xtest key: {e}")))?;
         if needs_shift {
             if let Some((shift_code, _)) = self.keysym_to_keycode(0xffe1) {
-                xtest::fake_input(&self.conn, KEY_RELEASE_EVENT, shift_code, 0, self.root, 0, 0, 0)
-                    .map_err(|e| DesktopError::Platform(format!("xtest shift: {e}")))?;
+                xtest::fake_input(
+                    &self.conn,
+                    KEY_RELEASE_EVENT,
+                    shift_code,
+                    0,
+                    self.root,
+                    0,
+                    0,
+                    0,
+                )
+                .map_err(|e| DesktopError::Platform(format!("xtest shift: {e}")))?;
             }
         }
-        self.conn.flush().map_err(|e| DesktopError::Platform(format!("flush: {e}")))
+        self.conn
+            .flush()
+            .map_err(|e| DesktopError::Platform(format!("flush: {e}")))
     }
 
     fn named_key_to_keysym(key: &str) -> Option<u32> {
@@ -467,7 +510,9 @@ impl X11Backend {
                 self.conn
                     .set_input_focus(InputFocus::PARENT, w, 0u32)
                     .map_err(|e| DesktopError::Platform(format!("set_input_focus: {e}")))?;
-                self.conn.flush().map_err(|e| DesktopError::Platform(format!("flush: {e}")))
+                self.conn
+                    .flush()
+                    .map_err(|e| DesktopError::Platform(format!("flush: {e}")))
             }
             ActKind::ClickByName { name } => Err(DesktopError::Platform(format!(
                 "ClickByName has no X11 surface (OCR must resolve \"{name}\" first)"

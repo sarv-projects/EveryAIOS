@@ -565,11 +565,8 @@ impl TieredEngine {
             return Err(EngineError::NotFound);
         }
         // G9 read-cleaner (P2.11): strip ad/tracker links + consent walls.
-        let cleaned = crate::content::clean_markdown(
-            &crate::content::default_filter_set(),
-            url,
-            &markdown,
-        );
+        let cleaned =
+            crate::content::clean_markdown(&crate::content::default_filter_set(), url, &markdown);
         let mut markdown = cleaned.text;
         let truncated = cap_output(&mut markdown, self.config.max_output);
         Ok(EngineResult {

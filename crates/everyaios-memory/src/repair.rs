@@ -39,11 +39,7 @@ pub fn repair_tool_json(raw: &str) -> Repair {
 
     // 3. Balance braces/brackets (append missing closers).
     let balanced = balance(&s);
-    let json = if balanced != s {
-        balanced
-    } else {
-        s
-    };
+    let json = if balanced != s { balanced } else { s };
 
     let repaired = json != raw.trim();
     Repair { json, repaired }

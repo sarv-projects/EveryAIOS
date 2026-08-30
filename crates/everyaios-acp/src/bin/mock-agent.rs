@@ -12,7 +12,9 @@
 use std::io::{self, BufRead, Write};
 
 fn main() {
-    let name = std::env::args().nth(1).unwrap_or_else(|| "mock-agent".into());
+    let name = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "mock-agent".into());
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut session_id: Option<String> = None;
@@ -29,7 +31,10 @@ fn main() {
             Ok(v) => v,
             Err(_) => continue,
         };
-        let method = v.get("method").and_then(serde_json::Value::as_str).unwrap_or("");
+        let method = v
+            .get("method")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
         let id = v.get("id").cloned();
         let mut reply = serde_json::json!({ "jsonrpc": "2.0" });
         if let Some(id) = id.clone() {
@@ -46,7 +51,8 @@ fn main() {
             }
             "session/new" => {
                 session_id = Some(format!("sess-{}", name));
-                reply["result"] = serde_json::json!({ "sessionId": session_id.as_deref().unwrap_or("") });
+                reply["result"] =
+                    serde_json::json!({ "sessionId": session_id.as_deref().unwrap_or("") });
             }
             "session/prompt" => {
                 // Simulate one turn: emit a session/update notification, then
@@ -68,7 +74,8 @@ fn main() {
                 continue;
             }
             "session/load" => {
-                reply["result"] = serde_json::json!({ "sessionId": session_id.as_deref().unwrap_or("") });
+                reply["result"] =
+                    serde_json::json!({ "sessionId": session_id.as_deref().unwrap_or("") });
             }
             _ if id.is_some() => {
                 reply["error"] = serde_json::json!({ "code": -32601, "message": format!("method not found: {method}") });

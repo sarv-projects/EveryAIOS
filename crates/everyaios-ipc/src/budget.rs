@@ -135,7 +135,9 @@ mod tests {
         assert!(b.inline.len() <= 50 * 1024);
         assert!(String::from_utf8_lossy(&b.inline).contains("truncated by payload budget"));
         // Full payload is one-shot fetchable.
-        let full = store.take(b.handle.unwrap().id).expect("full payload behind ref");
+        let full = store
+            .take(b.handle.unwrap().id)
+            .expect("full payload behind ref");
         assert_eq!(full.len(), 60 * 1024);
     }
 

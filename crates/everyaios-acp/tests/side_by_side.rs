@@ -47,10 +47,14 @@ fn two_mock_agents_run_side_by_side() {
 
     // Interleave prompts — the harness must keep both sessions alive.
     let out_a = a
-        .prompt("hello from the other side", |_| PermissionDecision::Deny { option_id: None })
+        .prompt("hello from the other side", |_| PermissionDecision::Deny {
+            option_id: None,
+        })
         .unwrap();
     let out_b = b
-        .prompt("hello back", |_| PermissionDecision::Deny { option_id: None })
+        .prompt("hello back", |_| PermissionDecision::Deny {
+            option_id: None,
+        })
         .unwrap();
     assert_eq!(out_a.stop_reason.as_str(), "end_turn");
     assert_eq!(out_b.stop_reason.as_str(), "end_turn");
@@ -80,7 +84,9 @@ fn cancel_targets_only_the_named_session() {
     // Cancelling A must not affect B's next prompt.
     a.cancel().unwrap();
     let out_b = b
-        .prompt("still working", |_| PermissionDecision::Deny { option_id: None })
+        .prompt("still working", |_| PermissionDecision::Deny {
+            option_id: None,
+        })
         .unwrap();
     assert_eq!(out_b.stop_reason.as_str(), "end_turn");
     a.shutdown();

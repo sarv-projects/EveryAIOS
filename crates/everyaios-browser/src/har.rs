@@ -62,7 +62,10 @@ impl Default for HarLog {
     fn default() -> Self {
         Self {
             version: "1.2".into(),
-            creator: HarCreator { name: "everyaios-replay".into(), version: env!("CARGO_PKG_VERSION").into() },
+            creator: HarCreator {
+                name: "everyaios-replay".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+            },
             entries: Vec::new(),
             has_gap: false,
             gap_note: None,
@@ -113,7 +116,8 @@ impl HarBuilder {
     /// response) — unless the log is already gap-marked.
     pub fn push_request(&mut self, req: &crate::diagnostics::NetworkRequest) {
         let Some(status) = req.status else {
-            self.log.mark_gap(format!("request {} never completed", req.url));
+            self.log
+                .mark_gap(format!("request {} never completed", req.url));
             return;
         };
         self.log.push(HarEntry {

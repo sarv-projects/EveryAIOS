@@ -54,3 +54,13 @@ repos:
         pass_filenames: false
         files: ^ui/src/.*\.(ts|tsx)$
         stages: [pre-commit]
+
+      # Fix 2: doc-sync — capabilities.yaml == ARCH/09 == spec §0, and the
+      # TODO.md header's checkbox totals match the file. Fast, no network.
+      - id: docs-sync
+        name: docs-sync (capabilities.yaml / ARCH/09 / spec / TODO counts)
+        entry: node scripts/check-doc-sync.mjs
+        language: system
+        pass_filenames: false
+        files: ^(capabilities\.yaml|DESKTOP-APP-SPEC\.md|ARCH/09-FEATURE-MATRIX\.md|TODO\.md|scripts/check-doc-sync\.mjs)$
+        stages: [pre-commit]

@@ -33,8 +33,19 @@ pub struct QrPairingSession {
 }
 
 impl QrPairingSession {
-    pub fn new(id: impl Into<String>, endpoint: impl Into<String>, nonce: impl Into<String>, expires_at_ms: u64) -> Self {
-        Self { id: id.into(), endpoint: endpoint.into(), nonce: nonce.into(), expires_at_ms, state: PairingState::AwaitingScan }
+    pub fn new(
+        id: impl Into<String>,
+        endpoint: impl Into<String>,
+        nonce: impl Into<String>,
+        expires_at_ms: u64,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            endpoint: endpoint.into(),
+            nonce: nonce.into(),
+            expires_at_ms,
+            state: PairingState::AwaitingScan,
+        }
     }
 
     /// The exact payload the QR encodes — the mobile must post this back

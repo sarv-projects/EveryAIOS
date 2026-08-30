@@ -29,23 +29,23 @@ pub mod crystallize;
 pub mod frontmatter;
 pub mod helpers;
 pub mod inbuilt;
-pub mod jobs;
 pub mod iteration;
+pub mod jobs;
 pub mod kanban;
 pub mod loop_pattern;
+pub mod marketplace;
 pub mod md;
 pub mod persona;
 pub mod plan_cache;
 pub mod plugin;
-pub mod marketplace;
 pub mod plugin_manifest;
 pub mod skill_store;
 pub mod skills_index;
 pub mod spec;
 pub mod subagent;
 pub mod supply_chain;
-pub mod swarm;
 pub mod surgical;
+pub mod swarm;
 pub mod topology;
 pub mod workflow;
 
@@ -68,9 +68,7 @@ pub use iteration::{
     SUBAGENT_MAX_ITERATIONS, SUBAGENT_TIMEOUT_CUSTOM_SECS, SUBAGENT_TIMEOUT_GLOBAL_SECS,
 };
 pub use kanban::{Column, Dispatcher, KanbanBoard, KanbanTask};
-pub use loop_pattern::{
-    Condition, LoopPattern, LoopPatternRegistry, LoopSnapshot,
-};
+pub use loop_pattern::{Condition, LoopPattern, LoopPatternRegistry, LoopSnapshot};
 pub use md::{BlueprintDoc, MdError};
 pub use persona::{
     load_persona, render_persona, Persona, PersonaConfig, PersonaError, TonePreset, CORE_RULES,
@@ -86,17 +84,16 @@ pub use skill_store::{
     SkillReference, SkillScript, SkillStore, MAX_ACTIVE_SKILLS,
 };
 pub use skills_index::{
-    compose_stack, ComposeOutcome, IndexEntry, RejectionReason, SelectionEvidence,
-    SkillsIndexFile,
+    compose_stack, ComposeOutcome, IndexEntry, RejectionReason, SelectionEvidence, SkillsIndexFile,
 };
 pub use spec::{SpecError, TaskSpec};
-pub use supply_chain::{
-    digest as manifest_digest, hmac_sha256, ManifestBody, QuarantineEntry, SignedManifest,
-    SupplyChainPolicy, SupplyVerdict,
-};
 pub use subagent::{
     AgentMessage, AgentMessageKind, SubAgentError, SubAgentLimits, SubAgentResult, SubAgentRuntime,
     SubAgentSpec, DELEGATE_BLOCKED_TOOLS, ROOT_AGENT,
+};
+pub use supply_chain::{
+    digest as manifest_digest, hmac_sha256, ManifestBody, QuarantineEntry, SignedManifest,
+    SupplyChainPolicy, SupplyVerdict,
 };
 pub use topology::{AgentRole, MultiAgentPlan, Topology};
 pub mod worktree;

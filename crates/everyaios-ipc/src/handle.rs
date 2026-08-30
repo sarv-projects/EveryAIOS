@@ -142,9 +142,15 @@ mod tests {
         // per-type budget → must become a ref (P39.1).
         let payload = vec![b'x'; 60 * 1024];
         let r = store.store_above(payload, 50 * 1024);
-        assert!(matches!(r, WirePayload::Ref(_)), "60KB must be a ref at a 50KB budget");
+        assert!(
+            matches!(r, WirePayload::Ref(_)),
+            "60KB must be a ref at a 50KB budget"
+        );
         let small = vec![b'x'; 40 * 1024];
-        assert!(matches!(store.store_above(small, 50 * 1024), WirePayload::Inline(_)));
+        assert!(matches!(
+            store.store_above(small, 50 * 1024),
+            WirePayload::Inline(_)
+        ));
     }
 
     #[test]

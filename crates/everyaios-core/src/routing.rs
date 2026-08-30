@@ -157,6 +157,9 @@ mod tests {
             cache_affinity: Some("k1".into()),
             fallback_chain: vec![("anthropic".into(), "claude-sonnet-4".into())],
         };
-        assert_eq!(d.fallback_after(), Some(&("anthropic".into(), "claude-sonnet-4".into())));
+        assert_eq!(
+            d.fallback_after(),
+            Some(&("anthropic".into(), "claude-sonnet-4".into()))
+        );
     }
 }

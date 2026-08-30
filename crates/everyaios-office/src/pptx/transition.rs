@@ -60,10 +60,9 @@ pub enum TransitionError {
 /// Read the slide's transition (if any).
 pub fn extract_transition(slide_xml: &str) -> Result<Option<Transition>, TransitionError> {
     let doc = Document::parse(slide_xml)?;
-    let Some(sld) = doc
-        .descendants()
-        .find(|d| d.is_element() && d.tag_name().namespace() == Some(P) && d.tag_name().name() == "sld")
-    else {
+    let Some(sld) = doc.descendants().find(|d| {
+        d.is_element() && d.tag_name().namespace() == Some(P) && d.tag_name().name() == "sld"
+    }) else {
         return Err(TransitionError::NoSlideRoot);
     };
     for child in sld.children() {
@@ -93,15 +92,18 @@ pub fn extract_transition(slide_xml: &str) -> Result<Option<Transition>, Transit
 /// placed before the slide's content (`p:cSld`) per the schema order.
 pub fn set_transition(slide_xml: &str, t: &Transition) -> Result<String, TransitionError> {
     let doc = Document::parse(slide_xml)?;
-    let Some(sld) = doc
-        .descendants()
-        .find(|d| d.is_element() && d.tag_name().namespace() == Some(P) && d.tag_name().name() == "sld")
-    else {
+    let Some(sld) = doc.descendants().find(|d| {
+        d.is_element() && d.tag_name().namespace() == Some(P) && d.tag_name().name() == "sld"
+    }) else {
         return Err(TransitionError::NoSlideRoot);
     };
 
     let kind_el = t.kind.as_str();
-    let speed = t.speed.as_deref().map(|s| format!(" spd=\"{s}\"")).unwrap_or_default();
+    let speed = t
+        .speed
+        .as_deref()
+        .map(|s| format!(" spd=\"{s}\""))
+        .unwrap_or_default();
     let adv = t
         .advance_ms
         .map(|ms| format!(" advTm=\"{ms}\""))
@@ -169,7 +171,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(out.contains("<p:transition spd=\"med\" advTm=\"1500\"><p:wipe/></p:transition>"), "{out}");
+        assert!(
+            out.contains("<p:transition spd=\"med\" advTm=\"1500\"><p:wipe/></p:transition>"),
+            "{out}"
+        );
         // Content still present, transition comes first.
         assert!(out.find("p:transition").unwrap() < out.find("p:cSld").unwrap());
         assert!(Document::parse(&out).is_ok());

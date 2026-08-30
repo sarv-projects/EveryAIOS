@@ -36,16 +36,18 @@ pub mod usn_winapi;
 pub mod walk;
 
 pub use checkpoint::{ChangeKind, CheckpointedFile, FsCheckpoint};
-pub use content::{extract_text, strip_html, ContentHit, ContentIndex, NoOcr, OcrEngine, OcrError, TesseractCli};
 pub use cleanup::{
     propose_duplicate_cleanup, propose_large_files_cleanup, CleanupAction, CleanupKind,
 };
+pub use content::{
+    extract_text, strip_html, ContentHit, ContentIndex, NoOcr, OcrEngine, OcrError, TesseractCli,
+};
 pub use dedup::{find_duplicates, DedupOptions, DupCandidate, DupGroup};
+pub use events::{watch_events, FileEvent};
 pub use finder::{find_large_files, FinderOptions, SortBy};
 pub use health::{
     check_health, drive_stats, health_from_stats, over_threshold, DriveStats, HealthStatus,
 };
-pub use events::{watch_events, FileEvent};
 pub use search::{watch, Debouncer, SearchHit, SearchIndex, WatchHandle};
 pub use snapshot::{Snapshot, SnapshotStore};
 pub use treemap::{color_for, squarify, treemap_for_dir, TreemapRect};

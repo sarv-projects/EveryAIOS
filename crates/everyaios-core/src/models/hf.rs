@@ -120,11 +120,7 @@ impl HfClient {
             .into_string()
             .map_err(|e| HfError::Network(e.to_string()))?;
         // Hub serves `sha256  filename` (like sha256sum).
-        let hex = text
-            .split_whitespace()
-            .next()
-            .unwrap_or("")
-            .to_lowercase();
+        let hex = text.split_whitespace().next().unwrap_or("").to_lowercase();
         if hex.len() == 64 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
             Ok(hex)
         } else {
@@ -146,7 +142,9 @@ impl HfClient {
             fitting = files.iter().collect();
         }
         fitting.sort_by_key(|f| std::cmp::Reverse(f.size)); // largest that fits = best quality
-        let best = fitting.first().ok_or(HfError::NotFound("no weight files".into()))?;
+        let best = fitting
+            .first()
+            .ok_or(HfError::NotFound("no weight files".into()))?;
         Ok(quant_from_filename(&best.path).to_string())
     }
 
@@ -219,7 +217,8 @@ impl HfClient {
                 break;
             }
             use std::io::Write;
-            file.write_all(&buf[..n]).map_err(|e| HfError::Io(e.to_string()))?;
+            file.write_all(&buf[..n])
+                .map_err(|e| HfError::Io(e.to_string()))?;
             done += n as u64;
             progress(done, expected_size);
         }
@@ -274,9 +273,8 @@ pub fn quant_from_filename(name: &str) -> &str {
         return "mlx";
     }
     for marker in [
-        "q8_0", "q6_k", "q5_k_m", "q5_k_s", "q5_0", "q4_k_m", "q4_k_s", "q4_1", "q4_0",
-        "q3_k_m", "q3_k_s", "q3_k_l", "q3_0", "q2_k", "f16", "f32", "iq4_xs", "iq3_xxs",
-        "bf16",
+        "q8_0", "q6_k", "q5_k_m", "q5_k_s", "q5_0", "q4_k_m", "q4_k_s", "q4_1", "q4_0", "q3_k_m",
+        "q3_k_s", "q3_k_l", "q3_0", "q2_k", "f16", "f32", "iq4_xs", "iq3_xxs", "bf16",
     ] {
         if lower.contains(marker) {
             return match marker {
@@ -384,9 +382,24 @@ mod tests {
     #[test]
     fn quants_in_dedupes() {
         let files = vec![
-            HfFile { path: "a-Q4_K_M.gguf".into(), size: 1, lfs: None, kind: None },
-            HfFile { path: "b-Q4_K_M.gguf".into(), size: 1, lfs: None, kind: None },
-            HfFile { path: "c-q8_0.gguf".into(), size: 1, lfs: None, kind: None },
+            HfFile {
+                path: "a-Q4_K_M.gguf".into(),
+                size: 1,
+                lfs: None,
+                kind: None,
+            },
+            HfFile {
+                path: "b-Q4_K_M.gguf".into(),
+                size: 1,
+                lfs: None,
+                kind: None,
+            },
+            HfFile {
+                path: "c-q8_0.gguf".into(),
+                size: 1,
+                lfs: None,
+                kind: None,
+            },
         ];
         let qs = quants_in(&files);
         assert_eq!(qs.len(), 2);

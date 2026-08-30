@@ -75,13 +75,12 @@ pub fn parse_verify(new_content: &str) -> Option<()> {
 /// Replace a symbol's body between `region` lines with `new_body`, then
 /// parse-verify the whole file. Returns the new file content only when the
 /// result parses — otherwise `None` and nothing is written.
-pub fn replace_body(
-    content: &str,
-    region: EditRegion,
-    new_body: &str,
-) -> Option<String> {
+pub fn replace_body(content: &str, region: EditRegion, new_body: &str) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
-    if region.start_line == 0 || region.end_line < region.start_line || region.end_line > lines.len() as u32 {
+    if region.start_line == 0
+        || region.end_line < region.start_line
+        || region.end_line > lines.len() as u32
+    {
         return None;
     }
     let (start, end) = (region.start_line as usize - 1, region.end_line as usize);
@@ -137,28 +136,56 @@ impl LspServerCatalog {
                     command: "rust-analyzer".into(),
                     version: "2026-08-15".into(),
                     languages: vec!["rust".into()],
-                    capabilities: LspCapabilities { hover: true, definition: true, references: true, rename: true, code_actions: true, diagnostics: true },
+                    capabilities: LspCapabilities {
+                        hover: true,
+                        definition: true,
+                        references: true,
+                        rename: true,
+                        code_actions: true,
+                        diagnostics: true,
+                    },
                 },
                 LspServerEntry {
                     id: "typescript-language-server".into(),
                     command: "typescript-language-server --stdio".into(),
                     version: "4.3.3".into(),
                     languages: vec!["typescript".into(), "javascript".into()],
-                    capabilities: LspCapabilities { hover: true, definition: true, references: true, rename: true, code_actions: true, diagnostics: true },
+                    capabilities: LspCapabilities {
+                        hover: true,
+                        definition: true,
+                        references: true,
+                        rename: true,
+                        code_actions: true,
+                        diagnostics: true,
+                    },
                 },
                 LspServerEntry {
                     id: "pyright".into(),
                     command: "pyright-langserver --stdio".into(),
                     version: "1.1.379".into(),
                     languages: vec!["python".into()],
-                    capabilities: LspCapabilities { hover: true, definition: true, references: true, rename: false, code_actions: false, diagnostics: true },
+                    capabilities: LspCapabilities {
+                        hover: true,
+                        definition: true,
+                        references: true,
+                        rename: false,
+                        code_actions: false,
+                        diagnostics: true,
+                    },
                 },
                 LspServerEntry {
                     id: "gopls".into(),
                     command: "gopls".into(),
                     version: "0.16.2".into(),
                     languages: vec!["go".into()],
-                    capabilities: LspCapabilities { hover: true, definition: true, references: true, rename: true, code_actions: true, diagnostics: true },
+                    capabilities: LspCapabilities {
+                        hover: true,
+                        definition: true,
+                        references: true,
+                        rename: true,
+                        code_actions: true,
+                        diagnostics: true,
+                    },
                 },
             ],
         }
@@ -167,7 +194,9 @@ impl LspServerCatalog {
     /// The server for a language, or `None` (the coordinator reports the
     /// gap instead of guessing).
     pub fn for_language(&self, language: &str) -> Option<&LspServerEntry> {
-        self.servers.iter().find(|s| s.languages.iter().any(|l| l == language))
+        self.servers
+            .iter()
+            .find(|s| s.languages.iter().any(|l| l == language))
     }
 
     pub fn find(&self, id: &str) -> Option<&LspServerEntry> {
@@ -192,13 +221,25 @@ mod tests {
         let path = tmpdb();
         let mut g = SymbolGraph::open(&path).unwrap();
         g.rebuild(
-            &[GraphSymbol { name: "a".into(), kind: "function".into(), file: "f.rs".into(), line: 1, language: "rust".into() }],
-            &[GraphEdge { source: "b".into(), target: "a".into(), kind: "call".into() }],
+            &[GraphSymbol {
+                name: "a".into(),
+                kind: "function".into(),
+                file: "f.rs".into(),
+                line: 1,
+                language: "rust".into(),
+            }],
+            &[GraphEdge {
+                source: "b".into(),
+                target: "a".into(),
+                kind: "call".into(),
+            }],
         )
         .unwrap();
         assert_eq!(
             safe_delete(&g, "a"),
-            DeleteVerdict::Refused { references: vec!["b".into()] }
+            DeleteVerdict::Refused {
+                references: vec!["b".into()]
+            }
         );
         let _ = std::fs::remove_file(&path);
     }
@@ -214,12 +255,27 @@ mod tests {
     #[test]
     fn replace_body_verifies_and_rejects_malformed() {
         let src = "fn main() {\n    let x = 1;\n}\n";
-        let ok = replace_body(src, EditRegion { start_line: 2, end_line: 2 }, "    let y = 2;").unwrap();
+        let ok = replace_body(
+            src,
+            EditRegion {
+                start_line: 2,
+                end_line: 2,
+            },
+            "    let y = 2;",
+        )
+        .unwrap();
         assert!(ok.contains("let y = 2;"));
         assert!(parse_verify(&ok).is_some());
 
         // Unbalanced braces in the replacement → rejected, nothing written.
-        let bad = replace_body(src, EditRegion { start_line: 2, end_line: 2 }, "    let y = {;");
+        let bad = replace_body(
+            src,
+            EditRegion {
+                start_line: 2,
+                end_line: 2,
+            },
+            "    let y = {;",
+        );
         assert!(bad.is_none());
     }
 

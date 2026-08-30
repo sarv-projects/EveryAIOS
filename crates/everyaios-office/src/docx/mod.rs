@@ -345,7 +345,8 @@ mod tests {
         // middle fragment is contiguous in the XML (the original text is split
         // across runs, so the full string is not — render_text proves the
         // round-trip instead).
-        let xml = String::from_utf8(reopened_archive.read_part("word/document.xml").unwrap()).unwrap();
+        let xml =
+            String::from_utf8(reopened_archive.read_part("word/document.xml").unwrap()).unwrap();
         assert!(xml.contains("Goodbye, "));
         assert!(xml.contains("world!"));
     }

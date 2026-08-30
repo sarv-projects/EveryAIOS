@@ -67,14 +67,20 @@ pub struct RetryPolicy {
 
 impl Default for RetryPolicy {
     fn default() -> Self {
-        Self { max_retries: 3, base_delay_secs: 5, max_wait_secs: 300 }
+        Self {
+            max_retries: 3,
+            base_delay_secs: 5,
+            max_wait_secs: 300,
+        }
     }
 }
 
 impl RetryPolicy {
     /// The wait (seconds) before retry `n` (1-based, `n <= max_retries`).
     pub fn delay_for(&self, retry_number: u32) -> u64 {
-        let backoff = self.base_delay_secs.saturating_mul(2u64.saturating_pow(retry_number - 1));
+        let backoff = self
+            .base_delay_secs
+            .saturating_mul(2u64.saturating_pow(retry_number - 1));
         backoff.min(self.max_wait_secs)
     }
 }
@@ -121,7 +127,10 @@ impl WfTask {
     /// Runnable now: Pending and every dependency `Success`.
     pub fn ready(&self, states: &BTreeMap<String, TaskState>) -> bool {
         self.state == TaskState::Pending
-            && self.depends_on.iter().all(|d| states.get(d) == Some(&TaskState::Success))
+            && self
+                .depends_on
+                .iter()
+                .all(|d| states.get(d) == Some(&TaskState::Success))
     }
 }
 
@@ -163,7 +172,12 @@ pub struct Workflow {
 
 impl Workflow {
     pub fn new(id: impl Into<String>) -> Self {
-        Self { id: id.into(), tasks: BTreeMap::new(), retry: RetryPolicy::default(), runs: Vec::new() }
+        Self {
+            id: id.into(),
+            tasks: BTreeMap::new(),
+            retry: RetryPolicy::default(),
+            runs: Vec::new(),
+        }
     }
 
     pub fn add_task(&mut self, task: WfTask) -> &mut Self {
@@ -177,8 +191,11 @@ impl Workflow {
 
     /// The tasks currently runnable (deps done, state pending).
     pub fn ready_tasks(&self) -> Vec<String> {
-        let states: BTreeMap<String, TaskState> =
-            self.tasks.iter().map(|(k, t)| (k.clone(), t.state)).collect();
+        let states: BTreeMap<String, TaskState> = self
+            .tasks
+            .iter()
+            .map(|(k, t)| (k.clone(), t.state))
+            .collect();
         self.tasks
             .iter()
             .filter(|(_, t)| t.ready(&states))
@@ -193,17 +210,26 @@ impl Workflow {
             .tasks
             .get(id)
             .map(|t| {
-                t.depends_on
-                    .iter()
-                    .all(|d| self.tasks.get(d).map(|dt| dt.state == TaskState::Success).unwrap_or(false))
+                t.depends_on.iter().all(|d| {
+                    self.tasks
+                        .get(d)
+                        .map(|dt| dt.state == TaskState::Success)
+                        .unwrap_or(false)
+                })
             })
             .unwrap_or(false);
         if !deps_ok {
             return Err(WorkflowError::NotReady(id.to_string()));
         }
-        let t = self.tasks.get_mut(id).ok_or(WorkflowError::UnknownTask(id.to_string()))?;
+        let t = self
+            .tasks
+            .get_mut(id)
+            .ok_or(WorkflowError::UnknownTask(id.to_string()))?;
         if !TaskState::can_transition(t.state, TaskState::Running) {
-            return Err(WorkflowError::IllegalTransition(t.state, TaskState::Running));
+            return Err(WorkflowError::IllegalTransition(
+                t.state,
+                TaskState::Running,
+            ));
         }
         t.state = TaskState::Running;
         Ok(())
@@ -212,9 +238,15 @@ impl Workflow {
     /// Task succeeded — but only when its verify hook passed. The caller
     /// passes the verify result; a failed verify is a retryable failure.
     pub fn succeed(&mut self, id: &str, verify_passed: bool) -> Result<(), WorkflowError> {
-        let t = self.tasks.get_mut(id).ok_or(WorkflowError::UnknownTask(id.to_string()))?;
+        let t = self
+            .tasks
+            .get_mut(id)
+            .ok_or(WorkflowError::UnknownTask(id.to_string()))?;
         if t.state != TaskState::Running {
-            return Err(WorkflowError::IllegalTransition(t.state, TaskState::Success));
+            return Err(WorkflowError::IllegalTransition(
+                t.state,
+                TaskState::Success,
+            ));
         }
         if t.verify.is_some() && !verify_passed {
             return self.record_failure(id, "verify failed");
@@ -229,7 +261,10 @@ impl Workflow {
     }
 
     fn record_failure(&mut self, id: &str, _reason: &str) -> Result<(), WorkflowError> {
-        let t = self.tasks.get_mut(id).ok_or(WorkflowError::UnknownTask(id.to_string()))?;
+        let t = self
+            .tasks
+            .get_mut(id)
+            .ok_or(WorkflowError::UnknownTask(id.to_string()))?;
         if t.state != TaskState::Running {
             return Err(WorkflowError::IllegalTransition(t.state, TaskState::Failed));
         }
@@ -264,9 +299,15 @@ impl Workflow {
 
     /// Manual requeue (`Skipped`/`Blocked`/`Failed` → `Running`).
     pub fn requeue(&mut self, id: &str) -> Result<(), WorkflowError> {
-        let t = self.tasks.get_mut(id).ok_or(WorkflowError::UnknownTask(id.to_string()))?;
+        let t = self
+            .tasks
+            .get_mut(id)
+            .ok_or(WorkflowError::UnknownTask(id.to_string()))?;
         if !TaskState::can_transition(t.state, TaskState::Running) {
-            return Err(WorkflowError::IllegalTransition(t.state, TaskState::Running));
+            return Err(WorkflowError::IllegalTransition(
+                t.state,
+                TaskState::Running,
+            ));
         }
         t.state = TaskState::Running;
         Ok(())
@@ -274,9 +315,15 @@ impl Workflow {
 
     /// Mark a task `Blocked` (nudge card surface).
     pub fn block(&mut self, id: &str) -> Result<(), WorkflowError> {
-        let t = self.tasks.get_mut(id).ok_or(WorkflowError::UnknownTask(id.to_string()))?;
+        let t = self
+            .tasks
+            .get_mut(id)
+            .ok_or(WorkflowError::UnknownTask(id.to_string()))?;
         if !TaskState::can_transition(t.state, TaskState::Blocked) {
-            return Err(WorkflowError::IllegalTransition(t.state, TaskState::Blocked));
+            return Err(WorkflowError::IllegalTransition(
+                t.state,
+                TaskState::Blocked,
+            ));
         }
         t.state = TaskState::Blocked;
         Ok(())
@@ -295,7 +342,11 @@ impl Workflow {
         let run = WorkflowRun {
             workflow_id: self.id.clone(),
             logical_date: logical_date.into(),
-            task_states: self.tasks.iter().map(|(k, t)| (k.clone(), t.state)).collect(),
+            task_states: self
+                .tasks
+                .iter()
+                .map(|(k, t)| (k.clone(), t.state))
+                .collect(),
             completed: self.is_complete(),
         };
         self.runs.push(run.clone());
@@ -327,8 +378,11 @@ impl Workflow {
                 adj.entry(d.clone()).or_default().push(t.id.clone());
             }
         }
-        let mut queue: Vec<String> =
-            indeg.iter().filter(|(_, &d)| d == 0).map(|(k, _)| k.clone()).collect();
+        let mut queue: Vec<String> = indeg
+            .iter()
+            .filter(|(_, &d)| d == 0)
+            .map(|(k, _)| k.clone())
+            .collect();
         let mut order = Vec::new();
         while let Some(id) = queue.pop() {
             order.push(id.clone());
@@ -402,7 +456,10 @@ mod tests {
         let mut w = wf();
         assert!(matches!(w.claim("parse"), Err(WorkflowError::NotReady(_))));
         assert!(w.claim("fetch").is_ok());
-        assert!(matches!(w.claim("fetch"), Err(WorkflowError::IllegalTransition(..)))); // already running
+        assert!(matches!(
+            w.claim("fetch"),
+            Err(WorkflowError::IllegalTransition(..))
+        )); // already running
         assert!(w.succeed("fetch", true).is_ok());
         assert!(w.claim("parse").is_ok());
     }
@@ -437,7 +494,11 @@ mod tests {
 
     #[test]
     fn backoff_doubles_and_caps() {
-        let p = RetryPolicy { max_retries: 10, base_delay_secs: 5, max_wait_secs: 40 };
+        let p = RetryPolicy {
+            max_retries: 10,
+            base_delay_secs: 5,
+            max_wait_secs: 40,
+        };
         assert_eq!(p.delay_for(1), 5);
         assert_eq!(p.delay_for(2), 10);
         assert_eq!(p.delay_for(3), 20);
@@ -486,7 +547,10 @@ mod tests {
 
         let mut missing = Workflow::new("missing");
         missing.add_task(WfTask::new("a").with_deps(&["nope"]));
-        assert_eq!(missing.topological_order(), Err(WorkflowError::UnknownDependency("nope".into())));
+        assert_eq!(
+            missing.topological_order(),
+            Err(WorkflowError::UnknownDependency("nope".into()))
+        );
     }
 
     #[test]

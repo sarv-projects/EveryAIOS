@@ -56,9 +56,11 @@ impl ElectronHandle {
     /// A11y snapshot of the attached window (reuses the existing snapshot
     /// engine — refs `[ref=eN]` scoped to the document).
     pub fn snapshot(&self, document_id: &str, mode: SnapshotMode) -> Result<Snapshot, CdpError> {
-        SnapshotEngine::default()
-            .with_mode(mode)
-            .capture(&self.client, Some(&self.session.session_id), document_id)
+        SnapshotEngine::default().with_mode(mode).capture(
+            &self.client,
+            Some(&self.session.session_id),
+            document_id,
+        )
     }
 
     /// Click a `[ref=eN]` from a snapshot: resolve the ref → backing DOM node
@@ -93,7 +95,11 @@ impl ElectronHandle {
                 message: "DOM.getBoxModel quad too short".into(),
             });
         }
-        let xs: Vec<f64> = quad.iter().step_by(2).filter_map(serde_json::Value::as_f64).collect();
+        let xs: Vec<f64> = quad
+            .iter()
+            .step_by(2)
+            .filter_map(serde_json::Value::as_f64)
+            .collect();
         let ys: Vec<f64> = quad
             .iter()
             .skip(1)
@@ -183,6 +189,9 @@ mod tests {
     fn attach_requires_electron_probe() {
         // A dead port errors cleanly (no Electron app there).
         let err = ElectronHandle::attach(1).unwrap_err();
-        assert!(matches!(err, CdpError::Http(_) | CdpError::Discovery(_)), "got {err:?}");
+        assert!(
+            matches!(err, CdpError::Http(_) | CdpError::Discovery(_)),
+            "got {err:?}"
+        );
     }
 }

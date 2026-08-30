@@ -16,17 +16,17 @@ use serde::{Deserialize, Serialize};
 pub mod cockpit;
 pub mod merkle;
 pub mod receipt;
-pub mod retention;
 pub mod repair;
 pub mod replay;
+pub mod retention;
 pub mod session_log;
 
 pub use receipt::{
-    CostSummary, EvidenceRef, Provenance, ReceiptActionRef, ReceiptBuilder, VerificationSummary,
-    WorkReceipt,
+    CostSummary, EffectReceipt, EvidenceRef, Provenance, ReceiptActionRef, ReceiptBuilder,
+    VerificationSummary, WorkReceipt,
 };
-pub use repair::{StartedUnknownClassification, StartedUnknownItem, started_unknown_repair};
-pub use session_log::{ProjectedMessage, ForkLineage};
+pub use repair::{started_unknown_repair, StartedUnknownClassification, StartedUnknownItem};
+pub use session_log::{ForkLineage, ProjectedMessage};
 
 /// One audit event. `kind` is a stable dotted name (e.g. `browser.act`,
 /// `guard.blocked`, `vault.rotate`); `payload` is schema-per-kind.

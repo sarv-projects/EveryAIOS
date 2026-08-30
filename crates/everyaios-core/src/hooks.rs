@@ -78,11 +78,9 @@ impl HookRegistry {
     }
 
     pub fn install(&mut self, spec: HookSpec, f: HookFn) {
-        if let Some(pos) = self
-            .hooks
-            .iter()
-            .position(|(s, _)| s.name == spec.name && s.kind == spec.kind && s.capability == spec.capability)
-        {
+        if let Some(pos) = self.hooks.iter().position(|(s, _)| {
+            s.name == spec.name && s.kind == spec.kind && s.capability == spec.capability
+        }) {
             self.hooks[pos].1 = f;
         } else {
             self.hooks.push((spec, f));
@@ -103,7 +101,8 @@ impl HookRegistry {
             .filter(|(s, _)| s.kind == event.kind && s.capability == event.capability)
         {
             let a = f(event);
-            self.audit.push((event.tool.clone(), format!("{:?}", event.kind), a.clone()));
+            self.audit
+                .push((event.tool.clone(), format!("{:?}", event.kind), a.clone()));
             match &a {
                 HookAction::Deny { .. } => {
                     if event.kind == HookKind::PreToolUse {
@@ -154,8 +153,14 @@ mod tests {
     fn pre_hook_can_deny() {
         let mut reg = HookRegistry::new();
         reg.install(
-            HookSpec { name: "no-delete".into(), kind: HookKind::PreToolUse, capability: "fs.write/**".into() },
-            Box::new(|_| HookAction::Deny { reason: "delete is blocked".into() }),
+            HookSpec {
+                name: "no-delete".into(),
+                kind: HookKind::PreToolUse,
+                capability: "fs.write/**".into(),
+            },
+            Box::new(|_| HookAction::Deny {
+                reason: "delete is blocked".into(),
+            }),
         );
         let action = reg.dispatch(&ev(HookKind::PreToolUse, "fs.write/**", "fs.remove"));
         assert!(matches!(action, HookAction::Deny { .. }));
@@ -166,7 +171,11 @@ mod tests {
     fn pre_allow_never_skips_ticket() {
         let mut reg = HookRegistry::new();
         reg.install(
-            HookSpec { kind: HookKind::PreToolUse, capability: "*".into(), name: "allow-all".into() },
+            HookSpec {
+                kind: HookKind::PreToolUse,
+                capability: "*".into(),
+                name: "allow-all".into(),
+            },
             Box::new(|_| HookAction::Allow),
         );
         let action = reg.dispatch(&ev(HookKind::PreToolUse, "fs.write/**", "fs.write"));
@@ -178,7 +187,11 @@ mod tests {
     fn post_failure_hook_records() {
         let mut reg = HookRegistry::new();
         reg.install(
-            HookSpec { kind: HookKind::PostToolUseFailure, capability: "*".into(), name: "failwatch".into() },
+            HookSpec {
+                kind: HookKind::PostToolUseFailure,
+                capability: "*".into(),
+                name: "failwatch".into(),
+            },
             Box::new(|_| HookAction::Record),
         );
         let action = reg.dispatch(&ev(HookKind::PostToolUseFailure, "browser.navigate", "nav"));
@@ -189,8 +202,14 @@ mod tests {
     fn post_deny_is_record_only() {
         let mut reg = HookRegistry::new();
         reg.install(
-            HookSpec { kind: HookKind::PostToolUse, capability: "*".into(), name: "p".into() },
-            Box::new(|_| HookAction::Deny { reason: "too late anyway".into() }),
+            HookSpec {
+                kind: HookKind::PostToolUse,
+                capability: "*".into(),
+                name: "p".into(),
+            },
+            Box::new(|_| HookAction::Deny {
+                reason: "too late anyway".into(),
+            }),
         );
         let action = reg.dispatch(&ev(HookKind::PostToolUse, "*", "t"));
         // The tool already ran; the deny is recorded, not effective.
@@ -201,8 +220,14 @@ mod tests {
     fn capability_scope_gates_hook() {
         let mut reg = HookRegistry::new();
         reg.install(
-            HookSpec { name: "narrow".into(), kind: HookKind::PreToolUse, capability: "fs.write:/tmp/**".into() },
-            Box::new(|_| HookAction::Deny { reason: "no".into() }),
+            HookSpec {
+                name: "narrow".into(),
+                kind: HookKind::PreToolUse,
+                capability: "fs.write:/tmp/**".into(),
+            },
+            Box::new(|_| HookAction::Deny {
+                reason: "no".into(),
+            }),
         );
         // Different capability: hook does not fire.
         let action = reg.dispatch(&ev(HookKind::PreToolUse, "browser.navigate", "nav"));

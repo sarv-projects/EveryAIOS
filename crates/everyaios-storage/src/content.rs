@@ -64,8 +64,7 @@ impl ContentIndex {
         let tx = self.conn.transaction()?;
         let mut n = 0usize;
         {
-            let mut stmt =
-                tx.prepare("INSERT INTO contents(path, content) VALUES (?1, ?2)")?;
+            let mut stmt = tx.prepare("INSERT INTO contents(path, content) VALUES (?1, ?2)")?;
             for (path, content) in entries {
                 stmt.execute(params![path, content])?;
                 n += 1;

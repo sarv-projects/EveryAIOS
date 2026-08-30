@@ -29,8 +29,20 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Fix 3 — the v1 kernel gate: releases are blocked while security-kernel
+  # items (P48.2/P48.4/P47.5) are open. The doc-sync check fails (exit 1) when
+  # any gate item is open; this job gates the whole build matrix on it.
+  kernel-gate:
+    name: kernel gate (v1 blockers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run doc-sync + kernel-gate check
+        run: node scripts/check-doc-sync.mjs
+
   build:
     name: ${{ matrix.name }}
+    needs: [kernel-gate]
     strategy:
       fail-fast: false
       matrix:

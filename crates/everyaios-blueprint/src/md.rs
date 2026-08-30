@@ -29,7 +29,9 @@
 //! ```
 
 use crate::blueprint::{Blueprint, BlueprintTask, TaskStatus, VerifyBlock};
-use crate::frontmatter::{parse_frontmatter, AgentConfig, FrontmatterError, Isolation, PermissionMode};
+use crate::frontmatter::{
+    parse_frontmatter, AgentConfig, FrontmatterError, Isolation, PermissionMode,
+};
 use crate::spec::TaskSpec;
 use everyaios_eval::{HashAlgorithm, OutcomeCheck};
 use thiserror::Error;

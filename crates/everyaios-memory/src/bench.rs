@@ -9,10 +9,10 @@
 //! coordinator sidecar calls — so they double as the "does it still work in
 //! the desktop runtime" retest.
 
+use crate::actr::{activation, recency, Memory};
 use crate::bm25::{run_signals_parallel, Bm25Doc, Bm25Index, Hit, SignalKind, SignalSource};
 use crate::ghost::GhostIndex;
 use crate::graph::{EdgeType, GraphStore, NodeKind};
-use crate::actr::{activation, recency, Memory};
 use std::time::Instant;
 
 /// P5.10 — consolidated "all built algorithms" smoke test. Exercises every
@@ -30,8 +30,14 @@ fn smoke_all_algorithms() {
     assert_eq!(
         crate::fusion::rrf_fuse(
             &[
-                crate::fusion::Signal { weight: 1.0, hits: &a },
-                crate::fusion::Signal { weight: 1.0, hits: &b },
+                crate::fusion::Signal {
+                    weight: 1.0,
+                    hits: &a
+                },
+                crate::fusion::Signal {
+                    weight: 1.0,
+                    hits: &b
+                },
             ],
             60.0
         )
@@ -40,20 +46,37 @@ fn smoke_all_algorithms() {
     );
     assert_eq!(crate::fusion::dedupe(&a).len(), 2);
     assert!(!crate::fusion::smart_snippets("the fox jumps", &["fox"], 4).is_empty());
-    assert!(crate::fusion::cap_text("x".repeat(10_000).as_str(), crate::fusion::ContentType::Memory).ends_with('…'));
+    assert!(crate::fusion::cap_text(
+        "x".repeat(10_000).as_str(),
+        crate::fusion::ContentType::Memory
+    )
+    .ends_with('…'));
     assert!(crate::fusion::budget_tokens(crate::fusion::ContentType::File) == 2000);
     assert!(!crate::fusion::merge_small_chunks(&["a".into(), "b".into()], 10, false).is_empty());
 
     // 2. actr (Alg #32)
-    let mem = Memory { id: "m".into(), importance: 10, strength: 1.0, created_at: 0, last_access: 0, keywords: vec![], graph_links: 0 };
+    let mem = Memory {
+        id: "m".into(),
+        importance: 10,
+        strength: 1.0,
+        created_at: 0,
+        last_access: 0,
+        keywords: vec![],
+        graph_links: 0,
+    };
     assert!(activation(&mem, 1_000, 3600.0) > 0.0);
     assert!(recency(0) > recency(1_000));
 
     // 3. compaction (Alg #21) + coordinator lifecycle
-    let mut c = crate::compaction::CompactionCoordinator::new(crate::compaction::CompactionConfig::default(), 100);
+    let mut c = crate::compaction::CompactionCoordinator::new(
+        crate::compaction::CompactionConfig::default(),
+        100,
+    );
     c.push_turn(95);
     let no_summarizers: &[&crate::compaction::Summarizer] = &[];
-    assert!(c.maybe_compact("x".repeat(400).as_str(), no_summarizers).is_some());
+    assert!(c
+        .maybe_compact("x".repeat(400).as_str(), no_summarizers)
+        .is_some());
 
     // 4. graph (Alg #6/#30)
     let mut g = crate::graph::GraphStore::new();
@@ -65,7 +88,11 @@ fn smoke_all_algorithms() {
 
     // 5. paging (Alg #20)
     let mut p = crate::paging::PagedMemory::new();
-    p.write(crate::paging::MemoryEntry { id: "e1".into(), content: "hello world entry".into(), importance: 5 });
+    p.write(crate::paging::MemoryEntry {
+        id: "e1".into(),
+        content: "hello world entry".into(),
+        importance: 5,
+    });
     p.flush_writes();
     assert!(p.read("e1").is_some());
     assert!(p.search("world").len() == 1);
@@ -73,13 +100,29 @@ fn smoke_all_algorithms() {
     // 6. ghost
     let mut gh = crate::ghost::GhostIndex::new();
     gh.index("/f", "r1");
-    assert_eq!(gh.apply_fs_event(&crate::ghost::FsEvent::Removed("/f".into())), 1);
+    assert_eq!(
+        gh.apply_fs_event(&crate::ghost::FsEvent::Removed("/f".into())),
+        1
+    );
 
     // 7. reference (C10) + query (P5.8)
-    let h = crate::reference::make_ref_handle("f", "/f.txt", crate::reference::RefKind::File, "line alpha\nline beta\n", 22, None);
+    let h = crate::reference::make_ref_handle(
+        "f",
+        "/f.txt",
+        crate::reference::RefKind::File,
+        "line alpha\nline beta\n",
+        22,
+        None,
+    );
     assert!(h.preview_tokens() <= crate::reference::PREVIEW_BUDGET_TOKENS);
-    assert_eq!(crate::reference::query_ref("a alpha\nb beta", "alpha", 5).len(), 1);
-    assert!(crate::reference::bounded_preview("abcdefghij".repeat(10).as_str(), 4, 4).contains("truncated"));
+    assert_eq!(
+        crate::reference::query_ref("a alpha\nb beta", "alpha", 5).len(),
+        1
+    );
+    assert!(
+        crate::reference::bounded_preview("abcdefghij".repeat(10).as_str(), 4, 4)
+            .contains("truncated")
+    );
 
     // 8. fsrs (C13)
     let fsrs = crate::fsrs::Fsrs::new(&crate::fsrs::DEFAULT_PARAMETERS).expect("fsrs params");
@@ -97,14 +140,22 @@ fn smoke_all_algorithms() {
 
     // 11. reinforce (FSRS queue)
     let mut q = crate::reinforce::ReviewQueue::new(0.9);
-    let cands = crate::reinforce::extract_candidates("This is an important fact. This is another important fact.");
+    let cands = crate::reinforce::extract_candidates(
+        "This is an important fact. This is another important fact.",
+    );
     assert!(!cands.is_empty());
     assert!(q.ingest(cands, 0) > 0);
 
     // 12. bm25 + parallel fusion
     let mut idx = crate::bm25::Bm25Index::new();
-    idx.build(vec![crate::bm25::Bm25Doc { id: "d".into(), text: "rust borrow checker".into() }]);
-    assert_eq!(crate::bm25::run_signals_parallel("rust", &idx, None, None, 3)[0].id, "d");
+    idx.build(vec![crate::bm25::Bm25Doc {
+        id: "d".into(),
+        text: "rust borrow checker".into(),
+    }]);
+    assert_eq!(
+        crate::bm25::run_signals_parallel("rust", &idx, None, None, 3)[0].id,
+        "d"
+    );
 
     // 13. planner (C7)
     let mut pl = crate::planner::ContextPlanner::new(crate::planner::PlannerConfig::default());
@@ -112,7 +163,10 @@ fn smoke_all_algorithms() {
 
     // 14. janus
     let j = crate::janus::run_janus("dup\ndup\nunique", 2, 2);
-    assert!(j.removed_blocks >= 1, "janus must remove the duplicate block");
+    assert!(
+        j.removed_blocks >= 1,
+        "janus must remove the duplicate block"
+    );
 
     // 15. cognee
     let mut cg = crate::cognee::CogneeMemory::new();
@@ -135,14 +189,25 @@ fn smoke_all_algorithms() {
     assert!(crate::embedding::cosine(&[1.0, 0.0], &[1.0, 0.0]) > 0.99);
 
     // 19. rerank (Alg #19)
-    let cands = vec![crate::rerank::Candidate { id: "c1".into(), text: "rust borrow checker".into() }];
+    let cands = vec![crate::rerank::Candidate {
+        id: "c1".into(),
+        text: "rust borrow checker".into(),
+    }];
     let retr: std::collections::HashMap<String, f64> = [("c1".to_string(), 0.8)].into();
     let reranker = crate::rerank::LexicalReranker::new();
-    assert_eq!(crate::rerank::rerank(&cands, &retr, &reranker, "rust", 0.5, 0.5, 3).len(), 1);
+    assert_eq!(
+        crate::rerank::rerank(&cands, &retr, &reranker, "rust", 0.5, 0.5, 3).len(),
+        1
+    );
 
     // 20. repair (P1.8)
-    let rep = crate::repair::repair_tool_json("```json\n{\"kind\":\"click\",\"ref_id\":\"e1\",}\n```");
-    assert!(serde_json::from_str::<serde_json::Value>(&rep.json).is_ok(), "repaired json must parse: {}", rep.json);
+    let rep =
+        crate::repair::repair_tool_json("```json\n{\"kind\":\"click\",\"ref_id\":\"e1\",}\n```");
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&rep.json).is_ok(),
+        "repaired json must parse: {}",
+        rep.json
+    );
 
     // 21. usage (P8)
     let mut ul = crate::usage::UsageLedger::new();
@@ -151,7 +216,11 @@ fn smoke_all_algorithms() {
     ul.clear_active();
     assert_eq!(ul.total().total_tokens(), 110);
 
-    eprintln!("[smoke] all {} algorithms exercised in {:?}", 21, start.elapsed());
+    eprintln!(
+        "[smoke] all {} algorithms exercised in {:?}",
+        21,
+        start.elapsed()
+    );
 }
 
 /// A graph-backed retrieval signal (spreading activation → ranked hits).
@@ -272,7 +341,13 @@ fn bench_spreading_activation() {
         g.add_node(&format!("n{i}"), NodeKind::Entity, &format!("node {i}"));
     }
     for i in 0..29 {
-        g.add_edge(&format!("n{i}"), &format!("n{}", i + 1), EdgeType::Supports, 0.9, 0);
+        g.add_edge(
+            &format!("n{i}"),
+            &format!("n{}", i + 1),
+            EdgeType::Supports,
+            0.9,
+            0,
+        );
     }
     // A contradicts edge to exercise lateral inhibition (negative activation).
     g.add_edge("n1", "n5", EdgeType::Contradicts, 1.0, 0);
@@ -292,7 +367,10 @@ fn bench_spreading_activation() {
         "contradicted node must be inhibited: {out:?}"
     );
 
-    eprintln!("[bench] spreading_activation: {elapsed:?} (top {:?})", &out[..3.min(out.len())]);
+    eprintln!(
+        "[bench] spreading_activation: {elapsed:?} (top {:?})",
+        &out[..3.min(out.len())]
+    );
 }
 
 /// Phantom-thread benchmark: ghost-context prevention must atomically evict a
@@ -339,9 +417,18 @@ fn bench_temporal_anticipation_and_actr() {
     g.add_edge("a", "b", EdgeType::Supports, 3.0, 30);
 
     let start = Instant::now();
-    let w15 = g.edge_between("a", "b", EdgeType::Supports, 15).unwrap().weight;
-    let w25 = g.edge_between("a", "b", EdgeType::Supports, 25).unwrap().weight;
-    let w35 = g.edge_between("a", "b", EdgeType::Supports, 35).unwrap().weight;
+    let w15 = g
+        .edge_between("a", "b", EdgeType::Supports, 15)
+        .unwrap()
+        .weight;
+    let w25 = g
+        .edge_between("a", "b", EdgeType::Supports, 25)
+        .unwrap()
+        .weight;
+    let w35 = g
+        .edge_between("a", "b", EdgeType::Supports, 35)
+        .unwrap()
+        .weight;
     let graph_elapsed = start.elapsed();
     assert_eq!((w15, w25, w35), (1.0, 2.0, 3.0));
 

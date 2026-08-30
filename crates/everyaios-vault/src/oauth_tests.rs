@@ -586,13 +586,19 @@ fn google_connector_pkce_roundtrip() {
         .with_token_url(GOOGLE, &base);
 
     let start = om.start_pkce(GOOGLE).unwrap();
-    assert!(start.auth_url.starts_with("https://accounts.google.com/o/oauth2/v2/auth?"));
+    assert!(start
+        .auth_url
+        .starts_with("https://accounts.google.com/o/oauth2/v2/auth?"));
     assert!(start.auth_url.contains("code_challenge_method=S256"));
-    assert!(start.auth_url.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb"));
+    assert!(start
+        .auth_url
+        .contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb"));
     // Google scopes are space-encoded in the authorize URL.
     assert!(start.auth_url.contains("drive.readonly"));
 
-    let info = om.complete_pkce(GOOGLE, "code-google", &start.state).unwrap();
+    let info = om
+        .complete_pkce(GOOGLE, "code-google", &start.state)
+        .unwrap();
     assert_eq!(info.account_id, "google-sub-1");
     assert_eq!(info.email.as_deref(), Some("you@gmail.com"));
 
@@ -666,41 +672,78 @@ fn connector_token_persists_and_loads() {
     let vault = vault();
     let om = OAuthManager::with_enabled(vault, true);
     // Fresh store has no token.
-    assert!(om.load_connector_token("remote-mcp", "google-drive").unwrap().is_none());
+    assert!(om
+        .load_connector_token("remote-mcp", "google-drive")
+        .unwrap()
+        .is_none());
     // Store a finished connector token (encrypted at rest).
-    om.store_connector_token("remote-mcp", "google-drive", "acc-tok-1", Some("ref-tok-1"), 3600, "drive.readonly")
+    om.store_connector_token(
+        "remote-mcp",
+        "google-drive",
+        "acc-tok-1",
+        Some("ref-tok-1"),
+        3600,
+        "drive.readonly",
+    )
+    .unwrap();
+    let loaded = om
+        .load_connector_token("remote-mcp", "google-drive")
+        .unwrap()
         .unwrap();
-    let loaded = om.load_connector_token("remote-mcp", "google-drive").unwrap().unwrap();
     assert_eq!(loaded, "acc-tok-1");
     // Upsert refreshes access token in place, keeps the row.
-    om.store_connector_token("remote-mcp", "google-drive", "acc-tok-2", None, 3600, "drive.readonly")
+    om.store_connector_token(
+        "remote-mcp",
+        "google-drive",
+        "acc-tok-2",
+        None,
+        3600,
+        "drive.readonly",
+    )
+    .unwrap();
+    let loaded = om
+        .load_connector_token("remote-mcp", "google-drive")
+        .unwrap()
         .unwrap();
-    let loaded = om.load_connector_token("remote-mcp", "google-drive").unwrap().unwrap();
     assert_eq!(loaded, "acc-tok-2");
     // Different store id stays independent.
-    assert!(om.load_connector_token("remote-mcp", "github").unwrap().is_none());
+    assert!(om
+        .load_connector_token("remote-mcp", "github")
+        .unwrap()
+        .is_none());
     // Revoke removes the connector token too.
     om.revoke("remote-mcp", "google-drive").unwrap();
-    assert!(om.load_connector_token("remote-mcp", "google-drive").unwrap().is_none());
+    assert!(om
+        .load_connector_token("remote-mcp", "google-drive")
+        .unwrap()
+        .is_none());
 }
 
 #[test]
 fn client_id_env_override_supplies_empty_provider() {
     // Slack/Notion ship with no public client id; an operator can supply their
     // own registered app id via EVERYAIOS_OAUTH_CLIENT_ID_<UPPER_PROVIDER>.
-    unsafe { std::env::set_var("EVERYAIOS_OAUTH_CLIENT_ID_SLACK", "slack-own-app-123"); }
+    unsafe {
+        std::env::set_var("EVERYAIOS_OAUTH_CLIENT_ID_SLACK", "slack-own-app-123");
+    }
     let vault = vault();
     let om = OAuthManager::with_enabled(vault, true);
     // provider() is private but the test module is a child of oauth.rs.
     let settings = om.provider(SLACK).unwrap();
     assert_eq!(settings.client_id, "slack-own-app-123");
-    unsafe { std::env::remove_var("EVERYAIOS_OAUTH_CLIENT_ID_SLACK"); }
+    unsafe {
+        std::env::remove_var("EVERYAIOS_OAUTH_CLIENT_ID_SLACK");
+    }
     // Without the override, slack returns the (empty) default id.
     let om2 = OAuthManager::with_enabled(vault, true);
     assert_eq!(om2.provider(SLACK).unwrap().client_id, "");
     // Unknown provider unaffected.
-    unsafe { std::env::set_var("EVERYAIOS_OAUTH_CLIENT_ID_GHOST", "zzz"); }
+    unsafe {
+        std::env::set_var("EVERYAIOS_OAUTH_CLIENT_ID_GHOST", "zzz");
+    }
     let om3 = OAuthManager::with_enabled(vault, true);
     assert!(om3.provider("ghost").is_err()); // ghost is not a provider
-    unsafe { std::env::remove_var("EVERYAIOS_OAUTH_CLIENT_ID_GHOST"); }
+    unsafe {
+        std::env::remove_var("EVERYAIOS_OAUTH_CLIENT_ID_GHOST");
+    }
 }

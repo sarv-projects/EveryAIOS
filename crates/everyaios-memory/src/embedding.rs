@@ -50,7 +50,10 @@ pub fn l2(a: &[f32], b: &[f32]) -> f64 {
 
 /// Dot product.
 pub fn dot(a: &[f32], b: &[f32]) -> f64 {
-    a.iter().zip(b.iter()).map(|(x, y)| *x as f64 * *y as f64).sum()
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| *x as f64 * *y as f64)
+        .sum()
 }
 
 /// Int8-quantized vector: `value ≈ scale * (q - zero_point)`.

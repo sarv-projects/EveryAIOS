@@ -24,24 +24,20 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Stopwords that never form concepts (subset of a standard English list).
 const STOPWORDS: &[&str] = &[
-    "the", "a", "an", "and", "or", "but", "if", "then", "else", "of", "to",
-    "in", "on", "at", "by", "for", "with", "from", "as", "is", "are", "was",
-    "were", "be", "been", "being", "it", "its", "this", "that", "these",
-    "those", "i", "you", "he", "she", "we", "they", "not", "no", "do", "does",
-    "did", "have", "has", "had", "will", "would", "can", "could", "should",
-    "may", "might", "there", "here", "what", "which", "who", "whom", "when",
-    "where", "how", "all", "any", "both", "each", "few", "more", "most",
-    "other", "some", "such", "only", "own", "same", "so", "than", "too",
-    "very", "just", "about", "into", "over", "after", "before", "under",
-    "again", "further", "then", "once", "also", "via", "per", "etc", "eg",
-    "ie", "vs", "e.g.", "i.e.",
+    "the", "a", "an", "and", "or", "but", "if", "then", "else", "of", "to", "in", "on", "at", "by",
+    "for", "with", "from", "as", "is", "are", "was", "were", "be", "been", "being", "it", "its",
+    "this", "that", "these", "those", "i", "you", "he", "she", "we", "they", "not", "no", "do",
+    "does", "did", "have", "has", "had", "will", "would", "can", "could", "should", "may", "might",
+    "there", "here", "what", "which", "who", "whom", "when", "where", "how", "all", "any", "both",
+    "each", "few", "more", "most", "other", "some", "such", "only", "own", "same", "so", "than",
+    "too", "very", "just", "about", "into", "over", "after", "before", "under", "again", "further",
+    "then", "once", "also", "via", "per", "etc", "eg", "ie", "vs", "e.g.", "i.e.",
 ];
 
 /// Is `word` a stopword / pure punctuation / numeric-only?
 fn is_content_word(word: &str) -> bool {
     let lower = word.to_lowercase();
-    !STOPWORDS.contains(&lower.as_str())
-        && word.chars().any(|c| c.is_alphabetic())
+    !STOPWORDS.contains(&lower.as_str()) && word.chars().any(|c| c.is_alphabetic())
 }
 
 /// Split text into sentence-ish windows (by sentence punctuation).
@@ -77,12 +73,20 @@ pub fn extract_concepts(window: &str, max_phrase: usize) -> Vec<String> {
     // Pass 1 — capitalized sequences (proper nouns / acronyms).
     let mut i = 0;
     while i < words.len() {
-        if words[i].chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+        if words[i]
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
             && is_content_word(words[i])
         {
             let mut seq = Vec::new();
             while i < words.len() && seq.len() < max_phrase {
-                let first = words[i].chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                let first = words[i]
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false);
                 if first && is_content_word(words[i]) {
                     seq.push(words[i]);
                     i += 1;
@@ -379,7 +383,8 @@ impl LazyGraphRag {
         if self.assessor.is_none() {
             CapabilityStatus {
                 enabled: false,
-                reason: "LLM relevance assessor not wired; deterministic lexical/graph fallback only",
+                reason:
+                    "LLM relevance assessor not wired; deterministic lexical/graph fallback only",
                 mode: "lazy-graph (deterministic)",
             }
         } else {
@@ -454,7 +459,10 @@ impl LazyGraphRag {
                 continue;
             }
             budget_used += 1;
-            for edge in self.graph.cooccurrence_neighbors(&concept, opts.neighbors_per_concept) {
+            for edge in self
+                .graph
+                .cooccurrence_neighbors(&concept, opts.neighbors_per_concept)
+            {
                 if visited.insert(edge.other.clone()) {
                     queue.push_back((edge.other.clone(), depth + 1));
                 }
@@ -486,10 +494,8 @@ impl LazyGraphRag {
         let mut assessed: HashMap<String, f64> = HashMap::new();
         let mut assess_budget = opts.relevance_budget;
         if let Some(assessor) = self.assessor.as_mut() {
-            let mut ranked: Vec<(String, f64)> = candidates
-                .iter()
-                .map(|(k, v)| (k.clone(), *v))
-                .collect();
+            let mut ranked: Vec<(String, f64)> =
+                candidates.iter().map(|(k, v)| (k.clone(), *v)).collect();
             ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             for (id, _) in ranked {
                 if assess_budget == 0 {
@@ -523,9 +529,8 @@ impl LazyGraphRag {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        let fully_assessed = self.assessor.is_some()
-            && !result.is_empty()
-            && result.iter().all(|c| c.assessed);
+        let fully_assessed =
+            self.assessor.is_some() && !result.is_empty() && result.iter().all(|c| c.assessed);
 
         RetrievalReport {
             chunks: result,
@@ -570,7 +575,12 @@ mod tests {
     ];
 
     fn rag() -> LazyGraphRag {
-        LazyGraphRag::new(CORPUS.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect())
+        LazyGraphRag::new(
+            CORPUS
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
+        )
     }
 
     #[test]
@@ -580,7 +590,9 @@ mod tests {
         assert_eq!(a, b, "same input → same concepts");
         assert!(a.iter().any(|c| c.contains("LazyGraphRAG")));
         // Stopwords never appear as standalone concepts.
-        assert!(a.iter().all(|c| !STOPWORDS.contains(&c.to_lowercase().as_str())));
+        assert!(a
+            .iter()
+            .all(|c| !STOPWORDS.contains(&c.to_lowercase().as_str())));
     }
 
     #[test]
@@ -619,7 +631,10 @@ mod tests {
         };
         let report = rag.retrieve("query time summarization", &opts);
         assert!(report.budget_used <= report.budget_cap);
-        assert!(!report.fully_assessed, "no assessor → honest assessed:false");
+        assert!(
+            !report.fully_assessed,
+            "no assessor → honest assessed:false"
+        );
         assert!(!report.chunks.is_empty());
     }
 
@@ -654,10 +669,22 @@ mod tests {
         // Global-query class: the answer chunk shares ZERO query tokens; only
         // the co-occurrence graph bridges query concepts to the answer.
         let corpus = vec![
-            ("a".to_string(), "The Northwind project ships quarterly reports.".to_string()),
-            ("b".to_string(), "Northwind reports are generated by the build pipeline.".to_string()),
-            ("c".to_string(), "The build pipeline runs every Friday.".to_string()),
-            ("d".to_string(), "Quarterly reports describe revenue by region.".to_string()),
+            (
+                "a".to_string(),
+                "The Northwind project ships quarterly reports.".to_string(),
+            ),
+            (
+                "b".to_string(),
+                "Northwind reports are generated by the build pipeline.".to_string(),
+            ),
+            (
+                "c".to_string(),
+                "The build pipeline runs every Friday.".to_string(),
+            ),
+            (
+                "d".to_string(),
+                "Quarterly reports describe revenue by region.".to_string(),
+            ),
         ];
         let mut rag = LazyGraphRag::new(corpus.clone());
         // Query uses concepts present only in c ("Friday" pipeline) and d ("revenue").

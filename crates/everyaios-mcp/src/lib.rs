@@ -25,15 +25,11 @@ pub mod store;
 
 pub use attach::{AttachError, AttachRequest, AttachedServer};
 pub use hijack::{validate_external_tool, HijackError, ToolIdentity, ToolSource};
+pub use loopback::{LoopbackPool, PoolStats};
 pub use manager::{
     install_plan, is_allowed, merge_into_catalog, verify_sha256, ChildHandle, InstallPlan,
     ManagedServer, McpServerManager, PlanError, ProcessSpawner, RegistryIndex, RegistryServer,
     ServerSpawner, ServerState, SpawnError, ToolSurface, ALLOW_LIST,
-};
-pub use loopback::{LoopbackPool, PoolStats};
-pub use server::{
-    tool_list, ExternalTool, McpServer, MrtrHandle, StatelessRequest, ToolCallHandler, ToolCatalog,
-    ToolListEntry, ToolListResponse,
 };
 pub use remote::{
     build_authorize_url, connect, discover_authorization_server, discover_protected_resource,
@@ -41,9 +37,11 @@ pub use remote::{
     ClientRegistration, HttpTransport, PkceFlow, ProtectedResource, RemoteError, RemoteTarget,
     TokenResponse, UreqTransport,
 };
-pub use store::{
-    ConnectConsent, ConnectFlow, StoreEntry, StoreIndex, StoreKind,
+pub use server::{
+    tool_list, ExternalTool, McpServer, MrtrHandle, StatelessRequest, ToolCallHandler, ToolCatalog,
+    ToolListEntry, ToolListResponse,
 };
+pub use store::{ConnectConsent, ConnectFlow, StoreEntry, StoreIndex, StoreKind};
 
 /// ACP tool-kind taxonomy (F9 — doc 45 §4.3): a shared vocabulary that maps
 /// onto our F9 permission classes.
@@ -902,7 +900,7 @@ mod tests {
     fn all_tools_merges_browser_and_storage() {
         let all = all_tools();
         assert_eq!(all.len(), 37 + 4 + 3 + 2 + 5); // browser + office + memory + search + storage
-        // No name collision across the catalogs (Channel B unified registry).
+                                                   // No name collision across the catalogs (Channel B unified registry).
         let mut names: Vec<&str> = all.iter().map(|t| t.name).collect();
         names.sort_unstable();
         names.dedup();

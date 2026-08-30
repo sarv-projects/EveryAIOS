@@ -30,8 +30,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::sync::{
-    reconcile, seal_set, open_set, KeyExchange, SharedSession, SyncEnvelope, SyncError,
-    SyncHello, SyncSession, SyncSet,
+    open_set, reconcile, seal_set, KeyExchange, SharedSession, SyncEnvelope, SyncError, SyncHello,
+    SyncSession, SyncSet,
 };
 
 /// Hard cap for one wire frame (16 MiB of JSON envelope).
@@ -119,20 +119,24 @@ pub fn run_exchange(
     let shared: SharedSession = kx.accept(&peer_hello)?;
 
     // 3. Confirm tokens both ways (MAC proves key possession).
-    let token = shared
-        .confirm_token()
-        .map_err(WireError::Protocol)?;
+    let token = shared.confirm_token().map_err(WireError::Protocol)?;
     write_frame(&mut stream, &serde_json::to_vec(&token)?)?;
     let peer_token: SyncEnvelope = serde_json::from_slice(&read_frame(&mut stream)?)?;
-    let ok = shared.verify_peer(&peer_token).map_err(WireError::Protocol)?;
+    let ok = shared
+        .verify_peer(&peer_token)
+        .map_err(WireError::Protocol)?;
     if !ok {
         return Err(WireError::HandshakeFailed);
     }
 
     // 4. Sealed full-mirror swap + local reconcile.
-    let my_env =
-        seal_set(&shared.box_, &session.device_id, crate::sync::SyncScope::Messages, &session.set)
-            .map_err(WireError::Protocol)?;
+    let my_env = seal_set(
+        &shared.box_,
+        &session.device_id,
+        crate::sync::SyncScope::Messages,
+        &session.set,
+    )
+    .map_err(WireError::Protocol)?;
     write_frame(&mut stream, &serde_json::to_vec(&my_env)?)?;
     let peer_env: SyncEnvelope = serde_json::from_slice(&read_frame(&mut stream)?)?;
     let remote: SyncSet = open_set(&shared.box_, &peer_env, None).map_err(WireError::Protocol)?;
@@ -198,7 +202,10 @@ impl SyncServer {
                         let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
                         match run_exchange(stream, &mut guard) {
                             Ok(outcome) => {
-                                outcomes_conn.lock().unwrap_or_else(|e| e.into_inner()).push(outcome);
+                                outcomes_conn
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .push(outcome);
                                 if let Some(cb) = on_synced_conn {
                                     cb(&guard);
                                 }
@@ -214,12 +221,20 @@ impl SyncServer {
             }
         });
 
-        Ok(Self { addr, stop, thread: Some(thread), outcomes })
+        Ok(Self {
+            addr,
+            stop,
+            thread: Some(thread),
+            outcomes,
+        })
     }
 
     /// Outcomes of exchanges completed while serving.
     pub fn outcomes(&self) -> Vec<ExchangeOutcome> {
-        self.outcomes.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.outcomes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Signal the accept loop to stop and join it.
@@ -299,9 +314,12 @@ mod tests {
         let hook: Arc<dyn Fn(&SyncSession) + Send + Sync> =
             Arc::new(move |_| persisted_c.store(true, Ordering::Relaxed));
 
-        let server =
-            SyncServer::start("127.0.0.1:0".parse().unwrap(), Arc::clone(&shared), Some(hook))
-                .unwrap();
+        let server = SyncServer::start(
+            "127.0.0.1:0".parse().unwrap(),
+            Arc::clone(&shared),
+            Some(hook),
+        )
+        .unwrap();
 
         let outcome = sync_with_peer(server.addr, &mut client_session).unwrap();
         assert_eq!(outcome.peer_device, "dev-server");

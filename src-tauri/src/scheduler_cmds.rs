@@ -15,11 +15,10 @@ use crate::AppState;
 /// of truth — the coordinator drives the same instance over `scheduler/*`).
 /// The returned `Arc` is independent of the relay guard, so commands can lock
 /// it without lifetime gymnastics.
-fn svc(state: &State<'_, AppState>) -> Result<std::sync::Arc<std::sync::Mutex<SchedulerService>>, String> {
-    let relay = state
-        .chat_relay
-        .lock()
-        .map_err(|e| e.to_string())?;
+fn svc(
+    state: &State<'_, AppState>,
+) -> Result<std::sync::Arc<std::sync::Mutex<SchedulerService>>, String> {
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
     let relay = relay
         .as_ref()
         .ok_or_else(|| "sidecar not connected — scheduler service not ready".to_string())?;
@@ -80,16 +79,24 @@ pub fn scheduler_delete(state: State<'_, AppState>, id: String) -> Result<bool, 
 
 /// Enable/disable a job.
 #[tauri::command]
-pub fn scheduler_enable(state: State<'_, AppState>, id: String, enabled: bool) -> Result<bool, String> {
+pub fn scheduler_enable(
+    state: State<'_, AppState>,
+    id: String,
+    enabled: bool,
+) -> Result<bool, String> {
     let handle = svc(&state)?;
     let mut svc = handle.lock().map_err(|e| e.to_string())?;
-    svc.set_enabled(&id, enabled, now_secs()).map_err(|e| e.to_string())?;
+    svc.set_enabled(&id, enabled, now_secs())
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
 
 /// Pause every job bound to a chat session (delete-chat cascade).
 #[tauri::command]
-pub fn scheduler_pause_session(state: State<'_, AppState>, session_id: String) -> Result<u32, String> {
+pub fn scheduler_pause_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<u32, String> {
     let handle = svc(&state)?;
     let mut svc = handle.lock().map_err(|e| e.to_string())?;
     Ok(svc.pause_session(&session_id) as u32)
@@ -97,7 +104,11 @@ pub fn scheduler_pause_session(state: State<'_, AppState>, session_id: String) -
 
 /// HITL pause (first-class state with an optional resume deadline).
 #[tauri::command]
-pub fn scheduler_pause(state: State<'_, AppState>, id: String, resume_deadline: Option<u64>) -> Result<bool, String> {
+pub fn scheduler_pause(
+    state: State<'_, AppState>,
+    id: String,
+    resume_deadline: Option<u64>,
+) -> Result<bool, String> {
     let handle = svc(&state)?;
     let mut svc = handle.lock().map_err(|e| e.to_string())?;
     svc.pause(&id, resume_deadline).map_err(|e| e.to_string())?;
@@ -135,7 +146,9 @@ pub fn scheduler_battery(state: State<'_, AppState>, on_battery: bool) -> Result
     svc.set_battery(on_battery);
     // J16 — mirror to the shared AppState flag so the storage commands (heavy
     // scans) defer from the same OS power event.
-    state.battery.store(on_battery, std::sync::atomic::Ordering::Relaxed);
+    state
+        .battery
+        .store(on_battery, std::sync::atomic::Ordering::Relaxed);
     Ok(true)
 }
 
@@ -149,7 +162,8 @@ pub fn scheduler_fire_event(
 ) -> Result<Vec<String>, String> {
     let handle = svc(&state)?;
     let mut svc = handle.lock().map_err(|e| e.to_string())?;
-    let kind = serde_json::from_value(serde_json::json!(kind)).map_err(|e| format!("bad kind: {e}"))?;
+    let kind =
+        serde_json::from_value(serde_json::json!(kind)).map_err(|e| format!("bad kind: {e}"))?;
     Ok(svc.fire_event(kind, &payload, now_secs()))
 }
 
@@ -176,7 +190,11 @@ pub fn scheduler_nudges(state: State<'_, AppState>) -> Result<Value, String> {
 
 /// Record a goal observation (feeds the nudge sentinels — from chat/session).
 #[tauri::command]
-pub fn scheduler_nudge(state: State<'_, AppState>, goal: String, ts: Option<u64>) -> Result<bool, String> {
+pub fn scheduler_nudge(
+    state: State<'_, AppState>,
+    goal: String,
+    ts: Option<u64>,
+) -> Result<bool, String> {
     let handle = svc(&state)?;
     let mut svc = handle.lock().map_err(|e| e.to_string())?;
     svc.record_nudge(&goal, ts.unwrap_or_else(now_secs));

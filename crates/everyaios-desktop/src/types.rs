@@ -160,9 +160,11 @@ impl ReadNode {
     }
 
     pub fn find_by_name(&self, name: &str) -> Option<&ReadNode> {
-        self.flatten()
-            .into_iter()
-            .find(|n| n.name.to_ascii_lowercase().contains(&name.to_ascii_lowercase()))
+        self.flatten().into_iter().find(|n| {
+            n.name
+                .to_ascii_lowercase()
+                .contains(&name.to_ascii_lowercase())
+        })
     }
 
     /// Click target for a named node (used by act-by-name).
@@ -219,18 +221,41 @@ impl OcrWord {
 /// The action vocabulary — deliberately small and human-reviewable.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ActKind {
-    Click { x: i32, y: i32 },
+    Click {
+        x: i32,
+        y: i32,
+    },
     /// UIA InvokePattern on a named element (Windows); xdotool-name on X11.
-    ClickByName { name: String },
-    Type { text: String },
+    ClickByName {
+        name: String,
+    },
+    Type {
+        text: String,
+    },
     /// UIA ValuePattern::SetValue (Windows) / osascript set value (mac).
-    SetValue { name: String, value: String },
-    Press { key: String },
-    Scroll { x: i32, y: i32, delta: i32 },
-    Drag { from: (i32, i32), to: (i32, i32) },
+    SetValue {
+        name: String,
+        value: String,
+    },
+    Press {
+        key: String,
+    },
+    Scroll {
+        x: i32,
+        y: i32,
+        delta: i32,
+    },
+    Drag {
+        from: (i32, i32),
+        to: (i32, i32),
+    },
     /// Open an app / bring a window forward.
-    LaunchApp { app: String },
-    ActivateWindow { window_id: u64 },
+    LaunchApp {
+        app: String,
+    },
+    ActivateWindow {
+        window_id: u64,
+    },
 }
 
 impl ActKind {

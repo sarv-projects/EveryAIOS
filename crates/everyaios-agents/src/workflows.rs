@@ -53,7 +53,14 @@ impl AgentRuns {
         Self::default()
     }
 
-    pub fn begin(&mut self, agent_id: &str, workflow_id: &str, kind: RunKind, at_ms: u64, timeline_id: Option<String>) -> String {
+    pub fn begin(
+        &mut self,
+        agent_id: &str,
+        workflow_id: &str,
+        kind: RunKind,
+        at_ms: u64,
+        timeline_id: Option<String>,
+    ) -> String {
         let id = format!("run-{}-{at_ms}", self.runs.len() + 1);
         self.runs.push(AgentRun {
             agent_id: agent_id.to_string(),
@@ -75,7 +82,10 @@ impl AgentRuns {
     }
 
     pub fn runs_for(&self, agent_id: &str) -> Vec<&AgentRun> {
-        self.runs.iter().filter(|r| r.agent_id == agent_id).collect()
+        self.runs
+            .iter()
+            .filter(|r| r.agent_id == agent_id)
+            .collect()
     }
 
     pub fn timeline(&self) -> &[AgentRun] {
@@ -90,7 +100,13 @@ mod tests {
     #[test]
     fn run_lifecycle() {
         let mut runs = AgentRuns::new();
-        runs.begin("analyst", "pivot-sheet", RunKind::Blueprint, 100, Some("tl-1".to_string()));
+        runs.begin(
+            "analyst",
+            "pivot-sheet",
+            RunKind::Blueprint,
+            100,
+            Some("tl-1".to_string()),
+        );
         let agent_runs = runs.runs_for("analyst");
         assert_eq!(agent_runs.len(), 1);
         assert_eq!(agent_runs[0].status, RunStatus::Running);

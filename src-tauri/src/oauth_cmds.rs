@@ -136,7 +136,8 @@ pub fn oauth_revoke(
 ) -> Result<(), String> {
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
     let mgr = OAuthManager::new(&vault);
-    mgr.revoke(&provider, &account_id).map_err(|e| e.to_string())
+    mgr.revoke(&provider, &account_id)
+        .map_err(|e| e.to_string())
 }
 
 fn parse_callback(req: &str) -> (Option<String>, Option<String>) {
@@ -165,7 +166,8 @@ fn urlencoding_decode(s: &str) -> String {
     let mut i = 0;
     while i < b.len() {
         if b[i] == b'%' && i + 2 < b.len() {
-            if let Ok(h) = u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or(""), 16)
+            if let Ok(h) =
+                u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or(""), 16)
             {
                 out.push(h as char);
                 i += 3;

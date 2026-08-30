@@ -173,8 +173,7 @@ pub struct BandStat {
 }
 
 /// `evaluateCalibration(samples)`.
-pub fn evaluate_calibration(
-    scores: &[(f64, bool)], // (score, wasCorrect)
+pub fn evaluate_calibration(scores: &[(f64, bool)], // (score, wasCorrect)
 ) -> CalibrationReport {
     let mut low = BandStat::default();
     let mut medium = BandStat::default();
@@ -299,13 +298,10 @@ mod tests {
 
     #[test]
     fn short_nongrounded_answer_is_additionally_flagged() {
-        let a = assess_evidence_grounding(
-            RiskSignals::default().answer_length(50),
-        );
+        let a = assess_evidence_grounding(RiskSignals::default().answer_length(50));
         assert!(a.flags.iter().any(|f| f == "suspiciously short answer"));
-        let b = assess_evidence_grounding(
-            RiskSignals::default().answer_length(50).grounded_only(true),
-        );
+        let b =
+            assess_evidence_grounding(RiskSignals::default().answer_length(50).grounded_only(true));
         assert!(!b.flags.iter().any(|f| f == "suspiciously short answer"));
     }
 
@@ -313,9 +309,13 @@ mod tests {
     fn calibration_monotone_when_useful() {
         // Low-band: mostly correct; high-band: mostly wrong → useful score.
         let samples = vec![
-            (0.2, true), (0.2, true), (0.2, false),
-            (0.5, true), (0.5, false),
-            (0.9, false), (0.9, false),
+            (0.2, true),
+            (0.2, true),
+            (0.2, false),
+            (0.5, true),
+            (0.5, false),
+            (0.9, false),
+            (0.9, false),
         ];
         let report = evaluate_calibration(&samples);
         assert!(report.high.error_rate > report.low.error_rate);

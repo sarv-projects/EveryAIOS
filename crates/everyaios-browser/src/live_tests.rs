@@ -283,7 +283,10 @@ fn live_electron_attach_snapshot_click_read() {
     // `attach` already runs the Electron probe (Browser: Electron/…) and
     // errors on any non-Electron target, so a successful attach is the check.
     let handle = crate::ElectronHandle::attach(port).expect("attach to Electron debug port");
-    assert!(!handle.app.browser_ws_url.is_empty(), "Electron ws url present");
+    assert!(
+        !handle.app.browser_ws_url.is_empty(),
+        "Electron ws url present"
+    );
 
     // snapshot → a tree with at least a root WebArea + some nodes.
     let snap = handle

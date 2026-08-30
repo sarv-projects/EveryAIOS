@@ -88,7 +88,9 @@ pub enum SendBlocked {
     StaleApproval(String),
     #[error("approval {0} already used")]
     AlreadyUsed(String),
-    #[error("open-world send to an untrusted recipient requires explicit approval (none presented)")]
+    #[error(
+        "open-world send to an untrusted recipient requires explicit approval (none presented)"
+    )]
     OpenWorldUntrusted,
 }
 

@@ -73,8 +73,15 @@ impl KanbanBoard {
 
     /// Advance a task to the next column (no skipping; Done is terminal).
     pub fn advance(&mut self, id: &str) -> Result<Column, String> {
-        let task = self.tasks.iter_mut().find(|t| t.id == id).ok_or_else(|| format!("task `{id}` not found"))?;
-        let next = task.column.advance().ok_or_else(|| format!("task `{id}` is already Done"))?;
+        let task = self
+            .tasks
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| format!("task `{id}` not found"))?;
+        let next = task
+            .column
+            .advance()
+            .ok_or_else(|| format!("task `{id}` is already Done"))?;
         task.column = next;
         Ok(next)
     }
@@ -121,7 +128,11 @@ impl Dispatcher {
             .find(|(a, _)| a == agent)
             .map(|(_, c)| *c)
             .unwrap_or_else(|| {
-                self.capacity.iter().find(|(a, _)| a == "*").map(|(_, c)| *c).unwrap_or(1)
+                self.capacity
+                    .iter()
+                    .find(|(a, _)| a == "*")
+                    .map(|(_, c)| *c)
+                    .unwrap_or(1)
             })
     }
 
@@ -182,8 +193,10 @@ mod tests {
     #[test]
     fn ready_respects_blockers() {
         let mut b = KanbanBoard::new();
-        b.add(task("setup", "a", Column::InProgress, vec![])).unwrap();
-        b.add(task("build", "b", Column::Ready, vec!["setup".into()])).unwrap();
+        b.add(task("setup", "a", Column::InProgress, vec![]))
+            .unwrap();
+        b.add(task("build", "b", Column::Ready, vec!["setup".into()]))
+            .unwrap();
         b.add(task("free", "b", Column::Ready, vec![])).unwrap();
         assert_eq!(b.ready().len(), 1);
         assert_eq!(b.ready()[0].id, "free");

@@ -242,7 +242,9 @@ mod tests {
         }
         let oracle = LibreOfficeOracle::new();
         let mut engine = crate::docx::DocxEngine::open(crate::zip::tests::sample_docx()).unwrap();
-        engine.patch_block("p1", "Hello, conformance oracle!").unwrap();
+        engine
+            .patch_block("p1", "Hello, conformance oracle!")
+            .unwrap();
         let patched = engine.save().unwrap();
         let path = std::env::temp_dir().join(format!(
             "everyaios-oracle-patched-{}.docx",

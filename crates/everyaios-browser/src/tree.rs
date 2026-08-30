@@ -358,7 +358,10 @@ mod tests {
         let mut refs = RefMinter::new();
         let tree = build_tree(&nodes, opts, &mut refs).unwrap();
         let rendered = tree.render();
-        assert!(rendered.contains("generic Sign up now [ref=e1]"), "{rendered}");
+        assert!(
+            rendered.contains("generic Sign up now [ref=e1]"),
+            "{rendered}"
+        );
         // The plain paragraph is pruned (not clickable).
         assert!(!rendered.contains("paragraph"), "{rendered}");
     }
@@ -369,12 +372,7 @@ mod tests {
         // names. Slim must cut ≥60% of the full render (the E16 gate).
         let mut nodes = vec![node("0", "WebArea", "Page", &["1"])];
         nodes.push(node("1", "generic", "", &["2", "3", "4", "5"]));
-        nodes.push(node(
-            "2",
-            "paragraph",
-            &"z".repeat(300),
-            &[],
-        ));
+        nodes.push(node("2", "paragraph", &"z".repeat(300), &[]));
         nodes.push(node("3", "paragraph", &"y".repeat(300), &[]));
         nodes.push(node("4", "paragraph", &"w".repeat(300), &[]));
         nodes.push(node("5", "button", "Submit", &[]));
