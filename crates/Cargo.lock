@@ -1379,6 +1379,7 @@ dependencies = [
  "everyaios-script",
  "everyaios-search",
  "everyaios-storage",
+ "everyaios-types",
  "everyaios-vault",
  "libc",
  "opentelemetry",
@@ -1419,6 +1420,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
+ "everyaios-types",
  "rand 0.8.7",
  "regex",
  "serde",
@@ -1514,6 +1516,14 @@ dependencies = [
  "twox-hash",
  "windows-sys 0.61.2",
  "zstd 0.13.3",
+]
+
+[[package]]
+name = "everyaios-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

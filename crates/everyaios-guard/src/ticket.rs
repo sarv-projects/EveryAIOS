@@ -23,15 +23,11 @@ pub enum ApprovalSource {
 }
 
 /// Risk tier of the operation (drives who must approve).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum RiskLevel {
-    #[default]
-    Low,
-    Medium,
-    High,
-    Critical,
-}
+///
+/// **Note (P47.3):** this is the canonical shared type from `everyaios-types`
+/// so the whole workspace grades risk on one scale (re-exported here to keep
+/// `everyaios_guard::RiskLevel` working for existing consumers).
+pub use everyaios_types::RiskLevel;
 
 /// Named risk tiers R0–R4 (H3). Formalizes RiskLevel for cards + catalog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

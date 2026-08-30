@@ -1,0 +1,13 @@
+[package]
+name = "everyaios-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "P47.3 — the shared contract crate: pure ID newtypes + the enum vocabulary every EveryAIOS crate speaks. No business logic, no DB, no networking — the one structural change the v3.59 architecture finalization adds: kills contract drift between crates by giving every ID/enum one canonical home."
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

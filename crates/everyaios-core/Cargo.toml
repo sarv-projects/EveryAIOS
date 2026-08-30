@@ -8,6 +8,7 @@ description = "EveryAIOS orchestrator binary — boots headless, loads config, s
 
 [dependencies]
 everyaios-ipc = { path = "../everyaios-ipc" }
+everyaios-types = { path = "../everyaios-types" }
 everyaios-vault = { path = "../everyaios-vault" }
 everyaios-guard = { path = "../everyaios-guard" }
 everyaios-memory = { path = "../everyaios-memory" }
