@@ -1,6 +1,8 @@
-//! H3 — unified Execution kernel. Chat turns, plans, scheduler runs, ACP
-//! prompts and subagents all enter the same record + state machine so
-//! resume / fork / replay / handoff / audit / receipt share one unit.
+//! H3 — unified Work records inside the ExecutionKernel (P47.4: the durable
+//! per-turn unit is named `Work`; the kernel that holds them stays
+//! `ExecutionKernel`). Chat turns, plans, scheduler runs, ACP prompts and
+//! subagents all enter the same record + state machine so resume / fork /
+//! replay / handoff / audit / receipt share one unit.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -148,7 +150,7 @@ impl ExecutionPhase {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Execution {
+pub struct Work {
     pub id: String,
     pub parent_id: Option<String>,
     pub workspace: String,
@@ -184,7 +186,7 @@ pub struct Execution {
     pub pending_approval: Option<PendingApproval>,
 }
 
-impl Execution {
+impl Work {
     pub fn new(
         id: String,
         trigger: ExecutionTrigger,
@@ -266,15 +268,16 @@ impl Execution {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-/// H3 — the in-memory Execution kernel, made durable for P48.4. The whole
-/// kernel serializes (plain `BTreeMap<String, Execution>` + counter + aliases)
+/// H3 — the in-memory ExecutionKernel (holds `Work` records), made durable
+/// for P48.4. The whole kernel serializes (plain `BTreeMap<String, Work>` +
+/// counter + aliases)
 /// so a [`ExecutionKernel::snapshot`] is the crash-checkpoint and
 /// [`ExecutionKernel::recover`] is the resume-from-disk half. Recovery resumes
 /// from the last checkpoint and never replays a completed effect, because an
 /// execution's `checkpoint`/`state`/`idempotency_key` are persisted with it.
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionKernel {
-    executions: BTreeMap<String, Execution>,
+    executions: BTreeMap<String, Work>,
     aliases: BTreeMap<String, String>,
     counter: u64,
 }
@@ -293,7 +296,7 @@ impl ExecutionKernel {
         policy_snapshot: String,
         context_snapshot: String,
         capability_scope: Vec<String>,
-    ) -> Execution {
+    ) -> Work {
         self.counter += 1;
         let id = format!("ex:{}", self.counter);
         self.begin_named(
@@ -318,11 +321,11 @@ impl ExecutionKernel {
         policy_snapshot: String,
         context_snapshot: String,
         capability_scope: Vec<String>,
-    ) -> Execution {
+    ) -> Work {
         if let Some(existing) = self.executions.get(&id) {
             return existing.clone();
         }
-        let mut ex = Execution::new(
+        let mut ex = Work::new(
             id.clone(),
             trigger,
             session_id.to_string(),
@@ -342,7 +345,7 @@ impl ExecutionKernel {
             .insert(key.to_string(), execution_id.to_string());
     }
 
-    pub fn by_alias(&self, key: &str) -> Option<&Execution> {
+    pub fn by_alias(&self, key: &str) -> Option<&Work> {
         let id = self.aliases.get(key)?;
         self.executions.get(id)
     }
@@ -360,7 +363,7 @@ impl ExecutionKernel {
         Ok(ex.state)
     }
 
-    pub fn get(&self, id: &str) -> Option<&Execution> {
+    pub fn get(&self, id: &str) -> Option<&Work> {
         self.executions.get(id)
     }
 
@@ -413,7 +416,7 @@ impl ExecutionKernel {
         serde_json::from_str(&data).map_err(|e| format!("parse checkpoint: {e}"))
     }
 
-    /// Number of live executions (drives the fork/replay surface + tests).
+    /// Number of live work records (drives the fork/replay surface + tests).
     pub fn len(&self) -> usize {
         self.executions.len()
     }
@@ -501,7 +504,7 @@ impl ExecutionKernel {
                 serde_json::to_value(ex).map_err(|e| e.to_string())
             }
             "execution/list" => {
-                let list: Vec<&Execution> = self.executions.values().collect();
+                let list: Vec<&Work> = self.executions.values().collect();
                 Ok(json!({ "executions": list, "count": list.len() }))
             }
             // v3.39 — bind an immutable runtime manifest and store the config_hash.
@@ -614,7 +617,7 @@ impl ExecutionKernel {
         }
     }
 
-    fn get_mut(&mut self, id: &str) -> Option<&mut Execution> {
+    fn get_mut(&mut self, id: &str) -> Option<&mut Work> {
         self.executions.get_mut(id)
     }
 }
@@ -742,7 +745,7 @@ mod tests {
 
     #[test]
     fn pending_approval_record_and_resolve() {
-        let mut ex = Execution::new(
+        let mut ex = Work::new(
             "ex:1".into(),
             ExecutionTrigger::Chat,
             "s".into(),
@@ -778,7 +781,7 @@ mod tests {
 
     #[test]
     fn pending_approval_reject_transitions_to_failed() {
-        let mut ex = Execution::new(
+        let mut ex = Work::new(
             "ex:2".into(),
             ExecutionTrigger::Plan,
             "s".into(),
@@ -800,7 +803,7 @@ mod tests {
 
     #[test]
     fn pending_approval_nothing_to_resolve_errors() {
-        let mut ex = Execution::new(
+        let mut ex = Work::new(
             "ex:3".into(),
             ExecutionTrigger::Chat,
             "s".into(),
@@ -812,7 +815,7 @@ mod tests {
 
     #[test]
     fn approval_survives_serialization_roundtrip() {
-        let mut ex = Execution::new(
+        let mut ex = Work::new(
             "ex:4".into(),
             ExecutionTrigger::Chat,
             "s".into(),
@@ -828,7 +831,7 @@ mod tests {
         })
         .unwrap();
         let j = serde_json::to_string(&ex).unwrap();
-        let restored: Execution = serde_json::from_str(&j).unwrap();
+        let restored: Work = serde_json::from_str(&j).unwrap();
         assert!(restored.pending_approval.is_some());
         assert_eq!(restored.pending_approval.unwrap().ticket_id, "t4");
         assert_eq!(restored.config_hash, "");

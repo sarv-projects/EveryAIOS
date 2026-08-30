@@ -336,10 +336,13 @@ impl GuardService {
         self.batches
             .use_batch_ticket(ticket_id, change_set_hash)
             .map_err(|e| e.to_string())
-    }    /// The approved change-set hash for a batch ticket (the executor presents
+    }
+    /// The approved change-set hash for a batch ticket (the executor presents
     /// it back at consume time; the card renders it for the human).
     pub fn batch_change_set_hash(&self, ticket_id: &str) -> Option<String> {
-        self.batches.get(ticket_id).map(|t| t.change_set_hash.clone())
+        self.batches
+            .get(ticket_id)
+            .map(|t| t.change_set_hash.clone())
     }
 
     /// The card-bound approval nonce for a batch ticket (same P10.2 rule as

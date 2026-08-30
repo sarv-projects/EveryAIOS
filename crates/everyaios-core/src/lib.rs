@@ -93,9 +93,11 @@ pub use challenge::{
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
 pub use config::{Config, ConfigError};
 pub use eval_service::EvalService;
+/// Backward-compat alias: [`Execution`] was renamed to [`Work`] (P47.4).
+pub use execution::Work as Execution;
 pub use execution::{
-    Execution, ExecutionKernel, ExecutionPhase, ExecutionTrigger, ForkLineage, PendingApproval,
-    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest,
+    ExecutionKernel, ExecutionPhase, ExecutionTrigger, ForkLineage, PendingApproval,
+    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest, Work,
 };
 pub use export::{
     render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
