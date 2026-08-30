@@ -20,8 +20,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use everyaios_guard::{
-    AuthorizationTicket, DecisionPackage, Estop, GuardReceipt, Operation, PermissionsPolicy,
-    PolicyAction, Profile, TicketStore,
+    AuthorizationTicket, BatchOperation, BatchTicket, BatchTicketStore, DecisionPackage, Estop,
+    GuardReceipt, Operation, PermissionsPolicy, PolicyAction, Profile, TicketStore,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -73,6 +73,10 @@ pub struct PendingGuardCard {
 /// The executor's pre-flight state (estop + policy + profile + tickets).
 pub struct GuardService {
     tickets: TicketStore,
+    /// P47.6 — batch tickets (UC-1 "approve all"): an immutable change set
+    /// approved as one unit, consumed via [`GuardService::use_batch_ticket`]
+    /// with the exact change-set hash.
+    batches: BatchTicketStore,
     policy: PermissionsPolicy,
     estop: Estop,
     profile: Profile,
@@ -97,6 +101,7 @@ impl Default for GuardService {
     fn default() -> Self {
         Self {
             tickets: TicketStore::new(),
+            batches: BatchTicketStore::new(),
             policy: PermissionsPolicy::default(),
             estop: Estop::new(),
             profile: Profile::Standard,
@@ -130,6 +135,32 @@ impl GuardService {
 
     pub fn set_profile(&mut self, profile: Profile) {
         self.profile = profile;
+    }
+
+    /// P44.5 — apply an H34 autonomy level as a `permissions.toml` preset
+    /// over the landed policy engine. This is the Rust half of the H34
+    /// Autonomy calculator: the chatbar level maps to a fixed rule map +
+    /// `min_confidence_for_auto`, and the hard floors (destructive,
+    /// financial, new-domain external, high-risk shell) stay Ask/Block in
+    /// every preset — never a Guard bypass.
+    pub fn set_autonomy_level(&mut self, level: everyaios_guard::AutonomyPreset) {
+        self.policy = PermissionsPolicy::preset(level);
+    }
+
+    /// The H34 level currently applied (derived from the policy's shape;
+    /// used by the autonomy indicator).
+    pub fn autonomy_level(&self) -> everyaios_guard::AutonomyPreset {
+        for level in [
+            everyaios_guard::AutonomyPreset::Sandbox,
+            everyaios_guard::AutonomyPreset::Ask,
+            everyaios_guard::AutonomyPreset::Auto,
+            everyaios_guard::AutonomyPreset::Maximum,
+        ] {
+            if self.policy.is_preset(level) {
+                return level;
+            }
+        }
+        everyaios_guard::AutonomyPreset::Ask
     }
 
     pub fn estop(&self) -> &Estop {
@@ -217,6 +248,68 @@ impl GuardService {
         }
     }
 
+    /// P47.6 — batch pre-flight (UC-1 "approve all"): the same gate
+    /// (estop → policy → profile → confidence) over a whole change set. The
+    /// ticket mints against the **immutable change-set hash** — approval
+    /// covers exactly the operation list presented, never an operation
+    /// category — and the executor consumes it with
+    /// [`GuardService::use_batch_ticket`] presenting the identical hash.
+    #[allow(clippy::too_many_arguments)]
+    pub fn evaluate_batch(
+        &mut self,
+        session_id: &str,
+        agent_id: &str,
+        operations: Vec<BatchOperation>,
+        decision: DecisionPackage,
+        audit_seq: u64,
+    ) -> GuardDecision {
+        if self.estop.is_pulled() {
+            return GuardDecision::Block {
+                reason: "estop pulled".to_string(),
+            };
+        }
+        // The batch is one decision unit: policy evaluates the write class
+        // (a batch is inherently a mutation of multiple resources), profile
+        // uses the package risk, and the R-tier mapping uses the worst case.
+        let policy_action = self.policy.evaluate(&Operation::GenericWrite);
+        if policy_action == PolicyAction::Block {
+            return GuardDecision::Block {
+                reason: "policy denies batch write".to_string(),
+            };
+        }
+        let needs_human = decision.risk >= self.profile.human_approval_threshold();
+        let low_confidence = decision
+            .confidence
+            .map(|c| !self.policy.auto_confidence_ok(c))
+            .unwrap_or(false);
+        let tier = everyaios_guard::RiskTier::from_risk_and_op(decision.risk, "batch", false);
+        let r4_ask = tier == everyaios_guard::RiskTier::R4;
+        let ask = policy_action == PolicyAction::Ask || needs_human || low_confidence || r4_ask;
+
+        self.counter += 1;
+        let ticket_id = format!("btk:{}", self.counter);
+        let mut ticket = BatchTicket::mint(
+            ticket_id.clone(),
+            agent_id,
+            session_id,
+            operations,
+            decision.risk,
+            audit_seq,
+        );
+        if !ask {
+            ticket.state = everyaios_guard::TicketState::Approved;
+            ticket.approval_source = everyaios_guard::ApprovalSource::Policy;
+        }
+        self.batches.mint(ticket);
+        self.decisions.insert(ticket_id.clone(), decision);
+
+        if ask {
+            GuardDecision::Ask { ticket_id }
+        } else {
+            GuardDecision::Allow { ticket_id }
+        }
+    }
+
     /// The **executor call-site** that consumes a ticket right before running
     /// a privileged action: estop must be clear, the ticket must be valid and
     /// the args must match (single-use). The executor still runs Guard-1 on
@@ -228,6 +321,29 @@ impl GuardService {
         self.tickets
             .use_ticket(ticket_id, args_hash)
             .map_err(|e| e.to_string())
+    }
+
+    /// P47.6 — executor call-site for a batch ticket: estop must be clear and
+    /// the presented change-set hash must equal the approved immutable set.
+    pub fn use_batch_ticket(
+        &mut self,
+        ticket_id: &str,
+        change_set_hash: &str,
+    ) -> Result<(), String> {
+        if self.estop.is_pulled() {
+            return Err("estop pulled".to_string());
+        }
+        self.batches
+            .use_batch_ticket(ticket_id, change_set_hash)
+            .map_err(|e| e.to_string())
+    }
+
+    /// The approved change-set hash for a batch ticket (the executor presents
+    /// it back at consume time; the card renders it for the human).
+    pub fn batch_change_set_hash(&self, ticket_id: &str) -> Option<String> {
+        self.batches
+            .get(ticket_id)
+            .map(|t| t.change_set_hash.clone())
     }
 
     pub fn set_ticket_bindings(
@@ -291,6 +407,34 @@ impl GuardService {
         ok
     }
 
+    /// P47.6 — human approval of a batch ticket (card-bound nonce, same rule
+    /// as single tickets). Approves the whole immutable change set.
+    pub fn approve_batch_with_nonce(&mut self, ticket_id: &str, nonce: &str) -> bool {
+        let ok = self.batches.approve_with_nonce(ticket_id, nonce);
+        if ok {
+            self.signal_ticket(ticket_id, true);
+        }
+        ok
+    }
+
+    /// P47.6 — internal approval for policy-controlled batch paths.
+    pub fn approve_batch(&mut self, ticket_id: &str) -> bool {
+        let ok = self.batches.approve(ticket_id);
+        if ok {
+            self.signal_ticket(ticket_id, true);
+        }
+        ok
+    }
+
+    /// P47.6 — human rejection of a batch ticket (card-bound nonce).
+    pub fn reject_batch_with_nonce(&mut self, ticket_id: &str, nonce: &str) -> bool {
+        let ok = self.batches.reject_with_nonce(ticket_id, nonce);
+        if ok {
+            self.signal_ticket(ticket_id, false);
+        }
+        ok
+    }
+
     fn signal_ticket(&mut self, ticket_id: &str, approved: bool) {
         self.outcomes.insert(ticket_id.to_string(), approved);
         if let Some(tx) = self.waiters.remove(ticket_id) {
@@ -341,6 +485,16 @@ impl GuardService {
 
     pub fn receipts(&self) -> Vec<GuardReceipt> {
         self.tickets.receipts().to_vec()
+    }
+
+    /// P47.6 — pending batch tickets (the "approve all" card renders these).
+    pub fn pending_batches(&self) -> Vec<everyaios_guard::BatchTicket> {
+        self.batches.pending().into_iter().cloned().collect()
+    }
+
+    /// P47.6 — append-only batch approval/denial receipts.
+    pub fn batch_receipts(&self) -> Vec<everyaios_guard::BatchReceipt> {
+        self.batches.receipts().to_vec()
     }
 
     /// JSON-RPC dispatch (`guard/*`) for the **Tauri UI / control plane**.
@@ -852,5 +1006,117 @@ mod tests {
             assert!(g2.lock().unwrap().approve(&tid));
         });
         assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), true);
+    }
+
+    #[test]
+    fn batch_flow_asks_approves_and_consumes_exact_change_set() {
+        let mut g = GuardService::new();
+        let ops = vec![
+            everyaios_guard::BatchOperation::new(
+                "fs.rename",
+                "rename",
+                "h-1",
+                vec![
+                    "/w/Downloads/a.pdf".to_string(),
+                    "/w/Docs/a.pdf".to_string(),
+                ],
+            ),
+            everyaios_guard::BatchOperation::new(
+                "fs.rename",
+                "rename",
+                "h-2",
+                vec![
+                    "/w/Downloads/b.png".to_string(),
+                    "/w/Images/b.png".to_string(),
+                ],
+            ),
+        ];
+        let d = g.evaluate_batch(
+            "s1",
+            "a1",
+            ops.clone(),
+            decision(RiskLevel::High, &["/w/Downloads"]),
+            9,
+        );
+        let GuardDecision::Ask { ticket_id } = d else {
+            panic!("expected Ask");
+        };
+
+        // The approved change-set hash is the immutable binding.
+        let cs = g.batch_change_set_hash(&ticket_id).unwrap();
+        assert_eq!(cs, everyaios_guard::change_set_hash(&ops));
+
+        // Human approval requires the card-bound nonce.
+        assert!(!g.approve_batch_with_nonce(&ticket_id, "forged"));
+        assert!(g.approve_batch(&ticket_id));
+
+        // Executor consumes with the exact set.
+        assert!(g.use_batch_ticket(&ticket_id, &cs).is_ok());
+        // Single-use + a stretched change set are both refused.
+        assert!(g.use_batch_ticket(&ticket_id, &cs).is_err());
+
+        // A second batch with one extra op has a different binding.
+        let mut ops2 = ops;
+        ops2.push(everyaios_guard::BatchOperation::new(
+            "fs.delete",
+            "delete",
+            "h-3",
+            vec!["/w/Downloads/secret".to_string()],
+        ));
+        assert_ne!(cs, everyaios_guard::change_set_hash(&ops2));
+
+        // Pending list + receipts exist for the card + audit.
+        assert!(g.pending_batches().is_empty());
+        assert_eq!(g.batch_receipts().len(), 1);
+    }
+
+    #[test]
+    fn autonomy_level_presets_drive_the_policy_gate() {
+        let mut g = GuardService::new();
+        assert_eq!(g.autonomy_level(), everyaios_guard::AutonomyPreset::Ask);
+
+        // Sandbox: a generic write is blocked outright — no ticket at all.
+        g.set_autonomy_level(everyaios_guard::AutonomyPreset::Sandbox);
+        assert_eq!(g.autonomy_level(), everyaios_guard::AutonomyPreset::Sandbox);
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/w/x"]),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Block { .. }));
+
+        // Auto: the same low-risk write is policy-allowed → ticket mints
+        // pre-approved (Allow, consumable immediately).
+        g.set_autonomy_level(everyaios_guard::AutonomyPreset::Auto);
+        assert_eq!(g.autonomy_level(), everyaios_guard::AutonomyPreset::Auto);
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/w/x"]),
+            "h",
+            0,
+        );
+        let GuardDecision::Allow { ticket_id } = d else {
+            panic!("expected Allow under Auto preset");
+        };
+        assert!(g.use_ticket(&ticket_id, "h").is_ok());
+
+        // The floor holds: delete still asks under Auto.
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.delete",
+            Operation::DeleteFiles,
+            decision(RiskLevel::High, &["/w/x"]),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Ask { .. }));
     }
 }

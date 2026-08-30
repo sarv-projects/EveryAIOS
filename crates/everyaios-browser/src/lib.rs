@@ -59,7 +59,7 @@ pub use diff::{diff_snapshots, snapshot_lines};
 pub use electron::ElectronHandle;
 pub use locator::{
     a11y_audit, find_first, find_semantic, first_actionable_ref, parse_batch, A11yIssue,
-    A11ySeverity, BatchParseError, Located, SemanticQuery,
+    A11ySeverity, BatchParseError, Located, RefRegistry, SemanticQuery,
 };
 pub use ownership::{OwnershipError, TabClaim, TabOwner, TabRecord, TabRegistry};
 pub use protocol::{parse_action, ActionParseError, ActionProtocol, ParsedAction};

@@ -151,6 +151,10 @@ pub struct BrowserActions<'a, C: CdpSession> {
     rng: std::sync::Mutex<XorShift>,
     /// Last known cursor position — the start of the next Bézier path.
     mouse_pos: std::sync::Mutex<Point>,
+    /// P46.4 — ref-generation registry: enforces act → invalidate →
+    /// re-observe (E9 H2). A state-changing action advances the generation,
+    /// so refs from the pre-mutation snapshot are stale until a re-observe.
+    refs: std::sync::Mutex<crate::locator::RefRegistry>,
 }
 
 impl<'a, C: CdpSession> BrowserActions<'a, C> {
@@ -163,6 +167,7 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
             rng: std::sync::Mutex::new(Self::make_rng(&behavior)),
             mouse_pos: std::sync::Mutex::new(Point { x: 0.0, y: 0.0 }),
             behavior,
+            refs: std::sync::Mutex::new(crate::locator::RefRegistry::new()),
         }
     }
 
@@ -295,20 +300,67 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
 
     /// `act` — one input primitive; always returns the post-settle diff.
     pub fn act(&self, act: ActKind) -> Result<ActResult, CdpError> {
-        let pre = self.snapshot("pre-act")?;
+        // P46.4 — the pre/post snapshots are raw (diff-only): they must not
+        // re-observe refs, or the invalidation between acts would be undone.
+        let pre = self.capture_raw("pre-act")?;
         let kind = act_kind_name(&act);
         // P2.9 — per-site behavioral realism: humanize only when the profile
         // says the current page's host is enabled.
         let humanized = self.behavior.site_enabled(&pre.url);
+        // P46.4 — refuse a ref the registry knows is from a pre-mutation
+        // snapshot (E9 H2): the caller must re-observe before acting again.
+        self.reject_stale_refs(&act)?;
         self.dispatch(&act, humanized)?;
         self.settle(ACT_SETTLE_MS);
-        let post = self.snapshot("post-act")?;
+        // P46.4 — the action changed state: prior refs are now stale until
+        // the next snapshot re-observes them.
+        self.refs.lock().unwrap().invalidate();
+        let post = self.capture_raw("post-act")?;
         let diff = diff_snapshots(&pre, &post);
         Ok(ActResult {
             kind: kind.to_string(),
             diff: Some(diff),
             note: humanized.then(|| "humanized (P2.9)".to_string()),
         })
+    }
+
+    /// P46.4 — check every ref used by `act` against the registry. A ref
+    /// observed in an older (pre-mutation) generation is refused: acting on
+    /// it would target stale geometry. Unknown refs pass (one-shot use).
+    fn reject_stale_refs(&self, act: &ActKind) -> Result<(), CdpError> {
+        let reg = self.refs.lock().unwrap();
+        let check = |ref_id: &str| -> Result<(), CdpError> {
+            if reg.is_stale(ref_id) {
+                return Err(CdpError::Protocol {
+                    code: -1,
+                    message: format!(
+                        "ref {ref_id} is stale (pre-mutation snapshot) — re-observe before acting"
+                    ),
+                });
+            }
+            Ok(())
+        };
+        match act {
+            ActKind::Click { ref_id }
+            | ActKind::Type { ref_id, .. }
+            | ActKind::Hover { ref_id }
+            | ActKind::Focus { ref_id }
+            | ActKind::Check { ref_id }
+            | ActKind::Uncheck { ref_id }
+            | ActKind::Select { ref_id, .. } => check(ref_id),
+            ActKind::Fill { fields } => {
+                for f in fields {
+                    check(&f.ref_id)?;
+                }
+                Ok(())
+            }
+            ActKind::Drag { from_ref, to_ref } => {
+                check(from_ref)?;
+                check(to_ref)?;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 
     fn dispatch(&self, act: &ActKind, humanized: bool) -> Result<(), CdpError> {
@@ -723,6 +775,21 @@ impl<'a, C: CdpSession> BrowserActions<'a, C> {
     // ------------------------------------------------------------------
 
     pub fn snapshot(&self, document_id: &str) -> Result<Snapshot, CdpError> {
+        let snap = self
+            .snapshot_engine
+            .capture(self.client, self.session_id, document_id)?;
+        // P46.4 — a fresh snapshot re-stamps its refs as current (the
+        // re-observe half of act → invalidate → re-observe).
+        self.refs.lock().unwrap().observe(&snap.root);
+        Ok(snap)
+    }
+
+    /// P46.4 — a *non-observing* capture for `act`'s internal pre/post
+    /// snapshots. These are for diffing only; they must not re-stamp refs,
+    /// or the invalidation between acts would be undone by the very action
+    /// that caused it. Only the caller's explicit [`Self::snapshot`] is a
+    /// re-observe.
+    fn capture_raw(&self, document_id: &str) -> Result<Snapshot, CdpError> {
         self.snapshot_engine
             .capture(self.client, self.session_id, document_id)
     }
@@ -1638,6 +1705,34 @@ mod tests {
         let snap = a.snapshot("doc-1").unwrap();
         assert!(find_ref(&snap.root, "nope").is_none());
         assert!(find_ref(&snap.root, "e1").is_some());
+    }
+
+    // P46.4 — the act path refuses a stale ref: snapshot → act (invalidate)
+    // → act again on the same ref must fail with the re-observe error.
+    #[test]
+    fn act_refuses_stale_ref_after_mutation() {
+        let m = mock();
+        let a = BrowserActions::new(&m, Some("sess-1"));
+        // Snapshot 1 registers e1 as current.
+        a.snapshot("doc-1").unwrap();
+        // First act consumes it and invalidates the generation.
+        a.act(ActKind::Click {
+            ref_id: "e1".into(),
+        })
+        .unwrap();
+        // Second act on the same ref: the registry knows e1 is stale.
+        let err = a
+            .act(ActKind::Click {
+                ref_id: "e1".into(),
+            })
+            .unwrap_err();
+        assert!(err.to_string().contains("stale"), "got: {err}");
+        // Re-observe (fresh snapshot) re-stamps e1 → act works again.
+        a.snapshot("doc-2").unwrap();
+        a.act(ActKind::Click {
+            ref_id: "e1".into(),
+        })
+        .unwrap();
     }
 
     #[test]

@@ -20,7 +20,7 @@
 //! malformed → default), `evaluate` maps an operation + context to
 //! [`PolicyAction`]::{Allow,Ask,Block}.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// What the policy decides for one action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,6 +78,18 @@ pub enum Rule {
     AskIfNewDomain,
     /// `ask_if_destructive`: ask only when the command is destructive.
     AskIfDestructive,
+}
+
+/// Canonical TOML string for a rule (the inverse of [`Rule::parse`]).
+fn rule_str(r: Rule) -> String {
+    match r {
+        Rule::AlwaysAsk => "always_ask".into(),
+        Rule::AlwaysAllow => "always_allow".into(),
+        Rule::Block => "block".into(),
+        Rule::AskIfGt(n) => format!("ask_if_gt_{n}"),
+        Rule::AskIfNewDomain => "ask_if_new_domain".into(),
+        Rule::AskIfDestructive => "ask_if_destructive".into(),
+    }
 }
 
 impl Rule {
@@ -180,9 +192,146 @@ impl Default for PermissionsPolicy {
     }
 }
 
+/// P44.5 — the H34 autonomy levels as `permissions.toml` presets. Each level
+/// is a fixed rule map over the landed `PermissionsPolicy` (plus a
+/// `min_confidence_for_auto`); the *hard floors* (destructive, secret/
+/// credential access, financial, security changes, cross-workspace writes,
+/// irreversible external effects) stay Ask/Block in every preset — a preset
+/// is never a bypass around Guard-1/Guard-2, only a knob over who must
+/// approve which class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutonomyPreset {
+    /// 🛡 plan + read-only — every mutation denied.
+    Sandbox,
+    /// 👀 default — safe reads auto; meaningful mutations + external ask;
+    /// destructive always ask.
+    Ask,
+    /// ⚡ low-risk mutations auto (workspace edits, dir create/rename, local
+    /// tests, format, generated artifacts); external sends/money/destructive/
+    /// new domains/credentials/high-risk shell/scope expansion still ask.
+    Auto,
+    /// 🚀 maximum autonomy within the hard floors — never bypasses
+    /// destructive, secrets/credentials, financial, security changes,
+    /// cross-workspace writes, irreversible external effects.
+    Maximum,
+}
+
+impl AutonomyPreset {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Sandbox => "sandbox",
+            Self::Ask => "ask",
+            Self::Auto => "auto",
+            Self::Maximum => "maximum",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<AutonomyPreset> {
+        Some(match s.to_lowercase().as_str() {
+            "sandbox" | "plan" | "read_only" => AutonomyPreset::Sandbox,
+            "ask" | "interactive" | "default" => AutonomyPreset::Ask,
+            "auto" => AutonomyPreset::Auto,
+            "maximum" | "run_everything" | "max" | "custom" => AutonomyPreset::Maximum,
+            _ => return None,
+        })
+    }
+
+    /// The autonomy-gradient mode this preset drives (H34 rides the landed
+    /// `everyaios-guard::autonomy` gradient, so the calculator stays one
+    /// knob).
+    pub fn to_mode(self) -> crate::autonomy::Mode {
+        match self {
+            Self::Sandbox => crate::autonomy::Mode::Plan,
+            Self::Ask => crate::autonomy::Mode::Interactive,
+            Self::Auto => crate::autonomy::Mode::Auto,
+            Self::Maximum => crate::autonomy::Mode::Custom,
+        }
+    }
+}
+
 impl PermissionsPolicy {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// P44.5 — build the `permissions.toml` preset for an H34 level. The map
+    /// is explicit per rule (not a delta), so a preset is a complete,
+    /// inspectable policy. The floors are hard: destructive/delete, web
+    /// (financial/account), new-domain external, and destructive shell stay
+    /// Ask-or-worse in every level.
+    pub fn preset(level: AutonomyPreset) -> Self {
+        match level {
+            AutonomyPreset::Sandbox => Self {
+                delete_files: Rule::Block,
+                multi_file_edit: Rule::Block,
+                external_network: Rule::Block,
+                terminal_shell: Rule::Block,
+                web_action: Rule::Block,
+                write: Rule::Block,
+                min_confidence_for_auto: 1.0,
+                user_feedback_learning: false,
+            },
+            AutonomyPreset::Ask => Self {
+                delete_files: Rule::AlwaysAsk,
+                multi_file_edit: Rule::AskIfGt(5),
+                external_network: Rule::AskIfNewDomain,
+                terminal_shell: Rule::AskIfDestructive,
+                web_action: Rule::AlwaysAsk,
+                write: Rule::AlwaysAsk,
+                min_confidence_for_auto: 0.85,
+                user_feedback_learning: true,
+            },
+            AutonomyPreset::Auto => Self {
+                // Low-risk local mutations run; anything with a floor asks.
+                delete_files: Rule::AlwaysAsk,
+                multi_file_edit: Rule::AlwaysAllow,
+                external_network: Rule::AskIfNewDomain,
+                terminal_shell: Rule::AskIfDestructive,
+                web_action: Rule::AlwaysAsk,
+                write: Rule::AlwaysAllow,
+                min_confidence_for_auto: 0.75,
+                user_feedback_learning: true,
+            },
+            AutonomyPreset::Maximum => Self {
+                // Everything local runs; the floors never move.
+                delete_files: Rule::AlwaysAsk,
+                multi_file_edit: Rule::AlwaysAllow,
+                external_network: Rule::AskIfNewDomain,
+                terminal_shell: Rule::AskIfDestructive,
+                web_action: Rule::AlwaysAsk,
+                write: Rule::AlwaysAllow,
+                min_confidence_for_auto: 0.6,
+                user_feedback_learning: true,
+            },
+        }
+    }
+
+    /// Render the preset as an actual `[permissions]` TOML block — the file
+    /// the user would write, guaranteed to round-trip through [`Self::parse`].
+    pub fn preset_toml(level: AutonomyPreset) -> String {
+        let p = Self::preset(level);
+        format!(
+            "# EveryAIOS autonomy preset: {name}\n\
+             [permissions]\n\
+             delete_files = \"{delete}\"\n\
+             multi_file_edit = \"{multi}\"\n\
+             external_network = \"{ext}\"\n\
+             terminal_shell = \"{shell}\"\n\
+             web_action = \"{web}\"\n\
+             write = \"{write}\"\n\
+             min_confidence_for_auto = {conf}\n\
+             user_feedback_learning = {feedback}\n",
+            name = level.as_str(),
+            delete = rule_str(p.delete_files),
+            multi = rule_str(p.multi_file_edit),
+            ext = rule_str(p.external_network),
+            shell = rule_str(p.terminal_shell),
+            web = rule_str(p.web_action),
+            write = rule_str(p.write),
+            conf = p.min_confidence_for_auto,
+            feedback = p.user_feedback_learning,
+        )
     }
 
     /// Parse a `permissions.toml` document. Unknown keys and malformed rule
@@ -230,6 +379,19 @@ impl PermissionsPolicy {
             p.user_feedback_learning = u;
         }
         p
+    }
+
+    /// Is this policy exactly one of the H34 presets? (Used by the autonomy
+    /// indicator to name the level currently applied.)
+    pub fn is_preset(&self, level: AutonomyPreset) -> bool {
+        let p = Self::preset(level);
+        p.delete_files == self.delete_files
+            && p.multi_file_edit == self.multi_file_edit
+            && p.external_network == self.external_network
+            && p.terminal_shell == self.terminal_shell
+            && p.web_action == self.web_action
+            && p.write == self.write
+            && (p.min_confidence_for_auto - self.min_confidence_for_auto).abs() < f64::EPSILON
     }
 
     /// Evaluate one operation under the policy. This is the executor's
@@ -341,5 +503,139 @@ user_feedback_learning = true
         let p = PermissionsPolicy::default();
         assert!(p.auto_confidence_ok(0.86));
         assert!(!p.auto_confidence_ok(0.84));
+    }
+
+    #[test]
+    fn sandbox_preset_denies_every_mutation() {
+        let p = PermissionsPolicy::preset(AutonomyPreset::Sandbox);
+        assert_eq!(p.evaluate(&Operation::DeleteFiles), PolicyAction::Block);
+        assert_eq!(
+            p.evaluate(&Operation::MultiFileEdit { files: 1 }),
+            PolicyAction::Block
+        );
+        assert_eq!(
+            p.evaluate(&Operation::ExternalNetwork { new_domain: false }),
+            PolicyAction::Block
+        );
+        assert_eq!(
+            p.evaluate(&Operation::TerminalShell { destructive: false }),
+            PolicyAction::Block
+        );
+        assert_eq!(p.evaluate(&Operation::WebAction), PolicyAction::Block);
+        assert_eq!(p.evaluate(&Operation::GenericWrite), PolicyAction::Block);
+        assert_eq!(p.min_confidence_for_auto, 1.0);
+    }
+
+    #[test]
+    fn ask_preset_matches_default_policy() {
+        let p = PermissionsPolicy::preset(AutonomyPreset::Ask);
+        assert_eq!(p.evaluate(&Operation::DeleteFiles), PolicyAction::Ask);
+        assert_eq!(
+            p.evaluate(&Operation::ExternalNetwork { new_domain: true }),
+            PolicyAction::Ask
+        );
+        assert_eq!(
+            p.evaluate(&Operation::TerminalShell { destructive: false }),
+            PolicyAction::Allow
+        );
+        assert_eq!(p.min_confidence_for_auto, 0.85);
+    }
+
+    #[test]
+    fn auto_preset_runs_low_risk_keeps_floors() {
+        let p = PermissionsPolicy::preset(AutonomyPreset::Auto);
+        // Low-risk local mutations auto.
+        assert_eq!(p.evaluate(&Operation::GenericWrite), PolicyAction::Allow);
+        assert_eq!(
+            p.evaluate(&Operation::MultiFileEdit { files: 9 }),
+            PolicyAction::Allow
+        );
+        // Floors stay.
+        assert_eq!(p.evaluate(&Operation::DeleteFiles), PolicyAction::Ask);
+        assert_eq!(p.evaluate(&Operation::WebAction), PolicyAction::Ask);
+        assert_eq!(
+            p.evaluate(&Operation::ExternalNetwork { new_domain: true }),
+            PolicyAction::Ask
+        );
+        assert_eq!(
+            p.evaluate(&Operation::TerminalShell { destructive: true }),
+            PolicyAction::Ask
+        );
+        assert_eq!(p.min_confidence_for_auto, 0.75);
+    }
+
+    #[test]
+    fn maximum_preset_is_auto_within_hard_floors() {
+        let p = PermissionsPolicy::preset(AutonomyPreset::Maximum);
+        assert_eq!(p.evaluate(&Operation::GenericWrite), PolicyAction::Allow);
+        assert_eq!(
+            p.evaluate(&Operation::MultiFileEdit { files: 99 }),
+            PolicyAction::Allow
+        );
+        // Hard floors never move: destructive / financial / new-domain / high
+        // -risk shell still ask.
+        assert_eq!(p.evaluate(&Operation::DeleteFiles), PolicyAction::Ask);
+        assert_eq!(p.evaluate(&Operation::WebAction), PolicyAction::Ask);
+        assert_eq!(
+            p.evaluate(&Operation::ExternalNetwork { new_domain: true }),
+            PolicyAction::Ask
+        );
+        assert_eq!(
+            p.evaluate(&Operation::TerminalShell { destructive: true }),
+            PolicyAction::Ask
+        );
+        assert_eq!(p.min_confidence_for_auto, 0.6);
+    }
+
+    #[test]
+    fn preset_toml_round_trips_through_parse() {
+        for level in [
+            AutonomyPreset::Sandbox,
+            AutonomyPreset::Ask,
+            AutonomyPreset::Auto,
+            AutonomyPreset::Maximum,
+        ] {
+            let toml = PermissionsPolicy::preset_toml(level);
+            let reparsed = PermissionsPolicy::parse(&toml);
+            let original = PermissionsPolicy::preset(level);
+            for op in [
+                Operation::DeleteFiles,
+                Operation::MultiFileEdit { files: 1 },
+                Operation::MultiFileEdit { files: 9 },
+                Operation::ExternalNetwork { new_domain: true },
+                Operation::ExternalNetwork { new_domain: false },
+                Operation::TerminalShell { destructive: true },
+                Operation::TerminalShell { destructive: false },
+                Operation::WebAction,
+                Operation::GenericWrite,
+            ] {
+                assert_eq!(
+                    reparsed.evaluate(&op),
+                    original.evaluate(&op),
+                    "preset {level:?} diverged on {op:?}"
+                );
+            }
+            assert_eq!(
+                reparsed.min_confidence_for_auto,
+                original.min_confidence_for_auto
+            );
+        }
+    }
+
+    #[test]
+    fn preset_maps_to_autonomy_gradient_modes() {
+        assert_eq!(
+            AutonomyPreset::Sandbox.to_mode(),
+            crate::autonomy::Mode::Plan
+        );
+        assert_eq!(
+            AutonomyPreset::Ask.to_mode(),
+            crate::autonomy::Mode::Interactive
+        );
+        assert_eq!(AutonomyPreset::Auto.to_mode(), crate::autonomy::Mode::Auto);
+        assert_eq!(
+            AutonomyPreset::Maximum.to_mode(),
+            crate::autonomy::Mode::Custom
+        );
     }
 }

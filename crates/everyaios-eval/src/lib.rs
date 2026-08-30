@@ -44,6 +44,7 @@ pub mod simulator;
 pub mod status;
 pub mod store;
 pub mod suite;
+pub mod surface;
 pub mod usage;
 pub mod verifier;
 
@@ -69,6 +70,7 @@ pub use simulator::{
 pub use status::{CompletionStatus, Score};
 pub use store::EvidenceStore;
 pub use suite::{builtin_suite, AdversarialTask, FaultInjection, FaultKind, TaskCategory};
+pub use surface::{verify_surface, Surface, SurfaceCheck, SurfaceContext, SurfaceVerdict};
 pub use usage::{
     EfficiencyMetrics, GenericUsageParser, TurnClass, TurnKind, TurnStat, Usage, UsageParser,
     UsageParserRegistry,
