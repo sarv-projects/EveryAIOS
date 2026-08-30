@@ -33,7 +33,7 @@ desktop_app/
 └── ui/                          ← React SPA (webview frontend)
 ```
 
-**Workspace count (v3.63):** the Rust workspace has **22 crates** — `crates/Cargo.toml` is authoritative; this tree is the module map, not the membership list (older docs saying 17/18/21 predate `engine`/`agents`/`catalog`/`desktop`/`types`). The **`everyaios-types`** crate (shared IDs/enums, pure types) landed 2026-08-30 (P47.3) — the one structural addition the v3.59 architecture finalization added.
+**Workspace count (v3.64):** the Rust workspace has **22 crates + 1 planned `everyaios-sandbox`** (TODO P49.5) — `crates/Cargo.toml` is authoritative; this tree is the module map, not the membership list (older docs saying 17/18/21 predate `engine`/`agents`/`catalog`/`desktop`/`types`). The **`everyaios-types`** crate (shared IDs/enums, pure types) landed 2026-08-30 (P47.3). **(v3.64 §4.4):** `everyaios-core` gains a `work_gateway` module (WorkRegistry/SessionRegistry/RunRegistry/ClientRegistry/NodeRegistry/EventBus/AttachmentRegistry/RunAuthority/ReviewQueue/CapabilityResolver — TODO P49, all open) and a planned `everyaios-sandbox` crate (`SandboxBackend` trait + native-OS backends — bwrap/Seatbelt/Windows-restricted-token, not Docker-first).
 
 **Reuse rule:** `@personal-ai/core-*` packages are **vendored in-repo** under `packages/core-*` (workspace glob `packages/*`; the old `../APP` sibling + `APP_CLONE_TOKEN` gate were removed 2026-08-29 — CI/release fail loudly if the workspace is incomplete). Desktop-specific additions go in `packages/coordinator/` or the Rust crates.
 
