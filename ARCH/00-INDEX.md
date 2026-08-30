@@ -21,7 +21,7 @@
 
 ## Reading order
 
-> **Product invariants (from SPEC §1 — every ARCH doc must preserve them):** one project = one folder + one session tree · one ticket model (ARCH/06 §6.10) as the only mutation path · one append-only event log (doc 53's 10 event types) · one Progress timeline that tabs/panels disclose rather than duplicate.
+> **Product invariants (from SPEC §1 — every ARCH doc must preserve them):** one project = one folder + one session tree · one effect-authorization model (ARCH/06 §6.10) as the mutation gate — agent/automation = `AuthorizationTicket`, human UI = trusted native gesture, both on the one audit · one append-only event log (doc 53's 10 event types) · one Progress timeline that tabs/panels disclose rather than duplicate.
 
 1. **01-SYSTEM-ARCHITECTURE.md** — processes, layers, IPC, lifecycle (the map)
 2. **02-MODULE-LAYOUT.md** — Rust crates + TS packages, ownership, what's new vs exists

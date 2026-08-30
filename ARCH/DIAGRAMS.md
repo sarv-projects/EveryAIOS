@@ -1052,7 +1052,7 @@ flowchart TD
     O --> Upd[Version / update / rollback]
     Upd --> Rec
     H -->|remove| X[Stop / uninstall]
-    U --> T[One ticket → executor → event log]
+    U --> T[Effect-authorization model → executor → event log (agent = ticket, human = trusted gesture)]
 ```
 
 Kinds: model runner · MCP server · ACP agent · browser child · sandbox · worker.  

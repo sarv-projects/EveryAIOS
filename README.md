@@ -188,7 +188,7 @@ Rust core — guard, vault, office, CDP, memory, audit, MCP, ACP, catalog
 Bun coordinator — the agent loop (proposes; cannot mutate without a ticket)
 ```
 
-One ticket → one executor → one event log → one timeline. Model calls are data-plane (budget and egress), not a confirm-card per token.
+One effect-authorization model → one executor → one event log → one timeline (agent = ticket, human = trusted gesture). Model calls are data-plane (budget and egress), not a confirm-card per token.
 
 ---
 
