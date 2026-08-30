@@ -1,5 +1,8 @@
 [package]
-name = "everyaios-desktop"
+name = "everyaios-computeruse"
+# NOTE: renamed from "everyaios-desktop" to avoid the package-name collision
+# with the src-tauri shell (also "everyaios-desktop"). Docs may still say
+# "the everyaios-desktop engine" for E9; this is that crate.
 version.workspace = true
 edition.workspace = true
 license.workspace = true

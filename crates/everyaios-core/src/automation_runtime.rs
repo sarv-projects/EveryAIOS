@@ -13,6 +13,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+/// P48.3 — audit seam for connector/effect steps. The host backs this with the
+/// same Merkle chain (`control::record_mutation(AuthKind::AutomationTicket,…)`)
+/// so an `email`/`calendar` write executed by the runtime is attributable and
+/// auditable exactly like every other effect. `automation_id`/`run_id` give the
+/// actor attribution on the automation path (spec §4.3 precise-invariant).
+pub trait AutomationAudit: Send + Sync {
+    fn record(&self, step_index: usize, kind: &str, payload: Value);
+}
+
 /// Search cascade seam (G8). The implementation may be local/cache/live, but
 /// the runtime only receives normalized results.
 pub trait SearchEngine {
@@ -66,6 +75,9 @@ pub struct AutomationRuntime<'a> {
     pub script: Option<&'a dyn ScriptSandbox>,
     pub search: Option<&'a dyn SearchEngine>,
     pub connectors: Option<&'a dyn ConnectorEngine>,
+    /// P48.3 — optional Merkle-chain audit hook (None until the host installs
+    /// it via [`AutomationRuntime::with_audit`]).
+    pub audit: Option<&'a dyn AutomationAudit>,
 }
 
 impl<'a> AutomationRuntime<'a> {
@@ -78,6 +90,20 @@ impl<'a> AutomationRuntime<'a> {
             script,
             search,
             connectors,
+            audit: None,
+        }
+    }
+
+    /// Attach a Merkle-chain audit hook so connector writes and other
+    /// effectful steps are attributable + auditable (spec §4.3 invariant).
+    pub fn with_audit(mut self, audit: &'a dyn AutomationAudit) -> Self {
+        self.audit = Some(audit);
+        self
+    }
+
+    fn record(&self, index: usize, kind: &str, payload: Value) {
+        if let Some(a) = self.audit {
+            a.record(index, kind, payload);
         }
     }
 
@@ -164,6 +190,13 @@ impl<'a> AutomationRuntime<'a> {
                         message,
                     }
                 })?;
+                // P48.3 — connector writes ride the same Merkle chain via the
+                // host audit hook (AutomationTicket provenance, §4.3).
+                self.record(
+                    index,
+                    "automation.email_sent",
+                    serde_json::json!({ "to": to, "subject": subject, "step": "email" }),
+                );
                 Ok(AutomationStepResult {
                     index,
                     kind: "email".into(),
@@ -185,6 +218,12 @@ impl<'a> AutomationRuntime<'a> {
                         message,
                     }
                 })?;
+                // P48.3 — calendar writes are audited on the same Merkle chain.
+                self.record(
+                    index,
+                    "automation.calendar_created",
+                    serde_json::json!({ "title": title, "when": when, "step": "calendar" }),
+                );
                 Ok(AutomationStepResult {
                     index,
                     kind: "calendar".into(),
@@ -278,6 +317,38 @@ mod tests {
             })
         );
         assert!(runtime.run(&automation, true).is_ok());
+    }
+
+    #[test]
+    fn connector_writes_emit_audit_when_hook_attached() {
+        use std::sync::Mutex;
+        use std::sync::Arc;
+
+        #[derive(Default)]
+        struct FakeAudit(Arc<Mutex<Vec<String>>>);
+        impl AutomationAudit for FakeAudit {
+            fn record(&self, _index: usize, kind: &str, _payload: Value) {
+                self.0.lock().unwrap().push(kind.to_string());
+            }
+        }
+
+        let connectors = FakeConnectors;
+        let audit = FakeAudit::default();
+        let events = Arc::clone(&audit.0);
+        let runtime = AutomationRuntime::new(None, None, Some(&connectors)).with_audit(&audit);
+        let automation = Automation::new("a", "mail", everyaios_blueprint::Trigger::Manual)
+            .step(AutomationStep::Email {
+                to: vec!["a@example.test".into()],
+                subject: "hello".into(),
+                body: "body".into(),
+            })
+            .step(AutomationStep::Calendar {
+                title: "Standup".into(),
+                when: "2026-09-01T09:00Z".into(),
+            });
+        assert!(runtime.run(&automation, true).is_ok());
+        let ev = events.lock().unwrap();
+        assert_eq!(ev.as_slice(), &["automation.email_sent", "automation.calendar_created"]);
     }
 
     #[test]

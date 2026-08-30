@@ -181,7 +181,12 @@ pub enum AuthKind {
     /// path; a consumed ticket may itself carry a human approval in its
     /// `approval_source`).
     AgentTicket,
-    /// Scheduler/automation-initiated (lease + ticket).
+    /// Scheduler/automation-initiated (lease + ticket). Reserved until the
+    /// automation scheduler is wired live to the funnel. The
+    /// `AutomationAudit` seam in `everyaios-core::automation_runtime` will
+    /// carry this provenance once a host installs the hook (spec §4.3).
+    /// Not dead code: it is part of the provenance vocabulary contract.
+    #[allow(dead_code)]
     AutomationTicket,
     /// Human-initiated UI action — the user's own gesture is the authorization.
     HumanGesture,

@@ -224,6 +224,15 @@ pub fn browser_navigate(
     );
     std::thread::sleep(std::time::Duration::from_millis(1500));
     b.url = url.clone();
+    // P48.3 — human-initiated UI action: authorized by the user's own gesture
+    // (navigate is side-effecting if the destination page mutates on load),
+    // audited on the same Merkle chain as every other effect.
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "browser.navigate",
+        serde_json::json!({ "url": url }),
+    );
     Ok(serde_json::json!({ "url": url }))
 }
 
@@ -268,6 +277,14 @@ pub fn browser_click(
         Some(d) => (d.added_lines.clone(), d.removed_lines.clone()),
         None => (Vec::new(), Vec::new()),
     };
+    // P48.3 — human-initiated UI click: a click can submit a form / trigger a
+    // side effect on the page, so it is gesture-authorized + audited.
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "browser.click",
+        serde_json::json!({ "refId": ref_id }),
+    );
     Ok(serde_json::json!({
         "ok": true,
         "refId": ref_id,
@@ -286,7 +303,7 @@ pub fn browser_type(
 ) -> Result<serde_json::Value, String> {
     let guard = lock_browser(&state)?;
     let b = guard.as_ref().ok_or("browser not attached — start it first")?;
-    let act = match ref_id {
+    let act = match ref_id.clone() {
         Some(id) => everyaios_browser::ActKind::Type {
             ref_id: id.clone(),
             text: text.clone(),
@@ -302,6 +319,14 @@ pub fn browser_type(
         Some(d) => d.added_lines.clone(),
         None => Vec::new(),
     };
+    // P48.3 — typing on a live page can mutate state / submit forms; gesture
+    // -authorized + audited on the same chain as every other effect.
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "browser.type",
+        serde_json::json!({ "refId": ref_id, "chars": text.chars().count() }),
+    );
     Ok(serde_json::json!({ "ok": true, "added": added }))
 }
 

@@ -4,10 +4,10 @@
 //! tkinter (for the fixture app), `Xvfb` + `xdpyinfo`. Spawns a small Xvfb
 //! on a free display if none is running.
 
-use everyaios_desktop::ocr::{locate_phrase, OcrEngine, TesseractCli, VisionHit};
-use everyaios_desktop::platform::linux::X11Backend;
-use everyaios_desktop::types::{ActKind, Region};
-use everyaios_desktop::verify::{Locator, Verifier};
+use everyaios_computeruse::ocr::{locate_phrase, OcrEngine, TesseractCli, VisionHit};
+use everyaios_computeruse::platform::linux::X11Backend;
+use everyaios_computeruse::types::{ActKind, Region};
+use everyaios_computeruse::verify::{Locator, Verifier};
 
 /// Find a free display number by probing /tmp/.X11-unix.
 fn free_display() -> String {

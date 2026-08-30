@@ -25,7 +25,7 @@ desktop_app/
 │   ├── everyaios-engine/             ← engine pure-stage port (contract · plan · risk · gate — Alg #2/#17; Evidence Grounding Score v3.59)
 │   ├── everyaios-agents/             ← P31/B9 agent bundles (agent.toml schema, registry, templates, scope)
 │   ├── everyaios-catalog/            ← P14/A11 model + provider catalog (ModelEntry, ProviderRecord, probes, pricing, routing)
-│   ├── everyaios-desktop/            ← E9/P9.1 desktop computer-use (see/read/act over native windows, OCR, verify, policy)
+│   ├── everyaios-desktop/            ← E9/P9.1 desktop computer-use (see/read/act over native windows, OCR, verify, policy) — package renamed everyaios-computeruse (v3.61, collision with the src-tauri shell); host wiring = src-tauri/src/desktop_cmds
 │   └── everyaios-ipc/                ← JSON-RPC over stdio (sidecar contract) + tauri command glue
 ├── packages/                    ← TS workspace (core-* vendored in-repo + coordinator)
 │   ├── core-*/                  ← @personal-ai/core-* vendored in-repo (2026-08-29 — no ../APP sibling, no APP_CLONE_TOKEN gate)

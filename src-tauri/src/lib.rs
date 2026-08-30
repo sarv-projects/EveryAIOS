@@ -16,6 +16,7 @@ mod catalog_cmds;
 mod cockpit_cmds;
 mod codeintel_cmds;
 mod control;
+mod desktop_cmds;
 mod fs_cmds;
 mod git_cmds;
 mod feedback_cmds;
@@ -94,6 +95,10 @@ pub struct AppState {
     pub mcp_remote_flows:
         Arc<Mutex<std::collections::HashMap<String, mcp_cmds::RemoteFlowState>>>,
     pub mcp_remote_tokens: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    /// P48.3 (E9): the lazily-attached native desktop engine (None until first
+    /// use; honest-fail on headless / no display). Engine + audit bridge live
+    /// here — never in the renderer or the coordinator.
+    pub desktop: Mutex<desktop_cmds::DesktopSlot>,
 }
 
 /// Monotonic stream-id source for `chat_stream` calls.
@@ -692,6 +697,7 @@ pub fn run() {
             mcp_live: Mutex::new(std::collections::HashMap::new()),
             mcp_remote_flows: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_remote_tokens: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            desktop: Mutex::new(desktop_cmds::DesktopSlot::default()),
         })
         .invoke_handler(tauri::generate_handler![
             version,
@@ -882,7 +888,14 @@ pub fn run() {
             codeintel_cmds::repomap_build,
             codeintel_cmds::file_outline,
             codeintel_cmds::model_aliases_resolve,
-            codeintel_cmds::ai_markers_scan
+            codeintel_cmds::ai_markers_scan,
+            // P48.3 (E9): desktop computer-use through the effect funnel.
+            desktop_cmds::desktop_status,
+            desktop_cmds::desktop_windows,
+            desktop_cmds::desktop_read,
+            desktop_cmds::desktop_see,
+            desktop_cmds::desktop_act,
+            desktop_cmds::desktop_stop
         ])
         // P8.8: auto-updater (checks + downloads against the configured
         // endpoints; signing key is the release secret).

@@ -24,6 +24,11 @@ members = [
     "everyaios-desktop",
 ]
 
+# N.B. crates/everyaios-desktop has package name everyaios-computeruse (renamed
+# to disambiguate from the src-tauri shell package, which is also
+# everyaios-desktop). The [workspace.dependencies] section below does not list
+# it as a shared dep — src-tauri declares it directly with a :rename.
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
