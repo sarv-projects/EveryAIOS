@@ -781,19 +781,19 @@ flowchart LR
 
 | Surface | Agent path | Human path | Ticket | Audit (provenance) | Verify | Receipt | Recovery |
 |---|---|---|---|---|---|---|---|
-| File (`fs_cmds`) | ✅ | ✅ (ticketed write) | ✅ agent | ✅ | 🟡 EV1-at-plan | ⚪ | ⚪ |
-| Shell (`script.run` / shell view) | ✅ | ✅ gesture | ✅ / gesture | ✅ `shell.command` | ⚪ | ⚪ | ⚪ |
-| Git (`git_cmds`) | 🟡 via ACP/plan | ✅ gesture | / gesture | ✅ `git.*` | 🟡 | ⚪ | ⚪ |
-| Office (`docx_patch` / `pdf_page_op`) | ✅ ticketed executor | ✅ gesture | ✅ / gesture | ✅ `office.*` | 🟡 conformance oracle | ⚪ | ⚪ |
-| Search (`search.query`) | ✅ ticketed | n/a | ✅ | ✅ | 🟡 | ⚪ | ⚪ |
-| Browser | ✅ attached (`LoopBrowser`→`tool/exec`→ticket→commit, real CDP) | ✅ gesture | ✅ / gesture | ✅ `browser.navigate/click/type` (P48.3) | 🟡 | ⚪ | ⚪ |
-| Desktop computer-use (E9) | ⚪ no loop tool (agent reaches effects only via ticketed executor; engine not yet exposed as a tool) | 🔶 seam landed (P48.3) | / gesture | 🔶 `desktop.act` + engine Guard-2 (fail-closed) | 🔶 engine verify | ⚪ | ⚪ |
-| Connector write (P42 crates) | 🟡 no live loop tool (`AutomationRuntime` test-only); approval primitive (`SendApproval`) gates sends | 🟡 | / automation-ticket | 🔶 `automation.email_sent`/`calendar_created` audit hook (P48.3) when the runtime executes | ⚪ | ⚪ | ⚪ |
-| MCP external tool | 🟡 registry tools via executor; external attach partial | n/a | ✅/🟡 | 🟡 | ⚪ | ⚪ | ⚪ |
-| ACP mediated (`use_ticket`, S0.6) | ✅ brokered | n/a | ✅ | ✅ | 🟡 | ⚪ | ⚪ |
+| File (`fs_cmds`) | ✅ | ✅ (ticketed write) | ✅ agent | ✅ | ✅ per-surface (P48.3) | ⚪ | ⚪ |
+| Shell (`script.run` / shell view) | ✅ | ✅ gesture | ✅ / gesture | ✅ `shell.command` | ✅ per-surface (P48.3) | ⚪ | ⚪ |
+| Git (`git_cmds`) | 🟡 via ACP/plan | ✅ gesture | / gesture | ✅ `git.*` | ✅ per-surface (P48.3) | ⚪ | ⚪ |
+| Office (`docx_patch` / `pdf_page_op`) | ✅ ticketed executor | ✅ gesture | ✅ / gesture | ✅ `office.*` | ✅ per-surface (P48.3) | ⚪ | ⚪ |
+| Search (`search.query`) | ✅ ticketed | n/a | ✅ | ✅ | ✅ per-surface (P48.3) | ⚪ | ⚪ |
+| Browser | ✅ attached (`LoopBrowser`→`tool/exec`→ticket→commit, real CDP) | ✅ gesture | ✅ / gesture | ✅ `browser.navigate/click/type` (P48.3) | ✅ per-surface (P48.3) | ⚪ | ⚪ |
+| Desktop computer-use (E9) | ⚪ no loop tool (agent reaches effects only via ticketed executor; engine not yet exposed as a tool) | 🔶 seam landed (P48.3) | / gesture | 🔶 `desktop.act` + engine Guard-2 (fail-closed) | 🔶 engine verify + per-surface primitive (P48.3) | ⚪ | ⚪ |
+| Connector write (P42 crates) | 🟡 no live loop tool (`AutomationRuntime` test-only); approval primitive (`SendApproval`) gates sends | 🟡 | / automation-ticket | 🔶 `automation.email_sent`/`calendar_created` audit hook (P48.3) when the runtime executes | ✅ per-surface (P48.3) | ⚪ | ⚪ |
+| MCP external tool | 🟡 registry tools via executor; external attach partial | n/a | ✅/🟡 | 🟡 | ✅ per-surface (P48.3) | ⚪ | ⚪ |
+| ACP mediated (`use_ticket`, S0.6) | ✅ brokered | n/a | ✅ | ✅ | ✅ per-surface (P48.3) | ⚪ | ⚪ |
 | Automation (scheduler) | ✅ tools via executor | n/a | ✅ | ✅ | 🟡 | ⚪ | ⚪ |
 
-**Legend:** ✅ landed-verified · 🔶 seam landed (host wiring, live-verify may need display/account) · 🟡 partial / wiring · ⚪ not-wired/post-v1 · n/a not-applicable. **Cross-cutting gaps:** `BatchTicket` generalization (P47.6) and per-surface Verify beyond EV1-at-plan remain; per-effect **`EffectReceipt`** (P47.5) and **ExecutionKernel disk persistence / crash-recovery** (P48.4) **landed 2026-08-30** (the Recovery column is now a durable checkpoint, not ⚪). Filling the remaining ⚪/🟡 cells is the P48.3 executor-attachment audit — the mechanical proof, not more docs.
+**Legend:** ✅ landed-verified · 🔶 seam landed (host wiring, live-verify may need display/account) · 🟡 partial / wiring · ⚪ not-wired/post-v1 · n/a not-applicable. **Cross-cutting gaps:** per-surface Verify beyond EV1-at-plan **landed 2026-08-30** (`everyaios-eval::surface` — `verify_surface` generalizes the filesystem-only `OutcomeCheck` to per-surface post-effect checks with honest Unverifiable/Degraded; wired as `eval/verify_surface`); `BatchTicket` generalization **landed 2026-08-30** (`everyaios-guard::batch` — immutable change-set ticket consumed via `GuardService::use_batch_ticket`); per-effect **`EffectReceipt`** (P47.5) and **ExecutionKernel disk persistence / crash-recovery** (P48.4) **landed 2026-08-30** (the Recovery column is now a durable checkpoint, not ⚪). Filling the remaining ⚪/🟡 cells is the rest of the P48.3 executor-attachment audit (MCP external attach · desktop-as-agent-tool · connector-write live wiring) — the mechanical proof, not more docs.
 
 **Terminology — Work vs Execution (v3.59):** the durable Work object is the existing `Execution` struct (`everyaios-core/src/execution.rs`; 14-phase state machine Created → Planning → Ready → Running {WaitingTool · WaitingApproval · WaitingUser · Checkpointed} → Verifying → Completed/Failed/Cancelled/Paused/Recoverable). **"Work" is the product/domain name; `Execution` is the implementation type** — one object, two names. A mechanical rename (or type-level alias) is queued as P47.4; until then the names are interchangeable in the spec.
 

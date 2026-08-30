@@ -28,6 +28,7 @@
 //! (P7.5).
 
 pub mod autonomy;
+pub mod batch;
 pub mod blocklist;
 pub mod configscan;
 pub mod decision;
@@ -55,6 +56,9 @@ pub mod toctou;
 pub mod urlfloor;
 
 pub use autonomy::{AutonomyPolicy, AutonomyVerdict, Mode, RiskClass};
+pub use batch::{
+    change_set_hash, BatchAction, BatchOperation, BatchReceipt, BatchTicket, BatchTicketStore,
+};
 pub use blocklist::{blocklist_for, BlocklistCategory, BLOCKLIST};
 pub use decision::{DecisionPackage, WebActionKind};
 pub use diffcard::{render_native_card, CardAction, CardResponse, NativeCard};
@@ -72,7 +76,7 @@ pub use pathfloor::{
     canonicalize_no_follow, enforce_floor, is_inside_root, normalize_lexical, FloorVerdict, FsOp,
     GrantAxis, PathGrant,
 };
-pub use permissions::{Operation, PermissionsPolicy, PolicyAction, Rule};
+pub use permissions::{AutonomyPreset, Operation, PermissionsPolicy, PolicyAction, Rule};
 pub use prescan::{scan_path, scan_shell, scan_url, PreExecScan, ScanTarget};
 pub use profiles::{GateAction, Hook, Profile};
 pub use release::{

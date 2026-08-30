@@ -5,32 +5,79 @@
 //! JSON-RPC surface (`eval/verify`) the coordinator hits when a plan (or
 //! other task) finishes.
 
-use everyaios_eval::{verify, Constraint, OutcomeCheck, TaskManifest, VerificationReport};
+use everyaios_eval::{
+    verify, Constraint, OutcomeCheck, SurfaceCheck, SurfaceContext, TaskManifest,
+    VerificationReport,
+};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default)]
 pub struct EvalService {
     last: Option<VerificationReport>,
+    /// P48.3 — per-surface verify results (shell/git/office/browser/desktop…
+    /// beyond the filesystem-only EV1-at-plan check).
+    last_surface: Option<everyaios_eval::SurfaceVerdict>,
 }
 
 impl EvalService {
     pub fn new() -> Self {
-        Self { last: None }
+        Self {
+            last: None,
+            last_surface: None,
+        }
     }
 
     pub fn last_report(&self) -> Option<&VerificationReport> {
         self.last.as_ref()
     }
 
+    pub fn last_surface_verdict(&self) -> Option<&everyaios_eval::SurfaceVerdict> {
+        self.last_surface.as_ref()
+    }
+
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
         match method {
             "eval/verify" => self.verify(params),
+            "eval/verify_surface" => self.verify_surface(params),
             "eval/last" => Ok(json!({
                 "report": self.last,
+                "surfaceVerdict": self.last_surface,
             })),
             _ => Err(format!("method not found: {method}")),
         }
+    }
+
+    /// P48.3 — per-surface verify: the caller names the `check` (e.g.
+    /// `shell_exit`, `browser_url`) and the engine-attached `context`
+    /// observation. Missing context ⇒ honest `unverifiable`, never a fake
+    /// pass. Returns the verdict + its EV1 status label.
+    fn verify_surface(&mut self, params: &Value) -> Result<Value, String> {
+        let check: SurfaceCheck = serde_json::from_value(
+            params
+                .get("check")
+                .cloned()
+                .ok_or_else(|| "missing check".to_string())?,
+        )
+        .map_err(|e| format!("bad check: {e}"))?;
+        let ctx: SurfaceContext = serde_json::from_value(
+            params
+                .get("context")
+                .cloned()
+                .unwrap_or(serde_json::json!({})),
+        )
+        .map_err(|e| format!("bad context: {e}"))?;
+        let verdict = everyaios_eval::verify_surface(&check, &ctx);
+        let label = verdict.status_label().to_string();
+        let verified = verdict.is_verified();
+        self.last_surface = Some(verdict.clone());
+        Ok(json!({
+            "check": check.describe(),
+            "surface": check.surface().as_str(),
+            "verified": verified,
+            "status": label,
+            "verdict": verdict,
+        }))
     }
 
     fn verify(&mut self, params: &Value) -> Result<Value, String> {
@@ -155,5 +202,37 @@ mod tests {
             .handle("eval/verify", &json!({ "taskId": "t2", "goal": "chat" }))
             .unwrap();
         assert_eq!(out["verified"], false);
+    }
+
+    #[test]
+    fn verify_surface_verifies_with_context_and_stays_honest_without() {
+        let mut svc = EvalService::new();
+        // Attached shell surface: exit 0 verifies.
+        let out = svc
+            .handle(
+                "eval/verify_surface",
+                &json!({
+                    "check": { "check": "shell_exit", "expected": 0 },
+                    "context": { "shell_exit": 0 },
+                }),
+            )
+            .unwrap();
+        assert_eq!(out["verified"], true);
+        assert_eq!(out["status"], "verified_complete");
+        assert_eq!(out["surface"], "shell");
+
+        // Same check, no context: honestly unverifiable, never a fake pass.
+        let out = svc
+            .handle(
+                "eval/verify_surface",
+                &json!({ "check": { "check": "shell_exit", "expected": 0 } }),
+            )
+            .unwrap();
+        assert_eq!(out["verified"], false);
+        assert_eq!(out["status"], "unverifiable");
+        assert_eq!(
+            svc.last_surface_verdict().unwrap().status_label(),
+            "unverifiable"
+        );
     }
 }

@@ -253,6 +253,71 @@ fn audit_into(
 }
 
 // ---------------------------------------------------------------------------
+// P46.4 — explicit ref invalidation (E9 H2 / E3 hard invariant)
+// ---------------------------------------------------------------------------
+
+/// P46.4 — the ref-generation registry. Enforces the **act → invalidate →
+/// re-observe** invariant at the ref level: a snapshot mints refs into a
+/// generation; any state-changing action advances the generation, so refs
+/// from a pre-mutation snapshot are **stale** and must not be acted on
+/// without a re-observe. The registry is deliberately lenient toward refs it
+/// has never seen (a one-shot `act` with a fresh ref still works) — the hard
+/// rule is that a ref *known* to come from an older generation is rejected.
+///
+/// Pure + deterministic (no CDP): the action layer holds one registry per
+/// engine, `observe`s after every snapshot, `invalidate`s after every
+/// state-changing action, and refuses stale refs before resolving geometry.
+#[derive(Debug, Clone, Default)]
+pub struct RefRegistry {
+    /// The current generation. Advances on every invalidation.
+    generation: u64,
+    /// ref_id → the generation it was observed in.
+    observed: std::collections::HashMap<String, u64>,
+}
+
+impl RefRegistry {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register every ref in a fresh snapshot under the current generation.
+    /// Call this right after a `snapshot()`. Ref ids already present from an
+    /// older generation are re-stamped as current (the re-observe is what
+    /// makes them fresh again).
+    pub fn observe(&mut self, root: &A11yNode) {
+        fn walk(node: &A11yNode, gen: u64, reg: &mut RefRegistry) {
+            if let Some(r) = &node.ref_id {
+                reg.observed.insert(r.clone(), gen);
+            }
+            for c in &node.children {
+                walk(c, gen, reg);
+            }
+        }
+        walk(root, self.generation, self);
+    }
+
+    /// Advance the generation — call after **any state-changing action**.
+    /// Every ref observed before this call becomes stale.
+    pub fn invalidate(&mut self) {
+        self.generation += 1;
+    }
+
+    /// Is this ref known to come from an older (pre-mutation) generation?
+    /// `false` for unknown refs (fresh single-shot use) and for refs observed
+    /// in the current generation.
+    pub fn is_stale(&self, ref_id: &str) -> bool {
+        self.observed
+            .get(ref_id)
+            .is_some_and(|g| *g < self.generation)
+    }
+
+    /// The current generation (for diagnostics).
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Batch JSON command mode (post-v1: run many `act` primitives in one call)
 // ---------------------------------------------------------------------------
 
@@ -404,5 +469,50 @@ mod tests {
     #[test]
     fn batch_rejects_non_array() {
         assert!(parse_batch("42").is_err());
+    }
+
+    // P46.4 — the acceptance test: a ref from a pre-mutation snapshot cannot
+    // be used post-mutation without a re-observe.
+    #[test]
+    fn ref_from_pre_mutation_snapshot_is_stale_until_reobserve() {
+        let mut reg = RefRegistry::new();
+
+        // Observe snapshot 1 — e1/e2 are fresh.
+        reg.observe(&tree());
+        assert!(!reg.is_stale("e1"));
+        assert!(!reg.is_stale("e2"));
+
+        // A state-changing action invalidates the generation.
+        reg.invalidate();
+        assert!(
+            reg.is_stale("e1"),
+            "ref from pre-mutation snapshot must be stale"
+        );
+        assert!(reg.is_stale("e2"));
+
+        // Acting on e1 now is refused by the caller (stale check).
+        assert!(reg.is_stale("e1"));
+
+        // A fresh snapshot (re-observe) re-stamps e1 as current.
+        let mut post = tree();
+        post.push(
+            A11yNode::new("textbox", "New field")
+                .with_ref("e9")
+                .with_actionable(),
+        );
+        reg.observe(&post);
+        assert!(!reg.is_stale("e1"), "re-observe makes the ref fresh again");
+        assert!(!reg.is_stale("e9"));
+    }
+
+    #[test]
+    fn unknown_refs_are_lenient_single_shot_use_works() {
+        let mut reg = RefRegistry::new();
+        // No observe yet — a one-shot act with a fresh ref still passes.
+        assert!(!reg.is_stale("e1"));
+        // After an invalidation, unknown refs remain allowed (the registry
+        // never saw them; it cannot call them stale).
+        reg.invalidate();
+        assert!(!reg.is_stale("e1"));
     }
 }
