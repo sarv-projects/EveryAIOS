@@ -23,7 +23,7 @@ use everyaios_guard::{
     reverify_exec, reverify_path, reverify_url, scan_all, urlfloor, ConnectivityMode,
     DecisionPackage, EgressEngine, EgressVerdict, Operation, ResourceBinding, RiskLevel, RiskTier,
 };
-use everyaios_mcp::{all_tools, ArgDef, ArgKind, ToolDef, ToolKind};
+use everyaios_mcp::{all_tools, ArgDef, ArgKind, ExternalTool, ToolDef, ToolKind};
 use everyaios_script::ScriptSandbox;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -77,6 +77,54 @@ pub enum ToolFamily {
     FileOps,
     Search,
     Office,
+    /// P48.3 — desktop computer-use (E9) as a loop tool. Reached through the
+    /// same ticketed executor as every other surface; an unattached backend
+    /// fails honestly ("desktop session not attached").
+    Desktop,
+    /// P48.3 — external MCP tools attached via `attach_external` (user-supplied
+    /// stdio/HTTP server). Dispatched through the executor like registry tools.
+    External,
+    /// P48.3 — connector writes (email/calendar). These ride the automation
+    /// runtime's `ConnectorEngine` seam with approval + audit.
+    Connector,
+}
+
+/// P48.3 — the desktop computer-use engine seam behind the `desktop.*` tools.
+/// A host that has a live `DesktopEngine` (everyaios-computeruse) injects this
+/// so the agent path reaches native windows through the ticketed executor. When
+/// absent the tools fail honestly ("desktop session not attached").
+pub trait DesktopBackend: Send + Sync {
+    /// List native windows (read-only; e-stop-guarded, not a mutation).
+    fn list_windows(&self) -> Result<Value, String>;
+    /// A11y/OCR read of a window → serialized snapshot.
+    fn read(&self, window_id: u64) -> Result<Value, String> {
+        let _ = window_id;
+        Err("desktop session not attached".into())
+    }
+    /// Act against a stable window id / a11y ref (observe → act → re-observe).
+    fn act(
+        &self,
+        kind: &str,
+        window_id: Option<u64>,
+        target: Option<&str>,
+        text: Option<&str>,
+    ) -> Result<Value, String>;
+}
+
+/// P48.3 — the connector-write engine seam behind the `connector.*` tools
+/// (email/calendar). Backed in the host by the automation runtime's
+/// `ConnectorEngine` adapter (P42 crates); absent → honest "connector not
+/// attached" failure. Writes are gated by the normal ticket + audit path.
+pub trait ConnectorToolBackend: Send + Sync {
+    fn email(&self, to: Vec<String>, subject: &str, body: &str) -> Result<Value, String>;
+    fn calendar(&self, title: &str, when: &str) -> Result<Value, String>;
+}
+
+/// P48.3 — an attached external MCP server's live tool dispatcher. Backed in
+/// the host by the attach machinery (`everyaios-mcp::AttachedServer`). When
+/// absent, external tools fail honestly ("external tool session not attached").
+pub trait ExternalToolBackend: Send + Sync {
+    fn call(&self, tool_id: &str, args: &Value) -> Result<Value, String>;
 }
 
 /// One catalog entry — the single source of truth for `tool/list`, guard
@@ -188,11 +236,51 @@ impl ToolRegistry {
             "office.pdf_form_fill",
             "office.pdf_redact",
             "office.pdf_pages",
+            "desktop.windows",
+            "desktop.read",
+            "desktop.act",
+            "connector.email_send",
+            "connector.calendar_create",
         ] {
             aliases.insert(id.into(), id.into());
         }
 
         Self { tools, aliases }
+    }
+
+    /// P48.3 — reconcile an attached external MCP server's tools into the
+    /// catalog as `External`-family entries (server label as provenance).
+    /// Already-registered ids (native precedence) are skipped. `label` is the
+    /// server provenance (e.g. `mcp:gmail`) recorded on each entry.
+    pub fn register_external(&mut self, label: &str, tools: &[ExternalTool]) -> Vec<String> {
+        let mut names = Vec::new();
+        for t in tools {
+            if self.get(&t.name).is_some() {
+                continue; // native precedence — never shadow a built-in
+            }
+            let (operation, risk) = if t.open_world {
+                ("external_network", "medium")
+            } else if t.read_only {
+                ("write", "low")
+            } else {
+                ("web_action", "high")
+            };
+            let mut entry = RegisteredTool {
+                id: t.name.clone(),
+                family: ToolFamily::External,
+                description: format!("{} ({label})", t.description),
+                read_only: t.read_only,
+                operation: operation.to_string(),
+                risk: risk.to_string(),
+                risk_tier: String::new(),
+                args_schema: t.input_schema.clone(),
+            };
+            entry = stamp_tier(entry);
+            self.tools.push(entry);
+            self.aliases.insert(t.name.clone(), t.name.clone());
+            names.push(t.name.clone());
+        }
+        names
     }
 
     pub fn list(&self) -> &[RegisteredTool] {
@@ -453,6 +541,92 @@ fn extra_tools() -> Vec<RegisteredTool> {
                 "additionalProperties": false
             }),
         ),
+        // P48.3 — desktop computer-use as a loop tool (E9 agent path).
+        RegisteredTool {
+            id: "desktop.windows".into(),
+            family: ToolFamily::Desktop,
+            description: "List native desktop windows (apps + titles + bounds)".into(),
+            read_only: true,
+            operation: "write".into(),
+            risk: "low".into(),
+            risk_tier: String::new(),
+            args_schema: json!({ "type": "object", "properties": {}, "required": [] }),
+        },
+        RegisteredTool {
+            id: "desktop.read".into(),
+            family: ToolFamily::Desktop,
+            description: "Read a window's a11y/OCR tree by stable window id".into(),
+            read_only: true,
+            operation: "write".into(),
+            risk: "low".into(),
+            risk_tier: String::new(),
+            args_schema: json!({
+                "type": "object",
+                "properties": {
+                    "windowId": { "type": "number" }
+                },
+                "required": ["windowId"],
+                "additionalProperties": false
+            }),
+        },
+        RegisteredTool {
+            id: "desktop.act".into(),
+            family: ToolFamily::Desktop,
+            description: "Act on a native window by stable ref (click/type/scroll/launch)".into(),
+            read_only: false,
+            operation: "web_action".into(),
+            risk: "high".into(),
+            risk_tier: String::new(),
+            args_schema: json!({
+                "type": "object",
+                "properties": {
+                    "kind": { "type": "string" },
+                    "windowId": { "type": "number" },
+                    "target": { "type": "string" },
+                    "text": { "type": "string" }
+                },
+                "required": ["kind"],
+                "additionalProperties": false
+            }),
+        },
+        // P48.3 — connector writes (email/calendar) via the automation engine.
+        RegisteredTool {
+            id: "connector.email_send".into(),
+            family: ToolFamily::Connector,
+            description: "Send an email through the connected mail provider".into(),
+            read_only: false,
+            operation: "web_action".into(),
+            risk: "high".into(),
+            risk_tier: String::new(),
+            args_schema: json!({
+                "type": "object",
+                "properties": {
+                    "to": { "type": "array", "items": { "type": "string" } },
+                    "subject": { "type": "string" },
+                    "body": { "type": "string" }
+                },
+                "required": ["to", "subject"],
+                "additionalProperties": false
+            }),
+        },
+        RegisteredTool {
+            id: "connector.calendar_create".into(),
+            family: ToolFamily::Connector,
+            description: "Create a calendar event on the connected calendar provider".into(),
+            read_only: false,
+            operation: "web_action".into(),
+            risk: "high".into(),
+            risk_tier: String::new(),
+            args_schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string" },
+                    "when": { "type": "string" }
+                },
+                "required": ["title", "when"],
+                "additionalProperties": false
+            }),
+        },
     ]
     .into_iter()
     .map(stamp_tier)
@@ -577,9 +751,23 @@ pub struct ToolService {
     undo: Vec<FileUndo>,
     /// P2.3 — optional browser engine (PDF/screenshot file-op tools).
     browser: Option<Arc<dyn BrowserBackend>>,
+    /// P48.3 — optional desktop computer-use engine (`desktop.*` tools, E9).
+    desktop: Option<Arc<dyn DesktopBackend>>,
+    /// P48.3 — optional connector-write engine (`connector.*` tools).
+    connector: Option<Arc<dyn ConnectorToolBackend>>,
+    /// P48.3 — attached external MCP servers (user-supplied tools).
+    external: Vec<ExternalAttachment>,
     /// G8 cascade (cache → SearXNG → DDG).
     search: everyaios_search::G8Cascade,
     search_transport: Arc<dyn everyaios_search::SearchTransport>,
+}
+
+/// P48.3 — one attached external MCP server: its backend dispatcher plus the
+/// tool ids it registered into the catalog (each carrying the server label).
+pub struct ExternalAttachment {
+    pub label: String,
+    pub tools: Vec<String>,
+    pub backend: Arc<dyn ExternalToolBackend>,
 }
 
 #[derive(Debug, Clone)]
@@ -614,6 +802,9 @@ impl ToolService {
             egress,
             undo: Vec::new(),
             browser: None,
+            desktop: None,
+            connector: None,
+            external: Vec::new(),
             search: everyaios_search::G8Cascade::default(),
             search_transport: Arc::new(UreqSearchTransport),
         }
@@ -629,6 +820,36 @@ impl ToolService {
     /// Attach (or replace) the live CDP backend after `browser_start`.
     pub fn attach_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
         self.browser = Some(browser);
+    }
+
+    /// P48.3 — attach (or replace) the live desktop engine so the `desktop.*`
+    /// tools reach native windows through the ticketed executor. This flips the
+    /// E9 agent-path cell (desktop becomes a loop tool).
+    pub fn attach_desktop(&mut self, desktop: Arc<dyn DesktopBackend>) {
+        self.desktop = Some(desktop);
+    }
+
+    /// P48.3 — attach (or replace) the connector engine backing `connector.*`
+    /// email/calendar writes.
+    pub fn attach_connector(&mut self, connector: Arc<dyn ConnectorToolBackend>) {
+        self.connector = Some(connector);
+    }
+
+    /// P48.3 — attach an external MCP server whose tools were reconciled into
+    /// the registry under `label`. The server's tools (already present as
+    /// `External`-family catalog entries) dispatch to `backend`.
+    pub fn attach_external(
+        &mut self,
+        label: &str,
+        tools: Vec<String>,
+        backend: Arc<dyn ExternalToolBackend>,
+    ) {
+        self.external.retain(|e| e.label != label);
+        self.external.push(ExternalAttachment {
+            label: label.to_string(),
+            tools,
+            backend,
+        });
     }
 
     /// Inject a search transport (tests; production uses [`UreqSearchTransport`]).
@@ -926,6 +1147,94 @@ impl ToolService {
             ToolFamily::Search => self.dispatch_search(args),
             ToolFamily::Browser => self.dispatch_browser(&spec.id, args),
             ToolFamily::Office => self.dispatch_office(&spec.id, args),
+            ToolFamily::Desktop => self.dispatch_desktop(&spec.id, args),
+            ToolFamily::External => self.dispatch_external(&spec.id, args),
+            ToolFamily::Connector => self.dispatch_connector(&spec.id, args),
+        }
+    }
+
+    /// P48.3 — desktop computer-use as a loop tool (E9 agent path). Honest
+    /// failure when no engine is attached (headless/no-display).
+    fn dispatch_desktop(&self, id: &str, args: &Value) -> Value {
+        let Some(d) = &self.desktop else {
+            return json!({"ok": false, "error": "desktop session not attached"});
+        };
+        match id {
+            "desktop.windows" => match d.list_windows() {
+                Ok(v) => json!({"ok": true, "windows": v}),
+                Err(e) => json!({"ok": false, "error": e}),
+            },
+            "desktop.read" => {
+                let window_id = args.get("windowId").and_then(Value::as_u64);
+                match d.read(window_id.unwrap_or(0)) {
+                    Ok(v) => json!({"ok": true, "snapshot": v}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                }
+            }
+            "desktop.act" => {
+                let kind = args.get("kind").and_then(Value::as_str).unwrap_or("click");
+                let window_id = args.get("windowId").and_then(Value::as_u64);
+                let target = args
+                    .get("target")
+                    .or_else(|| args.get("ref"))
+                    .and_then(Value::as_str);
+                let text = args.get("text").and_then(Value::as_str);
+                match d.act(kind, window_id, target, text) {
+                    Ok(v) => json!({"ok": true, "result": v}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                }
+            }
+            _ => json!({"ok": false, "error": format!("unknown desktop tool: {id}")}),
+        }
+    }
+
+    /// P48.3 — external MCP tools route to the attached server's backend.
+    fn dispatch_external(&self, id: &str, args: &Value) -> Value {
+        for e in &self.external {
+            if e.tools.iter().any(|t| t == id) {
+                return match e.backend.call(id, args) {
+                    Ok(v) => json!({"ok": true, "result": v}),
+                    Err(err) => json!({"ok": false, "error": err}),
+                };
+            }
+        }
+        json!({"ok": false, "error": "external tool session not attached"})
+    }
+
+    /// P48.3 — connector writes (email/calendar) through the automation
+    /// runtime's engine seam; gated by ticket + audited on the Merkle chain.
+    fn dispatch_connector(&self, id: &str, args: &Value) -> Value {
+        let Some(c) = &self.connector else {
+            return json!({"ok": false, "error": "connector not attached"});
+        };
+        match id {
+            "connector.email_send" => {
+                let to: Vec<String> = args
+                    .get("to")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(String::from)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let subject = args.get("subject").and_then(Value::as_str).unwrap_or("");
+                let body = args.get("body").and_then(Value::as_str).unwrap_or("");
+                match c.email(to, subject, body) {
+                    Ok(v) => json!({"ok": true, "result": v}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                }
+            }
+            "connector.calendar_create" => {
+                let title = args.get("title").and_then(Value::as_str).unwrap_or("");
+                let when = args.get("when").and_then(Value::as_str).unwrap_or("");
+                match c.calendar(title, when) {
+                    Ok(v) => json!({"ok": true, "result": v}),
+                    Err(e) => json!({"ok": false, "error": e}),
+                }
+            }
+            _ => json!({"ok": false, "error": format!("unknown connector tool: {id}")}),
         }
     }
 
@@ -2603,6 +2912,157 @@ mod tests {
             pre["reason"].as_str().unwrap_or("").contains("egress"),
             "{pre}"
         );
+    }
+
+    struct FakeDesktop;
+    impl DesktopBackend for FakeDesktop {
+        fn list_windows(&self) -> Result<Value, String> {
+            Ok(json!([{ "id": 1, "title": "Notes", "app": "Notes.app" }]))
+        }
+        fn read(&self, window_id: u64) -> Result<Value, String> {
+            Ok(json!({ "windowId": window_id, "tree": [{ "role": "Button", "name": "Save" }] }))
+        }
+        fn act(
+            &self,
+            kind: &str,
+            window_id: Option<u64>,
+            target: Option<&str>,
+            text: Option<&str>,
+        ) -> Result<Value, String> {
+            Ok(json!({
+                "kind": kind,
+                "windowId": window_id,
+                "target": target,
+                "text": text,
+                "ok": true,
+            }))
+        }
+    }
+
+    #[test]
+    fn desktop_tools_route_through_attached_backend() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        // Honest failure without a backend (headless/no-display).
+        let no_desktop = s.dispatch(
+            &s.registry.get("desktop.act").unwrap().clone(),
+            &json!({"kind": "click", "target": "Save"}),
+        );
+        assert_eq!(no_desktop["ok"], false);
+        assert!(no_desktop["error"]
+            .as_str()
+            .unwrap()
+            .contains("not attached"));
+
+        s.attach_desktop(Arc::new(FakeDesktop));
+        let windows = s.dispatch(
+            &s.registry.get("desktop.windows").unwrap().clone(),
+            &json!({}),
+        );
+        assert_eq!(windows["ok"], true);
+        assert_eq!(windows["windows"][0]["title"], "Notes");
+        let read = s.dispatch(
+            &s.registry.get("desktop.read").unwrap().clone(),
+            &json!({ "windowId": 1 }),
+        );
+        assert_eq!(read["ok"], true);
+        assert_eq!(read["snapshot"]["tree"][0]["role"], "Button");
+        let act = s.dispatch(
+            &s.registry.get("desktop.act").unwrap().clone(),
+            &json!({"kind": "click", "target": "Save"}),
+        );
+        assert_eq!(act["ok"], true);
+        assert_eq!(act["result"]["target"], "Save");
+    }
+
+    struct FakeConnector;
+    impl ConnectorToolBackend for FakeConnector {
+        fn email(&self, to: Vec<String>, subject: &str, body: &str) -> Result<Value, String> {
+            Ok(json!({ "to": to, "subject": subject, "body_len": body.len() }))
+        }
+        fn calendar(&self, title: &str, when: &str) -> Result<Value, String> {
+            Ok(json!({ "title": title, "when": when }))
+        }
+    }
+
+    #[test]
+    fn connector_writes_route_through_attached_engine() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        let no_conn = s.dispatch(
+            &s.registry.get("connector.email_send").unwrap().clone(),
+            &json!({ "to": ["a@example.test"], "subject": "hi" }),
+        );
+        assert_eq!(no_conn["ok"], false);
+        assert!(no_conn["error"].as_str().unwrap().contains("not attached"));
+
+        s.attach_connector(Arc::new(FakeConnector));
+        let mail = s.dispatch(
+            &s.registry.get("connector.email_send").unwrap().clone(),
+            &json!({ "to": ["a@example.test"], "subject": "hi", "body": "b" }),
+        );
+        assert_eq!(mail["ok"], true);
+        assert_eq!(mail["result"]["to"][0], "a@example.test");
+        let cal = s.dispatch(
+            &s.registry.get("connector.calendar_create").unwrap().clone(),
+            &json!({ "title": "Standup", "when": "2026-09-01T09:00Z" }),
+        );
+        assert_eq!(cal["ok"], true);
+        assert_eq!(cal["result"]["title"], "Standup");
+    }
+
+    #[test]
+    fn external_attach_registers_tools_and_dispatches_with_native_precedence() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        let before = s.registry.list().len();
+
+        // A user-supplied server exposing a brand-new tool and a colliding one.
+        let tools = vec![
+            ExternalTool {
+                name: "custom.query".into(),
+                description: "custom data".into(),
+                input_schema: json!({ "type": "object", "properties": {} }),
+                read_only: true,
+                open_world: false,
+                source: "mcp:custom".into(),
+            },
+            ExternalTool {
+                name: "script.run".into(),
+                description: "shadow attempt".into(),
+                input_schema: json!({ "type": "object", "properties": {} }),
+                read_only: false,
+                open_world: false,
+                source: "mcp:custom".into(),
+            },
+        ];
+        let names = s.registry.register_external("mcp:custom", &tools);
+        // Native precedence: the shadow attempt is skipped.
+        assert_eq!(names, vec!["custom.query"]);
+        assert_eq!(s.registry.list().len(), before + 1);
+
+        struct FakeExternal;
+        impl ExternalToolBackend for FakeExternal {
+            fn call(&self, tool_id: &str, args: &Value) -> Result<Value, String> {
+                Ok(json!({ "echo": tool_id, "args": args }))
+            }
+        }
+        s.attach_external("mcp:custom", names.clone(), Arc::new(FakeExternal));
+        let out = s.dispatch(
+            &s.registry.get("custom.query").unwrap().clone(),
+            &json!({ "q": 1 }),
+        );
+        assert_eq!(out["ok"], true);
+        assert_eq!(out["result"]["echo"], "custom.query");
+        // Unknown external id with no attachment fails honestly.
+        let mut s2 = svc(&dir);
+        s2.registry.register_external("mcp:other", &tools);
+        let miss = s2.dispatch(
+            &s2.registry.get("custom.query").unwrap().clone(),
+            &json!({}),
+        );
+        assert_eq!(miss["ok"], false);
+        assert!(miss["error"].as_str().unwrap().contains("not attached"));
     }
 
     fn tempfile() -> PathBuf {
