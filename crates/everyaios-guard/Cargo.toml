@@ -9,6 +9,7 @@ description = "EveryAIOS Guard — deterministic pre-exec scanning, path floors,
 [dependencies]
 regex = { workspace = true }
 thiserror = { workspace = true }
+everyaios-types = { path = "../everyaios-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

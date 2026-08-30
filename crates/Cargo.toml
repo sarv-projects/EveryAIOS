@@ -22,6 +22,7 @@ members = [
     "everyaios-search",
     "everyaios-catalog",
     "everyaios-desktop",
+    "everyaios-types",
 ]
 
 # N.B. crates/everyaios-desktop has package name everyaios-computeruse (renamed
