@@ -5,7 +5,9 @@
 //! approval card, never a silent mutation.
 
 use everyaios_core::GuardDecision;
-use everyaios_guard::{DecisionPackage, Operation as GuardOp, RiskLevel};
+use everyaios_guard::{
+    change_set_hash, BatchOperation, DecisionPackage, Operation as GuardOp, RiskLevel,
+};
 use everyaios_office::xlsx::address::{parse_range, parse_ref};
 use everyaios_office::xlsx::dsl::{
     pivot_result, Operation as XlsxOp, PivotAgg, Scalar, WorkbookCommandBatch,
@@ -212,20 +214,17 @@ pub fn xlsx_batch_request(
         .with_risk(RiskLevel::Medium)
         .with_paths(vec![path.clone()]);
 
-    let args_hash = batch_args_hash(&sheet, &batch);
+    // P47.6 — the bulk path now mints a **BatchTicket**: the immutable
+    // change set (one BatchOperation per DSL op, each with its own args
+    // hash + resource identities) is what the human approves. Approval
+    // covers exactly this set — adding/removing/reordering an op after
+    // approval changes the change-set hash and the ticket refuses.
+    let operations = batch_operations(&sheet, &batch);
     let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
-    let verdict = guard.evaluate(
-        "office",
-        "everyaios",
-        "office.xlsx_batch",
-        GuardOp::GenericWrite,
-        decision,
-        &args_hash,
-        0,
-    );
+    let verdict = guard.evaluate_batch("office", "everyaios", operations, decision, 0);
     match verdict {
         GuardDecision::Allow { ticket_id } => {
-            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            let approval_nonce = guard.batch_approval_nonce(&ticket_id).unwrap_or_default();
             Ok(serde_json::json!({
                 "action": "allow",
                 "summary": batch.summary,
@@ -234,7 +233,7 @@ pub fn xlsx_batch_request(
             }))
         }
         GuardDecision::Ask { ticket_id } => {
-            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            let approval_nonce = guard.batch_approval_nonce(&ticket_id).unwrap_or_default();
             Ok(serde_json::json!({
                 "action": "ask",
                 "summary": batch.summary,
@@ -259,10 +258,16 @@ pub fn xlsx_batch_commit(
     let path = crate::control::floor_user_file(&path)?
         .display()
         .to_string();
-    let args_hash = batch_args_hash(&sheet, &batch);
+    // P47.6 — recompute the identical immutable change set and consume the
+    // batch ticket with it. If the ops differ in any way from what the human
+    // approved (added/removed/reordered/mutated args), the change-set hash
+    // won't match and the ticket refuses — the executor can never stretch a
+    // "approve all" to a different or larger set.
+    let operations = batch_operations(&sheet, &batch);
+    let cs_hash = change_set_hash(&operations);
     let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     guard
-        .use_ticket(&ticket_id, &args_hash)
+        .use_batch_ticket(&ticket_id, &cs_hash)
         .map_err(|e| format!("batch ticket not consumable: {e}"))?;
     drop(guard);
 
@@ -355,17 +360,69 @@ fn edit_args_hash(path: &str, sheet: &str, address: &str, value: &str) -> String
     format!("{:016x}", h.finish())
 }
 
-/// Deterministic, scope-tagged args hash for a bulk batch ticket: canonical
-/// JSON of the batch (serde preserves field/operation order) + the target
-/// sheet, so a ticket minted for one sheet can't be replayed on another.
-fn batch_args_hash(sheet: &str, batch: &WorkbookCommandBatch) -> String {
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    "office.xlsx_batch".hash(&mut h);
-    sheet.hash(&mut h);
-    serde_json::to_string(batch)
-        .unwrap_or_default()
-        .hash(&mut h);
-    format!("{:016x}", h.finish())
+/// P47.6 — map a bulk batch to the immutable change set the BatchTicket
+/// binds. One [`BatchOperation`] per DSL op, each with its **own** args hash
+/// (canonical JSON of that op — serde preserves variant/field order) and its
+/// resource identities (address/range/sheet). The `sheet` scope is folded
+/// into the resources of every op, so a ticket minted for one sheet can't be
+/// replayed on another. Deterministic: the same batch always yields the same
+/// change set (and therefore the same change-set hash).
+fn batch_operations(sheet: &str, batch: &WorkbookCommandBatch) -> Vec<BatchOperation> {
+    let mut ops = Vec::with_capacity(batch.operations.len());
+    for op in &batch.operations {
+        let (name, resources) = op_identity(sheet, op);
+        let args_hash = {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            "office.xlsx_batch".hash(&mut h);
+            sheet.hash(&mut h);
+            serde_json::to_string(op).unwrap_or_default().hash(&mut h);
+            format!("{:016x}", h.finish())
+        };
+        ops.push(BatchOperation::new(
+            "office.xlsx_batch",
+            name,
+            args_hash,
+            resources,
+        ));
+    }
+    ops
+}
+
+/// The operation name + resource identities for one DSL op (for the change
+/// set). `sheet` is the scope every op touches.
+fn op_identity(sheet: &str, op: &XlsxOp) -> (&'static str, Vec<String>) {
+    let mut resources = vec![format!("sheet:{sheet}")];
+    match op {
+        XlsxOp::SetCell { address, .. } => {
+            resources.push(format!("cell:{address}"));
+            ("set_cell", resources)
+        }
+        XlsxOp::SetFormula { address, .. } => {
+            resources.push(format!("cell:{address}"));
+            ("set_formula", resources)
+        }
+        XlsxOp::ClearRange { range } => {
+            resources.push(format!("range:{range}"));
+            ("clear_range", resources)
+        }
+        XlsxOp::RenameSheet { from, to } => {
+            resources.push(format!("sheet:{from}->{to}"));
+            ("rename_sheet", resources)
+        }
+        XlsxOp::SortRange { range, .. } => {
+            resources.push(format!("range:{range}"));
+            ("sort_range", resources)
+        }
+        XlsxOp::FillRange { range, .. } => {
+            resources.push(format!("range:{range}"));
+            ("fill_range", resources)
+        }
+        XlsxOp::Shift { .. } => ("shift", resources),
+        XlsxOp::Pivot { source, .. } => {
+            resources.push(format!("range:{source}"));
+            ("pivot", resources)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -404,31 +461,112 @@ mod tests {
     }
 
     #[test]
-    fn batch_args_hash_is_deterministic_and_sheet_scoped() {
+    fn batch_operations_are_deterministic_per_op_and_sheet_scoped() {
         let mut b1 = WorkbookCommandBatch::new(0, "Fill B2:B10 with 5");
         b1.operations.push(XlsxOp::FillRange {
             range: parse_range("B2:B10").unwrap().1,
             mode: everyaios_office::xlsx::dsl::FillMode::Constant,
             value: Some(Scalar::Number(5.0)),
         });
+
+        // Deterministic: same batch → same change set → same change-set hash.
+        let ops1 = batch_operations("Sheet1", &b1);
+        assert_eq!(ops1.len(), 1);
+        assert_eq!(ops1[0].tool_id, "office.xlsx_batch");
+        assert_eq!(ops1[0].operation, "fill_range");
+        assert!(ops1[0].resources.iter().any(|r| r == "range:B2:B10"));
+        let h1 = change_set_hash(&ops1);
+        assert_eq!(h1, change_set_hash(&batch_operations("Sheet1", &b1)));
+
+        // Sheet scope is part of the change set (can't replay on another).
+        assert_ne!(h1, change_set_hash(&batch_operations("Sheet2", &b1)));
+
+        // A mutated op (different value) changes the change-set hash — the
+        // approval can never be stretched to different args.
         let mut b2 = b1.clone();
         b2.operations[0] = XlsxOp::FillRange {
             range: parse_range("B2:B10").unwrap().1,
             mode: everyaios_office::xlsx::dsl::FillMode::Constant,
             value: Some(Scalar::Number(6.0)),
         };
+        assert_ne!(h1, change_set_hash(&batch_operations("Sheet1", &b2)));
 
-        assert_eq!(
-            batch_args_hash("Sheet1", &b1),
-            batch_args_hash("Sheet1", &b1)
+        // An extra op added after approval changes the binding (approve-all
+        // covers exactly the set, never a category).
+        let mut b3 = b1.clone();
+        b3.operations.push(XlsxOp::ClearRange {
+            range: parse_range("C2:C5").unwrap().1,
+        });
+        assert_ne!(h1, change_set_hash(&batch_operations("Sheet1", &b3)));
+    }
+
+    #[test]
+    fn batch_ticket_flow_consumes_exact_change_set_only() {
+        // Full loop through the GuardService, mirroring xlsx_batch_request →
+        // xlsx_batch_commit: the request mints a BatchTicket over the change
+        // set; the exact set consumes; a stretched set is refused (approve
+        // all binds the set, never a category).
+        use everyaios_core::GuardService;
+        use everyaios_guard::{DecisionPackage as Dp, RiskLevel as Rl};
+
+        let mut b1 = WorkbookCommandBatch::new(0, "Fill + clear");
+        b1.operations.push(XlsxOp::FillRange {
+            range: parse_range("B2:B10").unwrap().1,
+            mode: everyaios_office::xlsx::dsl::FillMode::Constant,
+            value: Some(Scalar::Number(5.0)),
+        });
+        b1.operations.push(XlsxOp::ClearRange {
+            range: parse_range("C2:C5").unwrap().1,
+        });
+
+        let mut guard = GuardService::new();
+        let ops = batch_operations("Sheet1", &b1);
+        let verdict = guard.evaluate_batch(
+            "office",
+            "everyaios",
+            ops.clone(),
+            Dp::new(b1.summary.clone()).with_risk(Rl::Medium),
+            0,
         );
-        assert_ne!(
-            batch_args_hash("Sheet1", &b1),
-            batch_args_hash("Sheet2", &b1)
-        );
-        assert_ne!(
-            batch_args_hash("Sheet1", &b1),
-            batch_args_hash("Sheet1", &b2)
-        );
+        let everyaios_core::GuardDecision::Ask { ticket_id } = verdict else {
+            panic!("expected Ask");
+        };
+
+        // Human approval (card-bound nonce), exactly like the UI flow.
+        let nonce = guard.batch_approval_nonce(&ticket_id).unwrap();
+        assert!(guard.approve_batch_with_nonce(&ticket_id, &nonce));
+
+        // Exact change set consumes.
+        let cs = change_set_hash(&ops);
+        assert!(guard.use_batch_ticket(&ticket_id, &cs).is_ok());
+
+        // A second ticket over a *larger* set (an extra op the human never
+        // saw in the first approval): the executor presents the ORIGINAL
+        // (smaller) change set — refused. The approval binds the exact set,
+        // never a category the agent could stretch.
+        let mut b2 = b1.clone();
+        b2.operations.push(XlsxOp::RenameSheet {
+            from: "Sheet1".into(),
+            to: "Renamed".into(),
+        });
+        let mut guard2 = GuardService::new();
+        let ops2 = batch_operations("Sheet1", &b2);
+        let everyaios_core::GuardDecision::Ask { ticket_id: t2 } = guard2.evaluate_batch(
+            "office",
+            "everyaios",
+            ops2.clone(),
+            Dp::new(b2.summary.clone()).with_risk(Rl::Medium),
+            0,
+        ) else {
+            panic!("expected Ask");
+        };
+        let nonce2 = guard2.batch_approval_nonce(&t2).unwrap();
+        assert!(guard2.approve_batch_with_nonce(&t2, &nonce2));
+        // Presenting the original smaller set to the larger approval refuses.
+        assert!(guard2.use_batch_ticket(&t2, &cs).is_err());
+        // The exact (larger) set still works.
+        assert!(guard2
+            .use_batch_ticket(&t2, &change_set_hash(&ops2))
+            .is_ok());
     }
 }

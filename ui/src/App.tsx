@@ -13,6 +13,7 @@ import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { AiPointer } from "@/components/shell/ai-pointer";
 import { ToastBridge } from "@/components/shell/toast-bridge";
 import VaultGate from "@/components/shell/vault-gate";
+import { useAppStore } from "@/lib/store";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import NpsPrompt from "@/components/nps-prompt";
 import { startPerfMeasurement } from "@/lib/perf";
@@ -30,6 +31,12 @@ export default function App() {
     const onClick = (e: MouseEvent) => recordSessionEvent("click", e.target);
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
+  }, []);
+
+  // P44.5 — reconcile the composer autonomy level with the Rust GuardService
+  // preset at boot (the applied preset wins over stale localStorage).
+  useEffect(() => {
+    void useAppStore.getState().syncAutonomyFromRust();
   }, []);
 
   return (

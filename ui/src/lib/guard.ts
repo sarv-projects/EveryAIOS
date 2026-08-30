@@ -160,6 +160,54 @@ export async function guardEstop(pulled: boolean): Promise<boolean> {
   return invoke<boolean>("guard_estop", { pulled });
 }
 
+/** P44.5 — the Rust preset name for a UI autonomy level (`maximum` ↔ `full`). */
+export type AutonomyLevel =
+  | "sandbox"
+  | "ask"
+  | "auto"
+  | "maximum";
+
+export type UIAutonomyLevel = "sandbox" | "ask" | "auto" | "full";
+
+/** The UI `full` ↔ Rust `maximum` mapping (the UI vocabulary predates the
+ * preset names; the wire uses the Rust names). */
+export function toRustLevel(level: UIAutonomyLevel): AutonomyLevel {
+  return level === "full" ? "maximum" : level;
+}
+
+export function toUILevel(level: AutonomyLevel): UIAutonomyLevel {
+  return level === "maximum" ? "full" : level;
+}
+
+/** P44.5 — the Rust-applied H34 level + confidence floor (authoritative). */
+export interface GuardAutonomy {
+  autonomyLevel: AutonomyLevel;
+  minConfidenceForAuto: number;
+}
+
+/**
+ * P44.5 — the currently applied H34 autonomy level. The Rust preset is the
+ * source of truth (the composer indicator must read this, not localStorage).
+ */
+export async function guardAutonomy(): Promise<UIAutonomyLevel | null> {
+  if (!inTauri()) return null;
+  const out = await invoke<GuardAutonomy>("guard_autonomy");
+  return toUILevel(out.autonomyLevel);
+}
+
+/**
+ * P44.5 — apply an H34 autonomy level on the live GuardService (as a
+ * permissions.toml preset; the hard floors never move). Returns the applied
+ * UI level so the caller can confirm.
+ */
+export async function guardSetAutonomy(level: UIAutonomyLevel): Promise<UIAutonomyLevel | null> {
+  if (!inTauri()) return null;
+  const out = await invoke<GuardAutonomy>("guard_set_autonomy", {
+    level: toRustLevel(level),
+  });
+  return toUILevel(out.autonomyLevel);
+}
+
 function demoTickets(): GuardTicket[] {
   return [
     {

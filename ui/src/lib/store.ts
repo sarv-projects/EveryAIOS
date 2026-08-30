@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { inTauri } from './tauri'
+import { guardAutonomy, guardSetAutonomy } from './guard'
 import { inheritContext } from './plain-language'
 import {
   recordSessionCreated,
@@ -850,6 +851,8 @@ interface AppState {
   setSettingsSection: (s: SettingsSectionId) => void
   permissionMode: PermissionMode
   setPermissionMode: (m: PermissionMode) => void
+  /** P44.5 — reconcile the UI level with the Rust GuardService preset on boot. */
+  syncAutonomyFromRust: () => Promise<void>
   // P44.6 — frozen per-task autonomy snapshot + temporary elevation.
   taskSnapshot?: TaskSnapshot
   freezeTaskSnapshot: () => void
@@ -1283,6 +1286,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPermissionMode: (m) => {
     writePermission(m)
     set({ permissionMode: m })
+    // P44.5 — push the level to the live GuardService (Rust preset is
+    // authoritative). The returned level confirms what actually applied.
+    if (inTauri()) {
+      void guardSetAutonomy(m).then((applied) => {
+        if (applied && applied !== m) {
+          writePermission(applied)
+          set({ permissionMode: applied })
+        }
+      })
+    }
+  },
+
+  // P44.5 — reconcile the UI autonomy level with the Rust preset on load:
+  // the applied GuardService level wins over stale localStorage.
+  syncAutonomyFromRust: async () => {
+    if (!inTauri()) return
+    const level = await guardAutonomy()
+    if (level) {
+      writePermission(level)
+      set({ permissionMode: level })
+    }
   },
 
   // P44.6 — freeze the autonomy scope at task start; live chatbar changes
