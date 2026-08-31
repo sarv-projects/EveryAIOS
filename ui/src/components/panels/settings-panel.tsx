@@ -9,6 +9,7 @@ import {
   Boxes,
   Cloud,
   Command,
+  Compass,
   Cpu,
   Download,
   FolderTree,
@@ -18,6 +19,7 @@ import {
   Info,
   Keyboard,
   KeyRound,
+  Layers,
   MessageSquare,
   MessageSquareWarning,
   Mic,
@@ -32,6 +34,7 @@ import {
   SlidersHorizontal,
   Smartphone,
   Sparkles,
+  Stethoscope,
   Store,
   Terminal,
   Users,
@@ -50,11 +53,14 @@ import {
 import {
   AboutSection,
   AdvancedSection,
+  DoctorSection,
   KeyboardSection,
   PrivacySection,
   SyncSection,
 } from './settings-sections-extra'
 import AgentsModelsSection from './agents-models-section'
+import { DiscoverSection } from './discover-section'
+import { RuntimeSessionSection } from './runtime-session-section'
 import LocalModelsPanel from './local-models-panel'
 import MemoryPanel from './memory-panel'
 import {
@@ -100,6 +106,7 @@ const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: 
     title: 'Intelligence',
     items: [
       { id: 'agents', label: 'Agents & Models', icon: Boxes },
+      { id: 'discover', label: 'Discover', icon: Compass },
       { id: 'local', label: 'Local models', icon: Cpu },
       { id: 'apikeys', label: 'Providers / BYOK', icon: KeyRound },
       { id: 'experts', label: 'Experts', icon: Users },
@@ -121,6 +128,7 @@ const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: 
     title: 'Runtime',
     items: [
       { id: 'launch', label: 'Launch CLI', icon: Terminal },
+      { id: 'runtime', label: 'Session runtime', icon: Layers },
       { id: 'worktree', label: 'Worktree', icon: FolderTree },
       { id: 'resources', label: 'Resources', icon: HardDrive },
       { id: 'cloud', label: 'Cloud env', icon: Cloud },
@@ -145,6 +153,7 @@ const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: 
       { id: 'feedback', label: 'Feedback', icon: MessageSquareWarning },
       { id: 'beta', label: 'Beta', icon: Package },
       { id: 'advanced', label: 'Advanced', icon: SlidersHorizontal },
+      { id: 'doctor', label: 'Doctor', icon: Stethoscope },
       { id: 'about', label: 'About', icon: Info },
     ],
   },
@@ -218,6 +227,12 @@ function SectionBody({ section }: { section: SectionId }) {
       return <KeyboardSection />
     case 'advanced':
       return <AdvancedSection />
+    case 'doctor':
+      return <DoctorSection />
+    case 'discover':
+      return <DiscoverSection />
+    case 'runtime':
+      return <RuntimeSessionSection />
     case 'about':
       return <AboutSection />
     default:

@@ -11,6 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { inTauri } from '@/lib/tauri'
 import { AGENTS, AGENT_MAP, CAPABILITY_LABELS } from '@/lib/agents'
 import { sessionTotals, type SessionTotal } from '@/lib/spend'
 
@@ -75,15 +76,25 @@ export function ChartCard({
 
 export function SessionsTable() {
   const [live, setLive] = useState<SessionTotal[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let mounted = true
     sessionTotals()
       .then((rows) => {
-        if (mounted && rows.length > 0) setLive(rows)
+        if (mounted) {
+          setLive(rows)
+          setError(null)
+          setLoading(false)
+        }
       })
-      .catch(() => {
-        /* no shell — keep the demo rows */
+      .catch((cause) => {
+        if (mounted) {
+          setError(cause instanceof Error ? cause.message : 'Usage ledger is unavailable')
+          setLive(null)
+          setLoading(false)
+        }
       })
     return () => {
       mounted = false
@@ -91,17 +102,20 @@ export function SessionsTable() {
   }, [])
 
   const rows = live ?? []
-  const isLive = live !== null && rows.length > 0
+  const isLive = live !== null
+  const showPreview = !inTauri() && live === null && error === null
 
   return (
     <ChartCard
       title="Per-session cost breakdown"
-      subtitle={isLive ? 'live ledger · cost desc' : 'last 10 (demo)'}
+      subtitle={isLive ? 'live ledger · cost desc' : showPreview ? 'preview fixtures' : 'no live ledger data'}
       right={
         isLive ? (
           <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">live</Badge>
+        ) : showPreview ? (
+          <Badge className="bg-orange-500/15 text-[9px] text-orange-300">preview</Badge>
         ) : (
-          <Badge className="bg-orange-500/15 text-[9px] text-orange-300">demo</Badge>
+          <Badge variant="outline" className="text-[9px] text-muted-foreground">unavailable</Badge>
         )
       }
     >
@@ -117,8 +131,12 @@ export function SessionsTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLive
-            ? rows.map((s) => (
+          {loading ? (
+                <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">Loading usage ledger…</TableCell></TableRow>
+              ) : isLive
+            ? rows.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">No session usage recorded yet.</TableCell></TableRow>
+              ) : rows.map((s) => (
                 <TableRow key={s.session} className="border-border/50">
                   <TableCell className="py-1.5 font-mono text-xs text-foreground">{s.session}</TableCell>
                   <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">—</TableCell>
@@ -134,7 +152,7 @@ export function SessionsTable() {
                   <TableCell className="py-1.5 text-right font-mono text-[11px] text-muted-foreground">—</TableCell>
                 </TableRow>
               ))
-            : SESSIONS.map((s, i) => (
+            : showPreview ? SESSIONS.map((s, i) => (
                 <TableRow key={i} className="border-border/50">
                   <TableCell className="py-1.5 text-xs text-foreground">{s.title}</TableCell>
                   <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">{s.agent}</TableCell>
@@ -145,7 +163,9 @@ export function SessionsTable() {
                   </TableCell>
                   <TableCell className="py-1.5 text-right font-mono text-[11px] text-muted-foreground">{s.dur}</TableCell>
                 </TableRow>
-              ))}
+              )) : (
+                <TableRow><TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">Session usage is unavailable. {error ?? ''}</TableCell></TableRow>
+              )}
         </TableBody>
       </Table>
     </ChartCard>

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { inTauri } from '@/lib/tauri'
 import { ChartCard, ModelLeaderboard, SessionsTable, AgentBreakdown } from './analytics-sections'
 
 const KPIS = [
@@ -81,6 +82,12 @@ export default function AnalyticsPanel() {
           transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
           className="space-y-4 p-4"
         >
+          {inTauri() ? (
+            <div className="rounded-lg border border-dashed border-border bg-card p-4 text-xs text-muted-foreground">
+              Live analytics are sourced from the encrypted usage ledger. Aggregates appear after real provider activity is recorded.
+            </div>
+          ) : (
+          <>
           {/* KPI cards */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {KPIS.map((k) => {
@@ -163,11 +170,15 @@ export default function AnalyticsPanel() {
             </ChartCard>
           </div>
 
+          </>
+          )}
           <SessionsTable />
-          <div className="grid gap-3 lg:grid-cols-2">
-            <ModelLeaderboard />
-            <AgentBreakdown />
-          </div>
+          {!inTauri() && (
+            <div className="grid gap-3 lg:grid-cols-2">
+              <ModelLeaderboard />
+              <AgentBreakdown />
+            </div>
+          )}
         </motion.div>
         </AnimatePresence>
       </div>
@@ -175,13 +186,13 @@ export default function AnalyticsPanel() {
       <footer className="flex items-center justify-between border-t border-border bg-card px-4 py-2">
         <span className="font-mono text-[10px] text-muted-foreground">
           <Coins className="mr-1 inline h-3 w-3" />
-          pricing synced 4m ago
+          {inTauri() ? 'pricing metadata unavailable until the live provider registry responds' : 'preview pricing metadata'}
         </span>
         <Button
           size="sm"
           variant="outline"
           className="h-7 text-xs"
-          onClick={() => notify('Exporting sessions.csv — 10 rows')}
+          onClick={() => notify(inTauri() ? 'CSV export is not connected to the live ledger yet' : 'Exporting preview sessions.csv — 10 rows')}
         >
           Export CSV
         </Button>

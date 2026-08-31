@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 import { staggerStyle } from '@/lib/stagger'
 import {
   guardActivity,
@@ -71,6 +72,7 @@ export default function GuardPanel() {
   const [activity, setActivity] = useState<RecentAction[]>([])
   const [matrix, setMatrix] = useState<MatrixCell[]>([])
   const [busy, setBusy] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
 
   // Live bridge (P7.5/J21 + P11.5.7): poll pending tickets + policy + the
@@ -90,8 +92,16 @@ export default function GuardPanel() {
         setPolicy(p)
         setActivity(a)
         setMatrix(m)
-      } catch {
-        /* shell not ready */
+        setLoadError(null)
+      } catch (error) {
+        if (!alive) return
+        // Do not retain a previous live projection after a failed refresh:
+        // stale approvals/activity are as misleading as seeded demo rows.
+        setTickets([])
+        setPolicy(null)
+        setActivity([])
+        setMatrix([])
+        setLoadError(error instanceof Error ? error.message : 'Guard is unavailable')
       }
     }
     void refresh()
@@ -288,7 +298,26 @@ export default function GuardPanel() {
             </section>
           )}
 
-          {/* Trust meter */}
+          {loadError && inTauri() && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-300">
+              <span>Guard data is unavailable. {loadError}</span>
+              <Button size="sm" variant="outline" className="h-6 shrink-0 text-[10px]" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {/* Trust meter: the score is a preview fixture until a live trust
+              projection is exposed by the GuardService. Never show it in the
+              desktop shell as if it were user data. */}
+          {inTauri() ? (
+            <section className="rounded-lg border border-dashed border-border bg-card p-4">
+              <div className="text-xs font-medium text-foreground">Trust Level</div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Trust score is unavailable until the live GuardService publishes a scored projection.
+              </p>
+            </section>
+          ) : (
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">Trust Level</span>
@@ -332,18 +361,22 @@ export default function GuardPanel() {
               />
             </div>
           </section>
+          )}
 
           {/* Recent actions */}
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">Recent Actions</span>
               <span className="font-mono text-[10px] text-muted-foreground">last 24h</span>
-              {activity.length === 0 && (
-                <Badge variant="outline" className="text-[9px] text-muted-foreground/60" title="Live bridge not connected — showing preview rows">
+              {!inTauri() && activity.length === 0 && (
+                <Badge variant="outline" className="text-[9px] text-muted-foreground/60">
                   preview
                 </Badge>
               )}
             </div>
+            {activity.length === 0 && inTauri() ? (
+              <div className="py-6 text-center text-xs text-muted-foreground">No Guard actions recorded yet.</div>
+            ) : (
             <ul className="space-y-1.5">
               {(activity.length > 0 ? activity : demoActivityRows).map((a, i) => {
                 const tone = ACTION_TONE[a.status]
@@ -394,6 +427,7 @@ export default function GuardPanel() {
                 )
               })}
             </ul>
+            )}
           </section>
 
           {/* Permissions matrix */}
@@ -441,13 +475,19 @@ export default function GuardPanel() {
           <section className="grid gap-3 sm:grid-cols-2">
             <VaultCard
               icon={<KeyRound className="h-4 w-4 text-orange-400" />}
-              title="Key-ring" stats="7 keys" sub="last rotated 2d ago" cta="Rotate now"
-              onCta={() => notify('Rotating key-ring — re-encrypting vault (SQLCipher)…')}
+              title="Key-ring"
+              stats={inTauri() ? '—' : '7 keys'}
+              sub={inTauri() ? 'Live key count is unavailable here' : 'preview fixture'}
+              cta="Open settings"
+              onCta={() => notify(inTauri() ? 'Open Settings → API keys to inspect the live vault' : 'Preview key-ring — no real credentials are present')}
             />
             <VaultCard
               icon={<Vault className="h-4 w-4 text-orange-400" />}
-              title="Session Vault" stats="12 sessions" sub="SQLCipher · encrypted" cta="View sessions"
-              onCta={() => notify('Session vault — 12 encrypted sessions, agent never sees raw cookies')}
+              title="Session Vault"
+              stats={inTauri() ? '—' : '12 sessions'}
+              sub={inTauri() ? 'Live session count is shown in the work list' : 'preview fixture'}
+              cta="View sessions"
+              onCta={() => notify(inTauri() ? 'Select a work item to view live encrypted sessions' : 'Preview session vault — no real sessions are present')}
             />
           </section>
         </div>

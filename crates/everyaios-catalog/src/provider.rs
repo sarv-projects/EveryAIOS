@@ -40,7 +40,7 @@ pub enum Transport {
 /// How a provider authenticates. P44.1 keeps this *typed* so the vault/auth
 /// bridge can resolve `api_key_env → opaque handle` in Rust only; it never
 /// stores the key itself.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Auth {
     /// A plain API key, read from the first env var that is set.
@@ -414,8 +414,13 @@ pub const ALIASES: &[(&str, &str)] = &[
     ("aliyun", "alibaba"),
     ("qwen", "alibaba"),
     // Bedrock (aws)
-    ("aws", "bedrock"),
-    ("amazon-bedrock", "bedrock"),
+    ("aws", "amazon-bedrock"),
+    ("bedrock", "amazon-bedrock"),
+    ("vertex", "google-vertex"),
+    ("gcp", "google-vertex"),
+    // Legacy profile ids → vendored models.dev canonical.
+    ("novita", "novita-ai"),
+    ("together", "togetherai"),
     // Hugging Face
     ("hf", "huggingface"),
     ("hugging-face", "huggingface"),
@@ -463,7 +468,7 @@ pub const OPENAI_COMPATIBLE_PROFILES: &[(&str, &str, &str)] = &[
     ("togetherai", "Together AI", "https://api.together.xyz/v1"),
     ("xai", "xAI", "https://api.x.ai/v1"),
     // the longer Hermes long-tail (also OpenAI-compatible)
-    ("novita", "Novita AI", "https://api.novita.ai/v3/openai"),
+    ("novita-ai", "Novita AI", "https://api.novita.ai/v3/openai"),
     ("stepfun", "StepFun", "https://api.stepfun.ai/v1"),
     ("perplexity", "Perplexity", "https://api.perplexity.ai"),
     ("mistral", "Mistral", "https://api.mistral.ai/v1"),
@@ -508,101 +513,51 @@ pub fn base_registry() -> ProviderRegistry {
         r.insert_for_seed(rec);
     }
 
-    // 2. OpenAI-compatible profile table (P44.3): `OpenaiChat` transport +
-    //    API-key auth + a reference base URL.
-    for (id, name, base_url) in OPENAI_COMPATIBLE_PROFILES {
-        let mut rec = r.lookup_or_default((*id).to_string());
-        rec.name = name.to_string();
-        rec.transport = Some(Transport::OpenaiChat);
-        rec.auth = Auth::ApiKeyEnv;
-        if rec.base_url.is_none() {
-            rec.base_url = Some((*base_url).to_string());
+    // 2. VENDORED models.dev provider directory (P44.3) — all 212 providers
+    //    (id · name · api-key env · base URL · auth shape · transport family),
+    //    the authoritative set OpenCode/Hermes consume. Merged field-by-field
+    //    onto the alias layer; NEVER a key, only the env-var NAME.
+    for row in crate::provider_seed::PROVIDER_SEED {
+        let mut rec = r.lookup_or_default(row.id.to_string());
+        rec.name = row.name.to_string();
+        rec.transport = Some(row.transport);
+        rec.auth = row.auth;
+        if rec.base_url.is_none() && !row.base_url.is_empty() {
+            rec.base_url = Some(row.base_url.to_string());
         }
-        let env = id.to_uppercase().replace('-', "_") + "_API_KEY";
-        if !rec.api_key_env.contains(&env) {
-            rec.api_key_env.push(env);
+        for env in row.env {
+            if !rec.api_key_env.contains(&env.to_string()) {
+                rec.api_key_env.push(env.to_string());
+            }
         }
+        rec.source = DiscoverySource::ModelsDev;
         r.insert_for_seed(rec);
     }
 
-    // 3. Non-OpenAI-protocol families (the distinct wire transports) — the
-    //    ids that don't ride the shared transport.
-    let distinct = [
-        (
-            "anthropic",
-            "Anthropic",
-            Transport::AnthropicMessages,
-            Auth::ApiKeyEnv,
-        ),
+    // 3. Overlay corrections the flat models.dev directory doesn't capture:
+    //    distinct wire transports + auth shapes for a few first-party ids, and
+    //    the local keyless runtime. These override the vendored row per-field.
+    let overlay = [
+        ("anthropic", "Anthropic", Transport::AnthropicMessages, Auth::ApiKeyEnv),
         ("openai", "OpenAI", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        (
-            "openai-api",
-            "OpenAI API",
-            Transport::CodexResponses,
-            Auth::ApiKeyEnv,
-        ),
-        (
-            "bedrock",
-            "Amazon Bedrock",
-            Transport::BedrockConverse,
-            Auth::AwsSdk,
-        ),
-        (
-            "vertex",
-            "Google Vertex",
-            Transport::OpenaiChat,
-            Auth::Vertex,
-        ),
+        ("openai-api", "OpenAI API (Responses/Codex)", Transport::CodexResponses, Auth::ApiKeyEnv),
+        ("amazon-bedrock", "Amazon Bedrock", Transport::BedrockConverse, Auth::AwsSdk),
+        ("google-vertex", "Google Vertex", Transport::OpenaiChat, Auth::Vertex),
         ("nous", "Nous", Transport::OpenaiChat, Auth::OAuthDeviceCode),
-        (
-            "opencode",
-            "OpenCode Zen",
-            Transport::OpenaiChat,
-            Auth::ApiKeyEnv,
-        ),
-        (
-            "opencode-free",
-            "OpenCode Free",
-            Transport::OpenaiChat,
-            Auth::Keyless,
-        ),
-        (
-            "kimi-for-coding",
-            "Moonshot Kimi",
-            Transport::OpenaiChat,
-            Auth::ApiKeyEnv,
-        ),
-        ("zai", "Z.ai", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("nvidia", "NVIDIA", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("alibaba", "Alibaba", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        (
-            "huggingface",
-            "HuggingFace",
-            Transport::OpenaiChat,
-            Auth::ApiKeyEnv,
-        ),
-        (
-            "vercel",
-            "Vercel AI Gateway",
-            Transport::OpenaiChat,
-            Auth::ApiKeyEnv,
-        ),
-        (
-            "local",
-            "Local runtime",
-            Transport::OpenaiChat,
-            Auth::Keyless,
-        ),
+        ("opencode", "OpenCode Zen", Transport::OpenaiChat, Auth::ApiKeyEnv),
+        ("opencode-free", "OpenCode Free", Transport::OpenaiChat, Auth::Keyless),
+        ("local", "Local runtime", Transport::OpenaiChat, Auth::Keyless),
     ];
-    for (id, name, transport, auth) in distinct {
-        let rec = ProviderRecord {
-            id: id.to_string(),
-            name: name.to_string(),
-            transport: Some(transport),
-            auth,
-            source: DiscoverySource::Overlay,
-            ..Default::default()
-        };
+    for (id, name, transport, auth) in overlay {
+        let mut rec = r.lookup_or_default(id.to_string());
+        rec.name = name.to_string();
+        rec.transport = Some(transport);
+        rec.auth = auth;
+        // `openai-api` shares OpenAI's key; `local` needs no key.
+        if id == "openai-api" && !rec.api_key_env.iter().any(|e| e == "OPENAI_API_KEY") {
+            rec.api_key_env.push("OPENAI_API_KEY".to_string());
+        }
+        rec.source = DiscoverySource::Overlay;
         r.insert_for_seed(rec);
     }
 
@@ -678,7 +633,7 @@ mod tests {
         assert_eq!(r.canonical_id("moonshot"), Some("kimi-for-coding"));
         assert_eq!(r.canonical_id("nim"), Some("nvidia"));
         assert_eq!(r.canonical_id("qwen"), Some("alibaba"));
-        assert_eq!(r.canonical_id("Amazon-Bedrock"), Some("bedrock"));
+        assert_eq!(r.canonical_id("Amazon-Bedrock"), Some("amazon-bedrock"));
         assert_eq!(
             r.resolve("claude").map(|p| p.id.as_str()),
             Some("anthropic")
@@ -688,11 +643,19 @@ mod tests {
     #[test]
     fn profile_table_has_transport_and_reference_url() {
         let r = base_registry();
-        for (id, _, url) in OPENAI_COMPATIBLE_PROFILES {
-            let rec = r.get(id).expect(id);
-            assert_eq!(rec.transport, Some(Transport::OpenaiChat), "{id}");
-            assert_eq!(rec.base_url.as_deref(), Some(*url), "{id} ref url");
-            assert!(rec.api_key_env.iter().any(|e| e.contains("_API_KEY")));
+        // The vendored models.dev directory is the source of truth: every
+        // seeded provider has a transport + an api-key env handle (or is a
+        // keyless local/free runtime). base_url is optional (SDK-default
+        // providers carry none in models.dev).
+        for row in crate::provider_seed::PROVIDER_SEED {
+            let rec = r.get(row.id).unwrap_or_else(|| panic!("missing {}", row.id));
+            assert!(rec.transport.is_some(), "{} has a transport", row.id);
+            let keyless = matches!(rec.auth, Auth::Keyless | Auth::AwsSdk | Auth::Vertex);
+            assert!(
+                keyless || !rec.api_key_env.is_empty(),
+                "{} has an auth env handle or is keyless",
+                row.id
+            );
         }
     }
 
@@ -735,34 +698,22 @@ mod tests {
             Some(Transport::AnthropicMessages)
         );
         assert_eq!(
-            r.get("bedrock").unwrap().transport,
+            r.get("amazon-bedrock").unwrap().transport,
             Some(Transport::BedrockConverse)
         );
-        assert_eq!(r.get("vertex").unwrap().auth, Auth::Vertex);
+        assert_eq!(r.get("google-vertex").unwrap().auth, Auth::Vertex);
         assert_eq!(r.get("opencode-free").unwrap().auth, Auth::Keyless);
 
-        // Every canonical id in the alias map + profile table + distinct set
-        // must be present.
-        let mut expected: Vec<&str> = ALIASES.iter().map(|(_, c)| *c).collect();
-        expected.extend(OPENAI_COMPATIBLE_PROFILES.iter().map(|(id, _, _)| *id));
-        expected.extend([
-            "anthropic",
-            "openai",
-            "openai-api",
-            "bedrock",
-            "vertex",
-            "nous",
-            "kimi-for-coding",
-            "zai",
-            "nvidia",
-            "alibaba",
-            "huggingface",
-            "vercel",
-            "local",
-        ]);
-        expected.sort_unstable();
-        expected.dedup();
-        for canonical in expected {
+        // The full vendored models.dev directory is present (200+ providers),
+        // including the ones OpenCode/Hermes expose.
+        assert!(r.len() >= 200, "vendored registry too small: {}", r.len());
+        for canonical in [
+            "anthropic", "openai", "openai-api", "amazon-bedrock", "google-vertex",
+            "nous", "kimi-for-coding", "zai", "zai-coding-plan", "nvidia", "alibaba",
+            "huggingface", "vercel", "local", "xai", "xiaomi", "xiaomi-token-plan-cn",
+            "zenmux", "zenifra", "zhipuai", "zhipuai-coding-plan", "xpersona", "zeldoc",
+            "perplexity", "deepseek", "groq", "openrouter", "mistral",
+        ] {
             assert!(r.get(canonical).is_some(), "missing provider `{canonical}`");
         }
     }

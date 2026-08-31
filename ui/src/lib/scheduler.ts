@@ -3,7 +3,8 @@
 // the demo set so the UI stays explorable. The durable state machine lives in
 // Rust (`everyaios-core::SchedulerService`); these are just the wire + types.
 
-import { invoke } from "./tauri";
+import { invoke, inTauri } from "./tauri";
+import { bridgeCall } from "./runtime";
 
 /** Mirror of the Rust `TriggerSpec` serde shape. */
 export type SchedulerTrigger =
@@ -108,11 +109,11 @@ const DEMO_SUGGESTIONS: NudgeSuggestion[] = [
 ];
 
 export async function schedulerList(): Promise<SchedulerList> {
-  try {
-    return await invoke<SchedulerList>("scheduler_list");
-  } catch {
-    return { jobs: DEMO_JOBS, onBattery: false };
-  }
+  return bridgeCall({
+    operation: 'scheduler list',
+    live: () => invoke<SchedulerList>('scheduler_list'),
+    preview: () => ({ jobs: DEMO_JOBS, onBattery: false }),
+  });
 }
 
 export async function schedulerCreate(args: {
@@ -123,62 +124,62 @@ export async function schedulerCreate(args: {
   steps: unknown[];
   policy?: SchedulerJob["policy"];
 }): Promise<boolean> {
-  try {
-    return await invoke<boolean>("scheduler_create", args);
-  } catch {
-    return true; // preview: pretend success
-  }
+  return bridgeCall({
+    operation: 'scheduler create',
+    live: () => invoke<boolean>('scheduler_create', args),
+    preview: () => true,
+  });
 }
 
 export async function schedulerDelete(id: string): Promise<boolean> {
-  try {
-    return await invoke<boolean>("scheduler_delete", { id });
-  } catch {
-    return true;
-  }
+  return bridgeCall({
+    operation: 'scheduler delete',
+    live: () => invoke<boolean>('scheduler_delete', { id }),
+    preview: () => true,
+  });
 }
 
 export async function schedulerEnable(id: string, enabled: boolean): Promise<boolean> {
-  try {
-    return await invoke<boolean>("scheduler_enable", { id, enabled });
-  } catch {
-    return true;
-  }
+  return bridgeCall({
+    operation: 'scheduler enable',
+    live: () => invoke<boolean>('scheduler_enable', { id, enabled }),
+    preview: () => true,
+  });
 }
 
 export async function schedulerPause(
   id: string,
   resumeDeadline?: number,
 ): Promise<boolean> {
-  try {
-    return await invoke<boolean>("scheduler_pause", { id, resumeDeadline });
-  } catch {
-    return true;
-  }
+  return bridgeCall({
+    operation: 'scheduler pause',
+    live: () => invoke<boolean>('scheduler_pause', { id, resumeDeadline }),
+    preview: () => true,
+  });
 }
 
 export async function schedulerResume(id: string): Promise<boolean> {
-  try {
-    return await invoke<boolean>("scheduler_resume", { id });
-  } catch {
-    return true;
-  }
+  return bridgeCall({
+    operation: 'scheduler resume',
+    live: () => invoke<boolean>('scheduler_resume', { id }),
+    preview: () => true,
+  });
 }
 
 export async function schedulerRunNow(id: string): Promise<boolean> {
-  try {
-    return await invoke<boolean>("scheduler_run_now", { id });
-  } catch {
-    return true;
-  }
+  return bridgeCall({
+    operation: 'scheduler run now',
+    live: () => invoke<boolean>('scheduler_run_now', { id }),
+    preview: () => true,
+  });
 }
 
 export async function schedulerBattery(onBattery: boolean): Promise<boolean> {
-  try {
-    return await invoke<boolean>("scheduler_battery", { onBattery });
-  } catch {
-    return true;
-  }
+  return bridgeCall({
+    operation: 'scheduler battery update',
+    live: () => invoke<boolean>('scheduler_battery', { onBattery }),
+    preview: () => true,
+  });
 }
 
 /** Fire an event trigger (CI fail / regression / repo change / ticket / metric). */
@@ -186,29 +187,29 @@ export async function schedulerFireEvent(
   kind: string,
   payload: Record<string, unknown>,
 ): Promise<string[]> {
-  try {
-    return await invoke<string[]>("scheduler_fire_event", { kind, payload });
-  } catch {
-    return [];
-  }
+  return bridgeCall({
+    operation: 'scheduler fire event',
+    live: () => invoke<string[]>("scheduler_fire_event", { kind, payload }),
+    preview: () => [],
+  });
 }
 
 /** Nudge sentinels: repeating-pattern schedule suggestions (H14 nudge cards). */
 export async function schedulerNudges(): Promise<NudgeSuggestion[]> {
-  try {
-    return await invoke<NudgeSuggestion[]>("scheduler_nudges");
-  } catch {
-    return DEMO_SUGGESTIONS;
-  }
+  return bridgeCall({
+    operation: 'scheduler nudges',
+    live: () => invoke<NudgeSuggestion[]>('scheduler_nudges'),
+    preview: () => DEMO_SUGGESTIONS,
+  });
 }
 
 /** Record a goal observation (feeds the nudge sentinels). */
 export async function schedulerNudge(goal: string, ts?: number): Promise<boolean> {
-  try {
-    return await invoke<boolean>("scheduler_nudge", { goal, ts });
-  } catch {
-    return true;
-  }
+  return bridgeCall({
+    operation: 'scheduler nudge',
+    live: () => invoke<boolean>('scheduler_nudge', { goal, ts }),
+    preview: () => true,
+  });
 }
 
 /** Human label for a trigger (the H14 list rows). */

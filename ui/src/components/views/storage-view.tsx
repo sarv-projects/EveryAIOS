@@ -12,11 +12,13 @@ import {
   storageScan,
   storageLargeFiles,
   storageDuplicates,
+  storageCleanupProposals,
   bytes,
   type StorageHealth,
   type TreemapRect,
   type LargeFile,
   type DupGroup,
+  type CleanupProposal,
 } from '@/lib/storage'
 
 /** P30.15 — dream-diary card: visible memory consolidation over the C-series. */
@@ -58,7 +60,23 @@ export default function StorageView() {
   const [deferred, setDeferred] = useState(false)
   const [large, setLarge] = useState<LargeFile[]>([])
   const [dups, setDups] = useState<DupGroup[]>([])
+  const [proposals, setProposals] = useState<CleanupProposal[]>([])
+  const [proposing, setProposing] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  async function reviewCleanup() {
+    setProposing(true)
+    try {
+      const p = await storageCleanupProposals()
+      setProposals(p)
+      if (p.length === 0) notify('No cleanup candidates — nothing to reclaim')
+      else notify(`${p.length} cleanup proposal(s) — each is Guard-2 ticketed before any delete`)
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Cleanup proposal failed')
+    } finally {
+      setProposing(false)
+    }
+  }
 
   async function refresh() {
     setLoading(true)
@@ -273,19 +291,59 @@ export default function StorageView() {
                 size="sm"
                 variant="default"
                 className="bg-orange-500 text-black hover:bg-orange-400"
-                onClick={() => notify(`Cleanup proposals are Guard-2 ticketed — ${bytes(reclaimable)} reclaimable`)}
+                disabled={proposing}
+                onClick={() => void reviewCleanup()}
               >
-                <GitCompare className="h-3 w-3" />
-                Review diff
+                <GitCompare className={cn('h-3 w-3', proposing && 'animate-spin')} />
+                {proposing ? 'Proposing…' : 'Review cleanup plan'}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => notify('Kept all files — no changes made')}
+                onClick={() => {
+                  setProposals([])
+                  notify('Kept all files — no changes made')
+                }}
               >
                 Keep all
               </Button>
             </div>
+
+            {proposals.length > 0 && (
+              <div className="mt-3 space-y-1.5 border-t border-orange-500/30 pt-3">
+                {proposals.map((p, i) => (
+                  <div
+                    key={i}
+                    className="rounded-md border border-border bg-card px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Trash2 className="h-3 w-3 text-orange-400" />
+                      <span className="flex-1 truncate text-[11px] text-foreground">
+                        {p.goal ?? p.summary ?? `Proposal ${i + 1}`}
+                      </span>
+                      {p.risk && (
+                        <Badge variant="outline" className="text-[9px] uppercase">
+                          {p.risk}
+                        </Badge>
+                      )}
+                      {typeof p.bytes === 'number' && (
+                        <Badge variant="outline" className="text-[9px] text-emerald-300">
+                          −{bytes(p.bytes)}
+                        </Badge>
+                      )}
+                    </div>
+                    {p.paths && p.paths.length > 0 && (
+                      <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+                        {p.paths.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <p className="pt-1 text-[10px] text-muted-foreground">
+                  Approve each in the Guard window — the storage engine never deletes on its own.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </ScrollArea>

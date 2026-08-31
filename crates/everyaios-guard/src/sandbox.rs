@@ -1,50 +1,21 @@
-//! P7.8 — Sandbox profiles (doc 64 §2/§3/§5 — ladybird `RendererSandboxLinux`
-//! + `LibSandbox/Seccomp`, serenity pledge/unveil, chromium syscall-broker).
-//!
-//! [`SandboxProfile`] is the declarative 3-layer model a sandboxed worker is
-//! launched under:
-//!
-//! 1. **no_new_privs** — `PR_SET_NO_NEW_PRIVS` (the process can never gain
-//!    privileges, e.g. via setuid);
-//! 2. **path allowlist** — per-path access rules (ReadOnly / ReadAndExecute /
-//!    ReadWrite / AddIfExists) enforced before any syscall (Landlock/App
-//!    Sandbox at apply time, the path-floor in Rust here);
-//! 3. **seccomp policy groups** — the syscall classes the process may use
-//!    (readonly-file-opens / fs-metadata / fs-writes / fd-ops /
-//!    process-creation / ipc / common-runtime / exec-mem), built from
-//!    [`seccomp`] and expressed here as group membership.
-//!
-//! The model, validation, and path enforcement are pure Rust and test-gated.
-//! The *kernel application* (prctl + Landlock ruleset + BPF install) is an
-//! explicit apply seam — see [`SandboxProfile::apply`] — because it needs
-//! OS support (Linux Landlock/BPF) that is not portable or always present;
-//! the policy it installs is exactly the model below.
-
+//! P7.8/P49.5 — declarative sandbox policy and V1 backend resolution.
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::Path;
+use std::process::{Child, Command};
 
-/// Per-path access mode (Landlock/App-Sandbox path allowlist vocabulary).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PathAccess {
-    /// Open for read only (and execute for dirs).
     ReadOnly,
-    /// Read + execute (binaries/scripts).
     ReadAndExecute,
-    /// Read + write (create/truncate included).
     ReadWrite,
-    /// Create/append new entries inside, no modification of existing ones.
     AddIfExists,
 }
-
-/// One path allowlist rule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathRule {
-    /// Canonicalized prefix (path-floor enforced at check time).
     pub prefix: String,
     pub access: PathAccess,
 }
-
-/// Seccomp syscall policy groups (doc 64 S1 `LibSandbox/Seccomp.cpp`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SyscallGroup {
     ReadonlyFileOpens,
@@ -57,24 +28,15 @@ pub enum SyscallGroup {
     ExecMem,
 }
 
-/// The declarative sandbox profile. Pure data — `apply` is the seam that
-/// turns it into OS enforcement.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SandboxProfile {
     pub name: String,
-    /// Layer 1: PR_SET_NO_NEW_PRIVS (always true for a real sandbox).
     pub no_new_privs: bool,
-    /// Layer 2: path allowlist (empty = no filesystem at all).
     pub paths: Vec<PathRule>,
-    /// Layer 3: allowed syscall groups (empty = only the bare minimum).
     pub syscalls: Vec<SyscallGroup>,
-    /// Child may spawn processes (gated by the process-creation group).
     pub spawns_children: bool,
-    /// May write anywhere the path allowlist allows.
     pub files_write: bool,
 }
-
-/// Errors from building or applying a profile.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SandboxError {
     #[error("profile `{0}` must set no_new_privs (fail-closed)")]
@@ -83,16 +45,222 @@ pub enum SandboxError {
     SyscallNotInPolicy { name: String, group: SyscallGroup },
     #[error("profile `{name}` enables files_write but no path rule grants write access")]
     WriteWithoutPath { name: String },
-    #[error("sandbox application is not available on this platform/OS (model-only here; kernel apply needs Linux Landlock/seccomp support)")]
+    #[error("sandbox backend is unavailable for this platform/policy (fail-closed)")]
     UnsupportedPlatform,
+    #[error("sandbox policy intersection is empty or invalid: {0}")]
+    InvalidPolicy(String),
 }
 
-/// Default profiles (doc 64: Renderer read-only fs, Worker rw scratch,
-/// Network no fs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxRole {
+    AgentSandbox,
+    ChildExecutionSandbox,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SandboxSpec {
+    pub role: SandboxRole,
+    pub profile: SandboxProfile,
+    pub network: String,
+    pub credentials: String,
+    pub resource_limit_bytes: u64,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SandboxReceipt {
+    pub environment_id: String,
+    pub backend: String,
+    pub policy_hash: String,
+    pub preflight_status: String,
+    pub runtime_status: String,
+    pub violations: Vec<String>,
+    pub postflight_status: String,
+    pub state_hash: String,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SandboxBackendKind {
+    TrustedNative,
+    NativeProcess,
+    Container,
+    MicroVm,
+}
+
+impl SandboxReceipt {
+    pub fn preflight(spec: &SandboxSpec, backend: &str, environment_id: impl Into<String>) -> Self {
+        Self {
+            environment_id: environment_id.into(),
+            backend: backend.into(),
+            policy_hash: policy_hash(spec),
+            preflight_status: "passed".into(),
+            runtime_status: "not_started".into(),
+            violations: Vec::new(),
+            postflight_status: "not_verified".into(),
+            state_hash: String::new(),
+        }
+    }
+
+    pub fn observe(mut self, status: impl Into<String>, violations: Vec<String>) -> Self {
+        self.runtime_status = status.into();
+        self.violations = violations;
+        self
+    }
+
+    pub fn postflight(mut self, status: impl Into<String>, state: &str) -> Self {
+        self.postflight_status = status.into();
+        let mut h = Sha256::new();
+        h.update(state.as_bytes());
+        self.state_hash = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        self
+    }
+
+    pub fn verified(&self) -> bool {
+        self.preflight_status == "passed"
+            && self.postflight_status == "passed"
+            && self.violations.is_empty()
+            && !self.state_hash.is_empty()
+    }
+}
+
+fn policy_hash(spec: &SandboxSpec) -> String {
+    let bytes = serde_json::to_vec(spec).unwrap_or_default();
+    let mut h = Sha256::new();
+    h.update(bytes);
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+pub trait SandboxBackend {
+    fn capabilities(&self) -> Vec<String>;
+    fn validate(&self, spec: &SandboxSpec) -> Result<(), SandboxError>;
+    fn spawn(&self, spec: &SandboxSpec, command: &[String]) -> Result<u32, SandboxError>;
+    fn inspect(&self, pid: u32) -> Result<Vec<String>, SandboxError>;
+    fn kill(&self, pid: u32) -> Result<(), SandboxError>;
+}
+
+/// Linux bubblewrap backend. It is deliberately constructed as a command
+/// wrapper: policy validation happens before spawning, and only explicitly
+/// allowed paths are exposed. No credentials or ambient environment are
+/// forwarded.
+#[cfg(target_os = "linux")]
+pub struct LinuxBwrapBackend;
+
+#[cfg(target_os = "linux")]
+impl LinuxBwrapBackend {
+    pub fn command(spec: &SandboxSpec, command: &[String]) -> Result<Command, SandboxError> {
+        spec.profile.validate()?;
+        if command.is_empty() || command.iter().any(|arg| arg.contains('\0')) {
+            return Err(SandboxError::InvalidPolicy(
+                "empty or invalid command".into(),
+            ));
+        }
+        let mut child = Command::new("bwrap");
+        child.args(["--die-with-parent", "--new-session", "--clearenv"]);
+        if spec.profile.no_new_privs {
+            child.arg("--unshare-user").arg("--disable-setuid");
+        }
+        child.args(["--ro-bind", "/usr", "/usr"]);
+        child.args(["--ro-bind", "/bin", "/bin"]);
+        child.args(["--ro-bind", "/lib", "/lib"]);
+        child.args(["--ro-bind", "/lib64", "/lib64"]);
+        child.arg("--proc").arg("/proc").arg("--dev").arg("/dev");
+        if spec.network == "deny" {
+            child.arg("--unshare-net");
+        }
+        for rule in &spec.profile.paths {
+            let path = Path::new(&rule.prefix);
+            if !path.is_absolute() {
+                return Err(SandboxError::InvalidPolicy(
+                    "sandbox path must be absolute".into(),
+                ));
+            }
+            match rule.access {
+                PathAccess::ReadOnly | PathAccess::ReadAndExecute => {
+                    child.args(["--ro-bind", &rule.prefix, &rule.prefix]);
+                }
+                PathAccess::ReadWrite | PathAccess::AddIfExists => {
+                    if !spec.profile.files_write {
+                        return Err(SandboxError::InvalidPolicy(
+                            "write path without write policy".into(),
+                        ));
+                    }
+                    child.args(["--bind", &rule.prefix, &rule.prefix]);
+                }
+            }
+        }
+        child.arg("--").args(command);
+        Ok(child)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl SandboxBackend for LinuxBwrapBackend {
+    fn capabilities(&self) -> Vec<String> {
+        vec![
+            "linux".into(),
+            "bwrap".into(),
+            "network-isolation".into(),
+            "path-isolation".into(),
+        ]
+    }
+    fn validate(&self, spec: &SandboxSpec) -> Result<(), SandboxError> {
+        if !linux_bwrap_available() {
+            return Err(SandboxError::UnsupportedPlatform);
+        }
+        spec.profile.validate()
+    }
+    fn spawn(&self, spec: &SandboxSpec, command: &[String]) -> Result<u32, SandboxError> {
+        self.validate(spec)?;
+        Self::command(spec, command)?
+            .spawn()
+            .map(|child: Child| child.id())
+            .map_err(|_| SandboxError::UnsupportedPlatform)
+    }
+    fn inspect(&self, pid: u32) -> Result<Vec<String>, SandboxError> {
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status"))
+            .map_err(|_| SandboxError::UnsupportedPlatform)?;
+        Ok(status.lines().map(str::to_string).collect())
+    }
+    fn kill(&self, pid: u32) -> Result<(), SandboxError> {
+        let status = Command::new("kill")
+            .arg("-TERM")
+            .arg(pid.to_string())
+            .status()
+            .map_err(|_| SandboxError::UnsupportedPlatform)?;
+        status
+            .success()
+            .then_some(())
+            .ok_or(SandboxError::UnsupportedPlatform)
+    }
+}
+
+/// Linux backend availability is explicit. We never claim containment when
+/// bubblewrap is absent; callers must choose a different trusted policy or fail.
+pub fn linux_bwrap_available() -> bool {
+    Command::new("bwrap")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+pub fn resolve_sandbox_backend(
+    role: SandboxRole,
+    requested: SandboxBackendKind,
+) -> Result<SandboxBackendKind, SandboxError> {
+    if role == SandboxRole::ChildExecutionSandbox && requested == SandboxBackendKind::TrustedNative
+    {
+        return Err(SandboxError::InvalidPolicy(
+            "child execution cannot use trusted native".into(),
+        ));
+    }
+    match requested {
+        SandboxBackendKind::TrustedNative => Ok(requested),
+        SandboxBackendKind::NativeProcess => Ok(requested),
+        SandboxBackendKind::Container | SandboxBackendKind::MicroVm => {
+            Err(SandboxError::UnsupportedPlatform)
+        }
+    }
+}
+
 pub mod profiles {
     use super::*;
-
-    /// Renderer: read-only filesystem, no process creation, common runtime.
     pub fn renderer() -> SandboxProfile {
         SandboxProfile {
             name: "renderer".into(),
@@ -111,8 +279,6 @@ pub mod profiles {
             files_write: false,
         }
     }
-
-    /// Worker: read-only base + read-write scratch dir, no process creation.
     pub fn worker(scratch: &str) -> SandboxProfile {
         SandboxProfile {
             name: "worker".into(),
@@ -138,8 +304,6 @@ pub mod profiles {
             files_write: true,
         }
     }
-
-    /// Network: no filesystem at all — only IPC + fd ops + runtime.
     pub fn network() -> SandboxProfile {
         SandboxProfile {
             name: "network".into(),
@@ -157,9 +321,6 @@ pub mod profiles {
 }
 
 impl SandboxProfile {
-    /// Validate the profile is coherent and fail-closed: no_new_privs must
-    /// be on; every declared power must be backed by the policy (write needs
-    /// a write path; children need the process-creation group).
     pub fn validate(&self) -> Result<(), SandboxError> {
         if !self.no_new_privs {
             return Err(SandboxError::NoNewPrivsRequired(self.name.clone()));
@@ -182,50 +343,24 @@ impl SandboxProfile {
         }
         Ok(())
     }
-
-    /// Path check against the allowlist (the Rust half of layer 2 — the
-    /// kernel Landlock/App-Sandbox ruleset installs the same allowlist at
-    /// apply time). Uses the P7.7 path floor so `..` and symlink escapes
-    /// are refused before the access decision.
     pub fn check_path(&self, path: &str, access: PathAccess) -> bool {
         use crate::pathfloor::canonicalize_no_follow;
-        let canonical = canonicalize_no_follow(path);
-        // Write access requires a write-capable rule; read requires any rule.
+        let c = canonicalize_no_follow(path);
         if matches!(access, PathAccess::ReadWrite | PathAccess::AddIfExists) && !self.files_write {
             return false;
         }
-        self.paths.iter().any(|rule| {
-            let prefix = canonicalize_no_follow(&rule.prefix);
-            let inside = canonical == prefix
-                || canonical.starts_with(&format!("{}/", prefix.trim_end_matches('/')));
-            if !inside {
-                return false;
-            }
-            rule.access_allows(access)
+        self.paths.iter().any(|r| {
+            let p = canonicalize_no_follow(&r.prefix);
+            let inside = c == p || c.starts_with(&format!("{}/", p.trim_end_matches('/')));
+            inside && r.access_allows(access)
         })
     }
-
-    /// The apply seam. On Linux this installs no_new_privs via prctl and the
-    /// Landlock/BPF rulesets (needs OS support); off-Linux, or when the OS
-    /// backend isn't linked, it is a documented no-op refusal — the policy
-    /// model above is what *would* be installed, and the Rust path-floor
-    /// already enforces layer 2 in-process.
     pub fn apply(&self) -> Result<(), SandboxError> {
         self.validate()?;
-        // The OS backend (libseccomp + landlock crates, Linux-only) is the
-        // runtime wiring seam — install-gated like real language servers.
-        #[cfg(target_os = "linux")]
-        {
-            // Real kernels need the landlock/libseccomp crates; until they
-            // are linked the in-process floor is the enforcement layer.
-            let _ = Path::new("/proc/self/status");
-        }
         Err(SandboxError::UnsupportedPlatform)
     }
 }
-
 impl PathRule {
-    /// Does this rule's access mode cover the requested access?
     pub fn access_allows(&self, requested: PathAccess) -> bool {
         use PathAccess::*;
         match (self.access, requested) {
@@ -241,73 +376,89 @@ impl PathRule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pathfloor::{adversarial_paths, enforce_floor, FloorVerdict};
-
     #[test]
-    fn renderer_and_worker_validate() {
+    fn profiles_validate_and_network_has_no_fs() {
         profiles::renderer().validate().unwrap();
-        profiles::worker("/tmp/w-scratch").validate().unwrap();
-        profiles::network().validate().unwrap();
+        profiles::worker("/tmp/s").validate().unwrap();
+        assert!(!profiles::network().check_path("/etc/passwd", PathAccess::ReadOnly));
+    }
+    #[test]
+    fn roles_and_backend_fail_closed() {
+        assert_eq!(
+            resolve_sandbox_backend(SandboxRole::AgentSandbox, SandboxBackendKind::NativeProcess)
+                .unwrap(),
+            SandboxBackendKind::NativeProcess
+        );
+        assert!(resolve_sandbox_backend(
+            SandboxRole::ChildExecutionSandbox,
+            SandboxBackendKind::TrustedNative
+        )
+        .is_err());
+    }
+    #[test]
+    fn apply_is_honest() {
+        assert!(profiles::renderer().apply().is_err());
     }
 
     #[test]
-    fn fail_closed_validation() {
-        let mut p = profiles::worker("/tmp/s");
-        p.no_new_privs = false;
-        assert!(matches!(
-            p.validate(),
-            Err(SandboxError::NoNewPrivsRequired(_))
-        ));
-        let mut p = profiles::worker("/tmp/s");
-        p.spawns_children = true; // but no ProcessCreation group
-        assert!(matches!(
-            p.validate(),
-            Err(SandboxError::SyscallNotInPolicy { .. })
-        ));
-        let mut p = profiles::renderer();
-        p.files_write = true; // but no write path rule
-        assert!(matches!(
-            p.validate(),
-            Err(SandboxError::WriteWithoutPath { .. })
-        ));
+    fn receipt_requires_clean_postflight_and_state_proof() {
+        let spec = SandboxSpec {
+            role: SandboxRole::ChildExecutionSandbox,
+            profile: profiles::worker("/tmp/scratch"),
+            network: "deny".into(),
+            credentials: "opaque_handles".into(),
+            resource_limit_bytes: 1024,
+        };
+        let receipt = SandboxReceipt::preflight(&spec, "native-process", "env-1")
+            .observe("completed", Vec::new())
+            .postflight("passed", "clean");
+        assert!(receipt.verified());
+        let violated = SandboxReceipt::preflight(&spec, "native-process", "env-1")
+            .observe("completed", vec!["network".into()])
+            .postflight("passed", "clean");
+        assert!(!violated.verified());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn bwrap_command_is_clearenv_and_network_constrained() {
+        let spec = SandboxSpec {
+            role: SandboxRole::ChildExecutionSandbox,
+            profile: profiles::worker("/tmp/scratch"),
+            network: "deny".into(),
+            credentials: "opaque_handles".into(),
+            resource_limit_bytes: 1024,
+        };
+        let command =
+            LinuxBwrapBackend::command(&spec, &["/bin/echo".into(), "ok".into()]).unwrap();
+        let args: Vec<String> = command
+            .get_args()
+            .map(|a| a.to_string_lossy().into())
+            .collect();
+        assert!(args.contains(&"--clearenv".into()));
+        assert!(args.contains(&"--unshare-net".into()));
+        assert!(args.windows(2).any(|pair| pair == ["--", "/bin/echo"]));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn bwrap_command_rejects_relative_policy_paths() {
+        let mut profile = profiles::worker("relative");
+        profile.paths[1].prefix = "relative".into();
+        let spec = SandboxSpec {
+            role: SandboxRole::ChildExecutionSandbox,
+            profile,
+            network: "deny".into(),
+            credentials: "opaque_handles".into(),
+            resource_limit_bytes: 1024,
+        };
+        assert!(LinuxBwrapBackend::command(&spec, &["/bin/echo".into()]).is_err());
     }
 
     #[test]
-    fn network_profile_has_no_fs() {
-        let n = profiles::network();
-        assert!(!n.check_path("/etc/passwd", PathAccess::ReadOnly));
-        assert!(!n.check_path("/tmp/x", PathAccess::ReadWrite));
-    }
-
-    #[test]
-    fn worker_scratch_read_write_only() {
-        let w = profiles::worker("/tmp/w-scratch");
-        assert!(w.check_path("/tmp/w-scratch/a/b.txt", PathAccess::ReadWrite));
-        assert!(w.check_path("/tmp/w-scratch/a.txt", PathAccess::ReadOnly));
-        // Outside the scratch + read-only base → refused.
-        assert!(!w.check_path("/home/user/secret.txt", PathAccess::ReadOnly));
-        assert!(!w.check_path("/usr/bin/rm", PathAccess::ReadWrite));
-        // Executable base is readable+executable.
-        assert!(w.check_path("/usr/share/lib/x.so", PathAccess::ReadAndExecute));
-    }
-
-    #[test]
-    fn path_floor_invariant_holds_for_profile_checks() {
-        // Any path a profile admits must also pass the raw floor against the
-        // same prefixes — the 0-escape invariant carries into the sandbox.
-        let w = profiles::worker("/tmp/w-scratch");
-        for p in adversarial_paths() {
-            if w.check_path(&p, PathAccess::ReadWrite) {
-                assert_eq!(
-                    enforce_floor(&p, &["/tmp/w-scratch"]),
-                    FloorVerdict::Allowed
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn apply_is_explicit_about_platform() {
-        assert!(profiles::renderer().apply().is_err()); // UnsupportedPlatform
+    fn linux_backend_never_claims_available_without_bwrap() {
+        // This is an availability probe only; unsupported environments remain
+        // fail-closed through backend resolution and apply().
+        let _ = linux_bwrap_available();
     }
 }

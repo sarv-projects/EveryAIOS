@@ -1,9 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { GitBranch, Plus, RefreshCw, History, GitCommitHorizontal } from 'lucide-react'
+import { GitBranch, Plus, RefreshCw, History, GitCommitHorizontal, GitMerge, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { gitStatus, gitLog, gitStageAll, gitCommit, gitRoot, type GitStatus, type GitLog } from '@/lib/git'
+import {
+  gitStatus, gitLog, gitStageAll, gitCommit, gitRoot,
+  gitWorktreeList, gitWorktreeAdd, gitWorktreeMerge,
+  type GitStatus, type GitLog, type Worktree,
+} from '@/lib/git'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SkeletonBlock } from '@/components/ui/loading-state'
 
@@ -19,6 +23,9 @@ export function ScmPanel({ cwd }: { cwd: string | null }) {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [committing, setCommitting] = useState(false)
+  const [worktrees, setWorktrees] = useState<Worktree[]>([])
+  const [newTree, setNewTree] = useState('')
+  const [wtBusy, setWtBusy] = useState(false)
 
   const refresh = useCallback(async (dir: string) => {
     setLoading(true)
@@ -27,12 +34,18 @@ export function ScmPanel({ cwd }: { cwd: string | null }) {
       if (!r.root) {
         setStatus(null)
         setLog(null)
+        setWorktrees([])
         return
       }
       setRoot(r.root)
-      const [s, l] = await Promise.all([gitStatus(r.root), gitLog(r.root, 15)])
+      const [s, l, w] = await Promise.all([
+        gitStatus(r.root),
+        gitLog(r.root, 15),
+        gitWorktreeList(r.root),
+      ])
       setStatus(s)
       setLog(l)
+      setWorktrees(w)
     } catch {
       setStatus(null)
     } finally {
@@ -56,6 +69,33 @@ export function ScmPanel({ cwd }: { cwd: string | null }) {
       await refresh(root)
     } finally {
       setCommitting(false)
+    }
+  }
+
+  const addWorktree = async () => {
+    if (!root || !newTree.trim()) return
+    setWtBusy(true)
+    try {
+      await gitWorktreeAdd(root, newTree.trim(), status?.branch || 'HEAD')
+      setNewTree('')
+      await refresh(root)
+    } catch {
+      /* non-repo / bad name — refresh reflects reality */
+    } finally {
+      setWtBusy(false)
+    }
+  }
+
+  const mergeWorktree = async (name: string) => {
+    if (!root) return
+    setWtBusy(true)
+    try {
+      await gitWorktreeMerge(root, name, status?.branch || 'main', `merge ${name}`)
+      await refresh(root)
+    } catch {
+      /* merge conflict / nothing to merge — status reflects it */
+    } finally {
+      setWtBusy(false)
     }
   }
 
@@ -136,6 +176,57 @@ export function ScmPanel({ cwd }: { cwd: string | null }) {
             ))}
           </div>
         )}
+
+        {/* P41.2 — subagent worktrees: isolated branches per parallel agent. */}
+        <div className="mt-3 space-y-0.5 border-t border-border pt-2">
+          <div className="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Layers className="h-2.5 w-2.5" /> Worktrees
+            {worktrees.length > 0 && (
+              <span className="font-mono text-[9px] text-muted-foreground/70">
+                {worktrees.length}
+              </span>
+            )}
+          </div>
+          {worktrees.map((w) => (
+            <div
+              key={w.path}
+              className="flex items-center gap-2 rounded px-1.5 py-0.5 text-[10px] hover:bg-accent/40"
+            >
+              <GitBranch className="h-2.5 w-2.5 text-sky-400" />
+              <span className="truncate font-mono text-foreground">{w.branch ?? '(detached)'}</span>
+              <span className="truncate font-mono text-[9px] text-muted-foreground">{w.path}</span>
+              {w.branch && w.branch !== status.branch && (
+                <button
+                  onClick={() => void mergeWorktree(w.branch as string)}
+                  disabled={wtBusy}
+                  aria-label={`Merge ${w.branch}`}
+                  title={`Merge ${w.branch} into ${status.branch}`}
+                  className="ml-auto flex items-center gap-0.5 rounded border border-primary/40 px-1 py-0.5 text-[9px] text-primary disabled:opacity-40"
+                >
+                  <GitMerge className="h-2.5 w-2.5" /> merge
+                </button>
+              )}
+            </div>
+          ))}
+          <div className="mt-1 flex gap-1.5">
+            <input
+              value={newTree}
+              onChange={(e) => setNewTree(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void addWorktree()}
+              placeholder="new-worktree-branch"
+              aria-label="New worktree branch name"
+              className="h-6 min-w-0 flex-1 rounded border border-border bg-background px-2 font-mono text-[10px] focus:outline-none focus:ring-2 focus:ring-ring/40"
+            />
+            <button
+              onClick={() => void addWorktree()}
+              disabled={wtBusy || !newTree.trim()}
+              aria-label="Add worktree"
+              className="flex h-6 items-center gap-0.5 rounded border border-border px-1.5 text-[9px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+            >
+              <Plus className="h-2.5 w-2.5" /> add
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

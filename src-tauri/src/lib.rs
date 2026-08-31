@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 
 mod acp_cmds;
 mod agent_cmds;
+mod artifact_cmds;
 mod boot;
 mod browser_cmds;
 mod catalog_cmds;
@@ -19,6 +20,8 @@ mod codeintel_cmds;
 mod commands;
 mod control;
 mod desktop_cmds;
+mod discovery_cmds;
+mod doctor_cmds;
 mod feedback_cmds;
 mod fs_cmds;
 mod git_cmds;
@@ -30,6 +33,7 @@ mod maintenance_cmds;
 mod mcp_cmds;
 mod memory_cmds;
 mod oauth_cmds;
+mod openai_cmds;
 mod office_cmds;
 mod replay_cmds;
 mod scheduler_cmds;
@@ -42,6 +46,7 @@ mod tasks_cmds;
 mod trajectory_cmds;
 mod updater_cmds;
 mod vault_cmds;
+mod work_cmds;
 
 pub use state::AppState;
 
@@ -102,6 +107,7 @@ fn connect_chat_relay(
 ) {
     let handle = app.clone();
     let state = app.state::<AppState>();
+    *state.sidecar_activity_ms.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&activity));
     // The SidecarLink reader re-arms the supervisor's idle-watchdog clock on
     // every decoded frame (session/ready + session/heartbeat).
     let link = everyaios_core::SidecarLink::new_with_activity(stdin, stdout, Some(activity));
@@ -158,6 +164,56 @@ fn connect_chat_relay(
     }
     relay.spawn();
     *state.chat_relay.lock().expect("chat_relay poisoned") = Some(relay);
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeStatus {
+    vault: &'static str,
+    sidecar: bool,
+    persistence: &'static str,
+}
+
+#[tauri::command]
+fn runtime_status(state: State<'_, AppState>) -> RuntimeStatus {
+    let vault = if state.vault_unlocked.load(Ordering::Acquire) {
+        "ready"
+    } else {
+        match everyaios_core::gate_mode(&everyaios_core::default_data_dir()) {
+            "setup" | "wrap" => "setup",
+            "unlock" => "locked",
+            _ => "unknown",
+        }
+    };
+    let persistence = state
+        .boot_report
+        .lock()
+        .ok()
+        .map(|r| if r.contains("EPHEMERAL VAULT") { "ephemeral" } else { "durable" })
+        .unwrap_or("unknown");
+    let sidecar = state
+        .chat_relay
+        .lock()
+        .map(|relay| relay.is_some())
+        .unwrap_or(false)
+        && state
+            .sidecar_activity_ms
+            .lock()
+            .ok()
+            .and_then(|clock| clock.as_ref().cloned())
+            .map(|clock| {
+                let last = clock.load(Ordering::Relaxed);
+                last > 0 && now_ms().saturating_sub(last) <= 30_000
+            })
+            .unwrap_or(false);
+    RuntimeStatus { vault, sidecar, persistence }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 #[tauri::command]
@@ -381,6 +437,7 @@ fn vault_setup(
         everyaios_core::setup_vault_passphrase(&everyaios_core::default_data_dir(), &passphrase)
             .map_err(|e| e.to_string())?;
     let status = reopen_disk_vault(&state, &r.key)?;
+    state.vault_unlocked.store(true, Ordering::Release);
     Ok(serde_json::json!({
         "ok": true,
         "origin": r.origin,
@@ -399,6 +456,7 @@ fn vault_unlock(
         everyaios_core::unlock_vault_passphrase(&everyaios_core::default_data_dir(), &passphrase)
             .map_err(|e| e.to_string())?;
     let status = reopen_disk_vault(&state, &r.key)?;
+    state.vault_unlocked.store(true, Ordering::Release);
     Ok(serde_json::json!({
         "ok": true,
         "origin": r.origin,
@@ -564,17 +622,26 @@ pub fn run() {
     // working) but flag it loudly so the UI can warn that nothing will persist,
     // instead of letting the user believe their chat is durable.
     let mut vault_ephemeral = false;
+    let mut vault_unlocked = false;
     let vault = match resolved {
-        Ok(r) => Vault::open(&data_dir.join("vault.db"), &r.key).unwrap_or_else(|e| {
-            eprintln!("everyaios-desktop: vault open failed (using in-memory): {e}");
-            vault_ephemeral = true;
-            Vault::open_in_memory(&r.key).unwrap_or_else(|_| {
-                Vault::open_in_memory(&everyaios_core::default_vault_key())
-                    .expect("in-memory vault")
-            })
-        }),
+        Ok(r) => match Vault::open(&data_dir.join("vault.db"), &r.key) {
+            Ok(vault) => {
+                vault_unlocked = true;
+                vault
+            }
+            Err(e) => {
+                // Keep a disposable vault only as a type-safe boot container;
+                // it is locked from the UI and cannot be treated as durable.
+                eprintln!("everyaios-desktop: vault open failed (persistence unavailable): {e}");
+                vault_ephemeral = true;
+                Vault::open_in_memory(&r.key).unwrap_or_else(|_| {
+                    Vault::open_in_memory(&everyaios_core::default_vault_key())
+                        .expect("in-memory vault")
+                })
+            }
+        },
         Err(e) => {
-            eprintln!("everyaios-desktop: vault key resolve failed (using in-memory): {e}");
+            eprintln!("everyaios-desktop: vault key resolve failed (persistence unavailable): {e}");
             vault_ephemeral = true;
             Vault::open_in_memory(&everyaios_core::default_vault_key()).expect("in-memory vault")
         }
@@ -589,7 +656,9 @@ pub fn run() {
         .manage(AppState {
             boot_report: Mutex::new(boot_report),
             guard,
-            vault,
+            vault: Arc::clone(&vault),
+            vault_unlocked: std::sync::atomic::AtomicBool::new(vault_unlocked),
+            sidecar_activity_ms: Mutex::new(None),
             chat_relay: Mutex::new(None),
             replay_dir: everyaios_core::default_data_dir(),
             cockpit: Arc::new(Mutex::new(Default::default())),
@@ -606,6 +675,8 @@ pub fn run() {
             mcp_remote_flows: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_remote_tokens: Arc::new(Mutex::new(std::collections::HashMap::new())),
             desktop: Mutex::new(desktop_cmds::DesktopSlot::default()),
+            artifacts: Mutex::new(std::collections::HashMap::new()),
+            openai_server: Mutex::new(Default::default()),
         })
         .invoke_handler(commands::handler())
         // P8.8: auto-updater (checks + downloads against the configured

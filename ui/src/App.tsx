@@ -18,8 +18,10 @@ import { OnboardingModal } from "@/components/onboarding-modal";
 import NpsPrompt from "@/components/nps-prompt";
 import { startPerfMeasurement } from "@/lib/perf";
 import { recordSessionEvent } from "@/lib/session-recording";
+import { RuntimeStatusBanner } from "@/components/shell/runtime-status-banner";
 
 export default function App() {
+  const powerMode = useAppStore((s) => s.powerMode);
   // P11.4 — kick off LCP/TTI measurement at boot.
   useEffect(() => {
     startPerfMeasurement();
@@ -44,12 +46,13 @@ export default function App() {
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden">
       <KeyboardShortcuts />
       <TitleBar />
+      <RuntimeStatusBanner />
       <main className="flex-1 min-h-0 flex">
         <LeftSidebar />
         <CenterColumn />
-        {/* 48px activity rail + tool viewport are the cockpit, not a power-only extra. */}
-        <ActivityRail />
-        <RightViewport />
+        {/* Power mode intentionally reveals the cockpit rail and active lens. */}
+        {powerMode && <ActivityRail />}
+        {powerMode && <RightViewport />}
       </main>
       <StatusBar />
       <CommandPalette />

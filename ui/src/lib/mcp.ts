@@ -3,6 +3,7 @@
 // in a plain-browser preview it returns a small demo so the tab is explorable.
 
 import { inTauri, invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 export interface ToolInfo {
   name: string;
@@ -25,7 +26,7 @@ export interface McpCatalog {
 
 export async function mcpCatalog(): Promise<McpCatalog> {
   if (!inTauri()) return demoCatalog();
-  return invoke<McpCatalog>("mcp_catalog");
+  return nativeCall('MCP catalog', () => invoke<McpCatalog>("mcp_catalog"));
 }
 
 /** P11.5.8 — one known/attached MCP server row. */
@@ -40,7 +41,7 @@ export interface McpServerRow {
 /** P11.5.8 — the installed/user MCP servers list (replaces hardcoded rows). */
 export async function mcpServers(): Promise<McpServerRow[]> {
   if (!inTauri()) return demoServers();
-  return invoke<McpServerRow[]>("mcp_servers");
+  return nativeCall('MCP server list', () => invoke<McpServerRow[]>("mcp_servers"));
 }
 
 /** P11.5.8 — attach a user-supplied stdio MCP server + reconcile its tools. */
@@ -50,7 +51,7 @@ export async function mcpAttach(
   args: string[],
 ): Promise<{ name: string; tools: string[]; desc: string }> {
   if (!inTauri()) return { name, tools: ["mcp_tool_1"], desc: "demo attach" };
-  return invoke("mcp_attach", { name, command, args });
+  return nativeCall('MCP attach', () => invoke("mcp_attach", { name, command, args }));
 }
 
 /** Connect-Store — the curated "click → sign in → use" connector list. */
@@ -70,7 +71,7 @@ export interface StoreEntry {
 
 export async function storeCatalog(): Promise<StoreEntry[]> {
   if (!inTauri()) return demoStore();
-  return invoke<StoreEntry[]>("store_catalog");
+  return nativeCall('connector store catalog', () => invoke<StoreEntry[]>("store_catalog"));
 }
 
 /** One remote tool drawn from a connected server's tools/list. */
@@ -85,7 +86,7 @@ export async function mcpRemoteTools(
   storeId: string,
 ): Promise<RemoteToolInfo[]> {
   if (!inTauri()) return [];
-  return invoke<RemoteToolInfo[]>("mcp_remote_tools", { storeId });
+  return nativeCall('remote MCP tools', () => invoke<RemoteToolInfo[]>("mcp_remote_tools", { storeId }));
 }
 
 /** Start a remote-MCP OAuth 2.1 connect (discovery + PKCE) → auth URL. */
@@ -95,7 +96,7 @@ export async function mcpConnectStart(
   if (!inTauri()) {
     return { authUrl: "https://example.com/oauth/authorize?demo=1", state: "demo", redirectUri: "http://127.0.0.1:0/oauth/callback" };
   }
-  return invoke("mcp_connect_start", { storeId });
+  return nativeCall('MCP connect start', () => invoke("mcp_connect_start", { storeId }));
 }
 
 function demoStore(): StoreEntry[] {

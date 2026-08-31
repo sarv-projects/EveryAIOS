@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { inTauri } from '@/lib/tauri'
 import { useAppStore } from '@/lib/store'
 import { OfficeOpenBar } from './office-open-bar'
 import OfficeFileSwitcher from './office-file-switcher'
@@ -49,7 +50,7 @@ export default function OfficePdfView() {
   // P1.9 — read-only while the agent is running (same lock as Word/Excel).
   const locked = running && !paused
   // P4.7 — document text injected as the chat-overlay's `<user_document>`.
-  const docContext = payload ? payload.texts.join('\n') : DEMO_DOC_TEXT
+  const docContext = payload ? payload.texts.join('\n') : inTauri() ? '' : DEMO_DOC_TEXT
   // P33 scoped-PDF fix — keep the store's scoped document in sync so the
   // main composer's sendUserMessage can ground answers without the overlay.
   const docTitle = payload?.path ?? 'contract.pdf'
@@ -117,7 +118,7 @@ export default function OfficePdfView() {
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-red-400" />
           <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
-            {payload?.path ?? 'contract.pdf'}
+            {payload?.path ?? (inTauri() ? 'No PDF open' : 'contract.pdf')}
           </span>
           {payload ? (
             <Badge variant="outline" className="text-[10px] text-emerald-300">
@@ -275,6 +276,10 @@ export default function OfficePdfView() {
                 )}
               </div>
             )
+          ) : inTauri() ? (
+          <div className="flex min-h-[420px] w-full max-w-3xl items-center justify-center rounded-lg border border-dashed border-border bg-background/30 p-8 text-center text-xs text-muted-foreground">
+            Open a real PDF to view pages, extract text, and use document actions.
+          </div>
           ) : (
           <div
             className="relative rounded-sm bg-[#fbfbf9] shadow-xl"
@@ -361,7 +366,7 @@ export default function OfficePdfView() {
             <ChevronLeft className="h-3 w-3" />
           </button>
           <span className="text-foreground">
-            {page} / {payload ? payload.pages : 8}
+            {page} / {payload ? payload.pages : inTauri() ? '—' : 8}
           </span>
           <button
             onClick={() => setPage(Math.min(payload ? payload.pages : 8, page + 1))}

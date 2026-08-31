@@ -45,3 +45,41 @@ export async function gitRoot(start: string): Promise<{ root: string | null }> {
   if (!inTauri()) return { root: null }
   return invoke('git_root', { start })
 }
+
+// --- P41.2 worktrees (subagent isolation) ---------------------------------
+
+export interface Worktree {
+  path: string
+  branch: string | null
+}
+
+export async function gitWorktreeList(repo: string): Promise<Worktree[]> {
+  if (!inTauri()) return []
+  const r = await invoke<{ worktrees: Worktree[] }>('git_worktree_list', { repo })
+  return r.worktrees
+}
+
+export async function gitWorktreeAdd(
+  repo: string,
+  name: string,
+  base: string,
+): Promise<{ path: string; branch: string; base: string }> {
+  return invoke('git_worktree_add', { repo, name, base })
+}
+
+export async function gitWorktreeMerge(
+  repo: string,
+  name: string,
+  targetBranch: string,
+  message: string,
+): Promise<{ merged: boolean; mergeHead: string }> {
+  return invoke('git_worktree_merge', { repo, name, targetBranch, message })
+}
+
+export async function gitWorktreeRevert(
+  repo: string,
+  name: string,
+  commit: string,
+): Promise<{ reverted: boolean }> {
+  return invoke('git_worktree_revert', { repo, name, commit })
+}

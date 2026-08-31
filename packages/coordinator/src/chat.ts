@@ -50,6 +50,8 @@ export { composeHooks, runStage, type WaterfallHooks } from "./waterfall";
 /** Minimal B1-base turn parameters (P1.5 owns full system-prompt assembly). */
 export interface ChatStreamParams {
   sessionId: string;
+  /** P49: canonical durable Work identity; defaults to sessionId at the host boundary. */
+  workId?: string;
   streamId: string;
   text: string;
   surface?: "chat" | "reader" | "bubble" | "automation";
@@ -385,6 +387,7 @@ export async function runChatStream(
     void request("execution/begin", {
       trigger: surface === "automation" ? "scheduler" : "chat",
       sessionId,
+      ...(params.workId !== undefined ? { workId: params.workId } : {}),
       objective: text,
       contextSnapshot: { sessionId, streamId },
     }).catch(() => {

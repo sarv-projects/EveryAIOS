@@ -27,6 +27,7 @@ import {
   Cpu,
   Route,
   ScanSearch,
+  PanelRight,
 } from 'lucide-react'
 import {
   Dialog,
@@ -64,6 +65,8 @@ export function CommandPalette() {
   const setSelectedModel = useAppStore((s) => s.setSelectedModel)
   const setAutoRoute = useAppStore((s) => s.setAutoRoute)
   const autoRoute = useAppStore((s) => s.autoRoute)
+  const powerMode = useAppStore((s) => s.powerMode)
+  const togglePowerMode = useAppStore((s) => s.togglePowerMode)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const officePaths = useAppStore((s) => s.officePaths)
   const { theme, toggle } = useTheme()
@@ -106,6 +109,19 @@ export function CommandPalette() {
         group: 'actions',
         onSelect: () => {
           toggle()
+          setOpen(false)
+        },
+      },
+      {
+        id: 'toggle-power-mode',
+        label: powerMode ? 'Switch to casual mode' : 'Switch to power mode',
+        hint: 'Show or hide the activity rail, viewport, and advanced controls',
+        icon: PanelRight,
+        group: 'actions',
+        shortcut: '⌘.',
+        keywords: 'casual power cockpit viewport rail',
+        onSelect: () => {
+          togglePowerMode()
           setOpen(false)
         },
       },
@@ -304,7 +320,7 @@ export function CommandPalette() {
         },
       },
     ]
-  }, [sessions, theme, toggle, setActiveSession, setActiveView, setCenterScreen, setSettingsSection, newSession, setOpen, notify, setSelectedAgent, setSelectedModel, setAutoRoute, autoRoute, selectedAgentId])
+  }, [sessions, theme, toggle, powerMode, togglePowerMode, setActiveSession, setActiveView, setCenterScreen, setSettingsSection, newSession, setOpen, notify, setSelectedAgent, setSelectedModel, setAutoRoute, autoRoute, selectedAgentId])
 
   const filtered = React.useMemo(() => {
     if (!query) return items

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import {
   ArrowUp,
   Boxes,
@@ -8,6 +8,7 @@ import {
   CircleDollarSign,
   FileText,
   Mic,
+  Volume2,
   Package,
   Plus,
   type LucideIcon,
@@ -52,7 +53,7 @@ const MENTIONS: { cmd: string; desc: string; icon: LucideIcon }[] = [
   { cmd: '@packages', desc: 'Installed npm packages', icon: Package },
 ]
 
-function HintPopover({ title, children }: { title: string; children: React.ReactNode }) {
+function HintPopover({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="absolute bottom-full left-2 z-30 mb-1.5 w-64 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
       <div className="border-b border-border bg-zinc-900/60 px-2 py-1 font-mono text-[10px] text-muted-foreground">
@@ -65,10 +66,14 @@ function HintPopover({ title, children }: { title: string; children: React.React
 
 interface HintItem { cmd: string; desc: string; icon?: LucideIcon; color?: string }
 
-function HintRow({ item }: { item: HintItem }) {
+function HintRow({ item, onSelect }: { item: HintItem; onSelect: (command: string) => void }) {
   const Icon = item.icon
   return (
-    <button type="button" className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-accent/60">
+    <button
+      type="button"
+      onClick={() => onSelect(item.cmd)}
+      className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-accent/60"
+    >
       {Icon && <Icon className="h-3 w-3 text-muted-foreground" />}
       <span className={cn('font-mono text-[11px]', item.color ?? 'text-orange-300')}>{item.cmd}</span>
       <span className="ml-auto truncate text-[10px] text-muted-foreground">{item.desc}</span>
@@ -136,13 +141,14 @@ function AutonomyChip({ compact }: { compact?: boolean }) {
   )
 }
 
-function IconBtn({ icon: Icon, label, onClick, hidden }: { icon: LucideIcon; label: string; onClick: () => void; hidden?: boolean }) {
+function IconBtn({ icon: Icon, label, onClick, hidden, active }: { icon: LucideIcon; label: string; onClick: () => void; hidden?: boolean; active?: boolean }) {
   return (
     <Button
       size="icon"
       variant="ghost"
       className={cn(
         'h-7 w-7 text-muted-foreground hover:text-foreground',
+        active && 'bg-orange-500/15 text-orange-500',
         hidden && 'hidden sm:inline-flex'
       )}
       onClick={onClick}
@@ -163,6 +169,7 @@ export default function ChatComposer({ budget, centered }: Props) {
   const composerValue = useAppStore((s) => s.composerValue)
   const setComposerValue = useAppStore((s) => s.setComposerValue)
   const notify = useAppStore((s) => s.notify)
+  const [ttsEnabled, setTtsEnabled] = useState(false)
   const activeSession = useAppStore((s) =>
     s.sessions.find((x) => x.id === s.activeSessionId)
   )
@@ -238,7 +245,15 @@ export default function ChatComposer({ budget, centered }: Props) {
     >
       {hintList && hintList.items.length > 0 && (
         <HintPopover title={hintList.title}>
-          {hintList.items.map((c) => <HintRow key={c.cmd} item={c} />)}
+          {hintList.items.map((c) => (
+            <HintRow
+              key={c.cmd}
+              item={c}
+              onSelect={(command) => {
+                setComposerValue(`${command} `)
+              }}
+            />
+          ))}
         </HintPopover>
       )}
 
@@ -263,6 +278,15 @@ export default function ChatComposer({ budget, centered }: Props) {
         />
         <div className="flex shrink-0 items-center gap-0.5 pb-0.5">
           <IconBtn icon={Mic} label="Voice input" onClick={() => notify('Voice input — coming soon')} />
+          <IconBtn
+            icon={Volume2}
+            label={ttsEnabled ? 'Disable read aloud' : 'Read assistant replies aloud'}
+            active={ttsEnabled}
+            onClick={() => {
+              setTtsEnabled((enabled) => !enabled)
+              notify(ttsEnabled ? 'Read aloud off' : 'Read aloud on')
+            }}
+          />
           <Button
             size="icon"
             className="h-8 w-8 shrink-0 rounded-md bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-40"
@@ -289,6 +313,15 @@ export default function ChatComposer({ budget, centered }: Props) {
             </span>
           )}
         </span>
+      </div>
+
+      <div className="hidden items-center gap-2 px-2 pb-1 font-mono text-[9px] text-muted-foreground/70 sm:flex">
+        <span>Enter send</span>
+        <span>·</span>
+        <span>Shift+Enter newline</span>
+        <span>·</span>
+        <span>Esc clear</span>
+        <span className="ml-auto">@ mention · / command · ! macro</span>
       </div>
 
       {localRuntime && (localCtxWindow ?? ctxWindow) <= 20_000 && (

@@ -2,25 +2,32 @@
 // JSON-RPC passthrough; `memoryRead` is the read-and-rank shortcut the panel's
 // search box uses. Without the shell, the demo returns a small canned store.
 
-import { invoke, inTauri } from './tauri'
+import { invoke } from './tauri'
+import { bridgeCall } from './runtime'
 
 export async function memoryRequest(
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<unknown> {
-  if (!inTauri()) return demoHandle(method, params)
-  return invoke('memory_request', { method, params })
+  return bridgeCall({
+    operation: `memory request (${method})`,
+    live: () => invoke('memory_request', { method, params }),
+    preview: () => demoHandle(method, params),
+  })
 }
 
 export async function memoryRead(
   query: string,
   k = 8,
 ): Promise<{ query: string; results: string[] }> {
-  if (!inTauri()) {
-    const results = demoMemory.filter((f) => f.toLowerCase().includes(query.toLowerCase())).slice(0, k)
-    return { query, results }
-  }
-  return invoke('memory_read', { query, k })
+  return bridgeCall({
+    operation: 'memory read',
+    live: () => invoke('memory_read', { query, k }),
+    preview: () => {
+      const results = demoMemory.filter((f) => f.toLowerCase().includes(query.toLowerCase())).slice(0, k)
+      return { query, results }
+    },
+  })
 }
 
 /** One fact row from `memory/status` (the live provenance surface). */
@@ -48,25 +55,28 @@ export interface MemoryStatus {
  * Demo fallback in plain-browser preview.
  */
 export async function memoryFacts(): Promise<MemoryStatus> {
-  if (!inTauri()) {
-    const now = Date.now()
-    return {
-      facts: demoMemory.map((text, i) => ({
-        id: `mem:demo${i}`,
-        sessionId: 'demo',
-        text,
-        importance: 8,
-        status: 'active',
-        createdAtMs: now - i * 86_400_000,
-        updatedAtMs: now - i * 86_400_000,
-        source: 'demo',
-        sourceId: 'preview',
-      })),
-      active: demoMemory.length,
-      superseded: 0,
-    }
-  }
-  return invoke('memory_request', { method: 'memory/status', params: {} })
+  return bridgeCall({
+    operation: 'memory status',
+    live: () => invoke('memory_request', { method: 'memory/status', params: {} }),
+    preview: () => {
+      const now = Date.now()
+      return {
+        facts: demoMemory.map((text, i) => ({
+          id: `mem:demo${i}`,
+          sessionId: 'demo',
+          text,
+          importance: 8,
+          status: 'active' as const,
+          createdAtMs: now - i * 86_400_000,
+          updatedAtMs: now - i * 86_400_000,
+          source: 'demo',
+          sourceId: 'preview',
+        })),
+        active: demoMemory.length,
+        superseded: 0,
+      }
+    },
+  })
 }
 
 /** One node from the live GraphStore (`memory/graph`). */
@@ -110,26 +120,29 @@ export interface MemoryEpisodes {
  * restyled fact list. Demo fallback in preview.
  */
 export async function memoryGraph(): Promise<MemoryGraph> {
-  if (!inTauri()) {
-    const now = Date.now()
-    return {
-      nodes: demoMemory.slice(0, 6).map((text, i) => ({
-        id: `mem:demo${i}`,
-        kind: 'episodic',
-        label: 'demo',
-        recordedAtMs: now - i * 86_400_000,
-      })),
-      edges: demoMemory.slice(1, 6).map((_, i) => ({
-        src: `mem:demo${i}`,
-        dst: `mem:demo${i + 1}`,
-        ty: 'derivedfrom',
-        weight: 1,
-      })),
-      nodeCount: 6,
-      edgeCount: 5,
-    }
-  }
-  return invoke('memory_request', { method: 'memory/graph', params: {} })
+  return bridgeCall({
+    operation: 'memory graph',
+    live: () => invoke('memory_request', { method: 'memory/graph', params: {} }),
+    preview: () => {
+      const now = Date.now()
+      return {
+        nodes: demoMemory.slice(0, 6).map((text, i) => ({
+          id: `mem:demo${i}`,
+          kind: 'episodic',
+          label: 'demo',
+          recordedAtMs: now - i * 86_400_000,
+        })),
+        edges: demoMemory.slice(1, 6).map((_, i) => ({
+          src: `mem:demo${i}`,
+          dst: `mem:demo${i + 1}`,
+          ty: 'derivedfrom',
+          weight: 1,
+        })),
+        nodeCount: 6,
+        edgeCount: 5,
+      }
+    },
+  })
 }
 
 /**
@@ -137,8 +150,10 @@ export async function memoryGraph(): Promise<MemoryGraph> {
  * preview), distinct from the flat fact list. Demo fallback in preview.
  */
 export async function memoryEpisodes(): Promise<MemoryEpisodes> {
-  if (!inTauri()) {
-    return {
+  return bridgeCall({
+    operation: 'memory episodes',
+    live: () => invoke('memory_request', { method: 'memory/episodes', params: {} }),
+    preview: () => ({
       episodes: demoMemory.slice(0, 4).map((text, i) => ({
         sessionId: `demo-${i + 1}`,
         count: 1,
@@ -146,9 +161,8 @@ export async function memoryEpisodes(): Promise<MemoryEpisodes> {
         preview: [text],
       })),
       total: 4,
-    }
-  }
-  return invoke('memory_request', { method: 'memory/episodes', params: {} })
+    }),
+  })
 }
 
 // Demo fallback (preview only — the Tauri path hits the live MemoryService).

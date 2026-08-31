@@ -449,6 +449,7 @@ impl ExecutionKernel {
                     .get("sessionId")
                     .and_then(Value::as_str)
                     .unwrap_or("default");
+                let work_id = params.get("workId").and_then(Value::as_str);
                 let objective = params
                     .get("objective")
                     .and_then(Value::as_str)
@@ -477,7 +478,20 @@ impl ExecutionKernel {
                             .collect()
                     })
                     .unwrap_or_default();
-                let ex = self.begin(trigger, session, objective, parent, policy, ctx, scope);
+                let ex = if let Some(work_id) = work_id {
+                    self.begin_named(
+                        work_id.to_string(),
+                        trigger,
+                        session,
+                        objective,
+                        parent,
+                        policy,
+                        ctx,
+                        scope,
+                    )
+                } else {
+                    self.begin(trigger, session, objective, parent, policy, ctx, scope)
+                };
                 serde_json::to_value(ex).map_err(|e| e.to_string())
             }
             "execution/transition" => {

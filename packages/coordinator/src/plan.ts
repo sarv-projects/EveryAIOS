@@ -82,6 +82,8 @@ export function draftPlanTasks(goal: string): PlanTask[] {
 
 export interface PlanExecutionParams {
   sessionId: string;
+  /** P49 canonical Work identity. */
+  workId?: string;
   planId: string;
   streamId: string;
   tasks: PlanTask[];
@@ -202,6 +204,7 @@ export async function runPlanExecution(
       await request("execution/begin", {
         trigger: "plan",
         sessionId,
+        ...(params.workId !== undefined ? { workId: params.workId } : {}),
         objective: planId,
         contextSnapshot: { sessionId, planId, streamId },
       });

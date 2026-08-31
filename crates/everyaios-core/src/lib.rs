@@ -27,6 +27,7 @@ pub mod connectors;
 pub mod decline;
 pub mod diagnose;
 pub mod distill;
+pub mod doctor;
 pub mod email;
 pub mod eval_service;
 pub mod execution;
@@ -49,6 +50,7 @@ pub mod migrate;
 pub mod migration;
 pub mod models;
 pub mod native_loop;
+pub mod openai_server;
 pub mod orphan;
 pub mod pairing;
 pub mod plan_service;
@@ -74,6 +76,7 @@ pub mod vault_key;
 pub mod version;
 pub mod voice;
 pub mod widgets;
+pub mod work_gateway;
 pub mod worker_pool;
 pub mod worktree_cap;
 pub mod wsl;
@@ -92,6 +95,11 @@ pub use challenge::{
 };
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
 pub use config::{Config, ConfigError};
+pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
+pub use openai_server::{
+    ChatCompletionRequest, ChatMessage, CompletionBackend, CompletionResult, ModelLister,
+    ModelRow, OpenAiServer,
+};
 pub use eval_service::EvalService;
 /// Backward-compat alias: [`Execution`] was renamed to [`Work`] (P47.4).
 pub use execution::Work as Execution;
@@ -143,6 +151,14 @@ pub use vault_key::{
 pub use widgets::{
     LookupWidget, MathWidget, StockQuote, StockWidget, WeatherSnapshot, WeatherWidget, WidgetCard,
     WidgetError,
+};
+pub use work_gateway::{
+    AgentLifetime, AgentSession, AttachmentRef, AuthSource, CapabilityCandidate,
+    CapabilityResolution, ClientCapabilities, ClientSession, ContextReleasePolicy, DomainEvent,
+    ExecutionNode, OperationalEvent, PresenceEvent, PtySession, ReviewItem, RunAuthority,
+    RuntimeEvent, RuntimeManifest as GatewayRuntimeManifest, SteeringInstruction,
+    TrustedGestureAttestation, WorkAddress, WorkEvent, WorkEventEnvelope, WorkGateway,
+    WorkGatewaySnapshot, WorkPresence, WorkPresenceState, WorktreeBinding,
 };
 pub use wsl::{
     detect_environment, detect_environment_from_env, translate_linux_to_windows,

@@ -182,6 +182,7 @@ export function startScheduler(
       await runChatStream(
         {
           sessionId: job.sessionId,
+          workId: job.sessionId,
           streamId,
           text: `${resume}Run scheduled task "${job.name}"${monitorDirective}`,
           surface: "automation",

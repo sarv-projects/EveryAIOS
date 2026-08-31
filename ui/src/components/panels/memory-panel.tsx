@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { mockMemory, type MemoryItem } from '@/lib/store'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 import { useDebouncedValue } from '@/lib/ux'
 import { staggerStyle } from '@/lib/stagger'
 import {
@@ -28,17 +29,17 @@ import { SkeletonBlock } from '@/components/ui/loading-state'
 import { cn } from '@/lib/utils'
 
 const CATEGORIES = [
-  { id: 'all', name: 'Coding standards', icon: Folder, count: 2 },
-  { id: 'deploy', name: 'Deployment', icon: GitBranch, count: 1 },
-  { id: 'project', name: 'Project context', icon: Folder, count: 1 },
-  { id: 'prefs', name: 'Personal prefs', icon: User, count: 1 },
-  { id: 'skills', name: 'Skills', icon: Plus, count: 0 },
+  { id: 'all', name: 'All knowledge', icon: Folder },
+  { id: 'deploy', name: 'Deployment', icon: GitBranch },
+  { id: 'project', name: 'Project context', icon: Folder },
+  { id: 'prefs', name: 'Personal prefs', icon: User },
+  { id: 'skills', name: 'Skills', icon: Plus },
 ]
 
 const STORES = [
-  { id: 'episodic', name: 'Episodic memory', icon: Brain, sub: '47 episodes' },
-  { id: 'semantic', name: 'Semantic store', icon: Network, sub: '128 facts' },
-  { id: 'graph', name: 'Knowledge graph', icon: GitBranch, sub: '14 nodes' },
+  { id: 'episodic', name: 'Episodic memory', icon: Brain },
+  { id: 'semantic', name: 'Semantic store', icon: Network },
+  { id: 'graph', name: 'Knowledge graph', icon: GitBranch },
 ]
 
 const SOURCE_TONE: Record<MemoryItem['source'], string> = {
@@ -92,12 +93,13 @@ const SKILLS = [
 ]
 
 export default function MemoryPanel() {
-  const [items, setItems] = useState(mockMemory)
+  const [items, setItems] = useState<MemoryItem[]>(inTauri() ? [] : mockMemory)
   const [activeCat, setActiveCat] = useState('all')
   const [tab, setTab] = useState('knowledge')
   const [liveFacts, setLiveFacts] = useState<MemoryFact[] | null>(null)
   const [liveGraph, setLiveGraph] = useState<MemoryGraph | null>(null)
   const [liveEpisodes, setLiveEpisodes] = useState<MemoryEpisode[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
 
   // P5.22 — the knowledge/episodic/graph tabs read the live MemoryService
@@ -106,15 +108,17 @@ export default function MemoryPanel() {
   // session). Demo fallback in preview.
   useEffect(() => {
     let alive = true
-    memoryFacts()
-      .then((s) => alive && setLiveFacts(s.facts.filter((f) => f.status === 'active')))
-      .catch(() => {})
-    memoryGraph()
-      .then((g) => alive && g.nodes.length > 0 && setLiveGraph(g))
-      .catch(() => {})
-    memoryEpisodes()
-      .then((e) => alive && e.episodes.length > 0 && setLiveEpisodes(e.episodes))
-      .catch(() => {})
+    Promise.all([memoryFacts(), memoryGraph(), memoryEpisodes()])
+      .then(([status, graph, episodes]) => {
+        if (!alive) return
+        setLiveFacts(status.facts.filter((f) => f.status === 'active'))
+        setLiveGraph(graph)
+        setLiveEpisodes(episodes.episodes)
+        setLoadError(null)
+      })
+      .catch((error) => {
+        if (alive) setLoadError(error instanceof Error ? error.message : 'Memory is unavailable')
+      })
     return () => {
       alive = false
     }
@@ -132,10 +136,25 @@ export default function MemoryPanel() {
     enabled: true,
     source: 'learned' as const,
   }))
-  const shownItems = liveFacts ? liveItems : items
+  const shownItems = liveFacts !== null ? liveItems : items
 
   const suggestions = shownItems.filter((i) => i.source === 'suggested')
   const knowledge = shownItems.filter((i) => i.source !== 'suggested')
+  const categoryCount = (id: string): number => {
+    if (id === 'all') return knowledge.length
+    if (id === 'skills') return inTauri() ? 0 : SKILLS.length
+    const name = CATEGORIES.find((category) => category.id === id)?.name
+    return knowledge.filter((item) => item.category === name).length
+  }
+  const storeSub = (id: string): string => {
+    if (id === 'episodic') {
+      return liveEpisodes !== null ? `${liveEpisodes.length} episodes` : inTauri() ? 'unavailable' : 'preview'
+    }
+    if (id === 'semantic') {
+      return liveFacts !== null ? `${liveFacts.length} facts` : inTauri() ? 'unavailable' : 'preview'
+    }
+    return liveGraph !== null ? `${liveGraph.nodes.length} nodes` : inTauri() ? 'unavailable' : 'preview'
+  }
 
   const toggleItem = (id: string) =>
     setItems((prev) =>
@@ -162,9 +181,14 @@ export default function MemoryPanel() {
             <Badge variant="secondary" className="text-[9px]">
               {shownItems.length} items
             </Badge>
-            {liveFacts && (
+            {liveFacts !== null && (
               <Badge variant="outline" className="text-[9px] text-emerald-300">
                 live store
+              </Badge>
+            )}
+            {loadError && inTauri() && (
+              <Badge variant="outline" className="text-[9px] text-red-300" title={loadError}>
+                unavailable
               </Badge>
             )}
           </div>
@@ -212,7 +236,7 @@ export default function MemoryPanel() {
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="flex-1 truncate text-left">{c.name}</span>
-                  <Badge variant="secondary" className="text-[9px]">{c.count}</Badge>
+                  <Badge variant="secondary" className="text-[9px]">{categoryCount(c.id)}</Badge>
                 </button>
               )
             })}
@@ -227,12 +251,14 @@ export default function MemoryPanel() {
               return (
                 <button
                   key={s.id}
+                  type="button"
+                  onClick={() => notify(`${s.name} selected — ${storeSub(s.id)}`)}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground/70 hover:bg-accent hover:text-foreground"
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0 text-orange-400/80" />
                   <div className="min-w-0 flex-1 text-left">
                     <div className="truncate">{s.name}</div>
-                    <div className="font-mono text-[9px] text-muted-foreground">{s.sub}</div>
+                    <div className="font-mono text-[9px] text-muted-foreground">{storeSub(s.id)}</div>
                   </div>
                 </button>
               )
@@ -242,6 +268,11 @@ export default function MemoryPanel() {
 
         {/* Right column */}
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+          {loadError && inTauri() && (
+            <div className="mx-4 mt-4 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-300">
+              Memory could not be loaded. {loadError}
+            </div>
+          )}
           <AnimatePresence mode="wait">
           <motion.div
             key={tab}
@@ -306,6 +337,8 @@ export default function MemoryPanel() {
                     <KnowledgeCard
                       item={i}
                       onToggle={() => toggleItem(i.id)}
+                      onEdit={() => notify(`Edit knowledge “${i.title}” — opens the guarded memory editor`)}
+                      onDelete={() => dismiss(i.id)}
                     />
                   </div>
                 ))}
@@ -355,7 +388,9 @@ function EpisodicTab({
             title: f.text,
             detail: `source: ${f.source} · session ${f.sessionId}`,
           }))
-        : EPISODES
+        : inTauri()
+          ? []
+          : EPISODES
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
@@ -367,10 +402,15 @@ function EpisodicTab({
           {episodes && episodes.length > 0
             ? `${episodes.length} live sessions`
             : facts && facts.length > 0
-              ? `${facts.length} live facts`
-              : `${EPISODES.length} episodes · last 7d`}
-        </span>
+              ? `${facts.length} live facts`            : inTauri()
+              ? 'no episodes'
+              : `${EPISODES.length} episodes · last 7d`}</span>
       </div>
+      {rows.length === 0 ? (
+        <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+          {inTauri() ? 'No episodic memory recorded yet.' : 'No episodes match.'}
+        </div>
+      ) : (
       <ul className="divide-y divide-border/50">
         {rows.map((e) => (
           <li key={e.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/40">
@@ -383,6 +423,7 @@ function EpisodicTab({
           </li>
         ))}
       </ul>
+      )}
     </div>
   )
 }
@@ -390,8 +431,9 @@ function EpisodicTab({
 function SemanticTab() {
   // P11.5.6 — semantic store over the live memory/* RPC (demo fallback in
   // preview). Search box (debounced) + folder organization + bulk enable.
-  const [facts, setFacts] = useState<string[]>(DEMO_FACTS.map((f) => f.fact))
+  const [facts, setFacts] = useState<string[]>(inTauri() ? [] : DEMO_FACTS.map((f) => f.fact))
   const [query, setQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const [folders, setFolders] = useState<Record<string, string>>({})
   const [disabled, setDisabled] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
@@ -402,7 +444,12 @@ function SemanticTab() {
     setLoading(true)
     void memoryRead(debounced, 20).then((r) => {
       if (!active) return
-      setFacts(r.results.length ? r.results : DEMO_FACTS.map((f) => f.fact))
+      setFacts(r.results)
+      setError(null)
+      setLoading(false)
+    }).catch((cause) => {
+      if (!active) return
+      setError(cause instanceof Error ? cause.message : 'Memory search is unavailable')
       setLoading(false)
     })
     return () => {
@@ -441,7 +488,12 @@ function SemanticTab() {
           <SkeletonBlock lines={4} />
         </div>
       )}
-      {!loading && shown.length === 0 && (
+      {error && inTauri() && !loading && (
+        <div className="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-300">
+          Memory search failed: {error}
+        </div>
+      )}
+      {!loading && !error && shown.length === 0 && (
         <div className="py-8 text-center text-xs text-muted-foreground">No memories match</div>
       )}
       {!loading &&
@@ -492,12 +544,14 @@ function GraphTab({
   // P5.22 — live mode: the real GraphStore surface (`memory/graph`: Episodic
   // nodes + session→fact DerivedFrom edges), then the facts-derived ring,
   // then the preview seed.
-  const liveGraph = graph && graph.nodes.length > 0
+  const liveGraph = graph !== null
   const nodes = liveGraph
     ? graph!.nodes.slice(0, 8).map((n) => ({ id: n.id, label: n.label || n.id }))
     : facts && facts.length > 0
       ? facts.slice(0, 8).map((f) => ({ id: f.id, label: f.text.split(/\s+/).slice(0, 3).join(' ') }))
-      : GRAPH_NODES
+      : inTauri()
+        ? []
+        : GRAPH_NODES
   const edges = liveGraph
     ? graph!.edges
         .filter((e) => nodes.some((n) => n.id === e.src) && nodes.some((n) => n.id === e.dst))
@@ -507,7 +561,9 @@ function GraphTab({
       ? facts.slice(0, 8).flatMap((f, i) =>
           i === 0 ? [] : [{ from: facts[i - 1]!.id, to: f.id, label: facts[i - 1]!.sessionId === f.sessionId ? 'episodic' : 'derived' }],
         )
-      : GRAPH_EDGES
+      : inTauri()
+        ? []
+        : GRAPH_EDGES
   const nodePos: Record<string, { x: number; y: number }> =
     liveGraph || (facts && facts.length > 0)
       ? Object.fromEntries(
@@ -516,7 +572,9 @@ function GraphTab({
             return [n.id, { x: 50 + 32 * Math.cos(angle), y: 45 + 28 * Math.sin(angle) }]
           }),
         )
-      : {
+      : inTauri()
+        ? {}
+        : {
           g1: { x: 20, y: 40 },
           g2: { x: 55, y: 25 },
           g3: { x: 82, y: 40 },
@@ -542,6 +600,11 @@ function GraphTab({
         </div>
         <span className="font-mono text-[10px] text-muted-foreground">{countLabel}</span>
       </div>
+      {nodes.length === 0 ? (
+        <div className="px-4 py-10 text-center text-xs text-muted-foreground">
+          {inTauri() ? 'No knowledge-graph data recorded yet.' : 'No graph data.'}
+        </div>
+      ) : (
       <div className="relative h-72">
         {/* edges */}
         <svg className="absolute inset-0 h-full w-full" aria-hidden>
@@ -590,11 +653,19 @@ function GraphTab({
           )
         })}
       </div>
+      )}
     </div>
   )
 }
 
 function SkillsTab() {
+  if (inTauri()) {
+    return (
+      <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-xs text-muted-foreground">
+        Installed skills will appear here when the live skills registry is available.
+      </div>
+    )
+  }
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       {SKILLS.map((s) => (
@@ -679,9 +750,13 @@ function SuggestionCard({
 function KnowledgeCard({
   item,
   onToggle,
+  onEdit,
+  onDelete,
 }: {
   item: MemoryItem
   onToggle: () => void
+  onEdit: () => void
+  onDelete: () => void
 }) {
   return (
     <div
@@ -708,12 +783,16 @@ function KnowledgeCard({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
+            type="button"
+            onClick={onEdit}
             className="flex size-7 items-center justify-center rounded-md border border-border bg-background/40 text-muted-foreground hover:text-foreground"
             aria-label="Edit knowledge"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
+            type="button"
+            onClick={onDelete}
             className="flex size-7 items-center justify-center rounded-md border border-border bg-background/40 text-muted-foreground hover:text-red-400"
             aria-label="Delete knowledge"
           >

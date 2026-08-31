@@ -1,6 +1,6 @@
 # EveryAIOS — Production UI Design Specification
 
-> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). The `ui/` tree is the **mock of the finished product** — explorable in a plain browser (`npm run dev`) with demo fallbacks, and live-wired inside Tauri. This file describes that mock as it should look at the end state (spec v3.66 — architecture frozen), not a wishlist of unbuilt chrome.
+> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). `ui/src` is the **production frontend** used by the Tauri desktop application. A plain-browser Vite run (`npm run dev`) is a clearly labelled development preview with isolated fixtures; it is not the production runtime and must never imply real files, accounts, providers, tasks, or side effects. This file describes the shipped product contract (spec v3.66 — architecture frozen), not a wishlist of unbuilt chrome.
 > **v3.57 (2026-08-26):** composer is **three independent controls** — **Agent ▾ (WHO)** · **Work Mode ▾ (WHAT: 🤖 Auto · 📐 Plan · 🔨 Build · 🔎 Research)** · **Autonomy ▾ (HOW MUCH: 🛡 Sandbox · 👀 Ask · ⚡ Auto · 🚀 Maximum)**. Default chips `[🤖 Auto] [🛡 Ask]`. Code/browser/Office/terminal are capabilities *inside Build*, never extra modes (OpenCode Plan/Build + Cowork Chat/Cowork + Hermes sandbox/ask — we did not copy their chrome). Office views are **honest engines** (block list / formula bar / slides+notes / pdf.js+ops), not Microsoft ribbon clones. Guard-2 v1 = webview + nonce. P42 Graph/Workspace rows stay **not attached**. Version badge in the title/status bars is `v3.57`.
 
 ---
@@ -84,7 +84,7 @@ Session list status: 🟠 waiting for approval · 🔵 running · 🟢 completed
 
 ### 3.5 Status bar (24px)
 
-**Casual:** one discreet pill — `● Preview · demo data` (amber, plain-browser) / `● Ready · Local` or `● Processing…` (emerald/orange live-dot) + `🛡 100% Private (On-Device)` + `EveryAIOS v3.57`.
+**Casual:** one discreet runtime pill — `● Development Preview` (amber, plain-browser) / `● Starting…` · `● Vault setup` · `● Vault locked` · `● Coordinator offline` · `● Live runtime` · `● Degraded` — plus privacy/provider details computed from live state. Never show `Ready`, `Local`, or `100% Private (On-Device)` without runtime evidence.
 **Dev mode (Settings → General → Developer Mode):** the full 12-badge telemetry strip — agent health (mark + latency + model + `auto` routing badge, hover = uptime/tasks/error-rate tooltip) · `sidecar online` · `core rust` · `db 3/14MB` · `mcp 127.0.0.1:9200` · `browser chrome (system)` · `cache 94%` · `guard · L2` · `vault · 7 keys` · `audit · append` · version.
 
 ---
@@ -237,11 +237,11 @@ Every view is a full-fidelity surface with per-view header actions (wired — se
 
 ## 8. Mock data
 
-Everything is explorable in a plain browser (`npm run dev` — `inTauri()` is false, so every bridge call falls back to its demo set):
+The visual surface is explorable in a plain browser (`npm run dev`) using explicitly labelled development fixtures. In the Tauri shell, every capability panel reads native state or shows loading, empty, unavailable, or error state; native failures never fall back to preview data:
 
 | Surface | Mock data |
 |---|---|
-| Sessions | 5 seeded (Q3 report · price scraper · router refactor · invoice batch · standup digest) with messages, steps, artifacts, an open MCQ card |
+| Sessions | Development-preview fixtures only; the Tauri shell loads encrypted-vault sessions and shows an empty state when none exist |
 | Automations | 3 demo jobs + 8 templates + 7-run history; NL create prepends a job |
 | Memory | 5 knowledge items (2 suggestions) + 6 episodes + 5 facts + 5-node graph + 6 skills |
 | Guard | 7 recent actions + 5×5 permission matrix + demo tickets + profile `balanced` |
@@ -301,7 +301,7 @@ Researched 2026-08-26 against live docs (OpenCode, OpenChamber, Claude Cowork, H
 | **OpenClaw** | Detached task ledger: queued → running → terminal; push completion. | Automations + Tasks rail (`task_ledger`). Status dots on the work queue. |
 | **Cursor / Claude Code desktop** | Parallel sessions sidebar, drag-drop panes, verbose/normal/summary. | Left recents-as-work-queue + right multi-view tabs. We do **not** rebuild an IDE (I12 is the Code rail). |
 
-The mock must always be able to answer: **who** is running (Agent), **what** kind of work (Mode), **how much** they may do without asking (Autonomy) — three questions, three controls, never mixed into one pill row.
+The production UI must always be able to answer: **who** is running (Agent), **what** kind of work (Mode), **how much** they may do without asking (Autonomy) — three questions, three controls, never mixed into one pill row.
 
 ---
 

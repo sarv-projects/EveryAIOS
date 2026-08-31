@@ -26,13 +26,11 @@ const SHORTCUTS = [
     { keys: '⌘⇧ C', action: 'Code view' },
     { keys: '⌘⇧ O', action: 'Office view' },
     { keys: '⌘⇧ P', action: 'Progress view' },
+    { keys: '⌘⇧ D', action: 'Diff view' },
+    { keys: '⌘⇧ F', action: 'Fullscreen active view' },
     { keys: '⌘⇧ T', action: 'Trajectory view' },
   ]},
   { group: 'Panels', items: [
-    { keys: '⌘⇧ A', action: 'Automations' },
-    { keys: '⌘⇧ G', action: 'Guard' },
-    { keys: '⌘⇧ M', action: 'Memory' },
-    { keys: '⌘⇧ R', action: 'Repeat last action (replay card)' },
     { keys: '⌥ Space', action: 'Quick ask (AIPointer)' },
   ]},
   { group: 'Agent', items: [
@@ -63,6 +61,8 @@ export function KeyboardShortcuts() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const toggleRail = useAppStore((s) => s.toggleRail)
   const togglePowerMode = useAppStore((s) => s.togglePowerMode)
+  const setPowerMode = useAppStore((s) => s.setPowerMode)
+  const setFullscreenView = useAppStore((s) => s.setFullscreenView)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const toggleAgentPause = useAppStore((s) => s.toggleAgentPause)
@@ -98,6 +98,7 @@ export function KeyboardShortcuts() {
       // Cmd/Ctrl + \ — viewport
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault()
+        setPowerMode(true)
         toggleRail()
         return
       }
@@ -173,6 +174,20 @@ export function KeyboardShortcuts() {
         setCenterScreen('chat')
         return
       }
+      // Cmd/Ctrl + Shift + D — diff view
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault()
+        setActiveView('diff')
+        setCenterScreen('chat')
+        return
+      }
+      // Cmd/Ctrl + Shift + F — fullscreen active lens
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setPowerMode(true)
+        setFullscreenView(true)
+        return
+      }
       // Cmd/Ctrl + Shift + T — trajectory
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault()
@@ -189,6 +204,11 @@ export function KeyboardShortcuts() {
       }
       // Escape — close overlay or pause agent
       if (e.key === 'Escape') {
+        if (useAppStore.getState().fullscreenView) {
+          e.preventDefault()
+          setFullscreenView(false)
+          return
+        }
         if (overlayOpen) {
           e.preventDefault()
           setOverlayOpen(false)
@@ -225,6 +245,8 @@ export function KeyboardShortcuts() {
     toggleSidebar,
     toggleRail,
     togglePowerMode,
+    setPowerMode,
+    setFullscreenView,
     setActiveView,
     setCenterScreen,
     toggleAgentPause,

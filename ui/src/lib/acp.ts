@@ -5,6 +5,7 @@
 // over ACP stdio and obeys the same Guard-2 ticket card.
 
 import { invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 /** Auth-mode badge (F12 — subscription / api_key / local). */
 export type AuthMode = "subscription" | "api_key" | "local";
@@ -79,18 +80,18 @@ export interface AuthenticateResult {
 
 /** The launch registry (the picker). Default = inbuilt EveryAIOS. */
 export async function acpAgents(): Promise<HarnessManifest[]> {
-  return invoke<HarnessManifest[]>("acp_agents");
+  return nativeCall('ACP agent registry', () => invoke<HarnessManifest[]>("acp_agents"));
 }
 
 /** F8 — per-agent install state (installed? version? kind?). */
 export async function acpInstallStatus(): Promise<Record<string, InstallState>> {
-  return invoke<Record<string, InstallState>>("acp_install_status");
+  return nativeCall('ACP install status', () => invoke<Record<string, InstallState>>("acp_install_status"));
 }
 
 /** F8 — plan-before-touch: resolve the plan + mint a Guard-2 ticket (or
  * auto-allow). Nothing is downloaded until `acpInstallCommit`. */
 export async function acpInstallRequest(agentId: string): Promise<InstallRequest> {
-  return invoke<InstallRequest>("acp_install_request", { agentId });
+  return nativeCall('ACP install request', () => invoke<InstallRequest>("acp_install_request", { agentId }));
 }
 
 /** F8 — the executor half: consume the (mandatory) single-use ticket and
@@ -99,7 +100,7 @@ export async function acpInstallCommit(
   agentId: string,
   ticketId: string,
 ): Promise<{ agentId: string; version: string; kind: string; binaryPath?: string }> {
-  return invoke("acp_install_commit", { agentId, ticketId });
+  return nativeCall('ACP install commit', () => invoke("acp_install_commit", { agentId, ticketId }));
 }
 
 /** Launch an agent: spawn + ACP handshake → a live handle. May report
@@ -108,7 +109,7 @@ export async function acpLaunch(
   agentId: string,
   cwd: string,
 ): Promise<AcpHandleInfo> {
-  return invoke<AcpHandleInfo>("acp_launch", { agentId, cwd });
+  return nativeCall('ACP launch', () => invoke<AcpHandleInfo>("acp_launch", { agentId, cwd }));
 }
 
 /** Drive the ACP `authenticate` flow on a live handle. Agent-type methods
@@ -118,7 +119,7 @@ export async function acpAuthenticate(
   handle: string,
   methodId: string,
 ): Promise<AuthenticateResult> {
-  return invoke<AuthenticateResult>("acp_authenticate", { handle, methodId });
+  return nativeCall('ACP authenticate', () => invoke<AuthenticateResult>("acp_authenticate", { handle, methodId }));
 }
 
 /** Drive one ACP turn. Returns the stop reason + any minted Guard-2 tickets. */
@@ -126,22 +127,22 @@ export async function acpPrompt(
   handle: string,
   text: string,
 ): Promise<AcpPromptResult> {
-  return invoke<AcpPromptResult>("acp_prompt", { handle, text });
+  return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", { handle, text }));
 }
 
 /** Interrupt the ongoing ACP turn. */
 export async function acpCancel(handle: string): Promise<void> {
-  return invoke("acp_cancel", { handle });
+  return nativeCall('ACP cancel', () => invoke("acp_cancel", { handle }));
 }
 
 /** Tear an ACP session down (kill + reap). */
 export async function acpShutdown(handle: string): Promise<boolean> {
-  return invoke<boolean>("acp_shutdown", { handle });
+  return nativeCall('ACP shutdown', () => invoke<boolean>("acp_shutdown", { handle }));
 }
 
 /** Live ACP handles. */
 export async function acpSessions(): Promise<AcpHandleInfo[]> {
-  return invoke<AcpHandleInfo[]>("acp_sessions");
+  return nativeCall('ACP sessions', () => invoke<AcpHandleInfo[]>("acp_sessions"));
 }
 
 /** P38 — the `primary_chief` default (inbuilt | ACP agent id). */
@@ -149,11 +150,11 @@ export async function chiefDefaultGet(): Promise<{
   primaryChief: string
   known: string[]
 }> {
-  return invoke<{ primaryChief: string; known: string[] }>("chief_default_get");
+  return nativeCall('chief default get', () => invoke<{ primaryChief: string; known: string[] }>("chief_default_get"));
 }
 
 /** P38 — set the `primary_chief` default. Unknown ids are refused (fail
  * closed — never a silent fallback to the inbuilt engine). */
 export async function chiefDefaultSet(primaryChief: string): Promise<string> {
-  return invoke<string>("chief_default_set", { primaryChief });
+  return nativeCall('chief default set', () => invoke<string>("chief_default_set", { primaryChief }));
 }

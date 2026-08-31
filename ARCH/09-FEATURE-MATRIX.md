@@ -1,6 +1,10 @@
 # 09 — Capability → Feature → Module Matrix (the complete derivation)
 
-> Every capability from the research corpus (docs 01–85, 282 repos) + the v2.0 matrix + the user's explicit requirements. **No scope cuts.** Status legend: 🟢 = exists (reuse from @personal-ai/core-*) · 🟡 = new (build) · 🔵 = new-in-Rust (everyaios-*) · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
+> Every capability from the research corpus (docs 01–85, 282 repos) + the v2.0 matrix + the user's explicit requirements. **No scope cuts.** Status legend: 🟢 = exists/verified · 🟡 = partial/foundation · 🔵 = new-in-Rust and wired · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
+
+## P49 Work Gateway status (2026-08-30)
+
+The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JSONL persistence/reopen, event replay and local subscription, execution linkage, core `work/*` dispatch, Tauri read commands, coordinator propagation, and UI status projection. Sandbox policy roles, fail-closed backend selection, Linux availability probing, and self-verifying SandboxReceipt lifecycle types are now implemented/tested; Linux bubblewrap command construction and process lifecycle are now implemented behind `LinuxBwrapBackend`; production availability remains fail-closed when bubblewrap is absent, while macOS/Windows backends remain open. Remaining runtime contracts: canonical audit integration, CapabilityBroker contract (opaque run-scoped handles) and the shared secret-free CapabilityInvocation metadata contract are implemented/tested; provider-stream preflight validates supplied invocation metadata against relay-issued, run-scoped grants; vault remains the secret-resolution boundary; capability-backed effect attempts now project only opaque grant IDs into Work events, and tool commits emit attempted/observed/verified Work lifecycle events, while broader connector invocation wiring remains open. Trusted gesture/context policy, real PTY/worktree/AgentSession lifecycle, remote clients, and node failover remain open.
 
 ## A. Model & BYOK layer
 

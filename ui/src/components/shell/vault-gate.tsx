@@ -5,6 +5,7 @@ import { KeyRound, Loader2, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { inTauri, invoke } from '@/lib/tauri'
 import { useAppStore } from '@/lib/store'
+import { markVaultLocked, markVaultSetup, markRuntimeBooting } from '@/lib/runtime'
 
 /** 1Password/Bitwarden/Signal rule: do not use the app until a passphrase
  * exists. Blocks the shell; cannot dismiss. */
@@ -23,11 +24,22 @@ export default function VaultGate({ children }: { children: React.ReactNode }) {
     }
     void invoke<{ needsSetup?: boolean; ok?: boolean; mode?: string }>('vault_key_status')
       .then((s) => {
-        if (s.mode === 'unlock') setGate('unlock')
-        else if (s.needsSetup || s.mode === 'setup' || s.mode === 'wrap') setGate('setup')
-        else setGate('open')
+        if (s.mode === 'unlock') {
+          markVaultLocked()
+          setGate('unlock')
+        } else if (s.needsSetup || s.mode === 'setup' || s.mode === 'wrap') {
+          markVaultSetup()
+          setGate('setup')
+        } else {
+          markRuntimeBooting()
+          setGate('open')
+        }
       })
-      .catch(() => setGate('setup'))
+      .catch((cause) => {
+        markVaultSetup('Vault status could not be verified. Create or repair the vault before continuing.')
+        setError(cause instanceof Error ? cause.message : 'Vault status could not be verified')
+        setGate('setup')
+      })
   }, [])
 
   const submit = async () => {
@@ -45,6 +57,7 @@ export default function VaultGate({ children }: { children: React.ReactNode }) {
       const cmd = gate === 'setup' ? 'vault_setup' : 'vault_unlock'
       await invoke(cmd, { passphrase: pass })
       notify(gate === 'setup' ? 'Vault created' : 'Vault unlocked')
+      markRuntimeBooting()
       setGate('open')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Vault rejected the passphrase')

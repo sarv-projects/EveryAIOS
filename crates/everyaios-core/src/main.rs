@@ -19,6 +19,29 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    // P46.2 — `everyaios doctor`: per-subsystem readiness report (spec H35).
+    // A support primitive: diagnose a broken component without a support
+    // ticket. `--json` emits the machine-readable report; the default is a
+    // human table. Exit code is 1 only when a v1-required subsystem is broken.
+    if args.iter().any(|a| a == "doctor") {
+        let json = args.iter().any(|a| a == "--json");
+        let probe = everyaios_core::LiveProbe::new(everyaios_core::default_data_dir());
+        let report = everyaios_core::run_doctor(everyaios_core::version::VERSION, &probe);
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string())
+            );
+        } else {
+            print!("{}", report.render_table());
+        }
+        return if report.exit_code() == 0 {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
+    }
+
     // P40.1 — the headless runtime profile (spec H33): the same binary, no
     // tray/UI, for the always-on executor node. The core + B7 scheduler
     // (inside the coordinator) + browser/script/office engines all run; the

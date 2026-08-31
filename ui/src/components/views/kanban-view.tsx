@@ -11,6 +11,7 @@ import { GitBranch, ShieldCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 
 export type KanbanStatus = 'pending' | 'in_progress' | 'review' | 'done' | 'blocked'
 
@@ -53,13 +54,16 @@ export function sortKanban(cards: KanbanCard[]): KanbanCard[] {
 }
 
 export default function KanbanView() {
-  const [cards, setCards] = useState<KanbanCard[]>(DEMO)
+  const [cards, setCards] = useState<KanbanCard[]>(() => (inTauri() ? [] : DEMO))
   const blueprint = useAppStore((s) => s.pendingPlan)
 
   // P11.5.10 — when a live plan exists (P6.3 plan executor), derive cards from
   // its tasks; otherwise the demo board renders so the view is explorable.
   useEffect(() => {
-    if (!blueprint?.tasks?.length) return
+    if (!blueprint?.tasks?.length) {
+      if (inTauri()) setCards([])
+      return
+    }
     const live: KanbanCard[] = blueprint.tasks.map((t, i) => ({
       id: t.id ?? `task-${i}`,
       title: t.goal ?? `Task ${i + 1}`,
@@ -89,6 +93,11 @@ export default function KanbanView() {
         <Badge variant="secondary" className="text-[9px]">worktree-per-branch</Badge>
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">{cards.length} tasks</span>
       </div>
+      {inTauri() && cards.length === 0 ? (
+        <div className="flex h-[calc(100%-28px)] items-center justify-center rounded-lg border border-dashed border-border px-6 text-center text-xs text-muted-foreground">
+          No parallel work is active. Approved plan tasks will appear here when the live work gateway reports them.
+        </div>
+      ) : (
       <div className="flex h-[calc(100%-28px)] min-w-max gap-2.5">
         {COLUMNS.map((col) => {
           const colCards = grouped.get(col.status) ?? []
@@ -142,6 +151,7 @@ export default function KanbanView() {
           )
         })}
       </div>
+      )}
     </div>
   )
 }

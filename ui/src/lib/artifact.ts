@@ -14,6 +14,7 @@
 // rest of the bridge layer.
 
 import { inTauri, invoke } from '@/lib/tauri'
+import { bridgeCall } from '@/lib/runtime'
 import {
   useAppStore,
   type ArtifactActionUi,
@@ -23,32 +24,30 @@ import {
 export async function startArtifactServer(
   workspace: string,
 ): Promise<ArtifactServerState> {
-  if (inTauri()) {
-    try {
-      const port = (await invoke('artifact_serve', {
-        workspace,
-      })) as number
-      return { port, url: `http://127.0.0.1:${port}/`, status: 'serving' }
-    } catch {
-      // fall through to the demo path
-    }
-  }
-  // Demo path — no real server in browser preview.
-  const demoPort = 4500 + Math.floor(Math.random() * 200)
-  return { port: demoPort, url: `http://127.0.0.1:${demoPort}/`, status: 'serving', demo: true }
+  return bridgeCall({
+    operation: 'artifact server start',
+    live: async () => {
+      const port = (await invoke('artifact_serve', { workspace })) as number
+      return { port, url: `http://127.0.0.1:${port}/`, status: 'serving' as const }
+    },
+    preview: () => {
+      const demoPort = 4500 + Math.floor(Math.random() * 200)
+      return { port: demoPort, url: `http://127.0.0.1:${demoPort}/`, status: 'serving' as const, demo: true }
+    },
+  })
 }
 
 export async function stopArtifactServer(port: number): Promise<void> {
-  if (inTauri()) {
-    try {
+  await bridgeCall({
+    operation: 'artifact server stop',
+    live: async () => {
       await invoke('artifact_stop', { port })
-      return
-    } catch {
-      // fall through
-    }
+    },
+    preview: () => undefined,
+  })
+  if (!inTauri()) {
+    useAppStore.getState().patchArtifactServer({ port, url: '', status: 'stopped' })
   }
-  const store = useAppStore.getState()
-  store.patchArtifactServer({ port, url: '', status: 'stopped' })
 }
 
 export function demoActionChecklist(prefix = 'q3-dashboard'): ArtifactActionUi[] {

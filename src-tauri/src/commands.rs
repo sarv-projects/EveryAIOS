@@ -14,11 +14,14 @@
 
 use crate::acp_cmds;
 use crate::agent_cmds;
+use crate::artifact_cmds;
 use crate::browser_cmds;
 use crate::catalog_cmds;
 use crate::cockpit_cmds;
 use crate::codeintel_cmds;
 use crate::desktop_cmds;
+use crate::discovery_cmds;
+use crate::doctor_cmds;
 use crate::feedback_cmds;
 use crate::fs_cmds;
 use crate::git_cmds;
@@ -30,6 +33,7 @@ use crate::mcp_cmds;
 use crate::memory_cmds;
 use crate::oauth_cmds;
 use crate::office_cmds;
+use crate::openai_cmds;
 use crate::replay_cmds;
 use crate::scheduler_cmds;
 use crate::shell_cmds;
@@ -40,6 +44,7 @@ use crate::tasks_cmds;
 use crate::trajectory_cmds;
 use crate::updater_cmds;
 use crate::vault_cmds;
+use crate::work_cmds;
 
 use crate::xlsx_cmds;
 
@@ -48,6 +53,7 @@ use crate::xlsx_cmds;
 /// `Fn(Invoke) -> bool`, which is exactly what `Builder::invoke_handler` wants.
 pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
+        crate::runtime_status,
         crate::version,
         catalog_cmds::catalog_sync_plan,
         catalog_cmds::catalog_sync_refresh,
@@ -246,5 +252,34 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         desktop_cmds::desktop_see,
         desktop_cmds::desktop_act,
         desktop_cmds::desktop_stop,
+        work_cmds::work_list,
+        work_cmds::work_snapshot,
+        work_cmds::work_events,
+        work_cmds::work_presence,
+        work_cmds::work_reviews,
+        // P49.10-12: session-runtime lifecycle (PtySession/WorktreeBinding/AgentSession).
+        work_cmds::work_pty_spawn,
+        work_cmds::work_pty_resize,
+        work_cmds::work_pty_signal,
+        work_cmds::work_pty_close,
+        work_cmds::work_pty_snapshot,
+        work_cmds::work_worktree_create,
+        work_cmds::work_worktree_attach,
+        work_cmds::work_worktree_op,
+        work_cmds::work_agent_spawn,
+        work_cmds::work_agent_op,
+        work_cmds::work_agent_sessions,
+        // P15-H29: local artifact preview server (loopback, path-floored).
+        artifact_cmds::artifact_serve,
+        artifact_cmds::artifact_stop,
+        // P46.2: everyaios doctor — per-subsystem readiness report.
+        doctor_cmds::doctor_report,
+        // P9.5: local OpenAI-compatible server (loopback + bearer token).
+        openai_cmds::openai_server_start,
+        openai_cmds::openai_server_stop,
+        openai_cmds::openai_server_status,
+        // P44.7/44.8: discovery surface + routing feed.
+        discovery_cmds::discovery_inventory,
+        discovery_cmds::routing_feed_decide,
     ]
 }

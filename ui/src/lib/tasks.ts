@@ -6,6 +6,7 @@
 // (registered at boot) — the rail re-fetches on that event, never polls.
 
 import { invoke, listen } from "./tauri";
+import { bridgeCall } from './runtime';
 
 /** Mirror of the Rust `TaskKind` serde shape. */
 export type TaskKind = "automation" | "subagent" | "acp" | "cli" | "scheduled";
@@ -90,39 +91,55 @@ const DEMO_TASKS: TaskRecord[] = [
 ];
 
 export async function tasksList(status?: string): Promise<TaskRecord[]> {
-  try {
-    const out = await invoke<unknown>("tasks_list", { status });
-    if (Array.isArray(out)) return out as TaskRecord[];
-    return DEMO_TASKS;
-  } catch {
-    return DEMO_TASKS;
-  }
+  return bridgeCall({
+    operation: 'task list',
+    live: async () => {
+      const out = await invoke<unknown>('tasks_list', { status });
+      if (!Array.isArray(out)) throw new Error('task list returned an invalid response');
+      return out as TaskRecord[];
+    },
+    preview: () => DEMO_TASKS,
+  });
 }
 
 export async function tasksShow(id: string): Promise<TaskRecord | null> {
-  try {
-    return await invoke<TaskRecord>("tasks_show", { id });
-  } catch {
-    return null;
-  }
+  return bridgeCall({
+    operation: 'task show',
+    live: async () => {
+      try {
+        return await invoke<TaskRecord>("tasks_show", { id });
+      } catch (error) {
+        // A missing task is a valid domain result; all other native failures
+        // must remain visible to the caller/runtime policy.
+        if (String(error).toLowerCase().includes('not found')) return null;
+        throw error;
+      }
+    },
+    preview: () => DEMO_TASKS.find((task) => task.id === id) ?? null,
+  });
 }
 
 export async function tasksCancel(id: string): Promise<boolean> {
-  try {
-    await invoke<unknown>("tasks_cancel", { id });
-    return true;
-  } catch {
-    return false;
-  }
+  return bridgeCall({
+    operation: 'task cancel',
+    live: async () => {
+      await invoke<unknown>("tasks_cancel", { id });
+      return true;
+    },
+    preview: () => true,
+  });
 }
 
 export async function tasksRetry(id: string): Promise<string | null> {
-  try {
-    const out = await invoke<{ id: string }>("tasks_retry", { id });
-    return out.id ?? null;
-  } catch {
-    return null;
-  }
+  return bridgeCall({
+    operation: 'task retry',
+    live: async () => {
+      const out = await invoke<{ id: string }>("tasks_retry", { id });
+      if (!out?.id) throw new Error('task retry returned no task id');
+      return out.id;
+    },
+    preview: () => id,
+  });
 }
 
 export async function tasksEnqueue(args: {
@@ -130,12 +147,15 @@ export async function tasksEnqueue(args: {
   title: string;
   requester?: string;
 }): Promise<string | null> {
-  try {
-    const out = await invoke<{ id: string }>("tasks_enqueue", args);
-    return out.id ?? null;
-  } catch {
-    return null;
-  }
+  return bridgeCall({
+    operation: 'task enqueue',
+    live: async () => {
+      const out = await invoke<{ id: string }>("tasks_enqueue", args);
+      if (!out?.id) throw new Error('task enqueue returned no task id');
+      return out.id;
+    },
+    preview: () => 'preview-task',
+  });
 }
 
 /** Push completion: fires `task-update` on every terminal transition.

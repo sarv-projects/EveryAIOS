@@ -4,6 +4,7 @@
 // explorable.
 
 import { inTauri, invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 export interface StorageHealth {
   mount: string;
@@ -49,36 +50,68 @@ export interface DupGroup {
   files: string[];
 }
 
+/** D9–D12 — a Guard-2 cleanup proposal (decision-package shape). The storage
+ * engine only ever PROPOSES; deletion runs through a Guard-2 ticket. */
+export interface CleanupProposal {
+  goal?: string;
+  summary?: string;
+  risk?: string;
+  paths?: string[];
+  bytes?: number;
+  [k: string]: unknown;
+}
+
 /** D12 — free-space health (never battery-gated). */
 export async function storageHealth(path?: string): Promise<StorageHealth> {
   if (!inTauri()) return demoHealth();
-  return invoke<StorageHealth>("storage_health", path ? { path } : undefined);
+  return nativeCall('storage health', () => invoke<StorageHealth>("storage_health", path ? { path } : undefined));
 }
 
 /** D9/D10 — scan + treemap (battery-gated on the Rust side). */
 export async function storageScan(path?: string): Promise<StorageScan> {
   if (!inTauri()) return demoScan();
-  return invoke<StorageScan>("storage_scan", path ? { path } : undefined);
+  return nativeCall('storage scan', () => invoke<StorageScan>("storage_scan", path ? { path } : undefined));
 }
 
 /** D11 — largest files (battery-gated). */
 export async function storageLargeFiles(path?: string): Promise<LargeFile[]> {
   if (!inTauri()) return demoLargeFiles();
-  const r = await invoke<{ deferred: boolean; files: LargeFile[] }>(
+  const r = await nativeCall('storage large files', () => invoke<{ deferred: boolean; files: LargeFile[] }>(
     "storage_large_files",
     path ? { path } : undefined,
-  );
+  ));
   return r.deferred ? [] : r.files;
 }
 
 /** D10 — duplicate groups (battery-gated). */
 export async function storageDuplicates(path?: string): Promise<DupGroup[]> {
   if (!inTauri()) return demoDupGroups();
-  const r = await invoke<{ deferred: boolean; groups: DupGroup[] }>(
+  const r = await nativeCall('storage duplicates', () => invoke<{ deferred: boolean; groups: DupGroup[] }>(
     "storage_duplicates",
     path ? { path } : undefined,
-  );
+  ));
   return r.deferred ? [] : r.groups;
+}
+
+/** D9–D12 — large-file cleanup proposals (Guard-2 decision packages; battery-gated). */
+export async function storageCleanupProposals(
+  path?: string,
+  topN = 10,
+): Promise<CleanupProposal[]> {
+  if (!inTauri()) return demoCleanupProposals();
+  const args: Record<string, unknown> = { topN };
+  if (path) args.path = path;
+  const r = await nativeCall('storage cleanup proposals', () => invoke<{ deferred: boolean; proposals: CleanupProposal[] }>(
+    "storage_cleanup_proposals",
+    args,
+  ));
+  return r.deferred ? [] : r.proposals;
+}
+
+/** J16 — tell the Rust side whether the device is on battery (heavy scans defer). */
+export async function storageBattery(on: boolean): Promise<void> {
+  if (!inTauri()) return;
+  await nativeCall('storage battery', () => invoke("storage_battery", { on }));
 }
 
 function bytes(v: number): string {
@@ -137,5 +170,12 @@ function demoDupGroups(): DupGroup[] {
   return [
     { size: 4000, wastedBytes: 12 * 1024, copies: 3, files: ["src/pipeline.ts", "out/pipeline.ts", "data/pipeline.ts"] },
     { size: 4.2 * 1024 ** 2, wastedBytes: 4.2 * 1024 ** 2, copies: 2, files: ["assets/logo.png", "public/logo.png"] },
+  ];
+}
+
+function demoCleanupProposals(): CleanupProposal[] {
+  return [
+    { goal: "Move raw-events.csv to review", summary: "18 MB large file, unopened 90d", risk: "medium", paths: ["data/raw-events.csv"], bytes: 18 * 1024 ** 2 },
+    { goal: "Remove duplicate logo.png", summary: "2 copies, keep newest", risk: "low", paths: ["public/logo.png"], bytes: 4.2 * 1024 ** 2 },
   ];
 }

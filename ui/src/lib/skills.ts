@@ -3,6 +3,7 @@
 // plain-language capability consent before install.
 
 import { inTauri, invoke } from "./tauri";
+import { bridgeCall } from './runtime';
 
 export interface SkillRowView {
   id: string;
@@ -16,20 +17,27 @@ export interface SkillRowView {
 }
 
 export async function skillsCatalog(): Promise<SkillRowView[]> {
-  if (!inTauri()) return demoSkills();
-  try {
-    return await invoke<SkillRowView[]>("skills_catalog");
-  } catch {
-    return demoSkills();
-  }
+  return bridgeCall({
+    operation: 'skills catalog',
+    live: () => invoke<SkillRowView[]>('skills_catalog'),
+    preview: () => demoSkills(),
+  });
 }
 
 export async function skillsInstall(id: string): Promise<{ installed: boolean }> {
-  return invoke("skills_install", { id });
+  return bridgeCall({
+    operation: 'skill install',
+    live: () => invoke("skills_install", { id }),
+    preview: () => ({ installed: true }),
+  });
 }
 
 export async function skillsUninstall(name: string): Promise<{ installed: boolean }> {
-  return invoke("skills_uninstall", { name });
+  return bridgeCall({
+    operation: 'skill uninstall',
+    live: () => invoke("skills_uninstall", { name }),
+    preview: () => ({ installed: false }),
+  });
 }
 
 function demoSkills(): SkillRowView[] {
