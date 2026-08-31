@@ -1,10 +1,8 @@
-// Live-data bridge (P0.7): when running inside the Tauri shell, replaces the
-// demo layer with real data — ACP agents + install states, spend snapshot,
-// and the chat streaming relay. In a plain-browser preview it no-ops and the
-// UI stays fully explorable on the mock dataset.
-//
-// The bridge is deliberately additive: every surface keeps its demo fallback,
-// so a missing command or a dead shell never blanks a panel.
+// Live-data bridge (P0.7): when running inside the Tauri shell, hydrates
+// real agent, usage, session, work, Guard, and chat state. In a plain-browser
+// run it remains inactive and the UI may use explicitly labelled preview fixtures.
+// Native command failures are recorded as degraded runtime state and are never
+// converted into preview data or synthetic success.
 
 import { useAppStore, type LiveBudget } from "./store";
 import {
@@ -18,6 +16,17 @@ import { acpAgents, acpInstallStatus, acpLaunch, acpPrompt, type HarnessManifest
 import { limitationFor } from "./plain-language";
 import { usageSnapshot } from "./spend";
 import { AGENTS, getModel, type AgentRuntime } from "./agents";
+import { workList, workSnapshot } from "./work";
+import {
+  markRuntimeBooting,
+  markRuntimeLive,
+  markSidecarOffline,
+  markVaultLocked,
+  markVaultSetup,
+  runtimeError,
+  setRuntimeState,
+} from "./runtime";
+import { runtimeStatus as readRuntimeStatus, type RuntimeStatus } from "./tauri";
 
 /** ACP registry id → the v2 catalog's agent id (same brain, curated skin). */
 const ACP_TO_CATALOG: Record<string, string> = {
@@ -200,146 +209,250 @@ function handleChatEvent(e: ChatWireEvent): void {
   }
 }
 
-export async function initBridge(): Promise<void> {
-  if (!inTauri()) return;
+type BridgeDisposer = () => void;
 
-  // 1. Agents — real registry + install states merged into the picker.
-  try {
-    const manifests = await acpAgents();
-    const installs = await acpInstallStatus();
-    const merged: AgentRuntime[] = AGENTS.map((a) => ({ ...a }));
-    const seen = new Set(merged.map((a) => a.id));
+// `main.tsx` mounts the bootstrap effect inside React.StrictMode. Keep one
+// shared bridge with reference-counted cleanup so setup→cleanup→setup does not
+// duplicate listeners, polling, or side effects.
+let bridgeUsers = 0;
+let bridgeStart: Promise<BridgeDisposer> | null = null;
 
-    for (const m of manifests) {
-      const catalogId = ACP_TO_CATALOG[m.id] ?? m.id;
-      const state = installs[m.id];
-      const status = state?.installed || m.id === "everyaios" ? "installed" : "available";
-      const existing = merged.find((a) => a.id === catalogId);
-      if (existing) {
-        existing.status = status;
-        existing.version = state?.version ?? existing.version;
-        existing.path = state?.binaryPath ?? existing.path;
-        existing.note = m.description;
-      } else if (!seen.has(catalogId)) {
-        const row = synthesizeAgent(m);
-        row.status = status;
-        row.version = state?.version;
-        row.path = state?.binaryPath ?? undefined;
-        merged.push(row);
-        seen.add(catalogId);
+export function initBridge(): Promise<BridgeDisposer> {
+  bridgeUsers += 1;
+  if (!bridgeStart) bridgeStart = startBridge();
+  return bridgeStart.then((dispose) => {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      bridgeUsers = Math.max(0, bridgeUsers - 1);
+      if (bridgeUsers === 0) {
+        dispose();
+        bridgeStart = null;
       }
-    }
-    useAppStore.getState().setLiveAgents(merged);
-  } catch {
-    /* preview mode — keep the demo catalog */
-  }
-
-  // 2. Spend — live budget into the composer strip.
-  try {
-    const snap = await usageSnapshot();
-    const spent = snap.byKey.reduce((s, k) => s + (k.costUsd ?? 0), 0);
-    const budget: LiveBudget = {
-      spent,
-      cap: 2,
-      tokens: snap.total.tokensIn + snap.total.tokensOut,
-      cacheHitRate: snap.cacheHitRate,
     };
-    useAppStore.getState().setLiveBudget(budget);
-    const top = snap.byKey[0];
-    if (top?.key) {
-      const st = useAppStore.getState();
-      st.noteStreamTick(0);
-      useAppStore.setState({
-        streamStats: { ...st.streamStats, activeKey: top.key },
-      });
+  });
+}
+
+async function startBridge(): Promise<BridgeDisposer> {
+  if (!inTauri()) return () => undefined;
+
+  let alive = true;
+  let hydrated = false;
+  let hydrating = false;
+  let wasSidecarReady = false;
+  let fault: string | undefined;
+  let readinessTimer: ReturnType<typeof setInterval> | undefined;
+  let guardTimer: ReturnType<typeof setInterval> | undefined;
+  let unlistenChat: (() => void) | undefined;
+  const seenTickets = new Set<string>();
+
+  const recordFault = (operation: string, error: unknown) => {
+    fault = `${operation}: ${runtimeError(error)}`;
+    setRuntimeState('degraded', fault);
+  };
+
+  const updateReadiness = async (): Promise<RuntimeStatus | null> => {
+    if (!alive) return null;
+    try {
+      const status = await readRuntimeStatus();
+      if (!alive) return status;
+      if (status.vault === 'setup') {
+        markVaultSetup();
+      } else if (status.vault === 'locked') {
+        markVaultLocked();
+      } else if (!status.sidecar) {
+        wasSidecarReady = false;
+        markSidecarOffline();
+      } else {
+        // A supervisor restart is a new live session. Rehydrate native
+        // projections and discard transient errors from the old relay.
+        if (!wasSidecarReady) {
+          hydrated = false;
+          fault = undefined;
+        }
+        wasSidecarReady = true;
+        if (status.persistence === 'ephemeral') {
+          setRuntimeState('degraded', 'Vault persistence is unavailable.');
+        } else if (fault) {
+          setRuntimeState('degraded', fault);
+        } else {
+          markRuntimeLive();
+        }
+      }
+      return status;
+    } catch (error) {
+      recordFault('runtime readiness probe', error);
+      return null;
     }
-  } catch {
-    /* demo */
-  }
+  };
 
-  // 3. Chat relay — stream real turns into the active session.
-  try {
-    void onChatEvent(handleChatEvent);
-  } catch {
-    /* demo */
-  }
-
-  try {
-    const { invoke } = await import("./tauri");
-    const listed = await invoke<{ sessions?: Array<import("./store").Session> }>("session_list");
-    // The shell owns the sessions list the moment `session_list` answers —
-    // even an empty vault means the mock seed is superseded (bugfix 3),
-    // otherwise a boot-time write would stamp demo chats into the vault.
-    useAppStore.getState().markSessionsHydrated();
-    if (listed?.sessions && listed.sessions.length > 0) {
-      useAppStore.setState({
-        sessions: listed.sessions,
-        activeSessionId: listed.sessions[0]!.id,
-      });
-    }
-  } catch {
-    /* vault locked — VaultGate handles setup */
-  }
-
-  // 4. Guard-2 tickets — poll pending approvals into the transcript as
-  //    permission cards (same ticket id the Cockpit card shows).
-  try {
-    const { guardTickets } = await import("./guard");
-    const seen = new Set<string>();
-    setInterval(async () => {
+  const loadLiveData = async () => {
+    if (!alive || hydrating) return;
+    hydrating = true;
+    fault = undefined;
+    try {
       try {
-        const tickets = await guardTickets();
-        for (const t of tickets) {
-          if (seen.has(t.ticketId)) continue;
-          seen.add(t.ticketId);
-          const st = useAppStore.getState();
-          // P44.6 — a Guard ticket arriving while a task is frozen at a
-          // lower autonomy level renders the Autonomy Limit escalation card
-          // (Do Once / Allow For This Task / Change Level) instead of the
-          // plain permission card. Elevation adjusts the task's frozen
-          // policy; the ticket itself is still resolved by the human in the
-          // dedicated guard window (never a Guard bypass).
-          const snap = st.taskSnapshot;
-          const frozenLow =
-            !!snap &&
-            snap.sessionId !== undefined &&
-            snap.sessionId === t.sessionId &&
-            (snap.autonomyLevel === "sandbox" || snap.autonomyLevel === "ask");
-          if (frozenLow) {
-            st.pushAutonomyLimit({
-              id: t.ticketId,
-              action: `${t.operation} · ${t.paths.join(", ")}`,
-              reason:
-                t.decision?.goal ??
-                `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk (frozen level ${snap.autonomyLevel})`,
-              sessionId: t.sessionId,
-            });
-          } else {
-            st.pushMcq(
-              {
-                id: t.ticketId,
-                title: `${t.operation} · ${t.paths.join(", ")}`,
-                description:
-                  t.decision?.goal ??
-                  `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk`,
-                kind: "permission",
-                approvalNonce: t.approvalNonce,
-                options: [
-                  { label: "Approve & run", value: "approve" },
-                  { label: "Reject", value: "reject" },
-                ],
-              },
-              t.sessionId,
-            );
+        const manifests = await acpAgents();
+        const installs = await acpInstallStatus();
+        const merged: AgentRuntime[] = AGENTS.map((a) => ({ ...a }));
+        const seen = new Set(merged.map((a) => a.id));
+        for (const m of manifests) {
+          const catalogId = ACP_TO_CATALOG[m.id] ?? m.id;
+          const state = installs[m.id];
+          const status = state?.installed || m.id === 'everyaios' ? 'installed' : 'available';
+          const existing = merged.find((a) => a.id === catalogId);
+          if (existing) {
+            existing.status = status;
+            existing.version = state?.version ?? existing.version;
+            existing.path = state?.binaryPath ?? existing.path;
+            existing.note = m.description;
+          } else if (!seen.has(catalogId)) {
+            const row = synthesizeAgent(m);
+            row.status = status;
+            row.version = state?.version;
+            row.path = state?.binaryPath ?? undefined;
+            merged.push(row);
+            seen.add(catalogId);
           }
         }
-      } catch {
-        /* shell may not be ready yet */
+        if (alive) useAppStore.getState().setLiveAgents(merged);
+      } catch (error) {
+        recordFault('agent registry', error);
       }
-    }, 2000);
-  } catch {
-    /* demo */
+
+      try {
+        const snap = await usageSnapshot();
+        const budget: LiveBudget = {
+          spent: snap.byKey.reduce((s, k) => s + (k.costUsd ?? 0), 0),
+          cap: 2,
+          tokens: snap.total.tokensIn + snap.total.tokensOut,
+          cacheHitRate: snap.cacheHitRate,
+        };
+        if (alive) {
+          useAppStore.getState().setLiveBudget(budget);
+          const top = snap.byKey[0];
+          if (top?.key) {
+            const st = useAppStore.getState();
+            useAppStore.setState({ streamStats: { ...st.streamStats, activeKey: top.key } });
+          }
+        }
+      } catch (error) {
+        recordFault('usage ledger', error);
+      }
+
+      try {
+        const { invoke } = await import('./tauri');
+        const listed = await invoke<{ sessions?: Array<import('./store').Session> }>('session_list');
+        if (alive) {
+          // An empty native list is authoritative. It replaces the browser
+          // seed with an empty real vault and prevents fake chats persisting.
+          useAppStore.getState().markSessionsHydrated();
+          const sessions = listed?.sessions ?? [];
+          useAppStore.setState({
+            sessions,
+            activeSessionId: sessions[0]?.id ?? '',
+          });
+        }
+      } catch (error) {
+        recordFault('session store', error);
+      }
+
+      try {
+        const items = await workList();
+        if (alive) {
+          const active = useAppStore.getState().activeSessionId;
+          const current = items.find((w) => w.sessionId === active) ?? items[0];
+          const snapshot = current ? await workSnapshot(current.workId) : null;
+          useAppStore.getState().setWorkProjection(items, snapshot?.presence, snapshot?.events);
+        }
+      } catch (error) {
+        recordFault('work gateway', error);
+      }
+
+      if (alive) {
+        const { guardTickets } = await import('./guard');
+        const pollGuard = async () => {
+          try {
+            const tickets = await guardTickets();
+            for (const t of tickets) {
+              if (!alive || seenTickets.has(t.ticketId)) continue;
+              seenTickets.add(t.ticketId);
+              const st = useAppStore.getState();
+              const snap = st.taskSnapshot;
+              const frozenLow = !!snap && snap.sessionId === t.sessionId &&
+                (snap.autonomyLevel === 'sandbox' || snap.autonomyLevel === 'ask');
+              if (frozenLow) {
+                st.pushAutonomyLimit({
+                  id: t.ticketId,
+                  action: `${t.operation} · ${t.paths.join(', ')}`,
+                  reason: t.decision?.goal ?? `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk`,
+                  sessionId: t.sessionId,
+                });
+              } else {
+                st.pushMcq({
+                  id: t.ticketId,
+                  title: `${t.operation} · ${t.paths.join(', ')}`,
+                  description: t.decision?.goal ?? `${t.operation} on ${t.paths.length} path(s) — ${t.risk} risk`,
+                  kind: 'permission',
+                  approvalNonce: t.approvalNonce,
+                  options: [
+                    { label: 'Approve & run', value: 'approve' },
+                    { label: 'Reject', value: 'reject' },
+                  ],
+                }, t.sessionId);
+              }
+            }
+          } catch (error) {
+            recordFault('Guard-2 ticket poll', error);
+          }
+        };
+        await pollGuard();
+        guardTimer = setInterval(() => void pollGuard(), 2000);
+      }
+      hydrated = true;
+      if (alive) {
+        const status = await readRuntimeStatus().catch(() => null);
+        if (status?.vault === 'ready' && status.sidecar && !fault && status.persistence !== 'ephemeral') {
+          markRuntimeLive();
+        }
+      }
+    } finally {
+      hydrating = false;
+    }
+  };
+
+  markRuntimeBooting();
+  try {
+    // Tauri events are process-wide. Attach exactly once for this bridge
+    // lifetime; sidecar restarts reuse the same event channel and must not
+    // create duplicate transcript updates.
+    unlistenChat = await onChatEvent(handleChatEvent);
+    if (!alive) {
+      unlistenChat();
+      unlistenChat = undefined;
+    }
+  } catch (error) {
+    recordFault('chat event listener', error);
   }
+  const initial = await updateReadiness();
+  if (initial?.vault === 'ready' && initial.sidecar) {
+    await loadLiveData();
+  }
+  readinessTimer = setInterval(() => {
+    void updateReadiness().then((status) => {
+      if (status?.vault === 'ready' && status.sidecar && !hydrated) void loadLiveData();
+    });
+  }, 2000);
+
+  return () => {
+    alive = false;
+    if (readinessTimer) clearInterval(readinessTimer);
+    if (guardTimer) clearInterval(guardTimer);
+    unlistenChat?.();
+    unlistenChat = undefined;
+    seenTickets.clear();
+  };
 }
 
 const CATALOG_TO_ACP: Record<string, string> = {

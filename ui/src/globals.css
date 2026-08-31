@@ -45,6 +45,13 @@
   --color-surface-1: hsl(var(--surface-1));
   --color-surface-2: hsl(var(--surface-2));
   --color-surface-3: hsl(var(--surface-3));
+  /* Keep legacy utility names on the spec's semantic palette. */
+  --color-orange-500: hsl(var(--brand));
+  --color-orange-600: hsl(var(--brand-hover));
+  --color-blue-500: hsl(var(--info));
+  --color-emerald-500: hsl(var(--success));
+  --color-amber-500: hsl(var(--warning));
+  --color-red-500: hsl(var(--danger));
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

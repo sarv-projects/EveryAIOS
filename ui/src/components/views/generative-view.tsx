@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { inTauri } from '@/lib/tauri'
 import {
   ArtifactCard,
   DescriptorRenderer,
@@ -40,14 +41,14 @@ const DEMO_MERMAID = `flowchart LR
   I --> J[Audit receipt]`
 
 export default function GenerativeView() {
-  const [tab, setTab] = useState<'demo' | 'empty'>('demo')
+  const [tab, setTab] = useState<'demo' | 'empty'>(() => (inTauri() ? 'empty' : 'demo'))
 
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs font-medium text-foreground">Generative UI</span>
         <Badge variant="secondary" className="text-[9px]">agent-emitted surfaces</Badge>
-        <div className="ml-auto flex gap-1">
+        {!inTauri() && <div className="ml-auto flex gap-1">
           {(['demo', 'empty'] as const).map((t) => (
             <button
               key={t}
@@ -61,10 +62,10 @@ export default function GenerativeView() {
               {t === 'demo' ? 'Demo bundle' : 'Empty state'}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
 
-      {tab === 'empty' ? (
+      {tab === 'empty' || inTauri() ? (
         <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
           <p className="font-mono text-[11px] text-muted-foreground">
             No live artifacts yet. Agent-emitted HTML / descriptors / Mermaid

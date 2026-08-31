@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { OfficeOpenBar } from './office-open-bar'
 import OfficeFileSwitcher from './office-file-switcher'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 import { pptxOpen, pptxNotes, officeOpenExternal, isOfficeFloorError, type PptxPayload } from '@/lib/office'
 
 const SLIDES = [
@@ -50,7 +51,7 @@ export default function OfficePptxView() {
         <div className="flex items-center gap-2">
           <Presentation className="h-4 w-4 text-orange-400" />
           <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
-            {payload?.path ?? 'quarterly-deck.pptx'}
+            {payload?.path ?? (inTauri() ? 'No presentation open' : 'quarterly-deck.pptx')}
           </span>
           {payload ? (
             <Badge variant="outline" className="text-[10px] text-emerald-300">
@@ -62,7 +63,7 @@ export default function OfficePptxView() {
               className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
             >
               <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
-              demo
+              {inTauri() ? 'no file open' : 'preview'}
             </Badge>
           )}
         </div>
@@ -110,8 +111,13 @@ export default function OfficePptxView() {
                 </pre>
               </div>
             )}
-            {!payload && <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />}
-            {!payload && (
+            {!payload && !inTauri() && <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />}
+            {!payload && inTauri() && (
+              <div className="flex h-full items-center justify-center p-8 text-center text-xs text-muted-foreground">
+                Open a real presentation to view slides and speaker notes.
+              </div>
+            )}
+            {!payload && !inTauri() && (
             <div className="flex h-full flex-col p-8">
               <Badge
                 variant="secondary"
@@ -167,7 +173,7 @@ export default function OfficePptxView() {
               <ChevronLeft className="h-4 w-4" />
             </button>
             <span className="font-mono text-[10px] text-muted-foreground">
-              {payload ? payload.slides[current]?.part : 'Editing text box · "Revenue: $1.8M (+20%)"'}
+              {payload ? payload.slides[current]?.part : inTauri() ? 'No presentation open' : 'Editing text box · "Revenue: $1.8M (+20%)"'}
             </span>
             <button
               onClick={() =>
@@ -192,6 +198,8 @@ export default function OfficePptxView() {
               <p className="whitespace-pre-wrap text-foreground/80">
                 {notes.find((n) => n.slide === current + 1)?.talk || 'No speaker notes for this slide'}
               </p>
+            ) : inTauri() ? (
+              <p>Speaker notes unavailable until a real presentation is open.</p>
             ) : (
               <>
                 <div className="mb-1 text-[9px] uppercase tracking-wide text-orange-300">
@@ -213,7 +221,7 @@ export default function OfficePptxView() {
 
       <div className="border-t border-border bg-zinc-900/60 px-3 py-2">
         <div className="flex gap-2 overflow-x-auto scroll-thin">
-          {(payload ? payload.slides : SLIDES).map((s, i) => (
+          {(payload ? payload.slides : inTauri() ? [] : SLIDES).map((s, i) => (
             <button
               key={i}
               onClick={() => setCurrent(i)}

@@ -1,6 +1,6 @@
-// Tauri IPC bridge (P0.7). `invoke` proxies the Tauri v2 command bridge; in a
-// plain-browser preview (vite dev without the shell) it throws, and callers
-// fall back to demo data so the UI is still explorable.
+// Tauri IPC bridge (P0.7). `invoke` proxies the Tauri v2 command bridge.
+// Preview fixtures are selected explicitly by each bridge; a native rejection
+// is never converted into preview data or success.
 //
 // P1.4: chat streaming — `chat_stream` dispatches a turn through the Rust core
 // (→ coordinator engine → broker), and `chat-event` emits carry the streamed
@@ -151,6 +151,17 @@ export async function onChatEvent(
   cb: (e: ChatWireEvent) => void,
 ): Promise<() => void> {
   return listen<ChatWireEvent>("chat-event", (event) => cb(event.payload));
+}
+
+export interface RuntimeStatus {
+  vault: 'ready' | 'setup' | 'locked' | 'unknown'
+  sidecar: boolean
+  persistence: 'durable' | 'ephemeral' | 'unknown'
+}
+
+/** Read-only shell readiness probe used by the canonical runtime state. */
+export async function runtimeStatus(): Promise<RuntimeStatus> {
+  return invoke<RuntimeStatus>('runtime_status')
 }
 
 // ---------------------------------------------------------------------------

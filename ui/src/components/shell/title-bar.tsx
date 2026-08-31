@@ -21,6 +21,7 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeft,
+  PanelRight,
   Sun,
   Moon,
   Settings,
@@ -66,7 +67,13 @@ export function TitleBar() {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
   const powerMode = useAppStore((s) => s.powerMode)
+  const togglePowerMode = useAppStore((s) => s.togglePowerMode)
+  const notify = useAppStore((s) => s.notify)
+  const liveBudget = useAppStore((s) => s.liveBudget)
   const { theme, toggle } = useTheme()
+  const spent = liveBudget?.spent ?? active?.spent ?? 0
+  const cap = liveBudget?.cap ?? 5
+  const tokens = liveBudget?.tokens ?? active?.tokens ?? 0
 
   return (
     <header className="drag-region h-9 shrink-0 border-b border-border bg-sidebar/80 backdrop-blur-xl flex items-center px-2 gap-2 no-select">
@@ -93,7 +100,12 @@ export function TitleBar() {
 
       {/* Workspace + session title */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <button className="no-drag hover:bg-accent rounded-md px-2 py-0.5 flex items-center gap-1 hover:text-foreground transition-colors">
+        <button
+          type="button"
+          onClick={() => notify('Workspace menu — everyaios / work')}
+          className="no-drag hover:bg-accent rounded-md px-2 py-0.5 flex items-center gap-1 hover:text-foreground transition-colors"
+          aria-label="Open workspace menu"
+        >
           <span className="font-medium text-foreground">everyaios</span>
           <span className="text-muted-foreground/60">/</span>
           <span>work</span>
@@ -141,15 +153,34 @@ export function TitleBar() {
           <TooltipTrigger asChild>
             <button
               type="button"
+              onClick={togglePowerMode}
+              aria-pressed={powerMode}
+              aria-label={powerMode ? 'Switch to casual mode' : 'Switch to power mode'}
+              className={cn(
+                'no-drag flex h-6 items-center gap-1 rounded-md border px-2 font-mono text-[10.5px] transition-colors',
+                powerMode
+                  ? 'border-orange-500/40 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+                  : 'border-border bg-background/40 text-muted-foreground hover:bg-accent hover:text-foreground',
+              )}
+            >
+              <PanelRight className="h-3 w-3" />
+              {powerMode ? 'Power' : 'Casual'}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {powerMode ? 'Hide cockpit views (⌘.)' : 'Show cockpit views and advanced controls (⌘.)'}
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
               onClick={() => useAppStore.getState().setCenterScreen('guard')}
               className="no-drag flex h-6 items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 font-mono text-[10.5px] hover:bg-emerald-500/20"
             >
               <ShieldCheck className="h-3 w-3 text-emerald-400" />
-              {powerMode ? (
-                <span className="text-emerald-300">Guard · Standard</span>
-              ) : (
-                <span className="text-emerald-300">Guard · Standard</span>
-              )}
+              <span className="text-emerald-300">Guard · Standard</span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -160,14 +191,14 @@ export function TitleBar() {
         {powerMode && (
           <>
             <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-orange-500/30 bg-orange-500/10 text-[10.5px] font-mono">
-              <span className="text-orange-300">$1.84</span>
+              <span className="text-orange-300">${spent.toFixed(2)}</span>
               <span className="text-muted-foreground/60">/</span>
-              <span className="text-muted-foreground">$5.00</span>
+              <span className="text-muted-foreground">${cap.toFixed(2)}</span>
             </div>
 
             <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-border bg-background/40 text-[10.5px] font-mono">
               <Activity className="h-3 w-3 text-blue-400" />
-              <span className="text-muted-foreground">184K tok</span>
+              <span className="text-muted-foreground">{Math.round(tokens / 1000)}K tok</span>
             </div>
           </>
         )}

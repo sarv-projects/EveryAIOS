@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { inTauri } from '@/lib/tauri'
 
 type NotificationKind =
   | 'info'
@@ -142,7 +143,7 @@ function relativeTime(ts: number): string {
 
 export function NotificationsPopover() {
   const [open, setOpen] = useState(false)
-  const [items, setItems] = useState<AppNotification[]>(INITIAL_NOTIFICATIONS)
+  const [items, setItems] = useState<AppNotification[]>(() => (inTauri() ? [] : INITIAL_NOTIFICATIONS))
 
   // Close on Escape
   useEffect(() => {

@@ -244,6 +244,7 @@ export function SyncSection() {
   const [target, setTarget] = useState('192.168.1.42:47615')
   const [busy, setBusy] = useState(false)
   const [last, setLast] = useState<string | null>(null)
+  const [bundlePath, setBundlePath] = useState('~/everyaios-sync.bundle')
 
   async function refreshDevice() {
     if (!inTauri()) return
@@ -315,6 +316,27 @@ export function SyncSection() {
       setLast('keypair rotated — old bundles unreadable')
     } catch (e) { notify(String(e)) } finally { setBusy(false) }
   }
+  async function handleExportBundle() {
+    if (!inTauri()) { notify('requires desktop shell'); return }
+    if (!bundlePath.trim()) { notify('enter a bundle file path'); return }
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<{ path: string; items: number; live: number }>('sync_export_bundle', { path: bundlePath.trim() })
+      setLast(`exported ${r.items} items (${r.live} live) → ${r.path}`)
+    } catch (e) { notify(String(e)) } finally { setBusy(false) }
+  }
+  async function handleImportBundle() {
+    if (!inTauri()) { notify('requires desktop shell'); return }
+    if (!bundlePath.trim()) { notify('enter a bundle file path'); return }
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<{ applied: number; pushed: number; conflicts: number; live: number }>('sync_import_bundle', { path: bundlePath.trim() })
+      setLast(`imported — applied ${r.applied}, push ${r.pushed}, conflicts ${r.conflicts}, live ${r.live}`)
+      await refreshDevice()
+    } catch (e) { notify(String(e)) } finally { setBusy(false) }
+  }
 
   return (
     <SectionShell title="Sync" desc="E2E-encrypted mirror — bundle + live TCP (LAN / Tailscale, port 47615, explicit trigger)">
@@ -355,8 +377,86 @@ export function SyncSection() {
         <Row label="Keypair" desc="Rotate re-keys the mirror (old bundles become unreadable)">
           <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handleRotate}>Rotate</Button>
         </Row>
+        <Row label="Bundle file" desc="Encrypted export/import over the file seam — USB, LAN share, backup (no network)">
+          <div className="flex items-center gap-2">
+            <Input value={bundlePath} onChange={(e) => setBundlePath(e.target.value)} placeholder="~/everyaios-sync.bundle" className="h-7 w-56 font-mono text-xs" />
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handleExportBundle}>Export</Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handleImportBundle}>Import</Button>
+          </div>
+        </Row>
         {last && <p className="text-xs text-muted-foreground">{last}</p>}
-        <p className="text-[10px] text-muted-foreground">Bundles: export/import via the file seam remains (USB / LAN share). Live transport is TCP-only, default 47615, no discovery.</p>
+        <p className="text-[10px] text-muted-foreground">Live transport is TCP-only, default 47615, no discovery. Bundles are E2E-encrypted with your device key — a rotated keypair makes old bundles unreadable.</p>
+      </div>
+    </SectionShell>
+  )
+}
+
+
+// === Doctor (P46.2 — H35 support primitive) ===
+export function DoctorSection() {
+  const [report, setReport] = useState<import('@/lib/doctor').DoctorReport | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function run() {
+    setLoading(true)
+    try {
+      const { doctorReport } = await import('@/lib/doctor')
+      setReport(await doctorReport())
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void run()
+  }, [])
+
+  const glyph = (s: string) => (s === 'ok' ? '✓' : s === 'warn' ? '⚠' : '✕')
+  const tone = (s: string) =>
+    s === 'ok' ? 'text-emerald-400' : s === 'warn' ? 'text-amber-400' : 'text-red-400'
+
+  return (
+    <SectionShell title="Doctor" desc="Per-subsystem readiness — a broken component is diagnosed, not a support ticket (everyaios doctor)">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={loading} onClick={run}>
+            {loading ? 'Checking…' : 'Re-run checks'}
+          </Button>
+          {report && (
+            <span className={`text-xs font-medium ${tone(report.overall)}`}>
+              {glyph(report.overall)}{' '}
+              {report.overall === 'ok'
+                ? 'All subsystems ready'
+                : report.overall === 'warn'
+                  ? 'Ready with warnings'
+                  : 'A required subsystem is broken'}
+            </span>
+          )}
+          {report && (
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">{report.version}</span>
+          )}
+        </div>
+        <ul className="divide-y divide-border/40 rounded-md border border-border/50 bg-background/30">
+          {(report?.checks ?? []).map((c) => (
+            <li key={c.name} className="px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className={`w-4 shrink-0 text-center font-mono text-sm ${tone(c.status)}`}>
+                  {glyph(c.status)}
+                </span>
+                <span className="w-32 shrink-0 text-xs font-medium text-foreground">{c.name}</span>
+                <span className="flex-1 text-[11px] text-muted-foreground">{c.detail}</span>
+              </div>
+              {c.hint && (
+                <div className="ml-6 mt-0.5 text-[10px] text-amber-300/80">↳ {c.hint}</div>
+              )}
+            </li>
+          ))}
+        </ul>
+        <p className="text-[10px] text-muted-foreground">
+          Also available on the terminal: <code className="font-mono">everyaios doctor</code> (add{' '}
+          <code className="font-mono">--json</code> for machine output). Credentials are reported as a
+          count only — never a value.
+        </p>
       </div>
     </SectionShell>
   )

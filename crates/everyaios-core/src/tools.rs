@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use everyaios_audit::{merkle::MerkleChain, AuditEvent};
+use everyaios_guard::CapabilityBroker;
 use everyaios_guard::{
     bind_exec_bytes, bind_path, bind_url, open_parent_dir,
     pathfloor::{enforce_floor, FloorVerdict},
@@ -755,6 +756,8 @@ pub struct ToolService {
     desktop: Option<Arc<dyn DesktopBackend>>,
     /// P48.3 — optional connector-write engine (`connector.*` tools).
     connector: Option<Arc<dyn ConnectorToolBackend>>,
+    /// P49.7 — optional opaque capability broker for connector authorization.
+    capabilities: Option<Arc<Mutex<everyaios_guard::LocalCapabilityBroker>>>,
     /// P48.3 — attached external MCP servers (user-supplied tools).
     external: Vec<ExternalAttachment>,
     /// G8 cascade (cache → SearXNG → DDG).
@@ -804,6 +807,7 @@ impl ToolService {
             browser: None,
             desktop: None,
             connector: None,
+            capabilities: None,
             external: Vec::new(),
             search: everyaios_search::G8Cascade::default(),
             search_transport: Arc::new(UreqSearchTransport),
@@ -833,6 +837,15 @@ impl ToolService {
     /// email/calendar writes.
     pub fn attach_connector(&mut self, connector: Arc<dyn ConnectorToolBackend>) {
         self.connector = Some(connector);
+    }
+
+    /// Attach the relay-owned capability broker. The broker validates opaque
+    /// grants; connector backends still own all credential resolution.
+    pub fn attach_capability_broker(
+        &mut self,
+        capabilities: Arc<Mutex<everyaios_guard::LocalCapabilityBroker>>,
+    ) {
+        self.capabilities = Some(capabilities);
     }
 
     /// P48.3 — attach an external MCP server whose tools were reconciled into
@@ -1076,6 +1089,28 @@ impl ToolService {
 
         if !spec.read_only && ticket_id.is_empty() {
             return Err("mutating tool requires a consumed ticket".into());
+        }
+
+        if matches!(spec.family, ToolFamily::Connector) {
+            let grant_id = str_param(params, "capabilityGrantId")
+                .ok_or("connector tool requires capabilityGrantId")?;
+            let run_id = str_param(params, "runId")
+                .or_else(|| str_param(params, "executionId"))
+                .ok_or("connector tool requires runId")?;
+            let request = everyaios_guard::CapabilityRequest {
+                run_id: run_id.to_string(),
+                capability: format!("connector:{}", spec.id),
+                operation: spec.operation.clone(),
+            };
+            let broker = self
+                .capabilities
+                .as_ref()
+                .ok_or("capability broker not attached")?;
+            broker
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .invoke(grant_id, &request)
+                .map_err(|e| format!("capability grant refused: {e}"))?;
         }
 
         let already = params

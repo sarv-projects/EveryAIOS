@@ -4,7 +4,6 @@ import * as React from 'react'
 import {
   CheckCircle2,
   ChevronDown,
-  Bot,
   Circle,
   Clock,
   Cog,
@@ -282,13 +281,6 @@ export function LeftSidebar() {
           badge={automations ? String(automations) : undefined}
           active={centerScreen === 'automations'}
           onClick={() => setCenterScreen('automations')}
-        />
-        <NavItem
-          icon={Bot}
-          label="Agents"
-          collapsed={collapsed}
-          active={centerScreen === 'agents'}
-          onClick={() => setCenterScreen('agents')}
         />
       </nav>
 

@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
+use everyaios_guard::CapabilityBroker;
 use everyaios_vault::{
     assemble_tool_calls, extract_json_tool_calls, Broker, LocalEndpoint, Vault,
     DEFAULT_SESSION_BUDGET_USD,
@@ -233,6 +234,10 @@ pub struct ChatRelay<W, R> {
     evals: Arc<Mutex<EvalService>>,
     /// H3 unified execution kernel.
     executions: Arc<Mutex<ExecutionKernel>>,
+    /// P49 V1-local Work Gateway projection and event journal.
+    work_gateway: Arc<Mutex<crate::work_gateway::WorkGateway>>,
+    /// P49.7 capability grants; secrets remain exclusively in the vault.
+    capabilities: Arc<Mutex<everyaios_guard::LocalCapabilityBroker>>,
     /// H3 data egress engine.
     egress: Arc<Mutex<everyaios_guard::EgressEngine>>,
     /// P43 (B7 v3.53): the detached-work task ledger (BackgroundTaskRecord
@@ -271,11 +276,14 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let egress = Arc::new(Mutex::new(everyaios_guard::EgressEngine::new(
             everyaios_guard::ConnectivityMode::ThirdParty,
         )));
-        let tools = Arc::new(Mutex::new(ToolService::new_with_egress(
+        let capabilities = Arc::new(Mutex::new(everyaios_guard::LocalCapabilityBroker::new()));
+        let mut tool_service = ToolService::new_with_egress(
             Arc::clone(&guard),
             crate::default_data_dir().join("workspace"),
             Arc::clone(&egress),
-        )));
+        );
+        tool_service.attach_capability_broker(Arc::clone(&capabilities));
+        let tools = Arc::new(Mutex::new(tool_service));
         Self {
             link,
             vault,
@@ -289,6 +297,11 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             tools,
             evals: Arc::new(Mutex::new(EvalService::new())),
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
+            work_gateway: Arc::new(Mutex::new(
+                crate::work_gateway::WorkGateway::open_default()
+                    .unwrap_or_else(|_| crate::work_gateway::WorkGateway::new()),
+            )),
+            capabilities,
             egress,
             tasks: Arc::new(Mutex::new(crate::task_ledger::TaskLedger::new(Box::new(
                 crate::task_ledger::InMemoryStore::new(),
@@ -301,6 +314,32 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// Unified execution kernel (chat / plan / scheduler / ACP).
     pub fn executions(&self) -> Arc<Mutex<crate::execution::ExecutionKernel>> {
         Arc::clone(&self.executions)
+    }
+
+    /// P49 local Work Gateway handle.
+    pub fn work_gateway(&self) -> Arc<Mutex<crate::work_gateway::WorkGateway>> {
+        Arc::clone(&self.work_gateway)
+    }
+
+    /// Authorize and durably record the beginning of a capability-backed
+    /// effect. Only the opaque grant id is projected into Work events; no
+    /// credential material crosses this boundary.
+    pub fn record_capability_effect(
+        &self,
+        work_id: &str,
+        effect_id: &str,
+        request: everyaios_guard::CapabilityRequest,
+        grant_id: &str,
+    ) -> Result<(), String> {
+        self.capabilities
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .invoke(grant_id, &request)
+            .map_err(|e| e.to_string())?;
+        self.work_gateway
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .record_effect_with_grant(work_id, effect_id, "attempted", "", Some(grant_id))
     }
 
     /// The memory service handle (tests + the Tauri `usage_snapshot` command
@@ -419,6 +458,8 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let tools = Arc::clone(&self.tools);
         let evals = Arc::clone(&self.evals);
         let executions = Arc::clone(&self.executions);
+        let work_gateway = Arc::clone(&self.work_gateway);
+        let capabilities = Arc::clone(&self.capabilities);
         let egress = Arc::clone(&self.egress);
         let tasks = Arc::clone(&self.tasks);
         let agui = self.agui.clone();
@@ -438,8 +479,10 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         let vault2 = Arc::clone(&vault);
                         let base2 = Arc::clone(&base_urls);
                         let local2 = Arc::clone(&local_endpoints);
+                        let capabilities2 = Arc::clone(&capabilities);
                         std::thread::spawn(move || {
-                            let _ = stream_provider(vault2, base2, local2, params, w2);
+                            let _ =
+                                stream_provider(vault2, base2, local2, capabilities2, params, w2);
                         });
                     }
                     // ARCH/05 durable-observation seam: the coordinator
@@ -629,7 +672,64 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     }
                     method if method.starts_with("tool/") => {
                         let mut svc = tools.lock().unwrap_or_else(|e| e.into_inner());
-                        match svc.handle(method, &params) {
+                        let effect_id = params
+                            .get("effectId")
+                            .and_then(|v| v.as_str())
+                            .or_else(|| params.get("ticketId").and_then(|v| v.as_str()))
+                            .unwrap_or("")
+                            .to_string();
+                        let work_id = params.get("workId").and_then(|v| v.as_str());
+                        let grant_id = params.get("capabilityGrantId").and_then(|v| v.as_str());
+                        if method == "tool/commit" && !effect_id.is_empty() {
+                            if let Some(work_id) = work_id {
+                                let _ = work_gateway
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .record_effect_with_grant(
+                                        work_id,
+                                        &effect_id,
+                                        "attempted",
+                                        "",
+                                        grant_id,
+                                    );
+                            }
+                        }
+                        let result = svc.handle(method, &params);
+                        if method == "tool/commit" && !effect_id.is_empty() {
+                            if let Some(work_id) = work_id {
+                                let mut gateway =
+                                    work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                                match &result {
+                                    Ok(out) => {
+                                        let ok = out
+                                            .get("ok")
+                                            .and_then(|v| v.as_bool())
+                                            .unwrap_or(false);
+                                        let outcome = out
+                                            .get("state")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or(if ok { "ok" } else { "failed" });
+                                        let _ = gateway.record_effect(
+                                            work_id, &effect_id, "observed", outcome,
+                                        );
+                                        let _ = gateway.record_effect(
+                                            work_id,
+                                            &effect_id,
+                                            "verified",
+                                            if ok { "true" } else { "false" },
+                                        );
+                                    }
+                                    Err(error) => {
+                                        let _ = gateway
+                                            .record_effect(work_id, &effect_id, "observed", error);
+                                        let _ = gateway.record_effect(
+                                            work_id, &effect_id, "verified", "false",
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        match result {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
@@ -649,9 +749,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             }
                         }
                     }
-                    method if method.starts_with("execution/") => {
-                        let mut svc = executions.lock().unwrap_or_else(|e| e.into_inner());
-                        match svc.handle(method, &params) {
+                    method if method.starts_with("work/") => {
+                        let mut gateway = work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                        match handle_work_gateway(&mut gateway, method, &params) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
@@ -659,6 +759,126 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 let _ = writer.reply_error(id, &e);
                             }
                         }
+                    }
+                    method if method.starts_with("execution/") => {
+                        let mut svc = executions.lock().unwrap_or_else(|e| e.into_inner());
+                        let result = svc.handle(method, &params);
+                        if let Ok(out) = &result {
+                            if method == "execution/record_approval" {
+                                if let (Some(work_id), Some(ticket_id), Some(approved)) = (
+                                    params.get("workId").and_then(|v| v.as_str()),
+                                    params.get("ticketId").and_then(|v| v.as_str()),
+                                    params.get("approved").and_then(|v| v.as_bool()),
+                                ) {
+                                    let _ = work_gateway
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .record_approval(work_id, ticket_id, approved);
+                                }
+                            }
+                            if method == "execution/attach_receipt" {
+                                if let (Some(work_id), Some(receipt_id)) = (
+                                    params.get("workId").and_then(|v| v.as_str()),
+                                    params.get("receiptId").and_then(|v| v.as_str()),
+                                ) {
+                                    let _ = work_gateway
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .record_artifact(work_id, receipt_id, true);
+                                }
+                            }
+                            if method == "execution/begin" {
+                                if let (Some(work_id), Some(execution_id)) = (
+                                    params.get("workId").and_then(|v| v.as_str()),
+                                    out.get("id").and_then(|v| v.as_str()),
+                                ) {
+                                    let _ = work_gateway
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .bind_execution(work_id, execution_id);
+                                }
+                            }
+                            if method == "execution/transition" {
+                                if let (Some(work_id), Some(execution_id), Some(state)) = (
+                                    params.get("workId").and_then(|v| v.as_str()),
+                                    params.get("id").and_then(|v| v.as_str()),
+                                    params.get("state").and_then(|v| v.as_str()),
+                                ) {
+                                    let _ = work_gateway
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .record_execution_transition(work_id, execution_id, state);
+                                }
+                            }
+                        }
+                        match result {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
+                    }
+                    "capability/allow" => {
+                        let run_id = params.get("runId").and_then(|v| v.as_str()).unwrap_or("");
+                        let scopes = params
+                            .get("capabilities")
+                            .and_then(|v| v.as_array())
+                            .map(|items| {
+                                items
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(str::to_string))
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        if run_id.is_empty() || scopes.is_empty() {
+                            let _ = writer.reply_error(id, "runId and capabilities are required");
+                        } else {
+                            capabilities
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .allow_for_run(run_id, scopes);
+                            let _ = writer.reply(id, serde_json::json!({ "ok": true }));
+                        }
+                    }
+                    "capability/authorize" => {
+                        let request: Result<everyaios_guard::CapabilityRequest, _> =
+                            serde_json::from_value(params.clone());
+                        let ttl = params
+                            .get("ttlMs")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(60_000);
+                        match request {
+                            Ok(request) => match capabilities
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .authorize(request, ttl)
+                            {
+                                Ok(grant) => {
+                                    let _ = writer.reply(
+                                        id,
+                                        serde_json::to_value(grant)
+                                            .unwrap_or_else(|_| serde_json::json!({})),
+                                    );
+                                }
+                                Err(e) => {
+                                    let _ = writer.reply_error(id, &e.to_string());
+                                }
+                            },
+                            Err(e) => {
+                                let _ = writer
+                                    .reply_error(id, &format!("invalid capability request: {e}"));
+                            }
+                        }
+                    }
+                    "capability/revoke" => {
+                        let grant_id = params.get("grantId").and_then(|v| v.as_str()).unwrap_or("");
+                        let revoked = capabilities
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .revoke(grant_id);
+                        let _ = writer.reply(id, serde_json::json!({ "revoked": revoked }));
                     }
                     "capability/manifest" => {
                         let commit = params.get("commit").and_then(|c| c.as_str()).unwrap_or("");
@@ -708,6 +928,21 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             }
                             _ => {
                                 let _ = writer.reply_error(id, "method not found");
+                            }
+                        }
+                    }
+                    // P49.10–12: session-runtime lifecycle. The agent loop
+                    // drives PtySession / WorktreeBinding / AgentSession as
+                    // first-class tools; the gateway owns the durable state +
+                    // WorkEvent fan-out (survives client disconnect).
+                    method if method.starts_with("work/") => {
+                        let mut gw = work_gateway.lock().unwrap_or_else(|e| e.into_inner());
+                        match gw.handle_rpc(method, &params) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
                             }
                         }
                     }
@@ -1042,6 +1277,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             "chat/stream",
             serde_json::json!({
                 "sessionId": params.session_id,
+                "workId": params.session_id,
                 "streamId": params.stream_id,
                 "text": params.text,
                 "surface": params.surface,
@@ -1193,6 +1429,194 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     }
 }
 
+fn handle_work_gateway(
+    gateway: &mut crate::work_gateway::WorkGateway,
+    method: &str,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    use crate::work_gateway::{ClientSession, ExecutionNode, ReviewItem, SteeringInstruction};
+    match method {
+        "work/create" => {
+            let id = params
+                .get("workId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/create requires workId")?;
+            let address = gateway.create_work(
+                id,
+                params
+                    .get("projectId")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned),
+                params
+                    .get("sessionId")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned),
+                params
+                    .get("objective")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+            );
+            serde_json::to_value(address).map_err(|e| e.to_string())
+        }
+        "work/get" => {
+            let id = params
+                .get("workId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/get requires workId")?;
+            serde_json::to_value(gateway.get_work(id)).map_err(|e| e.to_string())
+        }
+        "work/list" => serde_json::to_value(gateway.list_work()).map_err(|e| e.to_string()),
+        "work/snapshot" => {
+            let id = params
+                .get("workId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/snapshot requires workId")?;
+            serde_json::to_value(gateway.snapshot(id)).map_err(|e| e.to_string())
+        }
+        "work/events" => {
+            let id = params
+                .get("workId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/events requires workId")?;
+            let from = params
+                .get("fromSequence")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            serde_json::to_value(gateway.replay_from(id, from)).map_err(|e| e.to_string())
+        }
+        "work/client_attach" => {
+            let client: ClientSession = serde_json::from_value(
+                params
+                    .get("client")
+                    .cloned()
+                    .ok_or("work/client_attach requires client")?,
+            )
+            .map_err(|e| e.to_string())?;
+            gateway.attach_client(client)?;
+            Ok(serde_json::json!({"attached":true}))
+        }
+        "work/client_detach" => {
+            let id = params
+                .get("clientId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/client_detach requires clientId")?;
+            Ok(serde_json::json!({"detached":gateway.detach_client(id)}))
+        }
+        "work/node_register" => {
+            let node: ExecutionNode = serde_json::from_value(
+                params
+                    .get("node")
+                    .cloned()
+                    .ok_or("work/node_register requires node")?,
+            )
+            .map_err(|e| e.to_string())?;
+            gateway.register_node(node)?;
+            Ok(serde_json::json!({"registered":true}))
+        }
+        "work/node_heartbeat" => {
+            let id = params
+                .get("nodeId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/node_heartbeat requires nodeId")?;
+            let at = params
+                .get("atMs")
+                .and_then(|v| v.as_u64())
+                .unwrap_or_else(now_ms);
+            Ok(serde_json::json!({"healthy":gateway.heartbeat_node(id,at)}))
+        }
+        "work/lease_acquire" => {
+            let run = params
+                .get("runId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/lease_acquire requires runId")?;
+            let node = params
+                .get("nodeId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/lease_acquire requires nodeId")?;
+            let ttl = params
+                .get("ttlMs")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(30_000);
+            serde_json::to_value(gateway.acquire_run_authority(run, node, ttl)?)
+                .map_err(|e| e.to_string())
+        }
+        "work/lease_validate" => {
+            let run = params
+                .get("runId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/lease_validate requires runId")?;
+            let node = params
+                .get("nodeId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/lease_validate requires nodeId")?;
+            let token = params
+                .get("fencingToken")
+                .and_then(|v| v.as_u64())
+                .ok_or("work/lease_validate requires fencingToken")?;
+            Ok(serde_json::json!({"valid":gateway.validate_fencing_token(run,node,token)}))
+        }
+        "work/lease_release" => {
+            let run = params
+                .get("runId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/lease_release requires runId")?;
+            let node = params
+                .get("nodeId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/lease_release requires nodeId")?;
+            let token = params
+                .get("fencingToken")
+                .and_then(|v| v.as_u64())
+                .ok_or("work/lease_release requires fencingToken")?;
+            Ok(serde_json::json!({"released":gateway.release_authority(run,node,token)}))
+        }
+        "work/review_add" => {
+            let item: ReviewItem = serde_json::from_value(
+                params
+                    .get("review")
+                    .cloned()
+                    .ok_or("work/review_add requires review")?,
+            )
+            .map_err(|e| e.to_string())?;
+            gateway.request_review(item)?;
+            Ok(serde_json::json!({"queued":true}))
+        }
+        "work/review_resolve" => {
+            let id = params
+                .get("reviewId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/review_resolve requires reviewId")?;
+            Ok(serde_json::json!({"resolved":gateway.resolve_review(id)}))
+        }
+        "work/steer" => {
+            let instruction: SteeringInstruction = serde_json::from_value(
+                params
+                    .get("instruction")
+                    .cloned()
+                    .ok_or("work/steer requires instruction")?,
+            )
+            .map_err(|e| e.to_string())?;
+            gateway.steer(instruction)?;
+            Ok(serde_json::json!({"queued":true}))
+        }
+        "work/presence" => {
+            let id = params
+                .get("workId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/presence requires workId")?;
+            serde_json::to_value(gateway.presence(id)).map_err(|e| e.to_string())
+        }
+        _ => Err(format!("method not found: {method}")),
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn emit(on_event: &Arc<Mutex<EventSink>>, ev: ChatWireEvent) {
     on_event.lock().unwrap_or_else(|e| e.into_inner())(ev);
 }
@@ -1204,6 +1628,7 @@ fn stream_provider(
     vault: Arc<Mutex<Vault>>,
     base_urls: Arc<Mutex<HashMap<String, String>>>,
     local_endpoints: Arc<Mutex<LocalEndpointMap>>,
+    capabilities: Arc<Mutex<everyaios_guard::LocalCapabilityBroker>>,
     params: serde_json::Value,
     writer: WriterHandle<impl Write>,
 ) -> Result<(), crate::sidecar_link::LinkError> {
@@ -1236,6 +1661,38 @@ fn stream_provider(
         .get("tool_choice")
         .cloned()
         .or_else(|| params.get("toolChoice").cloned());
+
+    // Optional P49 capability metadata is validated before the vault broker is
+    // constructed. It contains only an opaque grant reference; secret values
+    // remain exclusively inside everyaios-vault.
+    if let Some(raw) = params.get("capabilityInvocation") {
+        let invocation: everyaios_guard::CapabilityInvocation = serde_json::from_value(raw.clone())
+            .map_err(|e| {
+                crate::sidecar_link::LinkError::Remote(format!(
+                    "invalid capability invocation: {e}"
+                ))
+            })?;
+        invocation.validate().map_err(|e| {
+            crate::sidecar_link::LinkError::Remote(format!("invalid capability invocation: {e}"))
+        })?;
+        if invocation.run_id != session_id {
+            return Err(crate::sidecar_link::LinkError::Remote(
+                "capability invocation run/session mismatch".into(),
+            ));
+        }
+        let request = everyaios_guard::CapabilityRequest {
+            run_id: invocation.run_id.clone(),
+            capability: invocation.capability.clone(),
+            operation: invocation.operation.clone(),
+        };
+        capabilities
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .invoke(&invocation.grant_id, &request)
+            .map_err(|e| {
+                crate::sidecar_link::LinkError::Remote(format!("capability denied: {e}"))
+            })?;
+    }
 
     // The vault guard must outlive the broker (Broker<'a> borrows the vault).
     let v = vault.lock().unwrap_or_else(|e| e.into_inner());
@@ -1628,6 +2085,20 @@ mod tests {
             matches!(evs[1], ChatWireEvent::PlanDone { ref plan_id, tasks_done: 2, error: None, .. } if plan_id == "p1")
         );
         side.join().unwrap();
+    }
+
+    #[test]
+    fn capability_invocation_metadata_is_secret_free_and_validated() {
+        let invocation = everyaios_guard::CapabilityInvocation {
+            grant_id: "grant:1".into(),
+            run_id: "run-1".into(),
+            capability: "connector:gmail.read".into(),
+            operation: "list".into(),
+        };
+        assert!(invocation.validate().is_ok());
+        let encoded = serde_json::to_string(&invocation).unwrap();
+        assert!(!encoded.contains("secret"));
+        assert!(!encoded.contains("Bearer"));
     }
 
     #[test]

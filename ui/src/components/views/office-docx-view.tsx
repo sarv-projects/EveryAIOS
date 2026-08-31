@@ -9,6 +9,7 @@ import { OfficeOpenBar } from './office-open-bar'
 import OfficeFileSwitcher from './office-file-switcher'
 import { docxOpen, docxPatch, docxTracks, officeOpenExternal, isOfficeFloorError, demoDocx, type DocxPayload } from '@/lib/office'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 
 export default function OfficeDocxView() {
   const [payload, setPayload] = useState<DocxPayload | null>(null)
@@ -62,7 +63,7 @@ export default function OfficeDocxView() {
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-blue-400" />
           <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
-            {title}
+            {payload?.path ?? (inTauri() ? 'No document open' : 'exec-summary.docx')}
           </span>
           {payload ? (
             <Badge variant="outline" className="text-[10px] text-emerald-300">
@@ -74,7 +75,7 @@ export default function OfficeDocxView() {
               className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
             >
               <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
-              demo
+              {inTauri() ? 'no file open' : 'preview'}
             </Badge>
           )}
         </div>
@@ -177,6 +178,10 @@ export default function OfficeDocxView() {
               </div>
             )}
           </div>
+        ) : inTauri() ? (
+        <div className="mx-auto max-w-3xl rounded-lg border border-dashed border-border bg-background/30 p-10 text-center text-xs text-muted-foreground">
+          Open a real DOCX file to view and edit its OOXML blocks.
+        </div>
         ) : (
         <div className="mx-auto max-w-3xl bg-[#1c1d20] p-8 sm:p-12">
           <article className="prose-invert space-y-4">
@@ -257,14 +262,14 @@ export default function OfficeDocxView() {
       </ScrollArea>
 
       <footer className="flex items-center justify-between border-t border-border bg-zinc-900/60 px-3 py-1.5 font-mono text-[10px] text-muted-foreground">
-        <span>{payload ? `Blocks: ${payload.blocks.length}` : 'Page 1/3'}</span>
-        <span>{payload ? `Words: ${payload.text.split(/\s+/).length}` : 'Words: 847'}</span>
+        <span>{payload ? `Blocks: ${payload.blocks.length}` : inTauri() ? 'Blocks: —' : 'Page 1/3'}</span>
+        <span>{payload ? `Words: ${payload.text.split(/\s+/).length}` : inTauri() ? 'Words: —' : 'Words: 847'}</span>
         <Badge
           variant="outline"
           className="gap-1 border-orange-500/40 text-[9px] text-orange-300"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-          Modified
+          {payload ? 'Modified' : inTauri() ? 'No document' : 'Preview'}
         </Badge>
       </footer>
     </div>

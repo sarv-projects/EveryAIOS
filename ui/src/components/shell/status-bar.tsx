@@ -28,36 +28,9 @@ import * as perfLib from '@/lib/perf'
 import { AGENT_MAP, MODEL_MAP, AGENTS } from '@/lib/agents'
 import { CompanionChip } from './companion-chip'
 import { cn } from '@/lib/utils'
+import { useRuntimeState } from '@/lib/runtime'
 import { inTauri } from '@/lib/tauri'
 
-// Simulated health data for agent runtimes
-const AGENT_HEALTH: Record<string, {
-  status: 'healthy' | 'degraded' | 'offline'
-  latency: number // ms
-  uptime: number // minutes
-  tasksCompleted: number
-  errorRate: number // 0-1
-}> = {
-  'everyaios-native': { status: 'healthy', latency: 12, uptime: 347, tasksCompleted: 84, errorRate: 0.01 },
-  'claude-code': { status: 'healthy', latency: 45, uptime: 347, tasksCompleted: 156, errorRate: 0.02 },
-  'codex-cli': { status: 'healthy', latency: 62, uptime: 240, tasksCompleted: 98, errorRate: 0.03 },
-  'grok-build': { status: 'degraded', latency: 180, uptime: 120, tasksCompleted: 42, errorRate: 0.08 },
-  'gemini-cli': { status: 'healthy', latency: 38, uptime: 347, tasksCompleted: 67, errorRate: 0.01 },
-  'cursor-agent': { status: 'offline', latency: 0, uptime: 0, tasksCompleted: 0, errorRate: 0 },
-  'aider': { status: 'healthy', latency: 55, uptime: 180, tasksCompleted: 73, errorRate: 0.04 },
-  'opencode': { status: 'degraded', latency: 210, uptime: 60, tasksCompleted: 12, errorRate: 0.12 },
-}
-
-const healthIcon = {
-  healthy: CheckCircle2,
-  degraded: AlertTriangle,
-  offline: CircleDot,
-}
-const healthColor = {
-  healthy: 'text-emerald-400',
-  degraded: 'text-amber-400',
-  offline: 'text-red-400',
-}
 
 interface Stat {
   icon: React.ElementType
@@ -80,62 +53,71 @@ export function StatusBar() {
   const monitorBadge = useAppStore((s) => s.monitorBadge)
   const clearMonitorBadge = useAppStore((s) => s.clearMonitorBadge)
   const { usePerfSnapshot } = perfLib
+  const runtime = useRuntimeState()
 
   const agent = AGENT_MAP[selectedAgentId]
   const model = MODEL_MAP[selectedModelId]
-  const health = AGENT_HEALTH[selectedAgentId]
-  const HealthIcon = health ? healthIcon[health.status] : CircleDot
-  const healthCol = health ? healthColor[health.status] : 'text-zinc-400'
+  // Agent health, latency, uptime, and task counts are not available from the
+  // runtime contract yet. Never invent them; show unknown until a live probe
+  // supplies evidence.
+  const healthLatency: number | undefined = undefined
+  const HealthIcon = CircleDot
+  const healthCol = 'text-zinc-400'
+  const runtimeValue = runtime.status === 'live'
+    ? 'live'
+    : runtime.status === 'preview'
+      ? 'preview'
+      : runtime.status
 
   const stats: Stat[] = [
     {
       icon: Sparkles,
       label: 'agent',
-      value: active?.agent ?? 'analyst',
-      tooltip: `Active agent: ${active?.agent ?? 'analyst'}`,
+      value: active?.agent ?? (inTauri() ? '—' : 'analyst'),
+      tooltip: active?.agent ? `Active agent: ${active.agent}` : 'No active session agent is available.',
     },
     {
       icon: Cpu,
       label: 'sidecar',
-      value: 'online',
-      color: 'text-emerald-400',
-      tooltip: 'TS sidecar (Bun-compiled) · 93MB RSS · 12ms IPC',
+      value: runtimeValue,
+      color: runtime.status === 'live' ? 'text-emerald-400' : 'text-amber-300',
+      tooltip: runtime.detail ?? 'Coordinator readiness is reported by the native runtime probe.',
     },
     {
       icon: Database,
       label: 'core',
-      value: 'rust',
-      color: 'text-emerald-400',
-      tooltip: 'everyaios-core binary · WAL mode · audit append-only',
+      value: runtime.status === 'live' ? 'available' : 'unknown',
+      color: runtime.status === 'live' ? 'text-emerald-400' : 'text-muted-foreground',
+      tooltip: 'Core availability is not claimed until the runtime is live.',
     },
     {
       icon: HardDrive,
       label: 'db',
-      value: '3 / 14MB',
-      tooltip: '3 SQLite DBs (app · memory · vault) · 14MB total',
+      value: '—',
+      tooltip: 'Database size is shown only when a live storage probe supplies it.',
     },
     {
       icon: Network,
       label: 'mcp',
-      value: '127.0.0.1:9200',
-      tooltip: 'MCP server on loopback · token-gated',
+      value: '—',
+      tooltip: 'MCP endpoint is not attached or reported by the runtime probe.',
     },
     {
       icon: Wifi,
       label: 'browser',
-      value: 'chrome (system)',
-      tooltip: 'System Chrome via CDP · 1 active tab · tier-2',
+      value: 'not attached',
+      tooltip: 'Browser status is shown by the Browser surface when a CDP session is attached.',
     },
     {
       icon: Zap,
       label: 'cache',
       value: liveBudget?.cacheHitRate != null
         ? `${Math.round(liveBudget.cacheHitRate * 100)}%`
-        : '94%',
-      color: 'text-emerald-400',
+        : '—',
+      color: liveBudget?.cacheHitRate != null ? 'text-emerald-400' : 'text-muted-foreground',
       tooltip: liveBudget?.cacheHitRate != null
         ? `Prompt cache hit rate · ${Math.round(liveBudget.cacheHitRate * 100)}% (live)`
-        : 'Prompt cache hit rate · 94% (last 30 turns)',
+        : 'Prompt cache hit rate is unavailable until the live usage ledger responds.',
     },
   ]
 
@@ -150,7 +132,7 @@ export function StatusBar() {
   // restores the full 12-badge telemetry (devMode).
   if (!devMode) {
     const busy = active?.status === 'running' || active?.status === 'action-required'
-    const preview = !inTauri()
+    const preview = runtime.status === 'preview'
     return (
       <footer className="shrink-0 h-6 border-t border-border bg-sidebar/80 backdrop-blur-xl flex items-center text-[10.5px] font-mono no-select">
         <div className="flex items-center gap-1.5 px-3">
@@ -159,7 +141,7 @@ export function StatusBar() {
             preview ? 'bg-amber-400' : activePaused ? 'bg-yellow-400' : busy ? 'bg-orange-500 live-dot' : 'bg-emerald-400'
           )} />
           <span className="text-muted-foreground">
-            {preview ? 'Preview · demo data' : activePaused ? '⏸ Paused' : busy ? 'Processing…' : '● Live · Local'}
+            {preview ? 'Development preview' : activePaused ? '⏸ Paused' : busy ? 'Processing…' : runtimeValue}
           </span>
         </div>
         <div className="flex-1" />
@@ -175,8 +157,8 @@ export function StatusBar() {
           </span>
         ) : (
           <span className="flex items-center gap-1.5 px-3 text-muted-foreground/70">
-            <ShieldCheck className="h-2.5 w-2.5 text-emerald-400" />
-            100% Private (On-Device)
+            <ShieldCheck className={cn('h-2.5 w-2.5', runtime.status === 'live' ? 'text-emerald-400' : 'text-amber-400')} />
+            {runtime.status === 'live' ? 'Privacy depends on selected provider' : 'Privacy status unavailable'}
           </span>
         )}
         <CompanionChip />
@@ -223,10 +205,10 @@ export function StatusBar() {
         )}
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/80">
-          {active?.status === 'action-required' ? 'awaiting approval' : active?.status === 'running' ? 'regenerating chart' : 'idle'}
+          {active?.status === 'action-required' ? 'awaiting approval' : active?.status === 'running' ? 'regenerating chart' : active ? 'idle' : 'no active work'}
         </span>
-        {/* Agent runtime health indicator */}
-        {agent && (
+        {/* Agent runtime health indicator */}          {agent && (
+
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex items-center gap-1.5 cursor-default">
@@ -234,7 +216,7 @@ export function StatusBar() {
                 <span className={cn('h-3.5 w-3.5 rounded text-[6px] font-bold flex items-center justify-center', agent.accent)}>{agent.mark}</span>
                 <HealthIcon className={cn('h-2.5 w-2.5', healthCol)} />
                 <span className={cn('text-[9.5px]', healthCol)}>
-                  {health?.latency ?? '—'}ms
+                  {healthLatency ?? '—'}ms
                 </span>
                 {model && (
                   <span className="text-muted-foreground/50">{model.label}</span>
@@ -247,9 +229,9 @@ export function StatusBar() {
             <TooltipContent side="top" className="font-mono text-[11px] max-w-xs">
               <div className="space-y-1">
                 <div className="font-semibold">{agent.name} · {model?.label ?? '—'}</div>
-                <div>Status: {health?.status ?? 'unknown'} · Latency: {health?.latency ?? '—'}ms</div>
-                <div>Tasks: {health?.tasksCompleted ?? 0} completed · Error rate: {((health?.errorRate ?? 0) * 100).toFixed(1)}%</div>
-                <div>Uptime: {health ? `${Math.floor(health.uptime / 60)}h ${health.uptime % 60}m` : '—'}</div>
+                <div>Status: unavailable until the selected runtime is probed</div>
+                <div>Tasks: — · Error rate: —</div>
+                <div>Uptime: —</div>
               </div>
             </TooltipContent>
           </Tooltip>
@@ -284,14 +266,14 @@ export function StatusBar() {
 
       {/* Right cluster — guard + version */}
       <div className="flex items-center gap-2 px-2 border-l border-border/60 h-full">
-        <div className="flex items-center gap-1 text-emerald-400">
+        <div className={cn('flex items-center gap-1', runtime.status === 'live' ? 'text-emerald-400' : 'text-amber-300')}>
           <ShieldCheck className="h-2.5 w-2.5" />
-          <span>guard · L2</span>
+          <span>guard · {runtime.status === 'live' ? 'available' : 'unknown'}</span>
         </div>
         <span className="text-muted-foreground/40">·</span>
-        <span className="text-muted-foreground/70">vault · 7 keys</span>
+        <span className="text-muted-foreground/70">vault · {runtime.status === 'vault-locked' ? 'locked' : runtime.status === 'vault-setup' ? 'setup required' : '—'}</span>
         <span className="text-muted-foreground/40">·</span>
-        <span className="text-muted-foreground/70">audit · append</span>
+        <span className="text-muted-foreground/70">audit · {runtime.status === 'live' ? 'available' : '—'}</span>
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/50">EveryAIOS v3.57</span>
       </div>

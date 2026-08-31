@@ -3,6 +3,7 @@
 // preview the caller falls back to demo data so the card is explorable.
 
 import { inTauri, invoke } from "./tauri";
+import { bridgeCall } from './runtime';
 
 /** The structured escalation bundle (doc 52 §2) rendered on the card. */
 export interface GuardDecision {
@@ -56,8 +57,11 @@ export interface GuardPolicy {
 
 /** The pending tickets waiting on a human decision (polled by the page). */
 export async function guardTickets(): Promise<GuardTicket[]> {
-  if (!inTauri()) return demoTickets();
-  return invoke<GuardTicket[]>("guard_tickets");
+  return bridgeCall({
+    operation: 'guard tickets',
+    live: () => invoke<GuardTicket[]>("guard_tickets"),
+    preview: () => demoTickets(),
+  });
 }
 
 /** Record a human decision: `approve` or `reject`. */
@@ -66,8 +70,11 @@ export async function guardRespond(
   action: "approve" | "reject",
   approvalNonce: string,
 ): Promise<boolean> {
-  if (!inTauri()) return true;
-  return invoke<boolean>("guard_respond", { ticketId, action, approvalNonce });
+  return bridgeCall({
+    operation: 'guard respond',
+    live: () => invoke<boolean>("guard_respond", { ticketId, action, approvalNonce }),
+    preview: () => true,
+  });
 }
 
 /**
@@ -84,8 +91,11 @@ export async function openGuardWindow(): Promise<void> {
 
 /** The append-only approve/reject receipts. */
 export async function guardReceipts(): Promise<GuardReceipt[]> {
-  if (!inTauri()) return demoReceipts();
-  return invoke<GuardReceipt[]>("guard_receipts");
+  return bridgeCall({
+    operation: 'guard receipts',
+    live: () => invoke<GuardReceipt[]>("guard_receipts"),
+    preview: () => demoReceipts(),
+  });
 }
 
 /** P11.5.7 — one recent-actions row (from the J5 audit store). */
@@ -99,8 +109,11 @@ export interface RecentAction {
 
 /** P11.5.7 — the recent-actions log (replaces the hardcoded ACTIONS array). */
 export async function guardActivity(limit?: number): Promise<RecentAction[]> {
-  if (!inTauri()) return demoActivity()
-  return invoke<RecentAction[]>('guard_activity', { limit })
+  return bridgeCall({
+    operation: 'guard activity',
+    live: () => invoke<RecentAction[]>('guard_activity', { limit }),
+    preview: () => demoActivity(),
+  })
 }
 
 /** P11.5.7 — one permissions-matrix cell (capability × scope). */
@@ -112,8 +125,11 @@ export interface MatrixCell {
 
 /** P11.5.7 — the live 5×5 matrix from permissions.toml. */
 export async function guardPermissionsMatrix(): Promise<MatrixCell[]> {
-  if (!inTauri()) return demoMatrix()
-  return invoke<MatrixCell[]>('guard_permissions_matrix')
+  return bridgeCall({
+    operation: 'guard permissions matrix',
+    live: () => invoke<MatrixCell[]>('guard_permissions_matrix'),
+    preview: () => demoMatrix(),
+  })
 }
 
 function demoActivity(): RecentAction[] {
@@ -143,21 +159,25 @@ function demoMatrix(): MatrixCell[] {
 
 /** The policy + profile + estop summary. */
 export async function guardPolicy(): Promise<GuardPolicy> {
-  if (!inTauri()) {
-    return {
+  return bridgeCall({
+    operation: 'guard policy',
+    live: () => invoke<GuardPolicy>("guard_policy"),
+    preview: () => ({
       minConfidenceForAuto: 0.85,
       userFeedbackLearning: true,
       profile: "standard",
       estopPulled: false,
-    };
-  }
-  return invoke<GuardPolicy>("guard_policy");
+    }),
+  });
 }
 
 /** Pull (`pulled=true`) or reset the global estop. */
 export async function guardEstop(pulled: boolean): Promise<boolean> {
-  if (!inTauri()) return pulled;
-  return invoke<boolean>("guard_estop", { pulled });
+  return bridgeCall({
+    operation: 'guard estop',
+    live: () => invoke<boolean>("guard_estop", { pulled }),
+    preview: () => pulled,
+  });
 }
 
 /** P44.5 — the Rust preset name for a UI autonomy level (`maximum` ↔ `full`). */

@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 use std::process::{ChildStdin, ChildStdout};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
 use everyaios_core::GuardService;
@@ -31,6 +31,14 @@ pub struct AppState {
     pub guard: Guard,
     /// The encrypted vault (opened at boot; shared with the chat relay).
     pub vault: Arc<Mutex<Vault>>,
+    /// Whether the currently managed vault was successfully opened with an
+    /// authoritative key. Commands update this after setup/unlock so the
+    /// renderer receives the actual lifecycle state, not a keyfile guess.
+    pub vault_unlocked: AtomicBool,
+    /// Monotonic activity clock for the currently managed coordinator. This
+    /// lets the readiness probe detect a dead/stale relay instead of treating
+    /// `Option<ChatRelay>` as proof that the sidecar is alive.
+    pub sidecar_activity_ms: Mutex<Option<Arc<AtomicU64>>>,
     /// P1.4: the chat relay over the coordinator link. `None` until the
     /// supervisor hands the sidecar's stdio pipes to a `SidecarLink` (the
     /// integration seam — the relay + protocol are fully built + tested).
@@ -75,4 +83,14 @@ pub struct AppState {
     /// use; honest-fail on headless / no display). Engine + audit bridge live
     /// here — never in the renderer or the coordinator.
     pub desktop: Mutex<DesktopSlot>,
+    /// P15-H29: live artifact preview servers keyed by loopback port
+    /// (`everyaios_script::artifact::serve`). Dropping a handle stops its
+    /// server thread; the map is the shell's registry of running previews so
+    /// `artifact_stop` can tear a specific one down. Guard-2-ticketed at the
+    /// command layer — the server is loopback-only + path-floored by
+    /// construction.
+    pub artifacts: Mutex<std::collections::HashMap<u16, everyaios_script::artifact::ServerHandle>>,
+    /// P9.5: the local OpenAI-compatible server (loopback + bearer token).
+    /// `None` until `openai_server_start`; dropping it closes the listener.
+    pub openai_server: Mutex<crate::openai_cmds::OpenAiServerSlot>,
 }

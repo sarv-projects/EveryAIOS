@@ -3,7 +3,8 @@
 // preview (no shell) the caller falls back to demo data so the page is
 // explorable.
 
-import { inTauri, invoke } from "./tauri";
+import { invoke } from "./tauri";
+import { bridgeCall } from './runtime';
 
 export interface UsageRecord {
   tokensIn: number;
@@ -40,14 +41,20 @@ export interface SessionTotal {
 
 /** The per-key/per-session/cache-hit dashboard data (polled by the page). */
 export async function usageSnapshot(): Promise<UsageSnapshot> {
-  if (!inTauri()) return demoSnapshot();
-  return invoke<UsageSnapshot>("usage_snapshot");
+  return bridgeCall({
+    operation: 'usage snapshot',
+    live: () => invoke<UsageSnapshot>("usage_snapshot"),
+    preview: () => demoSnapshot(),
+  });
 }
 
 /** P5.9 — real per-session cost/token breakdown from the durable ledger. */
 export async function sessionTotals(): Promise<SessionTotal[]> {
-  if (!inTauri()) return demoSessionTotals();
-  return invoke<SessionTotal[]>("session_totals");
+  return bridgeCall({
+    operation: 'session totals',
+    live: () => invoke<SessionTotal[]>("session_totals"),
+    preview: () => demoSessionTotals(),
+  });
 }
 
 function demoSessionTotals(): SessionTotal[] {

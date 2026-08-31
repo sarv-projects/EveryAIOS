@@ -54,12 +54,22 @@ const STATUS_ICON: Record<TaskStatus, typeof Clock> = {
 
 export default function TasksRail() {
   const [tasks, setTasks] = useState<TaskRecord[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'active' | 'terminal'>('all')
   const unlistenRef = useRef<(() => void) | null>(null)
 
   const refresh = useCallback(async () => {
-    const all = await tasksList()
-    setTasks(all)
+    try {
+      const all = await tasksList()
+      setTasks(all)
+      setError(null)
+      setLoading(false)
+    } catch (cause) {
+      setTasks([])
+      setError(cause instanceof Error ? cause.message : 'Task ledger is unavailable')
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -84,11 +94,19 @@ export default function TasksRail() {
   })
 
   async function cancel(id: string) {
-    if (await tasksCancel(id)) void refresh()
+    try {
+      if (await tasksCancel(id)) void refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Task cancellation failed')
+    }
   }
 
   async function retry(id: string) {
-    if (await tasksRetry(id)) void refresh()
+    try {
+      if (await tasksRetry(id)) void refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Task retry failed')
+    }
   }
 
   return (
@@ -121,7 +139,17 @@ export default function TasksRail() {
 
       <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
         <AnimatePresence initial={false}>
-          {visible.length === 0 && (
+          {error && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-6 text-center text-xs text-red-600">
+              Task ledger unavailable: {error}
+            </div>
+          )}
+          {loading && (
+            <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+              Loading task ledger…
+            </div>
+          )}
+          {!loading && !error && visible.length === 0 && (
             <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
               No detached tasks yet — automation jobs, subagent and ACP spawns,
               and CLI runs appear here.

@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MonitorSmartphone, RotateCcw, ExternalLink } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 import {
   demoActionChecklist,
   startArtifactServer,
@@ -106,9 +107,10 @@ export default function ArtifactView() {
     )
   }, [artifactServer, screenshots, shotIndex])
 
-  // Demo bootstrap: seed the store so the surface is live in preview mode.
+  // Preview bootstrap only. Native mode must wait for a real agent artifact;
+  // it must never start a server for a placeholder workspace.
   useEffect(() => {
-    if (!artifactServer && !serving) {
+    if (!inTauri() && !artifactServer && !serving) {
       setServing(true)
       void startArtifactServer('preview-demo').then((server) => {
         patchArtifactServer(server)

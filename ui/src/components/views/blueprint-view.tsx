@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 import {
   CheckCircle2,
   Circle,
@@ -107,12 +108,17 @@ export default function BlueprintView() {
     }))
   }, [pendingPlan])
 
-  const [tasks, setTasks] = useState<BlueprintTask[]>(DEMO_TASKS)
+  const [tasks, setTasks] = useState<BlueprintTask[]>(() => (inTauri() ? [] : DEMO_TASKS))
   const [draft, setDraft] = useState('')
   const shown = liveTasks ?? tasks
+  const nativeEmpty = inTauri() && !pendingPlan && shown.length === 0
 
   const addTask = () => {
     if (!draft.trim()) return
+    if (inTauri()) {
+      useAppStore.getState().notify('Blueprint task creation is not connected to the live task ledger yet', 'error')
+      return
+    }
     setTasks((prev) => [
       ...prev,
       {
@@ -126,6 +132,10 @@ export default function BlueprintView() {
   }
 
   const runTask = (id: string) => {
+    if (inTauri()) {
+      useAppStore.getState().notify('Run this plan from the composer after it has been approved', 'error')
+      return
+    }
     setTasks((prev) =>
       prev.map((t) =>
         t.id === id
@@ -138,6 +148,7 @@ export default function BlueprintView() {
   }
 
   const resetAll = () => {
+    if (inTauri()) return
     setTasks((prev) =>
       prev.map((t) => ({
         ...t,
@@ -176,6 +187,11 @@ export default function BlueprintView() {
         <div className="mb-2 font-mono text-[10px] text-slate-500">
           # spec.md — verify-gated blueprint tasks
         </div>
+        {nativeEmpty ? (
+          <div className="rounded-md border border-dashed border-border/60 px-3 py-10 text-center text-xs text-muted-foreground">
+            No plan yet. Describe work in the composer to create a plan.
+          </div>
+        ) : (
         <div className="space-y-2">
           {shown.map((task) => {
             const meta = STATUS_META[task.status]
@@ -225,6 +241,7 @@ export default function BlueprintView() {
             )
           })}
         </div>
+        )}
       </div>
 
       {/* Add task */}
@@ -237,10 +254,9 @@ export default function BlueprintView() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addTask()
           }}
-        />
-        <Button size="sm" onClick={addTask} className="h-8">
-          <Plus className="mr-1 h-3 w-3" /> Add
-        </Button>
+        />          <Button size="sm" onClick={addTask} className="h-8" disabled={inTauri()} title={inTauri() ? 'Create a plan from the chat composer' : undefined}>
+            <Plus className="mr-1 h-3 w-3" /> Add
+          </Button>
       </div>
     </div>
   )

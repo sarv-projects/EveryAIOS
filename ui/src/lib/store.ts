@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { inTauri } from './tauri'
+import { runtimeError, setRuntimeState } from './runtime'
 import { guardAutonomy, guardSetAutonomy } from './guard'
 import { inheritContext } from './plain-language'
 import {
@@ -16,6 +17,7 @@ import {
   type TaskKind,
 } from './agents'
 import type { ComposerRole, PermissionMode, TaskIntent } from './ui-prefs'
+import type { WorkAddress, WorkEventEnvelope, WorkPresence } from './work'
 
 // === Types ============================================================
 
@@ -39,6 +41,7 @@ export type ViewId =
   | 'kanban'
   | 'generative'
   | 'artifact'
+  | 'desktop'
 
 /** v3.57 Work Mode (WHAT) — Code/browser/Office/terminal live *inside* Build. */
 export type ChatMode = 'auto' | 'plan' | 'build' | 'research'
@@ -619,7 +622,7 @@ const readPowerMode = (): boolean => {
   if (typeof window === 'undefined') return true
   try {
     const v = window.localStorage.getItem(POWER_MODE_KEY)
-    // Unset → full cockpit (the mock of the finished product). Explicit '0' is casual.
+    // Unset → full cockpit. Explicit '0' selects the casual layout.
     if (v === null) return true
     return v === '1'
   } catch {
@@ -669,6 +672,9 @@ export const SETTINGS_SECTION_IDS = [
   'sync',
   'keyboard',
   'advanced',
+  'doctor',
+  'discover',
+  'runtime',
   'about',
 ] as const
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
@@ -716,6 +722,10 @@ export function taskScopeHash(autonomyLevel: string, mode: string, workspace: st
 interface AppState {
   // Sessions & navigation
   sessions: Session[]
+  workItems: WorkAddress[]
+  workPresence?: WorkPresence
+  workEvents: WorkEventEnvelope[]
+  setWorkProjection: (items: WorkAddress[], presence?: WorkPresence, events?: WorkEventEnvelope[]) => void
   activeSessionId: string
   /** True once the shell has taken ownership of the sessions list (loaded via
    * `session_list` or a new session was created). Until then the list is the
@@ -739,6 +749,9 @@ interface AppState {
   railCollapsed: boolean
   toggleRail: () => void
   setRailCollapsed: (v: boolean) => void
+  /** Full-window mode for the active cockpit lens. */
+  fullscreenView: boolean
+  setFullscreenView: (v: boolean) => void
 
   // Multi-view panel (ARCH/12 v3.0 — VS Code-style tabs). Open views are a
   // tabbed set; defaults Folder · Shell · Browser; "+" adds more; close × removes.
@@ -897,7 +910,7 @@ interface AppState {
   notify: (msg: string, kind?: 'default' | 'error') => void
   notifyMcpError: (msg: string) => void
 
-  // Live data (bridge) — empty/demo values until the shell answers
+  // Live data (bridge) — empty until the shell answers
   liveAgents: AgentRuntime[]
   setLiveAgents: (a: AgentRuntime[]) => void
   liveBudget?: LiveBudget
@@ -967,8 +980,13 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  sessions: mockSessions,
-  activeSessionId: 's1',
+  // Tauri starts with no client-side fixtures. The shell hydrates this list
+  // from the encrypted vault; only the plain-browser preview uses mock data.
+  sessions: inTauri() ? [] : mockSessions,
+  workItems: [],
+  workEvents: [],
+  setWorkProjection: (items, presence, events = []) => set({ workItems: items, workPresence: presence, workEvents: events }),
+  activeSessionId: inTauri() ? '' : 's1',
   sessionsHydrated: false,
   markSessionsHydrated: () => set({ sessionsHydrated: true }),
   setActiveSession: (id) => {
@@ -1031,23 +1049,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   clearMonitorBadge: () => set({ monitorBadge: { count: 0, stopped: false } }),
   deleteSession: async (id) => {
-    const st = get()
-    const remaining = st.sessions.filter((x) => x.id !== id)
-    const nextActive =
-      st.activeSessionId === id ? (remaining[0]?.id ?? st.activeSessionId) : st.activeSessionId
-    set({
-      sessions: remaining,
-      activeSessionId: nextActive,
-    })
     if (inTauri()) {
       try {
         const { schedulerPauseSession, invoke } = await import('./tauri')
         await schedulerPauseSession(id)
         await invoke('session_delete', { sessionId: id })
-      } catch {
-        /* scheduler / vault may be unwired in preview */
+      } catch (error) {
+        get().notify(`Could not delete this work: ${error instanceof Error ? error.message : String(error)}`, 'error')
+        return
       }
     }
+    const st = get()
+    const remaining = st.sessions.filter((x) => x.id !== id)
+    const nextActive =
+      st.activeSessionId === id ? (remaining[0]?.id ?? '') : st.activeSessionId
+    set({
+      sessions: remaining,
+      activeSessionId: nextActive,
+    })
   },
 
   activeView: 'office-xlsx',
@@ -1055,6 +1074,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({
       activeView: v,
       railCollapsed: false,
+      powerMode: true,
       openViews: s.openViews.includes(v) ? s.openViews : [...s.openViews, v],
     }))
     // P11.5.3 — persist the layout as it changes.
@@ -1066,6 +1086,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       browserUrl: url,
       activeView: 'browse',
       railCollapsed: false,
+      powerMode: true,
       openViews: s.openViews.includes('browse') ? s.openViews : [...s.openViews, 'browse'],
     }))
     get().saveSessionLayout(get().activeSessionId, { view: 'browse', railCollapsed: false })
@@ -1079,24 +1100,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ railCollapsed: v })
     get().saveSessionLayout(get().activeSessionId, { railCollapsed: v })
   },
+  fullscreenView: false,
+  setFullscreenView: (v) => set({ fullscreenView: v }),
 
-  openViews: ['office-xlsx', 'folder', 'shell', 'browse'],
+  openViews: ['folder', 'shell', 'browse', 'office-xlsx'],
   addView: (v) => {
     set((s) => ({
       openViews: s.openViews.includes(v) ? s.openViews : [...s.openViews, v],
       activeView: v,
       railCollapsed: false,
+      powerMode: true,
     }))
     // P33.7 — persist the tab set per session.
     get().saveSessionLayout(get().activeSessionId, { openViews: get().openViews })
   },
-  closeView: (v) =>
+  closeView: (v) => {
     set((s) => {
       const next = s.openViews.filter((x) => x !== v)
-      if (next.length === 0) return { openViews: next, railCollapsed: true }
+      if (next.length === 0) return { openViews: next, railCollapsed: true, fullscreenView: false }
       const active = s.activeView === v ? next[next.length - 1] : s.activeView
-      return { openViews: next, activeView: active }
-    }),
+      return { openViews: next, activeView: active, fullscreenView: false }
+    })
+    get().saveSessionLayout(get().activeSessionId, { openViews: get().openViews })
+  },
   officePaths: {},
   officeHistory: {},
   switchOfficeDoc: (view, path) =>
@@ -1182,11 +1208,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => {
       const next = !s.powerMode
       writePowerMode(next)
-      return { powerMode: next }
+      return { powerMode: next, fullscreenView: next ? s.fullscreenView : false }
     }),
   setPowerMode: (v) => {
     writePowerMode(v)
-    set({ powerMode: v })
+    set((s) => ({ powerMode: v, fullscreenView: v ? s.fullscreenView : false }))
   },
 
   devMode: false,
@@ -1768,50 +1794,56 @@ export const useAppStore = create<AppState>((set, get) => ({
     void (async () => {
       // Real shell: route by card kind — permission tickets go to Guard-2,
       // P6.3 circuit-break interrupts go to the plan executor (planRespond).
-      if (inTauri()) {
-        try {
-          const kind = get().sessions
-            .flatMap((s) => s.messages)
-            .find((m) => m.mcq?.id === id)?.mcq?.kind
-          if (kind === 'plan') {
-            const pending = get().pendingPlan
-            if (choice === 'approve' && pending) {
-              const { planExecute } = await import('./tauri')
-              await planExecute({
-                sessionId: get().activeSessionId,
-                planId: pending.planId,
-                tasks: pending.tasks,
-              })
-            }
-            get().setPendingPlan(undefined)
-          } else if (kind === 'mcq') {
-            const { planRespond } = await import('./tauri')
-            await planRespond(id, choice)
-          } else {
-            // F1 — approval happens in the dedicated guard window, never in
-            // the main renderer (it displays browser/generative-UI/plugin
-            // content). Open it; the human decides there.
-            const { openGuardWindow } = await import('./guard')
-            await openGuardWindow()
+      if (!inTauri()) {
+        get().notify('Preview mode — approval actions are not connected to a live executor')
+        return
+      }
+      try {
+        const kind = get().sessions
+          .flatMap((s) => s.messages)
+          .find((m) => m.mcq?.id === id)?.mcq?.kind
+        if (kind === 'plan') {
+          const pending = get().pendingPlan
+          if (choice === 'approve' && pending) {
+            const { planExecute } = await import('./tauri')
+            await planExecute({
+              sessionId: get().activeSessionId,
+              planId: pending.planId,
+              tasks: pending.tasks,
+            })
           }
-        } catch {
-          /* keep card state */
+          get().setPendingPlan(undefined)
+          clearMcq(id)
+          return
         }
+        if (kind === 'mcq') {
+          const { planRespond } = await import('./tauri')
+          await planRespond(id, choice)
+          clearMcq(id)
+          return
+        }
+        // F1 — approval happens in the dedicated guard window, never in the
+        // main renderer. Keep the card visible until that window records the
+        // decision; removing it here would falsely imply approval.
+        const { openGuardWindow } = await import('./guard')
+        await openGuardWindow()
+        get().notify('Guard-2: approval opened in the dedicated window')
+      } catch (error) {
+        get().notify(`Approval action failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
       }
     })()
-    set((s) => ({
-      sessions: s.sessions.map((x) => ({
-        ...x,
-        status: x.status === 'action-required' ? 'running' : x.status,
-        messages: x.messages
-          .map((m) => (m.mcq?.id === id ? { ...m, mcq: undefined } : m))
-          .filter((m) => m.content !== '' || m.mcq !== undefined || m.role !== 'assistant'),
-      })),
-    }))
-    // F1 — the main renderer can no longer decide; it only surfaces the
-    // ticket and opens the dedicated approval window where the decision is
-    // recorded (and audit-logged) by the human.
-    get().notify('Guard-2: approval opened in the dedicated window')
+
+    function clearMcq(cardId: string) {
+      set((s) => ({
+        sessions: s.sessions.map((x) => ({
+          ...x,
+          status: x.status === 'action-required' ? 'running' : x.status,
+          messages: x.messages
+            .map((m) => (m.mcq?.id === cardId ? { ...m, mcq: undefined } : m))
+            .filter((m) => m.content !== '' || m.mcq !== undefined || m.role !== 'assistant'),
+        })),
+      }))
+    }
   },
 
   acpHandles: {},
@@ -1923,11 +1955,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setNlAutomationDraft: (v) => set({ nlAutomationDraft: v }),
 }))
 
-/** Vault-backed persist (Codex JSONL / Claude transcripts analog). Preview
- * keeps mockSessions; the shell loads via `session_list` in initBridge.
- * Bugfix 3: the store starts on the mock seed, so persistence only engages
- * after the shell owns the list (`sessionsHydrated`) — otherwise a boot-time
- * state write would stamp the fake Q3 chats into the real vault. */
+/** Vault-backed persist (Codex JSONL / Claude transcripts analog). The browser
+ * preview keeps mockSessions; the shell loads via `session_list` in initBridge.
+ * Persistence only engages after the shell owns the list (`sessionsHydrated`) —
+ * otherwise a boot-time state write would stamp preview chats into the real vault. */
 if (typeof window !== 'undefined') {
   let persistTimer: ReturnType<typeof setTimeout> | undefined
   useAppStore.subscribe((s) => {
@@ -1941,8 +1972,12 @@ if (typeof window !== 'undefined') {
           for (const sess of s.sessions) {
             await invoke('session_put', { session: sess })
           }
-        } catch {
-          /* vault locked / sidecar */
+        } catch (error) {
+          // Persistence failure is a product state, not a recoverable no-op:
+          // keep the in-memory UI intact but tell the runtime and user that
+          // the latest session projection is not durable.
+          setRuntimeState('degraded', `session persistence: ${runtimeError(error)}`)
+          s.notify('Session changes could not be saved. Check the vault and retry.', 'error')
         }
       })()
     }, 400)

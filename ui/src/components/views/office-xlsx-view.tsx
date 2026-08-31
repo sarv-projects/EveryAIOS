@@ -6,6 +6,7 @@ import { Check, ChevronsUpDown, FileSpreadsheet, Loader2, ListFilter, RefreshCw,
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { inTauri } from '@/lib/tauri'
 import { OfficeOpenBar } from './office-open-bar'
 import OfficeFileSwitcher from './office-file-switcher'
 import { OfficeRibbon } from './office-ribbon'
@@ -147,7 +148,7 @@ export default function OfficeXlsxView() {
 
   // P4.2 — cells for a 0-based row (cached live window, or the 100K demo).
   const rowCells = (r: number): CellValue[] =>
-    payload ? (rowCache.current.get(r + 1) ?? []) : demoRow(r)
+    payload ? (rowCache.current.get(r + 1) ?? []) : inTauri() ? [] : demoRow(r)
 
   // Seed the draft with the displayed value when a cell is selected.
   const selectCell = (r: number, c: number) => {
@@ -337,7 +338,7 @@ export default function OfficeXlsxView() {
   // P4.2 — overscan window over the full row space (100K demo / live sheet).
   const ROW_HEIGHT = 22
   const OVERSCAN = 12
-  const totalRows = payload ? payload.total_rows : 100_000
+  const totalRows = payload ? payload.total_rows : inTauri() ? 0 : 100_000
   const startRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
   const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportH) / ROW_HEIGHT) + OVERSCAN)
 
@@ -347,7 +348,7 @@ export default function OfficeXlsxView() {
         <div className="flex items-center gap-2">
           <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
           <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
-            {payload?.path ?? 'Q3-Financials.xlsx'}
+            {payload?.path ?? (inTauri() ? 'No workbook open' : 'Q3-Financials.xlsx')}
           </span>
           {payload ? (
             <Badge variant="outline" className="text-[10px] text-emerald-300">
@@ -356,10 +357,15 @@ export default function OfficeXlsxView() {
           ) : (
             <Badge
               variant="outline"
-              className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+              className={cn(
+                'gap-1 text-[10px]',
+                inTauri()
+                  ? 'border-border text-muted-foreground'
+                  : 'border-orange-500/40 bg-orange-500/10 text-orange-300',
+              )}
             >
-              <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
-              demo
+              {!inTauri() && <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />}
+              {inTauri() ? 'no file open' : 'preview'}
             </Badge>
           )}
         </div>
@@ -687,6 +693,13 @@ export default function OfficeXlsxView() {
             </tr>
           </thead>
           <tbody>
+            {!payload && inTauri() && (
+              <tr>
+                <td colSpan={colCount + 1} className="p-10 text-center text-xs text-muted-foreground">
+                  Open a real workbook to load its rows and enable editing.
+                </td>
+              </tr>
+            )}
             {startRow > 0 && (
               <tr style={{ height: startRow * ROW_HEIGHT }}>
                 <td colSpan={colCount + 1} className="border-0 p-0" />

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  schedulerCreate,
   schedulerDelete,
   schedulerEnable,
   schedulerList,
@@ -30,6 +31,7 @@ import {
 } from '@/lib/scheduler'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 import AutomationEditor from './automation-editor'
 import TasksRail from './tasks-rail'
 
@@ -73,28 +75,65 @@ export default function AutomationsPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [nlInput, setNlInput] = useState('')
   const [tab, setTab] = useState('active')
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
   const notify = useAppStore((s) => s.notify)
+  const activeSessionId = useAppStore((s) => s.activeSessionId)
 
-  // H14: live job list from the Rust scheduler (demo fallback in preview).
+  // H14: live job list from the Rust scheduler (fixtures exist only in
+  // browser preview; native errors remain visible to the user).
   useEffect(() => {
-    void schedulerList().then((s) => setAutomations(s.jobs))
-  }, [])
+    let alive = true
+    setLoading(true)
+    setLoadError(null)
+    void schedulerList()
+      .then((s) => {
+        if (!alive) return
+        setAutomations(s.jobs)
+        setLoading(false)
+      })
+      .catch((error) => {
+        if (!alive) return
+        const message = error instanceof Error ? error.message : String(error)
+        setAutomations([])
+        setLoadError(message)
+        setLoading(false)
+        notify(`Automations unavailable: ${message}`, 'error')
+      })
+    return () => {
+      alive = false
+    }
+  }, [notify, reload])
 
   // P11.5.5 — NL automation creation: describe in plain words → config.
   // Deterministic zero-LLM parser for the common patterns (daily/weekly/
   // hourly/on-event); anything else falls through to a sensible default cron
   // with an honest note (full LLM-direct generation is a follow-up seam).
-  const createFromNl = () => {
+  const createFromNl = async () => {
     const text = nlInput.trim()
     if (!text) return
     const trigger = parseNlTrigger(text)
-    const newJob: SchedulerJob = {
+    if (inTauri() && !activeSessionId) {
+      notify('Create or select a work item before adding an automation', 'error')
+      return
+    }
+    const args = {
       id: `j-nl-${Date.now()}`,
       name: text.length > 40 ? `${text.slice(0, 40)}…` : text,
-      sessionId: 's-nl',
+      sessionId: activeSessionId,
       trigger,
       steps: [{ step: 'prompt', text }],
       policy: { suppressOnBattery: true, maxRunsPerHour: 1 },
+    }
+    try {
+      await schedulerCreate(args)
+    } catch (error) {
+      notify(`Automation was not created: ${error instanceof Error ? error.message : String(error)}`, 'error')
+      return
+    }
+    const newJob: SchedulerJob = {
+      ...args,
       enabled: true,
       state: { state: 'idle' },
       checkpoint: 0,
@@ -109,15 +148,28 @@ export default function AutomationsPanel() {
 
   // P11.5.5 — template → real job (not a toast): name/trigger/desc map onto
   // an enabled SchedulerJob the Rust scheduler can adopt.
-  const useTemplate = (t: (typeof TEMPLATES)[number]) => {
+  const useTemplate = async (t: (typeof TEMPLATES)[number]) => {
     const trigger = templateTrigger(t)
-    const newJob: SchedulerJob = {
+    if (inTauri() && !activeSessionId) {
+      notify('Create or select a work item before adding an automation', 'error')
+      return
+    }
+    const args = {
       id: `j-tpl-${Date.now()}`,
       name: t.name,
-      sessionId: 's-tpl',
+      sessionId: activeSessionId,
       trigger,
       steps: [{ step: 'prompt', text: t.desc }],
       policy: { suppressOnBattery: true, maxRunsPerHour: 2 },
+    }
+    try {
+      await schedulerCreate(args)
+    } catch (error) {
+      notify(`Automation was not created: ${error instanceof Error ? error.message : String(error)}`, 'error')
+      return
+    }
+    const newJob: SchedulerJob = {
+      ...args,
       enabled: true,
       state: { state: 'idle' },
       checkpoint: 0,
@@ -129,36 +181,29 @@ export default function AutomationsPanel() {
     notify(`Created automation from “${t.name}” template — ${triggerLabel(trigger)}`)
   }
 
+  const reportActionError = (label: string, error: unknown) =>
+    notify(`${label} failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
+
   const toggleEnabled = (id: string) => {
     const next = !automations.find((a) => a.id === id)?.enabled
-    void schedulerEnable(id, next).then(() =>
-      setAutomations((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, enabled: next } : a)),
-      ),
-    )
+    void schedulerEnable(id, next)
+      .then(() => setAutomations((prev) => prev.map((a) => (a.id === id ? { ...a, enabled: next } : a))))
+      .catch((error) => reportActionError('Updating automation', error))
   }
 
-  const runNow = (id: string) => void schedulerRunNow(id)
+  const runNow = (id: string) => void schedulerRunNow(id).catch((error) => reportActionError('Running automation', error))
   const pauseJob = (id: string) =>
-    void schedulerPause(id).then(() =>
-      setAutomations((prev) =>
-        prev.map((a) =>
-          a.id === id
-            ? { ...a, state: { state: 'paused' as const, resumeDeadline: undefined } }
-            : a,
-        ),
-      ),
-    )
+    void schedulerPause(id)
+      .then(() => setAutomations((prev) => prev.map((a) => a.id === id ? { ...a, state: { state: 'paused' as const, resumeDeadline: undefined } } : a)))
+      .catch((error) => reportActionError('Pausing automation', error))
   const resumeJob = (id: string) =>
-    void schedulerResume(id).then(() =>
-      setAutomations((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, state: { state: 'idle' as const } } : a)),
-      ),
-    )
+    void schedulerResume(id)
+      .then(() => setAutomations((prev) => prev.map((a) => a.id === id ? { ...a, state: { state: 'idle' as const } } : a)))
+      .catch((error) => reportActionError('Resuming automation', error))
   const removeJob = (id: string) =>
-    void schedulerDelete(id).then(() =>
-      setAutomations((prev) => prev.filter((a) => a.id !== id)),
-    )
+    void schedulerDelete(id)
+      .then(() => setAutomations((prev) => prev.filter((a) => a.id !== id)))
+      .catch((error) => reportActionError('Deleting automation', error))
 
   const selected = automations.find((a) => a.id === selectedId) ?? null
 
@@ -230,7 +275,7 @@ export default function AutomationsPanel() {
                     <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-orange-500/15 text-orange-400">
                       <LayoutTemplate className="h-4 w-4" />
                     </div>
-                    <Badge variant="secondary" className="font-mono text-[9px]">{t.runs} runs</Badge>
+                    <Badge variant="secondary" className="font-mono text-[9px]">{inTauri() ? 'new' : `${t.runs} preview runs`}</Badge>
                   </div>
                   <h3 className="mt-2.5 text-sm font-medium text-foreground">{t.name}</h3>
                   <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{t.desc}</p>
@@ -250,7 +295,7 @@ export default function AutomationsPanel() {
                 </div>
               ))}
             </div>
-          ) : tab === 'history' ? (
+          ) : tab === 'history' && !inTauri() ? (
             <div className="rounded-lg border border-border bg-card">
               <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
                 <div className="flex items-center gap-1.5">
@@ -327,8 +372,30 @@ export default function AutomationsPanel() {
                 </table>
               </div>
             </div>
+          ) : tab === 'history' ? (
+            <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-xs text-muted-foreground">
+              Run history will appear here after the live scheduler records its first run.
+            </div>
           ) : (
           <>
+            {loading && (
+              <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-xs text-muted-foreground">
+                Loading automations…
+              </div>
+            )}
+            {!loading && loadError && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-4 text-xs text-red-300">
+                <span>Automations unavailable: {loadError}</span>
+                <Button size="sm" variant="outline" className="h-7 shrink-0 text-[10px]" onClick={() => setReload((value) => value + 1)}>
+                  Retry
+                </Button>
+              </div>
+            )}
+            {!loading && !loadError && automations.length === 0 && (
+              <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-xs text-muted-foreground">
+                No automations configured yet.
+              </div>
+            )}
             {automations.map((a) => {
               const Trigger = TRIGGER_ICON[a.trigger.type]
               const Icon = Trigger.icon

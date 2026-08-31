@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/lib/store'
 
 type EventKind = 'file' | 'edit' | 'browser' | 'shell' | 'code' | 'office' | 'export'
 
@@ -100,6 +101,10 @@ export default function ProgressView() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All')
   const [expanded, setExpanded] = useState<string | null>('09:15:22')
 
+  const workItems = useAppStore((s) => s.workItems)
+  const workPresence = useAppStore((s) => s.workPresence)
+  const workEvents = useAppStore((s) => s.workEvents)
+
   const visible =
     filter === 'All'
       ? EVENTS
@@ -131,6 +136,25 @@ export default function ProgressView() {
           ))}
         </div>
       </header>
+
+      {workItems.length > 0 && (
+        <div className="border-b border-border px-4 py-2">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-semibold">Live Work</span>
+            <Badge variant="outline" className="text-[10px]">
+              {workPresence?.state ?? 'connected'}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <span className="font-mono">{workItems[0]?.workId}</span>
+            <span>·</span>
+            <span>{workEvents.length} events</span>
+            {workPresence?.activeClients.length ? (
+              <span>· {workPresence.activeClients.length} client(s)</span>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       <ScrollArea className="scroll-thin min-h-0 flex-1">
         <div className="relative px-4 py-3">

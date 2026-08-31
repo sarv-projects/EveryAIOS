@@ -11,6 +11,7 @@ import {
   Activity,
   Plus,
   Maximize2,
+  Minimize2,
   PanelRightClose,
   PanelRight,
   GripVertical,
@@ -79,6 +80,7 @@ const PdfView = React.lazy(() => import('@/components/views/office-pdf-view'))
 const GenerativeView = React.lazy(() => import('@/components/views/generative-view'))
 const ArtifactView = React.lazy(() => import('@/components/views/artifact-view'))
 const CodeView = React.lazy(() => import('@/components/views/code-view'))
+const DesktopView = React.lazy(() => import('@/components/views/desktop-view'))
 
 // Map viewport IDs to the task kind that determines which agent handles them
 const VIEW_TASK_MAP: Partial<Record<ViewId, TaskKind>> = {
@@ -96,6 +98,7 @@ const VIEW_TASK_MAP: Partial<Record<ViewId, TaskKind>> = {
   storage: 'code',
   timeline: 'plan',
   trajectory: 'plan',
+  desktop: 'browser',
 }
 
 interface RailItem {
@@ -119,10 +122,10 @@ const sessionItems: RailItem[] = [
 ]
 
 const officeFlyoutItems = [
-  { id: 'office-xlsx' as ViewId, label: 'Sheets', live: true, type: 'Sheets' },
-  { id: 'office-docx' as ViewId, label: 'Word', live: false, type: 'Word' },
-  { id: 'office-pptx' as ViewId, label: 'Slides', live: false, type: 'Slides' },
-  { id: 'office-pdf' as ViewId, label: 'PDF', live: false, type: 'PDF' },
+  { id: 'office-xlsx' as ViewId, label: 'Q3-Financials.xlsx', live: true, type: 'Sheets' },
+  { id: 'office-docx' as ViewId, label: 'exec-summary.docx', live: false, type: 'Word' },
+  { id: 'office-pptx' as ViewId, label: 'quarterly-deck.pptx', live: false, type: 'Slides' },
+  { id: 'office-pdf' as ViewId, label: 'invoice-8402.pdf', live: false, type: 'PDF' },
 ]
 
 // View metadata for the multi-view tab strip (ARCH/12 v3.0 — VS Code-style).
@@ -131,10 +134,10 @@ const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   shell: { label: 'Terminal', icon: Terminal },
   browse: { label: 'Browser', icon: Globe },
   code: { label: 'Code', icon: Code2 },
-  'office-xlsx': { label: 'Sheets', icon: Table },
-  'office-docx': { label: 'Word', icon: FileText },
-  'office-pptx': { label: 'Slides', icon: Presentation },
-  'office-pdf': { label: 'PDF', icon: File },
+  'office-xlsx': { label: 'Q3-Financials.xlsx', icon: Table },
+  'office-docx': { label: 'exec-summary.docx', icon: FileText },
+  'office-pptx': { label: 'quarterly-deck.pptx', icon: Presentation },
+  'office-pdf': { label: 'invoice-8402.pdf', icon: File },
   progress: { label: 'Progress', icon: Activity },
   diff: { label: 'Diff', icon: GitCompare },
   audit: { label: 'Audit', icon: ShieldCheck },
@@ -146,6 +149,7 @@ const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   kanban: { label: 'Kanban', icon: GitBranch },
   generative: { label: 'Generative UI', icon: Sparkles },
   artifact: { label: 'Artifact', icon: MonitorSmartphone },
+  desktop: { label: 'Computer use', icon: MonitorSmartphone },
 }
 
 function ViewportContent({ view }: { view: ViewId }) {
@@ -183,6 +187,7 @@ function renderView(view: ViewId) {
     case 'kanban': return <KanbanView />
     case 'generative': return <GenerativeView />
     case 'artifact': return <ArtifactView />
+    case 'desktop': return <DesktopView />
     default: return null
   }
 }
@@ -214,7 +219,9 @@ export function ActivityRail() {
           <Tooltip key={item.id}>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={() => handleClick(item)}
+                aria-label={`Open ${item.label} view`}
                 className={cn(
                   'group relative grid h-9 w-9 place-items-center rounded-md transition-all',
                   isActive
@@ -265,16 +272,13 @@ export function ActivityRail() {
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
               <button
+                type="button"
                 onClick={() => {
-                  if (activeView.startsWith('office-') && !railCollapsed) {
-                    setRailCollapsed(true)
-                  } else if (activeView.startsWith('office-')) {
-                    setRailCollapsed(false)
-                  } else {
-                    setActiveView('office-xlsx')
-                    setOfficeFlyoutOpen(true)
-                  }
+                  if (!activeView.startsWith('office-')) setActiveView('office-xlsx')
+                  setRailCollapsed(false)
+                  setOfficeFlyoutOpen(true)
                 }}
+                aria-label="Open Office documents"
                 className={cn(
                   'group relative grid h-9 w-9 place-items-center rounded-md transition-all',
                   activeView.startsWith('office-') && !railCollapsed
@@ -342,7 +346,9 @@ export function ActivityRail() {
           <Tooltip key={item.id}>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={() => handleClick(item)}
+                aria-label={`Open ${item.label} view`}
                 className={cn(
                   'group relative grid h-9 w-9 place-items-center rounded-md transition-all',
                   isActive
@@ -367,7 +373,9 @@ export function ActivityRail() {
       <Tooltip>
         <TooltipTrigger asChild>
           <button
+            type="button"
             onClick={() => setActiveView('timeline')}
+            aria-label="Open session timeline"
             className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground/60 hover:bg-accent hover:text-foreground transition-all mt-1 border border-dashed border-border"
           >
             <Activity className="h-4 w-4" />
@@ -383,7 +391,9 @@ export function ActivityRail() {
       <Tooltip>
         <TooltipTrigger asChild>
           <button
+            type="button"
             onClick={toggleRail}
+            aria-label={railCollapsed ? 'Expand viewport' : 'Collapse viewport'}
             className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground/60 hover:bg-accent hover:text-foreground transition-all"
           >
             {railCollapsed ? (
@@ -410,6 +420,8 @@ export function RightViewport() {
   const addView = useAppStore((s) => s.addView)
   const closeView = useAppStore((s) => s.closeView)
   const reorderViews = useAppStore((s) => s.reorderViews)
+  const fullscreenView = useAppStore((s) => s.fullscreenView)
+  const setFullscreenView = useAppStore((s) => s.setFullscreenView)
 
   // P33.7 — drag-reorder state for the tab strip.
   const [dragIndex, setDragIndex] = React.useState<number | null>(null)
@@ -562,10 +574,13 @@ export function RightViewport() {
         <motion.section
           key="viewport"
           initial={{ width: 0, opacity: 0 }}
-          animate={{ width: `${viewportPct}%`, opacity: 1 }}
+          animate={{ width: fullscreenView ? '100%' : `${viewportPct}%`, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-          className="border-l border-border bg-card/40 overflow-hidden flex flex-col min-w-0 relative"
+          className={cn(
+            'border-l border-border bg-card/40 overflow-hidden flex flex-col min-w-0 relative',
+            fullscreenView && 'fixed inset-0 z-50 w-full rounded-none bg-background',
+          )}
         >
           {/* Multi-view tab strip (VS Code-style: default Terminal · Folder · Browser, "+" to add, × to close) */}
           <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto scroll-thin border-b border-border bg-sidebar/60 px-1 pt-1 no-select">
@@ -620,6 +635,7 @@ export function RightViewport() {
                     {officePaths[v]?.split(/[\\/]/).pop() ?? meta.label}
                   </span>
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation()
                       closeView(v)
@@ -637,6 +653,7 @@ export function RightViewport() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
+                  type="button"
                   className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   title="Add view"
                 >
@@ -709,8 +726,14 @@ export function RightViewport() {
                 </Tooltip>
               )
             })}
-            <button className="grid h-5 w-5 place-items-center rounded hover:bg-accent text-muted-foreground">
-              <Maximize2 className="h-3 w-3" />
+            <button
+              type="button"
+              onClick={() => setFullscreenView(!fullscreenView)}
+              aria-label={fullscreenView ? 'Exit fullscreen view' : 'Open fullscreen view'}
+              title={fullscreenView ? 'Exit fullscreen (⌘⇧F)' : 'Fullscreen (⌘⇧F)'}
+              className="grid h-5 w-5 place-items-center rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+            >
+              {fullscreenView ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
             </button>
           </div>
 

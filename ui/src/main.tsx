@@ -7,15 +7,23 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { initBridge } from "@/lib/bridge";
 
-// Wire real Tauri data (agents/sessions/spend/tickets/chat) when running
-// inside the shell; plain-browser preview keeps the demo data.
-initBridge();
+// The bridge is started from a React effect so StrictMode can exercise its
+// setup/cleanup pair. Browser mode is an explicitly labelled design preview.
+function Bootstrap() {
+  React.useEffect(() => {
+    const bridge = initBridge();
+    return () => {
+      void bridge.then((dispose) => dispose());
+    };
+  }, []);
+  return <App />;
+}
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider defaultTheme="light" enableSystem={false}>
       <TooltipProvider delayDuration={200} skipDelayDuration={100}>
-        <App />
+        <Bootstrap />
         <Toaster />
       </TooltipProvider>
     </ThemeProvider>

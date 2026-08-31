@@ -30,6 +30,8 @@
 pub mod autonomy;
 pub mod batch;
 pub mod blocklist;
+pub mod capability_broker;
+pub mod capability_contract;
 pub mod configscan;
 pub mod decision;
 pub mod diffcard;
@@ -60,6 +62,11 @@ pub use batch::{
     change_set_hash, BatchAction, BatchOperation, BatchReceipt, BatchTicket, BatchTicketStore,
 };
 pub use blocklist::{blocklist_for, BlocklistCategory, BLOCKLIST};
+pub use capability_broker::{
+    CapabilityBroker, CapabilityBrokerError, CapabilityGrant, CapabilityRequest,
+    EphemeralCredential, LocalCapabilityBroker,
+};
+pub use capability_contract::CapabilityInvocation;
 pub use decision::{DecisionPackage, WebActionKind};
 pub use diffcard::{render_native_card, CardAction, CardResponse, NativeCard};
 pub use egress::{ConnectivityMode, EgressEngine, EgressPlan, EgressVerdict};
@@ -82,7 +89,13 @@ pub use profiles::{GateAction, Hook, Profile};
 pub use release::{
     EgressPolicy, EgressPolicyEngine, EnforcementZone, ReleaseDecision, ReleaseReceipt,
 };
-pub use sandbox::{PathAccess, PathRule, SandboxError, SandboxProfile, SyscallGroup};
+#[cfg(target_os = "linux")]
+pub use sandbox::LinuxBwrapBackend;
+pub use sandbox::{
+    linux_bwrap_available, resolve_sandbox_backend, PathAccess, PathRule, SandboxBackend,
+    SandboxBackendKind, SandboxError, SandboxProfile, SandboxReceipt, SandboxRole, SandboxSpec,
+    SyscallGroup,
+};
 pub use seccomp::{Action, ArgFilter, SeccompError, SeccompPolicy, SyscallRule};
 pub use structural::{
     contains_shell_operator, structural_verdict, StructuralVerdict, SHELL_OPERATORS,
