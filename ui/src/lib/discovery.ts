@@ -5,6 +5,7 @@
 // secret. Demo fallback keeps the panel explorable in a plain browser.
 
 import { inTauri, invoke } from './tauri'
+import { nativeCall } from './runtime'
 
 export type ResourceKind = 'agent' | 'model' | 'provider' | 'mcp' | 'skill' | 'browser'
 export type ManagedStatus =
@@ -45,7 +46,7 @@ export interface RouteDecision {
 
 export async function discoveryInventory(): Promise<DiscoveryInventory> {
   if (!inTauri()) return demoInventory()
-  return invoke<DiscoveryInventory>('discovery_inventory')
+  return nativeCall('discovery inventory', () => invoke<DiscoveryInventory>('discovery_inventory'))
 }
 
 export async function routingFeedDecide(req: {
@@ -54,7 +55,7 @@ export async function routingFeedDecide(req: {
   requiresCodex?: boolean
 }): Promise<RouteDecision> {
   if (!inTauri()) return { ranked: [], excluded: [], generation: 0 }
-  return invoke<RouteDecision>('routing_feed_decide', req)
+  return nativeCall('routing decision', () => invoke<RouteDecision>('routing_feed_decide', req))
 }
 
 function demoInventory(): DiscoveryInventory {

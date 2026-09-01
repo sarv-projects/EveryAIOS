@@ -5,6 +5,7 @@
 // stays explorable.
 
 import { inTauri, invoke } from './tauri'
+import { nativeCall } from './runtime'
 
 export type DoctorStatus = 'ok' | 'warn' | 'fail'
 export interface DoctorCheck {
@@ -21,7 +22,7 @@ export interface DoctorReport {
 
 export async function doctorReport(): Promise<DoctorReport> {
   if (!inTauri()) return demoReport()
-  return invoke<DoctorReport>('doctor_report')
+  return nativeCall('doctor report', () => invoke<DoctorReport>('doctor_report'))
 }
 
 function demoReport(): DoctorReport {

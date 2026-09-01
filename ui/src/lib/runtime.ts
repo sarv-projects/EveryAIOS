@@ -1,5 +1,9 @@
 import { useSyncExternalStore } from 'react'
-import { inTauri } from './tauri'
+/** Keep the runtime policy independent from the IPC module so every native
+ * command can report failures through this module without a circular import. */
+function shellAvailable(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
 
 /** The only runtime states the consumer UI may expose. */
 export type RuntimeReadiness =
@@ -18,7 +22,7 @@ export interface RuntimeState {
 }
 
 const initialStatus: RuntimeState = {
-  status: inTauri() ? 'booting' : 'preview',
+  status: shellAvailable() ? 'booting' : 'preview',
   updatedAt: Date.now(),
 }
 
@@ -65,7 +69,7 @@ export async function nativeCall<T>(
   live: () => Promise<T>,
   failureStatus: RuntimeReadiness = 'degraded',
 ): Promise<T> {
-  if (!inTauri()) {
+  if (!shellAvailable()) {
     throw new Error(`${operation} requires the Tauri desktop shell`)
   }
   try {
@@ -82,7 +86,7 @@ export async function bridgeCall<T>(opts: {
   preview: () => T | Promise<T>
   failureStatus?: RuntimeReadiness
 }): Promise<T> {
-  if (!inTauri()) {
+  if (!shellAvailable()) {
     setRuntimeState('preview', 'Plain-browser development preview')
     return opts.preview()
   }

@@ -73,6 +73,7 @@ export default function GuardPanel() {
   const [matrix, setMatrix] = useState<MatrixCell[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
   const notify = useAppStore((s) => s.notify)
 
   // Live bridge (P7.5/J21 + P11.5.7): poll pending tickets + policy + the
@@ -110,7 +111,7 @@ export default function GuardPanel() {
       alive = false
       clearInterval(timer)
     }
-  }, [])
+  }, [reload])
 
   // F1 — the approval decision happens in the dedicated guard window, never
   // in this renderer (which also displays browser/generative-UI/plugin
@@ -301,7 +302,7 @@ export default function GuardPanel() {
           {loadError && inTauri() && (
             <div className="flex items-center justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-300">
               <span>Guard data is unavailable. {loadError}</span>
-              <Button size="sm" variant="outline" className="h-6 shrink-0 text-[10px]" onClick={() => window.location.reload()}>
+              <Button size="sm" variant="outline" className="h-6 shrink-0 text-[10px]" onClick={() => setReload((value) => value + 1)}>
                 Retry
               </Button>
             </div>

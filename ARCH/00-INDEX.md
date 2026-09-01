@@ -1,21 +1,21 @@
 # ARCH — The Desktop Agentic-OS Architecture (Hybrid)
 
-> **Status:** v1.0 (architecture design, 2026-08-06; re-verified 2026-08-21; **agent control plane frozen v3.47 — 2026-08-23**; **architecture frozen v3.66 — 2026-08-30**) · Works alongside the **master spec `../DESKTOP-APP-SPEC.md` (now v3.66 — see `SPEC-CHANGELOG.md`)** — this ARCH series adds the research-derived Rust layer; the two stay in sync (09 mirrors spec §0).
-> **Docs:** 00-INDEX + 01–15 (12 = UI/UX specification and layout design — **v3.4, 2026-08-21: activity-rail work cockpit → multi-view tabbed panel (§4.1b) + full-fidelity tool surfaces (§4.1c)**, doc 67 §6; 13 = Prompt Anatomy — the assembled desktop prompt: CACHE_BOUNDARY stable prefix, data-only third-party content, user-document delimiting, prompt-is-not-permission; 14 = ShowUI-Aloha Reference — visual grounding/action representation, halt-over-guess, opt-in weights never weaken Guard-2; 15 = Connect Store — the curated "click → sign in → use" connector surface: remote MCP + OAuth 2.1, device-flow/loopback for the big four, Guard-2 consent payloads, remote_plan first-class remote MCP) + research docs 49–85 (storage intelligence, generative-UI/image/voice/email gaps, aider recheck, gap-pass-2 hierarchy/search-stack, formalization, dep+catalog audit, agent-browser ecosystem, agentic dev-environments + closed-source agents, ACP registry + subscription auth, repo batch 2 — OmniRoute provider/routing goldmine, OmniRoute deep-dive, TencentDB Agent Memory, capability deltas — Sites/heartbeat + UI finalization, final all-rounder market research — H30/H31/H32 + two-channel injection; doc 69 = ACP ecosystem/harness → P17, doc 70 = MCP-directory → P18, docs 71–79 = batches 4–9 + local-model core → P19–P27, docs 80–82 = benchmark/moat/priority reviews → §9.1/§10/P28, doc 83 = competitor batch openworker/cc-switch/skales/deepseek-harness → P30, doc 85 = Work Gateway / durable-session layer (Cowork/OpenClaw/Podium/Codex) → spec v3.64–v3.66 + P49).
+> **Status:** Architecture reference. It works alongside the master spec `../DESKTOP-APP-SPEC.md`; this ARCH series defines architecture boundaries, module ownership, and diagrams. Capability identity is mirrored in `09-FEATURE-MATRIX.md`; historical decisions are recorded in `../SPEC-CHANGELOG.md`. Delivery status remains in `../TODO.md`.
+> **Docs:** 00–15 define the architecture, module layout, security, routing, memory, caching, office, browser, MCP, algorithms, repository map, UI surfaces, prompt anatomy, visual grounding, and connector store. Research provenance and adoption decisions remain in `RESEARCH/desktop_app/`; delivery status remains in `TODO.md`; historical changes remain in `SPEC-CHANGELOG.md`.
 > **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (new `everyaios-storage` crate, doc 49). **No scope compromise**: every capability in the research corpus (docs 01–85, **282 repos**) is derived in `09-FEATURE-MATRIX.md` (156 rows).
 > **Working name:** "EveryAIOS" (from the v2.0 spec's `~/.everyaios/`) — canonical across code + docs. Final branding is a **P12.6 GTM item**, not an open build dependency.
 
 ## The two specs reconciled
 
-> Historical reconciliation (columns describe earlier spec generations; the **live master spec is `desktop_app/DESKTOP-APP-SPEC.md` v3.66 — frozen (baseline v3.64, final hardening v3.65)**, in sync with this ARCH).
+> This table records stable architectural differences between the earlier drafts and the current hybrid architecture. It is descriptive, not a release-history log.
 
-| | Earlier v2.0 spec | All-Rust research spec (`RESEARCH/desktop_app/DESKTOP-APP-SPEC.md` — **superseded** draft) | This architecture |
+| | Earlier v2.0 spec | All-Rust research spec (the earlier all-Rust research draft) | This architecture |
 |---|---|---|---|
 | Engine | TS sidecar only | All-Rust | **Hybrid (both)** |
 | Browser | a11y-snapshot tool | CDP over system Chrome | **CDP child-process (Rust) + injected recorder** |
 | Office | block-patch (TS, superseded) | surgical OOXML | **Surgical OOXML part-patching + IronCalc + pdf-lib/lopdf** |
 | BYOK | provider clients built | ProviderAdapter | **Multi-key rings per provider + fallback rotation + OAuth** |
-| Connectors | MCP-first (decision 2026-08-16): MCP Servers + Native + Tool Catalog + Local Auth Bridge | local-first hub, no cloud proxy | **MCP is the platform; Composio/Zapier/Nango aggregator tabs removed (cloud SaaS holding OAuth tokens server-side)** |
+| Connectors | MCP-first: MCP Servers + Native + Tool Catalog + Local Auth Bridge | local-first hub, no cloud proxy | **MCP is the platform; Composio/Zapier/Nango aggregator tabs removed (cloud SaaS holding OAuth tokens server-side)** |
 | Memory | built algos (TS) | 7 algorithms + SOTA | **Built algos kept + SOTA retrieval layer (mem0/Letta patterns)** |
 | Guardrails | dual-guard (regex + diff cards) | Trust Ladder + interceptors | **Dual-guard in Rust + Trust Ladder in TS engine (kept)** |
 
@@ -34,7 +34,7 @@
 9. **09-FEATURE-MATRIX.md** — the complete capability→feature→module→status derivation
 10. **10-BUILD-PLAN.md** — phases with exit criteria
 11. **11-AI-CHAT-FEATURES.md** — AI chat derivation: copy (from APP engine + Hermes/etc.), convert, reject
-12. **12-UI-SPEC.md** — UI/UX specification **v3.4**: 48px activity rail + multi-view tabbed viewport (Folder/Shell/Browse/Code + ONE Office flyout + session views + plugin slot), views contract, takeover/resume, per-session tab/layout persistence (2026 work-cockpit pattern — Claude Views/Cursor/ChatGPT Work/Devin, doc 67 §6)
+12. **12-UI-SPEC.md** — UI/UX specification **v3.4**: 48px activity rail + multi-view tabbed viewport (Folder/Shell/Browse/Code + ONE Office flyout + session views + plugin slot), views contract, takeover/resume, per-session tab/layout persistence (multi-view work-cockpit design)
 13. **13-PROMPT-ANATOMY.md** — the assembled desktop prompt (`packages/coordinator/src/prompt.ts`): identity/persona scanned before insertion, third-party retrieval as data-only content, `<user_document>` delimiting, byte-stable prefix above `CACHE_BOUNDARY`, prompt-is-not-permission (P1.5)
 14. **14-SHOWUI-ALOHA-REFERENCE.md** — visual grounding + action-representation reference: a11y/UIA/CDP first, OCR/vision only when necessary, verify after one action, opt-in weights (P9.1)
 15. **15-CONNECT-STORE.md** — the Connect Store (v1.0, 2026-08-29): the curated "click → sign in → use" connector surface — remote MCP + OAuth 2.1 (`everyaios-mcp::store`), device-flow/loopback PKCE for the big four (GitHub/Google/Microsoft/Slack), Guard-2 consent payloads (`ConnectConsent`), first-class remote MCP via `remote_plan`

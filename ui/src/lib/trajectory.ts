@@ -4,6 +4,7 @@
 // a plain-browser preview the callers fall back to demo data.
 
 import { inTauri, invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 /** One context-injection record (one ContextInjection audit event). */
 export interface ContextInjection {
@@ -31,7 +32,7 @@ export type TrajectorySource = (typeof TRAJECTORY_SOURCES)[number];
 /** The session ids that have a context-injection log. */
 export async function trajectorySessions(): Promise<string[]> {
   if (!inTauri()) return demoSessions();
-  return invoke<string[]>("trajectory_sessions");
+  return nativeCall('trajectory sessions', () => invoke<string[]>("trajectory_sessions"));
 }
 
 /** One session's context-injection records (newest-last). */
@@ -39,7 +40,7 @@ export async function trajectorySnapshot(
   sessionId: string,
 ): Promise<ContextInjection[]> {
   if (!inTauri()) return demoInjections(sessionId);
-  return invoke<ContextInjection[]>("trajectory_snapshot", { sessionId });
+  return nativeCall('trajectory snapshot', () => invoke<ContextInjection[]>("trajectory_snapshot", { sessionId }));
 }
 
 /** Group a session's injections by source (stable TRAJECTORY_SOURCES order). */

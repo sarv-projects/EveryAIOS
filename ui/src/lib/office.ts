@@ -3,6 +3,7 @@
 // In a plain-browser preview the pages fall back to demo content.
 
 import { invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 export interface DocxBlockInfo {
   address: string;
@@ -34,35 +35,35 @@ export interface PdfPayload {
 }
 
 export async function docxOpen(path: string): Promise<DocxPayload> {
-  return invoke<DocxPayload>("docx_open", { path });
+  return nativeCall('DOCX open', () => invoke<DocxPayload>("docx_open", { path }));
 }
 
 export async function pptxOpen(path: string): Promise<PptxPayload> {
-  return invoke<PptxPayload>("pptx_open", { path });
+  return nativeCall('PPTX open', () => invoke<PptxPayload>("pptx_open", { path }));
 }
 
 export async function pdfOpen(path: string): Promise<PdfPayload> {
-  return invoke<PdfPayload>("pdf_open", { path });
+  return nativeCall('PDF open', () => invoke<PdfPayload>("pdf_open", { path }));
 }
 
 /** P4.4 — the raw PDF as a `data:application/pdf;base64,` URL for pdf.js. */
 export async function pdfBytes(path: string): Promise<string> {
-  return invoke<string>("pdf_bytes", { path });
+  return nativeCall('PDF bytes', () => invoke<string>("pdf_bytes", { path }));
 }
 
 export async function docxPatch(path: string, address: string, text: string) {
-  return invoke("docx_patch", { path, address, text });
+  return nativeCall('DOCX patch', () => invoke("docx_patch", { path, address, text }));
 }
 
 export async function docxTracks(path: string): Promise<{
   changes: Array<{ kind: string; author: string; text: string }>;
   comments: Array<{ id: string; author: string; text: string }>;
 }> {
-  return invoke("docx_tracks", { path });
+  return nativeCall('DOCX tracked changes', () => invoke("docx_tracks", { path }));
 }
 
 export async function pptxNotes(path: string): Promise<{ notes: Array<{ slide: number; talk: string }> }> {
-  return invoke("pptx_notes", { path });
+  return nativeCall('PPTX notes', () => invoke("pptx_notes", { path }));
 }
 
 export async function pdfPageOp(
@@ -70,11 +71,11 @@ export async function pdfPageOp(
   op: string,
   extra?: { pages?: number[]; delta?: number; other?: string; out?: string },
 ) {
-  return invoke("pdf_page_op", { path, op, ...extra });
+  return nativeCall('PDF page operation', () => invoke("pdf_page_op", { path, op, ...extra }));
 }
 
 export async function officeOpenExternal(path: string) {
-  return invoke("office_open_external", { path });
+  return nativeCall('open office file externally', () => invoke("office_open_external", { path }));
 }
 
 /**

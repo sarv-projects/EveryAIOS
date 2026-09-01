@@ -4,6 +4,7 @@
 // data so the page is still explorable.
 
 import { inTauri, invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 /** Per-document segment metadata (replay_segments row). */
 export interface Segment {
@@ -37,13 +38,13 @@ export interface Timeline {
 /** Searchable sessions list. */
 export async function replaySessions(query: string): Promise<Segment[]> {
   if (!inTauri()) return demoSessionSearch(query);
-  return invoke<Segment[]>("replay_sessions", { query: query || null });
+  return nativeCall('replay sessions', () => invoke<Segment[]>("replay_sessions", { query: query || null }));
 }
 
 /** Full scrubber data for one document. */
 export async function replayTimeline(documentId: string): Promise<Timeline> {
   if (!inTauri()) return demoTimeline(documentId);
-  return invoke<Timeline>("replay_timeline", { documentId });
+  return nativeCall('replay timeline', () => invoke<Timeline>("replay_timeline", { documentId }));
 }
 
 /** A step's screenshot as a data URL, or null when missing. */
@@ -56,7 +57,7 @@ export async function replayScreenshot(
       ? "data:image/svg+xml;base64," + btoa(demoShotSvg(step))
       : null;
   }
-  return invoke<string | null>("replay_screenshot", { documentId, step });
+  return nativeCall('replay screenshot', () => invoke<string | null>("replay_screenshot", { documentId, step }));
 }
 
 /** Watch: live tail of a document's stream since a seq. */
@@ -65,13 +66,13 @@ export async function watchEvents(
   sinceSeq: number,
 ): Promise<ReplayEvent[]> {
   if (!inTauri()) return [];
-  return invoke<ReplayEvent[]>("watch_events", { documentId, sinceSeq });
+  return nativeCall('watch audit events', () => invoke<ReplayEvent[]>("watch_events", { documentId, sinceSeq }));
 }
 
 /** Stop: JSON-RPC agent/stop over the control channel. */
 export async function agentStop(sessionId: string): Promise<void> {
   if (!inTauri()) return;
-  return invoke<void>("agent_stop", { sessionId });
+  return nativeCall('agent stop', () => invoke<void>("agent_stop", { sessionId }));
 }
 
 // ---------------------------------------------------------------------------

@@ -73,13 +73,19 @@ export default function TasksRail() {
   }, [])
 
   useEffect(() => {
+    let disposed = false
     void refresh()
     void onTaskUpdate(() => {
-      void refresh()
+      if (!disposed) void refresh()
     }).then((unlisten) => {
-      unlistenRef.current = unlisten
+      // Tauri resolves `listen` asynchronously. StrictMode may clean up the
+      // effect before that promise settles; unsubscribe immediately instead
+      // of retaining a listener that the component can no longer own.
+      if (disposed) unlisten()
+      else unlistenRef.current = unlisten
     })
     return () => {
+      disposed = true
       unlistenRef.current?.()
       unlistenRef.current = null
     }

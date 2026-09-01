@@ -1,6 +1,7 @@
 // P11.5.3 — LSP bridge (lsp_cmds.rs → everyaios-codeintel LspRunner).
 
 import { invoke, inTauri } from './tauri'
+import { nativeCall } from './runtime'
 
 export interface LspProblem {
   path: string
@@ -30,7 +31,7 @@ export async function lspDiagnostics(
     return { rows: [], count: 0, error: 'preview — LSP needs the Tauri shell' }
   }
   try {
-    return await invoke<LspResult>('lsp_diagnostics', { root, path, language, text })
+    return await nativeCall('LSP diagnostics', () => invoke<LspResult>('lsp_diagnostics', { root, path, language, text }))
   } catch (e) {
     return { rows: [], count: 0, error: String(e) }
   }

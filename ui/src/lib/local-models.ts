@@ -1,4 +1,5 @@
 import { inTauri, invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 /** Installed runtime row (ollama / llamafile) with hwfit badges. */
 export interface LocalModelRow {
@@ -166,16 +167,16 @@ export async function listLocalModels(): Promise<{
   hardware?: HardwareProfile;
 }> {
   if (!inTauri()) return { models: [], ctxFloor: 15_000, ctxSoft: 20_000 };
-  return invoke("local_models");
+  return nativeCall('local model inventory', () => invoke("local_models"));
 }
 
 export async function ensureLocal(runtime: string, model?: string): Promise<void> {
-  await invoke("local_ensure", { runtime, model: model ?? null });
+  await nativeCall('local runtime ensure', () => invoke("local_ensure", { runtime, model: model ?? null }));
 }
 
 export async function getHardware(): Promise<HardwareProfile | null> {
   if (!inTauri()) return null;
-  return invoke("local_hardware");
+  return nativeCall('hardware profile', () => invoke("local_hardware"));
 }
 
 export function getLocalPrefs(): LocalPrefs {

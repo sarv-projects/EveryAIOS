@@ -1,4 +1,5 @@
 import { inTauri, invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 export interface OAuthAccount {
   provider: string;
@@ -10,17 +11,17 @@ export interface OAuthAccount {
 
 export async function oauthStatus(): Promise<{ enabled: boolean; providers: string[] }> {
   if (!inTauri()) return { enabled: false, providers: [] };
-  return invoke("oauth_status");
+  return nativeCall('OAuth status', () => invoke("oauth_status"));
 }
 
 export async function oauthAccounts(): Promise<OAuthAccount[]> {
   if (!inTauri()) return [];
-  const r = await invoke<{ accounts?: OAuthAccount[] }>("oauth_accounts");
+  const r = await nativeCall('OAuth accounts', () => invoke<{ accounts?: OAuthAccount[] }>("oauth_accounts"));
   return r.accounts ?? [];
 }
 
 export async function oauthStartPkce(provider: string): Promise<{ authUrl: string }> {
-  return invoke("oauth_start_pkce", { provider });
+  return nativeCall('OAuth PKCE start', () => invoke("oauth_start_pkce", { provider }));
 }
 
 export async function oauthStartDevice(provider: string): Promise<{
@@ -29,7 +30,7 @@ export async function oauthStartDevice(provider: string): Promise<{
   verificationUriComplete?: string;
   intervalSecs: number;
 }> {
-  return invoke("oauth_start_device", { provider });
+  return nativeCall('OAuth device start', () => invoke("oauth_start_device", { provider }));
 }
 
 export async function oauthPollDevice(provider: string): Promise<{
@@ -37,9 +38,9 @@ export async function oauthPollDevice(provider: string): Promise<{
   intervalSecs?: number;
   account?: OAuthAccount;
 }> {
-  return invoke("oauth_poll_device", { provider });
+  return nativeCall('OAuth device poll', () => invoke("oauth_poll_device", { provider }));
 }
 
 export async function oauthRevoke(provider: string, accountId: string): Promise<void> {
-  return invoke("oauth_revoke", { provider, accountId });
+  return nativeCall('OAuth revoke', () => invoke("oauth_revoke", { provider, accountId }));
 }
