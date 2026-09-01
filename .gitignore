@@ -31,3 +31,7 @@ Thumbs.db
 # Uploaded screenshots (not project assets)
 *.png
 !icons/*.png
+
+# P50.3 sidecar resource: the bun-compiled coordinator binary (97MB, built
+# via `pnpm --filter @everyaios/coordinator build` + copy — never committed)
+src-tauri/bin/

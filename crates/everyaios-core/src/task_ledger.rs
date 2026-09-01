@@ -814,4 +814,82 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// P50.3.2 — the wire contract between the Rust ledger and the TS bridge
+    /// (`ui/src/lib/tasks.ts` mirrors these exact serde shapes). If this test
+    /// fails, a field was renamed/added in Rust without updating the TS
+    /// mirror (or vice versa) — the `tasks/*` responses would desync from the
+    /// activity rail. Checked fields: names, casing (snake_case), the
+    /// blocked-delivery payload shape, and the enum value spellings.
+    #[test]
+    fn serialized_record_matches_ts_bridge_contract() {
+        let record = TaskRecord {
+            id: "task-000001".into(),
+            kind: TaskKind::Scheduled,
+            title: "contract".into(),
+            status: TaskStatus::TimedOut,
+            requester: Some("s-1".into()),
+            created_ms: 1,
+            started_ms: Some(2),
+            finished_ms: Some(3),
+            last_heartbeat_ms: Some(4),
+            error: Some("boom".into()),
+            retry_generation: 7,
+            delivery: DeliveryState::Blocked {
+                retries: 2,
+                deadline_ms: 99,
+            },
+        };
+        let v = serde_json::to_value(&record).unwrap();
+        let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            vec![
+                "created_ms",
+                "delivery",
+                "error",
+                "finished_ms",
+                "id",
+                "kind",
+                "last_heartbeat_ms",
+                "requester",
+                "retry_generation",
+                "started_ms",
+                "status",
+                "title",
+            ]
+        );
+        // Enum spellings (snake_case in both languages).
+        assert_eq!(v["kind"], "scheduled");
+        assert_eq!(v["status"], "timed_out");
+        // Struct variant: externally-tagged → `{ blocked: { retries, deadline_ms } }`.
+        assert_eq!(v["delivery"]["blocked"]["retries"], 2);
+        assert_eq!(v["delivery"]["blocked"]["deadline_ms"], 99);
+
+        // Unit variants of the externally-tagged enum serialize as plain
+        // strings ("pending"), not {"pending": null} — the TS mirror type
+        // (`ui/src/lib/tasks.ts`) matches this exactly.
+        let empty = TaskRecord {
+            id: "task-000002".into(),
+            kind: TaskKind::Cli,
+            title: "contract".into(),
+            status: TaskStatus::Queued,
+            requester: None,
+            created_ms: 1,
+            started_ms: None,
+            finished_ms: None,
+            last_heartbeat_ms: None,
+            error: None,
+            retry_generation: 0,
+            delivery: DeliveryState::Pending,
+        };
+        let v = serde_json::to_value(&empty).unwrap();
+        // The optionals are present as null (TS: `field: T | null`), not absent.
+        assert!(v["requester"].is_null());
+        assert!(v["started_ms"].is_null());
+        assert_eq!(v["kind"], "cli");
+        assert_eq!(v["status"], "queued");
+        assert_eq!(v["delivery"], "pending");
+    }
 }

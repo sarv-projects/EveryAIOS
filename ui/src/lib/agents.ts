@@ -79,6 +79,9 @@ export interface AgentRuntime {
   sandbox: 'strict' | 'soft' | 'none'
   /** Notes / install hint */
   note?: string
+  /** P50.3.9 — governance truth: how much of this agent's effects EveryAIOS
+   * actually governs. Rendered in the picker; never imply un-audited coverage. */
+  governance?: import('./acp').GovernanceInfo
 }
 
 // === Model catalog ============================================================

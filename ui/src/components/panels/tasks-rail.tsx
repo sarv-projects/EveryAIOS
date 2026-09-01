@@ -164,7 +164,9 @@ export default function TasksRail() {
           {visible.map((t, i) => {
             const Icon = STATUS_ICON[t.status]
             const blocked =
-              t.delivery && 'blocked' in t.delivery ? t.delivery.blocked : null
+              typeof t.delivery === "object" && t.delivery !== null && "blocked" in t.delivery
+                ? t.delivery.blocked
+                : null
             return (
               <motion.div
                 key={t.id}

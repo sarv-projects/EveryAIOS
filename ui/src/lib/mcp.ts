@@ -4,6 +4,7 @@
 
 import { inTauri, invoke } from "./tauri";
 import { nativeCall } from './runtime';
+import { guardTickets } from './guard';
 
 export interface ToolInfo {
   name: string;
@@ -44,14 +45,60 @@ export async function mcpServers(): Promise<McpServerRow[]> {
   return nativeCall('MCP server list', () => invoke<McpServerRow[]>("mcp_servers"));
 }
 
-/** P11.5.8 — attach a user-supplied stdio MCP server + reconcile its tools. */
-export async function mcpAttach(
+/** P11.5.8 + P50.3.5 — attach a user-supplied stdio MCP server, **request**
+ * half: the shell mints a Guard-2 ticket bound to the exact command + args.
+ * Consent is enforced in Rust (no ticket → no spawn), not only in UI copy. */
+export async function mcpAttachRequest(
   name: string,
   command: string,
   args: string[],
+): Promise<{ action: "allow" | "ask"; ticketId: string; approvalNonce: string }> {
+  if (!inTauri()) return { action: "allow", ticketId: "preview", approvalNonce: "preview" };
+  return nativeCall('MCP attach request', () =>
+    invoke<{ action: "allow" | "ask"; ticketId: string; approvalNonce: string }>(
+      "mcp_attach_request",
+      { name, command, args },
+    ));
+}
+
+/** P50.3.5 — attach, **commit** half: consume the ticket and spawn. Only
+ * succeeds after the guard-window approval of exactly this command line. */
+export async function mcpAttachCommit(
+  name: string,
+  command: string,
+  args: string[],
+  ticketId: string,
 ): Promise<{ name: string; tools: string[]; desc: string }> {
   if (!inTauri()) return { name, tools: ["mcp_tool_1"], desc: "demo attach" };
-  return nativeCall('MCP attach', () => invoke("mcp_attach", { name, command, args }));
+  return nativeCall('MCP attach commit', () =>
+    invoke("mcp_attach_commit", { name, command, args, ticketId }));
+}
+
+/** P50.3.5 — detach a server: row removed + live child killed + disconnect
+ * persisted (the server will not reappear connected after a restart). */
+export async function mcpDetach(name: string): Promise<boolean> {
+  if (!inTauri()) return true;
+  return nativeCall('MCP detach', () => invoke<boolean>("mcp_detach", { name }));
+}
+
+/**
+ * Wait until a Guard-2 ticket leaves the pending stack (approved or rejected
+ * in the dedicated guard window). `allow` requests are already auto-approved,
+ * so callers can skip straight to commit. Resolves `true` on approval
+ * (ticket gone), `false` on timeout.
+ */
+export async function waitForTicketResolution(
+  ticketId: string,
+  timeoutMs = 120_000,
+): Promise<boolean> {
+  if (!inTauri()) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const tickets = await guardTickets();
+    if (!tickets.some((t) => t.ticketId === ticketId)) return true;
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+  return false;
 }
 
 /** Connect-Store — the curated "click → sign in → use" connector list. */

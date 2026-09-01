@@ -65,6 +65,7 @@ function synthesizeAgent(m: HarnessManifest): AgentRuntime {
     defaultModel: "",
     headless: true,
     sandbox: "soft",
+    governance: m.governance,
     note: "Installed from the ACP registry (F8)",
   };
 }

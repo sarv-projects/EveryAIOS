@@ -21,12 +21,13 @@ export type TaskStatus =
   | "cancelled"
   | "lost";
 
-/** Mirror of the Rust `DeliveryState` serde shape. */
+/** Mirror of the Rust `DeliveryState` serde shape. Unit variants serialize as
+ * plain strings (externally-tagged enum, P50.3.2 contract test pins this). */
 export type DeliveryState =
-  | { pending: null }
-  | { delivered: null }
+  | "pending"
+  | "delivered"
   | { blocked: { retries: number; deadline_ms: number } }
-  | { dismissed: null };
+  | "dismissed";
 
 /** Mirror of the Rust `TaskRecord` serde shape. */
 export interface TaskRecord {
@@ -58,7 +59,7 @@ const DEMO_TASKS: TaskRecord[] = [
     last_heartbeat_ms: Date.now() - 29 * 60_000,
     error: null,
     retry_generation: 0,
-    delivery: { delivered: null },
+    delivery: "delivered",
   },
   {
     id: "task-000002",
@@ -72,7 +73,7 @@ const DEMO_TASKS: TaskRecord[] = [
     last_heartbeat_ms: Date.now() - 20_000,
     error: null,
     retry_generation: 0,
-    delivery: { pending: null },
+    delivery: "pending",
   },
   {
     id: "task-000003",

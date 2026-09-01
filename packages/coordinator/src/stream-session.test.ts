@@ -76,4 +76,39 @@ describe("vendored StreamSession", () => {
     s.complete(); // still silent
     expect(events.filter((e) => e === "batch")).toHaveLength(0);
   });
+
+  // P50.3.10 — stream/event lifecycle: switching sessions must not leak
+  // events from the dead session into the new one. The old session is
+  // destroyed (listeners/timers cleared), a new session with the same id
+  // takes over, and only the live session emits.
+  test("session switch: destroyed session stops emitting; rebind delivers to the new one", async () => {
+    const deadEvents: string[] = [];
+    const liveEvents: string[] = [];
+    const s1 = new StreamSession("sess-1", (e) => deadEvents.push(e.type), {
+      batchIntervalMs: 5,
+    });
+    s1.pushToken("stale");
+    s1.destroy(); // session switch / cancel — listeners + timers cleared
+
+    const s2 = new StreamSession("sess-1", (e) => liveEvents.push(e.type), {
+      batchIntervalMs: 5,
+    });
+    s2.pushToken("fresh");
+    await tick(15);
+
+    expect(deadEvents.filter((e) => e === "batch")).toHaveLength(0);
+    expect(liveEvents.filter((e) => e === "batch")).toHaveLength(1);
+    s2.destroy();
+  });
+
+  test("session switch: complete() on the destroyed session stays silent", async () => {
+    const deadEvents: string[] = [];
+    const s1 = new StreamSession("sess-2", (e) => deadEvents.push(e.type), {
+      batchIntervalMs: 5,
+    });
+    s1.destroy();
+    s1.complete();
+    await tick(15);
+    expect(deadEvents).toHaveLength(0);
+  });
 });
