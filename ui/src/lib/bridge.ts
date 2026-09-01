@@ -20,6 +20,7 @@ import { workList, workSnapshot } from "./work";
 import {
   markRuntimeBooting,
   markRuntimeLive,
+  nativeCall,
   markSidecarOffline,
   markVaultLocked,
   markVaultSetup,
@@ -343,7 +344,7 @@ async function startBridge(): Promise<BridgeDisposer> {
 
       try {
         const { invoke } = await import('./tauri');
-        const listed = await invoke<{ sessions?: Array<import('./store').Session> }>('session_list');
+        const listed = await nativeCall('session list', () => invoke<{ sessions?: Array<import('./store').Session> }>('session_list'));
         if (alive) {
           // An empty native list is authoritative. It replaces the browser
           // seed with an empty real vault and prevents fake chats persisting.
@@ -591,6 +592,8 @@ export async function sendUserMessage(
       });
       return;
     }
-    st.streamFail(err instanceof Error ? err.message : "Failed to reach the agent");
+    const message = err instanceof Error ? err.message : "Failed to reach the agent";
+    setRuntimeState('degraded', `chat stream: ${message}`);
+    st.streamFail(message);
   }
 }

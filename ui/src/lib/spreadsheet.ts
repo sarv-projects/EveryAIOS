@@ -4,6 +4,7 @@
 // virtualization is explorable.
 
 import { invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 export type CellValue =
   | { Empty: null }
@@ -50,7 +51,7 @@ export interface RecalcResult {
 }
 
 export async function xlsxRecalc(path: string): Promise<RecalcResult> {
-  return invoke<RecalcResult>("xlsx_recalc", { path });
+  return nativeCall('spreadsheet recalculate', () => invoke<RecalcResult>("xlsx_recalc", { path }));
 }
 
 /** P4.7 — Guard-2 cell-edit split (plan-before-touch). Ticket-every-effect:
@@ -69,7 +70,7 @@ export async function xlsxEditRequest(
   address: string,
   value: string,
 ): Promise<XlsxEditRequest> {
-  return invoke<XlsxEditRequest>("xlsx_edit_request", { path, sheet, address, value });
+  return nativeCall('spreadsheet edit request', () => invoke<XlsxEditRequest>("xlsx_edit_request", { path, sheet, address, value }));
 }
 
 export async function xlsxEditCommit(
@@ -79,7 +80,7 @@ export async function xlsxEditCommit(
   value: string,
   ticketId: string,
 ): Promise<{ address: string; sheet: string; changedParts: string[] }> {
-  return invoke("xlsx_edit_commit", { path, sheet, address, value, ticketId });
+  return nativeCall('spreadsheet edit commit', () => invoke("xlsx_edit_commit", { path, sheet, address, value, ticketId }));
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +162,7 @@ export async function xlsxBatchRequest(
   sheet: string,
   batch: WorkbookBatch,
 ): Promise<XlsxBatchRequest> {
-  return invoke<XlsxBatchRequest>("xlsx_batch_request", { path, sheet, batch });
+  return nativeCall('spreadsheet batch request', () => invoke<XlsxBatchRequest>("xlsx_batch_request", { path, sheet, batch }));
 }
 
 export async function xlsxBatchCommit(
@@ -170,7 +171,7 @@ export async function xlsxBatchCommit(
   batch: WorkbookBatch,
   ticketId: string,
 ): Promise<{ summary: string; sheet: string; changedParts: string[] }> {
-  return invoke("xlsx_batch_commit", { path, sheet, batch, ticketId });
+  return nativeCall('spreadsheet batch commit', () => invoke("xlsx_batch_commit", { path, sheet, batch, ticketId }));
 }
 
 export interface PivotRow {
@@ -187,14 +188,14 @@ export async function xlsxPivot(
   aggregate: number,
   agg: "sum" | "count" | "avg",
 ): Promise<PivotRow[]> {
-  return invoke<PivotRow[]>("xlsx_pivot", {
+  return nativeCall('spreadsheet pivot', () => invoke<PivotRow[]>("xlsx_pivot", {
     path,
     sheet,
     source,
     groupBy,
     aggregate,
     agg,
-  });
+  }));
 }
 
 /** Read one windowed slice of a sheet from a workbook path. */
@@ -204,12 +205,12 @@ export async function xlsxOpen(
   offset: number,
   limit: number,
 ): Promise<XlsxWindowPayload> {
-  return invoke<XlsxWindowPayload>("xlsx_open", {
+  return nativeCall('spreadsheet open', () => invoke<XlsxWindowPayload>("xlsx_open", {
     path,
     sheet,
     offset,
     limit,
-  });
+  }));
 }
 
 export function cellDisplay(v: CellValue | undefined): string {

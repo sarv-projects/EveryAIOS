@@ -53,7 +53,8 @@ const KIND_META: Record<
   git: { icon: GitBranch, tone: 'text-emerald-300', ring: 'ring-emerald-500/20', label: 'Git' },
 }
 
-// Seeded list of notifications to demonstrate the activity feed.
+// Browser-preview fixture only. Native notifications must arrive from the
+// live event/audit stream and start empty until that stream is connected.
 const INITIAL_NOTIFICATIONS: AppNotification[] = [
   {
     id: 'n1',
@@ -291,7 +292,7 @@ export function NotificationsPopover() {
           <div className="flex items-center justify-between border-t border-border/60 bg-background/30 px-3 py-1.5">
             <button className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-orange-300">
               <Zap className="h-3 w-3 text-orange-400" />
-              Notification settings
+              {inTauri() ? 'Notification settings (live stream unavailable)' : 'Notification settings'}
             </button>
             <button className="font-mono text-[10px] text-orange-300 transition-colors hover:text-orange-200">
               View all activity →

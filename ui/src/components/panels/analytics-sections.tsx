@@ -173,8 +173,9 @@ export function SessionsTable() {
 }
 
 export function ModelLeaderboard() {
+  if (inTauri()) return null
   return (
-    <ChartCard title="Model leaderboard" subtitle="by usage share">
+    <ChartCard title="Model leaderboard" subtitle="preview fixtures · by usage share">
       <ul className="space-y-1.5">
         {MODELS.map((m, i) => (
           <li
@@ -205,6 +206,7 @@ const AGENT_STATS = [
 ]
 
 export function AgentBreakdown() {
+  if (inTauri()) return null
   const totalCost = 8.58
   return (
     <ChartCard title="Agent cost breakdown" subtitle="per runtime · last 30 days">

@@ -3,6 +3,7 @@
 // (no shell) the callers fall back to demo data so the page is explorable.
 
 import { inTauri, invoke } from "./tauri";
+import { nativeCall } from './runtime';
 
 export type AgentStatus = "running" | "waiting" | "done" | "failed" | "idle";
 
@@ -47,7 +48,7 @@ export interface CockpitState {
 /** Full flight-deck snapshot (polled by the page). */
 export async function cockpitSnapshot(): Promise<CockpitState> {
   if (!inTauri()) return demoState();
-  return invoke<CockpitState>("cockpit_snapshot");
+  return nativeCall('cockpit snapshot', () => invoke<CockpitState>("cockpit_snapshot"));
 }
 
 /** Feed seam: record a live agent action. */
@@ -57,7 +58,7 @@ export async function cockpitActivity(
   summary: string,
 ): Promise<void> {
   if (!inTauri()) return;
-  return invoke<void>("cockpit_activity", { agentId, tool, summary });
+  return nativeCall('cockpit activity', () => invoke<void>("cockpit_activity", { agentId, tool, summary }));
 }
 
 /** Feed seam: update an agent's token counters. */
@@ -67,7 +68,7 @@ export async function cockpitTokens(
   tokensOut: number,
 ): Promise<void> {
   if (!inTauri()) return;
-  return invoke<void>("cockpit_tokens", { agentId, tokensIn, tokensOut });
+  return nativeCall('cockpit tokens', () => invoke<void>("cockpit_tokens", { agentId, tokensIn, tokensOut }));
 }
 
 /** Register/refresh an agent card (coordinator registration feed). */
@@ -78,7 +79,7 @@ export async function cockpitUpsertAgent(args: {
   provider: string;
 }): Promise<void> {
   if (!inTauri()) return;
-  return invoke<void>("cockpit_upsert_agent", args);
+  return nativeCall('cockpit agent update', () => invoke<void>("cockpit_upsert_agent", args));
 }
 
 /** Toggle quiet mode: collapse to a single-sentence tray status. */
@@ -87,19 +88,19 @@ export async function cockpitQuiet(
   status?: string,
 ): Promise<void> {
   if (!inTauri()) return;
-  return invoke<void>("cockpit_quiet", { quiet, status: status ?? null });
+  return nativeCall('cockpit quiet mode', () => invoke<void>("cockpit_quiet", { quiet, status: status ?? null }));
 }
 
 /** STOP: kill the agent loop over the control channel. */
 export async function agentStop(sessionId: string): Promise<void> {
   if (!inTauri()) return;
-  return invoke<void>("agent_stop", { sessionId });
+  return nativeCall('agent stop', () => invoke<void>("agent_stop", { sessionId }));
 }
 
 /** UNDO: revert the last action over the control channel. */
 export async function agentUndo(sessionId: string): Promise<void> {
   if (!inTauri()) return;
-  return invoke<void>("agent_undo", { sessionId });
+  return nativeCall('agent undo', () => invoke<void>("agent_undo", { sessionId }));
 }
 
 /** Answer a circuit-break MCQ interrupt card. */
@@ -108,7 +109,7 @@ export async function interruptRespond(
   choice: number,
 ): Promise<void> {
   if (!inTauri()) return;
-  return invoke<void>("interrupt_respond", { interruptId, choice });
+  return nativeCall('interrupt response', () => invoke<void>("interrupt_respond", { interruptId, choice }));
 }
 
 // ---------------------------------------------------------------------------

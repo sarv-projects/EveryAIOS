@@ -11,6 +11,7 @@
 
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { nativeCall } from './runtime';
 
 export { listen };
 
@@ -26,7 +27,7 @@ export async function invoke<T = unknown>(
   cmd: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
-  return tauriInvoke<T>(cmd, args);
+  return nativeCall(`Tauri command ${cmd}`, () => tauriInvoke<T>(cmd, args));
 }
 
 /** Wire events from the Rust chat relay (camelCase mirror of ChatWireEvent). */

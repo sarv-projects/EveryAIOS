@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { inTauri } from './tauri'
-import { runtimeError, setRuntimeState } from './runtime'
+import { nativeCall, runtimeError, setRuntimeState } from './runtime'
 import { guardAutonomy, guardSetAutonomy } from './guard'
 import { inheritContext } from './plain-language'
 import {
@@ -1053,7 +1053,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         const { schedulerPauseSession, invoke } = await import('./tauri')
         await schedulerPauseSession(id)
-        await invoke('session_delete', { sessionId: id })
+        await nativeCall('session delete', () => invoke('session_delete', { sessionId: id }))
       } catch (error) {
         get().notify(`Could not delete this work: ${error instanceof Error ? error.message : String(error)}`, 'error')
         return
@@ -1970,7 +1970,7 @@ if (typeof window !== 'undefined') {
         try {
           const { invoke } = await import('./tauri')
           for (const sess of s.sessions) {
-            await invoke('session_put', { session: sess })
+            await nativeCall('session save', () => invoke('session_put', { session: sess }))
           }
         } catch (error) {
           // Persistence failure is a product state, not a recoverable no-op:

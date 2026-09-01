@@ -39,6 +39,20 @@ use crate::tools::ToolService;
 /// P1.8: registered keyless local endpoints (provider → endpoint).
 type LocalEndpointMap = HashMap<String, LocalEndpoint>;
 
+fn load_persistent_memory() -> MemoryService {
+    let path = crate::default_data_dir().join("memory.json");
+    match MemoryService::load_from(&path) {
+        Ok(memory) => memory,
+        Err(_) => MemoryService::new(),
+    }
+}
+
+fn persist_memory(memory: &MemoryService) {
+    let path = crate::default_data_dir().join("memory.json");
+    let _ = std::fs::create_dir_all(crate::default_data_dir());
+    let _ = memory.save_to(&path);
+}
+
 /// UI event sink (pre-existing; alias keeps clippy's type_complexity quiet).
 type EventSink = Box<dyn Fn(ChatWireEvent) + Send>;
 
@@ -290,7 +304,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             base_urls: Arc::new(Mutex::new(HashMap::new())),
             local_endpoints: Arc::new(Mutex::new(HashMap::new())),
-            memory: Arc::new(Mutex::new(MemoryService::new())),
+            memory: Arc::new(Mutex::new(load_persistent_memory())),
             guard,
             plan: Arc::new(Mutex::new(PlanService::new())),
             scheduler: Arc::new(Mutex::new(SchedulerService::new())),
@@ -511,8 +525,10 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // reply is synchronous and the sidecar can await it.
                     method if method.starts_with("memory/") || method == "usage/snapshot" => {
                         let mut svc = memory.lock().unwrap_or_else(|e| e.into_inner());
+                        let is_mutation = matches!(method, "memory/write" | "memory/forget" | "memory/ghost" | "memory/ghost_batch" | "memory/consolidate" | "memory/tick" | "memory/scope" | "memory/assess" | "memory/load");
                         match svc.handle(method, &params) {
                             Ok(out) => {
+                                if is_mutation { persist_memory(&svc); }
                                 let _ = writer.reply(id, out);
                             }
                             Err(e) => {

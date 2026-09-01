@@ -2,6 +2,7 @@
 // through Tauri; demo fallback for the plain-browser preview.
 
 import { invoke, inTauri } from './tauri'
+import { nativeCall } from './runtime'
 
 export interface GitStatusRow {
   code: string
@@ -20,30 +21,30 @@ export async function gitStatus(dir: string): Promise<GitStatus> {
   if (!inTauri()) {
     return { branch: 'main', rows: [], count: 0 }
   }
-  return invoke<GitStatus>('git_status', { dir })
+  return nativeCall('git status', () => invoke<GitStatus>('git_status', { dir }))
 }
 
 export async function gitLog(dir: string, n = 15): Promise<GitLog> {
   if (!inTauri()) return { commits: [] }
-  return invoke<GitLog>('git_log', { dir, n })
+  return nativeCall('git log', () => invoke<GitLog>('git_log', { dir, n }))
 }
 
 export async function gitDiff(dir: string, path?: string): Promise<{ diff: string }> {
   if (!inTauri()) return { diff: '' }
-  return invoke('git_diff', { dir, path })
+  return nativeCall('git diff', () => invoke('git_diff', { dir, path }))
 }
 
 export async function gitStageAll(dir: string): Promise<{ staged: boolean }> {
-  return invoke('git_stage_all', { dir })
+  return nativeCall('git stage all', () => invoke('git_stage_all', { dir }))
 }
 
 export async function gitCommit(dir: string, message: string): Promise<{ committed: boolean }> {
-  return invoke('git_commit', { dir, message })
+  return nativeCall('git commit', () => invoke('git_commit', { dir, message }))
 }
 
 export async function gitRoot(start: string): Promise<{ root: string | null }> {
   if (!inTauri()) return { root: null }
-  return invoke('git_root', { start })
+  return nativeCall('git root', () => invoke('git_root', { start }))
 }
 
 // --- P41.2 worktrees (subagent isolation) ---------------------------------
@@ -55,7 +56,7 @@ export interface Worktree {
 
 export async function gitWorktreeList(repo: string): Promise<Worktree[]> {
   if (!inTauri()) return []
-  const r = await invoke<{ worktrees: Worktree[] }>('git_worktree_list', { repo })
+  const r = await nativeCall('git worktree list', () => invoke<{ worktrees: Worktree[] }>('git_worktree_list', { repo }))
   return r.worktrees
 }
 
@@ -64,7 +65,7 @@ export async function gitWorktreeAdd(
   name: string,
   base: string,
 ): Promise<{ path: string; branch: string; base: string }> {
-  return invoke('git_worktree_add', { repo, name, base })
+  return nativeCall('git worktree add', () => invoke('git_worktree_add', { repo, name, base }))
 }
 
 export async function gitWorktreeMerge(
@@ -73,7 +74,7 @@ export async function gitWorktreeMerge(
   targetBranch: string,
   message: string,
 ): Promise<{ merged: boolean; mergeHead: string }> {
-  return invoke('git_worktree_merge', { repo, name, targetBranch, message })
+  return nativeCall('git worktree merge', () => invoke('git_worktree_merge', { repo, name, targetBranch, message }))
 }
 
 export async function gitWorktreeRevert(
@@ -81,5 +82,5 @@ export async function gitWorktreeRevert(
   name: string,
   commit: string,
 ): Promise<{ reverted: boolean }> {
-  return invoke('git_worktree_revert', { repo, name, commit })
+  return nativeCall('git worktree revert', () => invoke('git_worktree_revert', { repo, name, commit }))
 }

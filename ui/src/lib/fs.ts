@@ -4,6 +4,7 @@
 // views stay explorable.
 
 import { invoke, inTauri } from './tauri'
+import { nativeCall } from './runtime'
 
 export interface FsEntry {
   name: string
@@ -36,23 +37,23 @@ export interface FsUndo {
 
 export async function fsHome(): Promise<string> {
   if (!inTauri()) return '/'
-  return invoke<string>('fs_home')
+  return nativeCall('filesystem home', () => invoke<string>('fs_home'))
 }
 
 export async function fsListDir(path: string): Promise<FsList> {
   if (!inTauri()) return demoList(path)
-  return invoke<FsList>('fs_list_dir', { path })
+  return nativeCall('filesystem list', () => invoke<FsList>('fs_list_dir', { path }))
 }
 
 export async function fsReadFile(path: string): Promise<FsRead> {
   if (!inTauri()) {
     return { path, name: path.split('/').pop() ?? path, content: '', sizeBytes: 0, truncated: false, binary: false }
   }
-  return invoke<FsRead>('fs_read_file', { path })
+  return nativeCall('filesystem read', () => invoke<FsRead>('fs_read_file', { path }))
 }
 
 export async function fsWriteFile(path: string, content: string): Promise<{ path: string; bytes: number }> {
-  return invoke('fs_write_file', { path, content })
+  return nativeCall('filesystem write', () => invoke('fs_write_file', { path, content }))
 }
 
 /** P41.3 — ticketed editor write, request half: a Guard-2 ticket (diff card)
@@ -67,7 +68,7 @@ export async function fsWriteTicket(
   approvalNonce: string
   preview: { before: string; after: string }
 }> {
-  return invoke('fs_write_ticket', { path, content })
+  return nativeCall('filesystem write ticket', () => invoke('fs_write_ticket', { path, content }))
 }
 
 /** P41.3 — ticketed editor write, executor half: consumes the mandatory
@@ -78,14 +79,14 @@ export async function fsWriteCommit(
   content: string,
   ticketId: string,
 ): Promise<{ path: string; bytes: number }> {
-  return invoke('fs_write_commit', { path, content, ticketId })
+  return nativeCall('filesystem write commit', () => invoke('fs_write_commit', { path, content, ticketId }))
 }
 
 export async function fsUndoList(): Promise<{ undos: FsUndo[]; count: number }> {
   if (!inTauri()) {
     return { undos: [], count: 0 }
   }
-  return invoke('fs_undo_list')
+  return nativeCall('filesystem undo list', () => invoke('fs_undo_list'))
 }
 
 // Demo fallback — a small realistic tree (preview only; the Tauri path is real).

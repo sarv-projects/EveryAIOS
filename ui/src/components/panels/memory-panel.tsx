@@ -15,6 +15,7 @@ import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
 import { useDebouncedValue } from '@/lib/ux'
 import { staggerStyle } from '@/lib/stagger'
+import { skillsCatalog, type SkillRowView } from '@/lib/skills'
 import {
   memoryRead,
   memoryRequest,
@@ -100,6 +101,7 @@ export default function MemoryPanel() {
   const [liveGraph, setLiveGraph] = useState<MemoryGraph | null>(null)
   const [liveEpisodes, setLiveEpisodes] = useState<MemoryEpisode[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [skills, setSkills] = useState<SkillRowView[]>([])
   const notify = useAppStore((s) => s.notify)
 
   // P5.22 — the knowledge/episodic/graph tabs read the live MemoryService
@@ -108,12 +110,13 @@ export default function MemoryPanel() {
   // session). Demo fallback in preview.
   useEffect(() => {
     let alive = true
-    Promise.all([memoryFacts(), memoryGraph(), memoryEpisodes()])
-      .then(([status, graph, episodes]) => {
+    Promise.all([memoryFacts(), memoryGraph(), memoryEpisodes(), skillsCatalog()])
+      .then(([status, graph, episodes, catalog]) => {
         if (!alive) return
         setLiveFacts(status.facts.filter((f) => f.status === 'active'))
         setLiveGraph(graph)
         setLiveEpisodes(episodes.episodes)
+        setSkills(catalog.filter((skill) => skill.installed))
         setLoadError(null)
       })
       .catch((error) => {
@@ -124,8 +127,9 @@ export default function MemoryPanel() {
     }
   }, [])
 
-  // Live facts feed the knowledge list (each fact = one MemoryItem); the
-  // demo seed stays the fallback in plain-browser preview.
+  // Live facts feed the knowledge list (each fact = one MemoryItem). In the
+  // Tauri shell, an unavailable or empty native store remains empty; only the
+  // explicitly labelled browser preview may use fixtures.
   const liveItems: MemoryItem[] = (liveFacts ?? []).map((f, i) => ({
     id: f.id,
     title: f.text,
@@ -142,7 +146,7 @@ export default function MemoryPanel() {
   const knowledge = shownItems.filter((i) => i.source !== 'suggested')
   const categoryCount = (id: string): number => {
     if (id === 'all') return knowledge.length
-    if (id === 'skills') return inTauri() ? 0 : SKILLS.length
+    if (id === 'skills') return inTauri() ? skills.length : SKILLS.length
     const name = CATEGORIES.find((category) => category.id === id)?.name
     return knowledge.filter((item) => item.category === name).length
   }
@@ -308,7 +312,7 @@ export default function MemoryPanel() {
           {tab === 'episodic' && <EpisodicTab facts={liveFacts} episodes={liveEpisodes} />}
           {tab === 'semantic' && <SemanticTab />}
           {tab === 'graph' && <GraphTab facts={liveFacts} graph={liveGraph} />}
-          {tab === 'skills' && <SkillsTab />}
+          {tab === 'skills' && <SkillsTab skills={skills} />}
           {tab === 'knowledge' && (
           <>
             {suggestions.length > 0 && (
@@ -429,8 +433,9 @@ function EpisodicTab({
 }
 
 function SemanticTab() {
-  // P11.5.6 — semantic store over the live memory/* RPC (demo fallback in
-  // preview). Search box (debounced) + folder organization + bulk enable.
+  // P11.5.6 — semantic store over the live memory/* RPC. Search box
+  // (debounced) + folder organization + bulk enable; preview fixtures are
+  // restricted to the plain-browser development path.
   const [facts, setFacts] = useState<string[]>(inTauri() ? [] : DEMO_FACTS.map((f) => f.fact))
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -508,7 +513,7 @@ function SemanticTab() {
               <div className="min-w-0 flex-1">
                 <div className="text-xs text-foreground">{f}</div>
                 <div className="truncate font-mono text-[9px] text-muted-foreground">
-                  folder: {folder} · source: engine
+                  folder: {folder} · source: {inTauri() ? 'live store' : 'preview fixture'}
                 </div>
               </div>
               <select
@@ -658,17 +663,20 @@ function GraphTab({
   )
 }
 
-function SkillsTab() {
-  if (inTauri()) {
+function SkillsTab({ skills }: { skills: SkillRowView[] }) {
+  const rows = inTauri()
+    ? skills.map((s) => ({ id: s.id, name: s.name, desc: s.description, status: 'installed' as const, version: s.version }))
+    : SKILLS
+  if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-xs text-muted-foreground">
-        Installed skills will appear here when the live skills registry is available.
+        {inTauri() ? 'No installed skills yet.' : 'No skills available.'}
       </div>
     )
   }
   return (
     <div className="grid gap-2 sm:grid-cols-2">
-      {SKILLS.map((s) => (
+      {rows.map((s) => (
         <div
           key={s.id}
           className={cn(

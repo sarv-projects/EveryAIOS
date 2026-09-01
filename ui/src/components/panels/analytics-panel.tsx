@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart,
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
+import { usageSnapshot, sessionTotals } from '@/lib/spend'
 import { ChartCard, ModelLeaderboard, SessionsTable, AgentBreakdown } from './analytics-sections'
 
 const KPIS = [
@@ -53,6 +54,19 @@ const TOOLTIP_STYLE = {
 export default function AnalyticsPanel() {
   const [range, setRange] = useState('30d')
   const notify = useAppStore((s) => s.notify)
+  const [live, setLive] = useState<{ spent: number; tokens: number; sessions: number } | null>(null)
+  useEffect(() => {
+    if (!inTauri()) return
+    let active = true
+    Promise.all([usageSnapshot(), sessionTotals()]).then(([snapshot, totals]) => {
+      if (active) setLive({
+        spent: snapshot.byKey.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
+        tokens: snapshot.total.tokensIn + snapshot.total.tokensOut,
+        sessions: totals.length,
+      })
+    }).catch(() => { if (active) setLive({ spent: 0, tokens: 0, sessions: 0 }) })
+    return () => { active = false }
+  }, [])
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -84,7 +98,7 @@ export default function AnalyticsPanel() {
         >
           {inTauri() ? (
             <div className="rounded-lg border border-dashed border-border bg-card p-4 text-xs text-muted-foreground">
-              Live analytics are sourced from the encrypted usage ledger. Aggregates appear after real provider activity is recorded.
+              {live ? `Live ledger: $${live.spent.toFixed(2)} · ${live.tokens.toLocaleString()} tokens · ${live.sessions} sessions.` : 'Loading live analytics from the encrypted usage ledger…'}
             </div>
           ) : (
           <>

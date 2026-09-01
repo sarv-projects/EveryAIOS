@@ -3,7 +3,7 @@
 // preview the caller falls back to demo data so the card is explorable.
 
 import { inTauri, invoke } from "./tauri";
-import { bridgeCall } from './runtime';
+import { bridgeCall, nativeCall } from './runtime';
 
 /** The structured escalation bundle (doc 52 §2) rendered on the card. */
 export interface GuardDecision {
@@ -86,7 +86,7 @@ export async function guardRespond(
  */
 export async function openGuardWindow(): Promise<void> {
   if (!inTauri()) return;
-  await invoke<void>("guard_open_window");
+  await nativeCall('open Guard approval window', () => invoke<void>("guard_open_window"));
 }
 
 /** The append-only approve/reject receipts. */
@@ -211,7 +211,7 @@ export interface GuardAutonomy {
  */
 export async function guardAutonomy(): Promise<UIAutonomyLevel | null> {
   if (!inTauri()) return null;
-  const out = await invoke<GuardAutonomy>("guard_autonomy");
+  const out = await nativeCall('Guard autonomy status', () => invoke<GuardAutonomy>("guard_autonomy"));
   return toUILevel(out.autonomyLevel);
 }
 
@@ -222,9 +222,9 @@ export async function guardAutonomy(): Promise<UIAutonomyLevel | null> {
  */
 export async function guardSetAutonomy(level: UIAutonomyLevel): Promise<UIAutonomyLevel | null> {
   if (!inTauri()) return null;
-  const out = await invoke<GuardAutonomy>("guard_set_autonomy", {
+  const out = await nativeCall('set Guard autonomy', () => invoke<GuardAutonomy>("guard_set_autonomy", {
     level: toRustLevel(level),
-  });
+  }));
   return toUILevel(out.autonomyLevel);
 }
 

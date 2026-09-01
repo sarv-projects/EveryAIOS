@@ -6,6 +6,7 @@
 // button produces the same markdown so it can still be filed.
 
 import { inTauri, invoke } from './tauri'
+import { nativeCall } from './runtime'
 
 export type FeedbackKind = 'bug' | 'feature'
 
@@ -20,12 +21,12 @@ const LOCAL_KEY = 'everyaios.feedback.drafts'
 
 export async function submitFeedback(report: FeedbackReport): Promise<{ path?: string }> {
   if (inTauri()) {
-    const path = await invoke<string>('feedback_submit', {
+    const path = await nativeCall('feedback submit', () => invoke<string>('feedback_submit', {
       kind: report.kind,
       title: report.title,
       body: report.body,
       category: report.category || null,
-    })
+    }))
     return { path }
   }
   // Preview fallback: persist locally so the report isn't lost.
