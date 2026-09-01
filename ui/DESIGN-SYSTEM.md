@@ -43,6 +43,7 @@ JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
 | ErrorState (5 kinds) | `ui/error-state.tsx` | network / keyRevoked / provider5xx / budget / unknown |
 | LoadingState (5 kinds) | `ui/loading-state.tsx` | ttft / compaction / tool / agent / generic |
 | MessageBubble, ChatComposer, MCQ card | `chat/*` | Composer: Work Mode ▾ (Auto/Plan/Build/Research) · Agent ▾ · Autonomy ▾ (Sandbox/Ask/Auto/Maximum). Casual chips `[🤖 Auto] [🛡 Ask]`. Now-doing strip shows the live autonomy level. |
+| Agent-picker governance badge | `chat/agent-model-picker.tsx` | P50.3.9: Governed-Mediated (green, "every effect ticketed + audited") · Self-contained (amber, "approvals mediated; agent's own effects unaudited") · NotGoverned (red) — honest note on hover; data from `acp_agents` `governance` |
 | OnboardingModal | `onboarding-modal.tsx` | 4 steps, non-dismissible, skip allowed |
 | Folder/Shell/Browse/Code/Diff views | `views/*` | real backends (fs/shell/CDP/undo-list) |
 | Cockpit slideover | `shell/cockpit-slideover.tsx` | animated open/close, per-agent pause/resume |

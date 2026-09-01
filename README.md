@@ -168,7 +168,7 @@ The Code rail is a real workbench (explorer, SCM, problems, editor, terminal). I
 
 Sidecar proposes. Rust disposes.
 
-Every mutation (file, office, shell, browser, send, connector write) needs a **ticket**. Guard-1 is the fast deny. Guard-2 is the card you see — nonce-bound, in its own webview, so a compromised chat window cannot fake yes. Path floor. Egress policy. Injection defense. Keys only in the SQLCipher vault; they are zeroized in memory; child processes do not inherit them.
+Every mutation (file, office, shell, browser, send, connector write, remote MCP tool call, MCP server install) needs a **ticket**. Guard-1 is the fast deny. Guard-2 is the card you see — nonce-bound, in its own webview, so a compromised chat window cannot fake yes. Path floor. Egress policy. Injection defense. Keys only in the SQLCipher vault; they are zeroized in memory; child processes do not inherit them.
 
 Trust ladder 0–100. Autonomy level is a preset on that engine, not a YOLO switch. External agents in self-contained mode are honest about what we cannot see.
 
