@@ -175,7 +175,7 @@ Header + `Trust Ladder` badge + `Guard-1 regex · Guard-2 cleanup`. Sections:
 Header + stats strip (Connected 5 · Available 12 · Tools 94 · MCP servers 3). **Three real tabs**:
 - **Native** — live vault OAuth accounts when the shell is up (`oauth_accounts`); empty vault shows an honest empty state (no fake “connected” rows). Plain-browser preview uses `NATIVE_SAMPLES` only.
 - **Planned (P42)** — Google Workspace + Microsoft 365/Graph cards, status `disconnected` / badge `not attached`. Crate engines exist; live OAuth attach is the follow-on.
-- **MCP Servers** — server rows (GitHub · Filesystem · Slack · Postgres: transport HTTP/stdio, desc, tools) — `Connect` flips the row to connected live.
+- **MCP Servers** — server rows (GitHub · Filesystem · Slack · Postgres: transport HTTP/stdio, desc, tools) — `Connect`/`Attach` runs the two-phase flow: the shell mints a Guard-2 ticket over the exact command line, the user approves the card in the guard window, and the commit half spawns — consent is enforced in Rust, not just UI copy. Disconnect persists; detached rows restore as `disconnected` after restart.
 - **Tool Catalog** — the real `everyaios-mcp` registry (total/browser/storage/read-only stats; every tool: name, kind badge, profile, args, `ro`/`open` flags).
 Footer: `OAuth tokens stored in your local vault (SQLCipher). The agent never sees raw tokens.`
 

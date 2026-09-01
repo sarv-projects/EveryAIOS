@@ -36,6 +36,15 @@
 > 6 new skillstore tests. **CI:** the dropped `APP_CLONE_TOKEN` gate is replaced
 > by an explicit fail-loudly step in `ci.yml` — every coordinator dep must
 > resolve to a vendored `packages/core-*` package or the workflow fails.
+> **v1.5 (2026-09-01, P50.3.4/.5):** consent enforcement moved fully into Rust —
+> user-supplied stdio attach is two-phase (`mcp_attach_request` mints an
+> args-hash-bound Guard-2 ticket over the exact command line; `mcp_attach_commit`
+> consumes the single-use ticket before any child spawns; `mcp_detach` persists
+> the disconnect), and remote `tools/call` goes through the same ticket +
+> audit-receipt path as native effects (`mcp_remote_call` request half →
+> `mcp_remote_call_commit` executor half; read-only `tools/list`/discovery stay
+> ungated). Attached-server identity persists to `<data_dir>/mcp_servers.json`
+> and restores at boot as honestly `disconnected` rows.
 
 ## The problem
 
