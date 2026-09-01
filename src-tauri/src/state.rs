@@ -79,6 +79,12 @@ pub struct AppState {
     pub mcp_remote_flows:
         Arc<Mutex<std::collections::HashMap<String, crate::mcp_cmds::RemoteFlowState>>>,
     pub mcp_remote_tokens: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    /// P50.3.4 — remote MCP `tools/call` requests waiting on their Guard-2
+    /// ticket (the request half minted the card; the commit half consumes the
+    /// ticket and executes). Keyed by ticket id — direct remote calls must not
+    /// bypass the same approval path native tools go through.
+    pub mcp_pending_calls:
+        Mutex<std::collections::HashMap<String, crate::mcp_cmds::PendingRemoteCall>>,
     /// P48.3 (E9): the lazily-attached native desktop engine (None until first
     /// use; honest-fail on headless / no display). Engine + audit bridge live
     /// here — never in the renderer or the coordinator.

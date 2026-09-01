@@ -307,7 +307,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             memory: Arc::new(Mutex::new(load_persistent_memory())),
             guard,
             plan: Arc::new(Mutex::new(PlanService::new())),
-            scheduler: Arc::new(Mutex::new(SchedulerService::new())),
+            scheduler: Arc::new(Mutex::new(SchedulerService::load_or_new(
+                crate::default_data_dir().join("scheduler.json"),
+            ))),
             tools,
             evals: Arc::new(Mutex::new(EvalService::new())),
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
@@ -318,7 +320,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             capabilities,
             egress,
             tasks: Arc::new(Mutex::new(crate::task_ledger::TaskLedger::new(Box::new(
-                crate::task_ledger::InMemoryStore::new(),
+                crate::task_ledger::FileStore::new(crate::default_data_dir().join("tasks.json")),
             )))),
             on_event: Arc::new(Mutex::new(Box::new(on_event))),
             agui: crate::agui::AguiRelay::new(),

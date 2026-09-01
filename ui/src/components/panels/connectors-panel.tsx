@@ -13,11 +13,13 @@ import { scopesFor } from '@/lib/connector-scopes'
 import { type Connector } from '@/lib/store'
 import { useAppStore } from '@/lib/store'
 import {
-  mcpAttach,
+  mcpAttachRequest,
+  mcpAttachCommit,
   mcpCatalog,
   mcpServers,
   mcpConnectStart,
   storeCatalog,
+  waitForTicketResolution,
   type McpCatalog,
   type McpServerRow,
   type StoreEntry,
@@ -168,7 +170,19 @@ export default function ConnectorsPanel() {
     setAttachBusy(true)
     try {
       const args = attachArgs.split(/\s+/).filter(Boolean)
-      const res = await mcpAttach(attachName.trim(), attachCmd.trim(), args)
+      // P50.3.5 — consent is enforced in Rust: mint a Guard-2 ticket bound to
+      // the exact command line, wait for the guard-window decision, and only
+      // then commit (spawn). No ticket → no child process, ever.
+      const req = await mcpAttachRequest(attachName.trim(), attachCmd.trim(), args)
+      if (req.action === 'ask') {
+        notify('Approval card opened — approve the MCP attach in the guard window')
+        const resolved = await waitForTicketResolution(req.ticketId)
+        if (!resolved) {
+          notify('MCP attach: approval not granted in time — nothing was spawned')
+          return
+        }
+      }
+      const res = await mcpAttachCommit(attachName.trim(), attachCmd.trim(), args, req.ticketId)
       notify(`MCP: attached “${res.name}” (${res.tools.length} tools reconciled)`)
       setAttachOpen(false)
       setAttachName('')

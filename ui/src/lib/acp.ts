@@ -29,6 +29,36 @@ export interface HarnessManifest {
   authMode: AuthMode;
   protocol: HarnessProtocol;
   isDefault: boolean;
+  /** P50.3.9 — governance truth (present on every row from the shell). */
+  governance?: GovernanceInfo;
+}
+
+/** P50.3.9 — how much of an agent's effects EveryAIOS actually governs.
+ * Never imply audit coverage that does not exist. */
+export type GovernanceClass =
+  | "GovernedMediated"
+  | "SelfContained"
+  | "NotGoverned";
+
+export interface GovernanceInfo {
+  class: GovernanceClass;
+  /** True only when every effect lands on the EveryAIOS audit trail. */
+  auditedEffects: boolean;
+  note: string;
+}
+
+/** Short picker/transcript badge label per governance class. */
+export function governanceLabel(g: GovernanceInfo | undefined): string {
+  switch (g?.class) {
+    case "GovernedMediated":
+      return "Governed — every effect ticketed + audited";
+    case "SelfContained":
+      return "Self-contained — approvals mediated; agent's own effects unaudited";
+    case "NotGoverned":
+      return "Not governed — no EveryAIOS audit coverage";
+    default:
+      return "Governance unknown";
+  }
 }
 
 export interface AcpHandleInfo {

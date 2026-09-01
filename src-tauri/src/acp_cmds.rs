@@ -120,9 +120,54 @@ impl From<(&AcpHandle, &str)> for AcpHandleInfo {
 }
 
 /// The launch registry (the agent picker). Default = inbuilt EveryAIOS.
+///
+/// P50.3.9 — governance truth: every agent row carries an explicit
+/// `governance` classification so the picker and the work transcript never
+/// imply EveryAIOS audit coverage for effects an external agent performs
+/// inside its own process.
+/// - `GovernedMediated` — every effect flows through the EveryAIOS executor
+///   (Guard-2 ticket → receipt on the one audit trail). Inbuilt engine only.
+/// - `SelfContained` — the agent's `session/request_permission` requests are
+///   answered by the shared GuardService (mediated at the ACP boundary), but
+///   effects the agent performs internally (its own shell, files, network)
+///   are **outside** the EveryAIOS audit trail. Honest label for ACP
+///   harnesses like Claude Code / Codex.
+/// - `NotGoverned` — neither of the above; no EveryAIOS coverage. (Registry
+///   agents that neither mediate permissions nor route effects; the picker
+///   must render the row as un-audited.)
 #[tauri::command]
-pub fn acp_agents() -> Vec<HarnessManifest> {
-    LaunchRegistry::builtin().agents
+pub fn acp_agents() -> Vec<serde_json::Value> {
+    LaunchRegistry::builtin()
+        .agents
+        .iter()
+        .map(|m| {
+            let (class, audited_effects, note) = if m.is_default {
+                (
+                    "GovernedMediated",
+                    true,
+                    "Every effect flows through the EveryAIOS executor: Guard-2 ticket, receipt on the audit trail.",
+                )
+            } else {
+                (
+                    "SelfContained",
+                    false,
+                    "Permission requests are mediated by Guard-2, but effects performed inside the agent's own process (shell, files, network) are outside the EveryAIOS audit trail.",
+                )
+            };
+            let mut v = serde_json::to_value(m).unwrap_or(serde_json::Value::Null);
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert(
+                    "governance".into(),
+                    serde_json::json!({
+                        "class": class,
+                        "auditedEffects": audited_effects,
+                        "note": note,
+                    }),
+                );
+            }
+            v
+        })
+        .collect()
 }
 
 /// F8 — refresh the official ACP registry cache (`registry.json` from the

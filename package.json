@@ -9,7 +9,8 @@
     "coordinator:typecheck": "pnpm --filter @everyaios/coordinator type-check",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "tauri:verify-clean-boot": "node scripts/clean-profile-boot-check.mjs"
+    "tauri:verify-clean-boot": "node scripts/clean-profile-boot-check.mjs",
+    "ipc:parity": "node scripts/ipc-parity.mjs --md"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4"

@@ -56,7 +56,7 @@ pub fn mcp_catalog() -> McpCatalog {
 }
 
 /// P11.5.8 — one known/attached MCP server row for the Connectors panel.
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerRow {
     pub name: String,
@@ -64,6 +64,67 @@ pub struct McpServerRow {
     pub transport: String, // stdio | http
     pub tools: usize,
     pub desc: String,
+}
+
+/// P50.3.4 — a remote `tools/call` waiting on its Guard-2 ticket. The request
+/// half mints the card and stores the exact call (args-hash bound); the commit
+/// half consumes the ticket and only then executes. Stored in the shell —
+/// never in the renderer.
+#[derive(Debug, Clone)]
+pub struct PendingRemoteCall {
+    pub store_id: String,
+    pub method: String,
+    pub params: serde_json::Value,
+    pub args_hash: String,
+}
+
+/// Stable args-hash for a remote call / attach request — the commit half
+/// recomputes it so the ticket can only be consumed by the exact operation
+/// that was approved (no bait-and-switch after the card).
+fn call_args_hash(parts: &[&str]) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for p in parts {
+        p.hash(&mut h);
+    }
+    format!("{:016x}", h.finish())
+}
+
+/// P50.3.5 — persist the attached-server registry (identity, transport, tool
+/// count, scopes desc) to `<data_dir>/mcp_servers.json` so attach state and
+/// disconnects survive a shell restart. Atomic tmp+rename; best-effort.
+fn persist_attached(state: &crate::AppState) -> Result<(), String> {
+    let path = everyaios_core::default_data_dir().join("mcp_servers.json");
+    let attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
+    let json =
+        serde_json::to_vec_pretty(&*attached).map_err(|e| format!("encode: {e}"))?;
+    drop(attached);
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &json).map_err(|e| format!("write: {e}"))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("rename: {e}"))
+}
+
+/// P50.3.5 — boot-time restore: reload the persisted attached-server rows.
+/// The live child processes died with the previous shell, so every restored
+/// row reports `disconnected` honestly — the row is the *identity* record
+/// (name/transport/desc) the user can re-attach or remove, never a faked
+/// live connection.
+pub fn load_attached_servers() -> std::collections::HashMap<String, McpServerRow> {
+    let path = everyaios_core::default_data_dir().join("mcp_servers.json");
+    let Ok(bytes) = std::fs::read(&path) else {
+        return Default::default();
+    };
+    let Ok(rows) = serde_json::from_slice::<std::collections::HashMap<String, McpServerRow>>(
+        &bytes,
+    ) else {
+        return Default::default();
+    };
+    rows.into_iter()
+        .map(|(k, mut row)| {
+            row.status = "disconnected".into();
+            (k, row)
+        })
+        .collect()
 }
 
 /// P11.5.8 — the installed/user MCP servers list: the built-in catalog
@@ -145,17 +206,80 @@ pub fn store_catalog() -> Vec<StoreRow> {
         .collect()
 }
 
-/// P11.5.8 — attach a user-supplied MCP server (stdio) and reconcile its
-/// tools into the unified catalog (native wins on name collisions). The
-/// exact-command consent is a Guard-2 card in the UI before this is called.
+/// P11.5.8 + P50.3.5 — attach a user-supplied MCP server (stdio), **request**
+/// half. The exact command + args are bound into a Guard-2 ticket (args-hash)
+/// — enforced here in Rust, not only in UI comments: the child process can
+/// only ever be spawned by the commit half after a human approval of exactly
+/// this command line. Returns `action: allow` (policy auto-approved) or
+/// `action: ask` (pending card the guard window renders).
 #[tauri::command]
-pub fn mcp_attach(
+pub fn mcp_attach_request(
     state: tauri::State<'_, crate::AppState>,
     name: String,
     command: String,
     args: Vec<String>,
 ) -> Result<serde_json::Value, String> {
+    use everyaios_guard::{Operation as GuardOp, RiskLevel};
+    let args_hash = call_args_hash(&["mcp.attach", &name, &command, &args.join("\u{1f}")]);
+    let decision = everyaios_guard::DecisionPackage::new(format!(
+        "Attach MCP server `{name}` (runs {command} {})",
+        args.join(" ")
+    ))
+    .with_risk(RiskLevel::High)
+    .with_script(vec![format!("{command} {}", args.join(" "))], format!("mcp:{name}"));
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
+    let verdict = guard.evaluate(
+        "mcp",
+        "everyaios",
+        "mcp.attach_server",
+        GuardOp::TerminalShell { destructive: false },
+        decision,
+        &args_hash,
+        0,
+    );
+    match verdict {
+        everyaios_core::GuardDecision::Allow { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            Ok(serde_json::json!({
+                "action": "allow",
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+            }))
+        }
+        everyaios_core::GuardDecision::Ask { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            Ok(serde_json::json!({
+                "action": "ask",
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+            }))
+        }
+        everyaios_core::GuardDecision::Block { reason } => {
+            Err(format!("MCP attach blocked: {reason}"))
+        }
+    }
+}
+
+/// P11.5.8 + P50.3.5 — attach, **commit** half: consume the single-use ticket
+/// (approval + args-hash match), then spawn and reconcile the tools. No
+/// ticket, no spawn. The registry row is persisted so attach state (and a
+/// later disconnect) survives a shell restart.
+#[tauri::command]
+pub fn mcp_attach_commit(
+    state: tauri::State<'_, crate::AppState>,
+    name: String,
+    command: String,
+    args: Vec<String>,
+    ticket_id: String,
+) -> Result<serde_json::Value, String> {
     use everyaios_mcp::attach::AttachedServer;
+    let args_hash = call_args_hash(&["mcp.attach", &name, &command, &args.join("\u{1f}")]);
+    {
+        let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
+        guard
+            .use_ticket(&ticket_id, &args_hash)
+            .map_err(|e| format!("MCP attach ticket invalid: {e}"))?;
+    } // never hold the guard lock across a process spawn
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let server = AttachedServer::spawn(&command, &arg_refs).map_err(|e| e.to_string())?;
     let tools = server.tools.clone();
@@ -176,11 +300,55 @@ pub fn mcp_attach(
             desc: desc.clone(),
         },
     );
+    drop(attached);
+    let _ = persist_attached(&state);
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::AgentTicket,
+        "mcp.attach_server",
+        serde_json::json!({
+            "name": name,
+            "command": command,
+            "args": args,
+            "ticketId": ticket_id,
+        }),
+    );
     Ok(serde_json::json!({
         "name": name,
         "tools": tools,
         "desc": desc,
     }))
+}
+
+/// P50.3.5 — detach: remove the row + kill the live child, and persist the
+/// disconnect so the server does not reappear connected after a restart.
+#[tauri::command]
+pub fn mcp_detach(
+    state: tauri::State<'_, crate::AppState>,
+    name: String,
+) -> Result<bool, String> {
+    let removed_live = state
+        .mcp_live
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(&name)
+        .is_some();
+    let removed = state
+        .mcp_servers
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(&name)
+        .is_some();
+    if removed || removed_live {
+        let _ = persist_attached(&state);
+        crate::control::record_mutation(
+            &state,
+            crate::control::AuthKind::HumanGesture,
+            "mcp.detach_server",
+            serde_json::json!({ "name": name, "hadLiveChild": removed_live }),
+        );
+    }
+    Ok(removed)
 }
 
 // ---------------------------------------------------------------------------
@@ -333,8 +501,16 @@ pub fn mcp_remote_status(
     }))
 }
 
-/// Run one JSON-RPC call against a connected remote MCP server (tools/list,
-/// tools/call, …).
+/// Run one JSON-RPC call against a connected remote MCP server.
+///
+/// P50.3.4 — **unified execution**: reads and discovery (`tools/list`,
+/// `ping`, resources/prompts) are read-only and never policy-gated; a
+/// `tools/call` can mutate the world, so it is routed through the *same*
+/// Guard-2 ticket path as native tools — this command is only the request
+/// half (mint ticket + stash the exact call); [`mcp_remote_call_commit`] is
+/// the executor half that consumes the single-use ticket and only then makes
+/// the network call. A direct remote `tools/call` can no longer bypass the
+/// executor.
 #[tauri::command]
 pub fn mcp_remote_call(
     state: tauri::State<'_, crate::AppState>,
@@ -342,16 +518,110 @@ pub fn mcp_remote_call(
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let url = store_url(&store_id)?;
-    let token = remote_access_token(&state, &store_id)
-        .ok_or_else(|| format!("`{store_id}` is not connected"))?;
+    if method != "tools/call" {
+        let url = store_url(&store_id)?;
+        let token = remote_access_token(&state, &store_id)
+            .ok_or_else(|| format!("`{store_id}` is not connected"))?;
+        let http = everyaios_mcp::UreqTransport;
+        let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
+        let resp =
+            everyaios_mcp::rpc(&target, &token, &method, params, &http).map_err(|e| e.to_string())?;
+        return Ok(resp);
+    }
 
-    // Reconnect (discovery + dynamic registration) — the registered client is
-    // per-instance; a fresh connect is the honest way to get a target.
+    // Request half — Guard-2 ticket over the exact (server, tool, arguments).
+    use everyaios_guard::{Operation as GuardOp, RiskLevel};
+    let tool = params
+        .get("name")
+        .and_then(|n| n.as_str())
+        .unwrap_or("<unnamed>")
+        .to_string();
+    let url = store_url(&store_id)?;
+    let args_hash = call_args_hash(&["mcp.remote_tools_call", &store_id, &tool, &params.to_string()]);
+    let decision = everyaios_guard::DecisionPackage::new(format!(
+        "Remote MCP call: {tool} on {store_id}"
+    ))
+    .with_risk(RiskLevel::High)
+    .with_network(vec![url]);
+    let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
+    let verdict = guard.evaluate(
+        "mcp",
+        "everyaios",
+        "mcp.remote_tools_call",
+        GuardOp::ExternalNetwork { new_domain: true },
+        decision,
+        &args_hash,
+        0,
+    );
+    match verdict {
+        everyaios_core::GuardDecision::Allow { ticket_id }
+        | everyaios_core::GuardDecision::Ask { ticket_id } => {
+            let approval_nonce = guard.approval_nonce(&ticket_id).unwrap_or("").to_string();
+            state
+                .mcp_pending_calls
+                .lock()
+                .map_err(|e| e.to_string())?
+                .insert(
+                    ticket_id.clone(),
+                    PendingRemoteCall {
+                        store_id: store_id.clone(),
+                        method: method.clone(),
+                        params,
+                        args_hash,
+                    },
+                );
+            Ok(serde_json::json!({
+                "action": "ask",
+                "ticketId": ticket_id,
+                "approvalNonce": approval_nonce,
+            }))
+        }
+        everyaios_core::GuardDecision::Block { reason } => {
+            Err(format!("remote MCP call blocked: {reason}"))
+        }
+    }
+}
+
+/// P50.3.4 — remote `tools/call`, **executor** half: consume the single-use
+/// ticket (approval + args-hash match), execute the exact stashed call, and
+/// record the audit receipt on the same append-only trail as native effects.
+#[tauri::command]
+pub fn mcp_remote_call_commit(
+    state: tauri::State<'_, crate::AppState>,
+    ticket_id: String,
+) -> Result<serde_json::Value, String> {
+    let pending = state
+        .mcp_pending_calls
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(&ticket_id)
+        .ok_or_else(|| "no pending remote MCP call for this ticket".to_string())?;
+    {
+        let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
+        guard
+            .use_ticket(&ticket_id, &pending.args_hash)
+            .map_err(|e| format!("remote MCP call ticket invalid: {e}"))?;
+    } // never hold the guard lock across the network call
+
+    let url = store_url(&pending.store_id)?;
+    let token = remote_access_token(&state, &pending.store_id)
+        .ok_or_else(|| format!("`{}` is not connected", pending.store_id))?;
     let http = everyaios_mcp::UreqTransport;
     let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
-    let resp =
-        everyaios_mcp::rpc(&target, &token, &method, params, &http).map_err(|e| e.to_string())?;
+    let resp = everyaios_mcp::rpc(&target, &token, &pending.method, pending.params.clone(), &http)
+        .map_err(|e| e.to_string())?;
+
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::AgentTicket,
+        "mcp.remote_tools_call",
+        serde_json::json!({
+            "storeId": pending.store_id,
+            "method": pending.method,
+            "params": pending.params,
+            "ticketId": ticket_id,
+        }),
+    );
     Ok(resp)
 }
 

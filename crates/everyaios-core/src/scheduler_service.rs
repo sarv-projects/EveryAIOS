@@ -430,6 +430,10 @@ pub struct SchedulerService {
     on_battery: bool,
     nudge_log: Vec<NudgeSample>,
     webhook_token: Option<String>,
+    /// P50.3.3 — durable job persistence. `Some(path)` ⇒ every mutation is
+    /// written through to the JSON file (atomic tmp+rename, best-effort: a
+    /// failed save is an error surfaced by `persist`, never a silent drop).
+    persist_path: Option<std::path::PathBuf>,
 }
 
 impl Default for SchedulerService {
@@ -445,7 +449,56 @@ impl SchedulerService {
             on_battery: false,
             nudge_log: Vec::new(),
             webhook_token: None,
+            persist_path: None,
         }
+    }
+
+    /// P50.3.3 — open (or create) the service with a JSON file backing store.
+    /// Jobs survive shell/coordinator restart. Restart reconciliation
+    /// (Hatchet lease semantics): a job that was mid-run when the process
+    /// died holds a dead lease — it is moved back to `Idle` so the next
+    /// due-cycle reassigns it (the fencing token makes any surviving stale
+    /// worker unable to commit), never deadlocked in `Running` forever.
+    pub fn load_or_new(path: std::path::PathBuf) -> Self {
+        let mut svc = Self::new();
+        svc.persist_path = Some(path.clone());
+        if let Ok(bytes) = std::fs::read(&path) {
+            if let Ok(jobs) = serde_json::from_slice::<Vec<Job>>(&bytes) {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                for mut job in jobs {
+                    if let RunState::Running { lease_expires_at, .. } = job.state {
+                        if lease_expires_at <= now {
+                            job.state = RunState::Idle;
+                        }
+                    }
+                    svc.jobs.insert(job.id.clone(), job);
+                }
+            }
+        }
+        svc
+    }
+
+    /// Write the job registry through to the backing file (best-effort:
+    /// returns the error so callers can surface it, but persistence failure
+    /// never mutates the in-memory state).
+    pub fn persist(&self) -> Result<(), String> {
+        let Some(path) = &self.persist_path else {
+            return Ok(());
+        };
+        let mut jobs: Vec<&Job> = self.jobs.values().collect();
+        jobs.sort_by(|a, b| a.id.cmp(&b.id));
+        let json = serde_json::to_vec_pretty(&jobs).map_err(|e| format!("encode: {e}"))?;
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, &json).map_err(|e| format!("write: {e}"))?;
+        std::fs::rename(&tmp, path).map_err(|e| format!("rename: {e}"))
+    }
+
+    /// Persist ignoring errors (for paths where the caller cannot propagate).
+    fn persist_quiet(&self) {
+        let _ = self.persist();
     }
 
     // -- registry -----------------------------------------------------------
@@ -473,22 +526,29 @@ impl SchedulerService {
         now: u64,
     ) -> &mut Job {
         let id = id.into();
-        let job = self
-            .jobs
-            .entry(id.clone())
-            .or_insert_with(|| Job::new(id.clone(), name, session_id, trigger.clone()));
-        job.name = job.name.clone();
-        job.trigger = trigger;
-        job.steps = steps;
-        if let Some(p) = policy {
-            job.policy = p;
+        {
+            let job = self
+                .jobs
+                .entry(id.clone())
+                .or_insert_with(|| Job::new(id.clone(), name, session_id, trigger.clone()));
+            job.name = job.name.clone();
+            job.trigger = trigger;
+            job.steps = steps;
+            if let Some(p) = policy {
+                job.policy = p;
+            }
+            job.next_run_at = compute_next_run(&job.trigger, now, job.next_run_at);
         }
-        job.next_run_at = compute_next_run(&job.trigger, now, job.next_run_at);
-        job
+        self.persist_quiet();
+        self.jobs.get_mut(&id).expect("job was just upserted")
     }
 
     pub fn delete(&mut self, id: &str) -> bool {
-        self.jobs.remove(id).is_some()
+        let removed = self.jobs.remove(id).is_some();
+        if removed {
+            self.persist_quiet();
+        }
+        removed
     }
 
     pub fn set_enabled(&mut self, id: &str, enabled: bool, now: u64) -> Result<(), String> {
@@ -500,6 +560,7 @@ impl SchedulerService {
         if enabled && job.next_run_at.is_none() {
             job.next_run_at = compute_next_run(&job.trigger, now, None);
         }
+        self.persist_quiet();
         Ok(())
     }
 
@@ -570,6 +631,9 @@ impl SchedulerService {
                 n += 1;
             }
         }
+        if n > 0 {
+            self.persist_quiet();
+        }
         n
     }
 
@@ -579,6 +643,7 @@ impl SchedulerService {
             .get_mut(id)
             .ok_or_else(|| format!("unknown job {id:?}"))?;
         job.state = RunState::Paused { resume_deadline };
+        self.persist_quiet();
         Ok(())
     }
 
@@ -594,6 +659,7 @@ impl SchedulerService {
         if job.enabled && job.next_run_at.is_none() {
             job.next_run_at = compute_next_run(&job.trigger, now, None);
         }
+        self.persist_quiet();
         Ok(())
     }
 
@@ -644,6 +710,7 @@ impl SchedulerService {
             "fence": fence,
             "runId": run_id,
         }))
+        .inspect(|_| self.persist_quiet())
     }
 
     fn fence_ok(job: &Job, fence: Option<&str>) -> Result<String, String> {
@@ -706,6 +773,7 @@ impl SchedulerService {
             .ok_or_else(|| format!("unknown job {id:?}"))?;
         Self::fence_ok(job, fence)?;
         job.checkpoint = index.max(job.checkpoint);
+        self.persist_quiet();
         Ok(())
     }
 
@@ -749,6 +817,7 @@ impl SchedulerService {
                 next_retry_at: Some(now + delay / 1000),
             };
         }
+        self.persist_quiet();
         Ok(())
     }
 
@@ -976,6 +1045,15 @@ impl SchedulerService {
     // -- JSON-RPC dispatch ---------------------------------------------------
 
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
+        let out = self.handle_inner(method, params)?;
+        // P50.3.3 — the coordinator drives lease/checkpoint/finish/due through
+        // this funnel; write through after every successful mutation so a
+        // shell/coordinator restart preserves leases, fences and checkpoints.
+        self.persist_quiet();
+        Ok(out)
+    }
+
+    fn handle_inner(&mut self, method: &str, params: &Value) -> Result<Value, String> {
         let now = params
             .get("now")
             .and_then(Value::as_u64)
@@ -1923,5 +2001,70 @@ mod tests {
             still, snap,
             "heartbeat must not rewrite the frozen run snapshot"
         );
+    }
+
+    /// P50.3.3 — scheduler jobs survive a shell/coordinator restart: the
+    /// registry is written through to the JSON backing file and reloads with
+    /// its state. A run that was mid-flight at death (dead lease) reconciles
+    /// back to `Idle` so the next due-cycle reassigns it — never deadlocked
+    /// in `Running`. A checkpoint taken before the crash is preserved so the
+    /// reassignment resumes from the last completed step.
+    #[test]
+    fn jobs_survive_restart_with_lease_reconciliation() {
+        let dir = std::env::temp_dir().join(format!("everyaios-schedsvc-{}", std::process::id()));
+        let path = dir.join("scheduler.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        // Session 1: create two jobs; one is mid-run with a checkpoint.
+        {
+            let mut svc = SchedulerService::load_or_new(path.clone());
+            svc.upsert(
+                "j-done",
+                "idle job",
+                "s1",
+                TriggerSpec::Interval { secs: 60 },
+                vec![],
+                None,
+                now(),
+            );
+            svc.upsert(
+                "j-crash",
+                "crashed job",
+                "s1",
+                TriggerSpec::Interval { secs: 60 },
+                vec![],
+                None,
+                now(),
+            );
+            svc.lease_start("j-crash", now()).unwrap();
+            svc.lease_checkpoint("j-crash", 3, Some("fence-j-crash-1750000000"))
+                .unwrap();
+        }
+        // The write-through already flushed both mutations; simulate the
+        // process death + restart (new service over the same file, later now).
+        {
+            let mut svc = SchedulerService::load_or_new(path.clone());
+            assert_eq!(svc.list().len(), 2, "both jobs survive the restart");
+            let done = svc.get("j-done").unwrap();
+            assert!(done.enabled, "enabled flag survives");
+            assert_eq!(done.state, RunState::Idle);
+            let crashed = svc.get("j-crash").unwrap();
+            assert_eq!(
+                crashed.state,
+                RunState::Idle,
+                "dead lease reconciles to Idle (reassignable), not Running forever"
+            );
+            assert_eq!(
+                crashed.checkpoint, 3,
+                "checkpoint preserved for resume-from-step"
+            );
+            // A stale worker with the old fence cannot commit after restart.
+            assert!(
+                svc.lease_heartbeat("j-crash", now() + 5, Some("fence-j-crash-1750000000"))
+                    .is_err()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

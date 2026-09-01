@@ -17,7 +17,7 @@ import {
 } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 import { ensureLocal, listLocalModels, type LocalModelRow } from '@/lib/local-models'
-import { chiefDefaultGet, chiefDefaultSet } from '@/lib/acp'
+import { chiefDefaultGet, chiefDefaultSet, governanceLabel } from '@/lib/acp'
 
 function StatusDot({ status }: { status: AgentRuntime['status'] }) {
   const tone =
@@ -333,6 +333,23 @@ export default function AgentModelPicker({ compact }: Props) {
                           {a.vendor} · v{a.version ?? '—'}
                         </div>
                         <div className="truncate text-[10px] text-muted-foreground/80">{a.tagline}</div>
+                        {/* P50.3.9 — governance truth badge: the picker never
+                            implies EveryAIOS audit coverage that does not exist. */}
+                        {a.governance && (
+                          <div
+                            className={cn(
+                              'truncate text-[9px] font-medium',
+                              a.governance.class === 'GovernedMediated'
+                                ? 'text-emerald-400/90'
+                                : a.governance.class === 'SelfContained'
+                                  ? 'text-amber-400/90'
+                                  : 'text-red-400/90',
+                            )}
+                            title={a.governance.note}
+                          >
+                            {governanceLabel(a.governance)}
+                          </div>
+                        )}
                       </div>
                       {isActive && <Check className="mt-1 h-3 w-3 shrink-0 text-orange-400" />}
                     </button>
