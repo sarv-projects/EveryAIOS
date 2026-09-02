@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 //! Live Linux E2E — E9 desktop computer-use under Xvfb.
 //!
 //! Requires: `EVERYAIOS_LIVE_TEST=1`, an X server on DISPLAY, `python3` with

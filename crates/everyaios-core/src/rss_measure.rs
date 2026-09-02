@@ -10,6 +10,7 @@
 //!   webview). Returns the sum, which is the honest "combined RSS."
 //! - [`RssSnapshot`] — a serializable snapshot for publishing in docs.
 
+#[cfg(target_os = "linux")]
 use std::process::Command;
 use std::time::Duration;
 

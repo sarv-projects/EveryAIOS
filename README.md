@@ -33,16 +33,23 @@ That is the product: one workspace, one memory, one safety model, one audit trai
 ## Install
 
 ```bash
-git clone <this-repo>
-cd desktop_app
+git clone https://github.com/sarv-projects/EveryAIOS
+cd EveryAIOS
 ```
 
-Needs Rust (stable), [Bun](https://bun.sh), Node 20+, and a C toolchain.
+Needs Rust (stable), [Bun](https://bun.sh), pnpm, Node 20+, and a C toolchain.
 
 ```bash
-cd packages/coordinator && bun install && bun run build && cd ../..
-cd ui && bun install
-cd ../src-tauri && cargo tauri dev
+# Sidecar: the bun-compiled coordinator. The vendored core-* engines must
+# build first (bun resolves their dist), same as CI does.
+pnpm install
+pnpm --filter './packages/core-*' run build
+pnpm --filter @everyaios/coordinator build
+cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator  # Windows: coordinator.exe
+
+# UI + app
+cd ui && bun install && cd ..
+cd src-tauri && cargo tauri dev
 ```
 
 Keys go in Settings (OpenAI, Anthropic, Gemini, OpenRouter, Groq, xAI, Azure, Bedrock, DeepSeek, …) or you point at Ollama / llamafile / MLX / llama.cpp on this machine.
