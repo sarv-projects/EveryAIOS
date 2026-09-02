@@ -77,6 +77,78 @@ fn verify_bundled() -> Result<Vec<everyaios_guard::skillstore::SkillRow>, String
     .map_err(|e| e.to_string())
 }
 
+/// P46.1 — the `/learn` sandbox gate as a structural allow-list check.
+///
+/// A learned skill may carry **no new powers** (spec I13: "output = a normal
+/// versioned skill, not a plugin with new powers"): every requested tool must
+/// be in the runtime capability allow-list, and `/learn` never attaches
+/// scripts (the blueprint is instruction+references; execution stays in the
+/// existing sandboxed tool paths). This check runs BEFORE any save — the
+/// `everyaios-blueprint::learn::LearnGate` boundary refuses the write.
+struct LearnStructuralGate;
+
+impl everyaios_blueprint::LearnGate for LearnStructuralGate {
+    fn verify(
+        &self,
+        skill: &everyaios_blueprint::Skill,
+        _evidence_sha256: &str,
+    ) -> Result<(), String> {
+        // No new powers: tools ⊆ runtime allow-list.
+        for t in &skill.manifest.tools {
+            if !RUNTIME_CAPABILITY_ALLOWLIST.contains(&t.as_str()) {
+                return Err(format!(
+                    "skill requests capability `{t}` outside the runtime allow-list — /learn cannot grant new powers"
+                ));
+            }
+        }
+        // No scripts: a learned skill is instructions+references only.
+        if !skill.manifest.scripts.is_empty() {
+            return Err("/learn never attaches scripts — the blueprint is instructions + references".into());
+        }
+        Ok(())
+    }
+}
+
+/// P46.1 — `/learn`: compile evidence (already reader-extracted text: a
+/// URL/PDF/repo/conversation/folder the user points at) into a versioned
+/// `SKILL.md` in the local skill registry. Sandbox-gated (structural
+/// allow-list — no new powers), provenance-sha256-marked, patch-versioned on
+/// re-learn. The UI renders the resulting skill in the registry.
+#[tauri::command]
+pub fn skills_learn(
+    evidence: String,
+    title: Option<String>,
+    name: Option<String>,
+    author: Option<String>,
+    tools: Option<Vec<String>>,
+) -> Result<serde_json::Value, String> {
+    if evidence.trim().is_empty() {
+        return Err("nothing to learn — evidence is empty".into());
+    }
+    let store = everyaios_blueprint::SkillStore::new(skills_root());
+    let req = everyaios_blueprint::LearnRequest {
+        evidence,
+        title,
+        author: author.unwrap_or_else(|| "everyaios-user".into()),
+        name,
+        tools: tools.unwrap_or_default(),
+    };
+    let gate = LearnStructuralGate;
+    let path = everyaios_blueprint::learn_and_save(&store, &req, &gate).map_err(|e| e.to_string())?;
+    // Reload the saved skill (learn_and_save wrote it under its derived name).
+    let id = everyaios_blueprint::derive_name(&req);
+    let skill = store.load(&id).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "id": id,
+        "name": id,
+        "version": skill.manifest.version,
+        "description": skill.manifest.description,
+        "path": path.display().to_string(),
+        "author": skill.manifest.author,
+        "learned": true,
+    }))
+}
+
 /// Read the set of installed skill names from the on-disk registry (skipping
 /// malformed entries — same policy as `SkillStore::scan`).
 fn installed_names() -> std::collections::BTreeSet<String> {

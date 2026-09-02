@@ -143,6 +143,14 @@ impl ReplayStore {
     pub fn open_index(&self) -> Result<Connection, ReplayError> {
         self.ensure_dirs()?;
         let conn = Connection::open(self.index_path())?;
+        // P45.1/.3 — WAL + synchronous=NORMAL + bounded WAL on the replay
+        // index (non-crypto; the vault keeps its safer FULL setting).
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=NORMAL;
+             PRAGMA journal_size_limit=67108864;
+             PRAGMA wal_autocheckpoint=4000;",
+        )?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS replay_segments (
                 document_id TEXT PRIMARY KEY,

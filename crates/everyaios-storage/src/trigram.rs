@@ -32,6 +32,9 @@ impl TrigramIndex {
 
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
+        // P45.1–.3 — WAL + synchronous=NORMAL + bounded WAL + mmap on the
+        // read-heavy trigram index. Vault never goes through here.
+        crate::pragmas::apply_read_heavy_index(&conn)?;
         conn.execute_batch(
             "CREATE VIRTUAL TABLE IF NOT EXISTS filenames USING fts5(name, tokenize = 'trigram');",
         )?;

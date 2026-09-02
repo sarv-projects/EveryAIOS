@@ -29,9 +29,9 @@ pub mod registry_index;
 
 pub use a2a::{A2aError, AgentCard, AgentCardVerifier, AgentSkill, CardTrust, SignedAgentCard};
 pub use chief::{
-    governance_mode, AcpChief, Approval, ChiefAdapter, ChiefCapabilities, ChiefError, ChiefEvent,
-    DelegateChief, EventStream, GovernedSession, PermissionRequest, SessionHandle, SessionOptions,
-    SessionState, UserMessage,
+    build_chief_prompt, governance_mode, AcpChief, Approval, ChiefAdapter, ChiefCapabilities,
+    ChiefError, ChiefEvent, DelegateChief, EventStream, GovernedSession, PermissionRequest,
+    SessionHandle, SessionOptions, SessionState, UserMessage,
 };
 pub use client::{AcpError, AcpSession, AcpTransport, ProcessTransport, PromptOutcome};
 pub use frame::{decode_messages, encode_message};

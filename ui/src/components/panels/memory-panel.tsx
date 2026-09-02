@@ -102,7 +102,40 @@ export default function MemoryPanel() {
   const [liveEpisodes, setLiveEpisodes] = useState<MemoryEpisode[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [skills, setSkills] = useState<SkillRowView[]>([])
+  const [adding, setAdding] = useState(false)
+  const [addText, setAddText] = useState('')
   const notify = useAppStore((s) => s.notify)
+
+  // P50.2.2 — durable write: “Add knowledge” persists through `memory/write`
+  // into the live MemoryService when the shell is up (preview keeps the
+  // local-only mirror).
+  const submitAdd = async () => {
+    const text = addText.trim()
+    if (!text) return
+    const sessionId = useAppStore.getState().activeSessionId || 'default'
+    if (inTauri()) {
+      try {
+        const res = (await memoryRequest('memory/write', {
+          sessionId,
+          facts: [text],
+          source: 'manual',
+          sourceId: 'memory-panel',
+        })) as { written?: number }
+        notify(`Saved ${res?.written ?? 1} fact(s) to the live memory store`)
+      } catch (e) {
+        notify(e instanceof Error ? e.message : 'Memory write failed', 'error')
+        return
+      }
+    }
+    setAddText('')
+    setAdding(false)
+    // Refresh so the new fact appears under the live store (or the preview seed).
+    void memoryFacts()
+      .then((status) => setLiveFacts(status.facts.filter((f) => f.status === 'active')))
+      .catch(() => {})
+    void memoryEpisodes().then((e) => setLiveEpisodes(e.episodes)).catch(() => {})
+    void memoryGraph().then(setLiveGraph).catch(() => {})
+  }
 
   // P5.22 — the knowledge/episodic/graph tabs read the live MemoryService
   // store when the shell is up: `memory/status` (facts), `memory/graph` (the
@@ -165,8 +198,23 @@ export default function MemoryPanel() {
       prev.map((i) => (i.id === id ? { ...i, enabled: !i.enabled } : i)),
     )
 
-  const dismiss = (id: string) =>
+  // P50.2.2 — durable forget: when the shell is up, deleting a knowledge row
+  // calls `memory/forget` on the live store (which propagates across paged +
+  // BM25 + graph + ghost) and only then drops it locally. Preview keeps the
+  // local-only dismissal.
+  const dismiss = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id))
+    if (inTauri()) {
+      void memoryRequest('memory/forget', { id })
+        .then(() => {
+          notify(`Forgot “${id}” from the live memory store`)
+          setLiveFacts((prev) => (prev ? prev.filter((f) => f.id !== id) : prev))
+        })
+        .catch((e) => {
+          notify(e instanceof Error ? e.message : 'Memory forget failed', 'error')
+        })
+    }
+  }
 
   const accept = (id: string) =>
     setItems((prev) =>
@@ -199,7 +247,7 @@ export default function MemoryPanel() {
           <Button
             size="sm"
             className="h-8 bg-orange-500 text-black hover:bg-orange-400"
-            onClick={() => notify('Add knowledge — opens the composer')}
+            onClick={() => setAdding(true)}
           >
             <Plus className="h-3.5 w-3.5" />
             Add knowledge
@@ -315,6 +363,41 @@ export default function MemoryPanel() {
           {tab === 'skills' && <SkillsTab skills={skills} />}
           {tab === 'knowledge' && (
           <>
+            {adding && (
+              <section className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+                <div className="mb-2 text-xs font-medium text-foreground">
+                  Add knowledge
+                  {inTauri() && (
+                    <span className="ml-2 font-mono text-[9px] text-emerald-300">
+                      memory/write → live store
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={addText}
+                    onChange={(e) => setAddText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void submitAdd()
+                      if (e.key === 'Escape') {
+                        setAdding(false)
+                        setAddText('')
+                      }
+                    }}
+                    placeholder="A fact to remember…"
+                    aria-label="New knowledge fact"
+                    autoFocus
+                    className="h-8 flex-1 rounded-md border border-border bg-background px-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring/40"
+                  />
+                  <Button size="sm" className="h-8 bg-orange-500 text-black hover:bg-orange-400" onClick={() => void submitAdd()}>
+                    Save
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8" onClick={() => { setAdding(false); setAddText('') }}>
+                    Cancel
+                  </Button>
+                </div>
+              </section>
+            )}
             {suggestions.length > 0 && (
               <section>
                 <div className="mb-2 flex items-center gap-1.5">

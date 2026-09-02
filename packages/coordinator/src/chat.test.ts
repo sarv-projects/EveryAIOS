@@ -247,6 +247,81 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     bridge.handleChunk({ streamId: "st-other", delta: "x" });
   });
 
+  test("P50.5 — a broker/provider error chunk throws the stream instead of an empty success", async () => {
+    const bridge = new FrameProviderBridge(async () => ({ accepted: true }));
+    const pull = (async () => {
+      try {
+        for await (const _c of bridge.streamChat(
+          { provider: "nvidia", model: "m", sessionId: "s1", messages: [], streamId: "st-err" },
+          new AbortController().signal,
+        )) {
+          /* drain */
+        }
+        return null;
+      } catch (e) {
+        return e;
+      }
+    })();
+    await tick(5);
+    // Rust surfaces a broker failure as {streamId, error} + {streamId, ended}.
+    bridge.handleChunk({
+      streamId: "st-err",
+      error: "provider returned 401 Unauthorized for model 'm'",
+    });
+    bridge.handleChunk({ streamId: "st-err", ended: true });
+    const err = await pull;
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain("401 Unauthorized");
+  });
+
+  test("P50.5 — a provider error chunk surfaces chat/error, never an empty done", async () => {
+    const { events, emit } = collector();
+    const bridge = new FrameProviderBridge(async () => ({ accepted: true }));
+    const run = runChatStream(
+      { ...PARAMS, streamId: "st-turn-err" },
+      emit,
+      bridge,
+      10,
+    );
+    await tick(10);
+    bridge.handleChunk({
+      streamId: "st-turn-err",
+      error: "model 'meta/llama' has reached end of life",
+    });
+    bridge.handleChunk({ streamId: "st-turn-err", ended: true });
+    await run;
+    const error = events.find((e) => e.type === "error") as
+      | { code: string; message: string }
+      | undefined;
+    expect(error?.message).toContain("end of life");
+    // The failure is honest: no done, no empty success, no cache write.
+    expect(events.some((e) => e.type === "done")).toBe(false);
+    expect(events.filter((e) => e.type === "batch").length).toBe(0);
+  });
+
+  test("P50.5 — cancel before ANY chunk unblocks the pending queue read", async () => {
+    const bridge = new FrameProviderBridge(async () => ({ accepted: true }));
+    const controller = new AbortController();
+    const pull = (async () => {
+      const got: StreamChunk[] = [];
+      for await (const c of bridge.streamChat(
+        { provider: "nvidia", model: "m", sessionId: "s1", messages: [], streamId: "st-cancel" },
+        controller.signal,
+      )) {
+        got.push(c);
+      }
+      return got;
+    })();
+    await tick(5);
+    // No chunks ever arrive; the user cancels. The read must NOT hang on
+    // `q.next()` waiting for a provider chunk.
+    controller.abort();
+    const start = Date.now();
+    const got = await pull;
+    expect(Date.now() - start).toBeLessThan(1_000);
+    expect(got).toEqual([]);
+  });
+
   test("a refused provider/stream (J11 budget) surfaces as budget_exceeded", async () => {
     const { events, emit } = collector();
     const bridge = new FrameProviderBridge(async () => {

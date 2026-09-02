@@ -207,6 +207,15 @@ export interface Session {
   view?: ViewId
   officeDoc?: string
   railCollapsed?: boolean
+  /** P38 — the session's pinned Chief (`inbuilt` | ACP id). Persisted on the
+   * Session object so the vault round-trip (`session_put`) makes the pin
+   * durable across app restarts; `sessionChiefs` is the fast store mirror. */
+  chiefPin?: string
+  /** P38 — the session was explicitly unpinned (a pin existed and was
+   * cleared). Persisted like `chiefPin` so a restarted session that had a pin
+   * clearly shows the user default applies again instead of reading as
+   * never-pinned. Cleared when a new pin is set. */
+  chiefUnpinned?: boolean
 }
 
 export interface Automation {
@@ -579,6 +588,19 @@ export interface LiveBudget {
   cacheHitRate?: number
 }
 
+/** P50.2.5 — one live notification row, fed by the bridge from real wire
+ * events (chat errors, budget kills, Guard-2 tickets, monitor outcomes).
+ * Never seeded: a fresh shell has zero rows until an event lands. */
+export interface LiveNotification {
+  id: string
+  kind: 'info' | 'success' | 'warning' | 'error' | 'cost' | 'guard' | 'agent' | 'git'
+  title: string
+  detail: string
+  ts: number
+  unread: boolean
+  source?: string
+}
+
 // The assistant message currently being streamed **(keyed by sessionId, not a
 // global)**. Streaming is routed to the session the turn started on, so a chat
 // switch mid-stream never lands tokens on the wrong transcript (chat-events
@@ -746,6 +768,21 @@ interface AppState {
   browserUrl: string | null
   /** P33.6 — route a Google Docs/Sheets link into the authenticated browser view. */
   openInBrowser: (url: string) => void
+  /** P50.3.8 — live CDP attachment state (reported by the browse view so the
+   * status bar and rail reflect the real session, never a hardcoded value). */
+  browserAttached: boolean
+  setBrowserAttached: (attached: boolean) => void
+
+  /** P38 — per-session Chief pins: sessionId → Chief id. An empty/absent pin
+   * means the user default applies; a pin outranks it for that session's
+   * turns. Kept in the store so the chat send path resolves the effective
+   * Chief per turn without extra IPC. */
+  sessionChiefs: Record<string, string>
+  setSessionChiefPin: (sessionId: string, chiefId: string) => void
+  clearSessionChiefPin: (sessionId: string) => void
+  /** P38 — the user's `primary_chief` default (loaded from the shell). */
+  userDefaultChief?: string
+  setUserDefaultChief: (chiefId: string) => void
   railCollapsed: boolean
   toggleRail: () => void
   setRailCollapsed: (v: boolean) => void
@@ -910,6 +947,14 @@ interface AppState {
   notify: (msg: string, kind?: 'default' | 'error') => void
   notifyMcpError: (msg: string) => void
 
+  // P50.2.5 — live notification event stream: real events pushed by the
+  // bridge (chat wire events + Guard-2 tickets) when the shell is up. The
+  // notifications popover renders this in Tauri; it stays empty until a live
+  // event lands, so a fresh shell never shows synthetic activity.
+  liveNotifications: LiveNotification[]
+  pushLiveNotification: (n: LiveNotification) => void
+  markLiveNotificationsRead: () => void
+
   // Live data (bridge) — empty until the shell answers
   liveAgents: AgentRuntime[]
   setLiveAgents: (a: AgentRuntime[]) => void
@@ -1063,9 +1108,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const remaining = st.sessions.filter((x) => x.id !== id)
     const nextActive =
       st.activeSessionId === id ? (remaining[0]?.id ?? '') : st.activeSessionId
+    // P38 — a deleted session takes its Chief pin with it (no orphan pin).
+    const pins = { ...st.sessionChiefs }
+    delete pins[id]
     set({
       sessions: remaining,
       activeSessionId: nextActive,
+      sessionChiefs: pins,
     })
   },
 
@@ -1081,6 +1130,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().saveSessionLayout(get().activeSessionId, { view: v, railCollapsed: false })
   },
   browserUrl: null,
+  browserAttached: false,
+  setBrowserAttached: (attached) => set({ browserAttached: attached }),
+
+  // P38 — starts empty: no session is pinned until the user pins one. The
+  // pin is ALSO written onto the Session object so the vault persist
+  // round-trip (`session_put`) makes it durable across app restarts; the
+  // mirror map is rehydrated from the loaded sessions at bridge start.
+  sessionChiefs: {},
+  setSessionChiefPin: (sessionId, chiefId) =>
+    set((s) => ({
+      sessionChiefs: { ...s.sessionChiefs, [sessionId]: chiefId },
+      sessions: s.sessions.map((x) =>
+        // A fresh pin clears any prior explicit-unpin marker.
+        x.id === sessionId ? { ...x, chiefPin: chiefId, chiefUnpinned: false } : x,
+      ),
+    })),
+  clearSessionChiefPin: (sessionId) =>
+    set((s) => {
+      const next = { ...s.sessionChiefs }
+      delete next[sessionId]
+      return {
+        sessionChiefs: next,
+        // Persist an explicit unpin: the session HAD a pin (or a marker) and
+        // now follows the user default again. The marker rides the vault
+        // round-trip so a restarted session shows "default applies — pin
+        // cleared" instead of reading as never-pinned.
+        sessions: s.sessions.map((x) =>
+          x.id === sessionId
+            ? { ...(({ chiefPin, ...rest }) => rest)(x), chiefUnpinned: true }
+            : x,
+        ),
+      }
+    }),
+  userDefaultChief: undefined,
+  setUserDefaultChief: (chiefId) => set({ userDefaultChief: chiefId }),
   openInBrowser: (url) => {
     set((s) => ({
       browserUrl: url,
@@ -1488,6 +1572,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   setLiveAgents: (a) => set({ liveAgents: a }),
   liveBudget: undefined,
   setLiveBudget: (b) => set({ liveBudget: b }),
+
+  // P50.2.5 — starts empty; only the bridge pushes real wire events.
+  // `pushLiveNotification` upserts by id so a re-emit (or a read toggle) never
+  // duplicates a row; the list is capped so the popover stays bounded.
+  liveNotifications: [],
+  pushLiveNotification: (n) =>
+    set((s) => {
+      const without = s.liveNotifications.filter((x) => x.id !== n.id)
+      return { liveNotifications: [n, ...without].slice(0, 50) }
+    }),
+  markLiveNotificationsRead: () =>
+    set((s) => ({ liveNotifications: s.liveNotifications.map((n) => ({ ...n, unread: false })) })),
 
   liveStreamId: {},
   setLiveStreamId: (sessionId, streamId) =>

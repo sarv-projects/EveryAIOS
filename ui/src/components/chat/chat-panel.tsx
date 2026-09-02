@@ -407,7 +407,9 @@ export default function ChatPanel() {
               viewportRef={viewportRef}
               onScroll={handleViewportScroll}
             >
-              <div className={cn(col, 'flex flex-col gap-3 py-4')}>
+              {/* P45.6 — content-visibility: auto skips layout/paint of
+                  off-screen bubbles in long transcripts. */}
+              <div className={cn(col, 'flex flex-col gap-3 py-4 [content-visibility:auto] [contain-intrinsic-size:auto_240px]')}>
                 {filteredMessages.length === 0 && query.trim()
                   ? (
                     <div className="flex flex-col items-center gap-2 py-12 text-center">

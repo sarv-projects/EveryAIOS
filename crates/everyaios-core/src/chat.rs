@@ -190,6 +190,11 @@ pub struct ChatStreamParams {
     /// `<user_document>` wrapping); the chat-overlay scopes a turn to an
     /// open document by passing its extracted text here.
     pub user_documents: Option<Vec<UserDocument>>,
+    /// P38 — the session's effective Chief (pin → user default → inbuilt),
+    /// forwarded to the coordinator's single dispatch guard. The UI resolves
+    /// it; external Chiefs are refused by the coordinator (see
+    /// `dispatchByChief` in `packages/coordinator/src/chat.ts`).
+    pub primary_chief: Option<String>,
 }
 
 /// P4.7 — a user-attached document for `<user_document>` wrapping (J6).
@@ -1305,6 +1310,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                 "personaId": params.persona_id,
                 "soulMd": params.soul_md,
                 "userDocuments": params.user_documents,
+                "primaryChief": params.primary_chief,
             }),
         )?;
         if !ack
@@ -1941,6 +1947,7 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                primary_chief: None,
             })
             .unwrap_err();
         let msg = err.to_string();
@@ -2008,6 +2015,7 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                primary_chief: None,
             })
             .expect("start_stream");
 
@@ -2290,6 +2298,7 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                primary_chief: None,
             })
             .expect("start_stream (1.99 < 2.00 pre-flight passes)");
 
@@ -2318,6 +2327,7 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                primary_chief: None,
             })
             .unwrap_err();
         assert!(matches!(err, ChatRelayError::BudgetExceeded { .. }));

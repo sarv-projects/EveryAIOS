@@ -38,6 +38,7 @@ import {
   type OpenAIFunctionTool,
 } from "./tools";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
+import { chiefRegistry } from "./chief";
 import { recordObservation, currentObservations } from "./observations";
 import { hintsFor } from "./catalog";
 import { budgetJson, refRegistry } from "./budget";
@@ -56,6 +57,9 @@ export interface ChatStreamParams {
   text: string;
   surface?: "chat" | "reader" | "bubble" | "automation";
   agentId?: string;
+  /** P38 — the session's effective Chief (pin → user default → inbuilt),
+   * resolved by the UI and asserted by the dispatcher guard. */
+  primaryChief?: string;
   provider?: string;
   model?: string;
   /** P1.5 — persona tone overlay (core-ai PERSONA_PRESETS). */
@@ -72,6 +76,108 @@ export interface ChatStreamParams {
   projectId?: string;
   /** P30.11 — interceptable turn/step waterfall hooks (default: pass-through). */
   hooks?: WaterfallHooks;
+}
+
+/**
+ * P38 (spec §4.2.5a §1/§2) — the single Chief dispatch decision for one
+ * turn. The coordinator owns the **inbuilt** engine; a session pinned to an
+ * external ACP Chief must never silently run inbuilt, so the coordinator
+ * refuses the turn with the routing instruction instead (the UI drives the
+ * ACP channel via `acp_prompt` — the refusal is the honest no-silent-fallback
+ * guard, not a working path).
+ *
+ * @returns the effective Chief for the session, or `{refused: true}` with a
+ *   reason when the turn cannot run through the coordinator.
+ */
+export interface ChiefDispatch {
+  chiefId?: string;
+  refused?: boolean;
+  reason?: string;
+}
+
+export function dispatchByChief(opts: {
+  /** The session's effective Chief (pin → user default → inbuilt). */
+  chiefId: string;
+}): ChiefDispatch {
+  if (opts.chiefId !== "inbuilt") {
+    return {
+      refused: true,
+      reason: `session pinned to external Chief "${opts.chiefId}" — this turn must run through the ACP channel (acp_prompt); the coordinator refuses to silently fall back to the inbuilt engine`,
+    };
+  }
+  return { chiefId: "inbuilt" };
+}
+
+/**
+ * P38 (spec §4.2.5a §2) — the coordinator's ChiefAdapter contract (TS mirror
+ * of `everyaios-acp::ChiefAdapter` in `crates/everyaios-acp/src/chief.rs`).
+ * One interface, two impls, identical turn contract: the dispatcher selects an
+ * adapter by effective Chief id and calls `runTurn` — it never special-cases
+ * individual Chiefs inline.
+ */
+export interface ChiefTurnContext {
+  params: ChatStreamParams;
+  emit: (e: ChatEvent) => void;
+  bridge: ProviderBridge;
+  batchIntervalMs: number;
+  request?: (method: string, params: unknown) => Promise<unknown>;
+}
+
+export interface ChiefAdapter {
+  readonly chiefId: string;
+  runTurn(ctx: ChiefTurnContext): Promise<void>;
+}
+
+/**
+ * P38 — impl A: the inbuilt engine. Owns the real ConversationEngine turn
+ * (prompt assembly, router, cache, tools, observations). The wire's
+ * `primaryChief: "inbuilt"` resolves here.
+ */
+export class InbuiltChiefAdapter implements ChiefAdapter {
+  readonly chiefId = "inbuilt";
+
+  async runTurn(ctx: ChiefTurnContext): Promise<void> {
+    await runInbuiltTurn(
+      ctx.params,
+      ctx.emit,
+      ctx.bridge,
+      ctx.batchIntervalMs,
+      ctx.request,
+    );
+  }
+}
+
+/**
+ * P38 — impl B: an external ACP Chief. The coordinator is the governed shell,
+ * not the runner: an external Chief's turns run on the ACP channel the UI
+ * drives (`acp_prompt`). This adapter's runTurn emits the honest routing
+ * refusal — the no-silent-fallback guarantee, expressed as an adapter instead
+ * of an inline guard.
+ */
+export class ExternalChiefAdapter implements ChiefAdapter {
+  constructor(readonly chiefId: string) {}
+
+  async runTurn(ctx: ChiefTurnContext): Promise<void> {
+    const dispatch = dispatchByChief({ chiefId: this.chiefId });
+    const { streamId } = ctx.params;
+    ctx.emit({ type: "stage", streamId, stage: `chief:refused:${dispatch.reason ?? this.chiefId}` });
+    ctx.emit({
+      type: "error",
+      streamId,
+      code: "routing",
+      message: dispatch.reason ?? `external chief ${this.chiefId} — use the ACP channel`,
+    });
+  }
+}
+
+/**
+ * P38 — adapter selection. `inbuilt` → inbuilt engine; anything else is an
+ * external ACP Chief (fail-closed: an unknown id lands on ExternalChiefAdapter
+ * and is refused, never silently routed to the inbuilt engine).
+ */
+export function chiefAdapterFor(chiefId: string): ChiefAdapter {
+  if (chiefId === "inbuilt") return new InbuiltChiefAdapter();
+  return new ExternalChiefAdapter(chiefId);
 }
 
 /** Events the coordinator forwards to the UI as `chat/<type>` notifications. */
@@ -215,6 +321,8 @@ export interface ProviderChunk {
     args?: Record<string, unknown>;
     arguments?: string;
   };
+  /** Broker/provider failure — MUST surface as an error, never as empty success. */
+  error?: string;
   /** Present when the provider stream ended (generator may close). */
   ended?: boolean;
 }
@@ -226,6 +334,9 @@ export interface ProviderChunk {
  */
 export class FrameProviderBridge implements ProviderBridge {
   private queues = new Map<string, PendingQueue<StreamChunk>>();
+  /** Broker/provider failures (P50.5 — never drop: empty "success" is a
+   *  synthetic success). Keyed by streamId; consumed by `streamChat`. */
+  private failures = new Map<string, string>();
 
   /**
    * @param requestFn outbound JSON-RPC request (Rust dispatches
@@ -238,6 +349,18 @@ export class FrameProviderBridge implements ProviderBridge {
 
   /** Called by the run loop for each `chat/provider_chunk` notification. */
   handleChunk(chunk: ProviderChunk): void {
+    // A broker/provider failure is terminal: record it and close the queue
+    // so the engine's provider generator throws (→ chat/error) instead of
+    // draining an empty stream into a fabricated empty success.
+    if (chunk.error !== undefined) {
+      this.failures.set(chunk.streamId, chunk.error);
+      const q = this.queues.get(chunk.streamId);
+      if (q) {
+        q.close();
+        this.queues.delete(chunk.streamId);
+      }
+      return;
+    }
     let q = this.queues.get(chunk.streamId);
     if (!q) {
       q = new PendingQueue<StreamChunk>();
@@ -271,11 +394,36 @@ export class FrameProviderBridge implements ProviderBridge {
     // One queue per stream, shared with handleChunk (which may create it
     // first — Rust pushes chunks right after the request frame).
     const key = req.streamId ?? "default";
+    // P50.5 — a recorded broker/provider failure surfaces as a throw so the
+    // engine emits `chat/error` (and the P36 scorer records ok:false), never
+    // an empty success. Checked before iteration AND at each read: the
+    // failure chunk arrives asynchronously after `provider/stream` ack, so
+    // the queue may close (ended) with the error recorded while we wait.
+    const takeFailure = (): Error | null => {
+      const failure = this.failures.get(key);
+      if (failure !== undefined) {
+        this.failures.delete(key);
+        return new Error(failure);
+      }
+      return null;
+    };
+    const pre = takeFailure();
+    if (pre) throw pre;
     let q = this.queues.get(key);
     if (!q) {
       q = new PendingQueue<StreamChunk>();
       this.queues.set(key, q);
     }
+    // P50.5 — a cancel before ANY chunk must unblock the pending queue read:
+    // without this, `await q.next()` hangs until the provider's next chunk
+    // (a cold/throttled provider would swallow the user's cancel). Closing
+    // the queue on abort makes the loop below return immediately → engine
+    // ends → chat/cancelled.
+    const onAbort = (): void => {
+      q.close();
+      this.queues.delete(key);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
     try {
       // The compiled prompt lives here, so the sidecar must ASK Rust to run
       // the provider call (the broker holds the keys — the sidecar never
@@ -296,6 +444,8 @@ export class FrameProviderBridge implements ProviderBridge {
         for (;;) {
           if (signal.aborted) return;
           const chunk = await q.next();
+          const failed = takeFailure();
+          if (failed) throw failed;
           if (chunk === undefined) return;
           yield chunk;
           if (chunk.type === "done") return;
@@ -306,6 +456,8 @@ export class FrameProviderBridge implements ProviderBridge {
       for (;;) {
         if (signal.aborted) return;
         const chunk = await q.next();
+        const failed = takeFailure();
+        if (failed) throw failed;
         if (chunk === undefined) break;
         if (chunk.type === "tool_call") sawTool = true;
         buffered.push(chunk);
@@ -332,6 +484,7 @@ export class FrameProviderBridge implements ProviderBridge {
         yield chunk;
       }
     } finally {
+      signal.removeEventListener("abort", onAbort);
       q.close();
       this.queues.delete(key);
     }
@@ -357,11 +510,54 @@ export function activeStreamCount(): number {
 let turnCounter = 0;
 
 /**
- * Run one chat turn through the real ConversationEngine, forwarding its
- * events as [`ChatEvent`]s (token deltas batched at 33ms by StreamSession).
- * Detached by the `chat/stream` handler; emits via `emit`.
+ * P38 (spec §4.2.5a §2) — the dispatcher. Selects a ChiefAdapter by the
+ * session's effective Chief and runs the turn through it; never special-cases
+ * a Chief inline. The effective Chief is the wire truth (`primaryChief`, UI-
+ * resolved pin → user default → inbuilt), falling back to the coordinator's
+ * own session-pin registry (Work-survives-Chief) when the wire omits it.
+ * An external ACP Chief's turn is refused with a routing instruction (the
+ * UI runs those on the ACP channel via `acp_prompt`) — never silently
+ * rerouted to the inbuilt engine.
  */
 export async function runChatStream(
+  params: ChatStreamParams,
+  emit: (e: ChatEvent) => void,
+  bridge: ProviderBridge,
+  batchIntervalMs = 33,
+  /**
+   * Outbound JSON-RPC request to Rust (P5.1 memory persistence).
+   * Forwarded to the inbuilt adapter; a missing handler never blocks the
+   * stream.
+   */
+  request?: (method: string, params: unknown) => Promise<unknown>,
+): Promise<void> {
+  const wireChief = params.primaryChief;
+  const registryChief = chiefRegistry.sessionPin(params.sessionId);
+  const chiefId = wireChief ?? registryChief ?? "inbuilt";
+  // P38 — when the wire carries a pin the registry does not yet know (fresh
+  // coordinator lifetime after a restart), learn it so `chief/resolve_session`
+  // and Work-survives-Chief stay truthful for later RPC reads.
+  if (wireChief !== undefined && wireChief !== registryChief) {
+    try {
+      chiefRegistry.setSessionPin(params.sessionId, wireChief);
+    } catch {
+      /* fail-closed: unknown ids are refused by validateSessionChiefPin */
+    }
+  }
+  await chiefAdapterFor(chiefId).runTurn(
+    request !== undefined
+      ? { params, emit, bridge, batchIntervalMs, request }
+      : { params, emit, bridge, batchIntervalMs },
+  );
+}
+
+/**
+ * Run one chat turn through the real ConversationEngine, forwarding its
+ * events as [`ChatEvent`]s (token deltas batched at 33ms by StreamSession).
+ * Detached by the `chat/stream` handler; emits via `emit`. This is
+ * `InbuiltChiefAdapter.runTurn`'s engine body.
+ */
+async function runInbuiltTurn(
   params: ChatStreamParams,
   emit: (e: ChatEvent) => void,
   bridge: ProviderBridge,

@@ -29,7 +29,9 @@ fn memory_arc(
 }
 
 /// Generic `memory/*` JSON-RPC passthrough (write/read/plan/forget/ghost/
-/// usage/snapshot/status/consolidate).
+/// usage/snapshot/status/consolidate). Mutations are written through to the
+/// durable `memory.json` store exactly like the sidecar dispatch path, so the
+/// panel's Add/Delete edits survive restarts (P50.2.2).
 #[tauri::command]
 pub fn memory_request(
     state: State<'_, AppState>,
@@ -38,7 +40,25 @@ pub fn memory_request(
 ) -> Result<serde_json::Value, String> {
     let mem = memory_arc(&state)?;
     let mut mem = mem.lock().map_err(|e| e.to_string())?;
-    mem.handle(&method, &params).map_err(|e| e.to_string())
+    let is_mutation = matches!(
+        method.as_str(),
+        "memory/write"
+            | "memory/forget"
+            | "memory/ghost"
+            | "memory/ghost_batch"
+            | "memory/consolidate"
+            | "memory/tick"
+            | "memory/scope"
+            | "memory/assess"
+            | "memory/load"
+    );
+    let out = mem.handle(&method, &params).map_err(|e| e.to_string())?;
+    if is_mutation {
+        let dir = everyaios_core::default_data_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = mem.save_to(&dir.join("memory.json"));
+    }
+    Ok(out)
 }
 
 /// Read-and-rank shortcut: query the memory store for the top-k relevant

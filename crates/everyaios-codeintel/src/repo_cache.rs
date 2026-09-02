@@ -50,6 +50,15 @@ impl RepoMapCache {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let conn = Connection::open(path).map_err(|e| e.to_string())?;
+        // P45.1/.3 — WAL + synchronous=NORMAL + bounded WAL (non-crypto;
+        // the vault keeps its safer FULL setting).
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA synchronous=NORMAL;
+             PRAGMA journal_size_limit=67108864;
+             PRAGMA wal_autocheckpoint=4000;",
+        )
+        .map_err(|e| e.to_string())?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS repo_maps (
                 hash TEXT PRIMARY KEY,

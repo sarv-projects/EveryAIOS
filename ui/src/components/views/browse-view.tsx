@@ -25,6 +25,9 @@ import { useAppStore } from '@/lib/store'
  * clicking a ref line acts on the live page (P2.3 act engine).
  */
 export default function BrowseView() {
+  // P50.3.8 — report the real CDP attachment state to the shared store so the
+  // status bar / rail reflect the live session (never a hardcoded value).
+  const setBrowserAttached = useAppStore((s) => s.setBrowserAttached)
   const [status, setStatus] = useState<BrowserStatus>({ attached: false })
   const [url, setUrl] = useState('https://example.com')
   const [snapshot, setSnapshot] = useState('')
@@ -59,6 +62,7 @@ export default function BrowseView() {
     try {
       const st = await browserStatus()
       setStatus(st)
+      setBrowserAttached(!!st.attached)
       if (!st.attached) {
         setSnapshot('')
         return
@@ -83,12 +87,18 @@ export default function BrowseView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
+  // P50.3.8 — closing the browse view must not leave a stale attachment
+  // claim behind; the store flag reflects the live session only while the
+  // surface that owns the session is mounted.
+  useEffect(() => () => setBrowserAttached(false), [setBrowserAttached])
+
   const start = async () => {
     setLoading(true)
     setError(null)
     try {
       await browserStart()
       setStatus({ attached: true })
+      setBrowserAttached(true)
       await browserNavigate('https://example.com')
       setUrl('https://example.com')
       await refresh()
@@ -144,7 +154,10 @@ export default function BrowseView() {
             </button>
             <button
               onClick={() => {
-                void browserStop().then(() => setStatus({ attached: false }))
+                void browserStop().then(() => {
+                  setStatus({ attached: false })
+                  setBrowserAttached(false)
+                })
               }}
               aria-label="Stop browser"
               className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-rose-400"

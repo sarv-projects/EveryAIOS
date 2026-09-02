@@ -39,6 +39,9 @@ impl SearchIndex {
     }
 
     fn init(conn: Connection) -> Result<Self, StorageError> {
+        // P45.1–.3 — WAL + synchronous=NORMAL + bounded WAL + mmap on the
+        // read-heavy FTS5 index. Vault never goes through here.
+        crate::pragmas::apply_read_heavy_index(&conn)?;
         conn.execute_batch(
             "CREATE VIRTUAL TABLE IF NOT EXISTS files \
              USING fts5(path UNINDEXED, name, dir, tokenize='unicode61');",

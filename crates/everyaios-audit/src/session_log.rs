@@ -215,10 +215,9 @@ impl SessionLog {
         Ok(Self { path, seq })
     }
 
-    /// Append one event, flush, return its seq.
-    pub fn append(&mut self, input: EventInput) -> Result<u64, SessionLogError> {
+    fn write_event(&mut self, input: EventInput) -> Result<SessionEvent, SessionLogError> {
         self.seq += 1;
-        let ev = SessionEvent {
+        Ok(SessionEvent {
             seq: self.seq,
             ts_ms: now_ms(),
             session: input.session,
@@ -229,7 +228,12 @@ impl SessionLog {
             trace_id: input.trace_id,
             span_id: input.span_id,
             event_type: input.event_type,
-        };
+        })
+    }
+
+    /// Append one event, flush, return its seq.
+    pub fn append(&mut self, input: EventInput) -> Result<u64, SessionLogError> {
+        let ev = self.write_event(input)?;
         let mut line = serde_json::to_vec(&ev)?;
         line.push(b'\n');
         let mut f = OpenOptions::new()
@@ -238,7 +242,41 @@ impl SessionLog {
             .open(&self.path)?;
         f.write_all(&line)?;
         f.flush()?;
-        Ok(self.seq)
+        Ok(ev.seq)
+    }
+
+    /// P45.5 — turn-boundary write batching (honesty-preserving). Writes N
+    /// events in ONE open/append/flush cycle, in receipt order, returning the
+    /// seq of each. The append-only invariant is unchanged: each line is one
+    /// complete, independently receiptable event; order is preserved (seq is
+    /// assigned on entry, lines are written in that order); a crash mid-cycle
+    /// leaves only fully-written newline-terminated lines readable, exactly as
+    /// with per-event appends. This is a throughput optimization — it never
+    /// weakens durability or reorders receipts.
+    pub fn append_batch(
+        &mut self,
+        inputs: impl IntoIterator<Item = EventInput>,
+    ) -> Result<Vec<u64>, SessionLogError> {
+        let events: Vec<SessionEvent> = inputs
+            .into_iter()
+            .map(|i| self.write_event(i))
+            .collect::<Result<_, _>>()?;
+        if events.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut body = Vec::new();
+        for ev in &events {
+            let mut line = serde_json::to_vec(ev)?;
+            line.push(b'\n');
+            body.extend_from_slice(&line);
+        }
+        let mut f = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
+        f.write_all(&body)?;
+        f.flush()?;
+        Ok(events.iter().map(|e| e.seq).collect())
     }
 
     pub fn seq(&self) -> u64 {
@@ -960,6 +998,61 @@ mod tests {
             .unwrap();
         assert!(log.fork_at_turn(1, "../escape").is_err());
         assert!(log.fork_at_turn(1, "a/b").is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // P45.5 — turn-boundary batching preserves the append-only invariant:
+    // one write cycle, seq-ordered lines, receipts stable and derivable.
+    #[test]
+    fn append_batch_writes_one_cycle_in_order_with_stable_receipts() {
+        let dir = tmp_dir("batch");
+        {
+            let mut log = SessionLog::open(&dir, "sess-1").unwrap();
+            let seqs = log
+                .append_batch([
+                    EventInput::new(EventType::TaskStarted, "sess-1", "a"),
+                    EventInput::new(EventType::ToolStarted, "sess-1", "a")
+                        .with_tool("browser.act", "k1"),
+                    EventInput::new(EventType::ToolCompleted, "sess-1", "a")
+                        .with_tool("browser.act", "k1"),
+                ])
+                .unwrap();
+            assert_eq!(seqs, vec![1, 2, 3]); // receipts stable, in order
+            // A per-event append continues the same monotonic sequence.
+            assert_eq!(
+                log.append(EventInput::new(EventType::PlanCreated, "sess-1", "a"))
+                    .unwrap(),
+                4
+            );
+        }
+        // Reopen: seq resumes from the batched writes; events read back in
+        // exactly the written order (receipt-stable recovery).
+        let log = SessionLog::open(&dir, "sess-1").unwrap();
+        assert_eq!(log.seq(), 4);
+        let evs = log.events().unwrap();
+        let types: Vec<EventType> = evs.iter().map(|e| e.event_type).collect();
+        assert_eq!(
+            types,
+            vec![
+                EventType::TaskStarted,
+                EventType::ToolStarted,
+                EventType::ToolCompleted,
+                EventType::PlanCreated,
+            ]
+        );
+        assert_eq!(evs[1].tool, "browser.act");
+        assert_eq!(evs[1].args_hash, "k1");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn append_batch_empty_is_a_noop_without_bumping_seq() {
+        let dir = tmp_dir("batch-empty");
+        let mut log = SessionLog::open(&dir, "sess-1").unwrap();
+        let seqs = log.append_batch(std::iter::empty::<EventInput>()).unwrap();
+        assert!(seqs.is_empty());
+        assert_eq!(log.seq(), 0);
+        assert!(log.events().unwrap().is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 }

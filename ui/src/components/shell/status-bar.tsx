@@ -49,6 +49,7 @@ export function StatusBar() {
   const selectedModelId = useAppStore((s) => s.selectedModelId)
   const autoRoute = useAppStore((s) => s.autoRoute)
   const liveBudget = useAppStore((s) => s.liveBudget)
+  const browserAttached = useAppStore((s) => s.browserAttached)
   const devMode = useAppStore((s) => s.devMode)
   const monitorBadge = useAppStore((s) => s.monitorBadge)
   const clearMonitorBadge = useAppStore((s) => s.clearMonitorBadge)
@@ -105,8 +106,11 @@ export function StatusBar() {
     {
       icon: Wifi,
       label: 'browser',
-      value: 'not attached',
-      tooltip: 'Browser status is shown by the Browser surface when a CDP session is attached.',
+      value: browserAttached ? 'attached' : 'not attached',
+      color: browserAttached ? 'text-emerald-400' : 'text-muted-foreground',
+      tooltip: browserAttached
+        ? 'CDP session attached — the browse view drives a real browser.'
+        : 'No CDP session attached — start the browser from the Browse surface.',
     },
     {
       icon: Zap,

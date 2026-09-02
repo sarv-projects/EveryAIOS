@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeEach } from "bun:test";
 import {
   buildResumePrompt,
   checkSpawn,
@@ -7,8 +7,55 @@ import {
   governanceBadge,
   injectChiefContext,
   resolveChiefId,
+  resolveSessionChief,
+  validateSessionChiefPin,
   type SpawnState,
 } from "./chief";
+
+describe("resolveSessionChief — per-session pin precedence", () => {
+  beforeEach(() => {
+    // Module-singleton registry: clear any pin a prior test may have left on
+    // the session ids this suite touches.
+    chiefRegistry.clearSessionPin("s-pin");
+    chiefRegistry.clearSessionPin("s2");
+  });
+
+  test("session pin outranks the user default", () => {
+    chiefRegistry.setSessionPin("s-pin", "codex");
+    const pin = chiefRegistry.sessionPin("s-pin");
+    expect(pin).toBe("codex");
+    expect(
+      resolveSessionChief({
+        ...(pin !== undefined ? { sessionPin: pin } : {}),
+        userDefault: "claude-code",
+      }),
+    ).toBe("codex");
+  });
+
+  test("no pin → user default → inbuilt", () => {
+    expect(resolveSessionChief({ userDefault: "claude-code" })).toBe("claude-code");
+    expect(resolveSessionChief({})).toBe("inbuilt");
+  });
+
+  test("unknown pin refuses fail-closed", () => {
+    expect(() => validateSessionChiefPin("not-a-chief")).toThrow(/fail-closed/);
+    expect(() => chiefRegistry.setSessionPin("s-pin", "not-a-chief")).toThrow(/fail-closed/);
+    expect(chiefRegistry.sessionPin("s-pin")).toBeUndefined();
+  });
+
+  test("setSessionPin keeps the Work-survives-Chief record in sync", () => {
+    chiefRegistry.record({
+      sessionId: "s-pin",
+      chiefId: "inbuilt",
+      governance: { kind: "mediated", fs: true, terminal: true },
+      lastCompletedTurn: 3,
+      configHash: "abc",
+    });
+    chiefRegistry.setSessionPin("s-pin", "codex");
+    expect(chiefRegistry.get("s-pin")?.chiefId).toBe("codex");
+    expect(chiefRegistry.get("s-pin")?.lastCompletedTurn).toBe(3);
+  });
+});
 
 describe("resolveChiefId — fail-closed resolution", () => {
   test("explicit session value wins", () => {

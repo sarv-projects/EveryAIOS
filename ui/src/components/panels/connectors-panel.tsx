@@ -36,7 +36,11 @@ import {
 } from '@/lib/oauth'
 import { inTauri } from '@/lib/tauri'
 
-const STATS = [
+// P50.2.6 — the stats strip must never present demo numbers in the native
+// shell. Every value is derived from live state below (oauth accounts, MCP
+// server rows, catalog tools); a preview-only fixture is used only in a
+// plain-browser run.
+const PREVIEW_STATS = [
   { label: 'Connected', value: '5', tone: 'text-emerald-300' },
   { label: 'Available', value: '12', tone: 'text-foreground' },
   { label: 'Tools', value: '94', tone: 'text-orange-300' },
@@ -293,19 +297,29 @@ export default function ConnectorsPanel() {
         )}
       </div>
 
-      {/* Stats strip */}
+      {/* Stats strip — live-derived values only in the shell; the preview
+          fixture appears solely in a plain-browser run (P50.2.6). */}
       <div className="grid grid-cols-2 gap-2 border-b border-border p-3 sm:grid-cols-4">
-        {STATS.map((s) => (
-          <div
-            key={s.label}
-            className="rounded-lg border border-border bg-card p-3"
-          >
-            <div className="text-[10px] text-muted-foreground">{s.label}</div>
-            <div className={cn('font-mono text-lg font-semibold', s.tone)}>
-              {s.label === 'Tools' && catalog ? catalog.total : s.value}
-            </div>
-          </div>
-        ))}
+        {inTauri()
+          ? [
+              { label: 'Connected', value: String(oauthAccts.length), tone: oauthAccts.length > 0 ? 'text-emerald-300' : 'text-zinc-500' },
+              { label: 'Available', value: '—', tone: 'text-foreground' },
+              { label: 'Tools', value: catalog ? String(catalog.total) : '—', tone: 'text-orange-300' },
+              { label: 'MCP servers', value: String(mcpList.length), tone: 'text-sky-300' },
+            ].map((s) => (
+              <div key={s.label} className="rounded-lg border border-border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground">{s.label}</div>
+                <div className={cn('font-mono text-lg font-semibold', s.tone)}>{s.value}</div>
+              </div>
+            ))
+          : PREVIEW_STATS.map((s) => (
+              <div key={s.label} className="rounded-lg border border-border bg-card p-3">
+                <div className="text-[10px] text-muted-foreground">{s.label}</div>
+                <div className={cn('font-mono text-lg font-semibold', s.tone)}>
+                  {s.label === 'Tools' && catalog ? catalog.total : s.value}
+                </div>
+              </div>
+            ))}
       </div>
 
       <div className="border-b border-border px-4 py-2">
@@ -320,7 +334,8 @@ export default function ConnectorsPanel() {
         </Tabs>
       </div>
 
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+      {/* P45.6 — content-visibility: auto skips offscreen connector rows. */}
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto [content-visibility:auto] [contain-intrinsic-size:auto_64px]">
         <motion.div
           key={tab}
           initial={{ opacity: 0, y: 6 }}

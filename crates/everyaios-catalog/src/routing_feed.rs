@@ -14,12 +14,12 @@
 //! merely down-ranked). A dead/unhealthy provider scores 0 and is excluded
 //! when any healthy candidate remains.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
 use crate::probe::{trusted_capabilities, Capability};
-use crate::provider::{ProviderRecord, ProviderRegistry};
+use crate::provider::{Auth, ProviderRecord, ProviderRegistry};
 
 /// Live health for one provider (fed by A7 observations / probe pings).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,6 +126,11 @@ impl RouteDecision {
 pub struct RoutingFeed {
     providers: Vec<ProviderRecord>,
     health: HashMap<String, Health>,
+    /// Provider ids (or aliases) the vault currently holds a credential for
+    /// (P50.3.6). Providers whose `Auth` requires a vault key are excluded
+    /// from the decision when absent — the feed never ranks a provider the
+    /// user has not keyed as if it were usable.
+    credentialed: HashSet<String>,
     generation: u64,
     /// Cached last decision keyed by (requirements-hash, generation).
     cache: HashMap<(u64, u64), RouteDecision>,
@@ -147,6 +152,28 @@ impl RoutingFeed {
     pub fn set_health(&mut self, provider_id: &str, health: Health) {
         self.health.insert(provider_id.to_string(), health);
         self.bump();
+    }
+
+    /// Replace the vault-credential set (P50.3.6). Ids (or their aliases)
+    /// present here may rank; a keyed provider absent here is excluded with
+    /// an honest "add a key" reason. Bumps the generation like any health
+    /// change, so cached decisions never outlive a key change.
+    pub fn set_credentialed(&mut self, ids: impl IntoIterator<Item = String>) {
+        self.credentialed = ids.into_iter().collect();
+        self.bump();
+    }
+
+    /// True when `id` (or one of its aliases) is in the credential set.
+    fn is_credentialed(&self, p: &ProviderRecord) -> bool {
+        self.credentialed.contains(&p.id)
+            || p.aliases.iter().any(|a| self.credentialed.contains(a))
+    }
+
+    /// Whether the provider needs a vault-held API key at all (P50.3.6).
+    /// Keyless/local runtimes and OS-credential sources are never gated by
+    /// the vault key ring.
+    fn requires_vault_key(auth: Auth) -> bool {
+        matches!(auth, Auth::ApiKey | Auth::ApiKeyEnv)
     }
 
     /// The current feed generation (cache key + decision provenance).
@@ -185,6 +212,17 @@ impl RoutingFeed {
                 .as_ref()
                 .map(trusted_capabilities)
                 .unwrap_or_default();
+
+            // P50.3.6 — credential gate: a provider that needs a vault-held
+            // API key but has none must not rank. This is the consumer-truth
+            // fix: the catalog alone no longer decides routability.
+            if Self::requires_vault_key(p.auth) && !self.is_credentialed(p) {
+                excluded.push(ExcludedProvider {
+                    id: p.id.clone(),
+                    reason: "no vault credential — add a provider key in Settings → Keys".into(),
+                });
+                continue;
+            }
 
             // Fail-closed: every required hard cap must be verified.
             let missing: Vec<Capability> = required
@@ -238,7 +276,9 @@ impl RoutingFeed {
                     .map(trusted_capabilities)
                     .unwrap_or_default();
                 let missing = required.iter().any(|c| !verified.contains(c));
-                if health == Health::Down && !missing {
+                // The credential gate holds in the fallback too: a dead
+                // provider still needs a key to be a retry candidate.
+                if health == Health::Down && !missing && (self.is_credentialed(p) || !Self::requires_vault_key(p.auth)) {
                     ranked.push(RankedProvider {
                         id: p.id.clone(),
                         score: 0.0,
@@ -302,11 +342,18 @@ mod tests {
         reg
     }
 
+    /// Pre-P50.3.6 tests exercise health/capability behavior, so credential
+    /// every provider (default `Auth::ApiKeyEnv` is now gate-gated).
+    fn credential_all(feed: &mut RoutingFeed, ids: &[&str]) {
+        feed.set_credentialed(ids.iter().map(|s| s.to_string()));
+    }
+
     #[test]
     fn healthy_verified_provider_ranks_top() {
         let reg = registry(vec![provider("a", true), provider("b", true)]);
         let mut feed = RoutingFeed::new();
         feed.load_registry(&reg);
+        credential_all(&mut feed, &["a", "b"]);
         feed.set_health("a", Health::Healthy);
         feed.set_health("b", Health::Degraded);
         let d = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
@@ -320,6 +367,7 @@ mod tests {
         let reg = registry(vec![provider("a", true), provider("b", false)]);
         let mut feed = RoutingFeed::new();
         feed.load_registry(&reg);
+        credential_all(&mut feed, &["a", "b"]);
         feed.set_health("a", Health::Healthy);
         feed.set_health("b", Health::Healthy);
         let d = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
@@ -333,6 +381,7 @@ mod tests {
         let reg = registry(vec![provider("a", true), provider("b", true)]);
         let mut feed = RoutingFeed::new();
         feed.load_registry(&reg);
+        credential_all(&mut feed, &["a", "b"]);
         feed.set_health("a", Health::Down);
         feed.set_health("b", Health::Healthy);
         let d = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
@@ -345,6 +394,7 @@ mod tests {
         let reg = registry(vec![provider("a", true)]);
         let mut feed = RoutingFeed::new();
         feed.load_registry(&reg);
+        credential_all(&mut feed, &["a"]);
         feed.set_health("a", Health::Down);
         let d = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
         // Only candidate is Down but capability-verified → readmitted at score 0.
@@ -357,6 +407,7 @@ mod tests {
         let reg1 = registry(vec![provider("a", true)]);
         let mut feed = RoutingFeed::new();
         feed.load_registry(&reg1);
+        credential_all(&mut feed, &["a"]);
         feed.set_health("a", Health::Healthy);
         let g1 = feed.generation();
         let d1 = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
@@ -366,6 +417,7 @@ mod tests {
         // New registry with an added provider bumps the generation → re-rank.
         let reg2 = registry(vec![provider("a", true), provider("c", true)]);
         feed.load_registry(&reg2);
+        credential_all(&mut feed, &["a", "c"]);
         feed.set_health("c", Health::Healthy);
         let g2 = feed.generation();
         assert_ne!(g1, g2);
@@ -379,10 +431,109 @@ mod tests {
         let reg = registry(vec![provider("a", false), provider("b", true)]);
         let mut feed = RoutingFeed::new();
         feed.load_registry(&reg);
+        credential_all(&mut feed, &["a", "b"]);
         feed.set_health("a", Health::Healthy);
         feed.set_health("b", Health::Unknown);
         // No hard requirement → even the tools-unverified provider is usable.
         let d = feed.decide(&RouteRequirements::default());
         assert_eq!(d.ranked.len(), 2);
+    }
+
+    // ---- P50.3.6 — vault-credential gating ------------------------------
+
+    fn keyed(id: &str) -> ProviderRecord {
+        // Default auth is ApiKeyEnv (needs a vault key).
+        let mut rec = provider(id, true);
+        rec.auth = Auth::ApiKeyEnv;
+        rec
+    }
+
+    fn keyless(id: &str) -> ProviderRecord {
+        let mut rec = provider(id, true);
+        rec.auth = Auth::Keyless;
+        rec
+    }
+
+    #[test]
+    fn unkeyed_api_provider_is_excluded_with_add_key_reason() {
+        let reg = registry(vec![keyed("a")]);
+        let mut feed = RoutingFeed::new();
+        feed.load_registry(&reg);
+        feed.set_health("a", Health::Healthy);
+        // No credential set at all — 'a' requires a vault key.
+        let d = feed.decide(&RouteRequirements::default());
+        assert!(d.ranked.is_empty(), "unkeyed provider must never rank");
+        let e = d.excluded.iter().find(|e| e.id == "a").expect("excluded entry");
+        assert!(e.reason.contains("vault credential"), "reason: {}", e.reason);
+        assert!(e.reason.contains("add a provider key"));
+    }
+
+    #[test]
+    fn credentialed_api_provider_ranks() {
+        let reg = registry(vec![keyed("a")]);
+        let mut feed = RoutingFeed::new();
+        feed.load_registry(&reg);
+        feed.set_credentialed(["a".to_string()]);
+        feed.set_health("a", Health::Healthy);
+        let d = feed.decide(&RouteRequirements::default());
+        assert_eq!(d.top(), Some("a"));
+        assert!(d.excluded.is_empty());
+    }
+
+    #[test]
+    fn keyless_provider_is_never_gated_by_vault() {
+        let reg = registry(vec![keyless("lmstudio")]);
+        let mut feed = RoutingFeed::new();
+        feed.load_registry(&reg);
+        // No credential set — keyless must still rank.
+        feed.set_health("lmstudio", Health::Healthy);
+        let d = feed.decide(&RouteRequirements::default());
+        assert_eq!(d.top(), Some("lmstudio"));
+        assert!(d.excluded.is_empty());
+    }
+
+    #[test]
+    fn alias_in_credential_set_credentials_the_provider() {
+        let mut rec = keyed("actual");
+        rec.aliases = vec!["legacy-name".to_string()];
+        let reg = registry(vec![rec]);
+        let mut feed = RoutingFeed::new();
+        feed.load_registry(&reg);
+        // The vault holds the key under the alias, not the canonical id.
+        feed.set_credentialed(["legacy-name".to_string()]);
+        feed.set_health("actual", Health::Healthy);
+        let d = feed.decide(&RouteRequirements::default());
+        assert_eq!(d.top(), Some("actual"));
+    }
+
+    #[test]
+    fn unkeyed_provider_is_not_readmitted_by_down_fallback() {
+        let reg = registry(vec![keyed("a")]);
+        let mut feed = RoutingFeed::new();
+        feed.load_registry(&reg);
+        feed.set_health("a", Health::Down);
+        // Everything is excluded AND unkeyed — no fallback re-admission.
+        let d = feed.decide(&RouteRequirements::default());
+        assert!(d.ranked.is_empty());
+        assert!(d.excluded.iter().any(|e| e.id == "a" && e.reason.contains("vault credential")));
+    }
+
+    #[test]
+    fn key_change_bumps_generation_and_invalidates_cache() {
+        let reg = registry(vec![keyed("a")]);
+        let mut feed = RoutingFeed::new();
+        feed.load_registry(&reg);
+        feed.set_health("a", Health::Healthy);
+        feed.set_credentialed(Vec::<String>::new());
+        let g1 = feed.generation();
+        let d1 = feed.decide(&RouteRequirements::default());
+        assert!(d1.ranked.is_empty());
+
+        // User adds a key → credential set changes → stale cached decision dies.
+        feed.set_credentialed(["a".to_string()]);
+        let g2 = feed.generation();
+        assert_ne!(g1, g2);
+        let d2 = feed.decide(&RouteRequirements::default());
+        assert_eq!(d2.top(), Some("a"));
     }
 }
