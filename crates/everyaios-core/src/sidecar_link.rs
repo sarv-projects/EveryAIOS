@@ -324,6 +324,7 @@ pub enum LinkError {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
     #[cfg(unix)]
     use std::os::unix::net::UnixStream;
