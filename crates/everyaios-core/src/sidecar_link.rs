@@ -325,6 +325,7 @@ pub enum LinkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::os::unix::net::UnixStream;
 
     /// A scripted fake sidecar: reads frames from its end of the pair and
@@ -332,6 +333,7 @@ mod tests {
     /// keeps its stdout open; the fake must not — the reader thread holds the
     /// Rust end open, so an EOF-waiting fake would never see EOF and would
     /// deadlock the test's join).
+    #[cfg(unix)]
     fn fake_sidecar(stream: UnixStream) -> std::thread::JoinHandle<Vec<String>> {
         std::thread::spawn(move || {
             let mut stream = stream;
@@ -383,10 +385,12 @@ mod tests {
         })
     }
 
+    #[cfg(unix)]
     fn pair() -> (UnixStream, UnixStream) {
         UnixStream::pair().expect("socketpair")
     }
 
+    #[cfg(unix)]
     #[test]
     fn request_response_roundtrip() {
         let (a, b) = pair();
@@ -403,6 +407,7 @@ mod tests {
         assert_eq!(seen, vec!["ping"]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn eof_fails_pending_requests() {
         // Fake sidecar that never responds and closes stdout. Fail-closed: the
@@ -419,6 +424,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn chat_stream_relay_forwards_events() {
         let (a, b) = pair();
@@ -453,6 +459,7 @@ mod tests {
         assert_eq!(seen, vec!["chat/stream"]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn coordinator_request_is_dispatched_and_replied() {
         // A sidecar that sends a `provider/stream` REQUEST to Rust.
@@ -484,6 +491,7 @@ mod tests {
         assert_eq!(reply["result"]["accepted"], serde_json::json!(true));
     }
 
+    #[cfg(unix)]
     #[test]
     fn writer_handle_pushes_notifications() {
         let (a, b) = pair();

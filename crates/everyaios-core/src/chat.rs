@@ -1846,6 +1846,7 @@ mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
+    #[cfg(unix)]
     use std::os::unix::net::UnixStream;
     use std::time::{Duration, Instant};
 
@@ -1864,10 +1865,12 @@ mod tests {
         (dir, vault)
     }
 
+    #[cfg(unix)]
     fn pair() -> (UnixStream, UnixStream) {
         UnixStream::pair().expect("socketpair")
     }
 
+    #[cfg(unix)]
     fn link_from(a: UnixStream) -> SidecarLink<UnixStream, UnixStream> {
         let reader = a.try_clone().expect("clone");
         SidecarLink::new(a, reader)
@@ -1928,6 +1931,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn start_stream_preflights_budget() {
         // A session already at/over its $ limit is refused BEFORE dispatch,
@@ -1980,6 +1984,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn relay_forwards_chat_events() {
         // Fake sidecar acks chat/stream, then streams batch + done back
@@ -2047,6 +2052,7 @@ mod tests {
         side.join().unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn relay_forwards_plan_interrupt_notifications() {
         // Stage-0 (P6.3): a `chat/interrupt` notification from the coordinator
@@ -2140,6 +2146,7 @@ mod tests {
         assert!(!encoded.contains("Bearer"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn provider_stream_runs_broker_and_pushes_chunks() {
         // The provider call happens in Rust: the coordinator's provider/stream
@@ -2218,6 +2225,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn post_turn_budget_kill_surfaces_stopped() {
         // J11 end-to-end: a session pre-loaded to $1.99 spends $0.02 on a turn;
@@ -2348,6 +2356,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn relay_dispatches_scheduler_requests() {
         // P6.4: `scheduler/*` requests from the coordinator hit the shared

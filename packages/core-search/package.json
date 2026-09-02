@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && mkdir -p dist/data && cp src/data/searx-pool.json dist/data/searx-pool.json",
+    "build": "tsc && node -e \"require('fs').mkdirSync('dist/data',{recursive:true});require('fs').copyFileSync('src/data/searx-pool.json','dist/data/searx-pool.json')\"",
     "type-check": "tsc --noEmit",
     "lint": "pnpm --workspace-root exec eslint packages/core-search",
     "test": "vitest run",
