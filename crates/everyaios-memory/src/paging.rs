@@ -95,10 +95,11 @@ impl PagedMemory {
             self.core.remove(i)
         } else if let Some(i) = self.archival.iter().position(|e| e.id == id) {
             self.archival.remove(i)
-        } else if let Some(i) = self.recall.iter().position(|e| e.id == id) {
-            self.recall.remove(i)
         } else {
-            return None;
+            self.recall
+                .iter()
+                .position(|e| e.id == id)
+                .map(|i| self.recall.remove(i))?
         };
         let ret = entry.clone();
         self.recall.push(entry);

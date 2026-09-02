@@ -105,15 +105,12 @@ impl EgressPolicyEngine {
         &self.receipts
     }
 
-    /// Evaluate one release. Deterministic:
-    ///
-    ///   1. unknown profile → Deny (fail-closed),
-    ///   2. zone not allowed by the profile → Deny,
-    ///   3. destination denied → Deny,
-    ///   4. destination redact-listed → Redact,
-    ///   5. otherwise Allow.
-    /// A `scan_signal` (managed secret / pattern) from the vault egress
-    /// firewall downgrades Allow → Redact and Redact stays Redact.
+    /// Evaluate one release through a deterministic decision table
+    /// (fail-closed): an unknown profile, a zone outside the profile, or a
+    /// denied destination each Deny; a redact-listed destination yields
+    /// Redact; anything else Allow. A `scan_signal` (managed secret /
+    /// pattern) from the vault egress firewall downgrades Allow → Redact
+    /// and Redact stays Redact.
     pub fn evaluate(
         &mut self,
         profile: &str,
