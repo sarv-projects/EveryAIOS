@@ -21,6 +21,7 @@ use everyaios_guard::redteam::{run_red_team, RED_TEAM_CORPUS};
 use everyaios_guard::{DecisionPackage, Operation};
 use everyaios_vault::{KeyRing, KeySpec, KeyStatus, RoutingPolicy, Vault};
 
+#[cfg(unix)]
 fn temp_dir(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("everyaios-p10-sec-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
