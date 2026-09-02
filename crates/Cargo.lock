@@ -1446,6 +1446,7 @@ name = "everyaios-mcp"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "everyaios-guard",
  "rand 0.8.7",
  "serde",
  "serde_json",

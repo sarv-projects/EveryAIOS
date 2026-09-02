@@ -2,7 +2,8 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
-use std::process::{Child, Command};
+use std::process::{Child, Command, ExitStatus};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PathAccess {
@@ -49,6 +50,12 @@ pub enum SandboxError {
     UnsupportedPlatform,
     #[error("sandbox policy intersection is empty or invalid: {0}")]
     InvalidPolicy(String),
+    #[error("sandbox process has no monitor handle")]
+    MissingMonitor,
+    #[error("sandbox process exited before postflight verification")]
+    ProcessExited,
+    #[error("sandbox process exceeded its deadline")]
+    DeadlineExceeded,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,9 +136,84 @@ fn policy_hash(spec: &SandboxSpec) -> String {
 pub trait SandboxBackend {
     fn capabilities(&self) -> Vec<String>;
     fn validate(&self, spec: &SandboxSpec) -> Result<(), SandboxError>;
-    fn spawn(&self, spec: &SandboxSpec, command: &[String]) -> Result<u32, SandboxError>;
-    fn inspect(&self, pid: u32) -> Result<Vec<String>, SandboxError>;
-    fn kill(&self, pid: u32) -> Result<(), SandboxError>;
+    fn spawn(&self, spec: &SandboxSpec, command: &[String])
+        -> Result<SandboxProcess, SandboxError>;
+}
+
+/// A process launched by a concrete sandbox backend. The child remains owned
+/// by this handle until it is reaped; callers cannot claim postflight success
+/// without observing its exit and producing a receipt.
+pub struct SandboxProcess {
+    child: Child,
+    pub backend: String,
+    pub pid: u32,
+    started_at: Instant,
+}
+
+impl SandboxProcess {
+    pub fn try_wait(&mut self) -> Result<Option<ExitStatus>, SandboxError> {
+        self.child
+            .try_wait()
+            .map_err(|_| SandboxError::ProcessExited)
+    }
+
+    pub fn backend(&self) -> &str {
+        &self.backend
+    }
+
+    pub fn wait_with_deadline(&mut self, deadline: Instant) -> Result<ExitStatus, SandboxError> {
+        loop {
+            if let Some(status) = self.try_wait()? {
+                return Ok(status);
+            }
+            if Instant::now() >= deadline {
+                self.kill()?;
+                return Err(SandboxError::DeadlineExceeded);
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    pub fn kill(&mut self) -> Result<(), SandboxError> {
+        self.child.kill().map_err(|_| SandboxError::ProcessExited)?;
+        self.child
+            .wait()
+            .map_err(|_| SandboxError::ProcessExited)
+            .map(|_| ())
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        self.started_at.elapsed()
+    }
+
+    /// Produce a postflight receipt only after the process has been reaped.
+    /// A successful exit alone is not a proof of filesystem cleanliness; the
+    /// caller supplies the independently verified state digest.
+    pub fn postflight_receipt(
+        &mut self,
+        spec: &SandboxSpec,
+        environment_id: impl Into<String>,
+        deadline: Instant,
+        state: &str,
+        violations: Vec<String>,
+    ) -> Result<SandboxReceipt, SandboxError> {
+        let status = self.wait_with_deadline(deadline)?;
+        let runtime = if status.success() {
+            "completed"
+        } else {
+            "failed"
+        };
+        let postflight = if status.success() && violations.is_empty() {
+            "passed"
+        } else {
+            "failed"
+        };
+        Ok(
+            SandboxReceipt::preflight(spec, self.backend(), environment_id)
+                .observe(runtime, violations)
+                .postflight(postflight, state),
+        )
+    }
 }
 
 /// Linux bubblewrap backend. It is deliberately constructed as a command
@@ -205,28 +287,22 @@ impl SandboxBackend for LinuxBwrapBackend {
         }
         spec.profile.validate()
     }
-    fn spawn(&self, spec: &SandboxSpec, command: &[String]) -> Result<u32, SandboxError> {
+    fn spawn(
+        &self,
+        spec: &SandboxSpec,
+        command: &[String],
+    ) -> Result<SandboxProcess, SandboxError> {
         self.validate(spec)?;
-        Self::command(spec, command)?
+        let child = Self::command(spec, command)?
             .spawn()
-            .map(|child: Child| child.id())
-            .map_err(|_| SandboxError::UnsupportedPlatform)
-    }
-    fn inspect(&self, pid: u32) -> Result<Vec<String>, SandboxError> {
-        let status = std::fs::read_to_string(format!("/proc/{pid}/status"))
             .map_err(|_| SandboxError::UnsupportedPlatform)?;
-        Ok(status.lines().map(str::to_string).collect())
-    }
-    fn kill(&self, pid: u32) -> Result<(), SandboxError> {
-        let status = Command::new("kill")
-            .arg("-TERM")
-            .arg(pid.to_string())
-            .status()
-            .map_err(|_| SandboxError::UnsupportedPlatform)?;
-        status
-            .success()
-            .then_some(())
-            .ok_or(SandboxError::UnsupportedPlatform)
+        let pid = child.id();
+        Ok(SandboxProcess {
+            child,
+            backend: "linux-bwrap".into(),
+            pid,
+            started_at: Instant::now(),
+        })
     }
 }
 
@@ -240,6 +316,27 @@ pub fn linux_bwrap_available() -> bool {
         .unwrap_or(false)
 }
 
+/// Runtime containment capabilities. This is deliberately capability-based:
+/// a platform is not reported as governed merely because it can spawn a
+/// process. Windows/macOS backends return no enforced capability until their
+/// native policy implementations are integrated and tested.
+pub fn enforced_backend_capabilities() -> Vec<String> {
+    #[cfg(target_os = "linux")]
+    {
+        if linux_bwrap_available() {
+            return vec![
+                "linux-bwrap".into(),
+                "process-monitoring".into(),
+                "postflight-receipts".into(),
+            ];
+        }
+    }
+    Vec::new()
+}
+
+/// Resolve a backend for an external child. `NativeProcess` is deliberately
+/// not accepted as proof of containment: callers must provide a real backend
+/// (for example Linux bubblewrap) or fail closed.
 pub fn resolve_sandbox_backend(
     role: SandboxRole,
     requested: SandboxBackendKind,
@@ -252,7 +349,13 @@ pub fn resolve_sandbox_backend(
     }
     match requested {
         SandboxBackendKind::TrustedNative => Ok(requested),
-        SandboxBackendKind::NativeProcess => Ok(requested),
+        SandboxBackendKind::NativeProcess => {
+            if role == SandboxRole::AgentSandbox {
+                Ok(requested)
+            } else {
+                Err(SandboxError::UnsupportedPlatform)
+            }
+        }
         SandboxBackendKind::Container | SandboxBackendKind::MicroVm => {
             Err(SandboxError::UnsupportedPlatform)
         }
@@ -355,6 +458,9 @@ impl SandboxProfile {
             inside && r.access_allows(access)
         })
     }
+    /// Apply this profile to the current process. The library does not claim
+    /// to provide portable in-process confinement; external children must use
+    /// a concrete backend wrapper. This method therefore remains fail-closed.
     pub fn apply(&self) -> Result<(), SandboxError> {
         self.validate()?;
         Err(SandboxError::UnsupportedPlatform)
@@ -363,13 +469,13 @@ impl SandboxProfile {
 impl PathRule {
     pub fn access_allows(&self, requested: PathAccess) -> bool {
         use PathAccess::*;
-        match (self.access, requested) {
-            (ReadWrite, _) => true,
-            (AddIfExists, AddIfExists | ReadOnly | ReadAndExecute) => true,
-            (ReadAndExecute, ReadAndExecute | ReadOnly) => true,
-            (ReadOnly, ReadOnly) => true,
-            _ => false,
-        }
+        matches!(
+            (self.access, requested),
+            (ReadWrite, _)
+                | (AddIfExists, AddIfExists | ReadOnly | ReadAndExecute)
+                | (ReadAndExecute, ReadAndExecute | ReadOnly)
+                | (ReadOnly, ReadOnly)
+        )
     }
 }
 

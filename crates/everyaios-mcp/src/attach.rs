@@ -9,18 +9,25 @@
 //! exercised here against a spawned mock MCP server over loopback stdio.
 
 use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use serde::Serialize;
 
 use crate::server::{ExternalTool, ToolCatalog};
+use everyaios_guard::sandbox::SandboxProcess;
 
 /// An attached MCP server: the child process plus its reconciled tool names.
 pub struct AttachedServer {
-    child: Child,
+    child: Option<Child>,
+    sandbox_process: Option<SandboxProcess>,
     stdin: ChildStdin,
     reader: BufReader<ChildStdout>,
     pub tools: Vec<String>,
+    /// True only when launched through a concrete host sandbox backend.
+    sandboxed: bool,
+    /// Optional reviewed-import root for sandboxed change sets.
+    import_root: Option<PathBuf>,
 }
 
 /// Errors from the attach handshake.
@@ -46,6 +53,12 @@ impl AttachedServer {
     /// passed verbatim — SEP-1024 exact-command consent happens in the UI
     /// (H3) before this is called.
     pub fn spawn(command: &str, args: &[&str]) -> Result<Self, AttachError> {
+        Self::spawn_uncontrolled(command, args)
+    }
+
+    /// Legacy attach path. It is intentionally explicit: the child is not
+    /// covered by the native ticket/audit guarantee.
+    pub fn spawn_uncontrolled(command: &str, args: &[&str]) -> Result<Self, AttachError> {
         let mut child = Command::new(command)
             .args(args)
             .stdin(Stdio::piped())
@@ -62,10 +75,13 @@ impl AttachedServer {
             .take()
             .ok_or_else(|| AttachError::Stdio("no stdout".into()))?;
         Ok(Self {
-            child,
+            child: Some(child),
+            sandbox_process: None,
             stdin,
             reader: BufReader::new(stdout),
             tools: Vec::new(),
+            sandboxed: false,
+            import_root: None,
         })
     }
 
@@ -164,10 +180,53 @@ impl AttachedServer {
         Ok(names)
     }
 
+    /// Attach the concrete monitored process returned by a sandbox backend.
+    /// A path alone never establishes containment.
+    pub fn bind_sandbox_process(&mut self, process: SandboxProcess, root: PathBuf) {
+        self.sandbox_process = Some(process);
+        self.sandboxed = true;
+        self.import_root = Some(root);
+    }
+
+    /// Compatibility guard: callers must use `bind_sandbox_process`; merely
+    /// naming an import root cannot upgrade an uncontrolled child.
+    pub fn bind_sandbox_import_root(&mut self, _root: PathBuf) -> Result<(), AttachError> {
+        Err(AttachError::Protocol(
+            "sandbox import root requires a concrete monitored sandbox process".into(),
+        ))
+    }
+
+    pub fn monitor_exit(
+        &mut self,
+        deadline: std::time::Instant,
+    ) -> Result<std::process::ExitStatus, AttachError> {
+        self.sandbox_process
+            .as_mut()
+            .ok_or_else(|| AttachError::Protocol("child is not sandboxed".into()))
+            .and_then(|process| {
+                process
+                    .wait_with_deadline(deadline)
+                    .map_err(|e| AttachError::Protocol(e.to_string()))
+            })
+    }
+
+    pub fn is_sandboxed(&self) -> bool {
+        self.sandboxed
+    }
+
+    pub fn import_root(&self) -> Option<&PathBuf> {
+        self.import_root.as_ref()
+    }
+
     /// Tear the child process down.
     pub fn shutdown(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Some(process) = self.sandbox_process.as_mut() {
+            let _ = process.kill();
+        }
+        if let Some(child) = self.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
