@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 //! P10.3 — Performance & stress benchmarks (ARCH/02 budgets, doc 33 §9 replay
 //! scale, ARCH/05 token economy).
 //!

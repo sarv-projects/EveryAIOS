@@ -1844,19 +1844,26 @@ fn stream_provider(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::io::{Read, Write};
+    #[cfg(unix)]
     use std::net::TcpListener;
     #[cfg(unix)]
     use std::os::unix::net::UnixStream;
+    #[cfg(unix)]
     use std::time::{Duration, Instant};
 
+    #[cfg(unix)]
     use everyaios_ipc::frame;
+    #[cfg(unix)]
     use everyaios_vault::{KeySpec, KeyStatus, Usage, UsageRow};
 
+    #[cfg(unix)]
     fn temp_dir(tag: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("everyaios-core-chat-{tag}-{}", std::process::id()))
     }
 
+    #[cfg(unix)]
     fn temp_vault(tag: &str) -> (std::path::PathBuf, Vault) {
         let dir = temp_dir(tag);
         let _ = std::fs::remove_dir_all(&dir);
@@ -1876,6 +1883,7 @@ mod tests {
         SidecarLink::new(a, reader)
     }
 
+    #[cfg(unix)]
     fn spec(provider: &str, key_id: &str) -> KeySpec {
         KeySpec {
             provider: provider.into(),
@@ -1891,6 +1899,7 @@ mod tests {
 
     /// Spin a fake OpenAI-compatible endpoint (same pattern as the vault
     /// broker tests).
+    #[cfg(unix)]
     fn mock_server(respond: impl Fn(&str) -> (u16, String) + Send + 'static) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1918,6 +1927,7 @@ mod tests {
         format!("http://{addr}")
     }
 
+    #[cfg(unix)]
     fn wait_events(events: &Arc<Mutex<Vec<ChatWireEvent>>>, min: usize, timeout: Duration) -> bool {
         let start = Instant::now();
         loop {

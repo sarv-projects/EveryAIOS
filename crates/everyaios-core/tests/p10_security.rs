@@ -225,6 +225,7 @@ fn path_traversal_fuzz_10000_no_escape() {
 // P10.2.4 — symlink attack suite: chains, circular, TOCTOU-to-outside
 // ---------------------------------------------------------------------------
 
+#[cfg(unix)]
 #[test]
 fn symlink_attack_suite_refused() {
     let dir = temp_dir("symlink");
