@@ -172,6 +172,7 @@ impl AcpTransport for ProcessTransport {
     }
 
     fn is_alive(&mut self) -> bool {
+        #[cfg(target_os = "linux")]
         if let Some(monitor) = self.monitor.as_mut() {
             return matches!(monitor.try_wait(), Ok(None));
         }
