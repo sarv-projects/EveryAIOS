@@ -185,6 +185,7 @@ fn journey_install_byok_chat_tool_call() {
             persona_id: None,
             soul_md: None,
             user_documents: None,
+            primary_chief: None,
         })
         .expect("start_stream");
     assert!(

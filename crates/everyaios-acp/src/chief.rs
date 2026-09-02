@@ -52,6 +52,29 @@ pub struct UserMessage {
     pub text: String,
 }
 
+/// P38 (spec §4.2.5a §2) — inject the memory passport (C10) + governance
+/// block into an ACP Chief's prompt, mirroring the inbuilt path's
+/// `<memory_warm_set>` injection below the cache boundary. The external Chief
+/// gets the same durable context as the inbuilt engine; the block is inert
+/// when there are no facts to pass. Callers fetch `core_facts()` from the
+/// shared `MemoryService` (best-effort — a missing memory handler never
+/// blocks a turn, exactly like the inbuilt path).
+pub fn build_chief_prompt(text: &str, core_facts: &[String], governance: &GovernedSession) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !core_facts.is_empty() {
+        parts.push(format!(
+            "<memory_passport>\n{}\n</memory_passport>",
+            core_facts.join("\n")
+        ));
+    }
+    parts.push(format!(
+        "## Governance\nThis session runs under {}.\n",
+        governance.badge()
+    ));
+    parts.push(text.to_string());
+    parts.join("\n\n")
+}
+
 /// A permission request surfaced for Guard-2 (the ticket seam).
 #[derive(Debug, Clone)]
 pub struct PermissionRequest {
@@ -573,6 +596,31 @@ mod tests {
         let mode = governance_mode(false, &agent_caps(false, false), true);
         assert_eq!(mode, GovernedSession::SelfContained { channel_b: false });
         assert_eq!(mode.badge(), "Self-contained");
+    }
+
+    #[test]
+    fn build_chief_prompt_injects_passport_and_governance() {
+        let facts = vec!["user prefers concise answers".to_string(), "project uses pnpm".to_string()];
+        let prompt = build_chief_prompt(
+            "Summarize the repo",
+            &facts,
+            &GovernedSession::SelfContained { channel_b: true },
+        );
+        assert!(prompt.contains("<memory_passport>"));
+        assert!(prompt.contains("user prefers concise answers"));
+        assert!(prompt.contains("project uses pnpm"));
+        assert!(prompt.contains("Self-contained"));
+        assert!(prompt.ends_with("Summarize the repo"));
+    }
+
+    #[test]
+    fn build_chief_prompt_without_facts_is_just_governance_plus_text() {
+        // Empty warm set → no passport block, but the governance badge is
+        // still honest (a Chief session always runs under some boundary).
+        let prompt = build_chief_prompt("hi", &[], &GovernedSession::NotGoverned);
+        assert!(!prompt.contains("<memory_passport>"));
+        assert!(prompt.contains("NotGoverned"));
+        assert!(prompt.ends_with("hi"));
     }
 
     #[test]

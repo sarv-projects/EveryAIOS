@@ -30,6 +30,7 @@ pub mod frontmatter;
 pub mod helpers;
 pub mod inbuilt;
 pub mod iteration;
+pub mod learn;
 pub mod jobs;
 pub mod kanban;
 pub mod loop_pattern;
@@ -78,6 +79,10 @@ pub use plugin::{
     dogfood_rule, first_party_catalog, ApprovalRequest, CapabilityList, Contributes, FileBackend,
     HostFacades, LlmBackend, PluginEntry, PluginError, PluginManifest, PluginRegistry, PluginState,
     Slot, TrustFlagsDecl, ABI_VERSION,
+};
+pub use learn::{
+    derive_name, evidence_sha256, learn_and_save, learn_from_evidence, LearnDraft, LearnGate,
+    LearnRequest,
 };
 pub use skill_store::{
     grow_from_task, taste_skill, ScoredSkill, Skill, SkillError, SkillIndex, SkillManifest,

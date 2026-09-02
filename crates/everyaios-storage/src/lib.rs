@@ -19,6 +19,8 @@
 
 pub mod checkpoint;
 pub mod cleanup;
+pub mod pool;
+pub mod pragmas;
 pub mod content;
 pub mod dedup;
 pub mod events;

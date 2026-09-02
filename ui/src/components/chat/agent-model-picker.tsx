@@ -113,6 +113,40 @@ export default function AgentModelPicker({ compact }: Props) {
     (s) => s.sessions.find((x) => x.id === s.activeSessionId)?.folder,
   )
 
+  // P38 — per-session Chief pin: pin this agent as the Chief for the active
+  // session only (outranks the user default for that session's turns). The
+  // pin lives in the store and the chat send path passes it as primaryChief;
+  // external pins take the ACP branch, so this never forces an inbuilt turn.
+  const sessionPin = useAppStore((s) => s.sessionChiefs[s.activeSessionId])
+  // P38 — was the active session explicitly unpinned? Persisted on the
+  // Session (vault round-trip) so a restarted session that had a pin shows
+  // "default applies — pin cleared" instead of silence.
+  const sessionUnpinned = useAppStore(
+    (s) => s.sessions.find((x) => x.id === s.activeSessionId)?.chiefUnpinned === true,
+  )
+  const setSessionChiefPin = useAppStore((s) => s.setSessionChiefPin)
+  const clearSessionChiefPin = useAppStore((s) => s.clearSessionChiefPin)
+  const handlePinChief = () => {
+    if (!chiefEligibleId) {
+      notify(`${agent.name} is not Chief-eligible`)
+      return
+    }
+    const sessionId = useAppStore.getState().activeSessionId
+    if (!sessionId) {
+      notify('No active session to pin to')
+      return
+    }
+    // P38 — clicking the already-pinned Chief unpins (surfaces the durable
+    // pin lifecycle, not just pin-once).
+    if (sessionPin === chiefEligibleId) {
+      clearSessionChiefPin(sessionId)
+      notify(`Chief pin cleared for this session — default applies again`)
+      return
+    }
+    setSessionChiefPin(sessionId, chiefEligibleId)
+    notify(`Session pinned to ${chiefEligibleId} — this chat now routes through that Chief`)
+  }
+
   // F8 — plan-before-touch install: request (Guard-2 ticket or auto-allow),
   // then commit. The approved card shows in the transcript via the bridge.
   const installAgent = async (agentId: string) => {
@@ -193,6 +227,26 @@ export default function AgentModelPicker({ compact }: Props) {
       .then((r) => setLocalRows(r.models ?? []))
       .catch(() => setLocalRows([]))
   }, [open])
+
+  // P50.3.6 — when auto-route is on, consult the live routing feed
+  // (`routing_feed_decide`) so the picker shows *why* a provider is ranked
+  // (or excluded — the decision is vault-credential gated, so an unkeyed
+  // provider lands in `excluded` with an explicit "add a key" reason).
+  const [routeFeed, setRouteFeed] = useState<{ ranked: { id: string; score: number; health: string }[]; excluded: { id: string; reason: string }[] } | null>(null)
+  useEffect(() => {
+    if (!open || !autoRoute) {
+      setRouteFeed(null)
+      return
+    }
+    let alive = true
+    void import('@/lib/discovery')
+      .then(({ routingFeedDecide }) => routingFeedDecide({}))
+      .then((d) => alive && setRouteFeed({ ranked: d.ranked ?? [], excluded: d.excluded ?? [] }))
+      .catch(() => alive && setRouteFeed(null))
+    return () => {
+      alive = false
+    }
+  }, [open, autoRoute])
 
   const model = getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
   const models = getModelsForAgent(selectedAgentId)
@@ -284,19 +338,49 @@ export default function AgentModelPicker({ compact }: Props) {
                   </Badge>
                 )}
               </div>
-              {chiefEligibleId && (
-                <button
-                  type="button"
-                  onClick={handleSetChief}
-                  disabled={chiefEligibleId === defaultChief}
-                  className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-orange-300 hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted-foreground disabled:hover:no-underline"
-                >
-                  {chiefEligibleId === defaultChief
-                    ? 'default chief'
-                    : `Set ${agent.name} as default chief`}
-                </button>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                {chiefEligibleId && (
+                  <button
+                    type="button"
+                    onClick={handlePinChief}
+                    className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-orange-300 hover:underline"
+                    title="Pin this agent as the Chief for the active session only (outranks the user default); click again to unpin"
+                  >
+                    {sessionPin
+                      ? chiefEligibleId === sessionPin
+                        ? 'unpin from this session'
+                        : `Pin ${agent.name} for this session`
+                      : `Pin ${agent.name} for this session`}
+                  </button>
+                )}
+                {chiefEligibleId && (
+                  <button
+                    type="button"
+                    onClick={handleSetChief}
+                    disabled={chiefEligibleId === defaultChief}
+                    className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-orange-300 hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted-foreground disabled:hover:no-underline"
+                  >
+                    {chiefEligibleId === defaultChief
+                      ? 'default chief'
+                      : `Set ${agent.name} as default chief`}
+                  </button>
+                )}
+              </div>
             </div>
+            {/* P38 — effective-Chief readout: shows what THIS session actually
+                routes under (pin → default → inbuilt). An explicitly unpinned
+                session shows "default applies — pin cleared" instead of
+                silence, even after a restart (the marker is vault-persisted). */}
+            {sessionPin && (
+              <div className="border-b border-border bg-orange-500/5 px-3 py-1 font-mono text-[9px] text-orange-300/90">
+                Session pinned to <span className="font-semibold">{sessionPin}</span> — outranks the user default for this chat.
+              </div>
+            )}
+            {!sessionPin && sessionUnpinned && (
+              <div className="border-b border-border bg-emerald-500/5 px-3 py-1 font-mono text-[9px] text-emerald-300/90">
+                <span className="font-semibold">Default Chief applies</span> — this session's pin was cleared; it follows the user default again.
+              </div>
+            )}
 
             <div className="grid grid-cols-[minmax(0,260px)_1fr]">
               {/* Agent column */}
@@ -535,6 +619,43 @@ export default function AgentModelPicker({ compact }: Props) {
                   </div>
                   <Switch checked={autoRoute} onCheckedChange={setAutoRoute} className="scale-75" />
                 </div>
+
+                {/* P50.3.6 — live routing decision when auto-route is on:
+                    ranked providers from `routing_feed_decide` (health +
+                    verified capabilities); the send path feeds the same feed
+                    into the per-turn router. No feed ⇒ no ranked claim. When
+                    the ranked list is empty the excluded reasons ARE the
+                    message (unkeyed providers explain where to add a key). */}
+                {autoRoute && routeFeed && (
+                  <div className="mt-1.5 space-y-1 rounded-md border border-orange-500/20 bg-orange-500/5 px-2 py-1.5">
+                    <div className="font-mono text-[8px] uppercase tracking-wider text-orange-300/80">
+                      Live route feed
+                    </div>
+                    {routeFeed.ranked.length > 0 ? (
+                      routeFeed.ranked.slice(0, 3).map((r, i) => (
+                        <div key={r.id} className="flex items-center gap-1.5 font-mono text-[9px] text-muted-foreground">
+                          <span className="text-orange-300">#{i + 1}</span>
+                          <span className="flex-1 truncate text-foreground/80">{r.id}</span>
+                          <span className="text-muted-foreground/60">{r.score.toFixed(2)}</span>
+                          <span className={cn('truncate', r.health === 'healthy' ? 'text-emerald-400/80' : 'text-amber-400/80')}>
+                            {r.health}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="font-mono text-[9px] text-amber-300/90">
+                          No usable route yet
+                        </div>
+                        {routeFeed.excluded.slice(0, 3).map((e) => (
+                          <div key={e.id} className="truncate font-mono text-[9px] text-muted-foreground">
+                            <span className="text-foreground/70">{e.id}</span> — {e.reason}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-1.5 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
                   <Sparkles className="h-2.5 w-2.5" />

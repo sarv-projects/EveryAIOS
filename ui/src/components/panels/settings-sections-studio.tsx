@@ -146,7 +146,11 @@ export function VoiceSection() {
   const notify = useAppStore((s) => s.notify)
   return (
     <SectionShell title="Voice" desc="Mic, noise, shortcuts, and spoken replies">
-      <Honest>VAD + speech-to-text is P9.3 — not built. These toggles persist; the composer mic still notifies “coming soon”.</Honest>
+      <Honest>
+        Voice is confirmed v1 scope (H15 VAD/STT + H28 TTS, promoted 2026-08-31) — the capture/read-aloud stack is
+        not wired in this build yet. These controls are the staged v1 surface (prefs persist and will drive the
+        stack); the composer mic is disabled with a truthful status rather than “coming soon”.
+      </Honest>
       <div className="text-xs font-medium text-foreground">General</div>
       <Row label="Input device" desc="Microphone used for voice input">
         <Select value={device} onValueChange={setDevice}>
@@ -177,12 +181,12 @@ export function VoiceSection() {
         <Switch checked={noise} onCheckedChange={setNoise} />
       </Row>
       <Row label="Term correction" desc="Names, project names, jargon for recognition">
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('No terms added yet')}>
+        <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled title="Term correction lands with the v1 STT stack — not wired yet">
           No terms yet
         </Button>
       </Row>
       <Row label="History" desc="Up to 100 voice inputs from the last 30 days">
-        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => notify('Voice history — empty until P9.3')}>
+        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled title="Voice history records once the v1 capture stack records — not wired yet">
           View history
         </Button>
       </Row>
@@ -219,7 +223,7 @@ export function VoiceSection() {
       <Row label="Push-to-talk">
         <Switch checked={pushToTalk} onCheckedChange={setPushToTalk} />
       </Row>
-      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Mic test — no capture pipeline yet')}>
+      <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled title="Microphone test needs the v1 capture pipeline — not wired yet">
         <Mic className="h-3.5 w-3.5" /> Test microphone
       </Button>
     </SectionShell>
@@ -227,13 +231,16 @@ export function VoiceSection() {
 }
 
 export function MobileSection() {
-  const [remote, setRemote] = usePref('mobile.remote', false)
-  const [control, setControl] = usePref('mobile.control', false)
-  const [awake, setAwake] = usePref('mobile.awake', false)
-  const notify = useAppStore((s) => s.notify)
+  // Remote session handoff + mobile companion is post-v1 (capabilities.yaml
+  // H18, ARCH/09 ⚪). Per P50.4.7 the section renders a truthful post-v1
+  // surface: the pairing preview stays visible as a forward-looking cue, but
+  // no persisted dead switches pretend remote pairing works today.
   return (
     <SectionShell title="Mobile" desc="Pair a phone to resume a session on the LAN">
-      <Honest>Remote handoff is P9.4 — not built. QR and install are placeholders so the pairing flow is visible.</Honest>
+      <Honest>
+        Remote session handoff + mobile companion is post-v1 (H18) — not built. This preview shows the intended
+        pairing flow; no toggle below is live yet.
+      </Honest>
       <div className="flex items-center gap-4 rounded-md border border-border/50 bg-background/30 p-4">
         <div className="grid h-28 w-28 place-items-center rounded-md border border-dashed border-border bg-background/40">
           <QrCode className="h-12 w-12 text-muted-foreground/50" />
@@ -244,23 +251,23 @@ export function MobileSection() {
             Install the phone app, sign in with the same vault, then scan. No founder server.
           </p>
           <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" className="h-7 bg-orange-500 text-black hover:bg-orange-400" onClick={() => notify('Install mobile — store listing not published')}>
+            <Button size="sm" className="h-7 bg-orange-500 text-black hover:bg-orange-400" disabled title="Post-v1 (H18) — remote pairing backend not wired">
               <Smartphone className="h-3.5 w-3.5" /> Install mobile
             </Button>
-            <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Refresh QR — pairing backend not wired')}>
+            <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled title="Post-v1 (H18) — pairing backend not wired">
               Refresh code
             </Button>
           </div>
         </div>
       </div>
-      <Row label="Allow remote sessions" desc="Phone can view and continue this machine’s jobs">
-        <Switch checked={remote} onCheckedChange={setRemote} />
+      <Row label="Allow remote sessions" desc="Post-v1 (H18) — phone view/continue is not built; switch inert">
+        <Switch disabled />
       </Row>
-      <Row label="Allow phone to control this device" desc="Access local folders of created tasks only">
-        <Switch checked={control} onCheckedChange={setControl} />
+      <Row label="Allow phone to control this device" desc="Post-v1 (H18) — control is not built; switch inert">
+        <Switch disabled />
       </Row>
-      <Row label="Keep the computer awake" desc="Prevent sleep while a long job is running">
-        <Switch checked={awake} onCheckedChange={setAwake} />
+      <Row label="Keep the computer awake" desc="Unrelated to pairing — stays available as a native concern">
+        <Switch disabled title="Wake-lock is a post-v1 pairing concern — not wired"/>
       </Row>
     </SectionShell>
   )

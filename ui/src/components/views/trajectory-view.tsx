@@ -139,7 +139,8 @@ export default function TrajectoryView() {
       </div>
 
       {/* Source-grouped list */}
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 scroll-thin">
+      {/* P45.6 — content-visibility: auto skips offscreen timeline rows. */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 scroll-thin [content-visibility:auto] [contain-intrinsic-size:auto_56px]">
         {TRAJECTORY_SOURCES.map((src) => {
           const items = grouped.get(src) ?? []
           if (items.length === 0) return null

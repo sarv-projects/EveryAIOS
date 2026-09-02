@@ -129,6 +129,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         mcp_cmds::mcp_remote_tools,
         skills_cmds::skills_catalog,
         skills_cmds::skills_install,
+        skills_cmds::skills_learn,
         skills_cmds::skills_uninstall,
         office_cmds::docx_open,
         office_cmds::docx_patch,

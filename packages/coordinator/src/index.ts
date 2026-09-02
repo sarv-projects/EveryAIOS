@@ -56,6 +56,7 @@ import {
   chiefRegistry,
   governanceBadge,
   resolveChiefId,
+  resolveSessionChief,
   type GovernanceMode,
 } from "./chief";
 
@@ -189,6 +190,63 @@ export function handleRequest(req: Request): Response | null {
           });
         }
         response = ok(id, { chiefId, badge: governanceBadge(governance) });
+      } catch (e) {
+        response = err(
+          id,
+          ERROR_CODES.INVALID_REQUEST,
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+      break;
+    }
+
+    case "chief/set_session": {
+      // P38 — pin a session to a Chief (per-session override). Fail-closed:
+      // unknown ids refuse; the resolved pin is returned so the caller can
+      // confirm the effective Chief for the session.
+      const p = (req.params ?? {}) as { sessionId?: string; chiefId?: string };
+      if (typeof p.sessionId !== "string" || p.sessionId === "" || typeof p.chiefId !== "string") {
+        response = err(id, ERROR_CODES.INVALID_REQUEST, "chief/set_session requires sessionId and chiefId");
+        break;
+      }
+      try {
+        const chiefId = chiefRegistry.setSessionPin(p.sessionId, p.chiefId);
+        const governance: GovernanceMode =
+          chiefId === "inbuilt"
+            ? { kind: "mediated", fs: true, terminal: true }
+            : { kind: "self_contained", channelB: true };
+        response = ok(id, { sessionId: p.sessionId, chiefId, badge: governanceBadge(governance) });
+      } catch (e) {
+        response = err(
+          id,
+          ERROR_CODES.INVALID_REQUEST,
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+      break;
+    }
+
+    case "chief/resolve_session": {
+      // P38 — the dispatcher-side read: what Chief does THIS session run
+      // under right now? Session pin → user default → inbuilt. Used by the
+      // chat path as the single dispatch decision and by the UI to show the
+      // effective Chief per session.
+      const p = (req.params ?? {}) as { sessionId?: string; userDefault?: string };
+      if (typeof p.sessionId !== "string" || p.sessionId === "") {
+        response = err(id, ERROR_CODES.INVALID_REQUEST, "chief/resolve_session requires sessionId");
+        break;
+      }
+      try {
+        const pin = chiefRegistry.sessionPin(p.sessionId);
+        const chiefId = resolveSessionChief({
+          ...(pin !== undefined ? { sessionPin: pin } : {}),
+          ...(typeof p.userDefault === "string" && p.userDefault !== "" ? { userDefault: p.userDefault } : {}),
+        });
+        response = ok(id, {
+          sessionId: p.sessionId,
+          chiefId,
+          source: pin ? "session-pin" : p.userDefault ? "user-default" : "inbuilt",
+        });
       } catch (e) {
         response = err(
           id,

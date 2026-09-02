@@ -613,8 +613,8 @@
 - id: H15
   layer: H
   name: Voice input (VAD)
-  post_v1: true
-  source: 33 §10, doc 50
+  post_v1: false
+  source: **✅ v1 (2026-08-31): voice promoted to v1 intent per product direction. Stack not wired yet — section + settings staged as v1-pending, no dead-toggling (P50.4.3/P50.4.4). 33 §10, doc 50**
 
 - id: H16
   layer: H
@@ -691,8 +691,8 @@
 - id: H28
   layer: H
   name: Voice output (TTS)
-  post_v1: true
-  source: doc 50
+  post_v1: false
+  source: **✅ v1 (2026-08-31): voice promoted to v1 intent per product direction. Stack not wired yet — read-aloud setting kept as staged v1 surface (P50.4.4). doc 50**
 
 - id: H29
   layer: H

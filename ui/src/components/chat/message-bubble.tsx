@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
@@ -235,7 +235,11 @@ interface Props {
   streaming?: boolean
 }
 
-export default function MessageBubble({ message, streaming }: Props) {
+// P45.9 — memoized: store updates are immutable (untouched messages keep
+// identity), so a shallow compare re-renders only the message whose object
+// changed (the one streaming). Custom comparison is avoided: `streaming` is a
+// primitive per-message flag, so the default shallow prop compare is exact.
+const MessageBubble = memo(function MessageBubble({ message, streaming }: Props) {
   if (message.role === 'system') {
     return (
       <div className="fade-up my-2 flex justify-center">
@@ -332,4 +336,6 @@ export default function MessageBubble({ message, streaming }: Props) {
       </div>
     </div>
   )
-}
+})
+
+export default MessageBubble

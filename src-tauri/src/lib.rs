@@ -253,6 +253,7 @@ fn chat_stream(
     persona_id: Option<String>,
     soul_md: Option<String>,
     user_documents: Option<Vec<everyaios_core::UserDocument>>,
+    primary_chief: Option<String>,
 ) -> Result<String, String> {
     // P1.4: dispatch one turn through the coordinator's ConversationEngine.
     // The reply is the streamId; all output arrives as `chat-event` emits
@@ -279,6 +280,7 @@ fn chat_stream(
             persona_id,
             soul_md,
             user_documents,
+            primary_chief,
         })
         .map_err(|e| e.to_string())?;
     Ok(stream_id)

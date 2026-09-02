@@ -610,6 +610,41 @@ pub fn acp_authenticate(
     Ok(serde_json::json!({ "ok": true, "sessionId": session_id }))
 }
 
+/// P38 (spec §4.2.5a §2) — build the prompt for an external Chief with the
+/// memory passport (C10) + governance block injected, mirroring the inbuilt
+/// path's `<memory_warm_set>` injection. Best-effort: a missing/unavailable
+/// memory handler never blocks the turn (same contract as `memory/plan`).
+fn build_acp_prompt_with_passport(
+    state: &State<'_, AppState>,
+    text: &str,
+    agent_id: &str,
+) -> String {
+    // External ACP agents are Self-contained: permission requests are
+    // mediated by Guard-2 at the ACP boundary, but effects performed inside
+    // the agent's own process are outside the EveryAIOS audit trail.
+    let governance = if agent_id == "everyaios" {
+        everyaios_acp::GovernedSession::Mediated {
+            fs: true,
+            terminal: true,
+        }
+    } else {
+        everyaios_acp::GovernedSession::SelfContained { channel_b: true }
+    };
+    let core_facts = {
+        let relay = state.chat_relay.lock().ok();
+        relay
+            .as_ref()
+            .and_then(|r| r.as_ref())
+            .map(|r| {
+                let mem = r.memory();
+                let m = mem.lock().unwrap_or_else(|e| e.into_inner());
+                m.core_facts()
+            })
+            .unwrap_or_default()
+    };
+    everyaios_acp::build_chief_prompt(text, &core_facts, &governance)
+}
+
 /// Drive one ACP prompt turn. The agent's `session/request_permission`
 /// requests route through the shared Guard-2 service: `Allow` auto-allows,
 /// `Block` denies, and `Ask` denies the current turn while minting a ticket
@@ -658,10 +693,15 @@ pub fn acp_prompt(
         .get_mut(&handle)
         .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
 
+    // P38 (spec §4.2.5a §2) — the external Chief gets the same memory
+    // passport + governance context as the inbuilt path: prepend the warm set
+    // (C10) and the honest governance block before the turn text.
+    let prompt_text = build_acp_prompt_with_passport(&state, &text, &agent_id);
+
     let mut pending_tickets: Vec<String> = Vec::new();
     let outcome = entry
         .session
-        .prompt(&text, |req| {
+        .prompt(&prompt_text, |req| {
             let mut g = guard.lock().expect("guard_service poisoned");
             let (op, risk) = map_tool_call(&req.tool_call);
             let paths: Vec<String> = req

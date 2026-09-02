@@ -12,6 +12,7 @@
 
 pub mod auth_bridge;
 pub mod broker;
+pub mod credential_broker;
 pub mod egress;
 pub mod keyring;
 pub mod ledger;
@@ -26,6 +27,10 @@ pub use broker::{
     ChatStreamEvent, ToolCallDelta,
 };
 pub use egress::{EgressFirewall, EgressPolicy, EgressVerdict};
+pub use credential_broker::{
+    AllowlistApprover, CredentialBroker, CredentialFillError, CredentialHandle, DenyAllApprover,
+    FillApprover, FillReceipt, FillSink, FillTarget,
+};
 pub use keyring::{
     KeyEntry, KeyInfo, KeyRing, KeyRingError, KeySpec, KeyStatus, RoutingPolicy, SelectedKey,
     COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, MAX_429_SWITCHES,
@@ -480,6 +485,26 @@ pub enum VaultError {
 mod tests {
     use super::*;
 
+    /// P45.1 acceptance — the SQLCipher **vault is untouched** by the
+    /// non-vault pragma tuning: it must keep its safer `synchronous` default
+    /// (FULL, not NORMAL) and its default journal_size_limit. Credentials
+    /// must not trade durability for write throughput.
+    #[test]
+    fn vault_keeps_safe_pragma_defaults_untouched() {
+        let dir = std::env::temp_dir().join(format!("everyaios-vault-pragma-test-{}", std::process::id()));
+        let path = dir.join("vault.db");
+        let _ = std::fs::remove_dir_all(&dir);
+        {
+            let vault = Vault::open(&path, "test-key").expect("open");
+            vault.register_key("anthropic", "key-1").unwrap();
+            let sync: i64 = vault.conn.query_row("PRAGMA synchronous;", [], |r| r.get(0)).unwrap();
+            assert_eq!(sync, 2, "vault must stay synchronous=FULL (2), never NORMAL (1)");
+            let limit: i64 = vault.conn.query_row("PRAGMA journal_size_limit;", [], |r| r.get(0)).unwrap();
+            assert_ne!(limit, 67_108_864, "vault must keep its default journal_size_limit");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn open_create_and_roundtrip() {
         let dir = std::env::temp_dir().join(format!("everyaios-vault-test-{}", std::process::id()));
@@ -570,6 +595,56 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P50.2.1 — runtime truth for the session list: a fresh vault lists ZERO
+    /// sessions (never a seeded demo row); a malformed payload row drops
+    /// cleanly at the parse boundary (the Tauri `session_list` command
+    /// filter-maps `serde_json::from_str(...).ok()`), and delete removes the
+    /// row so no orphan remains. The vault itself stores raw payloads — the
+    /// sample-chat seed lives in the UI preview only, never here.
+    #[test]
+    fn session_list_empty_malformed_and_delete() {
+        let vault = Vault::open_in_memory("mem-key").expect("open");
+
+        // 1. Fresh vault → empty list (no seeding).
+        let empty = vault.list_ui_sessions().unwrap();
+        assert!(empty.is_empty(), "fresh vault must list zero sessions");
+
+        // 2. Malformed payload: stored raw in the vault; the consumer-side
+        //    parse boundary drops it (mirrors the Tauri session_list filter).
+        vault
+            .put_ui_session("broken", "this is not json")
+            .unwrap();
+        let raw = vault.list_ui_sessions().unwrap();
+        assert_eq!(raw.len(), 1);
+        assert_eq!(raw[0].0, "broken");
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&raw[0].1);
+        assert!(parsed.is_err(), "malformed payload must fail to parse");
+        let dropped: Vec<_> = raw
+            .iter()
+            .filter_map(|(_, p)| serde_json::from_str::<serde_json::Value>(p).ok())
+            .collect();
+        assert!(dropped.is_empty(), "malformed rows must be dropped, never surfaced");
+
+        // 3. Healthy row alongside the broken one: only the parseable row
+        //    surfaces through the consumer filter.
+        vault
+            .put_ui_session("good", r#"{"id":"good","title":"hi"}"#)
+            .unwrap();
+        let mixed = vault.list_ui_sessions().unwrap();
+        assert_eq!(mixed.len(), 2);
+        let surfaced: Vec<_> = mixed
+            .iter()
+            .filter_map(|(_, p)| serde_json::from_str::<serde_json::Value>(p).ok())
+            .collect();
+        assert_eq!(surfaced.len(), 1);
+        assert_eq!(surfaced[0]["id"], "good");
+
+        // 4. Delete removes the row completely (no orphan).
+        vault.delete_ui_session("broken").unwrap();
+        vault.delete_ui_session("good").unwrap();
+        assert!(vault.list_ui_sessions().unwrap().is_empty());
     }
 
     #[test]
@@ -677,6 +752,77 @@ mod tests {
         assert_eq!(totals[1].session, "s-1");
         assert_eq!(totals[1].tokens_in, 100);
         assert!((totals[1].cost - 0.0020).abs() < 1e-12);
+    }
+
+    /// P50.2.5 — durable analytics aggregates: `session_totals` is a
+    /// query-time aggregate of the durable `token_usage` ledger, so (a) a
+    /// fresh vault aggregates to ZERO rows (never a synthetic dashboard) and
+    /// (b) the totals survive a vault reopen with the same key — the
+    /// aggregate is derived from persisted bytes, not session memory.
+    #[test]
+    fn session_totals_are_empty_fresh_and_durable_across_reopen() {
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-vault-agg-{}",
+            std::process::id()
+        ));
+        let path = dir.join("vault.db");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Fresh vault → zero aggregate rows (zero activity renders zero).
+        {
+            let vault = Vault::open(&path, "agg-key").expect("open");
+            assert!(vault.session_totals().unwrap().is_empty());
+            for _ in 0..3 {
+                vault
+                    .record_usage(&UsageRow {
+                        session: "agg-1".into(),
+                        provider: "openai".into(),
+                        model: "gpt-4o".into(),
+                        key_id: "k".into(),
+                        usage: Usage {
+                            prompt: 100,
+                            output: 40,
+                            cache_read: 0,
+                            cache_write: 0,
+                        },
+                        cost: 0.0005,
+                        tool: None,
+                    })
+                    .unwrap();
+            }
+            vault
+                .record_usage(&UsageRow {
+                    session: "agg-2".into(),
+                    provider: "deepseek".into(),
+                    model: "deepseek-chat".into(),
+                    key_id: "k".into(),
+                    usage: Usage::default(),
+                    cost: 0.02,
+                    tool: None,
+                })
+                .unwrap();
+            let totals = vault.session_totals().unwrap();
+            assert_eq!(totals.len(), 2);
+            assert_eq!(totals[0].session, "agg-2"); // most expensive first
+            assert_eq!(totals[1].session, "agg-1");
+            assert_eq!(totals[1].tokens_in, 300);
+            assert!((totals[1].cost - 0.0015).abs() < 1e-12);
+        }
+
+        // Reopen with the SAME key: the aggregate is byte-derived from the
+        // ledger and must be unchanged (durable across app restarts).
+        {
+            let vault = Vault::open(&path, "agg-key").expect("reopen");
+            let totals = vault.session_totals().unwrap();
+            assert_eq!(totals.len(), 2);
+            assert_eq!(totals[0].session, "agg-2");
+            assert_eq!(totals[1].session, "agg-1");
+            assert_eq!(totals[1].tokens_in, 300);
+            assert!((totals[1].cost - 0.0015).abs() < 1e-12);
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

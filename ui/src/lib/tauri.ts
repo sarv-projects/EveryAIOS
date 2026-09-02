@@ -105,6 +105,10 @@ export async function chatStream(args: {
   agentId?: string;
   /** P4.7 — documents to inject below the cache boundary (J6 wrapping). */
   userDocuments?: { title: string; content: string }[];
+  /** P38 — the session's effective Chief (pin → default → inbuilt); the
+   * coordinator's dispatch guard asserts it so an external Chief never runs
+   * inbuilt by accident. */
+  primaryChief?: string;
 }): Promise<string> {
   return tauriInvoke<string>("chat_stream", args);
 }

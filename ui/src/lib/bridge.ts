@@ -15,7 +15,8 @@ import {
 import { acpAgents, acpInstallStatus, acpLaunch, acpPrompt, type HarnessManifest } from "./acp";
 import { limitationFor } from "./plain-language";
 import { usageSnapshot } from "./spend";
-import { AGENTS, getModel, type AgentRuntime } from "./agents";
+import { AGENTS, type AgentRuntime } from "./agents";
+import { resolveProviderModel } from "./model-routing";
 import { workList, workSnapshot } from "./work";
 import {
   markRuntimeBooting,
@@ -130,13 +131,40 @@ function handleChatEvent(e: ChatWireEvent): void {
     case "error":
       if (e.code === "budget_exceeded") {
         st.streamBudgetKill(budgetKillText(e.message ?? ""), sid);
+        st.pushLiveNotification({
+          id: `live:cost:${e.streamId ?? sid}:${Date.now()}`,
+          kind: 'cost',
+          title: 'Budget limit reached',
+          detail: budgetKillText(e.message ?? ""),
+          ts: Date.now(),
+          unread: true,
+          source: 'Spend',
+        });
       } else if (e.code === "tool_failed" || e.toolId) {
         st.streamToolResult(e.toolId ?? "tool", undefined, e.message ?? "tool failed");
+        st.pushLiveNotification({
+          id: `live:tool:${e.toolId ?? 'tool'}:${Date.now()}`,
+          kind: 'warning',
+          title: `Tool failed: ${e.toolId ?? 'tool'}`,
+          detail: e.message ?? "tool failed",
+          ts: Date.now(),
+          unread: true,
+          source: 'Agent',
+        });
       } else {
         // P32.4 — honest-limitation surfacing: say plainly what failed +
         // offer the nearest alternative (Wharton: no technical framing).
         const lim = limitationFor(e.message ?? "Agent error");
         st.streamFail(`${lim.plain} — ${lim.alternative}`, sid);
+        st.pushLiveNotification({
+          id: `live:error:${e.streamId ?? sid}:${Date.now()}`,
+          kind: 'error',
+          title: 'Turn failed',
+          detail: lim.plain,
+          ts: Date.now(),
+          unread: true,
+          source: 'Agent',
+        });
       }
       break;
     case "stage":
@@ -154,6 +182,15 @@ function handleChatEvent(e: ChatWireEvent): void {
           stopped: e.stopped ?? false,
           current: e.current ?? "",
           jobId: e.jobId,
+        });
+        st.pushLiveNotification({
+          id: `live:monitor:${e.jobId ?? e.streamId ?? 'job'}:${Date.now()}`,
+          kind: 'info',
+          title: e.stopped ? 'Monitor stopped' : 'Monitor updated',
+          detail: e.current ?? "",
+          ts: Date.now(),
+          unread: true,
+          source: 'Automation',
         });
       }
       break;
@@ -351,9 +388,17 @@ async function startBridge(): Promise<BridgeDisposer> {
           // seed with an empty real vault and prevents fake chats persisting.
           useAppStore.getState().markSessionsHydrated();
           const sessions = listed?.sessions ?? [];
+          // P38 — rehydrate per-session Chief pins from the vault round-trip
+          // (each Session carries its durable `chiefPin`), so pins set before
+          // the app restarted are live again in the store mirror.
+          const sessionChiefs: Record<string, string> = {}
+          for (const s of sessions) {
+            if (s.chiefPin) sessionChiefs[s.id] = s.chiefPin
+          }
           useAppStore.setState({
             sessions,
             activeSessionId: sessions[0]?.id ?? '',
+            ...(Object.keys(sessionChiefs).length > 0 ? { sessionChiefs } : {}),
           });
         }
       } catch (error) {
@@ -372,6 +417,16 @@ async function startBridge(): Promise<BridgeDisposer> {
         recordFault('work gateway', error);
       }
 
+      // P38 — the user's primary_chief default, read live at hydration so the
+      // chat send path resolves the effective Chief without stale config.
+      try {
+        const { chiefDefaultGet } = await import('./acp');
+        const cfg = await chiefDefaultGet();
+        if (alive && cfg?.primaryChief) useAppStore.getState().setUserDefaultChief(cfg.primaryChief);
+      } catch (error) {
+        recordFault('chief default', error);
+      }
+
       if (alive) {
         const { guardTickets } = await import('./guard');
         const pollGuard = async () => {
@@ -381,6 +436,15 @@ async function startBridge(): Promise<BridgeDisposer> {
               if (!alive || seenTickets.has(t.ticketId)) continue;
               seenTickets.add(t.ticketId);
               const st = useAppStore.getState();
+              st.pushLiveNotification({
+                id: `live:guard:${t.ticketId}`,
+                kind: 'guard',
+                title: `Approval needed: ${t.operation}`,
+                detail: `${t.paths.join(', ')} — ${t.risk} risk`,
+                ts: Date.now(),
+                unread: true,
+                source: 'Guard',
+              });
               const snap = st.taskSnapshot;
               const frozenLow = !!snap && snap.sessionId === t.sessionId &&
                 (snap.autonomyLevel === 'sandbox' || snap.autonomyLevel === 'ask');
@@ -470,16 +534,23 @@ function isInbuilt(agentId: string): boolean {
   return agentId === "everyaios-native" || agentId === "everyaios" || agentId === "";
 }
 
-function selectedProviderModel(modelId: string): { provider: string; model: string } {
+/**
+ * P50.3.6 — resolve the provider/model a turn should run on.
+ * - An explicit local runtime selection always wins (the user picked it).
+ * - When auto-route is on, return undefined/undefined so the coordinator's
+ *   live task→model router (health/cost/latency observations, `router.ts`
+ *   `selectModelForTask`) decides per turn; the Rust `chat_stream` boundary
+ *   accepts `None` for both and routes accordingly.
+ * - Otherwise fall back to the static catalog mapping for the picked model.
+ */
+function selectedProviderModel(modelId: string): { provider?: string; model?: string } {
+  // P50.3.6 — pure decision (tested in model-routing.test.ts).
   const st = useAppStore.getState();
-  if (st.localRuntime) {
-    return { provider: st.localRuntime, model: modelId };
-  }
-  const m = getModel(modelId);
-  if (!m) return { provider: "nvidia", model: modelId };
-  const provider =
-    m.provider === "meta" ? "nvidia" : m.provider;
-  return { provider, model: m.slug || m.id };
+  return resolveProviderModel({
+    modelId,
+    localRuntime: st.localRuntime,
+    autoRoute: st.autoRoute,
+  });
 }
 
 /**
@@ -497,8 +568,24 @@ export async function sendUserMessage(
 
   const sessionId = st.activeSessionId;
   const catalogId = st.selectedAgentId;
-  const inbuilt = isInbuilt(catalogId);
-  const agentId = inbuilt ? undefined : catalogId;
+  const selectedInbuilt = isInbuilt(catalogId);
+  // P38 — the session's effective Chief: session pin → user default →
+  // inbuilt. The pin is store-owned (set via the picker's per-session pin);
+  // the user default is read live so an out-of-date cached default never
+  // misroutes. When the Chief is an external ACP agent, the session's turns
+  // route through the ACP channel under that Chief (spec F12: an external
+  // Chief is the session's top brain, EveryAIOS is the governed shell); the
+  // coordinator additionally refuses any inbuilt dispatch that carries an
+  // external `primaryChief` (fail-closed, never silent fallback).
+  const pin = st.sessionChiefs[sessionId];
+  const userDefault = useAppStore.getState().userDefaultChief;
+  const sessionChief = pin ?? userDefault ?? "inbuilt";
+  const chiefInbuilt = isInbuilt(sessionChief);
+  // A session governed by an external Chief runs on the ACP channel no matter
+  // which chat agent the user has selected — the pinned Chief outranks the
+  // selected agent for that session's turns.
+  const inbuilt = selectedInbuilt && chiefInbuilt;
+  const agentId = inbuilt ? undefined : sessionChief;
   const { provider, model } = selectedProviderModel(st.selectedModelId);
   // P33 scoped-PDF fix — when the study-mode chip is set (chat scoped to an
   // open document) and no explicit context was passed, attach the open
@@ -543,7 +630,11 @@ export async function sendUserMessage(
       return;
     }
     if (!inbuilt) {
-      const acpId = CATALOG_TO_ACP[catalogId] ?? catalogId;
+      // P38 — the session runs under its Chief. When the Chief is external
+      // (pinned or defaulted), launch THAT agent on the ACP channel; when
+      // only the selected agent is external, that agent is the Chief.
+      const chiefId = !chiefInbuilt ? sessionChief : catalogId;
+      const acpId = CATALOG_TO_ACP[chiefId] ?? chiefId;
       let handle = st.acpHandles[catalogId];
       if (!handle) {
         const folder =
@@ -573,6 +664,11 @@ export async function sendUserMessage(
       personaId: st.personaId,
       soulMd: SOUL_PRESETS[st.soulId] || undefined,
       ...(effectiveContext ? { userDocuments: [effectiveContext] } : {}),
+      // P38 — always assert the session's Chief at the wire boundary (inbuilt
+      // here, since the external-Chief case took the ACP branch above). The
+      // coordinator guard refuses if it ever sees a non-inbuilt value on the
+      // inbuilt engine path.
+      primaryChief: sessionChief,
     });
     // Bugfix — remember the live stream id so Pause/Stop can `chat_cancel`
     // the real Rust stream instead of only flipping local state.

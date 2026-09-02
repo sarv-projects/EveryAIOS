@@ -63,6 +63,33 @@ export function resolveChiefId(explicit?: string, userDefault?: string): ChiefId
   return INBUILT_CHIEF;
 }
 
+/**
+ * P38 (spec §4.2.5a §1) — per-session Chief resolution, the single dispatch
+ * decision the coordinator's chat path uses. Precedence: **session pin** →
+ * **user default** → `inbuilt`. A session pins its own Chief via
+ * `chief/set_session` (fail-closed: unknown ids refuse, never a silent
+ * fallback). A session that never pinned one follows the user default, and a
+ * fresh install with no default is the inbuilt engine.
+ */
+export function resolveSessionChief(opts: {
+  sessionPin?: string;
+  userDefault?: string;
+}): ChiefId {
+  return resolveChiefId(opts.sessionPin, opts.userDefault);
+}
+
+/**
+ * P38 — validate a session-level Chief pin before recording it. Returns the
+ * pin when known; throws fail-closed for unknown ids (same vocabulary as
+ * `resolveChiefId`).
+ */
+export function validateSessionChiefPin(pin: string): ChiefId {
+  if (!KNOWN_CHIEFS.includes(pin)) {
+    throw new Error(`unknown primary_chief "${pin}" — fail-closed (no silent fallback)`);
+  }
+  return pin;
+}
+
 export interface ChiefContext {
   /** Memory passport (C10): the session's durable facts. */
   passport: string;
@@ -184,6 +211,10 @@ export function buildResumePrompt(
 /** In-memory per-session chief records (the durable log is Rust's event log). */
 export class ChiefRegistry {
   private records = new Map<string, ChiefRecord>();
+  /** P38 — session-level pins: sessionId → pinned Chief (`inbuilt` | ACP id).
+   * A pin outranks the user default for every turn of that session; absent a
+   * pin, the user default applies. Fail-closed on unknown ids. */
+  private pins = new Map<string, ChiefId>();
 
   record(r: ChiefRecord): void {
     this.records.set(r.sessionId, r);
@@ -191,6 +222,27 @@ export class ChiefRegistry {
 
   get(sessionId: string): ChiefRecord | undefined {
     return this.records.get(sessionId);
+  }
+
+  /** P38 — pin a session to a Chief (per-session override). Returns the pin. */
+  setSessionPin(sessionId: string, chiefId: ChiefId): ChiefId {
+    const validated = validateSessionChiefPin(chiefId);
+    this.pins.set(sessionId, validated);
+    // Keep the Work-survives-Chief record in sync so the resume chain and the
+    // pin never disagree.
+    const prev = this.records.get(sessionId);
+    if (prev) {
+      this.records.set(sessionId, { ...prev, chiefId: validated });
+    }
+    return validated;
+  }
+
+  sessionPin(sessionId: string): ChiefId | undefined {
+    return this.pins.get(sessionId);
+  }
+
+  clearSessionPin(sessionId: string): void {
+    this.pins.delete(sessionId);
   }
 
   /** Swap the Chief for a session, keeping the Work chain intact. */

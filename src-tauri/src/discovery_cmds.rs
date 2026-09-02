@@ -17,6 +17,10 @@ use everyaios_catalog::{
     base_registry, DiscoveryInventory, Health, ManagedResource, ResourceCard, ResourceKind,
     RouteRequirements, RoutingFeed,
 };
+use everyaios_vault::KeyRing;
+use tauri::State;
+
+use crate::AppState;
 
 /// Build the full Discover inventory. Providers from the registry; the other
 /// classes from their live collectors (best-effort, honest empties).
@@ -43,8 +47,14 @@ pub fn discovery_inventory() -> Result<serde_json::Value, String> {
 /// P44.8 — the provider-level route decision for a set of requirements. Loads
 /// the registry into a fresh feed and ranks; health is Unknown until live
 /// observations are wired (honest — the decision reports the health it has).
+///
+/// P50.3.6 — the decision is **vault-credential gated**: only providers the
+/// vault currently holds a key for may rank. A provider whose auth needs a
+/// vault key but has none is excluded with an explicit "add a key" reason,
+/// so the catalog alone can never make an unkeyed provider look usable.
 #[tauri::command]
 pub fn routing_feed_decide(
+    state: State<'_, AppState>,
     requires_tools: Option<bool>,
     requires_structured_output: Option<bool>,
     requires_codex: Option<bool>,
@@ -52,11 +62,18 @@ pub fn routing_feed_decide(
     let reg = base_registry();
     let mut feed = RoutingFeed::new();
     feed.load_registry(&reg);
-    // Mark every provider Healthy-by-default so the decision is meaningful in
+    // Mark every provider Unknown-by-default so the decision is meaningful in
     // the absence of live pings; a real observation feed overrides per-id.
     for p in reg.all() {
         feed.set_health(&p.id, Health::Unknown);
     }
+    // P50.3.6 — the live vault key set drives routability. Locked/empty vault
+    // ⇒ empty set ⇒ every keyed provider excluded with the reason below;
+    // keyless/local providers (no vault key needed) still rank.
+    let vault = state.vault.lock().map_err(|e| e.to_string())?;
+    let ring = KeyRing::new(&vault);
+    let credentialed: Vec<String> = ring.providers_with_keys().unwrap_or_default();
+    feed.set_credentialed(credentialed);
     let decision = feed.decide(&RouteRequirements {
         requires_tools: requires_tools.unwrap_or(false),
         requires_structured_output: requires_structured_output.unwrap_or(false),

@@ -292,7 +292,9 @@ export function LeftSidebar() {
             </span>
           )}
         </div>
-        <div className="scroll-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1 pb-2">
+        {/* P45.6 — content-visibility: auto skips layout/paint of off-screen
+            session rows in long lists. */}
+        <div className="scroll-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1 pb-2 [content-visibility:auto] [contain-intrinsic-size:auto_48px]">
           {recent
             // P11.5.1 — child sessions (forks) indent under their parent.
             .filter((s) => !s.parentId)

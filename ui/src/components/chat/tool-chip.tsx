@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { ChevronRight, Loader2, RotateCw, ShieldAlert, Wrench, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ToolCallRecord } from '@/lib/store'
@@ -24,7 +24,10 @@ function riskTone(risk?: string): string {
   return 'border-border bg-background/40 text-muted-foreground'
 }
 
-function ToolChip({ rec }: { rec: ToolCallRecord }) {
+// P45.9 — memoized: tool-call rows only re-render when the record changes
+// (streaming updates mutate the running call's object identity; settled calls
+// keep identity, so untouched chips skip re-render entirely).
+const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
   const [open, setOpen] = useState(rec.status === 'failed')
   const retry = useAppStore((s) => s.retryToolCall)
   const argsPreview = previewArgs(rec.args)
@@ -106,7 +109,7 @@ function ToolChip({ rec }: { rec: ToolCallRecord }) {
       )}
     </div>
   )
-}
+})
 
 export default function ToolChips({ calls }: { calls: ToolCallRecord[] }) {
   if (calls.length === 0) return null

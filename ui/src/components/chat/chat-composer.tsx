@@ -8,7 +8,6 @@ import {
   CircleDollarSign,
   FileText,
   Mic,
-  Volume2,
   Package,
   Plus,
   type LucideIcon,
@@ -141,7 +140,15 @@ function AutonomyChip({ compact }: { compact?: boolean }) {
   )
 }
 
-function IconBtn({ icon: Icon, label, onClick, hidden, active }: { icon: LucideIcon; label: string; onClick: () => void; hidden?: boolean; active?: boolean }) {
+function IconBtn({ icon: Icon, label, onClick, hidden, active, disabled, title }: {
+  icon: LucideIcon
+  label: string
+  onClick?: () => void
+  hidden?: boolean
+  active?: boolean
+  disabled?: boolean
+  title?: string
+}) {
   return (
     <Button
       size="icon"
@@ -149,10 +156,13 @@ function IconBtn({ icon: Icon, label, onClick, hidden, active }: { icon: LucideI
       className={cn(
         'h-7 w-7 text-muted-foreground hover:text-foreground',
         active && 'bg-orange-500/15 text-orange-500',
-        hidden && 'hidden sm:inline-flex'
+        hidden && 'hidden sm:inline-flex',
+        disabled && 'cursor-not-allowed opacity-40 hover:text-muted-foreground'
       )}
-      onClick={onClick}
-      title={label}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={title ?? label}
+      aria-disabled={disabled}
     >
       <Icon className="h-3.5 w-3.5" />
     </Button>
@@ -169,7 +179,6 @@ export default function ChatComposer({ budget, centered }: Props) {
   const composerValue = useAppStore((s) => s.composerValue)
   const setComposerValue = useAppStore((s) => s.setComposerValue)
   const notify = useAppStore((s) => s.notify)
-  const [ttsEnabled, setTtsEnabled] = useState(false)
   const activeSession = useAppStore((s) =>
     s.sessions.find((x) => x.id === s.activeSessionId)
   )
@@ -277,15 +286,16 @@ export default function ChatComposer({ budget, centered }: Props) {
           rows={1}
         />
         <div className="flex shrink-0 items-center gap-0.5 pb-0.5">
-          <IconBtn icon={Mic} label="Voice input" onClick={() => notify('Voice input — coming soon')} />
+          {/* P50.4.8 — voice input/output are v1-planned (spec H15/H28,
+              promoted to v1 scope 2026-08-31): the stack is not wired yet, so
+              the control is visibly inert with a truthful status instead of
+              pretending to capture audio. Read-aloud stays in Settings as a
+              staged v1 surface. */}
           <IconBtn
-            icon={Volume2}
-            label={ttsEnabled ? 'Disable read aloud' : 'Read assistant replies aloud'}
-            active={ttsEnabled}
-            onClick={() => {
-              setTtsEnabled((enabled) => !enabled)
-              notify(ttsEnabled ? 'Read aloud off' : 'Read aloud on')
-            }}
+            icon={Mic}
+            label="Voice input (v1-pending)"
+            title="Voice input (VAD/STT) is a v1 deliverable — capture stack not wired in this build; the control is disabled, not coming soon"
+            disabled
           />
           <Button
             size="icon"

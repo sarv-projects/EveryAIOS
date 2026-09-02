@@ -342,6 +342,24 @@ impl<'a> KeyRing<'a> {
             })
     }
 
+    /// The set of provider names that currently hold at least one key in the
+    /// ring (P50.3.6 — vault-credential gating for the routing feed; the
+    /// discovery feed asks this instead of re-listing per provider).
+    pub fn providers_with_keys(&self) -> Result<Vec<String>, KeyRingError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT provider FROM key_ring ORDER BY provider")
+            .map_err(KeyRingError::from)?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(KeyRingError::from)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(KeyRingError::from)?);
+        }
+        Ok(out)
+    }
+
     /// List keys for a provider — handle-only views, never the secret.
     pub fn list(&self, provider: &str) -> Result<Vec<KeyInfo>, KeyRingError> {
         let now = now_ms();
@@ -771,6 +789,21 @@ mod tests {
             daily_token_cap: None,
             daily_cost_cap: None,
         }
+    }
+
+    #[test]
+    fn providers_with_keys_returns_distinct_credentialed_providers() {
+        let ring = ring();
+        // Empty vault: no provider credentialed.
+        assert!(ring.providers_with_keys().unwrap().is_empty());
+        let _ = ring.add_key(spec("openai", "prod-1", "sk-a")).unwrap();
+        let _ = ring.add_key(spec("openai", "prod-2", "sk-b")).unwrap();
+        let _ = ring.add_key(spec("anthropic", "prod-3", "sk-c")).unwrap();
+        let providers = ring.providers_with_keys().unwrap();
+        assert_eq!(providers, vec!["anthropic", "openai"]); // distinct + sorted, no secrets
+        // Deleting the last key of a provider removes it from the set.
+        ring.delete_key("anthropic", "prod-3").unwrap();
+        assert_eq!(ring.providers_with_keys().unwrap(), vec!["openai"]);
     }
 
     #[test]

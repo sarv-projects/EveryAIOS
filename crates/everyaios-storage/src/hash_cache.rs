@@ -24,6 +24,9 @@ impl HashCache {
     /// Open (or create) the cache for `root`.
     pub fn open(root: &Path) -> rusqlite::Result<Self> {
         let conn = Connection::open(root.join(".everyaios-fclones.sqlite"))?;
+        // P45.1/.3 — WAL + synchronous=NORMAL + bounded WAL (write-heavy
+        // cache; no mmap — not read-mostly). Vault never goes through here.
+        crate::pragmas::apply_non_vault(&conn)?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS hash_cache (
                 path TEXT PRIMARY KEY,

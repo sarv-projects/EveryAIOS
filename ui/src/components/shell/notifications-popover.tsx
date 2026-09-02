@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
+import { useAppStore, type LiveNotification } from '@/lib/store'
 
 type NotificationKind =
   | 'info'
@@ -144,7 +145,25 @@ function relativeTime(ts: number): string {
 
 export function NotificationsPopover() {
   const [open, setOpen] = useState(false)
-  const [items, setItems] = useState<AppNotification[]>(() => (inTauri() ? [] : INITIAL_NOTIFICATIONS))
+  // P50.2.5 — in the shell the list is the live event stream from the bridge
+  // (chat wire events + Guard-2 tickets); it starts empty and only ever shows
+  // real events. The preview fixture is restricted to a plain-browser run.
+  const liveItems = useAppStore((s) => s.liveNotifications)
+  const pushRead = useAppStore((s) => s.markLiveNotificationsRead)
+  const [previewItems, setPreviewItems] = useState<AppNotification[]>(() =>
+    inTauri() ? [] : INITIAL_NOTIFICATIONS,
+  )
+  const items: AppNotification[] = inTauri()
+    ? liveItems.map((n: LiveNotification) => ({
+        id: n.id,
+        kind: n.kind,
+        title: n.title,
+        detail: n.detail,
+        ts: n.ts,
+        unread: n.unread,
+        source: n.source,
+      }))
+    : previewItems
 
   // Close on Escape
   useEffect(() => {
@@ -176,13 +195,25 @@ export function NotificationsPopover() {
   const unreadCount = items.filter((n) => n.unread).length
 
   const markAllRead = () => {
-    setItems((prev) => prev.map((n) => ({ ...n, unread: false })))
+    if (inTauri()) {
+      pushRead()
+    } else {
+      setPreviewItems((prev) => prev.map((n) => ({ ...n, unread: false })))
+    }
   }
 
   const markRead = (id: string) => {
-    setItems((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, unread: false } : n)),
-    )
+    if (inTauri()) {
+      const { pushLiveNotification } = useAppStore.getState()
+      const item = liveItems.find((n) => n.id === id)
+      if (item && item.unread) {
+        pushLiveNotification({ ...item, unread: false })
+      }
+    } else {
+      setPreviewItems((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, unread: false } : n)),
+      )
+    }
   }
 
   return (
@@ -292,7 +323,7 @@ export function NotificationsPopover() {
           <div className="flex items-center justify-between border-t border-border/60 bg-background/30 px-3 py-1.5">
             <button className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-orange-300">
               <Zap className="h-3 w-3 text-orange-400" />
-              {inTauri() ? 'Notification settings (live stream unavailable)' : 'Notification settings'}
+              {inTauri() ? 'Notification settings · live event stream' : 'Notification settings'}
             </button>
             <button className="font-mono text-[10px] text-orange-300 transition-colors hover:text-orange-200">
               View all activity →
