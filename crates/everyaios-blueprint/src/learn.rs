@@ -181,7 +181,7 @@ pub fn learn_from_evidence(
         "# {}\n\n{}\n\n---\n\nProvenance: `/learn` compiled on the evidence below (sha256 `{}`).\nRewrite or extend this file to keep the skill current — every save is versioned.\n\n```text\n{}\n```",
         name,
         description,
-        evidence_sha256(&evidence),
+        evidence_sha256(evidence),
         truncate_marker(evidence)
     );
     let mut version = "0.1.0".to_string();
@@ -211,7 +211,7 @@ pub fn learn_from_evidence(
     };
     Ok(LearnDraft {
         skill,
-        evidence_sha256: evidence_sha256(&evidence),
+        evidence_sha256: evidence_sha256(evidence),
         next_version,
     })
 }
@@ -227,10 +227,7 @@ pub fn learn_and_save(
     // Sandbox gate FIRST — a learned skill is saved only after the gate
     // verifies it loads sandboxed (None would refuse below, never bypass).
     let existing = store.load(&derive_name(req)).ok();
-    let draft = learn_from_evidence(
-        req,
-        existing.as_ref().map(|s| s.manifest.version.as_str()),
-    )?;
+    let draft = learn_from_evidence(req, existing.as_ref().map(|s| s.manifest.version.as_str()))?;
     gate.verify(&draft.skill, &draft.evidence_sha256)
         .map_err(|e| SkillError::Malformed {
             path: "<learn:gate>".into(),
@@ -326,7 +323,11 @@ mod tests {
     fn derives_deterministic_slug_from_title() {
         let draft = learn_from_evidence(&req(), None).unwrap();
         assert_eq!(draft.skill.manifest.name, "pdf-triage");
-        assert!(draft.skill.manifest.triggers.contains(&"pdf triage".to_string()));
+        assert!(draft
+            .skill
+            .manifest
+            .triggers
+            .contains(&"pdf triage".to_string()));
         // Deterministic: same input ⇒ same everything.
         let again = learn_from_evidence(&req(), None).unwrap();
         assert_eq!(draft, again);
@@ -382,14 +383,12 @@ mod tests {
     fn grow_from_task_remains_the_task_growth_path() {
         // Regression guard: the GenericAgent task-growth path stays intact
         // and version-bumping agrees with /learn's patch bump.
-        let dir = std::env::temp_dir().join(format!(
-            "everyaios-learn-grow-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("everyaios-learn-grow-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let store = SkillStore::new(&dir);
         let s = grow_from_task(&store, "PDF Triage", "solved it", "tester", "0.1.0").unwrap();
-        let s2 = grow_from_task(&store, "PDF Triage", "solved it again", "tester", "0.1.0").unwrap();
+        let s2 =
+            grow_from_task(&store, "PDF Triage", "solved it again", "tester", "0.1.0").unwrap();
         assert_eq!(s.manifest.version, "0.1.0");
         assert_eq!(s2.manifest.version, "0.1.1");
         std::fs::remove_dir_all(&dir).ok();

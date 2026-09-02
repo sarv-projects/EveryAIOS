@@ -98,7 +98,7 @@ impl KanbanBoard {
             .filter(|t| {
                 t.blocks
                     .iter()
-                    .all(|b| self.get(b).map_or(false, |bt| bt.column == Column::Done))
+                    .all(|b| self.get(b).is_some_and(|bt| bt.column == Column::Done))
             })
             .collect()
     }

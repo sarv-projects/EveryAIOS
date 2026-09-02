@@ -324,7 +324,11 @@ pub fn handle_request(
             }
         }
         Route::NotFound => openai_error(404, "unknown route", "invalid_request_error"),
-        _ if !authed => openai_error(401, "missing or invalid bearer token", "invalid_request_error"),
+        _ if !authed => openai_error(
+            401,
+            "missing or invalid bearer token",
+            "invalid_request_error",
+        ),
         Route::Models => {
             if method != "GET" {
                 return openai_error(405, "method not allowed", "invalid_request_error");
@@ -338,7 +342,11 @@ pub fn handle_request(
             let req: ChatCompletionRequest = match serde_json::from_str(body) {
                 Ok(r) => r,
                 Err(e) => {
-                    return openai_error(400, &format!("invalid request body: {e}"), "invalid_request_error")
+                    return openai_error(
+                        400,
+                        &format!("invalid request body: {e}"),
+                        "invalid_request_error",
+                    )
                 }
             };
             if req.messages.is_empty() {
@@ -434,7 +442,9 @@ fn handle_stream(
     let mut chunk = [0u8; 8192];
     loop {
         if buf.len() > MAX_REQUEST_BYTES {
-            let _ = stream.write_all(openai_error(413, "request too large", "invalid_request_error").as_bytes());
+            let _ = stream.write_all(
+                openai_error(413, "request too large", "invalid_request_error").as_bytes(),
+            );
             return Ok(());
         }
         let n = match stream.read(&mut chunk) {
@@ -470,7 +480,9 @@ fn handle_stream(
             }
             Ok(None) => { /* partial — keep reading */ }
             Err(HttpParseError::BodyTooLarge) => {
-                let _ = stream.write_all(openai_error(413, "body exceeds limit", "invalid_request_error").as_bytes());
+                let _ = stream.write_all(
+                    openai_error(413, "body exceeds limit", "invalid_request_error").as_bytes(),
+                );
                 return Ok(());
             }
         }
@@ -503,7 +515,10 @@ fn stream_completion(
                 return;
             }
             let frame = stream_chunk(id_ref, created, model_ref, delta);
-            if let Err(e) = stream_ref.write_all(frame.as_bytes()).and_then(|_| stream_ref.flush()) {
+            if let Err(e) = stream_ref
+                .write_all(frame.as_bytes())
+                .and_then(|_| stream_ref.flush())
+            {
                 *write_err_ref = Some(e);
             }
         })
@@ -554,7 +569,11 @@ mod tests {
     struct EchoBackend;
     impl CompletionBackend for EchoBackend {
         fn complete(&self, req: &ChatCompletionRequest) -> Result<CompletionResult, String> {
-            let last = req.messages.last().map(|m| m.content.clone()).unwrap_or_default();
+            let last = req
+                .messages
+                .last()
+                .map(|m| m.content.clone())
+                .unwrap_or_default();
             Ok(CompletionResult {
                 content: format!("echo: {last}"),
                 prompt_tokens: last.split_whitespace().count() as u64,
@@ -612,7 +631,14 @@ mod tests {
     #[test]
     fn chat_completion_non_stream_shape() {
         let req = r#"{"model":"everyaios-auto","messages":[{"role":"user","content":"hi there"}]}"#;
-        let r = handle_request("POST", "/v1/chat/completions", req, true, &EchoBackend, &StaticModels);
+        let r = handle_request(
+            "POST",
+            "/v1/chat/completions",
+            req,
+            true,
+            &EchoBackend,
+            &StaticModels,
+        );
         let v = body(&r);
         assert_eq!(v["object"], "chat.completion");
         assert_eq!(v["choices"][0]["message"]["role"], "assistant");
@@ -628,42 +654,87 @@ mod tests {
     #[test]
     fn chat_completion_rejects_empty_messages() {
         let req = r#"{"model":"m","messages":[]}"#;
-        let r = handle_request("POST", "/v1/chat/completions", req, true, &EchoBackend, &StaticModels);
+        let r = handle_request(
+            "POST",
+            "/v1/chat/completions",
+            req,
+            true,
+            &EchoBackend,
+            &StaticModels,
+        );
         assert!(r.starts_with("HTTP/1.1 400"));
     }
 
     #[test]
     fn chat_completion_rejects_bad_json() {
-        let r = handle_request("POST", "/v1/chat/completions", "{not json", true, &EchoBackend, &StaticModels);
+        let r = handle_request(
+            "POST",
+            "/v1/chat/completions",
+            "{not json",
+            true,
+            &EchoBackend,
+            &StaticModels,
+        );
         assert!(r.starts_with("HTTP/1.1 400"));
     }
 
     #[test]
     fn engine_error_becomes_503() {
         let req = r#"{"model":"m","messages":[{"role":"user","content":"x"}]}"#;
-        let r = handle_request("POST", "/v1/chat/completions", req, true, &FailBackend, &StaticModels);
+        let r = handle_request(
+            "POST",
+            "/v1/chat/completions",
+            req,
+            true,
+            &FailBackend,
+            &StaticModels,
+        );
         assert!(r.starts_with("HTTP/1.1 503"));
         assert_eq!(body(&r)["error"]["type"], "engine_error");
     }
 
     #[test]
     fn wrong_method_is_405() {
-        let r = handle_request("DELETE", "/v1/models", "", true, &EchoBackend, &StaticModels);
+        let r = handle_request(
+            "DELETE",
+            "/v1/models",
+            "",
+            true,
+            &EchoBackend,
+            &StaticModels,
+        );
         assert!(r.starts_with("HTTP/1.1 405"));
-        let r2 = handle_request("GET", "/v1/chat/completions", "", true, &EchoBackend, &StaticModels);
+        let r2 = handle_request(
+            "GET",
+            "/v1/chat/completions",
+            "",
+            true,
+            &EchoBackend,
+            &StaticModels,
+        );
         assert!(r2.starts_with("HTTP/1.1 405"));
     }
 
     #[test]
     fn unknown_route_is_404() {
-        let r = handle_request("GET", "/v1/embeddings", "", true, &EchoBackend, &StaticModels);
+        let r = handle_request(
+            "GET",
+            "/v1/embeddings",
+            "",
+            true,
+            &EchoBackend,
+            &StaticModels,
+        );
         assert!(r.starts_with("HTTP/1.1 404"));
     }
 
     #[test]
     fn route_tolerates_trailing_slash_and_query() {
         assert_eq!(route("/v1/models/"), Route::Models);
-        assert_eq!(route("/v1/chat/completions?foo=bar"), Route::ChatCompletions);
+        assert_eq!(
+            route("/v1/chat/completions?foo=bar"),
+            Route::ChatCompletions
+        );
         assert_eq!(route("/health"), Route::Health);
     }
 
@@ -686,12 +757,17 @@ mod tests {
         let mut deltas = Vec::new();
         let req = ChatCompletionRequest {
             model: "m".into(),
-            messages: vec![ChatMessage { role: "user".into(), content: "hi".into() }],
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "hi".into(),
+            }],
             stream: true,
             temperature: None,
             max_tokens: None,
         };
-        let r = EchoBackend.stream(&req, &mut |d| deltas.push(d.to_string())).unwrap();
+        let r = EchoBackend
+            .stream(&req, &mut |d| deltas.push(d.to_string()))
+            .unwrap();
         assert_eq!(deltas, vec!["echo: hi".to_string()]);
         assert_eq!(r.content, "echo: hi");
     }
@@ -700,21 +776,24 @@ mod tests {
     fn parse_and_bearer_helpers() {
         let raw = "POST /v1/chat/completions HTTP/1.1\r\nAuthorization: Bearer sk-local\r\nContent-Length: 2\r\n\r\n{}";
         let (m, p, b) = parse_http_request(raw).unwrap().unwrap();
-        assert_eq!((m.as_str(), p.as_str(), b.as_str()), ("POST", "/v1/chat/completions", "{}"));
+        assert_eq!(
+            (m.as_str(), p.as_str(), b.as_str()),
+            ("POST", "/v1/chat/completions", "{}")
+        );
         assert_eq!(bearer_token(raw).as_deref(), Some("sk-local"));
         // oversized declared body → Err.
-        let big = format!("POST /x HTTP/1.1\r\nContent-Length: {}\r\n\r\n", MAX_BODY_BYTES + 1);
+        let big = format!(
+            "POST /x HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+            MAX_BODY_BYTES + 1
+        );
         assert!(parse_http_request(&big).is_err());
     }
 
     #[test]
     fn end_to_end_over_a_real_socket() {
-        let server = OpenAiServer::serve(
-            "127.0.0.1:0",
-            Arc::new(EchoBackend),
-            Arc::new(StaticModels),
-        )
-        .unwrap();
+        let server =
+            OpenAiServer::serve("127.0.0.1:0", Arc::new(EchoBackend), Arc::new(StaticModels))
+                .unwrap();
         let port = server.local_addr().unwrap().port();
         let token = server.token().to_string();
         assert!(server.base_url().ends_with("/v1"));
@@ -736,12 +815,9 @@ mod tests {
 
     #[test]
     fn real_socket_streaming_yields_sse_and_done() {
-        let server = OpenAiServer::serve(
-            "127.0.0.1:0",
-            Arc::new(EchoBackend),
-            Arc::new(StaticModels),
-        )
-        .unwrap();
+        let server =
+            OpenAiServer::serve("127.0.0.1:0", Arc::new(EchoBackend), Arc::new(StaticModels))
+                .unwrap();
         let port = server.local_addr().unwrap().port();
         let token = server.token().to_string();
 
@@ -762,12 +838,9 @@ mod tests {
 
     #[test]
     fn real_socket_rejects_missing_token() {
-        let server = OpenAiServer::serve(
-            "127.0.0.1:0",
-            Arc::new(EchoBackend),
-            Arc::new(StaticModels),
-        )
-        .unwrap();
+        let server =
+            OpenAiServer::serve("127.0.0.1:0", Arc::new(EchoBackend), Arc::new(StaticModels))
+                .unwrap();
         let port = server.local_addr().unwrap().port();
         let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
         let request = "GET /v1/models HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
@@ -777,7 +850,8 @@ mod tests {
         assert!(resp.starts_with("HTTP/1.1 401"));
         // But /health is reachable without a token.
         let mut s2 = TcpStream::connect(("127.0.0.1", port)).unwrap();
-        s2.write_all("GET /health HTTP/1.1\r\nHost: x\r\n\r\n".as_bytes()).unwrap();
+        s2.write_all("GET /health HTTP/1.1\r\nHost: x\r\n\r\n".as_bytes())
+            .unwrap();
         let mut r2 = String::new();
         s2.read_to_string(&mut r2).unwrap();
         assert!(r2.starts_with("HTTP/1.1 200 OK"));

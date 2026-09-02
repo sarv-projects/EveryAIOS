@@ -36,8 +36,8 @@ pub fn parse_rules_md(source: &str) -> Vec<String> {
     let mut rules = Vec::new();
     for line in source.lines() {
         let t = line.trim();
-        if t.starts_with("- ") {
-            rules.push(t[2..].trim().to_string());
+        if let Some(stripped) = t.strip_prefix("- ") {
+            rules.push(stripped.trim().to_string());
         }
     }
     rules

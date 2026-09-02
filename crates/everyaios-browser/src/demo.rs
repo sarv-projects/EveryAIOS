@@ -469,7 +469,7 @@ mod tests {
 
     fn tree(after_type: bool) -> A11yNode {
         let mut root = A11yNode::new("document", "Page");
-        let mut boxed = A11yNode::new("textbox", if after_type { "alice" } else { "Username" })
+        let boxed = A11yNode::new("textbox", if after_type { "alice" } else { "Username" })
             .with_ref("e2")
             .with_actionable();
         root.push(boxed);

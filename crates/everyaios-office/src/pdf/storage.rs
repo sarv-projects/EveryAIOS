@@ -70,7 +70,7 @@ fn acro_field_ids(doc: &Document) -> Result<Vec<ObjectId>, PdfError> {
     let fields = acro
         .as_dict()?
         .get(b"Fields")
-        .map(|o| o.clone())
+        .cloned()
         .unwrap_or(Object::Array(Vec::new()));
     let arr = match fields {
         Object::Array(a) => a,

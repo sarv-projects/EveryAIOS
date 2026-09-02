@@ -115,8 +115,8 @@ mod tests {
     #[test]
     fn gap_aborts() {
         let mut c = UsnCursor::new(JournalSource::DebouncedWatch);
-        c.ingest(&vec![rec(10)]).unwrap();
-        let err = c.ingest(&vec![rec(5)]).unwrap_err();
+        c.ingest(&[rec(10)]).unwrap();
+        let err = c.ingest(&[rec(5)]).unwrap_err();
         assert!(err.contains("at/below"), "{err}");
         // Cursor unchanged after the failed batch.
         assert_eq!(c.next_usn, 10);

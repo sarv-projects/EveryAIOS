@@ -122,7 +122,7 @@ impl ProcessTransport {
     ) -> io::Result<Self> {
         let sandboxed = LinuxBwrapBackend
             .spawn_stdio(spec, command)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         Ok(Self {
             child: None,
             monitor: Some(sandboxed.monitor),
@@ -175,7 +175,10 @@ impl AcpTransport for ProcessTransport {
         if let Some(monitor) = self.monitor.as_mut() {
             return matches!(monitor.try_wait(), Ok(None));
         }
-        matches!(self.child.as_mut().and_then(|child| child.try_wait().ok()), Some(None))
+        matches!(
+            self.child.as_mut().and_then(|child| child.try_wait().ok()),
+            Some(None)
+        )
     }
 
     fn shutdown(&mut self) {
@@ -952,8 +955,8 @@ mod tests {
     #[cfg(all(unix, target_os = "linux"))]
     #[test]
     fn sandboxed_transport_roundtrips_through_bwrap() {
-        use everyaios_guard::sandbox::{profiles, SandboxRole, SandboxSpec};
         use everyaios_guard::sandbox::linux_bwrap_available;
+        use everyaios_guard::sandbox::{profiles, SandboxRole, SandboxSpec};
         if !linux_bwrap_available() {
             eprintln!("bwrap not available — skipping sandboxed transport test");
             return;

@@ -26,11 +26,11 @@ pub use broker::{
     assemble_tool_calls, extract_json_tool_calls, usage_tokens, Broker, BrokerError,
     ChatStreamEvent, ToolCallDelta,
 };
-pub use egress::{EgressFirewall, EgressPolicy, EgressVerdict};
 pub use credential_broker::{
     AllowlistApprover, CredentialBroker, CredentialFillError, CredentialHandle, DenyAllApprover,
     FillApprover, FillReceipt, FillSink, FillTarget,
 };
+pub use egress::{EgressFirewall, EgressPolicy, EgressVerdict};
 pub use keyring::{
     KeyEntry, KeyInfo, KeyRing, KeyRingError, KeySpec, KeyStatus, RoutingPolicy, SelectedKey,
     COOLDOWN_BASE_SECS, COOLDOWN_CAP_SECS, MAX_429_SWITCHES,
@@ -491,16 +491,31 @@ mod tests {
     /// must not trade durability for write throughput.
     #[test]
     fn vault_keeps_safe_pragma_defaults_untouched() {
-        let dir = std::env::temp_dir().join(format!("everyaios-vault-pragma-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-vault-pragma-test-{}",
+            std::process::id()
+        ));
         let path = dir.join("vault.db");
         let _ = std::fs::remove_dir_all(&dir);
         {
             let vault = Vault::open(&path, "test-key").expect("open");
             vault.register_key("anthropic", "key-1").unwrap();
-            let sync: i64 = vault.conn.query_row("PRAGMA synchronous;", [], |r| r.get(0)).unwrap();
-            assert_eq!(sync, 2, "vault must stay synchronous=FULL (2), never NORMAL (1)");
-            let limit: i64 = vault.conn.query_row("PRAGMA journal_size_limit;", [], |r| r.get(0)).unwrap();
-            assert_ne!(limit, 67_108_864, "vault must keep its default journal_size_limit");
+            let sync: i64 = vault
+                .conn
+                .query_row("PRAGMA synchronous;", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(
+                sync, 2,
+                "vault must stay synchronous=FULL (2), never NORMAL (1)"
+            );
+            let limit: i64 = vault
+                .conn
+                .query_row("PRAGMA journal_size_limit;", [], |r| r.get(0))
+                .unwrap();
+            assert_ne!(
+                limit, 67_108_864,
+                "vault must keep its default journal_size_limit"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -613,9 +628,7 @@ mod tests {
 
         // 2. Malformed payload: stored raw in the vault; the consumer-side
         //    parse boundary drops it (mirrors the Tauri session_list filter).
-        vault
-            .put_ui_session("broken", "this is not json")
-            .unwrap();
+        vault.put_ui_session("broken", "this is not json").unwrap();
         let raw = vault.list_ui_sessions().unwrap();
         assert_eq!(raw.len(), 1);
         assert_eq!(raw[0].0, "broken");
@@ -625,7 +638,10 @@ mod tests {
             .iter()
             .filter_map(|(_, p)| serde_json::from_str::<serde_json::Value>(p).ok())
             .collect();
-        assert!(dropped.is_empty(), "malformed rows must be dropped, never surfaced");
+        assert!(
+            dropped.is_empty(),
+            "malformed rows must be dropped, never surfaced"
+        );
 
         // 3. Healthy row alongside the broken one: only the parseable row
         //    surfaces through the consumer filter.
@@ -761,10 +777,7 @@ mod tests {
     /// aggregate is derived from persisted bytes, not session memory.
     #[test]
     fn session_totals_are_empty_fresh_and_durable_across_reopen() {
-        let dir = std::env::temp_dir().join(format!(
-            "everyaios-vault-agg-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("everyaios-vault-agg-{}", std::process::id()));
         let path = dir.join("vault.db");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

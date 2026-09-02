@@ -9,19 +9,14 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// Opt-in switch. Defaults to `false`; only an explicit user action flips it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TelemetryMode {
     /// No telemetry at all (default). `record` is a no-op.
+    #[default]
     Off,
     /// Enumerated, content-free event counters only.
     On,
-}
-
-impl Default for TelemetryMode {
-    fn default() -> Self {
-        TelemetryMode::Off
-    }
 }
 
 /// High-level event kinds. *Only* these are ever recorded — no free-form

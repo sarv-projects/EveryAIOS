@@ -199,7 +199,7 @@ impl UsageLedger {
                 });
             }
         }
-        out.sort_by(|a, b| b.usage.total_tokens().cmp(&a.usage.total_tokens()));
+        out.sort_by_key(|m| std::cmp::Reverse(m.usage.total_tokens()));
         out
     }
 

@@ -913,11 +913,6 @@ mod tests {
             depth: 2,
             max_learnings: 5,
         };
-        let cfg = DeepResearchConfig {
-            breadth: 1,
-            depth: 2,
-            max_learnings: 5,
-        };
         let tree =
             DeepResearch::build(&t, &c, "seed", &cfg, &|_, _| vec!["empty".to_string()]).unwrap();
         let gaps = DeepResearch::gap_check(&tree);

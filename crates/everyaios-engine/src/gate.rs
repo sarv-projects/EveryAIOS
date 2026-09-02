@@ -93,7 +93,7 @@ impl SessionApprovals {
             .retain(|_, e| now_ms.saturating_sub(e.last_access_ms) <= APPROVAL_TTL_MS);
         // 2) If still over cap, drop oldest by insertion (HashMap is O(1) pop).
         while self.map.len() > MAX_SESSION_KEYS {
-            if let Some(key) = self.map.keys().next().map(|k| k.clone()) {
+            if let Some(key) = self.map.keys().next().cloned() {
                 self.map.remove(&key);
             } else {
                 break;
@@ -104,6 +104,7 @@ impl SessionApprovals {
     /// `evaluatePermissionGate(agentMaxRisk, surface, tool, sessionApproved)`.
     /// `surface_allowlist` reflects the tool contract's allowed surfaces; the
     /// engine's scaffold passes the single active surface.
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate(
         &mut self,
         now_ms: u64,

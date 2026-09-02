@@ -45,12 +45,14 @@ impl SandboxedWorker {
             cmd.arg("--scratch").arg(s);
         }
         let mut child = cmd.spawn()?;
-        let stdin = child.stdin.take().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "worker stdin unavailable")
-        })?;
-        let stdout = child.stdout.take().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "worker stdout unavailable")
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| std::io::Error::other("worker stdin unavailable"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| std::io::Error::other("worker stdout unavailable"))?;
         let mut w = SandboxedWorker {
             id,
             profile: profile.to_string(),
@@ -65,17 +67,15 @@ impl SandboxedWorker {
         let mut ready = String::new();
         let n = w.stdout.read_line(&mut ready)?;
         if n == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("worker {id} exited before reporting ready"),
-            ));
+            return Err(std::io::Error::other(format!(
+                "worker {id} exited before reporting ready"
+            )));
         }
         let ready = ready.trim().to_string();
         if !ready.starts_with("ready ") {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("worker {id} did not report ready (got `{ready}`)"),
-            ));
+            return Err(std::io::Error::other(format!(
+                "worker {id} did not report ready (got `{ready}`)"
+            )));
         }
         Ok(w)
     }
@@ -104,10 +104,7 @@ impl SandboxedWorker {
 
     /// Is the child still alive?
     pub fn is_alive(&mut self) -> bool {
-        match self.child.try_wait() {
-            Ok(Some(_)) => false,
-            _ => true,
-        }
+        !matches!(self.child.try_wait(), Ok(Some(_)))
     }
 }
 

@@ -415,8 +415,10 @@ mod tests {
 
     #[test]
     fn file_hash_verifies_and_fails_honestly() {
-        let mut ctx = SurfaceContext::default();
-        ctx.file_bytes = Some(Vec::new()); // sha256("")
+        let mut ctx = SurfaceContext {
+            file_bytes: Some(Vec::new()), // sha256("")
+            ..Default::default()
+        };
         let v = verify_surface(&file_check(), &ctx);
         assert!(matches!(v, SurfaceVerdict::Verified { .. }));
         assert_eq!(v.status_label(), "verified_complete");
@@ -429,8 +431,10 @@ mod tests {
     #[test]
     fn shell_git_browser_office_verify() {
         // Shell exit code.
-        let mut ctx = SurfaceContext::default();
-        ctx.shell_exit = Some(0);
+        let mut ctx = SurfaceContext {
+            shell_exit: Some(0),
+            ..Default::default()
+        };
         assert!(verify_surface(&SurfaceCheck::ShellExit { expected: 0 }, &ctx).is_verified());
         ctx.shell_exit = Some(2);
         assert!(matches!(
@@ -482,8 +486,10 @@ mod tests {
 
     #[test]
     fn per_surface_status_folds_into_ev1_taxonomy() {
-        let mut ctx = SurfaceContext::default();
-        ctx.search_hits = Some(7);
+        let ctx = SurfaceContext {
+            search_hits: Some(7),
+            ..Default::default()
+        };
         let v = verify_surface(&SurfaceCheck::SearchHits { min_hits: 5 }, &ctx);
         assert_eq!(v.status_label(), "verified_complete");
         assert!(v.is_verified());

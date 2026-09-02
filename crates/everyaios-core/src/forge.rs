@@ -273,6 +273,7 @@ impl<C: CommandRunner, F: FileStore> ForgeRuntime<C, F> {
     /// run the write→test→iterate loop until the implementation makes it
     /// green. `gen_test(spec)` produces the test file, `gen_impl(stderr)`
     /// produces the next implementation attempt from the failure output.
+    #[allow(clippy::too_many_arguments)]
     pub fn tdd_loop(
         &self,
         impl_path: &str,
@@ -410,6 +411,9 @@ mod tests {
     }
 
     impl ScriptedRunner {
+        // Kept for scripted-runner callers that assert on output ordering;
+        // the plain test path does not exercise it.
+        #[allow(dead_code)]
         fn push(&self, out: CommandOutput) {
             self.script.lock().unwrap().push(out);
         }

@@ -13,6 +13,9 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Hook invoked when a resource transition is audited.
+type AuditHook = Box<dyn Fn(&str, &str, bool) + Send + Sync>;
+
 /// The kinds of process a [`ManagedResource`] can own. Office and vault
 /// providers are excluded by construction (see module docs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -216,7 +219,7 @@ impl<R> ManagedResource<R> {
 /// sink so lifecycle events land in the event log.
 #[derive(Default)]
 pub struct ResourceManager {
-    audit: Option<Box<dyn Fn(&str, &str, bool) + Send + Sync>>,
+    audit: Option<AuditHook>,
     pub resources: Vec<ManagedResource<serde_json::Value>>,
 }
 
@@ -329,7 +332,7 @@ mod tests {
         r.install_state = InstallState::Installed;
         r.health = ResourceHealth::Down;
         // Installed + enabled but not started and not healthy — usable check false
-        assert_eq!(r.running_and_healthy(), false);
+        assert!(!r.running_and_healthy());
         r.step(ResourcePhase::Started, "s", at()).unwrap();
         r.set_health(ResourceHealth::Healthy, at());
         assert!(r.running_and_healthy());

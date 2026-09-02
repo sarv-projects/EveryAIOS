@@ -128,7 +128,7 @@ fn bench_ipc_roundtrip_latency() {
         (n, elapsed)
     });
     // Server: echo every frame back so the client round-trip completes.
-    let mut server_handle = std::thread::spawn(move || {
+    let server_handle = std::thread::spawn(move || {
         while let Ok(Some(payload)) = everyaios_ipc::frame::decode(&mut server) {
             let _ = everyaios_ipc::frame::write_frame(&mut server, &payload);
         }
@@ -287,7 +287,7 @@ fn bench_compaction_200k_tokens() {
     let elapsed = start.elapsed();
     eprintln!(
         "[bench] compaction of 200K-token context: {elapsed:?} (decided: {:?})",
-        action.as_ref().map(|a| a.1.clone())
+        action.as_ref().map(|a| a.1)
     );
     assert!(
         elapsed < Duration::from_secs(3),

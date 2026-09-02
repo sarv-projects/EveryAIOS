@@ -46,7 +46,7 @@ pub fn digest(body: &ManifestBody) -> String {
 /// HMAC-SHA256 (RFC 2104) — no extra crate; the key lives in the vault.
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> String {
     const BLOCK: usize = 64;
-    let mut k = vec![0u8; BLOCK];
+    let mut k = [0u8; BLOCK];
     if key.len() > BLOCK {
         k[..32].copy_from_slice(&Sha256::digest(key));
     } else {

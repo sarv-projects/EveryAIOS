@@ -147,10 +147,9 @@ fn read_http_response(stream: &mut TcpStream) -> std::io::Result<String> {
         raw.extend_from_slice(&chunk[..n]);
     }
     if status != 200 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("loopback server returned HTTP {status}"),
-        ));
+        return Err(std::io::Error::other(format!(
+            "loopback server returned HTTP {status}"
+        )));
     }
     Ok(String::from_utf8_lossy(
         &raw[header_end..header_end + content_length.min(raw.len() - header_end)],

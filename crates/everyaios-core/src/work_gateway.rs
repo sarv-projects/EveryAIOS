@@ -175,25 +175,74 @@ pub enum PresenceEvent {
 #[serde(rename_all = "snake_case", tag = "kind", content = "data")]
 pub enum RuntimeEvent {
     // --- PTY (P49.10) ---
-    PtyStarted { pty_id: String, process_id: Option<u32>, rows: u16, cols: u16 },
-    PtyOutput { pty_id: String, chunk: String },
-    PtyResize { pty_id: String, rows: u16, cols: u16 },
-    PtySignal { pty_id: String, signal: String },
-    PtyExit { pty_id: String, code: Option<i32> },
+    PtyStarted {
+        pty_id: String,
+        process_id: Option<u32>,
+        rows: u16,
+        cols: u16,
+    },
+    PtyOutput {
+        pty_id: String,
+        chunk: String,
+    },
+    PtyResize {
+        pty_id: String,
+        rows: u16,
+        cols: u16,
+    },
+    PtySignal {
+        pty_id: String,
+        signal: String,
+    },
+    PtyExit {
+        pty_id: String,
+        code: Option<i32>,
+    },
     // --- Worktree (P49.11) ---
-    WorktreeCreated { worktree_id: String, branch: String },
-    WorktreeAttached { worktree_id: String, run_id: String },
-    WorktreeMerged { worktree_id: String, into: String },
-    WorktreeReverted { worktree_id: String },
-    WorktreeDestroyed { worktree_id: String },
+    WorktreeCreated {
+        worktree_id: String,
+        branch: String,
+    },
+    WorktreeAttached {
+        worktree_id: String,
+        run_id: String,
+    },
+    WorktreeMerged {
+        worktree_id: String,
+        into: String,
+    },
+    WorktreeReverted {
+        worktree_id: String,
+    },
+    WorktreeDestroyed {
+        worktree_id: String,
+    },
     // --- AgentSession (P49.12) ---
-    AgentSessionSpawned { agent_session_id: String, agent_id: String, lifetime: String },
-    AgentSessionMessage { agent_session_id: String, direction: String },
-    AgentSessionAttached { agent_session_id: String },
-    AgentSessionDetached { agent_session_id: String },
-    AgentSessionSteered { agent_session_id: String },
-    AgentSessionCheckpointed { agent_session_id: String, checkpoint: u32 },
-    AgentSessionTerminated { agent_session_id: String },
+    AgentSessionSpawned {
+        agent_session_id: String,
+        agent_id: String,
+        lifetime: String,
+    },
+    AgentSessionMessage {
+        agent_session_id: String,
+        direction: String,
+    },
+    AgentSessionAttached {
+        agent_session_id: String,
+    },
+    AgentSessionDetached {
+        agent_session_id: String,
+    },
+    AgentSessionSteered {
+        agent_session_id: String,
+    },
+    AgentSessionCheckpointed {
+        agent_session_id: String,
+        checkpoint: u32,
+    },
+    AgentSessionTerminated {
+        agent_session_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -821,113 +870,445 @@ impl WorkGateway {
 
     // ======== P49.10 PtySession lifecycle ========
 
-    pub fn spawn_pty(&mut self, work_id: &str, pty_id: &str, process_id: Option<u32>, rows: u16, cols: u16) -> Result<WorkEventEnvelope, String> {
-        if !self.works.contains_key(work_id) { return Err("unknown work".into()); }
-        self.ptys.insert(pty_id.to_string(), PtySession { pty_id: pty_id.to_string(), process_id, rows, cols, state: "running".into(), output: String::new() });
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::PtyStarted { pty_id: pty_id.to_string(), process_id, rows, cols }), None).ok_or("append PtyStarted".into())
+    pub fn spawn_pty(
+        &mut self,
+        work_id: &str,
+        pty_id: &str,
+        process_id: Option<u32>,
+        rows: u16,
+        cols: u16,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !self.works.contains_key(work_id) {
+            return Err("unknown work".into());
+        }
+        self.ptys.insert(
+            pty_id.to_string(),
+            PtySession {
+                pty_id: pty_id.to_string(),
+                process_id,
+                rows,
+                cols,
+                state: "running".into(),
+                output: String::new(),
+            },
+        );
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::PtyStarted {
+                pty_id: pty_id.to_string(),
+                process_id,
+                rows,
+                cols,
+            }),
+            None,
+        )
+        .ok_or("append PtyStarted".into())
     }
-    pub fn resize_pty(&mut self, work_id: &str, pty_id: &str, rows: u16, cols: u16) -> Result<WorkEventEnvelope, String> {
+    pub fn resize_pty(
+        &mut self,
+        work_id: &str,
+        pty_id: &str,
+        rows: u16,
+        cols: u16,
+    ) -> Result<WorkEventEnvelope, String> {
         let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
-        if pty.state != "running" && pty.state != "paused" { return Err(format!("pty is {}", pty.state)); }
-        pty.rows = rows; pty.cols = cols;
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::PtyResize { pty_id: pty_id.to_string(), rows, cols }), None).ok_or("append PtyResize".into())
+        if pty.state != "running" && pty.state != "paused" {
+            return Err(format!("pty is {}", pty.state));
+        }
+        pty.rows = rows;
+        pty.cols = cols;
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::PtyResize {
+                pty_id: pty_id.to_string(),
+                rows,
+                cols,
+            }),
+            None,
+        )
+        .ok_or("append PtyResize".into())
     }
-    pub fn write_pty_output(&mut self, work_id: &str, pty_id: &str, chunk: &str) -> Result<WorkEventEnvelope, String> {
+    pub fn write_pty_output(
+        &mut self,
+        work_id: &str,
+        pty_id: &str,
+        chunk: &str,
+    ) -> Result<WorkEventEnvelope, String> {
         let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
         pty.output.push_str(chunk);
         const CAP: usize = 64 * 1024;
-        if pty.output.len() > CAP { let s = pty.output.len() - CAP; pty.output = pty.output[s..].to_string(); }
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::PtyOutput { pty_id: pty_id.to_string(), chunk: chunk.to_string() }), None).ok_or("append PtyOutput".into())
+        if pty.output.len() > CAP {
+            let s = pty.output.len() - CAP;
+            pty.output = pty.output[s..].to_string();
+        }
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::PtyOutput {
+                pty_id: pty_id.to_string(),
+                chunk: chunk.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append PtyOutput".into())
     }
-    pub fn signal_pty(&mut self, work_id: &str, pty_id: &str, signal: &str) -> Result<WorkEventEnvelope, String> {
-        if !self.ptys.contains_key(pty_id) { return Err("unknown pty".into()); }
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::PtySignal { pty_id: pty_id.to_string(), signal: signal.to_string() }), None).ok_or("append PtySignal".into())
+    pub fn signal_pty(
+        &mut self,
+        work_id: &str,
+        pty_id: &str,
+        signal: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !self.ptys.contains_key(pty_id) {
+            return Err("unknown pty".into());
+        }
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::PtySignal {
+                pty_id: pty_id.to_string(),
+                signal: signal.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append PtySignal".into())
     }
     pub fn pause_pty(&mut self, pty_id: &str) -> Result<(), String> {
         let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
-        if pty.state != "running" { return Err(format!("pty is {}", pty.state)); }
-        pty.state = "paused".into(); Ok(())
+        if pty.state != "running" {
+            return Err(format!("pty is {}", pty.state));
+        }
+        pty.state = "paused".into();
+        Ok(())
     }
     pub fn resume_pty(&mut self, pty_id: &str) -> Result<(), String> {
         let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
-        if pty.state != "paused" { return Err(format!("pty is {}", pty.state)); }
-        pty.state = "running".into(); Ok(())
+        if pty.state != "paused" {
+            return Err(format!("pty is {}", pty.state));
+        }
+        pty.state = "running".into();
+        Ok(())
     }
-    pub fn close_pty(&mut self, work_id: &str, pty_id: &str, code: Option<i32>) -> Result<WorkEventEnvelope, String> {
+    pub fn close_pty(
+        &mut self,
+        work_id: &str,
+        pty_id: &str,
+        code: Option<i32>,
+    ) -> Result<WorkEventEnvelope, String> {
         let pty = self.ptys.get_mut(pty_id).ok_or("unknown pty")?;
         pty.state = "exited".into();
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::PtyExit { pty_id: pty_id.to_string(), code }), None).ok_or("append PtyExit".into())
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::PtyExit {
+                pty_id: pty_id.to_string(),
+                code,
+            }),
+            None,
+        )
+        .ok_or("append PtyExit".into())
     }
-    pub fn snapshot_terminal(&self, pty_id: &str) -> Option<PtySession> { self.ptys.get(pty_id).cloned() }
+    pub fn snapshot_terminal(&self, pty_id: &str) -> Option<PtySession> {
+        self.ptys.get(pty_id).cloned()
+    }
 
     // ======== P49.11 WorktreeBinding lifecycle ========
 
     #[allow(clippy::too_many_arguments)]
-    pub fn create_worktree(&mut self, work_id: &str, run_id: &str, worktree_id: &str, repo_root: &str, worktree_root: &str, base_revision: &str, branch: &str, isolation_mode: &str) -> Result<WorkEventEnvelope, String> {
-        if !self.works.contains_key(work_id) { return Err("unknown work".into()); }
-        self.worktrees.insert(worktree_id.to_string(), WorktreeBinding { worktree_id: worktree_id.to_string(), work_id: work_id.to_string(), run_id: run_id.to_string(), repo_root: repo_root.to_string(), worktree_root: worktree_root.to_string(), base_revision: base_revision.to_string(), branch: branch.to_string(), isolation_mode: isolation_mode.to_string(), status: "created".into() });
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::WorktreeCreated { worktree_id: worktree_id.to_string(), branch: branch.to_string() }), None).ok_or("append WorktreeCreated".into())
+    pub fn create_worktree(
+        &mut self,
+        work_id: &str,
+        run_id: &str,
+        worktree_id: &str,
+        repo_root: &str,
+        worktree_root: &str,
+        base_revision: &str,
+        branch: &str,
+        isolation_mode: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !self.works.contains_key(work_id) {
+            return Err("unknown work".into());
+        }
+        self.worktrees.insert(
+            worktree_id.to_string(),
+            WorktreeBinding {
+                worktree_id: worktree_id.to_string(),
+                work_id: work_id.to_string(),
+                run_id: run_id.to_string(),
+                repo_root: repo_root.to_string(),
+                worktree_root: worktree_root.to_string(),
+                base_revision: base_revision.to_string(),
+                branch: branch.to_string(),
+                isolation_mode: isolation_mode.to_string(),
+                status: "created".into(),
+            },
+        );
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::WorktreeCreated {
+                worktree_id: worktree_id.to_string(),
+                branch: branch.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append WorktreeCreated".into())
     }
-    pub fn attach_worktree(&mut self, work_id: &str, worktree_id: &str, run_id: &str) -> Result<WorkEventEnvelope, String> {
-        let wt = self.worktrees.get_mut(worktree_id).ok_or("unknown worktree")?;
-        wt.run_id = run_id.to_string(); wt.status = "attached".into();
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::WorktreeAttached { worktree_id: worktree_id.to_string(), run_id: run_id.to_string() }), None).ok_or("append WorktreeAttached".into())
+    pub fn attach_worktree(
+        &mut self,
+        work_id: &str,
+        worktree_id: &str,
+        run_id: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        let wt = self
+            .worktrees
+            .get_mut(worktree_id)
+            .ok_or("unknown worktree")?;
+        wt.run_id = run_id.to_string();
+        wt.status = "attached".into();
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::WorktreeAttached {
+                worktree_id: worktree_id.to_string(),
+                run_id: run_id.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append WorktreeAttached".into())
     }
-    pub fn snapshot_worktree(&self, worktree_id: &str) -> Option<WorktreeBinding> { self.worktrees.get(worktree_id).cloned() }
-    pub fn merge_worktree(&mut self, work_id: &str, worktree_id: &str, into: &str) -> Result<WorkEventEnvelope, String> {
-        let wt = self.worktrees.get_mut(worktree_id).ok_or("unknown worktree")?; wt.status = "merged".into();
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::WorktreeMerged { worktree_id: worktree_id.to_string(), into: into.to_string() }), None).ok_or("append WorktreeMerged".into())
+    pub fn snapshot_worktree(&self, worktree_id: &str) -> Option<WorktreeBinding> {
+        self.worktrees.get(worktree_id).cloned()
     }
-    pub fn revert_worktree(&mut self, work_id: &str, worktree_id: &str) -> Result<WorkEventEnvelope, String> {
-        let wt = self.worktrees.get_mut(worktree_id).ok_or("unknown worktree")?; wt.status = "reverted".into();
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::WorktreeReverted { worktree_id: worktree_id.to_string() }), None).ok_or("append WorktreeReverted".into())
+    pub fn merge_worktree(
+        &mut self,
+        work_id: &str,
+        worktree_id: &str,
+        into: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        let wt = self
+            .worktrees
+            .get_mut(worktree_id)
+            .ok_or("unknown worktree")?;
+        wt.status = "merged".into();
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::WorktreeMerged {
+                worktree_id: worktree_id.to_string(),
+                into: into.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append WorktreeMerged".into())
     }
-    pub fn destroy_worktree(&mut self, work_id: &str, worktree_id: &str) -> Result<WorkEventEnvelope, String> {
-        if self.worktrees.remove(worktree_id).is_none() { return Err("unknown worktree".into()); }
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::WorktreeDestroyed { worktree_id: worktree_id.to_string() }), None).ok_or("append WorktreeDestroyed".into())
+    pub fn revert_worktree(
+        &mut self,
+        work_id: &str,
+        worktree_id: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        let wt = self
+            .worktrees
+            .get_mut(worktree_id)
+            .ok_or("unknown worktree")?;
+        wt.status = "reverted".into();
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::WorktreeReverted {
+                worktree_id: worktree_id.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append WorktreeReverted".into())
+    }
+    pub fn destroy_worktree(
+        &mut self,
+        work_id: &str,
+        worktree_id: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        if self.worktrees.remove(worktree_id).is_none() {
+            return Err("unknown worktree".into());
+        }
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::WorktreeDestroyed {
+                worktree_id: worktree_id.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append WorktreeDestroyed".into())
     }
 
     // ======== P49.12 AgentSession lifecycle ========
 
     #[allow(clippy::too_many_arguments)]
-    pub fn spawn_subagent(&mut self, work_id: &str, run_id: &str, agent_session_id: &str, agent_id: &str, lifetime: AgentLifetime, pty_id: Option<String>, worktree_id: Option<String>) -> Result<WorkEventEnvelope, String> {
-        if !self.works.contains_key(work_id) { return Err("unknown work".into()); }
-        self.agent_sessions.insert(agent_session_id.to_string(), AgentSession { agent_session_id: agent_session_id.to_string(), work_id: work_id.to_string(), run_id: run_id.to_string(), agent_id: agent_id.to_string(), lifetime, pty_id, worktree_id, runtime_state: "spawned".into(), last_checkpoint: 0, attached: matches!(lifetime, AgentLifetime::PersistentAttachedSession) });
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::AgentSessionSpawned { agent_session_id: agent_session_id.to_string(), agent_id: agent_id.to_string(), lifetime: lifetime.as_str().to_string() }), None).ok_or("append AgentSessionSpawned".into())
+    pub fn spawn_subagent(
+        &mut self,
+        work_id: &str,
+        run_id: &str,
+        agent_session_id: &str,
+        agent_id: &str,
+        lifetime: AgentLifetime,
+        pty_id: Option<String>,
+        worktree_id: Option<String>,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !self.works.contains_key(work_id) {
+            return Err("unknown work".into());
+        }
+        self.agent_sessions.insert(
+            agent_session_id.to_string(),
+            AgentSession {
+                agent_session_id: agent_session_id.to_string(),
+                work_id: work_id.to_string(),
+                run_id: run_id.to_string(),
+                agent_id: agent_id.to_string(),
+                lifetime,
+                pty_id,
+                worktree_id,
+                runtime_state: "spawned".into(),
+                last_checkpoint: 0,
+                attached: matches!(lifetime, AgentLifetime::PersistentAttachedSession),
+            },
+        );
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionSpawned {
+                agent_session_id: agent_session_id.to_string(),
+                agent_id: agent_id.to_string(),
+                lifetime: lifetime.as_str().to_string(),
+            }),
+            None,
+        )
+        .ok_or("append AgentSessionSpawned".into())
     }
-    pub fn send_subagent_message(&mut self, work_id: &str, agent_session_id: &str, to_agent: bool) -> Result<WorkEventEnvelope, String> {
-        if !self.agent_sessions.contains_key(agent_session_id) { return Err("unknown agent session".into()); }
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::AgentSessionMessage { agent_session_id: agent_session_id.to_string(), direction: if to_agent { "to_agent".into() } else { "from_agent".into() } }), None).ok_or("append AgentSessionMessage".into())
+    pub fn send_subagent_message(
+        &mut self,
+        work_id: &str,
+        agent_session_id: &str,
+        to_agent: bool,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !self.agent_sessions.contains_key(agent_session_id) {
+            return Err("unknown agent session".into());
+        }
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionMessage {
+                agent_session_id: agent_session_id.to_string(),
+                direction: if to_agent {
+                    "to_agent".into()
+                } else {
+                    "from_agent".into()
+                },
+            }),
+            None,
+        )
+        .ok_or("append AgentSessionMessage".into())
     }
-    pub fn attach_agent_session(&mut self, work_id: &str, agent_session_id: &str) -> Result<WorkEventEnvelope, String> {
-        let s = self.agent_sessions.get_mut(agent_session_id).ok_or("unknown agent session")?;
-        s.attached = true; s.runtime_state = "attached".into();
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::AgentSessionAttached { agent_session_id: agent_session_id.to_string() }), None).ok_or("append AgentSessionAttached".into())
+    pub fn attach_agent_session(
+        &mut self,
+        work_id: &str,
+        agent_session_id: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        let s = self
+            .agent_sessions
+            .get_mut(agent_session_id)
+            .ok_or("unknown agent session")?;
+        s.attached = true;
+        s.runtime_state = "attached".into();
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionAttached {
+                agent_session_id: agent_session_id.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append AgentSessionAttached".into())
     }
-    pub fn detach_agent_session(&mut self, work_id: &str, agent_session_id: &str) -> Result<WorkEventEnvelope, String> {
-        let lt = self.agent_sessions.get(agent_session_id).ok_or("unknown agent session")?.lifetime;
-        if lt == AgentLifetime::EphemeralChild { return self.terminate_agent_session(work_id, agent_session_id); }
+    pub fn detach_agent_session(
+        &mut self,
+        work_id: &str,
+        agent_session_id: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        let lt = self
+            .agent_sessions
+            .get(agent_session_id)
+            .ok_or("unknown agent session")?
+            .lifetime;
+        if lt == AgentLifetime::EphemeralChild {
+            return self.terminate_agent_session(work_id, agent_session_id);
+        }
         let s = self.agent_sessions.get_mut(agent_session_id).unwrap();
-        s.attached = false; s.runtime_state = "detached".into();
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::AgentSessionDetached { agent_session_id: agent_session_id.to_string() }), None).ok_or("append AgentSessionDetached".into())
+        s.attached = false;
+        s.runtime_state = "detached".into();
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionDetached {
+                agent_session_id: agent_session_id.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append AgentSessionDetached".into())
     }
-    pub fn steer_agent_session(&mut self, work_id: &str, agent_session_id: &str) -> Result<WorkEventEnvelope, String> {
-        if !self.agent_sessions.contains_key(agent_session_id) { return Err("unknown agent session".into()); }
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::AgentSessionSteered { agent_session_id: agent_session_id.to_string() }), None).ok_or("append AgentSessionSteered".into())
+    pub fn steer_agent_session(
+        &mut self,
+        work_id: &str,
+        agent_session_id: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !self.agent_sessions.contains_key(agent_session_id) {
+            return Err("unknown agent session".into());
+        }
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionSteered {
+                agent_session_id: agent_session_id.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append AgentSessionSteered".into())
     }
-    pub fn checkpoint_agent_session(&mut self, work_id: &str, agent_session_id: &str) -> Result<WorkEventEnvelope, String> {
-        let s = self.agent_sessions.get_mut(agent_session_id).ok_or("unknown agent session")?;
+    pub fn checkpoint_agent_session(
+        &mut self,
+        work_id: &str,
+        agent_session_id: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        let s = self
+            .agent_sessions
+            .get_mut(agent_session_id)
+            .ok_or("unknown agent session")?;
         s.last_checkpoint = s.last_checkpoint.saturating_add(1);
         let cp = s.last_checkpoint;
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::AgentSessionCheckpointed { agent_session_id: agent_session_id.to_string(), checkpoint: cp }), None).ok_or("append AgentSessionCheckpointed".into())
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionCheckpointed {
+                agent_session_id: agent_session_id.to_string(),
+                checkpoint: cp,
+            }),
+            None,
+        )
+        .ok_or("append AgentSessionCheckpointed".into())
     }
-    pub fn terminate_agent_session(&mut self, work_id: &str, agent_session_id: &str) -> Result<WorkEventEnvelope, String> {
-        let s = self.agent_sessions.get_mut(agent_session_id).ok_or("unknown agent session")?;
-        s.runtime_state = "terminated".into(); s.attached = false;
-        self.append(work_id, WorkEvent::Runtime(RuntimeEvent::AgentSessionTerminated { agent_session_id: agent_session_id.to_string() }), None).ok_or("append AgentSessionTerminated".into())
+    pub fn terminate_agent_session(
+        &mut self,
+        work_id: &str,
+        agent_session_id: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        let s = self
+            .agent_sessions
+            .get_mut(agent_session_id)
+            .ok_or("unknown agent session")?;
+        s.runtime_state = "terminated".into();
+        s.attached = false;
+        self.append(
+            work_id,
+            WorkEvent::Runtime(RuntimeEvent::AgentSessionTerminated {
+                agent_session_id: agent_session_id.to_string(),
+            }),
+            None,
+        )
+        .ok_or("append AgentSessionTerminated".into())
     }
-    pub fn agent_session(&self, agent_session_id: &str) -> Option<&AgentSession> { self.agent_sessions.get(agent_session_id) }
-    pub fn agent_sessions_for(&self, work_id: &str) -> Vec<&AgentSession> { self.agent_sessions.values().filter(|s| s.work_id == work_id).collect() }
+    pub fn agent_session(&self, agent_session_id: &str) -> Option<&AgentSession> {
+        self.agent_sessions.get(agent_session_id)
+    }
+    pub fn agent_sessions_for(&self, work_id: &str) -> Vec<&AgentSession> {
+        self.agent_sessions
+            .values()
+            .filter(|s| s.work_id == work_id)
+            .collect()
+    }
 
     /// P49.10–12 — JSON-RPC dispatch so the **sidecar agent loop** (not just a
     /// human/CLI) can drive the session runtime as first-class tools. The
@@ -939,34 +1320,94 @@ impl WorkGateway {
     pub fn handle_rpc(&mut self, method: &str, p: &Value) -> Result<Value, String> {
         let s = |k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
         let opt_s = |k: &str| p.get(k).and_then(Value::as_str).map(|v| v.to_string());
-        let u16f = |k: &str, d: u16| p.get(k).and_then(Value::as_u64).map(|v| v as u16).unwrap_or(d);
+        let u16f = |k: &str, d: u16| {
+            p.get(k)
+                .and_then(Value::as_u64)
+                .map(|v| v as u16)
+                .unwrap_or(d)
+        };
         let ev = |e: WorkEventEnvelope| serde_json::to_value(e).map_err(|x| x.to_string());
         match method {
-            "work/pty_spawn" => ev(self.spawn_pty(&s("workId"), &s("ptyId"), p.get("processId").and_then(Value::as_u64).map(|v| v as u32), u16f("rows", 24), u16f("cols", 80))?),
-            "work/pty_resize" => ev(self.resize_pty(&s("workId"), &s("ptyId"), u16f("rows", 24), u16f("cols", 80))?),
-            "work/pty_output" => ev(self.write_pty_output(&s("workId"), &s("ptyId"), &s("chunk"))?),
+            "work/pty_spawn" => ev(self.spawn_pty(
+                &s("workId"),
+                &s("ptyId"),
+                p.get("processId").and_then(Value::as_u64).map(|v| v as u32),
+                u16f("rows", 24),
+                u16f("cols", 80),
+            )?),
+            "work/pty_resize" => ev(self.resize_pty(
+                &s("workId"),
+                &s("ptyId"),
+                u16f("rows", 24),
+                u16f("cols", 80),
+            )?),
+            "work/pty_output" => {
+                ev(self.write_pty_output(&s("workId"), &s("ptyId"), &s("chunk"))?)
+            }
             "work/pty_signal" => ev(self.signal_pty(&s("workId"), &s("ptyId"), &s("signal"))?),
-            "work/pty_close" => ev(self.close_pty(&s("workId"), &s("ptyId"), p.get("code").and_then(Value::as_i64).map(|v| v as i32))?),
-            "work/pty_snapshot" => serde_json::to_value(self.snapshot_terminal(&s("ptyId"))).map_err(|e| e.to_string()),
-            "work/worktree_create" => ev(self.create_worktree(&s("workId"), &s("runId"), &s("worktreeId"), &s("repoRoot"), &s("worktreeRoot"), &s("baseRevision"), &s("branch"), &opt_s("isolationMode").unwrap_or_else(|| "worktree".into()))?),
-            "work/worktree_attach" => ev(self.attach_worktree(&s("workId"), &s("worktreeId"), &s("runId"))?),
-            "work/worktree_merge" => ev(self.merge_worktree(&s("workId"), &s("worktreeId"), &s("into"))?),
+            "work/pty_close" => ev(self.close_pty(
+                &s("workId"),
+                &s("ptyId"),
+                p.get("code").and_then(Value::as_i64).map(|v| v as i32),
+            )?),
+            "work/pty_snapshot" => {
+                serde_json::to_value(self.snapshot_terminal(&s("ptyId"))).map_err(|e| e.to_string())
+            }
+            "work/worktree_create" => ev(self.create_worktree(
+                &s("workId"),
+                &s("runId"),
+                &s("worktreeId"),
+                &s("repoRoot"),
+                &s("worktreeRoot"),
+                &s("baseRevision"),
+                &s("branch"),
+                &opt_s("isolationMode").unwrap_or_else(|| "worktree".into()),
+            )?),
+            "work/worktree_attach" => {
+                ev(self.attach_worktree(&s("workId"), &s("worktreeId"), &s("runId"))?)
+            }
+            "work/worktree_merge" => {
+                ev(self.merge_worktree(&s("workId"), &s("worktreeId"), &s("into"))?)
+            }
             "work/worktree_revert" => ev(self.revert_worktree(&s("workId"), &s("worktreeId"))?),
             "work/worktree_destroy" => ev(self.destroy_worktree(&s("workId"), &s("worktreeId"))?),
             "work/agent_spawn" => {
                 let lifetime = match s("lifetime").as_str() {
-                    "persistent" | "persistent_attached_session" => AgentLifetime::PersistentAttachedSession,
+                    "persistent" | "persistent_attached_session" => {
+                        AgentLifetime::PersistentAttachedSession
+                    }
                     _ => AgentLifetime::EphemeralChild,
                 };
-                ev(self.spawn_subagent(&s("workId"), &s("runId"), &s("agentSessionId"), &s("agentId"), lifetime, opt_s("ptyId"), opt_s("worktreeId"))?)
+                ev(self.spawn_subagent(
+                    &s("workId"),
+                    &s("runId"),
+                    &s("agentSessionId"),
+                    &s("agentId"),
+                    lifetime,
+                    opt_s("ptyId"),
+                    opt_s("worktreeId"),
+                )?)
             }
-            "work/agent_message" => ev(self.send_subagent_message(&s("workId"), &s("agentSessionId"), p.get("toAgent").and_then(Value::as_bool).unwrap_or(true))?),
-            "work/agent_attach" => ev(self.attach_agent_session(&s("workId"), &s("agentSessionId"))?),
-            "work/agent_detach" => ev(self.detach_agent_session(&s("workId"), &s("agentSessionId"))?),
+            "work/agent_message" => ev(self.send_subagent_message(
+                &s("workId"),
+                &s("agentSessionId"),
+                p.get("toAgent").and_then(Value::as_bool).unwrap_or(true),
+            )?),
+            "work/agent_attach" => {
+                ev(self.attach_agent_session(&s("workId"), &s("agentSessionId"))?)
+            }
+            "work/agent_detach" => {
+                ev(self.detach_agent_session(&s("workId"), &s("agentSessionId"))?)
+            }
             "work/agent_steer" => ev(self.steer_agent_session(&s("workId"), &s("agentSessionId"))?),
-            "work/agent_checkpoint" => ev(self.checkpoint_agent_session(&s("workId"), &s("agentSessionId"))?),
-            "work/agent_terminate" => ev(self.terminate_agent_session(&s("workId"), &s("agentSessionId"))?),
-            "work/agent_sessions" => serde_json::to_value(self.agent_sessions_for(&s("workId"))).map_err(|e| e.to_string()),
+            "work/agent_checkpoint" => {
+                ev(self.checkpoint_agent_session(&s("workId"), &s("agentSessionId"))?)
+            }
+            "work/agent_terminate" => {
+                ev(self.terminate_agent_session(&s("workId"), &s("agentSessionId"))?)
+            }
+            "work/agent_sessions" => serde_json::to_value(self.agent_sessions_for(&s("workId")))
+                .map_err(|e| e.to_string()),
             other => Err(format!("unknown work method: {other}")),
         }
     }
@@ -1707,7 +2148,6 @@ mod tests {
     }
 }
 
-
 // ===========================================================================
 // P49.16 — Remote approval security + ContextReleasePolicy (v3.65 §4.4a).
 // ===========================================================================
@@ -1812,7 +2252,10 @@ impl ContextReleasePolicy {
     /// without a human in the loop? Only `Redacted`/`ReferenceOnly` may;
     /// `Approval` needs a gesture, `Blocked` never.
     pub fn auto_releasable_externally(&self) -> bool {
-        matches!(self, ContextReleasePolicy::Redacted | ContextReleasePolicy::ReferenceOnly)
+        matches!(
+            self,
+            ContextReleasePolicy::Redacted | ContextReleasePolicy::ReferenceOnly
+        )
     }
 
     /// The release decision for a proposed context need. `is_external` = the
@@ -1879,7 +2322,17 @@ mod p49_runtime_tests {
     #[test]
     fn worktree_binding_follows_the_run_not_the_agent() {
         let mut gw = gw_with_work("w2");
-        gw.create_worktree("w2", "run-a", "wt1", "/repo", "/repo/.wt/wt1", "abc123", "feature/x", "worktree").unwrap();
+        gw.create_worktree(
+            "w2",
+            "run-a",
+            "wt1",
+            "/repo",
+            "/repo/.wt/wt1",
+            "abc123",
+            "feature/x",
+            "worktree",
+        )
+        .unwrap();
         // A new run (Claude Code died → Codex started) attaches the SAME worktree.
         gw.attach_worktree("w2", "wt1", "run-b").unwrap();
         let wt = gw.snapshot_worktree("wt1").unwrap();
@@ -1894,11 +2347,32 @@ mod p49_runtime_tests {
     #[test]
     fn ephemeral_child_dies_on_detach_persistent_survives() {
         let mut gw = gw_with_work("w3");
-        gw.spawn_subagent("w3", "run", "s-eph", "claude-code", AgentLifetime::EphemeralChild, None, None).unwrap();
-        gw.spawn_subagent("w3", "run", "s-persist", "codex", AgentLifetime::PersistentAttachedSession, None, None).unwrap();
+        gw.spawn_subagent(
+            "w3",
+            "run",
+            "s-eph",
+            "claude-code",
+            AgentLifetime::EphemeralChild,
+            None,
+            None,
+        )
+        .unwrap();
+        gw.spawn_subagent(
+            "w3",
+            "run",
+            "s-persist",
+            "codex",
+            AgentLifetime::PersistentAttachedSession,
+            None,
+            None,
+        )
+        .unwrap();
         // Detach the ephemeral child → terminated.
         gw.detach_agent_session("w3", "s-eph").unwrap();
-        assert_eq!(gw.agent_session("s-eph").unwrap().runtime_state, "terminated");
+        assert_eq!(
+            gw.agent_session("s-eph").unwrap().runtime_state,
+            "terminated"
+        );
         // Detach the persistent session → survives (detached, not terminated).
         gw.detach_agent_session("w3", "s-persist").unwrap();
         let p = gw.agent_session("s-persist").unwrap();
@@ -1912,7 +2386,16 @@ mod p49_runtime_tests {
     #[test]
     fn agent_session_checkpoint_and_steer() {
         let mut gw = gw_with_work("w4");
-        gw.spawn_subagent("w4", "r", "s1", "a", AgentLifetime::PersistentAttachedSession, Some("pty".into()), Some("wt".into())).unwrap();
+        gw.spawn_subagent(
+            "w4",
+            "r",
+            "s1",
+            "a",
+            AgentLifetime::PersistentAttachedSession,
+            Some("pty".into()),
+            Some("wt".into()),
+        )
+        .unwrap();
         gw.checkpoint_agent_session("w4", "s1").unwrap();
         gw.checkpoint_agent_session("w4", "s1").unwrap();
         assert_eq!(gw.agent_session("s1").unwrap().last_checkpoint, 2);
@@ -1943,7 +2426,11 @@ mod p49_runtime_tests {
         assert!(!forged.is_human_gesture());
         assert!(resolve_remote_approval(&forged).is_err());
         // A native attestation with an empty nonce is not trusted (no binding).
-        let empty = TrustedGestureAttestation { auth_source: AuthSource::NativeGesture, gesture_origin: "x".into(), nonce: String::new() };
+        let empty = TrustedGestureAttestation {
+            auth_source: AuthSource::NativeGesture,
+            gesture_origin: "x".into(),
+            nonce: String::new(),
+        };
         assert!(!empty.is_human_gesture());
         assert!(resolve_remote_approval(&empty).is_err());
     }
@@ -1957,7 +2444,9 @@ mod p49_runtime_tests {
         assert!(ContextReleasePolicy::Approval.decide(true, true).is_ok());
         // Redacted / ReferenceOnly may auto-release externally.
         assert!(ContextReleasePolicy::Redacted.decide(true, false).is_ok());
-        assert!(ContextReleasePolicy::ReferenceOnly.decide(true, false).is_ok());
+        assert!(ContextReleasePolicy::ReferenceOnly
+            .decide(true, false)
+            .is_ok());
         assert!(ContextReleasePolicy::Redacted.auto_releasable_externally());
         assert!(!ContextReleasePolicy::Approval.auto_releasable_externally());
     }

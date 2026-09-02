@@ -106,11 +106,12 @@ impl EgressPolicyEngine {
     }
 
     /// Evaluate one release. Deterministic:
-    /// 1. unknown profile → Deny (fail-closed),
-    /// 2. zone not allowed by the profile → Deny,
-    /// 3. destination denied → Deny,
-    /// 4. destination redact-listed → Redact,
-    /// 5. otherwise Allow.
+    ///
+    ///   1. unknown profile → Deny (fail-closed),
+    ///   2. zone not allowed by the profile → Deny,
+    ///   3. destination denied → Deny,
+    ///   4. destination redact-listed → Redact,
+    ///   5. otherwise Allow.
     /// A `scan_signal` (managed secret / pattern) from the vault egress
     /// firewall downgrades Allow → Redact and Redact stays Redact.
     pub fn evaluate(
@@ -183,6 +184,9 @@ impl EgressPolicyEngine {
         decision
     }
 
+    // The decision table is intentionally explicit; each column is part of the
+    // release contract and the receipt must persist them all.
+    #[allow(clippy::too_many_arguments)]
     fn receipt(
         &mut self,
         profile: &str,

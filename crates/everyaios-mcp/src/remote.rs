@@ -232,7 +232,7 @@ pub fn connect(server_url: &str, http: &dyn HttpTransport) -> Result<RemoteTarge
     }
     let resource = discover_protected_resource(server_url, http)?;
     let auth = discover_authorization_server(&resource, server_url, http)?;
-    let redirect_uri = format!("http://127.0.0.1:0/oauth/callback");
+    let redirect_uri = "http://127.0.0.1:0/oauth/callback".to_string();
     let client = if auth.registration_endpoint.is_empty() {
         // No dynamic registration — the caller must supply a client_id.
         return Err(RemoteError::NeedsPreRegisteredClient);

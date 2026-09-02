@@ -132,7 +132,6 @@ pub mod embedded {
 
     use seekstorm::commit::Commit;
     use seekstorm::index::IndexDocument;
-    use seekstorm::search::Search;
 
     enum Request {
         Add(String, String),
@@ -202,7 +201,7 @@ pub mod embedded {
             Ok(rt) => rt,
             Err(_) => return,
         };
-        let _ = rt.block_on(async move {
+        rt.block_on(async move {
             let index = match open_or_create(&index_path).await {
                 Ok(i) => i,
                 Err(_) => return,

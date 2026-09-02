@@ -1218,7 +1218,7 @@ mod tests {
             ..Default::default()
         };
         assert!(
-            assemble_tool_calls(&[fragment.clone()], true).is_empty(),
+            assemble_tool_calls(std::slice::from_ref(&fragment), true).is_empty(),
             "length-truncated call must be dropped (fail-closed)"
         );
         // Same unparsable args on a clean finish stay a `_raw` rescue.

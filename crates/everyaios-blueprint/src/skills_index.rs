@@ -158,9 +158,7 @@ pub fn compose_stack(
             outcome
                 .selected
                 .iter()
-                .find(|s| {
-                    s.name != *name && index.get(&s.name).map_or(false, |e| e.tags.contains(t))
-                })
+                .find(|s| s.name != *name && index.get(&s.name).is_some_and(|e| e.tags.contains(t)))
                 .map(|s| s.name.clone())
         }) {
             outcome

@@ -25,6 +25,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+/// Push-completion hook fired on terminal transitions.
+type TaskWatcher = Box<dyn Fn(&TaskRecord) + Send>;
+
 /// Terminal records are pruned after this age (7 days).
 pub const RETENTION_MS: i64 = 7 * 24 * 3600 * 1000;
 /// Default lost-state grace window (5-minute class, B7).
@@ -166,7 +169,7 @@ pub struct TaskLedger {
     records: Vec<TaskRecord>,
     store: Box<dyn TaskStore + Send>,
     /// Push-completion hooks: fired on every terminal transition.
-    watchers: Vec<Box<dyn Fn(&TaskRecord) + Send>>,
+    watchers: Vec<TaskWatcher>,
     grace_ms: i64,
     next_seq: u64,
     clock: std::sync::Arc<dyn Fn() -> i64 + Send + Sync>,

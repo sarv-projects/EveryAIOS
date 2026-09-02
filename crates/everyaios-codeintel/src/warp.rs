@@ -210,7 +210,7 @@ mod tests {
                 n,
                 n / 2.0,
                 1.0,
-                text.bytes().map(|b| f32::from(b)).sum::<f32>() % 7.0,
+                text.bytes().map(f32::from).sum::<f32>() % 7.0,
             ]
         }
     }

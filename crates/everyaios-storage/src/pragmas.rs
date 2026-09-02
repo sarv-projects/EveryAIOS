@@ -49,15 +49,22 @@ mod tests {
     /// on-disk connection (in-memory connections ignore some journal pragmas).
     #[test]
     fn non_vault_db_gets_wal_and_synchronous_normal() {
-        let dir = std::env::temp_dir().join(format!("everyaios-pragmas-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-pragmas-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("idx.sqlite");
         let conn = Connection::open(&path).unwrap();
         apply_non_vault(&conn).unwrap();
 
         // synchronous=NORMAL (1), WAL journal, bounded WAL + throttled checkpoint.
-        assert_eq!(pragma_i64(&conn, "PRAGMA synchronous;"), 1, "synchronous must be NORMAL (1)");
-        let journal: String = conn.query_row("PRAGMA journal_mode;", [], |r| r.get(0)).unwrap();
+        assert_eq!(
+            pragma_i64(&conn, "PRAGMA synchronous;"),
+            1,
+            "synchronous must be NORMAL (1)"
+        );
+        let journal: String = conn
+            .query_row("PRAGMA journal_mode;", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(journal, "wal", "journal_mode must be WAL");
         assert_eq!(pragma_i64(&conn, "PRAGMA journal_size_limit;"), 67_108_864);
         assert_eq!(pragma_i64(&conn, "PRAGMA wal_autocheckpoint;"), 4000);
@@ -72,7 +79,11 @@ mod tests {
         let path = dir.join("fts.sqlite");
         let conn = Connection::open(&path).unwrap();
         apply_read_heavy_index(&conn).unwrap();
-        assert_eq!(pragma_i64(&conn, "PRAGMA mmap_size;"), 268_435_456, "mmap_size must be 256MiB");
+        assert_eq!(
+            pragma_i64(&conn, "PRAGMA mmap_size;"),
+            268_435_456,
+            "mmap_size must be 256MiB"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -80,13 +91,19 @@ mod tests {
     /// reserved for the read-heavy helper) — keeps write DBs off mmap.
     #[test]
     fn plain_pragma_call_leaves_mmap_default() {
-        let dir = std::env::temp_dir().join(format!("everyaios-mmap-default-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "everyaios-mmap-default-test-{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("plain.sqlite");
         let conn = Connection::open(&path).unwrap();
         apply_non_vault(&conn).unwrap();
         let mmap = pragma_i64(&conn, "PRAGMA mmap_size;");
-        assert!(mmap != 268_435_456, "mmap must not be applied by the plain call");
+        assert!(
+            mmap != 268_435_456,
+            "mmap must not be applied by the plain call"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

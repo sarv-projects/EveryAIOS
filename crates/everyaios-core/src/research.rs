@@ -1,9 +1,9 @@
 //! H31 corpus-first research surface (doc 68 §2.2 — Gemini-Notebook-class):
 //! pick sources (files / folders / URLs / emails) → grounded, cited answers
 //! + report artifacts, reusing the C-series RAG + G2 deep research + EV1
-//! citation fidelity. The **audio-digest output** (podcast-style Audio
-//! Overview) rides H28 TTS — recorded here as the composition seam, not
-//! faked.
+//!   citation fidelity. The **audio-digest output** (podcast-style Audio
+//!   Overview) rides H28 TTS — recorded here as the composition seam, not
+//!   faked.
 //!
 //! This module owns the *research contract*: source selection, the
 //! grounded answer with per-claim citations, and the deterministic

@@ -2685,17 +2685,14 @@ mod tests {
                     "args": {"path": p}
                 }),
             );
-            match out {
-                Ok(v) => {
-                    if v["ok"] == true {
-                        assert!(
-                            everyaios_guard::pathfloor::is_inside_root(&p, &[&root])
-                                || dir.join(&p).starts_with(&dir),
-                            "path floor allowed escape: {p}"
-                        );
-                    }
+            if let Ok(v) = out {
+                if v["ok"] == true {
+                    assert!(
+                        everyaios_guard::pathfloor::is_inside_root(&p, &[&root])
+                            || dir.join(&p).starts_with(&dir),
+                        "path floor allowed escape: {p}"
+                    );
                 }
-                Err(_) => {}
             }
         }
     }

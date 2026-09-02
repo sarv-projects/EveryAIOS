@@ -2,12 +2,13 @@
 //! vendored `models.json` baseline ships **static**; a refresh path exists
 //! for when we need it. This module owns the two halves:
 //!
-//! 1. **The 30-provider pattern** — one `SyncSpec` per provider (source URL
-//!    + the fields it owns), so a refresh is per-provider and mergeable,
-//!    never one giant opaque blob.
-//! 2. **The `bun validate`-style gate** — `validate_vendored` runs over the
-//!    shipped baseline before *any* sync output is accepted: schema shape,
-//!    non-negative pricing, the two-tier blocker rule, no duplicate ids.
+//!   1. **The 30-provider pattern** — one `SyncSpec` per provider (source
+//!      URL + the fields it owns), so a refresh is per-provider and
+//!      mergeable, never one giant opaque blob.
+//!   2. **The `bun validate`-style gate** — `validate_vendored` runs over
+//!      the shipped baseline before *any* sync output is accepted: schema
+//!      shape, non-negative pricing, the two-tier blocker rule, no
+//!      duplicate ids.
 //!
 //! The live fetch (network) is a documented runtime seam — this module is
 //! pure and testable without network access.

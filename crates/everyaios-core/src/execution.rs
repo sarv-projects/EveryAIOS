@@ -287,6 +287,7 @@ impl ExecutionKernel {
         Self::default()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn begin(
         &mut self,
         trigger: ExecutionTrigger,
@@ -311,6 +312,7 @@ impl ExecutionKernel {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn begin_named(
         &mut self,
         id: String,

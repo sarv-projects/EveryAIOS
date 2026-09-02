@@ -242,7 +242,7 @@ mod tests {
         push_record(&mut buf, 11, 10, 0x0001, "second.bin");
         // Cut 3 bytes into the second record: the parser must keep the first
         // record and stop (not panic, not emit a partial second record).
-        let second_start = 48 + (60 + 16 + 7) & !7; // first record length
+        let second_start = (48 + (60 + 16 + 7)) & !7; // first record length
         buf.truncate(second_start + 10);
         let (recs, next) = parse_record_stream(&buf);
         assert_eq!(recs.len(), 1);

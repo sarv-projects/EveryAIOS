@@ -1036,7 +1036,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(30));
             assert!(g2.lock().unwrap().approve(&tid));
         });
-        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), true);
+        assert!(rx.recv_timeout(Duration::from_secs(2)).unwrap());
     }
 
     #[test]

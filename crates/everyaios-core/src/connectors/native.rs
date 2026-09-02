@@ -176,6 +176,12 @@ impl SqlGuard {
     }
 }
 
+impl Default for SqlGuard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Rail 3a — column redaction: sensitive columns are never echoed back.
 #[derive(Debug, Clone, Default)]
 pub struct ColumnRedaction {

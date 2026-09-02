@@ -801,7 +801,7 @@ mod tests {
         let _ = ring.add_key(spec("anthropic", "prod-3", "sk-c")).unwrap();
         let providers = ring.providers_with_keys().unwrap();
         assert_eq!(providers, vec!["anthropic", "openai"]); // distinct + sorted, no secrets
-        // Deleting the last key of a provider removes it from the set.
+                                                            // Deleting the last key of a provider removes it from the set.
         ring.delete_key("anthropic", "prod-3").unwrap();
         assert_eq!(ring.providers_with_keys().unwrap(), vec!["openai"]);
     }

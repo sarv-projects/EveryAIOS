@@ -51,10 +51,11 @@ impl ResourceKind {
 
 /// The ManagedResource lifecycle (discovery ≠ install ≠ activation). Ordered
 /// so `>=` comparisons express "at least this far along".
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedResource {
     /// Found + described (default from a bare discovery pass).
+    #[default]
     Discovered,
     /// Passed validation (schema/signature/allow-list).
     Validated,
@@ -76,12 +77,6 @@ pub enum ManagedResource {
     RollingBack,
     /// Removed/uninstalled.
     Removed,
-}
-
-impl Default for ManagedResource {
-    fn default() -> Self {
-        ManagedResource::Discovered
-    }
 }
 
 impl ManagedResource {
@@ -186,7 +181,11 @@ impl ResourceCard {
         ResourceCard {
             kind: ResourceKind::Provider,
             id: rec.id.clone(),
-            name: if rec.name.is_empty() { rec.id.clone() } else { rec.name.clone() },
+            name: if rec.name.is_empty() {
+                rec.id.clone()
+            } else {
+                rec.name.clone()
+            },
             version: rec.source_version.clone(),
             source: source_label(rec.source),
             auth,

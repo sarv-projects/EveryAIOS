@@ -253,8 +253,10 @@ mod tests {
 
     #[test]
     fn destructive_cap_blocks() {
-        let mut policy = EccPolicy::default();
-        policy.max_destructive_per_session = 2;
+        let policy = EccPolicy {
+            max_destructive_per_session: 2,
+            ..Default::default()
+        };
         let events = vec![ev("plan", true), ev("delete", true), ev("delete", true)];
         assert!(matches!(
             plan_before_build(&policy, &events, "delete"),
@@ -274,8 +276,10 @@ mod tests {
 
     #[test]
     fn scan_flags_runaway_rewrite_streak() {
-        let mut policy = EccPolicy::default();
-        policy.max_consecutive_rewrites = 2;
+        let policy = EccPolicy {
+            max_consecutive_rewrites: 2,
+            ..Default::default()
+        };
         let events = vec![
             ev("plan", true),
             ev("rewrite", false),

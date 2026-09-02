@@ -96,10 +96,6 @@ pub use challenge::{
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
 pub use config::{Config, ConfigError};
 pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
-pub use openai_server::{
-    ChatCompletionRequest, ChatMessage, CompletionBackend, CompletionResult, ModelLister,
-    ModelRow, OpenAiServer,
-};
 pub use eval_service::EvalService;
 /// Backward-compat alias: [`Execution`] was renamed to [`Work`] (P47.4).
 pub use execution::Work as Execution;
@@ -119,6 +115,10 @@ pub use hwfit::{
 pub use local::{LocalConfig, LocalError, LocalManager, LocalModelInfo};
 pub use memory_service::{FactStatus, MemoryService, StoredFact};
 pub use messaging::{MessageReminder, ReminderQueue};
+pub use openai_server::{
+    ChatCompletionRequest, ChatMessage, CompletionBackend, CompletionResult, ModelLister, ModelRow,
+    OpenAiServer,
+};
 pub use plan_service::PlanService;
 pub use provider_ref::{
     classify_category, ingest_provider_reference, parse_provider_reference, AuthClass,

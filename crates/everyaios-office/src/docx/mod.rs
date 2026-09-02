@@ -331,7 +331,7 @@ mod tests {
         let mut edited = DocxEngine::open(original).unwrap();
         edited.patch_block("p1", "Goodbye, world!").unwrap();
         let out = edited.save().unwrap();
-        let mut reopened = DocxEngine::open(out.clone()).unwrap();
+        let reopened = DocxEngine::open(out.clone()).unwrap();
         assert_eq!(
             reopened.render_text(),
             "Goodbye, world!\nLine one\nline two\ncell A1 | cell B1\n"

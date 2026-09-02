@@ -59,7 +59,11 @@ pub struct UserMessage {
 /// when there are no facts to pass. Callers fetch `core_facts()` from the
 /// shared `MemoryService` (best-effort — a missing memory handler never
 /// blocks a turn, exactly like the inbuilt path).
-pub fn build_chief_prompt(text: &str, core_facts: &[String], governance: &GovernedSession) -> String {
+pub fn build_chief_prompt(
+    text: &str,
+    core_facts: &[String],
+    governance: &GovernedSession,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     if !core_facts.is_empty() {
         parts.push(format!(
@@ -600,7 +604,10 @@ mod tests {
 
     #[test]
     fn build_chief_prompt_injects_passport_and_governance() {
-        let facts = vec!["user prefers concise answers".to_string(), "project uses pnpm".to_string()];
+        let facts = vec![
+            "user prefers concise answers".to_string(),
+            "project uses pnpm".to_string(),
+        ];
         let prompt = build_chief_prompt(
             "Summarize the repo",
             &facts,
@@ -794,7 +801,7 @@ mod tests {
             .unwrap();
 
         // Drain events: a permission request arrives; answer it via the seam.
-        let mut events = chief.stream_events(&h);
+        let events = chief.stream_events(&h);
         let mut saw_permission = false;
         let mut saw_done = false;
         while let Ok(ev) = events.recv() {

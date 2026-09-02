@@ -23,6 +23,9 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+
+/// Optional post-exchange hook (the persistence seam for `SyncServer`).
+type SyncObserver = Arc<dyn Fn(&SyncSession) + Send + Sync>;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -177,7 +180,7 @@ impl SyncServer {
     pub fn start(
         bind: SocketAddr,
         session: Arc<Mutex<SyncSession>>,
-        on_synced: Option<Arc<dyn Fn(&SyncSession) + Send + Sync>>,
+        on_synced: Option<SyncObserver>,
     ) -> Result<Self, WireError> {
         let listener = TcpListener::bind(bind)?;
         listener.set_nonblocking(true)?;
