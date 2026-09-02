@@ -279,8 +279,13 @@ export class ToolExecutor {
         }
       }
     } catch (e) {
-      if (e instanceof Error && e.message.startsWith("tool")) throw e;
-      /* guard/evaluate missing in tests — fall through to tool/exec */
+      // A guard transport/protocol failure is not permission to continue.
+      // Rust's `tool/commit` remains the final enforcement point, but
+      // fail-closed here prevents a degraded sidecar from presenting an
+      // unreviewed action to the executor. Tests that model an older Rust
+      // endpoint must provide a `tool/exec`-only request explicitly.
+      if (e instanceof Error) throw e;
+      throw new Error(`guard pre-flight failed: ${String(e)}`);
     }
 
     const pre = (await this.request("tool/exec", {
@@ -306,12 +311,7 @@ export class ToolExecutor {
       }
     }
 
-    let consumed = false;
-    try {
-      consumed = await useTicket(this.request, ticketId, hash);
-    } catch {
-      consumed = false;
-    }
+    const consumed = await useTicket(this.request, ticketId, hash);
 
     const committed = (await this.request("tool/commit", {
       toolId,

@@ -99,7 +99,7 @@ Skills and connectors converge on **MCP** (tools/resources) + **SKILL.md**
 (instructions). Distribution is a **signed registry index** (the ACP/MCP registry
 machinery already in `everyaios-mcp`/`everyaios-acp`, signed with the same minisign
 key the updater uses). Install = Guard-2 consent (tool list + permissions) →
-sandboxed (the `everyaios-guard` sandbox profiles). This is the post-v1
+sandboxed (the `everyaios-guard` sandbox profiles), with host changes imported through a reviewed change set. A self-contained external process is not covered by the native EveryAIOS ticket/audit guarantee. This is the post-v1
 "community skills marketplace" (TODO **P9.7 / line 968**).
 
 ## Honest boundaries
