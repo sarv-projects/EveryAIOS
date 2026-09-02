@@ -1843,6 +1843,7 @@ fn stream_provider(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
     #[cfg(unix)]
     use std::io::{Read, Write};
