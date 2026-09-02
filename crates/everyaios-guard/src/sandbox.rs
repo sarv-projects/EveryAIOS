@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
-use std::process::{Child, Command, ExitStatus};
+use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -150,6 +150,15 @@ pub struct SandboxProcess {
     started_at: Instant,
 }
 
+/// The stdio endpoints and lifecycle monitor returned by a concrete sandbox
+/// launcher. The pipes are transferred to the protocol transport while the
+/// monitor retains ownership of the child process for kill/reap operations.
+pub struct SandboxedStdio {
+    pub stdin: ChildStdin,
+    pub stdout: ChildStdout,
+    pub monitor: SandboxProcess,
+}
+
 impl SandboxProcess {
     pub fn try_wait(&mut self) -> Result<Option<ExitStatus>, SandboxError> {
         self.child
@@ -159,6 +168,14 @@ impl SandboxProcess {
 
     pub fn backend(&self) -> &str {
         &self.backend
+    }
+
+    /// Take piped stdio for a protocol transport without transferring child
+    /// lifecycle ownership. The backend must have created both pipes.
+    pub fn take_stdio(&mut self) -> Result<(ChildStdin, ChildStdout), SandboxError> {
+        let stdin = self.child.stdin.take().ok_or(SandboxError::MissingMonitor)?;
+        let stdout = self.child.stdout.take().ok_or(SandboxError::MissingMonitor)?;
+        Ok((stdin, stdout))
     }
 
     pub fn wait_with_deadline(&mut self, deadline: Instant) -> Result<ExitStatus, SandboxError> {
@@ -235,7 +252,7 @@ impl LinuxBwrapBackend {
         let mut child = Command::new("bwrap");
         child.args(["--die-with-parent", "--new-session", "--clearenv"]);
         if spec.profile.no_new_privs {
-            child.arg("--unshare-user").arg("--disable-setuid");
+            child.arg("--unshare-user").args(bwrap_userns_hardening());
         }
         child.args(["--ro-bind", "/usr", "/usr"]);
         child.args(["--ro-bind", "/bin", "/bin"]);
@@ -272,6 +289,37 @@ impl LinuxBwrapBackend {
 }
 
 #[cfg(target_os = "linux")]
+impl LinuxBwrapBackend {
+    /// Spawn a sandboxed child with piped stdio. The monitor retains process
+    /// ownership; callers may transfer only the returned endpoints.
+    pub fn spawn_stdio(
+        &self,
+        spec: &SandboxSpec,
+        command: &[String],
+    ) -> Result<SandboxedStdio, SandboxError> {
+        self.validate(spec)?;
+        let mut child = Self::command(spec, command)?;
+        child.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        let mut child = child
+            .spawn()
+            .map_err(|_| SandboxError::UnsupportedPlatform)?;
+        let stdin = child.stdin.take().ok_or(SandboxError::MissingMonitor)?;
+        let stdout = child.stdout.take().ok_or(SandboxError::MissingMonitor)?;
+        let pid = child.id();
+        Ok(SandboxedStdio {
+            stdin,
+            stdout,
+            monitor: SandboxProcess {
+                child,
+                backend: "linux-bwrap".into(),
+                pid,
+                started_at: Instant::now(),
+            },
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
 impl SandboxBackend for LinuxBwrapBackend {
     fn capabilities(&self) -> Vec<String> {
         vec![
@@ -293,7 +341,9 @@ impl SandboxBackend for LinuxBwrapBackend {
         command: &[String],
     ) -> Result<SandboxProcess, SandboxError> {
         self.validate(spec)?;
-        let child = Self::command(spec, command)?
+        let mut command = Self::command(spec, command)?;
+        command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        let child = command
             .spawn()
             .map_err(|_| SandboxError::UnsupportedPlatform)?;
         let pid = child.id();
@@ -314,6 +364,44 @@ pub fn linux_bwrap_available() -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+/// Userns-hardening flags for the local bubblewrap, version-detected once.
+///
+/// bubblewrap 0.9.0 removed `--disable-setuid` (and later releases followed
+/// upstream's rename to `--disable-userns` / `--assert-userns-disabled`,
+/// which only exist on 0.9+). Passing the old flag makes every sandboxed
+/// spawn on a modern distro fail, so the builder must pick the flags the
+/// installed bwrap actually understands. Parse failure falls back to the
+/// legacy flag (correct for pre-0.9; on 0.9+ it fails closed with a clear
+/// bwrap error rather than silently weakening the policy).
+#[cfg(target_os = "linux")]
+fn bwrap_userns_hardening() -> &'static [&'static str] {
+    use std::sync::OnceLock;
+    static FLAGS: OnceLock<&'static [&'static str]> = OnceLock::new();
+    FLAGS.get_or_init(|| {
+        let version = Command::new("bwrap")
+            .arg("--version")
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let modern = version
+            .split_whitespace()
+            .last()
+            .and_then(|v| {
+                let mut parts = v.split('.');
+                let major: u64 = parts.next()?.parse().ok()?;
+                let minor: u64 = parts.next().unwrap_or("0").parse().ok()?;
+                Some((major, minor))
+            })
+            .map(|(major, minor)| major > 0 || (major == 0 && minor >= 9))
+            .unwrap_or(false);
+        if modern {
+            &["--disable-userns", "--assert-userns-disabled"]
+        } else {
+            &["--disable-setuid"]
+        }
+    })
 }
 
 /// Runtime containment capabilities. This is deliberately capability-based:

@@ -16,3 +16,5 @@ sha2 = { workspace = true }
 flate2 = { workspace = true }
 zip = { workspace = true }
 tar = { workspace = true }
+# Linux-only at runtime; the sandbox APIs are #[cfg(target_os = "linux")]-gated.
+everyaios-guard = { path = "../everyaios-guard" }

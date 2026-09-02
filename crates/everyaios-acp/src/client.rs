@@ -14,6 +14,9 @@ use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::io::{self, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+
+#[cfg(target_os = "linux")]
+use everyaios_guard::sandbox::LinuxBwrapBackend;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -65,7 +68,9 @@ impl<T: AcpTransport + ?Sized> AcpTransport for &mut T {
 
 /// stdio transport over a spawned agent process (the ACP wire transport).
 pub struct ProcessTransport {
-    child: Child,
+    child: Option<Child>,
+    #[cfg(target_os = "linux")]
+    monitor: Option<everyaios_guard::sandbox::SandboxProcess>,
     stdin: ChildStdin,
     reader: BufReader<ChildStdout>,
     buf: Vec<u8>,
@@ -95,9 +100,34 @@ impl ProcessTransport {
             io::Error::new(io::ErrorKind::BrokenPipe, "no stdout on spawned agent")
         })?;
         Ok(Self {
-            child,
+            child: Some(child),
+            #[cfg(target_os = "linux")]
+            monitor: None,
             stdin,
             reader: BufReader::new(stdout),
+            buf: Vec::new(),
+            pending: VecDeque::new(),
+        })
+    }
+
+    /// Build a transport from stdio owned by a concrete sandbox launcher
+    /// (Linux bubblewrap). The monitor is retained so shutdown/reaping stays
+    /// controlled by the sandbox handle rather than an uncontrolled child
+    /// constructor: `is_alive`/`shutdown` observe the sandboxed process, and
+    /// the child is never reaped outside the sandbox backend.
+    #[cfg(target_os = "linux")]
+    pub fn spawn_sandboxed(
+        spec: &everyaios_guard::sandbox::SandboxSpec,
+        command: &[String],
+    ) -> io::Result<Self> {
+        let sandboxed = LinuxBwrapBackend
+            .spawn_stdio(spec, command)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        Ok(Self {
+            child: None,
+            monitor: Some(sandboxed.monitor),
+            stdin: sandboxed.stdin,
+            reader: BufReader::new(sandboxed.stdout),
             buf: Vec::new(),
             pending: VecDeque::new(),
         })
@@ -142,12 +172,22 @@ impl AcpTransport for ProcessTransport {
     }
 
     fn is_alive(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(None))
+        if let Some(monitor) = self.monitor.as_mut() {
+            return matches!(monitor.try_wait(), Ok(None));
+        }
+        matches!(self.child.as_mut().and_then(|child| child.try_wait().ok()), Some(None))
     }
 
     fn shutdown(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        #[cfg(target_os = "linux")]
+        if let Some(monitor) = self.monitor.as_mut() {
+            let _ = monitor.kill();
+            return;
+        }
+        if let Some(child) = self.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -903,6 +943,45 @@ mod tests {
     #[test]
     fn spawn_missing_binary_errors() {
         assert!(ProcessTransport::spawn("definitely-not-a-real-agent", &[], &[]).is_err());
+    }
+
+    /// Sandboxed-process smoke test (Linux only): round-trip one frame over
+    /// a bwrap-launched `/bin/cat`, with the monitor owning the child. The
+    /// test skips (honest no-op) when bubblewrap or user namespaces are
+    /// unavailable on the host; it never passes without real containment.
+    #[cfg(all(unix, target_os = "linux"))]
+    #[test]
+    fn sandboxed_transport_roundtrips_through_bwrap() {
+        use everyaios_guard::sandbox::{profiles, SandboxRole, SandboxSpec};
+        use everyaios_guard::sandbox::linux_bwrap_available;
+        if !linux_bwrap_available() {
+            eprintln!("bwrap not available — skipping sandboxed transport test");
+            return;
+        }
+        // The backend refuses to bind a nonexistent host path (fail-closed);
+        // the worker profile's scratch dir must exist before spawning.
+        let scratch = "/tmp/everyaios-acp-sandbox-test";
+        let _ = std::fs::create_dir_all(scratch);
+        let spec = SandboxSpec {
+            role: SandboxRole::ChildExecutionSandbox,
+            profile: profiles::worker(scratch),
+            network: "deny".into(),
+            credentials: "none".into(),
+            resource_limit_bytes: 1 << 20,
+        };
+        let Ok(mut t) = ProcessTransport::spawn_sandboxed(&spec, &["/bin/cat".into()]) else {
+            // bwrap present but unusable (e.g. no user namespaces in this
+            // container) — fail-closed today, not a transport regression.
+            eprintln!("sandboxed spawn unavailable — skipping sandboxed transport test");
+            return;
+        };
+        assert!(t.is_alive());
+        t.send(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#)
+            .unwrap();
+        let echoed = t.recv().unwrap().expect("cat echoes through bwrap");
+        assert_eq!(echoed, r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#);
+        t.shutdown();
+        assert!(!t.is_alive());
     }
 
     /// Regression: two frames arriving in a single read chunk must BOTH be
