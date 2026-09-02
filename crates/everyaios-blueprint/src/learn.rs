@@ -296,6 +296,7 @@ fn bump_patch(v: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::skill_store::grow_from_task;
 
     struct AllowGate;
     impl LearnGate for AllowGate {

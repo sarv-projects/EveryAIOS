@@ -209,6 +209,21 @@ describe("ToolExecutor", () => {
     expect(calls.every((c) => c.method !== "tool/commit")).toBe(true);
   });
 
+  test("guard transport failure fails closed and never reaches tool execution", async () => {
+    const calls: string[] = [];
+    const request: ToolRequest = async (method) => {
+      calls.push(method);
+      if (method === "guard/evaluate") throw new Error("guard unavailable");
+      throw new Error(`unexpected request: ${method}`);
+    };
+    const ex = new ToolExecutor(request);
+    await expect(ex.executeTool("file_ops.write", { path: "a" }, { sessionId: "s" }))
+      .rejects.toThrow("guard unavailable");
+    expect(calls).toEqual(["guard/evaluate"]);
+    expect(calls).not.toContain("tool/exec");
+    expect(calls).not.toContain("tool/commit");
+  });
+
   test("ask never auto-commits; waits until ticket_status is approved", async () => {
     let polls = 0;
     const { request, calls } = fakeRust({
