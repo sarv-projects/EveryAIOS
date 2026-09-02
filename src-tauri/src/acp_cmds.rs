@@ -31,7 +31,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use everyaios_acp::{
-    AcpSession, AuthMethod, ClientInfo, HarnessManifest, Installer, LaunchRegistry,
+    AcpSession, AuthMethod, ClientInfo, Installer, LaunchRegistry,
     PermissionDecision, Platform, PolicyVerdict, ProcessTransport, RegistryClient, RegistryPolicy,
     ToolCall, ToolKind,
 };

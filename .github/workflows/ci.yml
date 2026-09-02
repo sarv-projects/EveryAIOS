@@ -179,6 +179,12 @@ jobs:
           fi
           if [ "$err" -ne 0 ]; then exit 1; fi
           echo "core-* packages verified vendored in-repo (${#need[@]})"
+      # dist/ is gitignored for the vendored engine packages, so a fresh
+      # checkout has no .d.ts to resolve — build them before typecheck/tests
+      # (mirrors what a local dev flow does).
+      - name: Build vendored core-* packages
+        working-directory: desktop_app
+        run: pnpm --filter './packages/core-*' run build
       - name: Coordinator typecheck
         working-directory: desktop_app/packages/coordinator
         run: bun run type-check
