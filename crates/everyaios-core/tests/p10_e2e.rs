@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 //! P10.1 — E2E integration suites (cross-cutting validation of P0–P9).
 //!
 //! Each test composes the REAL public API of the shipped crates (no mocks

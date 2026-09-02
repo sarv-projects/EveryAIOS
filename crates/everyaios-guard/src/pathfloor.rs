@@ -457,6 +457,7 @@ mod grant_tests {
         assert!(!is_inside_root("/home/user", &["/workspace"]));
     }
 
+    #[cfg(unix)]
     #[test]
     fn leaf_symlink_is_not_followed_but_escape_is_refused() {
         use std::os::unix::fs::symlink;
