@@ -1,8 +1,11 @@
 //! P7.8/P49.5 — declarative sandbox policy and V1 backend resolution.
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(target_os = "linux")]
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
+#[cfg(target_os = "linux")]
+use std::process::Stdio;
+use std::process::{Child, ChildStdin, ChildStdout, Command, ExitStatus};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -173,8 +176,16 @@ impl SandboxProcess {
     /// Take piped stdio for a protocol transport without transferring child
     /// lifecycle ownership. The backend must have created both pipes.
     pub fn take_stdio(&mut self) -> Result<(ChildStdin, ChildStdout), SandboxError> {
-        let stdin = self.child.stdin.take().ok_or(SandboxError::MissingMonitor)?;
-        let stdout = self.child.stdout.take().ok_or(SandboxError::MissingMonitor)?;
+        let stdin = self
+            .child
+            .stdin
+            .take()
+            .ok_or(SandboxError::MissingMonitor)?;
+        let stdout = self
+            .child
+            .stdout
+            .take()
+            .ok_or(SandboxError::MissingMonitor)?;
         Ok((stdin, stdout))
     }
 
@@ -299,7 +310,10 @@ impl LinuxBwrapBackend {
     ) -> Result<SandboxedStdio, SandboxError> {
         self.validate(spec)?;
         let mut child = Self::command(spec, command)?;
-        child.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        child
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
         let mut child = child
             .spawn()
             .map_err(|_| SandboxError::UnsupportedPlatform)?;
@@ -342,7 +356,10 @@ impl SandboxBackend for LinuxBwrapBackend {
     ) -> Result<SandboxProcess, SandboxError> {
         self.validate(spec)?;
         let mut command = Self::command(spec, command)?;
-        command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
         let child = command
             .spawn()
             .map_err(|_| SandboxError::UnsupportedPlatform)?;

@@ -1018,7 +1018,7 @@ mod tests {
                 ])
                 .unwrap();
             assert_eq!(seqs, vec![1, 2, 3]); // receipts stable, in order
-            // A per-event append continues the same monotonic sequence.
+                                             // A per-event append continues the same monotonic sequence.
             assert_eq!(
                 log.append(EventInput::new(EventType::PlanCreated, "sess-1", "a"))
                     .unwrap(),

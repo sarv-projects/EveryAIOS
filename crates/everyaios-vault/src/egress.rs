@@ -14,6 +14,9 @@
 
 use serde::{Deserialize, Serialize};
 
+/// One managed secret pattern: a recognizable prefix/name plus its checker.
+type SecretPattern = (&'static str, fn(&str) -> bool);
+
 /// The firewall verdict for one outbound payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -75,7 +78,7 @@ impl EgressFirewall {
         }
         // 2. Secret-shaped patterns (high precision, no hex-dump noise:
         //    every pattern needs a recognizable prefix or length).
-        let patterns: &[(&str, fn(&str) -> bool)] = &[
+        let patterns: &[SecretPattern] = &[
             ("sk-ant-", |p| p.contains("sk-ant-") && p.len() >= 40),
             ("sk-proj-", |p| p.contains("sk-proj-")),
             ("sk-", |p| has_long_token(p, "sk-", 20)),

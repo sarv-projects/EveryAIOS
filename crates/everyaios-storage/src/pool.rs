@@ -107,9 +107,7 @@ impl ConnectionPool {
             .lock()
             .unwrap()
             .pop_front()
-            .ok_or(PoolError::Exhausted(
-                "all reader connections are in use",
-            ))?;
+            .ok_or(PoolError::Exhausted("all reader connections are in use"))?;
         Ok(ConnGuard {
             pool: self,
             slot,
@@ -169,7 +167,11 @@ mod tests {
         }
         seen.sort_unstable();
         seen.dedup();
-        assert_eq!(seen.len(), DEFAULT_READERS, "only pre-opened handles reused");
+        assert_eq!(
+            seen.len(),
+            DEFAULT_READERS,
+            "only pre-opened handles reused"
+        );
     }
 
     #[test]

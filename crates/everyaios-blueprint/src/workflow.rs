@@ -287,11 +287,10 @@ impl Workflow {
         for t in self.tasks.values_mut() {
             if t.state == TaskState::UpForRetry
                 && t.next_attempt_at.map(|n| n <= now).unwrap_or(true)
+                && TaskState::can_transition(TaskState::UpForRetry, TaskState::Running)
             {
-                if TaskState::can_transition(TaskState::UpForRetry, TaskState::Running) {
-                    t.state = TaskState::Running;
-                    due.push(t.id.clone());
-                }
+                t.state = TaskState::Running;
+                due.push(t.id.clone());
             }
         }
         due

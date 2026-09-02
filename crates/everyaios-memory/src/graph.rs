@@ -231,10 +231,10 @@ impl GraphStore {
     pub fn snapshot(&self, limit: usize) -> (Vec<Node>, Vec<Edge>) {
         let limit = limit.max(8);
         let mut nodes = self.nodes.clone();
-        nodes.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at));
+        nodes.sort_by_key(|n| std::cmp::Reverse(n.recorded_at));
         nodes.truncate(limit);
         let mut edges = self.edges.clone();
-        edges.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at));
+        edges.sort_by_key(|e| std::cmp::Reverse(e.recorded_at));
         edges.truncate(limit.saturating_mul(2));
         (nodes, edges)
     }
@@ -277,6 +277,7 @@ impl GraphStore {
     /// P36 (C6) — add an edge with explicit confidence + source span. Plain
     /// [`Self::add_edge`] stays the convenience path and records the edge as
     /// `Extracted` with no span.
+    #[allow(clippy::too_many_arguments)]
     pub fn add_edge_with_evidence(
         &mut self,
         src: &str,
@@ -469,7 +470,6 @@ impl GraphBackend for GraphStore {
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
 

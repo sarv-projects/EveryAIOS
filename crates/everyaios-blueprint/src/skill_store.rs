@@ -392,7 +392,7 @@ impl SkillStore {
             return Err(SkillError::NotFound(name.into()));
         }
         std::fs::remove_dir_all(dir)?;
-        let _ = self.unpin(name);
+        self.unpin(name);
         Ok(())
     }
 
@@ -484,7 +484,7 @@ pub struct SkillPin {
 
 /// hex sha-256 of a byte slice.
 pub fn sha256_hex(bytes: &[u8]) -> String {
-    hex_of(&Sha256::digest(bytes).to_vec())
+    hex_of(&Sha256::digest(bytes))
 }
 
 fn hex_of(b: &[u8]) -> String {

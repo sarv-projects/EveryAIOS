@@ -105,7 +105,7 @@ fn extract_markdown(input: &str) -> String {
         line = line.replace('`', "");
         // Emphasis markers: `**bold**`, `__bold__`, `*em*`, `_em_` → text.
         line = line.replace("**", "").replace("__", "");
-        line = line.replace('*', "").replace('_', "");
+        line = line.replace(['*', '_'], "");
         // HTML comments.
         line = strip_html_comments(&line);
         out.push_str(&line);
@@ -163,7 +163,7 @@ fn extract_html(input: &str) -> String {
             let lower = window.to_ascii_lowercase();
             if lower.starts_with("/script") || lower.starts_with("/style") {
                 in_script = false;
-                while let Some(n) = chars.next() {
+                for n in chars.by_ref() {
                     if n == '>' {
                         break;
                     }

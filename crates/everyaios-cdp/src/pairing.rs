@@ -85,21 +85,24 @@ pub fn chrome_default_user_data_dirs() -> Vec<PathBuf> {
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from);
-    let Some(home) = home else {
-        return out;
-    };
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        out.push(home.join(".config/google-chrome"));
-        out.push(home.join(".config/chromium"));
-        out.push(home.join(".config/google-chrome-beta"));
-        out.push(home.join(".config/google-chrome-unstable"));
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let app = home.join("Library/Application Support");
-        out.push(app.join("Google/Chrome"));
-        out.push(app.join("Chromium"));
+        let Some(home) = home else {
+            return out;
+        };
+        #[cfg(target_os = "linux")]
+        {
+            out.push(home.join(".config/google-chrome"));
+            out.push(home.join(".config/chromium"));
+            out.push(home.join(".config/google-chrome-beta"));
+            out.push(home.join(".config/google-chrome-unstable"));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let app = home.join("Library/Application Support");
+            out.push(app.join("Google/Chrome"));
+            out.push(app.join("Chromium"));
+        }
     }
     #[cfg(target_os = "windows")]
     {

@@ -35,6 +35,9 @@ pub enum Health {
     Unknown,
 }
 
+// Deliberate: the default is `Unknown`, not the first variant (`Healthy`),
+// so `#[derive(Default)]` would change semantics if the enum is reordered.
+#[allow(clippy::derivable_impls)]
 impl Default for Health {
     fn default() -> Self {
         Health::Unknown
@@ -165,8 +168,7 @@ impl RoutingFeed {
 
     /// True when `id` (or one of its aliases) is in the credential set.
     fn is_credentialed(&self, p: &ProviderRecord) -> bool {
-        self.credentialed.contains(&p.id)
-            || p.aliases.iter().any(|a| self.credentialed.contains(a))
+        self.credentialed.contains(&p.id) || p.aliases.iter().any(|a| self.credentialed.contains(a))
     }
 
     /// Whether the provider needs a vault-held API key at all (P50.3.6).
@@ -278,7 +280,10 @@ impl RoutingFeed {
                 let missing = required.iter().any(|c| !verified.contains(c));
                 // The credential gate holds in the fallback too: a dead
                 // provider still needs a key to be a retry candidate.
-                if health == Health::Down && !missing && (self.is_credentialed(p) || !Self::requires_vault_key(p.auth)) {
+                if health == Health::Down
+                    && !missing
+                    && (self.is_credentialed(p) || !Self::requires_vault_key(p.auth))
+                {
                     ranked.push(RankedProvider {
                         id: p.id.clone(),
                         score: 0.0,
@@ -307,7 +312,9 @@ impl RoutingFeed {
 
 /// A tiny stable hash of the requirements (cache key component).
 fn req_hash(req: &RouteRequirements) -> u64 {
-    (req.requires_tools as u64) | ((req.requires_structured_output as u64) << 1) | ((req.requires_codex as u64) << 2)
+    (req.requires_tools as u64)
+        | ((req.requires_structured_output as u64) << 1)
+        | ((req.requires_codex as u64) << 2)
 }
 
 #[cfg(test)]
@@ -356,7 +363,10 @@ mod tests {
         credential_all(&mut feed, &["a", "b"]);
         feed.set_health("a", Health::Healthy);
         feed.set_health("b", Health::Degraded);
-        let d = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
+        let d = feed.decide(&RouteRequirements {
+            requires_tools: true,
+            ..Default::default()
+        });
         assert_eq!(d.top(), Some("a")); // healthy beats degraded
         assert_eq!(d.ranked.len(), 2);
     }
@@ -370,10 +380,16 @@ mod tests {
         credential_all(&mut feed, &["a", "b"]);
         feed.set_health("a", Health::Healthy);
         feed.set_health("b", Health::Healthy);
-        let d = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
+        let d = feed.decide(&RouteRequirements {
+            requires_tools: true,
+            ..Default::default()
+        });
         assert_eq!(d.ranked.len(), 1);
         assert_eq!(d.top(), Some("a"));
-        assert!(d.excluded.iter().any(|e| e.id == "b" && e.reason.contains("unverified")));
+        assert!(d
+            .excluded
+            .iter()
+            .any(|e| e.id == "b" && e.reason.contains("unverified")));
     }
 
     #[test]
@@ -384,9 +400,15 @@ mod tests {
         credential_all(&mut feed, &["a", "b"]);
         feed.set_health("a", Health::Down);
         feed.set_health("b", Health::Healthy);
-        let d = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
+        let d = feed.decide(&RouteRequirements {
+            requires_tools: true,
+            ..Default::default()
+        });
         assert_eq!(d.top(), Some("b"));
-        assert!(d.excluded.iter().any(|e| e.id == "a" && e.reason.contains("Down")));
+        assert!(d
+            .excluded
+            .iter()
+            .any(|e| e.id == "a" && e.reason.contains("Down")));
     }
 
     #[test]
@@ -396,7 +418,10 @@ mod tests {
         feed.load_registry(&reg);
         credential_all(&mut feed, &["a"]);
         feed.set_health("a", Health::Down);
-        let d = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
+        let d = feed.decide(&RouteRequirements {
+            requires_tools: true,
+            ..Default::default()
+        });
         // Only candidate is Down but capability-verified → readmitted at score 0.
         assert_eq!(d.top(), Some("a"));
         assert_eq!(d.ranked[0].score, 0.0);
@@ -410,7 +435,10 @@ mod tests {
         credential_all(&mut feed, &["a"]);
         feed.set_health("a", Health::Healthy);
         let g1 = feed.generation();
-        let d1 = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
+        let d1 = feed.decide(&RouteRequirements {
+            requires_tools: true,
+            ..Default::default()
+        });
         assert_eq!(d1.generation, g1);
         assert_eq!(d1.ranked.len(), 1);
 
@@ -421,7 +449,10 @@ mod tests {
         feed.set_health("c", Health::Healthy);
         let g2 = feed.generation();
         assert_ne!(g1, g2);
-        let d2 = feed.decide(&RouteRequirements { requires_tools: true, ..Default::default() });
+        let d2 = feed.decide(&RouteRequirements {
+            requires_tools: true,
+            ..Default::default()
+        });
         assert_eq!(d2.generation, g2);
         assert_eq!(d2.ranked.len(), 2); // 'c' now visible → cache did not stick
     }
@@ -463,8 +494,16 @@ mod tests {
         // No credential set at all — 'a' requires a vault key.
         let d = feed.decide(&RouteRequirements::default());
         assert!(d.ranked.is_empty(), "unkeyed provider must never rank");
-        let e = d.excluded.iter().find(|e| e.id == "a").expect("excluded entry");
-        assert!(e.reason.contains("vault credential"), "reason: {}", e.reason);
+        let e = d
+            .excluded
+            .iter()
+            .find(|e| e.id == "a")
+            .expect("excluded entry");
+        assert!(
+            e.reason.contains("vault credential"),
+            "reason: {}",
+            e.reason
+        );
         assert!(e.reason.contains("add a provider key"));
     }
 
@@ -515,7 +554,10 @@ mod tests {
         // Everything is excluded AND unkeyed — no fallback re-admission.
         let d = feed.decide(&RouteRequirements::default());
         assert!(d.ranked.is_empty());
-        assert!(d.excluded.iter().any(|e| e.id == "a" && e.reason.contains("vault credential")));
+        assert!(d
+            .excluded
+            .iter()
+            .any(|e| e.id == "a" && e.reason.contains("vault credential")));
     }
 
     #[test]

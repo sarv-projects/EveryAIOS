@@ -101,7 +101,10 @@ impl TonePreset {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse a tone name (case-insensitive); the name differs from the
+    /// standard `FromStr` trait method because this parser is fallible to
+    /// `Option`, not `Result`.
+    pub fn parse_tone(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "neutral" => Some(TonePreset::Neutral),
             "concise" => Some(TonePreset::Concise),
@@ -222,7 +225,7 @@ pub fn load_persona(soul_md: &str) -> Result<Persona, PersonaError> {
         return Err(PersonaError::MissingBody);
     }
     let tone = match fields.get("tone") {
-        Some(t) => TonePreset::from_str(t).ok_or_else(|| PersonaError::InvalidTone(t.clone()))?,
+        Some(t) => TonePreset::parse_tone(t).ok_or_else(|| PersonaError::InvalidTone(t.clone()))?,
         None => TonePreset::Neutral,
     };
     Ok(Persona {
@@ -396,8 +399,8 @@ mod tests {
             TonePreset::Academic,
             TonePreset::Custom,
         ] {
-            assert_eq!(TonePreset::from_str(p.as_str()), Some(p));
+            assert_eq!(TonePreset::parse_tone(p.as_str()), Some(p));
         }
-        assert_eq!(TonePreset::from_str("nope"), None);
+        assert_eq!(TonePreset::parse_tone("nope"), None);
     }
 }

@@ -19,14 +19,14 @@
 
 pub mod checkpoint;
 pub mod cleanup;
-pub mod pool;
-pub mod pragmas;
 pub mod content;
 pub mod dedup;
 pub mod events;
 pub mod finder;
 pub mod hash_cache;
 pub mod health;
+pub mod pool;
+pub mod pragmas;
 pub mod search;
 pub mod snapshot;
 pub mod treemap;

@@ -149,8 +149,8 @@ impl SymbolGraph {
             .filter(|e| {
                 let s = symbols.iter().find(|x| x.name == e.source);
                 let t = symbols.iter().find(|x| x.name == e.target);
-                s.map_or(false, |x| changed_files.contains(&x.file))
-                    || t.map_or(false, |x| changed_files.contains(&x.file))
+                s.is_some_and(|x| changed_files.contains(&x.file))
+                    || t.is_some_and(|x| changed_files.contains(&x.file))
             })
             .cloned()
             .collect();

@@ -1,7 +1,7 @@
 //! One-off tool for the skills-store operator: generates a fresh signing key
 //! + signed seed index, printing the public key b64 and the signed index JSON
-//! that the *app* embeds (the app ships only the verifying key + signed
-//! index; the private signing key never leaves the operator's tooling).
+//!   that the *app* embeds (the app ships only the verifying key + signed
+//!   index; the private signing key never leaves the operator's tooling).
 //!
 //!   cargo run -p everyaios-guard --example gen_skillstore_seed --release
 //!

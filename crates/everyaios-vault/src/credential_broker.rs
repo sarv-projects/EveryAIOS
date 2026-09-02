@@ -59,9 +59,7 @@ pub enum FillTarget {
     /// Write into a file at a workspace-floor-backed path. The broker checks
     /// the path is a plain path under a configured floor (see
     /// [`CredentialBroker::with_floor`]); otherwise it is refused.
-    File {
-        path: std::path::PathBuf,
-    },
+    File { path: std::path::PathBuf },
 }
 
 /// The Guard-2 approval seam. The shell wires this to the real approval card
@@ -129,7 +127,11 @@ impl<'a, A: FillApprover, S: FillSink> CredentialBroker<'a, A, S> {
 
     /// Resolve + approve + fill in one call. The secret is zeroized even on
     /// failure paths after the write attempt.
-    pub fn fill(&self, handle: &CredentialHandle, target: &FillTarget) -> Result<FillReceipt, CredentialFillError> {
+    pub fn fill(
+        &self,
+        handle: &CredentialHandle,
+        target: &FillTarget,
+    ) -> Result<FillReceipt, CredentialFillError> {
         // Resolve INSIDE the boundary. The raw secret never leaves this fn.
         let entry = self
             .ring
@@ -196,8 +198,9 @@ impl<'a, A: FillApprover, S: FillSink> CredentialBroker<'a, A, S> {
                 // ancestor when it doesn't).
                 let parent = path.parent().unwrap_or(path);
                 let resolved = if parent.exists() {
-                    std::fs::canonicalize(parent)
-                        .map_err(|e| CredentialFillError::InvalidTarget(format!("path floor: {e}")))?
+                    std::fs::canonicalize(parent).map_err(|e| {
+                        CredentialFillError::InvalidTarget(format!("path floor: {e}"))
+                    })?
                 } else {
                     let mut anc = parent.to_path_buf();
                     while !anc.exists() {
@@ -205,8 +208,9 @@ impl<'a, A: FillApprover, S: FillSink> CredentialBroker<'a, A, S> {
                             break;
                         }
                     }
-                    std::fs::canonicalize(&anc)
-                        .map_err(|e| CredentialFillError::InvalidTarget(format!("path floor: {e}")))?
+                    std::fs::canonicalize(&anc).map_err(|e| {
+                        CredentialFillError::InvalidTarget(format!("path floor: {e}"))
+                    })?
                 };
                 let floor_canon = std::fs::canonicalize(floor)
                     .map_err(|e| CredentialFillError::InvalidTarget(format!("floor: {e}")))?;
@@ -306,9 +310,8 @@ mod tests {
     use crate::Vault;
 
     fn ring() -> KeyRing<'static> {
-        let vault: &'static Vault = Box::leak(Box::new(
-            Vault::open_in_memory("broker-test-key").unwrap(),
-        ));
+        let vault: &'static Vault =
+            Box::leak(Box::new(Vault::open_in_memory("broker-test-key").unwrap()));
         KeyRing::new(vault)
     }
 
@@ -351,7 +354,11 @@ mod tests {
         assert!(!json.to_lowercase().contains("value"));
         // The sink got exactly the secret for exactly the target.
         assert_eq!(
-            sink.writes.lock().unwrap().get("env:PORTAL_PASSWORD").unwrap(),
+            sink.writes
+                .lock()
+                .unwrap()
+                .get("env:PORTAL_PASSWORD")
+                .unwrap(),
             b"s3cr3t!"
         );
     }
@@ -359,7 +366,8 @@ mod tests {
     #[test]
     fn secret_is_zeroized_and_never_part_of_receipt_or_error() {
         let r = ring();
-        r.add_key(spec("bank", "acct", "super-secret-12345")).unwrap();
+        r.add_key(spec("bank", "acct", "super-secret-12345"))
+            .unwrap();
         let sink = MemSink::default();
         let approver = AllowlistApprover {
             allowed: vec![("bank".into(), "acct".into(), "env:TOKEN".into())],
@@ -387,7 +395,10 @@ mod tests {
             .fill(&CredentialHandle::new("forms", "alice"), &env_target())
             .unwrap_err();
         assert!(matches!(err, CredentialFillError::Denied(_)));
-        assert!(sink.writes.lock().unwrap().is_empty(), "deny must never write");
+        assert!(
+            sink.writes.lock().unwrap().is_empty(),
+            "deny must never write"
+        );
     }
 
     #[test]
@@ -461,7 +472,11 @@ mod tests {
         );
         assert!(rc.is_ok());
         assert_eq!(
-            sink.writes.lock().unwrap().get(&format!("file:{}", worker.join("cred").display())).unwrap(),
+            sink.writes
+                .lock()
+                .unwrap()
+                .get(&format!("file:{}", worker.join("cred").display()))
+                .unwrap(),
             b"hunter2"
         );
         std::fs::remove_dir_all(&dir).ok();

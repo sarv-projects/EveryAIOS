@@ -30,9 +30,9 @@ pub mod frontmatter;
 pub mod helpers;
 pub mod inbuilt;
 pub mod iteration;
-pub mod learn;
 pub mod jobs;
 pub mod kanban;
+pub mod learn;
 pub mod loop_pattern;
 pub mod marketplace;
 pub mod md;
@@ -70,6 +70,10 @@ pub use iteration::{
     SUBAGENT_MAX_ITERATIONS, SUBAGENT_TIMEOUT_CUSTOM_SECS, SUBAGENT_TIMEOUT_GLOBAL_SECS,
 };
 pub use kanban::{Column, Dispatcher, KanbanBoard, KanbanTask};
+pub use learn::{
+    derive_name, evidence_sha256, learn_and_save, learn_from_evidence, LearnDraft, LearnGate,
+    LearnRequest,
+};
 pub use loop_pattern::{Condition, LoopPattern, LoopPatternRegistry, LoopSnapshot};
 pub use md::{BlueprintDoc, MdError};
 pub use persona::{
@@ -80,10 +84,6 @@ pub use plugin::{
     dogfood_rule, first_party_catalog, ApprovalRequest, CapabilityList, Contributes, FileBackend,
     HostFacades, LlmBackend, PluginEntry, PluginError, PluginManifest, PluginRegistry, PluginState,
     Slot, TrustFlagsDecl, ABI_VERSION,
-};
-pub use learn::{
-    derive_name, evidence_sha256, learn_and_save, learn_from_evidence, LearnDraft, LearnGate,
-    LearnRequest,
 };
 pub use skill_store::{
     grow_from_task, taste_skill, ScoredSkill, Skill, SkillError, SkillIndex, SkillManifest,

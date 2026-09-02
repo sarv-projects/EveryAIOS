@@ -352,12 +352,11 @@ fn parse_event(json: &serde_json::Value) -> Option<CalendarEvent> {
 fn parse_time(json: &serde_json::Value) -> Option<EventTime> {
     if let Some(dt) = json["dateTime"].as_str() {
         let tz = json["timeZone"].as_str().map(|s| s.to_string());
-        Some(EventTime::DateTime(dt.to_string(), tz))
-    } else if let Some(d) = json["date"].as_str() {
-        Some(EventTime::Date(d.to_string()))
-    } else {
-        None
+        return Some(EventTime::DateTime(dt.to_string(), tz));
     }
+    json["date"]
+        .as_str()
+        .map(|d| EventTime::Date(d.to_string()))
 }
 
 fn time_to_json(t: &EventTime) -> serde_json::Value {
@@ -375,7 +374,7 @@ fn time_to_json(t: &EventTime) -> serde_json::Value {
 
 fn event_time_to_ics(t: &EventTime) -> String {
     match t {
-        EventTime::DateTime(dt, _) => dt.replace('-', "").replace(':', "").replace('T', "T"),
+        EventTime::DateTime(dt, _) => dt.replace(['-', ':'], ""),
         EventTime::Date(d) => d.replace('-', ""),
     }
 }

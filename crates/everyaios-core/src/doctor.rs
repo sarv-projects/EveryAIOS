@@ -110,9 +110,7 @@ pub struct DoctorReport {
 
 impl DoctorReport {
     fn from_checks(version: String, checks: Vec<Check>) -> Self {
-        let overall = checks
-            .iter()
-            .fold(Status::Ok, |acc, c| acc.worse(c.status));
+        let overall = checks.iter().fold(Status::Ok, |acc, c| acc.worse(c.status));
         Self {
             version,
             checks,
@@ -213,7 +211,10 @@ pub fn run_doctor(version: &str, probe: &dyn DoctorProbe) -> DoctorReport {
 
     // Database / audit dir writable.
     match probe.database_writable() {
-        Ok(p) => checks.push(Check::ok("Database", format!("writable at {}", p.display()))),
+        Ok(p) => checks.push(Check::ok(
+            "Database",
+            format!("writable at {}", p.display()),
+        )),
         Err(e) => checks.push(Check::fail(
             "Database",
             format!("not writable: {e}"),
@@ -242,7 +243,11 @@ pub fn run_doctor(version: &str, probe: &dyn DoctorProbe) -> DoctorReport {
             }
         }
         Ok(_) => checks.push(Check::warn("Disk", "total size unknown", "not fatal")),
-        Err(e) => checks.push(Check::warn("Disk", format!("probe failed: {e}"), "not fatal")),
+        Err(e) => checks.push(Check::warn(
+            "Disk",
+            format!("probe failed: {e}"),
+            "not fatal",
+        )),
     }
 
     // Chrome / CDP pairing (optional — browser work degrades to honest-fail).
@@ -320,7 +325,8 @@ impl DoctorProbe for LiveProbe {
     fn vault_status(&self) -> Result<String, String> {
         let resolved = crate::resolve_vault_key(&self.data_dir).map_err(|e| e.to_string())?;
         let path = self.data_dir.join("vault.db");
-        let vault = everyaios_vault::Vault::open(&path, &resolved.key).map_err(|e| e.to_string())?;
+        let vault =
+            everyaios_vault::Vault::open(&path, &resolved.key).map_err(|e| e.to_string())?;
         let _ = vault.status();
         Ok(format!("{:?}", resolved.origin).to_lowercase())
     }
@@ -519,17 +525,42 @@ mod tests {
     #[test]
     fn disk_thresholds_map_to_status() {
         // 95% used → warn.
-        let warn = run_doctor("v", &FakeProbe { disk: Ok((5, 100)), ..Default::default() });
-        assert_eq!(warn.checks.iter().find(|c| c.name == "Disk").unwrap().status, Status::Warn);
+        let warn = run_doctor(
+            "v",
+            &FakeProbe {
+                disk: Ok((5, 100)),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            warn.checks
+                .iter()
+                .find(|c| c.name == "Disk")
+                .unwrap()
+                .status,
+            Status::Warn
+        );
         // 99% used → fail.
-        let fail = run_doctor("v", &FakeProbe { disk: Ok((1, 100)), ..Default::default() });
+        let fail = run_doctor(
+            "v",
+            &FakeProbe {
+                disk: Ok((1, 100)),
+                ..Default::default()
+            },
+        );
         assert_eq!(fail.overall, Status::Fail);
     }
 
     #[test]
     fn render_table_and_json_never_leak_secret_values() {
         // credential_count is a count; the report must never contain a value.
-        let r = run_doctor("v", &FakeProbe { creds: 3, ..Default::default() });
+        let r = run_doctor(
+            "v",
+            &FakeProbe {
+                creds: 3,
+                ..Default::default()
+            },
+        );
         let table = r.render_table();
         let json = serde_json::to_string(&r).unwrap();
         assert!(table.contains("3 BYOK key"));
@@ -542,7 +573,7 @@ mod tests {
     #[test]
     fn overall_is_worst_of_all_checks() {
         let probe = FakeProbe {
-            chrome: false, // warn
+            chrome: false,          // warn
             vault: Err("x".into()), // fail
             ..Default::default()
         };

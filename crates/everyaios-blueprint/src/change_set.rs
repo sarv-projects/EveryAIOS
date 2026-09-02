@@ -135,7 +135,11 @@ impl ReviewedImport {
             if entry.relative_path.is_absolute() {
                 return Err(ImportError::AbsolutePath(entry.relative_path.clone()));
             }
-            if entry.relative_path.components().any(|c| matches!(c, Component::ParentDir)) {
+            if entry
+                .relative_path
+                .components()
+                .any(|c| matches!(c, Component::ParentDir))
+            {
                 return Err(ImportError::PathEscape(entry.relative_path.clone()));
             }
             if planned.get(&entry.change_id).is_none() {
@@ -145,21 +149,33 @@ impl ReviewedImport {
                 return Err(ImportError::DuplicateChange(entry.change_id.clone()));
             }
             let Some((_, bytes)) = files.iter().find(|(p, _)| p == &entry.relative_path) else {
-                return Err(ImportError::ContentHashMismatch { path: entry.relative_path.clone() });
+                return Err(ImportError::ContentHashMismatch {
+                    path: entry.relative_path.clone(),
+                });
             };
             if sha256_hex(bytes) != entry.content_sha256 {
-                return Err(ImportError::ContentHashMismatch { path: entry.relative_path.clone() });
+                return Err(ImportError::ContentHashMismatch {
+                    path: entry.relative_path.clone(),
+                });
             }
         }
         let manifest = serde_json::to_vec(&entries).unwrap_or_default();
         if sha256_hex(&manifest) != expected_manifest_sha256 {
             return Err(ImportError::ManifestHashMismatch);
         }
-        Ok(Self { root, changes: entries, manifest_sha256: expected_manifest_sha256.into() })
+        Ok(Self {
+            root,
+            changes: entries,
+            manifest_sha256: expected_manifest_sha256.into(),
+        })
     }
 
     pub fn host_path(&self, relative: &Path) -> Result<PathBuf, ImportError> {
-        if relative.is_absolute() || relative.components().any(|c| matches!(c, Component::ParentDir)) {
+        if relative.is_absolute()
+            || relative
+                .components()
+                .any(|c| matches!(c, Component::ParentDir))
+        {
             return Err(ImportError::PathEscape(relative.to_path_buf()));
         }
         Ok(self.root.join(relative))
@@ -213,7 +229,7 @@ impl ChangeSet {
         };
         rec.change.depends_on.iter().all(|d| {
             self.get(d)
-                .map_or(false, |r| r.state == ChangeState::Committed)
+                .is_some_and(|r| r.state == ChangeState::Committed)
         })
     }
 
@@ -239,9 +255,7 @@ impl ChangeSet {
                 && r.state == ChangeState::Committed
                 && r.change.id != id
         }) {
-            return Err(format!(
-                "idempotency key already committed (duplicate prevented)"
-            ));
+            return Err("idempotency key already committed (duplicate prevented)".to_string());
         }
         let idx = *self
             .by_id
@@ -381,7 +395,8 @@ mod tests {
     #[test]
     fn reviewed_import_rejects_escape_and_hash_mismatch() {
         let mut cs = ChangeSet::new();
-        cs.plan(change("a", EffectClass::Reversible, vec![], "k-a")).unwrap();
+        cs.plan(change("a", EffectClass::Reversible, vec![], "k-a"))
+            .unwrap();
         let bytes = b"safe".to_vec();
         let entry = ImportEntry {
             change_id: "a".into(),
@@ -396,8 +411,12 @@ mod tests {
             &digest,
             &[(PathBuf::from("out.txt"), bytes)],
             &cs,
-        ).unwrap();
-        assert_eq!(import.host_path(Path::new("out.txt")).unwrap(), PathBuf::from("/tmp/work/out.txt"));
+        )
+        .unwrap();
+        assert_eq!(
+            import.host_path(Path::new("out.txt")).unwrap(),
+            PathBuf::from("/tmp/work/out.txt")
+        );
         assert!(matches!(
             import.host_path(Path::new("../escape")),
             Err(ImportError::PathEscape(_))

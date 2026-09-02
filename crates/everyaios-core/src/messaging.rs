@@ -170,7 +170,15 @@ impl MessageDispatcher {
             memory: HashMap::new(),
         }
     }
+}
 
+impl Default for MessageDispatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MessageDispatcher {
     pub fn register(&mut self, adapter: Box<dyn MessageAdapter>) {
         self.adapters.push(adapter);
     }
@@ -204,7 +212,7 @@ impl MessageDispatcher {
                     text,
                     conversation_id: conversation,
                 };
-                if let Ok(_) = adapter.send(&reply) {
+                if adapter.send(&reply).is_ok() {
                     replies.push(reply);
                 }
             }
@@ -452,7 +460,7 @@ impl<M: crate::email::Mailbox> MessageAdapter for EmailAdapter<M> {
             .map_err(|_| MessagingError::DeliveryFailed)?;
         Ok(all
             .into_iter()
-            .filter(|m| m.to.iter().any(|t| *t == self.self_address))
+            .filter(|m| m.to.contains(&self.self_address))
             .map(|m| InboundMessage {
                 channel: "email".into(),
                 from: m.from,
@@ -586,7 +594,7 @@ mod tests {
 
     #[test]
     fn whatsapp_adapter_round_trips_over_stub_transport() {
-        let mut wa = WhatsappAdapter::new(StubWhatsapp {
+        let wa = WhatsappAdapter::new(StubWhatsapp {
             inbox: vec![InboundMessage {
                 channel: "whatsapp".into(),
                 from: "+1555".into(),

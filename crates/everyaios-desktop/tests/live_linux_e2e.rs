@@ -38,7 +38,7 @@ fn ensure_xvfb() -> Option<std::process::Child> {
     }
     let display = free_display();
     std::env::set_var("DISPLAY", &display);
-    let child = std::process::Command::new("Xvfb")
+    let mut child = std::process::Command::new("Xvfb")
         .args([&display, "-screen", "0", "1280x800x24", "-nolisten", "tcp"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -50,6 +50,8 @@ fn ensure_xvfb() -> Option<std::process::Child> {
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+    // The Xvfb child never became ready — reap it before bailing.
+    let _ = child.wait();
     panic!("Xvfb on {display} never became ready");
 }
 

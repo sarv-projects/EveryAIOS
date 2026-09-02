@@ -170,7 +170,7 @@ impl ProviderRecord {
             self.transport = src.transport;
         }
         // Auth is a shape, always merged from the higher-precedence layer.
-        self.auth = src.auth.clone();
+        self.auth = src.auth;
         if src.api_key_env.iter().any(|v| !v.is_empty()) {
             self.api_key_env.clone_from(&src.api_key_env);
         }
@@ -206,6 +206,9 @@ impl ProviderRecord {
     }
 }
 
+// Deliberate: the default is `ApiKeyEnv`, not the first variant (`ApiKey`),
+// so `#[derive(Default)]` would change semantics if the enum is reordered.
+#[allow(clippy::derivable_impls)]
 impl Default for Auth {
     fn default() -> Self {
         // Providers that don't declare auth still get a sane typed shape so
@@ -538,15 +541,50 @@ pub fn base_registry() -> ProviderRegistry {
     //    distinct wire transports + auth shapes for a few first-party ids, and
     //    the local keyless runtime. These override the vendored row per-field.
     let overlay = [
-        ("anthropic", "Anthropic", Transport::AnthropicMessages, Auth::ApiKeyEnv),
+        (
+            "anthropic",
+            "Anthropic",
+            Transport::AnthropicMessages,
+            Auth::ApiKeyEnv,
+        ),
         ("openai", "OpenAI", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("openai-api", "OpenAI API (Responses/Codex)", Transport::CodexResponses, Auth::ApiKeyEnv),
-        ("amazon-bedrock", "Amazon Bedrock", Transport::BedrockConverse, Auth::AwsSdk),
-        ("google-vertex", "Google Vertex", Transport::OpenaiChat, Auth::Vertex),
+        (
+            "openai-api",
+            "OpenAI API (Responses/Codex)",
+            Transport::CodexResponses,
+            Auth::ApiKeyEnv,
+        ),
+        (
+            "amazon-bedrock",
+            "Amazon Bedrock",
+            Transport::BedrockConverse,
+            Auth::AwsSdk,
+        ),
+        (
+            "google-vertex",
+            "Google Vertex",
+            Transport::OpenaiChat,
+            Auth::Vertex,
+        ),
         ("nous", "Nous", Transport::OpenaiChat, Auth::OAuthDeviceCode),
-        ("opencode", "OpenCode Zen", Transport::OpenaiChat, Auth::ApiKeyEnv),
-        ("opencode-free", "OpenCode Free", Transport::OpenaiChat, Auth::Keyless),
-        ("local", "Local runtime", Transport::OpenaiChat, Auth::Keyless),
+        (
+            "opencode",
+            "OpenCode Zen",
+            Transport::OpenaiChat,
+            Auth::ApiKeyEnv,
+        ),
+        (
+            "opencode-free",
+            "OpenCode Free",
+            Transport::OpenaiChat,
+            Auth::Keyless,
+        ),
+        (
+            "local",
+            "Local runtime",
+            Transport::OpenaiChat,
+            Auth::Keyless,
+        ),
     ];
     for (id, name, transport, auth) in overlay {
         let mut rec = r.lookup_or_default(id.to_string());
@@ -564,15 +602,15 @@ pub fn base_registry() -> ProviderRegistry {
     // Aggregator classification (used so the enum is real, and so routing
     // treats these specially): OpenRouter is a passthrough aggregator;
     // OpenCode Zen/Go is a flat-namespace reseller.
-    r.by_id
-        .get_mut("openrouter")
-        .map(|rec| rec.aggregator = Some(AggregatorKind::IsAggregator));
-    r.by_id
-        .get_mut("opencode")
-        .map(|rec| rec.aggregator = Some(AggregatorKind::IsRoutingAggregator));
-    r.by_id
-        .get_mut("opencode-go")
-        .map(|rec| rec.aggregator = Some(AggregatorKind::IsRoutingAggregator));
+    if let Some(rec) = r.by_id.get_mut("openrouter") {
+        rec.aggregator = Some(AggregatorKind::IsAggregator);
+    }
+    if let Some(rec) = r.by_id.get_mut("opencode") {
+        rec.aggregator = Some(AggregatorKind::IsRoutingAggregator);
+    }
+    if let Some(rec) = r.by_id.get_mut("opencode-go") {
+        rec.aggregator = Some(AggregatorKind::IsRoutingAggregator);
+    }
 
     r.finalize();
     r
@@ -648,7 +686,9 @@ mod tests {
         // keyless local/free runtime). base_url is optional (SDK-default
         // providers carry none in models.dev).
         for row in crate::provider_seed::PROVIDER_SEED {
-            let rec = r.get(row.id).unwrap_or_else(|| panic!("missing {}", row.id));
+            let rec = r
+                .get(row.id)
+                .unwrap_or_else(|| panic!("missing {}", row.id));
             assert!(rec.transport.is_some(), "{} has a transport", row.id);
             let keyless = matches!(rec.auth, Auth::Keyless | Auth::AwsSdk | Auth::Vertex);
             assert!(
@@ -708,11 +748,34 @@ mod tests {
         // including the ones OpenCode/Hermes expose.
         assert!(r.len() >= 200, "vendored registry too small: {}", r.len());
         for canonical in [
-            "anthropic", "openai", "openai-api", "amazon-bedrock", "google-vertex",
-            "nous", "kimi-for-coding", "zai", "zai-coding-plan", "nvidia", "alibaba",
-            "huggingface", "vercel", "local", "xai", "xiaomi", "xiaomi-token-plan-cn",
-            "zenmux", "zenifra", "zhipuai", "zhipuai-coding-plan", "xpersona", "zeldoc",
-            "perplexity", "deepseek", "groq", "openrouter", "mistral",
+            "anthropic",
+            "openai",
+            "openai-api",
+            "amazon-bedrock",
+            "google-vertex",
+            "nous",
+            "kimi-for-coding",
+            "zai",
+            "zai-coding-plan",
+            "nvidia",
+            "alibaba",
+            "huggingface",
+            "vercel",
+            "local",
+            "xai",
+            "xiaomi",
+            "xiaomi-token-plan-cn",
+            "zenmux",
+            "zenifra",
+            "zhipuai",
+            "zhipuai-coding-plan",
+            "xpersona",
+            "zeldoc",
+            "perplexity",
+            "deepseek",
+            "groq",
+            "openrouter",
+            "mistral",
         ] {
             assert!(r.get(canonical).is_some(), "missing provider `{canonical}`");
         }

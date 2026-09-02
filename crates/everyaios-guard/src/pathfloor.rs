@@ -285,21 +285,29 @@ impl PathGrant {
         if !inside {
             return false;
         }
-        match (self.axis, op) {
-            (GrantAxis::ReadOnlyRecursive, FsOp::Read | FsOp::Stat | FsOp::List) => true,
+        matches!(
+            (self.axis, op),
             (
+                GrantAxis::ReadOnlyRecursive,
+                FsOp::Read | FsOp::Stat | FsOp::List
+            ) | (
                 GrantAxis::ReadWriteCreate,
                 FsOp::Read | FsOp::Write | FsOp::Create | FsOp::Stat | FsOp::List,
-            ) => true,
-            (GrantAxis::ReadWrite, FsOp::Read | FsOp::Write | FsOp::Stat | FsOp::List) => true,
-            (GrantAxis::Create, FsOp::Create | FsOp::Stat) => true,
-            (
-                GrantAxis::Temporary,
-                FsOp::Read | FsOp::Write | FsOp::Create | FsOp::Delete | FsOp::Stat | FsOp::List,
-            ) => true,
-            (GrantAxis::StatIntermediates, FsOp::Stat | FsOp::List) => true,
-            _ => false,
-        }
+            ) | (
+                GrantAxis::ReadWrite,
+                FsOp::Read | FsOp::Write | FsOp::Stat | FsOp::List,
+            ) | (GrantAxis::Create, FsOp::Create | FsOp::Stat)
+                | (
+                    GrantAxis::Temporary,
+                    FsOp::Read
+                        | FsOp::Write
+                        | FsOp::Create
+                        | FsOp::Delete
+                        | FsOp::Stat
+                        | FsOp::List,
+                )
+                | (GrantAxis::StatIntermediates, FsOp::Stat | FsOp::List)
+        )
     }
 
     /// The floor this grant implies (for `enforce_floor` roots).

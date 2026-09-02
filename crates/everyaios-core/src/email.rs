@@ -302,7 +302,7 @@ impl<M: Mailbox, G: TicketGate> EmailService<M, G> {
     pub fn send(&mut self, msg: OutgoingEmail) -> Result<String, MailboxError> {
         self.gate
             .approve_mutation(EmailTool::Send, &format!("send to {:?}", msg.to))
-            .map_err(|e| MailboxError::SendFailed(e))?;
+            .map_err(MailboxError::SendFailed)?;
         self.mailbox.send(msg)
     }
 
@@ -311,7 +311,7 @@ impl<M: Mailbox, G: TicketGate> EmailService<M, G> {
         let original = self.mailbox.read(thread_id)?;
         self.gate
             .approve_mutation(EmailTool::Reply, &format!("reply to {}", original.from))
-            .map_err(|e| MailboxError::SendFailed(e))?;
+            .map_err(MailboxError::SendFailed)?;
         self.mailbox.send(OutgoingEmail {
             to: vec![original.from],
             subject: format!("Re: {}", original.subject),
@@ -324,7 +324,7 @@ impl<M: Mailbox, G: TicketGate> EmailService<M, G> {
     pub fn triage(&mut self, id: &str, action: TriageAction) -> Result<bool, MailboxError> {
         self.gate
             .approve_mutation(EmailTool::Triage, &format!("{action:?} {id}"))
-            .map_err(|e| MailboxError::SendFailed(e))?;
+            .map_err(MailboxError::SendFailed)?;
         self.mailbox.triage(id, action)
     }
 }

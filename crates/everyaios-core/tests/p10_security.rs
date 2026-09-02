@@ -35,7 +35,7 @@ fn temp_dir(tag: &str) -> PathBuf {
 #[test]
 fn red_team_corpus_fully_blocked_by_guard_one() {
     // The P7.4 gate: 100% of the corpus must be blocked by Guard-1.
-    let escaped = run_red_team(&everyaios_guard::prescan::guard());
+    let escaped = run_red_team(everyaios_guard::prescan::guard());
     assert!(
         escaped.is_empty(),
         "red-team gate failed — {} probes escaped: {:?}",
@@ -349,7 +349,7 @@ fn sidecar_crash_leaves_no_orphans() {
             std::process::Command::new("sleep")
                 .arg("30")
                 .pre_exec(|| {
-                    unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) };
+                    libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
                     Ok(())
                 })
                 .spawn()

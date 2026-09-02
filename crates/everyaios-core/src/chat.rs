@@ -532,10 +532,23 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // reply is synchronous and the sidecar can await it.
                     method if method.starts_with("memory/") || method == "usage/snapshot" => {
                         let mut svc = memory.lock().unwrap_or_else(|e| e.into_inner());
-                        let is_mutation = matches!(method, "memory/write" | "memory/forget" | "memory/ghost" | "memory/ghost_batch" | "memory/consolidate" | "memory/tick" | "memory/scope" | "memory/assess" | "memory/load");
+                        let is_mutation = matches!(
+                            method,
+                            "memory/write"
+                                | "memory/forget"
+                                | "memory/ghost"
+                                | "memory/ghost_batch"
+                                | "memory/consolidate"
+                                | "memory/tick"
+                                | "memory/scope"
+                                | "memory/assess"
+                                | "memory/load"
+                        );
                         match svc.handle(method, &params) {
                             Ok(out) => {
-                                if is_mutation { persist_memory(&svc); }
+                                if is_mutation {
+                                    persist_memory(&svc);
+                                }
                                 let _ = writer.reply(id, out);
                             }
                             Err(e) => {

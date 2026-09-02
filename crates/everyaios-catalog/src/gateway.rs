@@ -165,8 +165,10 @@ impl GatewayRouter {
         }
         self.stats.misses += 1;
 
-        let mut filters = RouteFilters::default();
-        filters.requires_tools = require_tools;
+        let mut filters = RouteFilters {
+            requires_tools: require_tools,
+            ..Default::default()
+        };
         if require_vision {
             filters.input_modalities = vec!["image".to_string()];
         }

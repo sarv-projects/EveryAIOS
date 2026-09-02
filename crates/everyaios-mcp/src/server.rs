@@ -35,10 +35,7 @@ fn origin_is_local(origin: &str) -> bool {
         return false;
     };
     // Authority ends at the first `/`, `?` or `#`.
-    let authority = rest
-        .split(|c: char| c == '/' || c == '?' || c == '#')
-        .next()
-        .unwrap_or("");
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     // Host is the authority minus any `:port`. Strip a trailing `:digits`
     // only (an unbracketed IPv6 authority like `[::1]:7000` keeps its colons).
     let host = match authority.rsplit_once(':') {

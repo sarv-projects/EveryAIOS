@@ -49,7 +49,7 @@ fn main() {
                     serde_json::json!({ "code": -32601, "message": "method not found" });
             }
         }
-        let _ = writeln!(stdout, "{}", reply.to_string());
+        let _ = writeln!(stdout, "{reply}");
         let _ = stdout.flush();
     }
 }

@@ -184,20 +184,26 @@ mod tests {
 
     #[test]
     fn js_picks_light_then_cdp() {
-        let mut opts = AcquisitionOptions::default();
-        opts.light_available = true;
+        let opts = AcquisitionOptions {
+            light_available: true,
+            ..Default::default()
+        };
         let plan = pick(AcquisitionIntent::NeedsJs, "https://x", &opts).unwrap();
         assert_eq!(plan.kind, AcquisitionKind::Light);
-        opts.light_available = false;
-        opts.browser_available = true;
+        let opts = AcquisitionOptions {
+            browser_available: true,
+            ..Default::default()
+        };
         let plan = pick(AcquisitionIntent::NeedsJs, "https://x", &opts).unwrap();
         assert_eq!(plan.kind, AcquisitionKind::Cdp);
     }
 
     #[test]
     fn login_requires_session_flag() {
-        let mut opts = AcquisitionOptions::default();
-        opts.browser_available = true;
+        let opts = AcquisitionOptions {
+            browser_available: true,
+            ..Default::default()
+        };
         let plan = pick(AcquisitionIntent::NeedsLogin, "https://mail", &opts).unwrap();
         assert_eq!(plan.kind, AcquisitionKind::Cdp);
         assert!(plan.needs_session);
@@ -222,10 +228,16 @@ mod tests {
     #[test]
     fn stealth_never_emitted_without_build() {
         assert!(!stealth_allowed(&AcquisitionOptions::default()));
-        let mut opts = AcquisitionOptions::default();
-        opts.stealth_available = true;
+        let opts = AcquisitionOptions {
+            stealth_available: true,
+            ..Default::default()
+        };
         assert!(stealth_allowed(&opts));
-        opts.deny_stealth = true;
+        let opts = AcquisitionOptions {
+            stealth_available: true,
+            deny_stealth: true,
+            ..Default::default()
+        };
         assert!(!stealth_allowed(&opts));
         // And `pick` never returns Stealth at all — the engine doesn't offer
         // it unless a future build wires it as an AcquisitionKind branch.

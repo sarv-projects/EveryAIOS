@@ -71,7 +71,7 @@ impl DiagnosticReader {
                             .map(|a| {
                                 a["value"]
                                     .as_str()
-                                    .unwrap_or(&a["description"].as_str().unwrap_or(""))
+                                    .unwrap_or(a["description"].as_str().unwrap_or(""))
                                     .to_string()
                             })
                             .filter(|s| !s.is_empty())

@@ -469,7 +469,10 @@ impl SchedulerService {
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
                 for mut job in jobs {
-                    if let RunState::Running { lease_expires_at, .. } = job.state {
+                    if let RunState::Running {
+                        lease_expires_at, ..
+                    } = job.state
+                    {
                         if lease_expires_at <= now {
                             job.state = RunState::Idle;
                         }
@@ -2060,10 +2063,9 @@ mod tests {
                 "checkpoint preserved for resume-from-step"
             );
             // A stale worker with the old fence cannot commit after restart.
-            assert!(
-                svc.lease_heartbeat("j-crash", now() + 5, Some("fence-j-crash-1750000000"))
-                    .is_err()
-            );
+            assert!(svc
+                .lease_heartbeat("j-crash", now() + 5, Some("fence-j-crash-1750000000"))
+                .is_err());
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

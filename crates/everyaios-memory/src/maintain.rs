@@ -47,8 +47,10 @@ pub struct MemoryRow {
 /// Analyze references: find orphaned memories (no graph link, never
 /// retrieved) and near-duplicates (token-overlap ratio).
 pub fn analyze_references(rows: &[MemoryRow]) -> MaintainReport {
-    let mut report = MaintainReport::default();
-    report.analyzed = rows.len();
+    let mut report = MaintainReport {
+        analyzed: rows.len(),
+        ..Default::default()
+    };
     for r in rows {
         if r.linked.is_empty() && r.accesses == 0 {
             report.orphaned.push(r.id.clone());

@@ -241,6 +241,10 @@ impl ConnectorHub {
     pub fn len(&self) -> usize {
         self.connections.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.connections.is_empty()
+    }
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]

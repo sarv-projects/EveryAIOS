@@ -168,7 +168,7 @@ fn journey_install_byok_chat_tool_call() {
     });
     let events: Arc<Mutex<Vec<ChatWireEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let ev = Arc::clone(&events);
-    let mut relay = ChatRelay::new(link_from(a), Arc::clone(&vault), move |e| {
+    let relay = ChatRelay::new(link_from(a), Arc::clone(&vault), move |e| {
         ev.lock().unwrap_or_else(|x| x.into_inner()).push(e);
     });
     relay.with_base_url("nvidia", base);
@@ -378,7 +378,7 @@ fn crystallization_fourth_run_is_zero_token() {
     assert_eq!(candidates[0].successes, 3);
 
     // Compile to a deterministic script — the "0-token run" (no LLM call).
-    let skill = compile_to_script("weekly-report", &candidates[0], ScriptLanguage::Ts);
+    let skill = compile_to_script("weekly-report", candidates[0], ScriptLanguage::Ts);
     assert!(skill.source.contains("0-token deterministic run"));
     assert!(skill.source.contains("file_ops_write"));
     // The compiled run produces the recorded expected output → no drift, so

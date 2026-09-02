@@ -88,7 +88,7 @@ fn main() {
                     Some(Ok(l)) => l,
                     _ => break,
                 };
-                let decided: serde_json::Value = match serde_json::from_str(&decision_line.trim()) {
+                let decided: serde_json::Value = match serde_json::from_str(decision_line.trim()) {
                     Ok(v) => v,
                     Err(_) => break,
                 };

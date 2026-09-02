@@ -79,7 +79,7 @@ pub fn translate_windows_drive_to_linux(input: &str) -> Option<String> {
         return None;
     }
     let drive = (bytes[0] as char).to_ascii_lowercase();
-    let rest = trimmed[2..].trim_start_matches(|c| c == '\\' || c == '/');
+    let rest = trimmed[2..].trim_start_matches(['\\', '/']);
     Some(format!("/mnt/{drive}/{}", rest.replace('\\', "/")))
 }
 
