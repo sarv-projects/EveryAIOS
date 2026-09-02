@@ -53,7 +53,8 @@ pub mod workflow;
 pub use automation::{Automation, AutomationStep, Trigger};
 pub use blueprint::{Blueprint, BlueprintError, BlueprintTask, TaskStatus, VerifyBlock};
 pub use change_set::{
-    Change, ChangeSet, ChangeState, CommittedChange, EffectClass, RecoveryReport,
+    Change, ChangeSet, ChangeState, CommittedChange, EffectClass, ImportEntry, ImportError,
+    RecoveryReport, ReviewedImport,
 };
 pub use checkpoint::{BlueprintRegistry, Checkpoint, CheckpointError, RegistryError};
 pub use crystallize::{

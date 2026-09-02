@@ -11,6 +11,8 @@
 //! is the guard).
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::path::{Component, Path, PathBuf};
 
 /// doc-53 idempotency classes made explicit per change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,6 +77,99 @@ pub struct CommittedChange {
 pub struct ChangeSet {
     changes: Vec<CommittedChange>,
     by_id: std::collections::HashMap<String, usize>,
+}
+
+/// A host-imported change produced by a sandboxed external process.
+///
+/// The host accepts only an exact, pre-reviewed manifest: paths are relative
+/// to the declared root, hashes are checked against the bytes being imported,
+/// and every entry has a corresponding planned change/ticket.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewedImport {
+    pub root: PathBuf,
+    pub changes: Vec<ImportEntry>,
+    pub manifest_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportEntry {
+    pub change_id: String,
+    pub relative_path: PathBuf,
+    pub content_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ImportError {
+    #[error("import manifest is empty")]
+    Empty,
+    #[error("import path must be relative: {0}")]
+    AbsolutePath(PathBuf),
+    #[error("import path escapes its root: {0}")]
+    PathEscape(PathBuf),
+    #[error("import entry `{0}` has no planned change")]
+    UnknownChange(String),
+    #[error("import entry `{0}` is duplicated")]
+    DuplicateChange(String),
+    #[error("import manifest hash mismatch")]
+    ManifestHashMismatch,
+    #[error("import content hash mismatch for `{path}`")]
+    ContentHashMismatch { path: PathBuf },
+}
+
+impl ReviewedImport {
+    /// Validate a sandbox-produced manifest before any host mutation occurs.
+    /// This is deliberately pure over bytes and does not write to disk.
+    pub fn validate(
+        root: impl Into<PathBuf>,
+        entries: Vec<ImportEntry>,
+        expected_manifest_sha256: &str,
+        files: &[(PathBuf, Vec<u8>)],
+        planned: &ChangeSet,
+    ) -> Result<Self, ImportError> {
+        if entries.is_empty() {
+            return Err(ImportError::Empty);
+        }
+        let root = root.into();
+        let mut ids = std::collections::HashSet::new();
+        for entry in &entries {
+            if entry.relative_path.is_absolute() {
+                return Err(ImportError::AbsolutePath(entry.relative_path.clone()));
+            }
+            if entry.relative_path.components().any(|c| matches!(c, Component::ParentDir)) {
+                return Err(ImportError::PathEscape(entry.relative_path.clone()));
+            }
+            if planned.get(&entry.change_id).is_none() {
+                return Err(ImportError::UnknownChange(entry.change_id.clone()));
+            }
+            if !ids.insert(entry.change_id.clone()) {
+                return Err(ImportError::DuplicateChange(entry.change_id.clone()));
+            }
+            let Some((_, bytes)) = files.iter().find(|(p, _)| p == &entry.relative_path) else {
+                return Err(ImportError::ContentHashMismatch { path: entry.relative_path.clone() });
+            };
+            if sha256_hex(bytes) != entry.content_sha256 {
+                return Err(ImportError::ContentHashMismatch { path: entry.relative_path.clone() });
+            }
+        }
+        let manifest = serde_json::to_vec(&entries).unwrap_or_default();
+        if sha256_hex(&manifest) != expected_manifest_sha256 {
+            return Err(ImportError::ManifestHashMismatch);
+        }
+        Ok(Self { root, changes: entries, manifest_sha256: expected_manifest_sha256.into() })
+    }
+
+    pub fn host_path(&self, relative: &Path) -> Result<PathBuf, ImportError> {
+        if relative.is_absolute() || relative.components().any(|c| matches!(c, Component::ParentDir)) {
+            return Err(ImportError::PathEscape(relative.to_path_buf()));
+        }
+        Ok(self.root.join(relative))
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(bytes);
+    format!("{:x}", hash.finalize())
 }
 
 impl ChangeSet {
@@ -281,6 +376,32 @@ mod tests {
         assert!(!report.is_clean());
         assert_eq!(cs.get("w").unwrap().state, ChangeState::Reverted);
         assert_eq!(cs.get("del").unwrap().state, ChangeState::Unrecoverable);
+    }
+
+    #[test]
+    fn reviewed_import_rejects_escape_and_hash_mismatch() {
+        let mut cs = ChangeSet::new();
+        cs.plan(change("a", EffectClass::Reversible, vec![], "k-a")).unwrap();
+        let bytes = b"safe".to_vec();
+        let entry = ImportEntry {
+            change_id: "a".into(),
+            relative_path: PathBuf::from("out.txt"),
+            content_sha256: sha256_hex(&bytes),
+        };
+        let manifest = serde_json::to_vec(std::slice::from_ref(&entry)).unwrap();
+        let digest = sha256_hex(&manifest);
+        let import = ReviewedImport::validate(
+            "/tmp/work",
+            vec![entry],
+            &digest,
+            &[(PathBuf::from("out.txt"), bytes)],
+            &cs,
+        ).unwrap();
+        assert_eq!(import.host_path(Path::new("out.txt")).unwrap(), PathBuf::from("/tmp/work/out.txt"));
+        assert!(matches!(
+            import.host_path(Path::new("../escape")),
+            Err(ImportError::PathEscape(_))
+        ));
     }
 
     #[test]

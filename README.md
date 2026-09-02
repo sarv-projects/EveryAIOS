@@ -178,7 +178,7 @@ Append-only audit. Replay. Undo. Eval suite at plan completion: if we cannot ver
 
 ## How it is put together
 
-Three processes: Tauri UI, Rust core, Bun coordinator. Children for browsers, ACP agents, MCP servers, sandboxes.
+Three processes: Tauri UI, Rust core, Bun coordinator. Children for browsers, ACP agents, MCP servers, and sandboxes. External child effects are governed only in brokered mode or through sandboxed, hash-validated reviewed imports; self-contained effects remain outside the native audit guarantee.
 
 ```
 UI (React / Tauri 2)
