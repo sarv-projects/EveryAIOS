@@ -249,12 +249,16 @@ jobs:
       # engines must be built first — bun resolves them via their `main`
       # (dist/index.js).
       - name: Build coordinator sidecar (tauri resource glob)
-        working-directory: ..
+        # GITHUB_WORKSPACE is the repo root (the tauri-check job's default
+        # working-directory is src-tauri, so override back to the root).
+        working-directory: .
         shell: bash
         run: |
           pnpm install
           pnpm --filter './packages/core-*' run build
+          mkdir -p packages/coordinator/dist
           pnpm --filter @everyaios/coordinator build
+          mkdir -p src-tauri/bin
           if [ "$RUNNER_OS" = "Windows" ]; then
             cp packages/coordinator/dist/coordinator.exe src-tauri/bin/coordinator.exe
           else

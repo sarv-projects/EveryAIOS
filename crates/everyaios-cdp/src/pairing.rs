@@ -82,6 +82,7 @@ impl ProfilePairingStore {
 /// Chrome/Chromium default user-data directories on this OS.
 pub fn chrome_default_user_data_dirs() -> Vec<PathBuf> {
     let mut out = Vec::new();
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from);
