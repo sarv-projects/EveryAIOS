@@ -234,6 +234,33 @@ jobs:
           $libs = "-Clink-arg=advapi32.lib -Clink-arg=user32.lib -Clink-arg=crypt32.lib -Clink-arg=gdi32.lib"
           echo "RUSTFLAGS=$libs" >> $env:GITHUB_ENV
 
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      # tauri.conf.json declares `"resources": ["bin/coordinator*"]`, and
+      # tauri-build hard-fails when that glob matches nothing. The sidecar is
+      # gitignored and only exists after a bun --compile, so produce it here
+      # (release.yml does the same before bundling). The vendored core-*
+      # engines must be built first — bun resolves them via their `main`
+      # (dist/index.js).
+      - name: Build coordinator sidecar (tauri resource glob)
+        working-directory: ..
+        shell: bash
+        run: |
+          pnpm install
+          pnpm --filter './packages/core-*' run build
+          pnpm --filter @everyaios/coordinator build
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp packages/coordinator/dist/coordinator.exe src-tauri/bin/coordinator.exe
+          else
+            cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator
+          fi
+
       - name: cargo check (tauri shell)
         run: cargo check
 

@@ -297,13 +297,14 @@ impl ProviderRegistry {
     /// anything changed (routes re-rank).
     pub fn mark_verified(&mut self, canon: &str, verified_at: &str) -> bool {
         let norm = normalize(canon);
-        let id = if self.by_id.contains_key(&norm) {
-            norm
-        } else {
-            match self.by_alias.get(&norm) {
-                Some(canon) => canon.clone(),
-                None => return false,
-            }
+        let Some(id) = self
+            .by_id
+            .contains_key(&norm)
+            .then_some(norm.as_str())
+            .map(str::to_owned)
+            .or_else(|| self.by_alias.get(&norm).cloned())
+        else {
+            return false;
         };
         match self.by_id.get_mut(&id) {
             Some(r) if r.capabilities_verified_at.as_deref() != Some(verified_at) => {
@@ -331,14 +332,12 @@ impl ProviderRegistry {
         verified_at: &str,
     ) -> Option<bool> {
         let norm = normalize(canon);
-        let id = if self.by_id.contains_key(&norm) {
-            norm
-        } else {
-            match self.by_alias.get(&norm) {
-                Some(c) => c.clone(),
-                None => return None,
-            }
-        };
+        let id = self
+            .by_id
+            .contains_key(&norm)
+            .then_some(norm.as_str())
+            .map(str::to_owned)
+            .or_else(|| self.by_alias.get(&norm).cloned())?;
         let rec = self.by_id.get(&id)?;
         let advertised = crate::probe::AdvertisedHardCaps {
             tools: rec
