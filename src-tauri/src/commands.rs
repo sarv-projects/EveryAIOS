@@ -285,5 +285,13 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         // P44.7/44.8: discovery surface + routing feed.
         discovery_cmds::discovery_inventory,
         discovery_cmds::routing_feed_decide,
+        // P50.4.2: local model downloads (HF GGUF/MLX) + registry + serve.
+        crate::model_cmds::model_download_start,
+        crate::model_cmds::model_downloads,
+        crate::model_cmds::model_download_cancel,
+        crate::model_cmds::model_registry_list,
+        crate::model_cmds::model_registry_remove,
+        crate::model_cmds::model_recommend_quant,
+        crate::model_cmds::model_serve,
     ]
 }

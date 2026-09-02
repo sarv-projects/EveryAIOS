@@ -13,6 +13,7 @@ import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { AiPointer } from "@/components/shell/ai-pointer";
 import { ToastBridge } from "@/components/shell/toast-bridge";
 import VaultGate from "@/components/shell/vault-gate";
+import { SetupGate } from "@/components/shell/setup-gate";
 import { useAppStore } from "@/lib/store";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import NpsPrompt from "@/components/nps-prompt";
@@ -58,6 +59,8 @@ export default function App() {
       <CommandPalette />
       <ToastBridge />
       <AiPointer />
+      {/* P50.4.1 — first-run provider setup (no model → no generic agent error). */}
+      <SetupGate />
       {/* P11.2 — first-launch onboarding (welcome → key → chat → success). */}
       <OnboardingModal />
       {/* P11.6.2 — non-intrusive NPS prompt (after 7 days, at most once per 90). */}

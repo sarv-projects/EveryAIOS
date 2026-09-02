@@ -187,6 +187,9 @@ export function ModelsSection() {
       const { invoke } = await import('@/lib/tauri')
       const r = await invoke<{ keys: Array<{ provider: string; keyId: string; opaqueHandle: string; status: string }> }>('vault_keys_list', {})
       setKeys(r.keys ?? [])
+      // P50.4.1 — keep the live provider-configured fact in sync with the
+      // vault (drives the setup gate + no-provider UX).
+      useAppStore.getState().setProviderKeysConfigured((r.keys ?? []).length > 0)
     } catch {
       /* vault locked / preview */
     }

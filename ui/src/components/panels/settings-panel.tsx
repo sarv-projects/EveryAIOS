@@ -31,6 +31,7 @@ import {
   RefreshCw,
   Shield,
   ShieldCheck,
+  ShieldQuestion,
   SlidersHorizontal,
   Smartphone,
   Sparkles,
@@ -62,6 +63,7 @@ import AgentsModelsSection from './agents-models-section'
 import { DiscoverSection } from './discover-section'
 import { RuntimeSessionSection } from './runtime-session-section'
 import LocalModelsPanel from './local-models-panel'
+import CapabilityMatrixPanel from './capability-matrix-panel'
 import MemoryPanel from './memory-panel'
 import {
   BetaSection,
@@ -108,6 +110,7 @@ const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: 
       { id: 'agents', label: 'Agents & Models', icon: Boxes },
       { id: 'discover', label: 'Discover', icon: Compass },
       { id: 'local', label: 'Local models', icon: Cpu },
+      { id: 'capabilities', label: 'Capabilities', icon: ShieldQuestion },
       { id: 'apikeys', label: 'Providers / BYOK', icon: KeyRound },
       { id: 'experts', label: 'Experts', icon: Users },
       { id: 'chat', label: 'Chat & Auto-run', icon: MessageSquare },
@@ -175,6 +178,8 @@ function SectionBody({ section }: { section: SectionId }) {
       return <AgentsModelsSection />
     case 'local':
       return <LocalModelsPanel />
+    case 'capabilities':
+      return <CapabilityMatrixPanel />
     case 'apikeys':
       return <ModelsSection />
     case 'experts':

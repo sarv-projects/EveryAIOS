@@ -417,6 +417,26 @@ async function startBridge(): Promise<BridgeDisposer> {
         recordFault('work gateway', error);
       }
 
+      // P50.4.1/4.9 — the live provider-configured fact (vault has ≥1 BYOK
+      // key). Drives the first-run setup gate, the no-provider chat empty
+      // state, and the capability matrix. `null` until first probe.
+      try {
+        const { invoke } = await import('./tauri');
+        const listed = await nativeCall('vault keys', () =>
+          invoke<{ keys?: unknown[] }>('vault_keys_list'),
+        );
+        if (alive) {
+          useAppStore.getState().setProviderKeysConfigured((listed?.keys?.length ?? 0) > 0);
+        }
+      } catch (error) {
+        // Vault locked is a normal early state — the fact stays `null`
+        // (unknown) until the vault opens; never guess.
+        if (alive && (useAppStore.getState().providerKeysConfigured === null)) {
+          const status = await readRuntimeStatus().catch(() => null);
+          if (status?.vault === 'ready') recordFault('vault keys', error);
+        }
+      }
+
       // P38 — the user's primary_chief default, read live at hydration so the
       // chat send path resolves the effective Chief without stale config.
       try {
@@ -602,6 +622,16 @@ export async function sendUserMessage(
 
   if (!inTauri()) {
     st.notify("Preview mode — run inside the Tauri shell for the live agent loop");
+    return;
+  }
+
+  // P50.4.1/4.9 — no provider configured: open the setup gate instead of
+  // dispatching a turn that dies with a generic "agent error". The vault
+  // fact is `false` (probed), not `null` (unknown — let the wire decide and
+  // surface its error honestly). A picked local runtime always counts.
+  if (st.providerKeysConfigured === false && !st.localRuntime) {
+    st.openSetup();
+    st.notify("No model provider configured — add a BYOK key or use a local model first.");
     return;
   }
 
