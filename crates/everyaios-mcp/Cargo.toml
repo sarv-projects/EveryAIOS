@@ -14,3 +14,4 @@ thiserror = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
 ureq = { workspace = true }
+everyaios-guard = { path = "../everyaios-guard" }

@@ -99,7 +99,7 @@ Skills and connectors converge on **MCP** (tools/resources) + **SKILL.md**
 (instructions). Distribution is a **signed registry index** (the ACP/MCP registry
 machinery already in `everyaios-mcp`/`everyaios-acp`, signed with the same minisign
 key the updater uses). Install = Guard-2 consent (tool list + permissions) →
-sandboxed (the `everyaios-guard` sandbox profiles), with host changes imported only through the validated `ReviewedImport` manifest and a reviewed change set. A self-contained external process is not covered by the native EveryAIOS ticket/audit guarantee. This is the post-v1
+sandboxed (a tested concrete monitored backend primitive; currently Linux `bwrap` when installed), with host changes imported only through the validated `ReviewedImport` manifest and a reviewed change set. ACP/MCP launch commands are not yet wired to the shared monitored transport, so their current stdio path remains explicitly uncontrolled. macOS/Windows native enforcement and packaged verification remain release gates. A self-contained external process is not covered by the native EveryAIOS ticket/audit guarantee. The current attach API is explicitly uncontrolled unless a concrete sandbox process and reviewed-import root are bound. This is the post-v1
 "community skills marketplace" (TODO **P9.7 / line 968**).
 
 ## Honest boundaries

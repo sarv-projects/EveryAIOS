@@ -92,9 +92,9 @@ pub use release::{
 #[cfg(target_os = "linux")]
 pub use sandbox::LinuxBwrapBackend;
 pub use sandbox::{
-    linux_bwrap_available, resolve_sandbox_backend, PathAccess, PathRule, SandboxBackend,
-    SandboxBackendKind, SandboxError, SandboxProfile, SandboxReceipt, SandboxRole, SandboxSpec,
-    SyscallGroup,
+    enforced_backend_capabilities, linux_bwrap_available, resolve_sandbox_backend, PathAccess,
+    PathRule, SandboxBackend, SandboxBackendKind, SandboxError, SandboxProcess, SandboxProfile,
+    SandboxReceipt, SandboxRole, SandboxSpec, SyscallGroup,
 };
 pub use seccomp::{Action, ArgFilter, SeccompError, SeccompPolicy, SyscallRule};
 pub use structural::{
