@@ -1246,6 +1246,7 @@ dependencies = [
 name = "everyaios-acp"
 version = "0.1.0"
 dependencies = [
+ "everyaios-guard",
  "flate2",
  "serde",
  "serde_json",
