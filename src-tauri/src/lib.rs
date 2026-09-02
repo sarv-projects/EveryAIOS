@@ -31,6 +31,7 @@ mod local_cmds;
 mod lsp_cmds;
 mod maintenance_cmds;
 mod mcp_cmds;
+mod model_cmds;
 mod memory_cmds;
 mod oauth_cmds;
 mod openai_cmds;
@@ -67,6 +68,10 @@ pub const CHAT_EVENT: &str = "chat-event";
 /// `{ "line": … }`). Emitted for every `agui/event` notification the
 /// coordinator pushes.
 pub const AGUI_EVENT: &str = "agui-event";
+
+/// P50.4.2 — local-model download/serve progress events
+/// (`{ kind, id, repo, filename, phase, doneBytes, totalBytes, … }`).
+pub const MODEL_DOWNLOAD_EVENT: &str = "model-download";
 
 /// P11.5.11 — send one AG-UI event from the UI into the coordinator (e.g.
 /// `interrupt_resolved` answering an outstanding AG-UI interrupt). The line
@@ -677,6 +682,7 @@ pub fn run() {
             mcp_remote_flows: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_remote_tokens: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_pending_calls: Mutex::new(std::collections::HashMap::new()),
+            model_downloads: Mutex::new(std::collections::HashMap::new()),
             desktop: Mutex::new(desktop_cmds::DesktopSlot::default()),
             artifacts: Mutex::new(std::collections::HashMap::new()),
             openai_server: Mutex::new(Default::default()),

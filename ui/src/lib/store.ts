@@ -668,6 +668,7 @@ export const SETTINGS_SECTION_IDS = [
   'mobile',
   'agents',
   'local',
+  'capabilities',
   'apikeys',
   'experts',
   'launch',
@@ -772,6 +773,19 @@ interface AppState {
    * status bar and rail reflect the real session, never a hardcoded value). */
   browserAttached: boolean
   setBrowserAttached: (attached: boolean) => void
+
+  /** P50.4.1/4.9 — live vault-keys fact: `null` = unknown (not yet probed),
+   * `false` = vault has zero provider keys. Feeds the first-run setup gate,
+   * the no-provider chat empty state, and the capability matrix. Refreshed
+   * by the bridge at hydration and after every key add/remove. */
+  providerKeysConfigured: boolean | null
+  setProviderKeysConfigured: (configured: boolean) => void
+  /** P50.4.1 — first-run provider-setup overlay (opened when no provider is
+   * configured and the user asks to set one up; dismissible — the chat empty
+   * state re-surfaces it). */
+  setupOpen: boolean
+  openSetup: () => void
+  closeSetup: () => void
 
   /** P38 — per-session Chief pins: sessionId → Chief id. An empty/absent pin
    * means the user default applies; a pin outranks it for that session's
@@ -1132,6 +1146,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   browserUrl: null,
   browserAttached: false,
   setBrowserAttached: (attached) => set({ browserAttached: attached }),
+  providerKeysConfigured: null,
+  setProviderKeysConfigured: (configured) => set({ providerKeysConfigured: configured }),
+  setupOpen: false,
+  openSetup: () => set({ setupOpen: true }),
+  closeSetup: () => set({ setupOpen: false }),
 
   // P38 — starts empty: no session is pinned until the user pins one. The
   // pin is ALSO written onto the Session object so the vault persist

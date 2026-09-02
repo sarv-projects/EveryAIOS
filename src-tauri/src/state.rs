@@ -99,4 +99,10 @@ pub struct AppState {
     /// P9.5: the local OpenAI-compatible server (loopback + bearer token).
     /// `None` until `openai_server_start`; dropping it closes the listener.
     pub openai_server: Mutex<crate::openai_cmds::OpenAiServerSlot>,
+    /// P50.4.2 — in-flight local-model downloads (Hugging Face GGUF/MLX).
+    /// Each slot carries the cooperative cancel flag + shared status; the
+    /// worker thread removes the slot at terminal state and leaves the
+    /// `.part` staging file in place so a later start resumes via `Range`.
+    pub model_downloads:
+        Mutex<std::collections::HashMap<String, crate::model_cmds::ModelDownloadSlot>>,
 }

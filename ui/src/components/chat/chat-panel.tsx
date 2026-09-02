@@ -14,6 +14,8 @@ import {
   FileText,
   Folder,
   GitBranch,
+  KeyRound,
+  Loader2,
   MoreHorizontal,
   Pause,
   Pencil,
@@ -41,6 +43,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore, type ProgressStep, type Session } from '@/lib/store'
+import { inTauri, invoke } from '@/lib/tauri'
 import { AGENT_MAP, MODEL_MAP } from '@/lib/agents'
 import {
   schedulerNudges,
@@ -374,6 +377,9 @@ export default function ChatPanel() {
       {isEmpty ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1" />
+          {/* P50.4.9 — no provider configured: explain setup instead of
+              letting the first message die with a generic agent error. */}
+          <NoProviderCard />
           <EmptyState onPick={(p) => setComposerValue(p)} />
           <div className={cn(col, 'pb-6 pt-2')}>
             {store.streamStats.tokensPerSec > 0 && (
@@ -466,6 +472,85 @@ export default function ChatPanel() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * P50.4.9 — No-provider/offline empty state. Shown when the vault has no
+ * BYOK keys and no local runtime is picked: explains exactly what is
+ * missing, where data would go (privacy note), and offers setup / local
+ * download / re-check actions. Never a generic "agent error".
+ */
+function NoProviderCard() {
+  const providerKeysConfigured = useAppStore((s) => s.providerKeysConfigured)
+  const localRuntime = useAppStore((s) => s.localRuntime)
+  const openSetup = useAppStore((s) => s.openSetup)
+  const setProviderKeysConfigured = useAppStore((s) => s.setProviderKeysConfigured)
+  const setSettingsSection = useAppStore((s) => s.setSettingsSection)
+  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  const [checking, setChecking] = useState(false)
+
+  if (!inTauri()) return null
+  // Unknown (null) or configured → the normal empty state applies.
+  if (providerKeysConfigured !== false) return null
+  if (localRuntime) return null
+
+  const recheck = async () => {
+    setChecking(true)
+    try {
+      const r = await invoke<{ keys?: unknown[] }>('vault_keys_list')
+      setProviderKeysConfigured((r?.keys?.length ?? 0) > 0)
+    } catch {
+      /* vault still locked — stays false/unknown */
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  return (
+    <div className="fade-up mx-auto w-full max-w-md rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+      <div className="flex items-center gap-2">
+        <KeyRound className="h-4 w-4 text-amber-300" />
+        <div className="text-[12px] font-semibold text-foreground">No model provider configured</div>
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+        Add a bring-your-own-key provider or use a local model — until then there is no model to
+        answer with. Your key is stored encrypted in the local vault and only sent to the provider
+        you choose; local models run entirely on this machine.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <Button
+          size="sm"
+          className="h-7 bg-orange-500 text-[10px] text-white hover:bg-orange-600"
+          onClick={() => openSetup()}
+        >
+          <KeyRound className="mr-1 h-3 w-3" />
+          Set up a provider
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-[10px]"
+          onClick={() => {
+            setSettingsSection('local')
+            setCenterScreen('settings')
+          }}
+        >
+          <Download className="mr-1 h-3 w-3" />
+          Download a local model
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-[10px] text-muted-foreground"
+          disabled={checking}
+          onClick={() => void recheck()}
+        >
+          {checking ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCw className="mr-1 h-3 w-3" />}
+          Check again
+        </Button>
+      </div>
     </div>
   )
 }

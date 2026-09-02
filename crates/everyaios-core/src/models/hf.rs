@@ -10,6 +10,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use serde::Deserialize;
 
@@ -45,6 +46,8 @@ pub enum HfError {
     DiskPreflight { needed: u64, free: u64 },
     LfsOidMismatch { expected: String, actual: String },
     Io(String),
+    /// User cancelled — the `.part` staging file is kept for resume.
+    Cancelled,
 }
 
 impl std::fmt::Display for HfError {
@@ -162,13 +165,22 @@ impl HfClient {
     /// `dest.part`). Progress reported via `progress`. sha256 verified when
     /// the `.sha256` companion exists **and** the LFS oid is present (both
     /// must agree). On success the `.part` file is renamed to `dest`.
+    ///
+    /// `cancel` is an optional cooperative cancellation flag (P50.4.2 — the
+    /// UI Cancel button). When set, the download returns [`HfError::Cancelled`]
+    /// at the next chunk boundary and the `.part` staging file is left in
+    /// place so a later call with the same `dest` resumes via `Range`.
     pub fn download(
         &self,
         repo: &str,
         filename: &str,
         dest: &Path,
         progress: ProgressFn<'_>,
+        cancel: Option<&AtomicBool>,
     ) -> Result<ModelEntry, HfError> {
+        if cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed)) {
+            return Err(HfError::Cancelled);
+        }
         let files = self.repo_files(repo)?;
         let meta = files
             .iter()
@@ -195,7 +207,7 @@ impl HfClient {
         if status == 416 {
             // Range unsatisfiable → restart.
             std::fs::remove_file(&part).ok();
-            return self.download(repo, filename, dest, progress);
+            return self.download(repo, filename, dest, progress, cancel);
         }
 
         let mut file = std::fs::OpenOptions::new()
@@ -210,6 +222,9 @@ impl HfClient {
         let mut reader = resp.into_reader();
         let mut buf = [0u8; 64 * 1024];
         loop {
+            if cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::Relaxed)) {
+                return Err(HfError::Cancelled);
+            }
             let n = reader
                 .read(&mut buf)
                 .map_err(|e| HfError::Io(e.to_string()))?;

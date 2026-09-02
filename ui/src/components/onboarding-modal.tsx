@@ -36,7 +36,9 @@ export function OnboardingModal() {
           {[
             { label: 'Open a folder', action: () => setCenterScreen('files') },
             { label: 'Open a document', action: () => setCenterScreen('files') },
-            { label: 'Add a model', action: () => setCenterScreen('settings') },
+            // P50.4.1 — "Add a model" opens the real provider setup gate
+            // (key entry into the vault / local runtime), not just settings.
+            { label: 'Add a model', action: () => useAppStore.getState().openSetup() },
             { label: 'Just chat', action: () => setComposerValue('') },
           ].map((c) => (
             <button
