@@ -1,0 +1,123 @@
+# EveryAIOS — P50.5 release-gates matrix (P50.5.2 / .4 / .5 / .6 / .7 / .8).
+#
+# What this runs, per OS (ubuntu / windows / macos), on push to main, PRs,
+# nightly, and manual dispatch:
+#   - P50.5.2 search E2E      — everyaios-search p50_search_e2e (live legs run
+#     only when EVERYAIOS_E2E_SEARXNG_URL is set; outage/offline legs always).
+#   - P50.5.4 connector E2E   — everyaios-mcp p50_mcp_e2e (local binaries).
+#   - P50.5.5 failure inject  — everyaios-core p50_gates (crate legs) plus
+#     scripts/e2e/failure-injection.mjs L1–L7 against the debug core binary
+#     (L1 needs the coordinator binary; L7 live-Chrome needs
+#     EVERYAIOS_E2E_CHROME=1 — both report SKIP legs, never fake passes).
+#   - P50.5.6 crash recovery  — everyaios-core p50_gates (ledger / scheduler
+#     lease / kernel / audit-chain legs, all hermetic).
+#   - P50.5.7 security gate   — scripts/e2e/security-gate.mjs (guard +
+#     p10_security + audit + mcp suites, IPC parity, approval-provenance).
+#   - P50.5.8 matrix evidence — clean-profile boot check
+#     (scripts/clean-profile-boot-check.mjs) + doc-sync + ipc-parity on all
+#     three OSes; sidecar/vault/keyring/browser/desktop/file-path/updater
+#     live workflows stay the manual packaged-shell checklist in the row.
+#
+# Live-provider legs (Ollama/NVIDIA/SearXNG/Chrome) are env-gated and SKIP
+# with a message when the service is absent — a skip here means "cannot
+# execute", never "passed". Secrets for live legs come from Actions secrets.
+
+name: p50-gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  gates:
+    name: P50.5 gates (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: crates
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+
+      - name: Install OpenSSL (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install openssl:x64-windows-static-md
+          echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $env:GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+          $libs = "-Clink-arg=advapi32.lib -Clink-arg=user32.lib -Clink-arg=crypt32.lib -Clink-arg=gdi32.lib"
+          echo "RUSTFLAGS=-D warnings $libs" >> $env:GITHUB_ENV
+
+      # P50.5.2 — live search legs run only with a SearXNG service; the
+      # outage/offline legs always run.
+      - name: P50.5.2 search E2E
+        run: cargo test -p everyaios-search --test p50_search_e2e
+        env:
+          EVERYAIOS_E2E_SEARXNG_URL: ${{ secrets.EVERYAIOS_E2E_SEARXNG_URL }}
+
+      # P50.5.4 — local mock-server binaries, no env needed.
+      - name: P50.5.4 connector/MCP E2E
+        run: cargo test -p everyaios-mcp --test p50_mcp_e2e
+
+      # P50.5.5 (crate legs) + P50.5.6 (crash composition) — hermetic.
+      - name: P50.5.5/5.6 crash + failure gates
+        run: cargo test -p everyaios-core --test p50_gates
+
+      # P50.5.1/5.3 precedent suites still green alongside the new gates.
+      - name: P50.5.1/5.3 vertical suites
+        run: cargo test -p everyaios-core --test p50_e2e
+        env:
+          EVERYAIOS_E2E_BASE_URL: ${{ secrets.EVERYAIOS_E2E_BASE_URL }}
+          EVERYAIOS_E2E_PROVIDER: ${{ secrets.EVERYAIOS_E2E_PROVIDER }}
+          EVERYAIOS_E2E_MODEL: ${{ secrets.EVERYAIOS_E2E_MODEL }}
+          EVERYAIOS_E2E_API_KEY: ${{ secrets.EVERYAIOS_E2E_API_KEY }}
+
+      # P50.5.7 — suites + shell-integration proofs (needs node for parity).
+      - name: Setup node (for gate scripts)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: P50.5.7 security release gate
+        working-directory: .
+        run: node scripts/e2e/security-gate.mjs
+
+      # P50.5.8 — clean-profile boot + doc-sync + parity on every OS.
+      - name: Build debug core binary (for binary-level legs)
+        run: cargo build -p everyaios-core
+
+      - name: P50.5.5 binary legs (failure-injection L1-L7)
+        working-directory: .
+        run: node scripts/e2e/failure-injection.mjs
+        env:
+          EVERYAIOS_E2E_CORE_BIN: ${{ github.workspace }}/crates/target/debug/everyaios-core${{ runner.os == 'Windows' && '.exe' || '' }}
+          EVERYAIOS_E2E_CHROME: ${{ secrets.EVERYAIOS_E2E_CHROME }}
+
+      - name: P50.5.8 clean-profile boot check
+        working-directory: .
+        run: node scripts/clean-profile-boot-check.mjs
+
+      - name: doc-sync + ipc-parity
+        working-directory: .
+        run: |
+          node scripts/check-doc-sync.mjs
+          node scripts/ipc-parity.mjs

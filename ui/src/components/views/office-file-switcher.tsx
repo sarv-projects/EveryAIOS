@@ -17,7 +17,9 @@ export default function OfficeFileSwitcher({
 }: {
   view: ViewId
   current?: string | null
-  onOpen: (path: string) => void
+  // P50.3.7 — views surface open failures in their own error banners, so a
+  // tab click must never produce an unhandled rejection here.
+  onOpen: (path: string) => void | Promise<void>
 }) {
   // Do not `?? []` in the selector — a fresh [] every time is never
   // referentially equal, so zustand re-renders forever (white screen).
@@ -46,7 +48,14 @@ export default function OfficeFileSwitcher({
               className="max-w-[140px] truncate"
               title={p}
               onClick={() => {
-                if (!active) onOpen(p)
+                if (!active) {
+                  try {
+                    const r = onOpen(p) as unknown
+                    if (r instanceof Promise) r.catch(() => {})
+                  } catch {
+                    /* the view's own error banner reports the failure */
+                  }
+                }
               }}
             >
               {fileName(p)}
@@ -60,7 +69,14 @@ export default function OfficeFileSwitcher({
                 if (active) {
                   const remaining = history.filter((x) => x !== p)
                   const fallback = remaining[0]
-                  if (fallback) onOpen(fallback)
+                  if (fallback) {
+                    try {
+                      const r = onOpen(fallback) as unknown
+                      if (r instanceof Promise) r.catch(() => {})
+                    } catch {
+                      /* the view's own error banner reports the failure */
+                    }
+                  }
                 }
               }}
             >

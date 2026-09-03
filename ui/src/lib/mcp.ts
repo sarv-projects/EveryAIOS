@@ -136,6 +136,15 @@ export async function mcpRemoteTools(
   return nativeCall('remote MCP tools', () => invoke<RemoteToolInfo[]>("mcp_remote_tools", { storeId }));
 }
 
+/** P50.2.6 — live connected state for a store entry (vault token present?).
+ * Preview returns not-connected; native rejection propagates (fail-closed). */
+export async function mcpRemoteStatus(
+  storeId: string,
+): Promise<{ connected: boolean }> {
+  if (!inTauri()) return { connected: false };
+  return nativeCall('remote MCP status', () => invoke<{ connected: boolean }>("mcp_remote_status", { storeId }));
+}
+
 /** Start a remote-MCP OAuth 2.1 connect (discovery + PKCE) → auth URL. */
 export async function mcpConnectStart(
   storeId: string,

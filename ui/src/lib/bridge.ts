@@ -4,7 +4,7 @@
 // Native command failures are recorded as degraded runtime state and are never
 // converted into preview data or synthetic success.
 
-import { useAppStore, type LiveBudget } from "./store";
+import { useAppStore, sanitizeSessionRows, type LiveBudget } from "./store";
 import {
   inTauri,
   chatStream,
@@ -387,7 +387,9 @@ async function startBridge(): Promise<BridgeDisposer> {
           // An empty native list is authoritative. It replaces the browser
           // seed with an empty real vault and prevents fake chats persisting.
           useAppStore.getState().markSessionsHydrated();
-          const sessions = listed?.sessions ?? [];
+          // P50.2.1 — schema-wrong rows (valid JSON, no usable id) are
+          // dropped, never rendered as broken chats.
+          const sessions = sanitizeSessionRows(listed?.sessions);
           // P38 — rehydrate per-session Chief pins from the vault round-trip
           // (each Session carries its durable `chiefPin`), so pins set before
           // the app restarted are live again in the store mirror.
@@ -586,7 +588,15 @@ export async function sendUserMessage(
   const trimmed = text.trim();
   if (!trimmed) return;
 
-  const sessionId = st.activeSessionId;
+  // P50.2.1 — never dispatch a turn against a session that does not exist.
+  // An empty vault (or a wiped id) means the first message opens the work:
+  // create the session first so the turn has a real target and the message
+  // is never silently dropped by pushUserMessage's id match.
+  let sessionId = st.activeSessionId;
+  if (!st.sessions.some((s) => s.id === sessionId)) {
+    st.newSession();
+    sessionId = useAppStore.getState().activeSessionId;
+  }
   const catalogId = st.selectedAgentId;
   const selectedInbuilt = isInbuilt(catalogId);
   // P38 — the session's effective Chief: session pin → user default →

@@ -9,7 +9,7 @@
 //! transition (registered at `connect_chat_relay` boot) — the UI is woken,
 //! never polled.
 
-use everyaios_core::{TaskKind, TaskLedger};
+use everyaios_core::{FileStore, TaskKind, TaskLedger};
 use serde_json::Value;
 use tauri::State;
 
@@ -108,9 +108,30 @@ pub fn tasks_complete(
 
 /// Maintenance sweep (P43.4): prune terminal records past the 7-day retention
 /// and mark grace-expired running tasks lost. Returns `{ pruned, lost }`.
+///
+/// P50.1.7 — boot reaches this command with no sidecar on a clean profile, so
+/// a relay-only sweep would silently skip forever (stale Running + expired
+/// terminal records surviving until the first coordinator connect). When the
+/// relay is absent, fall back to the same predicates on the same file
+/// (`tasks.json` via `FileStore`) — identical state machine, no second source
+/// of truth. No UI caller depends on the offline error (only boot calls it).
 #[tauri::command]
 pub fn tasks_sweep(state: State<'_, AppState>) -> Result<Value, String> {
-    let handle = svc(&state)?;
+    let file_direct = || -> Result<Value, String> {
+        let path = everyaios_core::default_data_dir().join("tasks.json");
+        let mut ledger = TaskLedger::new(Box::new(FileStore::new(path)));
+        let reaped = ledger.handle("tasks/reap", &serde_json::json!({}))?;
+        let pruned = ledger.handle("tasks/prune", &serde_json::json!({}))?;
+        Ok(serde_json::json!({
+            "lost": reaped.get("lost").cloned().unwrap_or(Value::Null),
+            "pruned": pruned.get("pruned").cloned().unwrap_or(Value::Null),
+        }))
+    };
+    let handle = match svc(&state) {
+        Ok(handle) => handle,
+        Err(e) if e.contains("not connected") => return file_direct(),
+        Err(e) => return Err(e),
+    };
     let mut ledger = handle.lock().map_err(|e| e.to_string())?;
     let reaped = ledger.handle("tasks/reap", &serde_json::json!({}))?;
     let pruned = ledger.handle("tasks/prune", &serde_json::json!({}))?;

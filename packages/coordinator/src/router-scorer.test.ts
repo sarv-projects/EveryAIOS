@@ -63,4 +63,41 @@ describe("selectModelForTask with observations", () => {
     // Never a crash: the turn still gets a model (cheapest nvidia default).
     expect(sel.provider).toBe("nvidia");
   });
+
+  it("P50.3.6 excludes keyed providers with no vault credential", () => {
+    const sel = selectModelForTask({
+      task: "chat",
+      providers: ["nvidia", "openai"],
+      credentialedProviders: ["openai"],
+    });
+    expect(sel.provider).toBe("openai");
+  });
+
+  it("P50.3.6 keyless runtimes always pass the credential gate", () => {
+    const sel = selectModelForTask({
+      task: "chat",
+      providers: ["openai", "ollama"],
+      credentialedProviders: [],
+    });
+    expect(sel.provider).toBe("ollama");
+  });
+
+  it("P50.3.6 credential ids are case/separator-insensitive", () => {
+    const sel = selectModelForTask({
+      task: "chat",
+      providers: ["openai"],
+      credentialedProviders: ["OpenAI"],
+    });
+    expect(sel.provider).toBe("openai");
+    expect(sel.reason).not.toContain("no vault credential");
+  });
+
+  it("P50.3.6 empty gate reports the honest no-credential reason", () => {
+    const sel = selectModelForTask({
+      task: "chat",
+      providers: ["nvidia", "openai"],
+      credentialedProviders: [],
+    });
+    expect(sel.reason).toContain("no vault credential");
+  });
 });

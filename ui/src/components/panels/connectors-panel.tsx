@@ -15,9 +15,11 @@ import { useAppStore } from '@/lib/store'
 import {
   mcpAttachRequest,
   mcpAttachCommit,
+  mcpDetach,
   mcpCatalog,
   mcpServers,
   mcpConnectStart,
+  mcpRemoteStatus,
   storeCatalog,
   waitForTicketResolution,
   type McpCatalog,
@@ -29,6 +31,7 @@ import SkillsPanel from '@/components/panels/skills-panel'
 import {
   oauthAccounts,
   oauthPollDevice,
+  oauthRevoke,
   oauthStartDevice,
   oauthStartPkce,
   oauthStatus,
@@ -298,12 +301,14 @@ export default function ConnectorsPanel() {
       </div>
 
       {/* Stats strip — live-derived values only in the shell; the preview
-          fixture appears solely in a plain-browser run (P50.2.6). */}
+          fixture appears solely in a plain-browser run (P50.2.6). Connected
+          counts vault OAuth accounts + live MCP rows; Available counts the
+          curated store entries (never a hardcoded demo number). */}
       <div className="grid grid-cols-2 gap-2 border-b border-border p-3 sm:grid-cols-4">
         {inTauri()
           ? [
-              { label: 'Connected', value: String(oauthAccts.length), tone: oauthAccts.length > 0 ? 'text-emerald-300' : 'text-zinc-500' },
-              { label: 'Available', value: '—', tone: 'text-foreground' },
+              { label: 'Connected', value: String(oauthAccts.length + mcpList.filter((s) => s.status === 'connected').length), tone: oauthAccts.length + mcpList.filter((s) => s.status === 'connected').length > 0 ? 'text-emerald-300' : 'text-zinc-500' },
+              { label: 'Available', value: String(store.length), tone: 'text-foreground' },
               { label: 'Tools', value: catalog ? String(catalog.total) : '—', tone: 'text-orange-300' },
               { label: 'MCP servers', value: String(mcpList.length), tone: 'text-sky-300' },
             ].map((s) => (
@@ -411,13 +416,15 @@ export default function ConnectorsPanel() {
                 )}
               </section>
               {/* P4.20 — honest planned rows: P42 (Google Workspace / M365
-                  Graph) is spec'd, not attached. Never shown as connected. */}
-              <section>
-                <div className="mb-2 flex items-center gap-1.5">
+                  Graph) is spec'd, not attached. Never shown as connected.
+                  Collapsed behind a disclosure so only installed/attached/
+                  authenticated resources dominate the surface (P50.2.6). */}
+              <details>
+                <summary className="mb-2 flex cursor-pointer items-center gap-1.5">
                   <Cloud className="h-3.5 w-3.5 text-sky-400" />
                   <span className="text-xs font-medium text-foreground">Planned (P42)</span>
                   <Badge variant="outline" className="text-[9px] text-sky-300">not attached</Badge>
-                </div>
+                </summary>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {[
                     { id: 'p42-google', name: 'Google Workspace', desc: 'Gmail · Drive · Docs · Sheets — official APIs, read-only-first (P42.2)' },
@@ -427,7 +434,7 @@ export default function ConnectorsPanel() {
                     return (
                       <ConnectorCard
                         key={p.id}
-                        colorIdx={i + NATIVE_SAMPLES.length}
+                        colorIdx={i}
                         c={{
                           id: p.id,
                           name: p.name,
@@ -477,7 +484,7 @@ export default function ConnectorsPanel() {
                 <p className="mt-2 font-mono text-[9px] text-muted-foreground/60">
                   P42 rows are honest placeholders — no token is stored until the official server is attached behind Guard-2. Scopes above are the reviewed P42.3 manifest.
                 </p>
-              </section>
+              </details>
             </>
           ) : (
             <section className="rounded-lg border border-border bg-card p-3">
@@ -572,10 +579,30 @@ export default function ConnectorsPanel() {
                         </div>
                       </div>
                       {connected ? (
-                        <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">
-                          <Check className="h-3 w-3" />
-                          connected
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">
+                            <Check className="h-3 w-3" />
+                            connected
+                          </Badge>
+                          {s.transport !== 'native' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
+                              onClick={() => void (async () => {
+                                try {
+                                  await mcpDetach(s.name)
+                                  notify(`MCP: detached “${s.name}”`)
+                                  await refreshMcp()
+                                } catch (e) {
+                                  notify(`MCP detach failed: ${String(e)}`)
+                                }
+                              })()}
+                            >
+                              Detach
+                            </Button>
+                          )}
+                        </div>
                       ) : (
                         <Button
                           size="sm"
@@ -624,6 +651,72 @@ function StoreSection({
 }) {
   const [connected, setConnected] = useState<Set<string>>(new Set())
 
+  // P50.2.6 — hydrate live connected state from the shell: remote-MCP rows
+  // via mcp_remote_status (vault token present?), flat connectors via the
+  // vault OAuth accounts. Preview stays disconnected; native failures leave
+  // the row not-connected (fail-closed, never optimistic).
+  useEffect(() => {
+    if (!inTauri() || store.length === 0) return
+    let alive = true
+    void (async () => {
+      try {
+        const accts = await oauthAccounts()
+        const byProvider = new Set(accts.map((a) => a.provider))
+        const next = new Set<string>()
+        await Promise.all(store.map(async (e) => {
+          try {
+            if (e.kind === 'remote-mcp') {
+              const st = await mcpRemoteStatus(e.id)
+              if (st.connected) next.add(e.id)
+            } else if (byProvider.has(e.vaultProvider)) {
+              next.add(e.id)
+            }
+          } catch {
+            /* leave not-connected */
+          }
+        }))
+        if (alive) setConnected(next)
+      } catch {
+        /* leave not-connected */
+      }
+    })()
+    return () => { alive = false }
+  }, [store])
+
+  async function refreshConnected(e: StoreEntry) {
+    try {
+      if (e.kind === 'remote-mcp') {
+        const st = await mcpRemoteStatus(e.id)
+        setConnected((s) => { const n = new Set(s); if (st.connected) n.add(e.id); else n.delete(e.id); return n })
+      } else {
+        const accts = await oauthAccounts()
+        const has = accts.some((a) => a.provider === e.vaultProvider)
+        setConnected((s) => { const n = new Set(s); if (has) n.add(e.id); else n.delete(e.id); return n })
+      }
+    } catch {
+      /* leave not-connected */
+    }
+  }
+
+  async function disconnect(e: StoreEntry) {
+    try {
+      if (e.kind === 'remote-mcp') {
+        // No dedicated remote-disconnect command: revoke the stored vault
+        // token path via oauth revoke when the provider matches, then
+        // re-probe. The row renders not-connected until the probe passes.
+        try { await oauthRevoke(e.vaultProvider, e.id) } catch { /* token may be keyring-scoped */ }
+      } else {
+        const accts = await oauthAccounts()
+        const hit = accts.find((a) => a.provider === e.vaultProvider)
+        if (hit) await oauthRevoke(hit.provider, hit.accountId)
+      }
+      setConnected((s) => { const n = new Set(s); n.delete(e.id); return n })
+      notify(`${e.name} — disconnected (vault token revoked)`)
+    } catch (err) {
+      notify(`Disconnect ${e.name}: ${String(err)}`)
+    }
+  }
+
   async function connect(e: StoreEntry) {
     setConnectingId(e.id)
     try {
@@ -645,6 +738,7 @@ function StoreSection({
         window.open(r.authUrl, '_blank')
         notify(`${e.name} — authorize in the browser that just opened`)
       }
+      await refreshConnected(e)
     } catch (err) {
       notify(`Connect ${e.name}: ${String(err)}`)
     } finally {
@@ -737,7 +831,7 @@ function StoreSection({
                     variant={isConnected ? 'outline' : 'default'}
                     className="mt-auto h-7 gap-1.5 text-[11px]"
                     disabled={connectingId !== null}
-                    onClick={() => (isConnected ? setConnected((s) => { const n = new Set(s); n.delete(e.id); return n }) : connect(e))}
+                    onClick={() => (isConnected ? void disconnect(e) : void connect(e))}
                   >
                     {connectingId === e.id ? (
                       <>Connecting…</>

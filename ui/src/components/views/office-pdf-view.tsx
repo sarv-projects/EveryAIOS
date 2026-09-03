@@ -1,6 +1,6 @@
 'use client'
 
-import { lazy, Suspense, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, MessageSquare, ScanSearch } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,11 +35,14 @@ const DEMO_DOC_TEXT = [
 ].join('\n')
 
 export default function OfficePdfView() {
-  const [page, setPage] = useState(2)
+  const [page, setPage] = useState(1)
   const [zoom, setZoom] = useState(100)
   const [payload, setPayload] = useState<PdfPayload | null>(null)
   const [dataUrl, setDataUrl] = useState<string | null>(null)
+  const [pixelsUnavailable, setPixelsUnavailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // P50.3.7 — same attachment wiring as Word (store owns path/history).
+  const officePath = useAppStore((s) => s.officePaths['office-pdf'])
   const setScopedView = useAppStore((s) => s.setScopedView)
   const setScopedDoc = useAppStore((s) => s.setScopedDoc)
   const [overlayOpen, setOverlayOpen] = useState(false)
@@ -58,7 +61,9 @@ export default function OfficePdfView() {
   const open = async (path: string) => {
     try {
       setError(null)
+      setPixelsUnavailable(false)
       setPayload(await pdfOpen(path))
+      useAppStore.getState().openOfficeDoc(path)
       setPage(1)
       // Real pixels when the shell can hand us the raw bytes (pdf.js render);
       // fall back to the text-extraction cards if that fails.
@@ -66,6 +71,7 @@ export default function OfficePdfView() {
         setDataUrl(await pdfBytes(path))
       } catch {
         setDataUrl(null)
+        setPixelsUnavailable(true)
       }
     } catch (err) {
       setLastAttempted(path)
@@ -73,11 +79,17 @@ export default function OfficePdfView() {
     }
   }
 
-  // P2.12 — surgical content ops over `pdf_page_op` (the same engine the
-  // agent tools use). Each re-opens the file so the viewer reflects the
-  // rewrite.
+  // P50.3.7 — open the store-owned path (artifact / folder / tab-switch).
+  useEffect(() => {
+    if (officePath && officePath !== payload?.path) void open(officePath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officePath])
+
+  // Mutating page ops honor the agent-run lock at the call site too (the
+  // buttons are disabled, but the helpers must also refuse — never rely on
+  // button-only enforcement for an engine mutation).
   const runPageOp = async (op: string, payloadJson: string) => {
-    if (!payload) return
+    if (!payload || locked) return
     try {
       await pdfPageOp(payload.path, op, { other: payloadJson })
       await open(payload.path)
@@ -185,6 +197,7 @@ export default function OfficePdfView() {
             }}
           />
           <Button size="sm" variant="outline" className="h-6 text-[10px]"
+            disabled={locked} title={locked ? 'Read-only while the agent is running' : 'Rotate 90°'}
             onClick={() => pdfPageOp(payload.path, 'rotate', { delta: 90 }).then(() => open(payload.path)).catch((e) => setError(String(e)))}>
             Rotate 90°
           </Button>
@@ -269,9 +282,18 @@ export default function OfficePdfView() {
               </Suspense>
             ) : (
               <div className="w-full max-w-3xl space-y-2">
-                {payload.texts[page - 1] != null && (
+                {pixelsUnavailable && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 font-mono text-[10px] text-amber-300">
+                    Pixel render unavailable — showing extracted text instead.
+                  </div>
+                )}
+                {payload.texts[page - 1] != null ? (
                   <div className="rounded-sm bg-[#fbfbf9] p-6 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-xl">
                     {payload.texts[page - 1]}
+                  </div>
+                ) : (
+                  <div className="rounded-sm bg-[#fbfbf9] p-6 font-mono text-[11px] text-zinc-500 shadow-xl">
+                    This page has no extractable text.
                   </div>
                 )}
               </div>

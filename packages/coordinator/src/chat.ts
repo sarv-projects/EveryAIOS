@@ -62,6 +62,14 @@ export interface ChatStreamParams {
   primaryChief?: string;
   provider?: string;
   model?: string;
+  /**
+   * P50.3.6 — live vault key set for the taken-route credential gate. When
+   * present, the task→model router excludes keyed providers with no vault
+   * credential (keyless runtimes always pass). Fed by the Rust shell
+   * (`providers_with_keys`) via chat/stream params; absent ⇒ ungated
+   * (back-compat for tests/callers that predate the gate).
+   */
+  credentialedProviders?: string[];
   /** P1.5 — persona tone overlay (core-ai PERSONA_PRESETS). */
   personaId?: PersonaId;
   /** P1.5 — Hermes SOUL.md identity block (Slot #1, injection-scanned). */
@@ -642,6 +650,11 @@ async function runInbuiltTurn(
       task,
       ...(provider !== undefined ? { provider } : {}),
       ...(model !== undefined ? { model } : {}),
+      // P50.3.6 — gate the taken route on the live vault key set when the
+      // shell supplied it (mirrors the Rust display feed).
+      ...(params.credentialedProviders !== undefined
+        ? { credentialedProviders: params.credentialedProviders }
+        : {}),
       // P36/P0-5 — feed the RouteDecision consensus scorer the observations
       // recorded by *prior* turns of this process (health/cost/latency), so
       // the next routing decision reflects live provider outcomes.

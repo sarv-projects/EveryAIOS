@@ -6,6 +6,7 @@ import {
   Cpu,
   Database,
   HardDrive,
+  MonitorSmartphone,
   Network,
   ShieldCheck,
   Sparkles,
@@ -38,6 +39,8 @@ interface Stat {
   value: string
   color?: string
   tooltip: string
+  /** P50.3.7/8 — optional click-through to the owning surface. */
+  onClick?: () => void
 }
 
 export function StatusBar() {
@@ -50,6 +53,10 @@ export function StatusBar() {
   const autoRoute = useAppStore((s) => s.autoRoute)
   const liveBudget = useAppStore((s) => s.liveBudget)
   const browserAttached = useAppStore((s) => s.browserAttached)
+  // P50.3.7 — desktop engine attachment in the dev strip (mirrors browser).
+  const desktopAttached = useAppStore((s) => s.desktopAttached)
+  const desktopReason = useAppStore((s) => s.desktopReason)
+  const setActiveView = useAppStore((s) => s.setActiveView)
   const devMode = useAppStore((s) => s.devMode)
   const monitorBadge = useAppStore((s) => s.monitorBadge)
   const clearMonitorBadge = useAppStore((s) => s.clearMonitorBadge)
@@ -111,6 +118,19 @@ export function StatusBar() {
       tooltip: browserAttached
         ? 'CDP session attached — the browse view drives a real browser.'
         : 'No CDP session attached — start the browser from the Browse surface.',
+      onClick: () => setActiveView('browse'),
+    },
+    {
+      icon: MonitorSmartphone,
+      label: 'desktop',
+      value: desktopAttached ? 'attached' : 'not attached',
+      color: desktopAttached ? 'text-emerald-400' : 'text-muted-foreground',
+      tooltip: desktopAttached
+        ? 'Desktop engine attached — the Computer use view drives native windows.'
+        : desktopReason
+          ? `Desktop engine detached — ${desktopReason}`
+          : 'Desktop engine detached — open the Computer use surface to probe it.',
+      onClick: () => setActiveView('desktop'),
     },
     {
       icon: Zap,
@@ -246,19 +266,27 @@ export function StatusBar() {
       <div className="flex items-center gap-0 flex-1 overflow-x-auto scroll-thin">
         {stats.map((stat, i) => {
           const Icon = stat.icon
+          const body = (
+            <div className={cn(
+              'flex items-center gap-1.5 px-2 h-full whitespace-nowrap',
+              i < stats.length - 1 && 'border-r border-border/40',
+              stat.onClick && 'cursor-pointer hover:bg-accent/50 rounded transition-colors'
+            )}>
+              <Icon className={cn('h-2.5 w-2.5 text-muted-foreground/70')} />
+              <span className="text-muted-foreground/60">{stat.label}</span>
+              <span className={cn('text-foreground/80', stat.color)}>
+                {stat.value}
+              </span>
+            </div>
+          )
           return (
             <Tooltip key={stat.label}>
               <TooltipTrigger asChild>
-                <div className={cn(
-                  'flex items-center gap-1.5 px-2 h-full whitespace-nowrap',
-                  i < stats.length - 1 && 'border-r border-border/40'
-                )}>
-                  <Icon className={cn('h-2.5 w-2.5 text-muted-foreground/70')} />
-                  <span className="text-muted-foreground/60">{stat.label}</span>
-                  <span className={cn('text-foreground/80', stat.color)}>
-                    {stat.value}
-                  </span>
-                </div>
+                {stat.onClick ? (
+                  <button type="button" onClick={stat.onClick} aria-label={`Open ${stat.label} surface`} className="h-full">
+                    {body}
+                  </button>
+                ) : body}
               </TooltipTrigger>
               <TooltipContent side="top" className="font-mono text-[11px]">
                 {stat.tooltip}

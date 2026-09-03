@@ -55,16 +55,18 @@ export default function AnalyticsPanel() {
   const [range, setRange] = useState('30d')
   const notify = useAppStore((s) => s.notify)
   const [live, setLive] = useState<{ spent: number; tokens: number; sessions: number } | null>(null)
+  const [liveError, setLiveError] = useState<string | null>(null)
   useEffect(() => {
     if (!inTauri()) return
     let active = true
+    setLiveError(null)
     Promise.all([usageSnapshot(), sessionTotals()]).then(([snapshot, totals]) => {
       if (active) setLive({
         spent: snapshot.byKey.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
         tokens: snapshot.total.tokensIn + snapshot.total.tokensOut,
         sessions: totals.length,
       })
-    }).catch(() => { if (active) setLive({ spent: 0, tokens: 0, sessions: 0 }) })
+    }).catch((e) => { if (active) { setLive(null); setLiveError(e instanceof Error ? e.message : String(e)) } })
     return () => { active = false }
   }, [])
 
@@ -98,7 +100,7 @@ export default function AnalyticsPanel() {
         >
           {inTauri() ? (
             <div className="rounded-lg border border-dashed border-border bg-card p-4 text-xs text-muted-foreground">
-              {live ? `Live ledger: $${live.spent.toFixed(2)} · ${live.tokens.toLocaleString()} tokens · ${live.sessions} sessions.` : 'Loading live analytics from the encrypted usage ledger…'}
+              {live ? `Live ledger: $${live.spent.toFixed(2)} · ${live.tokens.toLocaleString()} tokens · ${live.sessions} sessions.` : liveError ? `Live ledger unavailable — ${liveError}` : 'Loading live analytics from the encrypted usage ledger…'}
             </div>
           ) : (
           <>

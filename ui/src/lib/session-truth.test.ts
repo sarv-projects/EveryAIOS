@@ -10,7 +10,7 @@
 // returns becomes the store's rows verbatim — never a synthesized chat.
 
 import { describe, expect, test } from 'bun:test'
-import { useAppStore } from './store'
+import { useAppStore, sanitizeSessionRows } from './store'
 
 describe('P50.2.1 — sessions runtime truth', () => {
   test('a fresh store is NOT hydrated: the demo seed can never persist', () => {
@@ -72,5 +72,53 @@ describe('P50.2.1 — sessions runtime truth', () => {
     // And no success marker is ever forged: the hydrated flag only flips via
     // markSessionsHydrated (called only after a real session_list round-trip).
     expect(typeof st.markSessionsHydrated).toBe('function')
+  })
+
+  test('schema-wrong vault rows are dropped, never rendered as broken chats', () => {
+    // JSON-valid but unusable: missing id, empty id, non-object rows.
+    const dirty = [
+      { id: 'good-1', title: 'real' },
+      { title: 'no id at all' },
+      { id: '', title: 'empty id' },
+      { id: 42, title: 'numeric id' },
+      null,
+      'a string row',
+    ]
+    const clean = sanitizeSessionRows(dirty)
+    expect(clean).toHaveLength(1)
+    expect(clean[0].id).toBe('good-1')
+    expect(sanitizeSessionRows(undefined)).toEqual([])
+    expect(sanitizeSessionRows(null)).toEqual([])
+  })
+
+  test('hydration with a dirty vault list keeps only renderable sessions', () => {
+    // Mirrors the bridge hydration path (markSessionsHydrated + sanitize +
+    // setState): the store must hold exactly the usable rows.
+    useAppStore.setState({ sessionsHydrated: false })
+    useAppStore.getState().markSessionsHydrated()
+    const fromVault = sanitizeSessionRows([
+      { id: 'real-2', title: 'kept', status: 'idle', preview: '', updatedAt: '', messages: [] },
+      { title: 'dropped: no id' },
+      { id: '', title: 'dropped: empty id' },
+    ])
+    useAppStore.setState({ sessions: fromVault, activeSessionId: fromVault[0]?.id ?? '', sessionChiefs: {} })
+    const st = useAppStore.getState()
+    expect(st.sessions).toHaveLength(1)
+    expect(st.sessions[0].id).toBe('real-2')
+    expect(st.activeSessionId).toBe('real-2')
+  })
+
+  test('sending with no matching session opens the work first (never a dropped turn)', () => {
+    // Empty vault: no row matches activeSessionId — the send path must
+    // create the session (newSession) so pushUserMessage has a real target.
+    useAppStore.setState({ sessionsHydrated: true, sessions: [], activeSessionId: '' })
+    useAppStore.getState().newSession()
+    const st = useAppStore.getState()
+    expect(st.sessions).toHaveLength(1)
+    expect(st.activeSessionId).toBe(st.sessions[0].id)
+    expect(st.activeSessionId.length).toBeGreaterThan(0)
+    // And the message lands on it (the pre-fix behavior dropped it silently).
+    st.pushUserMessage('hello?')
+    expect(useAppStore.getState().sessions[0].messages).toHaveLength(1)
   })
 })

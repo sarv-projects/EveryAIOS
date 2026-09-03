@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Presentation, ChevronLeft, ChevronRight, StickyNote } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -24,6 +24,8 @@ export default function OfficePptxView() {
   const [error, setError] = useState<string | null>(null)
   const [notes, setNotes] = useState<Array<{ slide: number; talk: string }>>([])
   const [lastAttempted, setLastAttempted] = useState<string | null>(null)
+  // P50.3.7 — same attachment wiring as Word (store owns path/history).
+  const officePath = useAppStore((s) => s.officePaths['office-pptx'])
   const running = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status === 'running')
   const paused = useAppStore((s) => s.pausedSessions[s.activeSessionId])
   // P1.9 — read-only while the agent is running (same lock as Word).
@@ -34,6 +36,7 @@ export default function OfficePptxView() {
       setError(null)
       setLastAttempted(path)
       setPayload(await pptxOpen(path))
+      useAppStore.getState().openOfficeDoc(path)
       setCurrent(0)
       try {
         setNotes((await pptxNotes(path)).notes)
@@ -44,6 +47,12 @@ export default function OfficePptxView() {
       setError(err instanceof Error ? err.message : 'Failed to open deck')
     }
   }
+
+  // P50.3.7 — open the store-owned path (artifact / folder / tab-switch).
+  useEffect(() => {
+    if (officePath && officePath !== payload?.path) void open(officePath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officePath])
 
   return (
     <div className="flex h-full w-full flex-col bg-zinc-900">
@@ -68,7 +77,11 @@ export default function OfficePptxView() {
           )}
         </div>
         <span className="font-mono text-[10px] text-muted-foreground">
-          {payload ? `Slide ${current + 1} / ${payload.slides.length}` : 'Slide 3 / 12'}
+          {payload
+            ? payload.slides.length > 0
+              ? `Slide ${Math.min(current + 1, payload.slides.length)} / ${payload.slides.length}`
+              : 'Empty deck'
+            : 'Slide 3 / 12'}
         </span>
       </header>
 
@@ -100,6 +113,11 @@ export default function OfficePptxView() {
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col bg-zinc-950/40 p-4">
           <div className="relative mx-auto aspect-video w-full max-w-2xl overflow-hidden rounded-lg border border-border bg-gradient-to-br from-[#1d1f23] to-[#141518] shadow-lg">
+            {payload && payload.slides.length === 0 && (
+              <div className="flex h-full items-center justify-center p-8 text-center font-mono text-[11px] text-muted-foreground">
+                This deck has no slides to show.
+              </div>
+            )}
             {payload && payload.slides[current] && (
               <div className="flex h-full flex-col p-8">
                 <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />
@@ -159,12 +177,17 @@ export default function OfficePptxView() {
             )}
           </div>
 
-          {notes[current] && (
-            <div className="mt-2 rounded border border-border bg-zinc-950 p-2 font-mono text-[10px] text-muted-foreground">
-              <StickyNote className="mr-1 inline h-3 w-3" />
-              {notes[current]?.talk || 'No speaker notes'}
-            </div>
-          )}
+          {(() => {
+            // P50.3.7 — resolve notes by slide number like the sidebar does;
+            // positional indexing misaligns on decks with missing notes.
+            const note = notes.find((n) => n.slide === current + 1)?.talk
+            return note ? (
+              <div className="mt-2 rounded border border-border bg-zinc-950 p-2 font-mono text-[10px] text-muted-foreground">
+                <StickyNote className="mr-1 inline h-3 w-3" />
+                {note}
+              </div>
+            ) : null
+          })()}
           <div className="mt-3 flex items-center justify-between">
             <button
               onClick={() => setCurrent(Math.max(0, current - 1))}

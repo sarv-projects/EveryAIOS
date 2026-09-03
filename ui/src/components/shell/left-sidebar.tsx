@@ -313,6 +313,16 @@ export function LeftSidebar() {
             recent.filter((s) => s.parentId).map((s) => (
               <WorkRow key={s.id} session={s} collapsed={collapsed} active={activeId === s.id} depth={1} />
             ))}
+          {/* P50.2.1 — an empty vault renders an honest empty state, never a
+              blank pane that reads as still loading. */}
+          {recent.length === 0 && !collapsed && (
+            <div className="px-3 py-6 text-center">
+              <p className="text-[11px] text-muted-foreground">No work yet</p>
+              <p className="mt-1 font-mono text-[10px] text-muted-foreground/60">
+                New work above — your first message opens it
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

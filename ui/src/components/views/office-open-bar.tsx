@@ -19,20 +19,37 @@ interface Props {
 
 const GOOGLE_DOC_HOSTS = ['docs.google.com', 'sheets.google.com', 'drive.google.com']
 
+/** P50.3.7 — supported engine extensions (matches the store's openOfficeDoc). */
+export const OFFICE_EXTENSIONS = ['docx', 'xlsx', 'xlsm', 'pptx', 'pdf']
+
 /** P33.6 — a Google Docs/Sheets/Drive link routes to the authenticated browser view. */
 export function isGoogleDocUrl(raw: string): boolean {
   try {
-    const u = new URL(raw.trim())
-    return GOOGLE_DOC_HOSTS.includes(u.hostname)
+    const host = new URL(raw.trim()).hostname.toLowerCase()
+    if (GOOGLE_DOC_HOSTS.includes(host)) return true
+    // Country domains: docs.google.co.uk, drive.google.de, …
+    return /^(docs|sheets|drive)\.google\.[a-z.]+$/.test(host)
   } catch {
     return false
   }
 }
 
+/** Extension guard with an honest refusal reason (null = openable). */
+export function officeExtensionError(raw: string): string | null {
+  const base = raw.trim().split(/[?#]/)[0]
+  const ext = base.split('.').pop()?.toLowerCase() ?? ''
+  if (!ext || !OFFICE_EXTENSIONS.includes(ext)) {
+    return `“${base}” is not openable here — supported: ${OFFICE_EXTENSIONS.map((e) => `.${e}`).join(' ')} (legacy .doc/.xls/.ppt convert in LibreOffice)`
+  }
+  return null
+}
+
 export function OfficeOpenBar({ onOpen, livePath }: Props) {
   const [path, setPath] = useState('')
   const [busy, setBusy] = useState(false)
+  const [hint, setHint] = useState<string | null>(null)
   const openInBrowser = useAppStore((s) => s.openInBrowser)
+  const notify = useAppStore((s) => s.notify)
   const canOpen = inTauri() && path.trim().length > 0
   const isGoogle = isGoogleDocUrl(path)
 
@@ -42,8 +59,17 @@ export function OfficeOpenBar({ onOpen, livePath }: Props) {
       // Google Docs/Sheets — normal access = authenticated browser view.
       openInBrowser(path.trim())
       setPath('')
+      setHint(null)
       return
     }
+    // P50.3.7 — refuse unsupported extensions before the engine round-trip.
+    const extErr = officeExtensionError(path)
+    if (extErr) {
+      setHint(extErr)
+      notify(extErr)
+      return
+    }
+    setHint(null)
     setBusy(true)
     try {
       await onOpen(path.trim())
@@ -53,14 +79,15 @@ export function OfficeOpenBar({ onOpen, livePath }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 border-b border-border bg-zinc-900/40 px-3 py-1.5">
+    <div className="flex flex-col border-b border-border bg-zinc-900/40">
+    <div className="flex items-center gap-1.5 px-3 py-1.5">
       <Input
         value={path}
-        onChange={(e) => setPath(e.target.value)}
+        onChange={(e) => { setPath(e.target.value); setHint(null) }}
         onKeyDown={(e) => e.key === 'Enter' && open()}
         placeholder={
           inTauri()
-            ? '/path/to/file.docx'
+            ? 'Absolute path inside the workspace — /…/file.docx (.docx .xlsx .pptx .pdf)'
             : 'Open a real file (Tauri shell only) — demo shown'
         }
         disabled={!inTauri()}
@@ -81,6 +108,10 @@ export function OfficeOpenBar({ onOpen, livePath }: Props) {
           {livePath}
         </span>
       )}
+    </div>
+    {hint && (
+      <div className="px-3 pb-1.5 font-mono text-[9px] text-amber-300">{hint}</div>
+    )}
     </div>
   )
 }
