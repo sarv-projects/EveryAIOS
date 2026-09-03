@@ -88,7 +88,7 @@ export interface ChatWireEvent {
 
 /** Pause every scheduled job bound to a chat (delete-session cascade). */
 export async function schedulerPauseSession(sessionId: string): Promise<number> {
-  return tauriInvoke<number>("scheduler_pause_session", { sessionId });
+  return invoke<number>("scheduler_pause_session", { sessionId });
 }
 
 /** P1.4: start a chat turn. Resolves with the streamId. */
@@ -110,12 +110,12 @@ export async function chatStream(args: {
    * inbuilt by accident. */
   primaryChief?: string;
 }): Promise<string> {
-  return tauriInvoke<string>("chat_stream", args);
+  return invoke<string>("chat_stream", args);
 }
 
 /** P1.4: cancel a running stream (abort → Rust → sidecar → provider). */
 export async function chatCancel(streamId: string): Promise<void> {
-  return tauriInvoke("chat_cancel", { streamId });
+  return invoke("chat_cancel", { streamId });
 }
 
 /** S0.5: re-run a failed tool through the same Guard-2 ticket path. */
@@ -126,7 +126,7 @@ export async function chatToolRetry(args: {
   args: Record<string, unknown>;
   agentId?: string;
 }): Promise<void> {
-  return tauriInvoke("chat_tool_retry", args);
+  return invoke("chat_tool_retry", args);
 }
 
 /** P6.3 Stage-0: run a blueprint plan through the coordinator's plan executor
@@ -139,7 +139,7 @@ export async function planExecute(args: {
   provider?: string;
   model?: string;
 }): Promise<string> {
-  return tauriInvoke<string>("plan_execute", args);
+  return invoke<string>("plan_execute", args);
 }
 
 /** P6.3 Stage-0: return a circuit-break card choice (skip/retry/escalate/…)
@@ -148,7 +148,7 @@ export async function planRespond(
   breakId: string,
   choice: string,
 ): Promise<void> {
-  return tauriInvoke("plan_respond", { breakId, choice });
+  return invoke("plan_respond", { breakId, choice });
 }
 
 /** Subscribe to chat events; returns an unsubscribe function. */

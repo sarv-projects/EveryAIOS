@@ -144,10 +144,15 @@ pub fn mcp_servers(state: tauri::State<'_, crate::AppState>) -> Result<Vec<McpSe
         ),
     }];
     let attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
+    // P50.2.6 — an attached row is "connected" only while its live child is
+    // tracked in mcp_live. Restored-after-restart rows (children died with the
+    // previous shell) honestly report disconnected until re-attached.
+    let live = state.mcp_live.lock().map_err(|e| e.to_string())?;
     for (name, info) in attached.iter() {
+        let status = if live.contains_key(name) { "connected" } else { "disconnected" };
         rows.push(McpServerRow {
             name: name.clone(),
-            status: "connected".into(),
+            status: status.into(),
             transport: info.transport.clone(),
             tools: info.tools,
             desc: info.desc.clone(),

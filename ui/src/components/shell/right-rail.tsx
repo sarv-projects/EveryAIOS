@@ -122,22 +122,25 @@ const sessionItems: RailItem[] = [
 ]
 
 const officeFlyoutItems = [
-  { id: 'office-xlsx' as ViewId, label: 'Q3-Financials.xlsx', live: true, type: 'Sheets' },
-  { id: 'office-docx' as ViewId, label: 'exec-summary.docx', live: false, type: 'Word' },
-  { id: 'office-pptx' as ViewId, label: 'quarterly-deck.pptx', live: false, type: 'Slides' },
-  { id: 'office-pdf' as ViewId, label: 'invoice-8402.pdf', live: false, type: 'PDF' },
+  { id: 'office-xlsx' as ViewId, label: 'Spreadsheet', live: false, type: 'Sheets' },
+  { id: 'office-docx' as ViewId, label: 'Document', live: false, type: 'Word' },
+  { id: 'office-pptx' as ViewId, label: 'Slides', live: false, type: 'Slides' },
+  { id: 'office-pdf' as ViewId, label: 'PDF', live: false, type: 'PDF' },
 ]
 
 // View metadata for the multi-view tab strip (ARCH/12 v3.0 — VS Code-style).
+// P50.3.7 — office labels are kind names until a real file is open; the tab
+// strip and flyout show `officePaths[v]` filenames once attached (never demo
+// filenames as if they were open).
 const VIEW_META: Record<ViewId, { label: string; icon: React.ElementType }> = {
   folder: { label: 'Folder', icon: Folder },
   shell: { label: 'Terminal', icon: Terminal },
   browse: { label: 'Browser', icon: Globe },
   code: { label: 'Code', icon: Code2 },
-  'office-xlsx': { label: 'Q3-Financials.xlsx', icon: Table },
-  'office-docx': { label: 'exec-summary.docx', icon: FileText },
-  'office-pptx': { label: 'quarterly-deck.pptx', icon: Presentation },
-  'office-pdf': { label: 'invoice-8402.pdf', icon: File },
+  'office-xlsx': { label: 'Spreadsheet', icon: Table },
+  'office-docx': { label: 'Document', icon: FileText },
+  'office-pptx': { label: 'Slides', icon: Presentation },
+  'office-pdf': { label: 'PDF', icon: File },
   progress: { label: 'Progress', icon: Activity },
   diff: { label: 'Diff', icon: GitCompare },
   audit: { label: 'Audit', icon: ShieldCheck },
@@ -201,6 +204,8 @@ export function ActivityRail() {
   const setOfficeFlyoutOpen = useAppStore((s) => s.setOfficeFlyoutOpen)
   const officeFlyoutOpen = useAppStore((s) => s.officeFlyoutOpen)
   const setRailCollapsed = useAppStore((s) => s.setRailCollapsed)
+  // P50.3.7/8 — rail dots reflect live attachment, never static flags.
+  const browserAttached = useAppStore((s) => s.browserAttached)
 
   const handleClick = (item: RailItem) => {
     if (item.id === activeView && !railCollapsed) {
@@ -215,6 +220,8 @@ export function ActivityRail() {
       {railItems.map((item) => {
         const Icon = item.icon
         const isActive = activeView === item.id && !railCollapsed
+        // P50.3.8 — the Browse dot means a live CDP session is attached.
+        const showLive = item.id === 'browse' ? browserAttached : item.live
         return (
           <Tooltip key={item.id}>
             <TooltipTrigger asChild>
@@ -230,7 +237,7 @@ export function ActivityRail() {
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {item.live && (
+                {showLive && (
                   <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-orange-500 live-dot ring-2 ring-sidebar" />
                 )}
                 {isActive && (
@@ -241,7 +248,7 @@ export function ActivityRail() {
             <TooltipContent side="left" sideOffset={8}>
               {item.label}
               <span className="ml-2 text-muted-foreground text-[10px] font-mono">{item.shortcut}</span>
-              {item.live && (
+              {showLive && (
                 <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-orange-400">
                   <span className="h-1 w-1 rounded-full bg-orange-500 live-dot" /> Live
                 </span>
@@ -316,7 +323,9 @@ export function ActivityRail() {
                 <span className="flex-1 text-left truncate">
                   {officePaths[doc.id]?.split(/[\\/]/).pop() ?? doc.label}
                 </span>
-                {doc.live && (
+                {/* P50.3.7 — the dot means a real file is open, never a demo
+                    filename. Kind label alone = nothing attached yet. */}
+                {officePaths[doc.id] && (
                   <span className="h-1.5 w-1.5 rounded-full bg-orange-500 live-dot" />
                 )}
               </button>
@@ -417,6 +426,10 @@ export function RightViewport() {
   const setActiveView = useAppStore((s) => s.setActiveView)
   const openViews = useAppStore((s) => s.openViews)
   const officePaths = useAppStore((s) => s.officePaths)
+  // P50.3.7/8 — per-tab attachment dots (browse = CDP session, desktop =
+  // engine, office = open file) so the strip never claims live wrongly.
+  const browserAttached = useAppStore((s) => s.browserAttached)
+  const desktopAttached = useAppStore((s) => s.desktopAttached)
   const addView = useAppStore((s) => s.addView)
   const closeView = useAppStore((s) => s.closeView)
   const reorderViews = useAppStore((s) => s.reorderViews)
@@ -461,15 +474,25 @@ export function RightViewport() {
       },
     ],
     browse: [
+      // P50.3.8 — header actions must do real things: the session is single-
+      // page (no tabs) and the snapshot lives in the view, so these route to
+      // the surface instead of claiming fake tabs/inspections.
       {
         icon: Globe,
-        label: 'New tab',
-        action: () => notify('New browser tab — starting at about:blank'),
+        label: 'Open Browse',
+        action: () => setActiveView('browse'),
       },
       {
         icon: ScanSearch,
-        label: 'Inspector',
-        action: () => notify('DOM inspector — accessibility-tree snapshot'),
+        label: 'Snapshot',
+        action: () => setActiveView('browse'),
+      },
+    ],
+    desktop: [
+      {
+        icon: MonitorSmartphone,
+        label: 'Open Computer use',
+        action: () => setActiveView('desktop'),
       },
     ],
     code: [
@@ -501,31 +524,39 @@ export function RightViewport() {
       },
     ],
     'office-xlsx': [
+      // P50.3.7 — route into the sheet surface instead of claiming fake
+      // recalc results; the view's own Recalc runs IronCalc on the open file.
       {
         icon: RotateCw,
         label: 'Recalculate',
-        action: () => notify('IronCalc recalc — 0 LLM ops (deterministic)'),
+        action: () => {
+          setActiveView('office-xlsx')
+          notify('Use Recalc in the sheet — runs on the open file')
+        },
       },
     ],
     'office-docx': [
       {
         icon: FileText,
-        label: 'Word count',
-        action: () => notify('847 words · 3 sections · Page 1/3'),
+        label: 'Open document',
+        action: () => setActiveView('office-docx'),
       },
     ],
     'office-pptx': [
       {
         icon: Presentation,
-        label: 'Presenter view',
-        action: () => notify('Presenter notes — Slide 3/5'),
+        label: 'Open deck',
+        action: () => setActiveView('office-pptx'),
       },
     ],
     'office-pdf': [
       {
         icon: ScanSearch,
         label: 'Search in PDF',
-        action: () => notify('Search — 3 hits for “invoice”'),
+        action: () => {
+          setActiveView('office-pdf')
+          notify('Use “Find in PDF” in the open document')
+        },
       },
     ],
     diff: [
@@ -589,6 +620,26 @@ export function RightViewport() {
               const Icon = meta.icon
               const isActive = v === activeView
               const isDragTarget = dragIndex !== null && idx === dropIndex
+              // P50.3.7/8 — live dot only on proven attachment: browse needs
+              // the CDP session, desktop the engine, office an open file.
+              const tabLive =
+                v === 'browse'
+                  ? browserAttached
+                  : v === 'desktop'
+                    ? desktopAttached
+                    : v.startsWith('office-')
+                      ? !!officePaths[v]
+                      : false
+              const tabTitle =
+                v === 'browse'
+                  ? browserAttached
+                    ? 'Browser — CDP session attached'
+                    : 'Browser — detached'
+                  : v === 'desktop'
+                    ? desktopAttached
+                      ? 'Computer use — engine attached'
+                      : 'Computer use — detached'
+                    : (officePaths[v] ?? meta.label)
               return (
                 <div
                   key={v}
@@ -617,6 +668,7 @@ export function RightViewport() {
                     setDropIndex(null)
                   }}
                   onClick={() => setActiveView(v)}
+                  title={tabTitle}
                   className={cn(
                     'group flex cursor-pointer items-center gap-1.5 rounded-t-md border border-b-0 px-2 py-1 text-[10.5px] transition-colors',
                     isActive
@@ -625,6 +677,9 @@ export function RightViewport() {
                   )}
                 >
                   <Icon className={cn('h-3 w-3 shrink-0', isActive && 'text-orange-500')} />
+                  {tabLive && (
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500 live-dot" title={tabTitle} />
+                  )}
                   <span
                     className={cn(
                       'max-w-[130px] truncate',

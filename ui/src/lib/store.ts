@@ -218,6 +218,24 @@ export interface Session {
   chiefUnpinned?: boolean
 }
 
+/**
+ * P50.2.1 — keep vault rows that can render as sessions, drop the rest. The
+ * Rust parse boundary already drops malformed JSON; this drops JSON-valid
+ * but schema-wrong rows (missing/empty `id`) that would otherwise enter the
+ * store verbatim and render as broken chats. Pure (unit-tested); dropping is
+ * always safe because the vault still holds the raw row.
+ */
+export function sanitizeSessionRows(rows: unknown): Session[] {
+  if (!Array.isArray(rows)) return []
+  return rows.filter(
+    (r): r is Session =>
+      typeof r === 'object' &&
+      r !== null &&
+      typeof (r as { id?: unknown }).id === 'string' &&
+      (r as { id: string }).id.length > 0,
+  )
+}
+
 export interface Automation {
   id: string
   name: string
@@ -270,7 +288,10 @@ export interface PendingPatch {
 export interface Connector {
   id: string
   name: string
-  category: 'native' | 'composio' | 'mcp' | 'zapier' | 'nango'
+  // P50.2.6 — only surfaces the Rust shell can prove: native OAuth rows
+  // (vault accounts) and MCP rows (attached/live). Legacy aggregator
+  // categories return only if a native command reports them.
+  category: 'native' | 'mcp'
   status: 'connected' | 'disconnected' | 'error'
   tools: number
   type?: 'oauth' | 'apiKey' | 'stdio' | 'http'
@@ -508,17 +529,10 @@ export const mockAutomations: Automation[] = [
   },
 ]
 
-export const mockConnectors: Connector[] = [
-  { id: 'c1', name: 'Gmail', category: 'native', status: 'connected', tools: 3, type: 'oauth' },
-  { id: 'c2', name: 'Google Calendar', category: 'native', status: 'connected', tools: 5, type: 'oauth' },
-  { id: 'c3', name: 'Composio (12 toolkits)', category: 'composio', status: 'connected', tools: 47, type: 'apiKey' },
-  { id: 'c4', name: 'Local SearXNG', category: 'native', status: 'connected', tools: 1, type: 'http' },
-  { id: 'c5', name: 'GitHub MCP', category: 'mcp', status: 'connected', tools: 18, type: 'http' },
-  { id: 'c6', name: 'Filesystem MCP', category: 'mcp', status: 'connected', tools: 7, type: 'stdio' },
-  { id: 'c7', name: 'Slack MCP', category: 'mcp', status: 'disconnected', tools: 14, type: 'stdio' },
-  { id: 'c8', name: 'Linear', category: 'native', status: 'disconnected', tools: 9, type: 'oauth' },
-  { id: 'c9', name: 'Notion', category: 'native', status: 'disconnected', tools: 11, type: 'oauth' },
-]
+// P50.2.6 — removed: mockConnectors (Composio/Slack/Linear demo rows) deleted
+// 2026-09-03. Only installed/attached/authenticated resources may appear
+// connected; the Connectors panel renders vault OAuth accounts + live MCP
+// rows + the store catalog, never a seeded list.
 
 export const mockMemory: MemoryItem[] = [
   {
@@ -773,6 +787,15 @@ interface AppState {
    * status bar and rail reflect the real session, never a hardcoded value). */
   browserAttached: boolean
   setBrowserAttached: (attached: boolean) => void
+  /** P50.3.8 — consume a routed browser URL (clears it so reopening the same
+   * URL retriggers the navigation effect). */
+  clearBrowserUrl: () => void
+  /** P50.3.7 — live desktop-engine attachment state (reported by the desktop
+   * view; mirrors `desktop_status`: attached + reason while detached). Lets
+   * the status bar and rail reflect the real engine, never a static claim. */
+  desktopAttached: boolean
+  desktopReason: string | null
+  setDesktopAttached: (attached: boolean, reason?: string | null) => void
 
   /** P50.4.1/4.9 — live vault-keys fact: `null` = unknown (not yet probed),
    * `false` = vault has zero provider keys. Feeds the first-run setup gate,
@@ -1146,6 +1169,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   browserUrl: null,
   browserAttached: false,
   setBrowserAttached: (attached) => set({ browserAttached: attached }),
+  clearBrowserUrl: () => set({ browserUrl: null }),
+  desktopAttached: false,
+  desktopReason: null,
+  setDesktopAttached: (attached, reason) =>
+    set({ desktopAttached: attached, desktopReason: reason ?? null }),
   providerKeysConfigured: null,
   setProviderKeysConfigured: (configured) => set({ providerKeysConfigured: configured }),
   setupOpen: false,
@@ -1256,7 +1284,12 @@ export const useAppStore = create<AppState>((set, get) => ({
             : ext === 'pdf'
               ? 'office-pdf'
               : undefined
-    if (!view) return
+    if (!view) {
+      // P50.3.7 — never drop an open request silently: surface the supported
+      // set so callers (rail prompt, palette, artifacts) explain the refusal.
+      get().notify(`Cannot open “${path}” — supported: .docx .xlsx/.xlsm .pptx .pdf`)
+      return
+    }
     const label = path.split(/[\\/]/).pop() ?? path
     set((s) => {
       const history = s.officeHistory[view] ?? []

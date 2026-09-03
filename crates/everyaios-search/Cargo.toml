@@ -10,3 +10,8 @@ description = "EveryAIOS search & research (P8.4) — G8 tiered cascade, deep re
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+# P50.5.2 — live HTTP transport for the real search E2E (reuses the locked
+# workspace ureq 2.x; no new dependency, no lock change).
+ureq = { workspace = true }

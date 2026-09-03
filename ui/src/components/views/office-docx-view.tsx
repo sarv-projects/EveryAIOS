@@ -146,6 +146,11 @@ export default function OfficeDocxView() {
             <div className="mt-6 border-t border-border pt-3 font-mono text-[10px] text-muted-foreground">
               {payload.blocks.length} block(s) · surgical OOXML
             </div>
+            {payload.blocks.length === 0 && (
+              <p className="mt-2 font-mono text-[10px] text-muted-foreground/70">
+                No editable blocks in this document — open it in LibreOffice for full fidelity.
+              </p>
+            )}
             <ul className="mt-2 space-y-1 font-mono text-[10px]">
               {payload.blocks.map((b) => (
                 <li key={b.address}>
@@ -154,7 +159,11 @@ export default function OfficeDocxView() {
                     disabled={locked}
                     onClick={() => {
                       setSelected(b.address)
-                      setDraft(payload.text.split('\n')[0] ?? '')
+                      // P50.3.7 — the engine exposes no per-block text read,
+                      // so never seed another block's text here: patching
+                      // with the wrong seed would corrupt the document.
+                      // Start empty; the address labels the target.
+                      setDraft('')
                     }}
                   >
                     {b.address} · {b.kind}
@@ -167,6 +176,7 @@ export default function OfficeDocxView() {
                 className="mt-2 h-20 w-full rounded border border-border bg-zinc-950 p-2 text-xs"
                 disabled={locked}
                 value={draft}
+                placeholder={`Replacement text for ${selected} — Saving patches this block only`}
                 onChange={(e) => setDraft(e.target.value)}
               />
             )}

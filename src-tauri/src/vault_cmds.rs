@@ -16,18 +16,11 @@ pub fn vault_keys_list(
     let providers = if let Some(p) = provider {
         vec![p]
     } else {
-        // Distinct providers from a dummy empty list — KeyRing::list is per-provider.
-        // Query sqlite via list of known broker providers.
-        vec![
-            "openai".into(),
-            "anthropic".into(),
-            "nvidia".into(),
-            "deepseek".into(),
-            "groq".into(),
-            "openrouter".into(),
-            "google".into(),
-            "ollama".into(),
-        ]
+        // P50.2.6/P50.3.6 — enumerate the live vault key set instead of a
+        // hardcoded provider list, so keys for any provider (xai, mistral,
+        // togetherai, cerebras, zai, …) are visible to the gate, the
+        // NoProvider card, and the routing feed. Locked/empty vault ⇒ empty.
+        ring.providers_with_keys().unwrap_or_default()
     };
     for p in providers {
         if let Ok(rows) = ring.list(&p) {

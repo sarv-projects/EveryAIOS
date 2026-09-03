@@ -49,21 +49,24 @@ import { useAppStore } from '@/lib/store'
  */
 export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [state, setState] = useState<CockpitState | null>(null)
+  const [pollError, setPollError] = useState<string | null>(null)
+  const notify = useAppStore((s) => s.notify)
   const pausedSessions = useAppStore((s) => s.pausedSessions)
   const setSessionPaused = useAppStore((s) => s.setSessionPaused)
   const [resumeFor, setResumeFor] = useState<string | null>(null)
   const [resumeNote, setResumeNote] = useState('')
 
-  // Poll cockpit_snapshot every 2s when open.
+  // Poll cockpit_snapshot every 2s when open. A failed poll clears the
+  // stale projection and surfaces the error instead of keeping last state.
   useEffect(() => {
     if (!open) return
     let active = true
     const poll = async () => {
       try {
         const s = await cockpitSnapshot()
-        if (active) setState(s)
-      } catch {
-        // offline — keep last state.
+        if (active) { setState(s); setPollError(null) }
+      } catch (e) {
+        if (active) { setState(null); setPollError(e instanceof Error ? e.message : String(e)) }
       }
     }
     void poll()
@@ -122,6 +125,12 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
               </Button>
             </header>
 
+            {pollError && (
+              <div className="border-b border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-300">
+                Cockpit unavailable — {pollError}
+              </div>
+            )}
+
             {/* Interrupts — P11.2: answers wired to interrupt_respond */}
             <AnimatePresence>
               {interrupts.length > 0 && (
@@ -152,7 +161,7 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
                                 size="sm"
                                 variant="ghost"
                                 className="h-6 text-[10px]"
-                                onClick={() => void interruptRespond(it.agent_id, oi)}
+                                onClick={() => void interruptRespond(it.agent_id, oi).catch((e) => notify(`Interrupt answer failed — ${e instanceof Error ? e.message : String(e)}`))}
                               >
                                 {opt}
                               </Button>

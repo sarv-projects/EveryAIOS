@@ -56,11 +56,30 @@ export interface RouterOptions {
   /** Restrict to providers in this list (e.g. only local). */
   providers?: string[];
   /**
+   * P50.3.6 — vault-credential gate for the *taken* route (mirrors the Rust
+   * `RoutingFeed::set_credentialed` display gate). When present, keyed
+   * providers absent from this set are excluded before ranking; keyless
+   * local runtimes and keyless tiers (`ollama`, `llamafile`, `lmstudio`,
+   * `local`, `opencode-free`) always pass.
+   * The caller (chat turn) feeds the live vault key set; an explicit
+   * provider/model lock still wins (user intent over gating).
+   */
+  credentialedProviders?: string[];
+  /**
    * P36 — live provider observations (`${provider}:${model}` → observation).
    * When present, ranking uses the deterministic RouteDecision consensus
    * scorer instead of raw cost-sort (the Rust `Scorer` port above).
    */
   observations?: Record<string, ProviderObservation>;
+}
+
+/** Providers that never need a vault key (P50.3.6 keyless bypass). Mirrors the
+ * Rust `requires_vault_key` gate (only ApiKey/ApiKeyEnv need keys): local
+ * runtimes + keyless cloud tiers (e.g. opencode-free) always pass. */
+const KEYLESS_PROVIDERS = new Set(["ollama", "llamafile", "lmstudio", "local", "opencode-free"]);
+
+function normalizeProviderId(id: string): string {
+  return id.trim().toLowerCase().replace(/[_ ]/g, "-");
 }
 
 /** Default capability requirements per task class. */
@@ -114,8 +133,21 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
   const needTools = req.tools ?? false;
 
   const providers = opts.providers ?? brokerProviders();
+  const credentialed = opts.credentialedProviders
+    ? new Set(opts.credentialedProviders.map(normalizeProviderId))
+    : null;
   const candidates: Array<{ provider: string; model: string }> = [];
   for (const provider of providers) {
+    // P50.3.6 — exclude keyed providers with no vault credential before
+    // ranking (keyless runtimes always pass). Mirrors the Rust feed gate so
+    // the taken route can never pick a provider the picker showed excluded.
+    if (
+      credentialed !== null &&
+      !KEYLESS_PROVIDERS.has(normalizeProviderId(provider)) &&
+      !credentialed.has(normalizeProviderId(provider))
+    ) {
+      continue;
+    }
     for (const m of catalogModels(provider)) {
       candidates.push({ provider, model: m.id });
     }
@@ -136,11 +168,15 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
 
   if (pass.length === 0) {
     const provider = opts.provider ?? "nvidia";
+    const gateNote =
+      credentialed !== null
+        ? " — no vault credential for any candidate (add a provider key in Settings → Keys)"
+        : "";
     return {
       provider,
       model: fallbackModel(provider, opts.task),
       contextWindow: undefined,
-      reason: `no candidate met requirements (vision=${needVision}, tools=${needTools}, ctx≥${minContext}) — fell back to ${provider} default`,
+      reason: `no candidate met requirements (vision=${needVision}, tools=${needTools}, ctx≥${minContext})${gateNote} — fell back to ${provider} default`,
     };
   }
 

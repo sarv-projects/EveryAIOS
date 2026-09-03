@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Check, ChevronsUpDown, FileSpreadsheet, Loader2, ListFilter, RefreshCw, ShieldAlert, Sigma, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -51,6 +51,9 @@ export default function OfficeXlsxView() {
     approvalNonce: string
   } | null>(null)
   const [committing, setCommitting] = useState(false)
+  // P50.3.7 — same attachment wiring as Word: the store owns the active
+  // path/history/session label so tabs, rail, and sessions stay in sync.
+  const officePath = useAppStore((s) => s.officePaths['office-xlsx'])
 
   // Bulk edit (range fill / sort) + read-only pivot.
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -87,15 +90,16 @@ export default function OfficeXlsxView() {
   const loadedRef = useRef(0)
   const fetchingRef = useRef(false)
 
-  const open = async (path: string) => {
+  const open = async (path: string, sheet: string | null = null) => {
     try {
       setError(null)
-      const p = await xlsxOpen(path, null, 0, 500)
+      const p = await xlsxOpen(path, sheet, 0, 500)
       rowCache.current = new Map()
       const start = p.offset + 1
       p.rows.forEach((row, i) => rowCache.current.set(start + i, row))
       loadedRef.current = p.offset + p.rows.length
       setPayload(p)
+      useAppStore.getState().openOfficeDoc(path)
       setRecalc(null)
       setSelected(null)
       setScrollTop(0)
@@ -104,6 +108,12 @@ export default function OfficeXlsxView() {
       setError(err instanceof Error ? err.message : 'Failed to open workbook')
     }
   }
+
+  // P50.3.7 — open the store-owned path (artifact / folder / tab-switch).
+  useEffect(() => {
+    if (officePath && officePath !== payload?.path) void open(officePath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officePath])
 
   // Advance the Rust window when the user scrolls near the loaded edge.
   const fetchMore = async () => {
@@ -437,12 +447,19 @@ export default function OfficeXlsxView() {
           Recalc
         </Button>
         {(() => {
-          const nums: number[] = []
-          if (payload && selected) {
-            const raw = cellDisplay(payload.rows[selected.r]?.[selected.c])
-            const n = Number(raw)
-            if (Number.isFinite(n) && raw !== '') nums.push(n)
+          // P50.3.7 — selection stats only: no selection (or no file) shows
+          // a hint, never 0.00 aggregates that imply measured data.
+          if (!payload || !selected) {
+            return (
+              <span className="shrink-0 font-mono text-[9px] text-muted-foreground/60">
+                Select a cell for Avg / Count / Sum
+              </span>
+            )
           }
+          const nums: number[] = []
+          const raw = cellDisplay(payload.rows[selected.r]?.[selected.c])
+          const n = Number(raw)
+          if (Number.isFinite(n) && raw !== '') nums.push(n)
           const count = nums.length
           const sum = nums.reduce((a, b) => a + b, 0)
           const avg = count ? sum / count : 0
@@ -744,39 +761,50 @@ export default function OfficeXlsxView() {
       </div>
 
       <div className="flex items-center gap-3 border-t border-border bg-zinc-900/50 px-3 py-1.5">
-        <div className="flex h-8 items-end gap-0.5">
-          {CHART_BARS.map((h, i) => (
-            <motion.div
-              key={i}
-              initial={{ height: '12%' }}
-              animate={{ height: `${h}%` }}
-              transition={{
-                duration: 0.7,
-                delay: 0.15 + i * 0.12,
-                ease: [0.16, 1, 0.3, 1],
-              }}
-              className="w-3 origin-bottom rounded-t bg-gradient-to-t from-orange-600 to-orange-400"
-            />
-          ))}
-        </div>
-        <div className="font-mono text-[10px] text-muted-foreground">
-          Revenue trend · Q1→Q4 projection
-        </div>
+        {/* P50.3.7 — the projection sketch is preview-only decor; a live
+            sheet shows its own sheet tabs, never invented revenue bars. */}
+        {!payload && !inTauri() && (
+          <>
+            <div className="flex h-8 items-end gap-0.5">
+              {CHART_BARS.map((h, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ height: '12%' }}
+                  animate={{ height: `${h}%` }}
+                  transition={{
+                    duration: 0.7,
+                    delay: 0.15 + i * 0.12,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                  className="w-3 origin-bottom rounded-t bg-gradient-to-t from-orange-600 to-orange-400"
+                />
+              ))}
+            </div>
+            <div className="font-mono text-[10px] text-muted-foreground">
+              Revenue trend · Q1→Q4 projection
+            </div>
+          </>
+        )}
         <div className="ml-auto flex items-center gap-1 font-mono text-[10px]">
-          {['Sheet1', 'Sheet2', 'Charts'].map((s, i) => (
+          {(payload ? payload.sheets.map((s) => s.name) : inTauri() ? [] : ['Sheet1']).map((s) => (
             <button
               key={s}
+              disabled={!payload || payload.sheet === s}
+              onClick={() => payload && void open(payload.path, s)}
+              title={payload ? `Open sheet ${s}` : s}
               className={cn(
-                'rounded-t border border-b-0 border-border px-3 py-1',
-                i === 0 ? 'bg-card text-foreground' : 'bg-zinc-900 text-muted-foreground'
+                'rounded-t border border-b-0 border-border px-3 py-1 disabled:cursor-default',
+                payload?.sheet === s ? 'bg-card text-foreground' : 'bg-zinc-900 text-muted-foreground hover:text-foreground'
               )}
             >
               {s}
             </button>
           ))}
-          <button className="rounded-t border border-b-0 border-border bg-zinc-900 px-3 py-1 text-orange-300">
-            +
-          </button>
+          {payload && (
+            <span className="ml-1 text-[9px] text-muted-foreground/60">
+              {payload.sheet} · {payload.total_rows.toLocaleString()} rows
+            </span>
+          )}
         </div>
       </div>
     </div>

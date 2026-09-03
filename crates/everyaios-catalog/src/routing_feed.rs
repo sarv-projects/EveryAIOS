@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::probe::{trusted_capabilities, Capability};
-use crate::provider::{Auth, ProviderRecord, ProviderRegistry};
+use crate::provider::{normalize, Auth, ProviderRecord, ProviderRegistry};
 
 /// Live health for one provider (fed by A7 observations / probe pings).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,13 +162,24 @@ impl RoutingFeed {
     /// an honest "add a key" reason. Bumps the generation like any health
     /// change, so cached decisions never outlive a key change.
     pub fn set_credentialed(&mut self, ids: impl IntoIterator<Item = String>) {
-        self.credentialed = ids.into_iter().collect();
+        self.credentialed = ids.into_iter().map(|s| normalize(&s)).collect();
         self.bump();
     }
 
     /// True when `id` (or one of its aliases) is in the credential set.
+    /// P50.3.6 — both sides are canonicalized via `normalize()` so vault
+    /// casings (`OpenAI`, `nvidia_nim`) match registry ids/aliases
+    /// (`openai`, `nvidia-nim`); without this an unkeyed provider could rank
+    /// (or a keyed one could be wrongly excluded) on spelling alone.
     fn is_credentialed(&self, p: &ProviderRecord) -> bool {
-        self.credentialed.contains(&p.id) || p.aliases.iter().any(|a| self.credentialed.contains(a))
+        if self.credentialed.iter().any(|c| normalize(c) == normalize(&p.id)) {
+            return true;
+        }
+        p.aliases.iter().any(|a| {
+            self.credentialed
+                .iter()
+                .any(|c| normalize(c) == normalize(a))
+        })
     }
 
     /// Whether the provider needs a vault-held API key at all (P50.3.6).
@@ -577,5 +588,17 @@ mod tests {
         assert_ne!(g1, g2);
         let d2 = feed.decide(&RouteRequirements::default());
         assert_eq!(d2.top(), Some("a"));
+    }
+
+    #[test]
+    fn credential_matching_is_case_and_separator_insensitive() {
+        let reg = registry(vec![keyed("openai")]);
+        let mut feed = RoutingFeed::new();
+        feed.load_registry(&reg);
+        // Vault casing/separators must not decide routability.
+        feed.set_credentialed(["OpenAI".to_string()]);
+        feed.set_health("openai", Health::Healthy);
+        let d = feed.decide(&RouteRequirements::default());
+        assert_eq!(d.top(), Some("openai"));
     }
 }

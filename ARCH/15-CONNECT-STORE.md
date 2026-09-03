@@ -45,6 +45,13 @@
 > `mcp_remote_call_commit` executor half; read-only `tools/list`/discovery stay
 > ungated). Attached-server identity persists to `<data_dir>/mcp_servers.json`
 > and restores at boot as honestly `disconnected` rows.
+> **v1.6 (2026-09-03, P50.2.6):** connected-truth hardening — `mcp_servers`
+> reports an attached row `connected` only while its live child is tracked in
+> the shell's `mcp_live` map (restart-restored rows stay `disconnected` until
+> re-attached); the Connectors panel hydrates each Store row from
+> `mcp_remote_status` (remote-MCP) or the vault OAuth accounts (flat
+> connectors) and disconnects through `oauth_revoke`/`mcp_detach`, so only
+> installed/attached/authenticated resources ever render `connected`.
 
 ## The problem
 

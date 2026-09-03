@@ -35,7 +35,9 @@ fn serve_args_hash(workspace: &str) -> String {
 /// Serve a guarded workspace folder on an ephemeral `127.0.0.1:<port>` and
 /// return the port. Guard-2-ticketed: the effect is evaluated + the ticket is
 /// consumed in this one call (the UI expects `serve → port`). `Ask`/`Block`
-/// verdicts return an error the UI surfaces (it falls back to its demo path).
+/// verdicts return an error the UI surfaces honestly (fail-closed — the live
+/// bridge never substitutes demo content; preview fixtures exist only in
+/// plain-browser runs outside the shell).
 #[tauri::command]
 pub fn artifact_serve(state: State<'_, AppState>, workspace: String) -> Result<u16, String> {
     use everyaios_guard::{Operation as GuardOp, RiskLevel};
