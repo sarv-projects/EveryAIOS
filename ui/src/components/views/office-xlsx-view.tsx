@@ -384,8 +384,34 @@ export default function OfficeXlsxView() {
         </Badge>
       </header>
 
-      {/* Full-fidelity ribbon (ARCH/12 v3.1 — "nothing held back") */}
-      <OfficeRibbon app="Excel" />
+      {/* Engine-backed ribbon: every button runs a real view action */}
+      <OfficeRibbon
+        app="Excel"
+        onAction={(action) => {
+          const st = useAppStore.getState()
+          switch (action) {
+            case 'recalc':
+              void runRecalc()
+              break
+            case 'batch':
+            case 'pivot':
+            case 'shift':
+            case 'sortfill':
+              if (!payload) {
+                st.notify('Open a workbook first — then the bulk panel has something to edit', 'error')
+                break
+              }
+              setBulkOpen(true)
+              break
+            case 'ask':
+              st.setComposerValue(
+                payload ? `Help with ${payload.path} (sheet ${payload.sheet}): ` : '',
+              )
+              st.setCenterScreen('chat')
+              break
+          }
+        }}
+      />
 
       <OfficeOpenBar onOpen={open} livePath={payload?.path} />
       <OfficeFileSwitcher view="office-xlsx" current={payload?.path} onOpen={open} />

@@ -228,14 +228,30 @@ fn live_tiered_stack_escalation() {
     );
 
     // NeedsJs intent: escalates to the light engine (Lightpanda, installed).
+    // Environment-honest: Lightpanda is optional — where it is missing the
+    // designed gap path escalates to real headless Chrome (unit-proven in
+    // tiers.rs), and the live assertion must accept that instead of failing
+    // an env without the optional engine.
+    let lightpanda_present = std::env::var_os("PATH")
+        .map(|paths| {
+            std::env::split_paths(&paths).any(|d| {
+                d.join("lightpanda").is_file() || d.join("lightpanda.exe").is_file()
+            })
+        })
+        .unwrap_or(false);
     let r1 = engine
         .fetch("https://example.com/", FetchIntent::NeedsJs)
         .expect("light fetch");
-    assert!(
-        matches!(r1.tier, EngineTier::Lightpanda),
-        "expected Lightpanda tier, got {:?}",
-        r1.tier
-    );
+    if lightpanda_present {
+        assert!(
+            matches!(r1.tier, EngineTier::Lightpanda),
+            "expected Lightpanda tier, got {:?}",
+            r1.tier
+        );
+    } else {
+        eprintln!("LIVE NOTE: lightpanda not installed — asserting the Chrome gap path");
+        assert_eq!(r1.tier, EngineTier::Chrome);
+    }
     assert!(
         r1.markdown.contains("Example Domain"),
         "light tier should render example.com:\n{}",

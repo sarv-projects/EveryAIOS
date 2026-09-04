@@ -3,25 +3,19 @@
 import * as React from 'react'
 import {
   Activity,
-  ArrowRight,
   Brain,
   CheckCircle2,
-  ChevronDown,
-  Circle,
-  Clock,
   Code2,
   DollarSign,
-  FileText,
   Globe,
   Loader2,
   MessageSquare,
-  Sparkles,
   Terminal,
   Zap,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useAppStore, type Session } from '@/lib/store'
-import { AGENT_MAP, MODEL_MAP } from '@/lib/agents'
+import { AGENT_MAP } from '@/lib/agents'
 import { useVirtualList } from '@/lib/ux'
 import { cn } from '@/lib/utils'
 
@@ -40,41 +34,68 @@ interface TimelineEvent {
   }
 }
 
-// Generate mock timeline events for a session
+// Timeline events derived from the session's real transcript — messages,
+// tool calls, plan steps, artifacts, and interrupts. No seeded content: an
+// empty session renders an honest empty state, never sample work.
 function getTimelineEvents(session: Session): TimelineEvent[] {
-  const base = session.updatedAt
   const events: TimelineEvent[] = [
-    { id: 't1', timestamp: base, type: 'message', title: 'Session started', detail: session.title, status: 'done' },
-    { id: 't2', timestamp: base, type: 'model_switch', title: 'Agent initialized', detail: 'Claude Code · Sonnet 4.5', status: 'done', meta: { tokens: 2400, cost: 0.01 } },
+    { id: `${session.id}-start`, timestamp: session.updatedAt, type: 'message', title: 'Session started', detail: session.title, status: 'done' },
   ]
 
-  if (session.status === 'running' || session.status === 'action-required' || session.status === 'paused') {
-    events.push(
-      { id: 't3', timestamp: base, type: 'tool_call', title: 'Reading project files', detail: 'src/api/*.ts — 12 files indexed', status: 'done', meta: { tokens: 8400, cost: 0.04 } },
-      { id: 't4', timestamp: base, type: 'file_edit', title: 'Edited src/api/handler.ts', detail: '+24 / -8 lines · surgical patch', status: 'done', meta: { tokens: 3200, cost: 0.02 } },
-      { id: 't5', timestamp: base, type: 'shell_cmd', title: 'Ran npm run build', detail: 'Exit 0 — 2.3s', status: 'done', meta: { duration: 2300 } },
-      { id: 't6', timestamp: base, type: 'browser_nav', title: 'Navigated to docs.api.com', detail: 'Extracted API schema from /v2/spec', status: 'done', meta: { tokens: 12000, cost: 0.06 } },
-      { id: 't7', timestamp: base, type: 'checkpoint', title: 'Auto-checkpoint saved', detail: '4 files modified · total +86/-23', status: 'done' },
-      { id: 't8', timestamp: base, type: 'cost_milestone', title: '$1.00 spent', detail: '42K input · 8K output tokens', status: 'done' },
-      { id: 't9', timestamp: base, type: 'tool_call', title: 'Regenerating chart data', detail: 'IronCalc recalc · B7:B12', status: 'active', meta: { tokens: 4200, cost: 0.02 } },
-    )
+  for (const m of session.messages ?? []) {
+    const snippet = m.content.length > 140 ? `${m.content.slice(0, 140)}…` : m.content
+    if (m.role === 'user') {
+      events.push({ id: `${m.id}-msg`, timestamp: m.timestamp, type: 'message', title: 'You', detail: snippet || undefined, status: 'done' })
+    } else if (m.role === 'assistant') {
+      events.push({ id: `${m.id}-msg`, timestamp: m.timestamp, type: 'message', title: 'Assistant', detail: snippet || undefined, status: 'done' })
+    } else {
+      events.push({ id: `${m.id}-msg`, timestamp: m.timestamp, type: 'message', title: 'System', detail: snippet || undefined, status: 'done' })
+    }
+    for (const t of m.toolCalls ?? []) {
+      events.push({
+        id: `${m.id}-tool-${t.id}`,
+        timestamp: m.timestamp,
+        type: 'tool_call',
+        title: t.toolId,
+        detail: t.error ?? t.progress ?? (t.args ? Object.keys(t.args).slice(0, 4).join(', ') : undefined),
+        status: t.status === 'running' ? 'active' : t.status === 'failed' ? 'error' : 'done',
+      })
+    }
+    for (const s of m.steps ?? []) {
+      events.push({
+        id: `${m.id}-step-${s.id}`,
+        timestamp: s.timestamp ?? m.timestamp,
+        type: stepToEventType(s.type),
+        title: s.label,
+        detail: s.detail ?? s.output ?? undefined,
+        status: s.status === 'failed' ? 'error' : s.status,
+      })
+    }
+    for (const a of m.artifacts ?? []) {
+      events.push({ id: `${m.id}-art-${a.id}`, timestamp: m.timestamp, type: 'file_edit', title: a.name, detail: a.type, status: 'done' })
+    }
+    if (m.mcq) {
+      events.push({ id: `${m.id}-mcq-${m.mcq.id}`, timestamp: m.timestamp, type: 'message', title: m.mcq.title, detail: m.mcq.description, status: 'pending' })
+    }
   }
 
-  if (session.status === 'action-required') {
-    events.push(
-      { id: 't10', timestamp: base, type: 'message', title: 'Approval requested', detail: 'Paragraph rewrite in exec-summary.docx', status: 'pending', meta: { tokens: 1800, cost: 0.01 } },
-    )
+  // A running session's latest event is the live one.
+  if (session.status === 'running' && events.length > 0) {
+    events[events.length - 1] = { ...events[events.length - 1], status: 'active' }
   }
-
-  if (session.status === 'completed') {
-    events.push(
-      { id: 't3b', timestamp: base, type: 'tool_call', title: 'Processing batch', detail: '42 invoices · PDF fill + sign', status: 'done', meta: { tokens: 48000, cost: 0.24 } },
-      { id: 't4b', timestamp: base, type: 'checkpoint', title: 'Batch complete', detail: '42/42 signed · 0 errors', status: 'done' },
-      { id: 't5b', timestamp: base, type: 'cost_milestone', title: '$2.41 total', detail: '240K tokens across 186 turns', status: 'done' },
-    )
-  }
-
   return events
+}
+
+function stepToEventType(t: string): TimelineEvent['type'] {
+  switch (t) {
+    case 'shell': return 'shell_cmd'
+    case 'browser': return 'browser_nav'
+    case 'tool': return 'tool_call'
+    case 'checkpoint':
+    case 'chart':
+    case 'export': return 'checkpoint'
+    default: return 'file_edit'
+  }
 }
 
 const typeIcon: Record<TimelineEvent['type'], React.ElementType> = {
@@ -116,8 +137,10 @@ export function SessionTimeline() {
 
   const events = getTimelineEvents(session)
   const agent = AGENT_MAP[selectedAgentId]
-  const totalTokens = events.reduce((sum, e) => sum + (e.meta?.tokens ?? 0), 0)
-  const totalCost = events.reduce((sum, e) => sum + (e.meta?.cost ?? 0), 0)
+  // Ledger-backed totals only — never derived from seeded content.
+  const totalTokens = session.tokens ?? null
+  const totalCost = session.spent ?? null
+  const doneCount = events.filter((e) => e.status === 'done').length
 
   // P11.4 — virtual scrolling for long timelines: only the windowed slice is
   // mounted; spacers keep the scrollbar honest (row height ~56px).
@@ -141,15 +164,28 @@ export function SessionTimeline() {
         <p className="text-xs text-muted-foreground line-clamp-1">{session.title}</p>
         <div className="flex items-center gap-3 mt-2 text-[11px] font-mono">
           <span className="text-muted-foreground">{events.length} events</span>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-orange-400/80">{totalTokens.toLocaleString()} tokens</span>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-orange-400/80">${totalCost.toFixed(2)}</span>
+          {totalTokens != null && (
+            <>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-orange-400/80">{totalTokens.toLocaleString()} tokens</span>
+            </>
+          )}
+          {totalCost != null && (
+            <>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-orange-400/80">${totalCost.toFixed(2)}</span>
+            </>
+          )}
         </div>
       </div>
 
       {/* Timeline — P11.4 virtualized scroll container */}
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
+        {events.length <= 1 ? (
+          <p className="px-4 py-6 text-center text-[11px] text-muted-foreground">
+            No events yet — send the first message to start this session's timeline.
+          </p>
+        ) : (
         <div className="px-4 py-3" style={{ height: totalHeight, position: 'relative' }}>
           <div style={{ transform: `translateY(${startOffset}px)` }}>
           {visible.map((event, i) => {
@@ -225,17 +261,24 @@ export function SessionTimeline() {
               </div>
             )
           })}
-          </div>
+           </div>
         </div>
+        )}
       </div>
 
       {/* Footer summary */}
       <div className="shrink-0 px-4 py-2 border-t border-border bg-sidebar/40 flex items-center justify-between text-[10.5px] font-mono">
-        <span className="text-muted-foreground">{events.filter(e => e.status === 'done').length}/{events.length} completed</span>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">{totalTokens.toLocaleString()} tokens</span>
-          <span className="text-orange-400/80">${totalCost.toFixed(2)}</span>
-        </div>
+        <span className="text-muted-foreground">{doneCount}/{events.length} completed</span>
+        {(totalTokens != null || totalCost != null) && (
+          <div className="flex items-center gap-2">
+            {totalTokens != null && (
+              <span className="text-muted-foreground">{totalTokens.toLocaleString()} tokens</span>
+            )}
+            {totalCost != null && (
+              <span className="text-orange-400/80">${totalCost.toFixed(2)}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Loader2,
   Bell,
+  Radar,
 } from 'lucide-react'
 import {
   Tooltip,
@@ -30,7 +31,6 @@ import { AGENT_MAP, MODEL_MAP, AGENTS } from '@/lib/agents'
 import { CompanionChip } from './companion-chip'
 import { cn } from '@/lib/utils'
 import { useRuntimeState } from '@/lib/runtime'
-import { inTauri } from '@/lib/tauri'
 
 
 interface Stat {
@@ -45,9 +45,16 @@ interface Stat {
 
 export function StatusBar() {
   const agentPaused = useAppStore((s) => s.agentPaused)
-  const sessions = useAppStore((s) => s.sessions)
+  // Perf: select only the active session's agent label, not the whole
+  // sessions array — streamed token batches replace the array identity every
+  // tick, and this bar is always mounted (with a blur backdrop, each extra
+  // render recomposites the full width).
+  const activeAgent = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.agent)
+  // Same scoping for the status pill (changes rarely; message text churn must
+  // not re-render this bar).
+  const activeStatus = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status)
+  const hasActive = useAppStore((s) => s.sessions.some((x) => x.id === s.activeSessionId))
   const activeId = useAppStore((s) => s.activeSessionId)
-  const active = sessions.find((s) => s.id === activeId)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const selectedModelId = useAppStore((s) => s.selectedModelId)
   const autoRoute = useAppStore((s) => s.autoRoute)
@@ -60,6 +67,8 @@ export function StatusBar() {
   const devMode = useAppStore((s) => s.devMode)
   const monitorBadge = useAppStore((s) => s.monitorBadge)
   const clearMonitorBadge = useAppStore((s) => s.clearMonitorBadge)
+  const cockpitOpen = useAppStore((s) => s.cockpitOpen)
+  const setCockpitOpen = useAppStore((s) => s.setCockpitOpen)
   const { usePerfSnapshot } = perfLib
   const runtime = useRuntimeState()
 
@@ -81,8 +90,8 @@ export function StatusBar() {
     {
       icon: Sparkles,
       label: 'agent',
-      value: active?.agent ?? (inTauri() ? '—' : 'analyst'),
-      tooltip: active?.agent ? `Active agent: ${active.agent}` : 'No active session agent is available.',
+      value: activeAgent ?? '—',
+      tooltip: activeAgent ? `Active agent: ${activeAgent}` : 'No active session agent is available.',
     },
     {
       icon: Cpu,
@@ -155,10 +164,10 @@ export function StatusBar() {
   // state pill + privacy reassurance; Settings → General → "Developer Mode"
   // restores the full 12-badge telemetry (devMode).
   if (!devMode) {
-    const busy = active?.status === 'running' || active?.status === 'action-required'
+    const busy = activeStatus === 'running' || activeStatus === 'action-required'
     const preview = runtime.status === 'preview'
     return (
-      <footer className="shrink-0 h-6 border-t border-border bg-sidebar/80 backdrop-blur-xl flex items-center text-[10.5px] font-mono no-select">
+      <footer className="shrink-0 h-6 border-t border-border bg-sidebar flex items-center text-[10.5px] font-mono no-select">
         <div className="flex items-center gap-1.5 px-3">
           <span className={cn(
             'h-1.5 w-1.5 rounded-full',
@@ -186,13 +195,23 @@ export function StatusBar() {
           </span>
         )}
         <CompanionChip />
+        <button
+          type="button"
+          onClick={() => setCockpitOpen(!cockpitOpen)}
+          className="flex items-center gap-1 px-1 text-muted-foreground/70 hover:text-orange-300"
+          title="Cockpit — live agent cards and interrupts"
+          aria-label="Toggle cockpit slide-over"
+        >
+          <Radar className="h-2.5 w-2.5" />
+          cockpit
+        </button>
         <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.57</span>
       </footer>
     )
   }
 
   return (
-    <footer className="shrink-0 h-6 border-t border-border bg-sidebar/80 backdrop-blur-xl flex items-center text-[10.5px] font-mono no-select">
+    <footer className="shrink-0 h-6 border-t border-border bg-sidebar flex items-center text-[10.5px] font-mono no-select">
       {/* Left cluster — agent health monitor */}
       <div className="flex items-center gap-1.5 px-2 border-r border-border/60 h-full">
         <span className={cn(
@@ -229,7 +248,7 @@ export function StatusBar() {
         )}
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/80">
-          {active?.status === 'action-required' ? 'awaiting approval' : active?.status === 'running' ? 'regenerating chart' : active ? 'idle' : 'no active work'}
+          {activeStatus === 'action-required' ? 'awaiting approval' : activeStatus === 'running' ? 'running' : hasActive ? 'idle' : 'no active work'}
         </span>
         {/* Agent runtime health indicator */}          {agent && (
 
@@ -306,6 +325,17 @@ export function StatusBar() {
         <span className="text-muted-foreground/70">vault · {runtime.status === 'vault-locked' ? 'locked' : runtime.status === 'vault-setup' ? 'setup required' : '—'}</span>
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/70">audit · {runtime.status === 'live' ? 'available' : '—'}</span>
+        <span className="text-muted-foreground/40">·</span>
+        <button
+          type="button"
+          onClick={() => setCockpitOpen(!cockpitOpen)}
+          className="flex items-center gap-1 text-muted-foreground/70 hover:text-orange-300"
+          title="Cockpit — live agent cards and interrupts"
+          aria-label="Toggle cockpit slide-over"
+        >
+          <Radar className="h-2.5 w-2.5" />
+          cockpit
+        </button>
         <span className="text-muted-foreground/40">·</span>
         <span className="text-muted-foreground/50">EveryAIOS v3.57</span>
       </div>

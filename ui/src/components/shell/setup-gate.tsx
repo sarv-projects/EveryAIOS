@@ -62,16 +62,29 @@ export function SetupGate() {
   const [done, setDone] = useState(false)
   const [runtimes, setRuntimes] = useState<LocalModelRow[]>([])
   const [connecting, setConnecting] = useState(false)
+  const [probeError, setProbeError] = useState<string | null>(null)
 
   // Probe installed local runtimes (Ollama/llamafile) whenever the gate opens.
+  // A failed probe is surfaced, never silently rendered as "no Ollama".
   useEffect(() => {
     if (!setupOpen) return
     setMode('choose')
     setError(null)
+    setProbeError(null)
     setDone(false)
     void listLocalModels()
-      .then((r) => setRuntimes(r.models ?? []))
-      .catch(() => setRuntimes([]))
+      .then((r) => {
+        setRuntimes(r.models ?? [])
+        setProbeError(null)
+      })
+      .catch((e) => {
+        setRuntimes([])
+        setProbeError(
+          e instanceof Error
+            ? `Local runtime probe failed: ${e.message}`
+            : 'Local runtime probe failed — the local-model service did not respond',
+        )
+      })
   }, [setupOpen])
 
   const saveKey = async () => {
@@ -126,7 +139,7 @@ export function SetupGate() {
     closeSetup()
     setCenterScreen('chat')
     setComposerValue('')
-    notify(done ? 'Provider configured — say hello to your first model.' : '')
+    if (done) notify('Provider configured — say hello to your first model.')
   }
 
   const startWithLocalSetup = () => {
@@ -314,9 +327,12 @@ export function SetupGate() {
                 </div>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
-                  No Ollama/llamafile runtimes detected yet.
+                  {probeError
+                    ? 'Ollama/llamafile not reachable right now.'
+                    : 'No Ollama/llamafile runtimes detected yet.'}
                 </p>
               )}
+              {probeError && <p className="text-[11px] text-amber-300">{probeError}</p>}
               {error && <p className="text-[11px] text-red-400">{error}</p>}
               <div className="space-y-1.5">
                 <Button

@@ -23,8 +23,19 @@ import { useAppStore, type Artifact } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { preciseFigures } from '@/lib/plain-language'
 
+const TYPE_ACCENT: Record<Artifact['type'], string> = {
+  webapp: 'text-emerald-400',
+  xlsx: 'text-emerald-400',
+  docx: 'text-sky-300',
+  pptx: 'text-orange-400',
+  pdf: 'text-rose-400',
+  code: 'text-violet-300',
+  markdown: 'text-amber-300',
+  image: 'text-fuchsia-300',
+}
+
 function TypeIcon({ type, className }: { type: Artifact['type']; className?: string }) {
-  const cls = cn('h-3.5 w-3.5', className)
+  const cls = cn('h-3.5 w-3.5', TYPE_ACCENT[type], className)
   switch (type) {
     case 'xlsx':
       return <FileSpreadsheet className={cls} />
@@ -43,20 +54,6 @@ function TypeIcon({ type, className }: { type: Artifact['type']; className?: str
     default:
       return <File className={cls} />
   }
-}
-
-function TypeAccent({ type }: { type: Artifact['type'] }) {
-  const map: Record<Artifact['type'], string> = {
-    webapp: 'text-emerald-400',
-    xlsx: 'text-emerald-400',
-    docx: 'text-sky-300',
-    pptx: 'text-orange-400',
-    pdf: 'text-rose-400',
-    code: 'text-violet-300',
-    markdown: 'text-amber-300',
-    image: 'text-fuchsia-300',
-  }
-  return <span className={map[type]} />
 }
 
 function Preview({ artifact }: { artifact: Artifact }) {
@@ -173,23 +170,28 @@ export default function ArtifactCard({ artifact }: Props) {
   const notify = useAppStore((s) => s.notify)
   const isLive = artifact.view && artifact.view === activeView
 
+  const openArtifact = () => {
+    const p = artifact.path ?? artifact.preview ?? artifact.name
+    if (/\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(p) || /\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(artifact.name)) {
+      const file = /\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(p) ? p : artifact.name
+      useAppStore.getState().openOfficeDoc(file)
+      return
+    }
+    if (artifact.view) {
+      setActiveView(artifact.view)
+      return
+    }
+    notify(`No viewer for “${artifact.name}” yet — use Save to download it`, 'error')
+  }
+
   return (
     <Card
-      onClick={() => {
-        const p = artifact.path ?? artifact.preview ?? artifact.name
-        if (/\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(p) || /\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(artifact.name)) {
-          const file = /\.(xlsx|xlsm|docx|pptx|pdf)$/i.test(p) ? p : artifact.name
-          useAppStore.getState().openOfficeDoc(file)
-          return
-        }
-        if (artifact.view) setActiveView(artifact.view)
-      }}
+      onClick={() => openArtifact()}
       className="group cursor-pointer gap-0 overflow-hidden border-border bg-card/60 p-0 transition-colors hover:border-orange-500/40"
     >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <TypeAccent type={artifact.type} />
-          <TypeIcon type={artifact.type} className="h-3.5 w-3.5 text-muted-foreground" />
+          <TypeIcon type={artifact.type} />
           <span className="truncate font-mono text-xs text-foreground">{artifact.name}</span>
         </div>
         {isLive && (
@@ -239,7 +241,11 @@ export default function ArtifactCard({ artifact }: Props) {
             className="h-7 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation()
-              notify('Viewing source')
+              const src = artifact.path ?? artifact.preview
+              void navigator.clipboard
+                ?.writeText(src)
+                .then(() => notify('Artifact reference copied'))
+                .catch(() => notify('Copy failed — clipboard unavailable', 'error'))
             }}
           >
             <Code className="h-3 w-3" />
@@ -251,7 +257,10 @@ export default function ArtifactCard({ artifact }: Props) {
             className="h-7 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation()
-              notify('Copied to clipboard')
+              void navigator.clipboard
+                ?.writeText(artifact.preview)
+                .then(() => notify('Copied to clipboard'))
+                .catch(() => notify('Copy failed — clipboard unavailable', 'error'))
             }}
           >
             <Copy className="h-3 w-3" />
@@ -263,7 +272,14 @@ export default function ArtifactCard({ artifact }: Props) {
             className="h-7 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation()
-              notify('Download started')
+              const blob = new Blob([artifact.preview], { type: 'text/plain' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = artifact.name.replace(/[^\w\-. ]+/g, '').trim() || 'artifact.txt'
+              a.click()
+              URL.revokeObjectURL(url)
+              notify('Artifact saved')
             }}
           >
             <Download className="h-3 w-3" />
@@ -275,7 +291,7 @@ export default function ArtifactCard({ artifact }: Props) {
             className="ml-auto h-7 gap-1 px-2 text-[11px] text-orange-300 hover:text-orange-200"
             onClick={(e) => {
               e.stopPropagation()
-              if (artifact.view) setActiveView(artifact.view)
+              openArtifact()
             }}
           >
             Open

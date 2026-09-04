@@ -97,13 +97,14 @@ export default function OfficePdfView() {
       setError(String(e))
     }
   }
+  const [annotText, setAnnotText] = useState('')
+  const [redactRect, setRedactRect] = useState('60,60,540,90')
+  const [formFields, setFormFields] = useState('')
   const annotatePage = () => {
-    const text = window.prompt('Annotation text (blank = highlight on the current page):')
-    void runPageOp('annotate', JSON.stringify({ page, rect: [60, 60, 540, 90], text: text ?? '' }))
+    void runPageOp('annotate', JSON.stringify({ page, rect: [60, 60, 540, 90], text: annotText }))
   }
   const redactPage = () => {
-    const raw = window.prompt('Redact rect as x1,y1,x2,y2 (page 1 = 60,60,540,90):') ?? '60,60,540,90'
-    const nums = raw.split(',').map(Number)
+    const nums = redactRect.split(',').map(Number)
     if (nums.length !== 4 || nums.some((n) => Number.isNaN(n))) {
       setError('Redact needs exactly four numbers: x1,y1,x2,y2')
       return
@@ -111,9 +112,11 @@ export default function OfficePdfView() {
     void runPageOp('redact', JSON.stringify([{ page, rect: nums }]))
   }
   const fillForm = () => {
-    const raw = window.prompt('Form fields as field=value,field2=value2:')
-    if (!raw) return
-    const fields = raw.split(',').map((kv) => {
+    if (!formFields.trim()) {
+      setError('Form fields need field=value pairs')
+      return
+    }
+    const fields = formFields.split(',').map((kv) => {
       const [field, ...rest] = kv.split('=')
       return { field: field?.trim() ?? '', value: rest.join('=').trim() }
     })
@@ -201,13 +204,35 @@ export default function OfficePdfView() {
             onClick={() => pdfPageOp(payload.path, 'rotate', { delta: 90 }).then(() => open(payload.path)).catch((e) => setError(String(e)))}>
             Rotate 90°
           </Button>
-          {/* P2.12 — surgical content ops on the same engine the agent uses */}
+          {/* P2.12 — surgical content ops on the same engine the agent uses.
+              Inline inputs (no prompt dialogs): blank annotation = highlight. */}
+          <input
+            value={annotText}
+            onChange={(e) => setAnnotText(e.target.value)}
+            placeholder="Annotation text…"
+            disabled={locked}
+            className="h-6 w-32 rounded border border-border bg-zinc-950 px-1.5 font-mono text-[10px] disabled:opacity-40"
+          />
           <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={locked} onClick={annotatePage} title="Add a highlight/sticky-note annotation on the current page">
             Annotate
           </Button>
+          <input
+            value={redactRect}
+            onChange={(e) => setRedactRect(e.target.value)}
+            placeholder="x1,y1,x2,y2"
+            disabled={locked}
+            className="h-6 w-28 rounded border border-border bg-zinc-950 px-1.5 font-mono text-[10px] disabled:opacity-40"
+          />
           <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={locked} onClick={redactPage} title="Redact a rect on the current page">
             Redact
           </Button>
+          <input
+            value={formFields}
+            onChange={(e) => setFormFields(e.target.value)}
+            placeholder="field=value,…"
+            disabled={locked}
+            className="h-6 w-32 rounded border border-border bg-zinc-950 px-1.5 font-mono text-[10px] disabled:opacity-40"
+          />
           <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={locked} onClick={fillForm} title="Fill AcroForm fields">
             Fill form
           </Button>

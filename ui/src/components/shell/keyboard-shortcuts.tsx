@@ -32,17 +32,20 @@ const SHORTCUTS = [
   ]},
   { group: 'Panels', items: [
     { keys: '⌥ Space', action: 'Quick ask (AIPointer)' },
+    { keys: '⌘ /', action: 'This shortcut overlay' },
+  ]},
+  { group: 'Center', items: [
+    { keys: '⌘⇧ A', action: 'Automations' },
+    { keys: '⌘⇧ G', action: 'Guard' },
+    { keys: '⌘⇧ M', action: 'Memory' },
   ]},
   { group: 'Agent', items: [
-    { keys: '⌘⇧ 1', action: 'Switch to Claude Code' },
-    { keys: '⌘⇧ 2', action: 'Switch to Codex CLI' },
-    { keys: '⌘⇧ 3', action: 'Switch to Grok Build' },
-    { keys: 'Esc', action: 'Pause / resume agent' },
+    { keys: 'Esc', action: 'Pause agent (when not typing)' },
   ]},
   { group: 'Chat', items: [
     { keys: 'Enter', action: 'Send message' },
     { keys: '⇧ Enter', action: 'New line' },
-    { keys: 'Esc', action: 'Clear input' },
+    { keys: 'Esc', action: 'Clear input (when typing)' },
     { keys: '⌥ M', action: 'Cycle work mode (Auto · Plan · Build · Research)' },
     { keys: '⌥ U', action: 'Cycle autonomy (Sandbox · Ask · Auto · Maximum)' },
   ]},
@@ -114,10 +117,11 @@ export function KeyboardShortcuts() {
         setOverlayOpen((v) => !v)
         return
       }
-      // Alt + Space — AIPointer quick ask (P30.12)
+      // Alt + Space — AIPointer quick ask (P30.12). Single owner: toggles
+      // the box open/closed (the box itself holds no key listener).
       if (e.altKey && e.code === 'Space') {
         e.preventDefault()
-        setAiPointerOpen(true)
+        setAiPointerOpen(!useAppStore.getState().aiPointerOpen)
         return
       }
       // Alt+M — cycle Work Mode (v3.57). OpenCode uses Tab for Plan/Build;
@@ -204,6 +208,11 @@ export function KeyboardShortcuts() {
       }
       // Escape — close overlay or pause agent
       if (e.key === 'Escape') {
+        if (useAppStore.getState().aiPointerOpen) {
+          e.preventDefault()
+          setAiPointerOpen(false)
+          return
+        }
         if (useAppStore.getState().fullscreenView) {
           e.preventDefault()
           setFullscreenView(false)

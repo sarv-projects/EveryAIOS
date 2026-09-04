@@ -1,21 +1,18 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowUp,
-  Boxes,
-  Brain,
   CircleDollarSign,
   FileText,
   Mic,
-  Package,
   Plus,
   type LucideIcon,
 } from 'lucide-react'
 import type { PermissionMode } from '@/lib/ui-prefs'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { useAppStore, type ChatMode } from '@/lib/store'
+import { useAppStore, sessionTranscriptMarkdown, type ChatMode } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import AgentModelPicker from './agent-model-picker'
 import { sendUserMessage } from '@/lib/bridge'
@@ -38,18 +35,15 @@ const SLASH_COMMANDS = [
   { cmd: '/export', desc: 'Export session transcript' },
 ]
 
-const MACROS = [
-  { cmd: '!deploy', desc: 'Run prod deploy checklist' },
-  { cmd: '!pnpm', desc: 'Use pnpm instead of npm' },
-  { cmd: '!lintcommit', desc: 'Lint then commit' },
-  { cmd: '!deploy-checklist', desc: 'Open deploy checklist' },
+const MACROS: { cmd: string; desc: string; expand: string }[] = [
+  { cmd: '!deploy', desc: 'Append the prod deploy checklist instruction', expand: '(follow the production deploy checklist: verify, stage, confirm before each irreversible step)' },
+  { cmd: '!pnpm', desc: 'Append "use pnpm instead of npm"', expand: '(use pnpm instead of npm for every package command)' },
+  { cmd: '!lintcommit', desc: 'Append "lint before committing"', expand: '(run the linter and fix findings before committing anything)' },
+  { cmd: '!deploy-checklist', desc: 'Append the deploy checklist instruction', expand: '(follow the production deploy checklist: verify, stage, confirm before each irreversible step)' },
 ]
 
 const MENTIONS: { cmd: string; desc: string; icon: LucideIcon }[] = [
-  { cmd: '@blueprints', desc: 'Reusable agent blueprints', icon: Boxes },
-  { cmd: '@skills', desc: 'Installed agent skills', icon: Brain },
-  { cmd: '@files', desc: 'Workspace files', icon: FileText },
-  { cmd: '@packages', desc: 'Installed npm packages', icon: Package },
+  { cmd: '@files', desc: 'Attach a workspace file as turn context', icon: FileText },
 ]
 
 function HintPopover({ title, children }: { title: string; children: ReactNode }) {
@@ -229,7 +223,92 @@ export default function ChatComposer({ budget, centered }: Props) {
     }
   })()
 
-  const canSend = composerValue.trim().length > 0
+  // Attached file context (sent with the next turn as a user document).
+  const [attachment, setAttachment] = useState<{ title: string; content: string } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const canSend = composerValue.trim().length > 0 || attachment !== null
+
+  const pickFile = () => fileRef.current?.click()
+
+  const onFileChosen = (file: File | undefined) => {
+    if (!file) return
+    if (file.size > 512 * 1024) {
+      notify(`“${file.name}” is ${(file.size / 1024).toFixed(0)} KB — attachments cap at 512 KB of text`, 'error')
+      return
+    }
+    const reader = new FileReader()
+    reader.onerror = () => notify(`Could not read “${file.name}” as text`, 'error')
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : ''
+      if (!text.trim()) {
+        notify(`“${file.name}” has no readable text — binary files can't attach`, 'error')
+        return
+      }
+      setAttachment({ title: file.name, content: text.slice(0, 200_000) })
+    }
+    reader.readAsText(file)
+  }
+
+  const runSlash = (text: string): boolean => {
+    const st = useAppStore.getState()
+    const [head, ...rest] = text.trim().split(/\s+/)
+    const arg = rest.join(' ')
+    switch (head) {
+      case '/help':
+        setComposerValue('/')
+        return true
+      case '/mode': {
+        const order: ChatMode[] = ['auto', 'plan', 'build', 'research']
+        const next = order[(order.indexOf(st.composerMode) + 1) % order.length]
+        st.setComposerMode(next)
+        notify(`Work mode → ${next}`)
+        setComposerValue(arg)
+        return true
+      }
+      case '/model':
+        st.setCenterScreen('settings')
+        st.setSettingsSection('agents')
+        notify('Pick the runtime and model in Agents & Models')
+        setComposerValue(arg)
+        return true
+      case '/undo':
+        void (async () => {
+          try {
+            const { agentUndo } = await import('@/lib/tauri')
+            await agentUndo(st.activeSessionId)
+            notify('Undo requested on the control channel')
+          } catch (e) {
+            notify(e instanceof Error ? e.message : 'Undo failed', 'error')
+          }
+        })()
+        setComposerValue(arg)
+        return true
+      case '/clear':
+        st.clearSessionMessages(st.activeSessionId)
+        setComposerValue('')
+        return true
+      case '/export': {
+        const sess = st.sessions.find((s) => s.id === st.activeSessionId)
+        if (!sess) {
+          notify('No active session to export', 'error')
+          return true
+        }
+        const blob = new Blob([sessionTranscriptMarkdown(sess)], { type: 'text/markdown' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${sess.title.replace(/[^\w\- ]+/g, '').trim() || 'session'}.md`
+        a.click()
+        URL.revokeObjectURL(url)
+        notify('Transcript exported as Markdown')
+        setComposerValue(arg)
+        return true
+      }
+      default:
+        return false
+    }
+  }
 
   const send = () => {
     if (!canSend) return
@@ -239,8 +318,22 @@ export default function ChatComposer({ budget, centered }: Props) {
       if (cur && cur.messages.length > 0) st.newSession()
       st.setCenterScreen('chat')
     }
-    const text = composerValue
-    void sendUserMessage(text)
+    let text = composerValue
+    // Macros expand to prompt augmentations (visible in the sent text).
+    const first = text.trimStart().split(/\s+/, 1)[0]
+    const macro = MACROS.find((m) => m.cmd === first)
+    if (macro) text = `${text} ${macro.expand}`
+    // Slash commands execute locally and never reach the model as turns.
+    if (text.trimStart().startsWith('/')) {
+      if (runSlash(text)) {
+        setAttachment(null)
+        return
+      }
+    }
+    if (!text.trim() && !attachment) return
+    const ctx = attachment
+    setAttachment(null)
+    void sendUserMessage(text, ctx ? { title: ctx.title, content: ctx.content } : undefined)
   }
 
   return (
@@ -259,6 +352,11 @@ export default function ChatComposer({ budget, centered }: Props) {
               key={c.cmd}
               item={c}
               onSelect={(command) => {
+                if (command === '@files') {
+                  setComposerValue('')
+                  pickFile()
+                  return
+                }
                 setComposerValue(`${command} `)
               }}
             />
@@ -267,8 +365,32 @@ export default function ChatComposer({ budget, centered }: Props) {
       )}
 
       {/* The chat bar is the field. Controls live in a one-line footer, not a stack above. */}
+      {attachment && (
+        <div className="mx-2 mt-2 flex items-center gap-1.5 rounded-md border border-orange-500/30 bg-orange-500/5 px-2 py-1 font-mono text-[10px] text-orange-200">
+          <FileText className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{attachment.title} · {(attachment.content.length / 1024).toFixed(1)} KB attached</span>
+          <button
+            type="button"
+            onClick={() => setAttachment(null)}
+            className="shrink-0 rounded px-1 text-muted-foreground hover:text-foreground"
+            title="Remove attachment"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="flex flex-nowrap items-center gap-1 px-2 pt-2 pb-1">
-        <IconBtn icon={Plus} label="Attach file" onClick={() => notify('Attach file')} />
+        <input
+          ref={fileRef}
+          type="file"
+          className="hidden"
+          aria-label="Attach a text file"
+          onChange={(e) => {
+            onFileChosen(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
+        <IconBtn icon={Plus} label="Attach file" onClick={pickFile} />
         <div className="shrink-0">
           <AgentModelPicker />
         </div>
@@ -279,6 +401,10 @@ export default function ChatComposer({ budget, centered }: Props) {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               send()
+            }
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+              setComposerValue('')
             }
           }}
           placeholder="Tell EveryAIOS what you need…"

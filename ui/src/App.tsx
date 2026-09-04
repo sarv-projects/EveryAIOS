@@ -9,6 +9,7 @@ import { CenterColumn } from "@/components/shell/center-column";
 import { ActivityRail, RightViewport } from "@/components/shell/right-rail";
 import { StatusBar } from "@/components/shell/status-bar";
 import { CommandPalette } from "@/components/shell/command-palette";
+import { CockpitSlideover } from "@/components/shell/cockpit-slideover";
 import { KeyboardShortcuts } from "@/components/shell/keyboard-shortcuts";
 import { AiPointer } from "@/components/shell/ai-pointer";
 import { ToastBridge } from "@/components/shell/toast-bridge";
@@ -23,6 +24,8 @@ import { RuntimeStatusBanner } from "@/components/shell/runtime-status-banner";
 
 export default function App() {
   const powerMode = useAppStore((s) => s.powerMode);
+  const cockpitOpen = useAppStore((s) => s.cockpitOpen);
+  const setCockpitOpen = useAppStore((s) => s.setCockpitOpen);
   // P11.4 — kick off LCP/TTI measurement at boot.
   useEffect(() => {
     startPerfMeasurement();
@@ -57,6 +60,8 @@ export default function App() {
       </main>
       <StatusBar />
       <CommandPalette />
+      {/* P3.2 — multi-agent flight deck (was implemented but never mounted). */}
+      <CockpitSlideover open={cockpitOpen} onClose={() => setCockpitOpen(false)} />
       <ToastBridge />
       <AiPointer />
       {/* P50.4.1 — first-run provider setup (no model → no generic agent error). */}

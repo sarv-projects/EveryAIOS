@@ -70,7 +70,9 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
       }
     }
     void poll()
-    const id = setInterval(poll, 2000)
+    // 3s cadence: cockpit snapshots are read-only IPC round-trips; 2s made
+    // the slide-over + status bar churn on every poll (P45 R4 micro-perf).
+    const id = setInterval(poll, 3000)
     return () => {
       active = false
       clearInterval(id)

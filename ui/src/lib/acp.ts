@@ -108,6 +108,27 @@ export interface AuthenticateResult {
   pending?: boolean;
 }
 
+/** Catalog (UI) agent id → ACP registry id. The UI picker labels curated
+ * rows with catalog ids (`claude-code`, `codex-cli`, `grok-build`, …); the
+ * ACP launch/install registry keys them by registry id (`claude`, `codex`,
+ * `grok`, …). Synthesized registry rows already carry their registry id, so
+ * unknown ids pass through unchanged. Always translate before `acp_launch` /
+ * `acp_install_*` calls. */
+const CATALOG_TO_ACP: Record<string, string> = {
+  "everyaios-native": "everyaios",
+  "claude-code": "claude",
+  "codex-cli": "codex",
+  "grok-build": "grok",
+  "gemini-cli": "gemini",
+  "cursor-agent": "cursor",
+  aider: "aider",
+  opencode: "opencode",
+};
+
+export function acpIdFor(catalogId: string): string {
+  return CATALOG_TO_ACP[catalogId] ?? catalogId;
+}
+
 /** The launch registry (the picker). Default = inbuilt EveryAIOS. */
 export async function acpAgents(): Promise<HarnessManifest[]> {
   return nativeCall('ACP agent registry', () => invoke<HarnessManifest[]>("acp_agents"));
@@ -158,6 +179,16 @@ export async function acpPrompt(
   text: string,
 ): Promise<AcpPromptResult> {
   return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", { handle, text }));
+}
+
+/** F8 — refresh the official ACP registry cache from the CDN (network).
+ * Returns the catalog stats. Fails honestly when offline/uncached. */
+export async function acpRegistryRefresh(): Promise<{
+  version?: string
+  agentCount?: number
+  fromCache?: boolean
+}> {
+  return nativeCall('ACP registry refresh', () => invoke("acp_registry_refresh"));
 }
 
 /** Interrupt the ongoing ACP turn. */

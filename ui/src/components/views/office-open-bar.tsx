@@ -27,8 +27,10 @@ export function isGoogleDocUrl(raw: string): boolean {
   try {
     const host = new URL(raw.trim()).hostname.toLowerCase()
     if (GOOGLE_DOC_HOSTS.includes(host)) return true
-    // Country domains: docs.google.co.uk, drive.google.de, …
-    return /^(docs|sheets|drive)\.google\.[a-z.]+$/.test(host)
+    // Country domains: docs.google.co.uk, drive.google.de, … — the TLD part
+    // is one (or two, e.g. .co.uk) 2-letter labels only, so lookalike hosts
+    // like docs.google.com.evil.example can never match (P33.6).
+    return /^(docs|sheets|drive)\.google\.[a-z]{2}(\.[a-z]{2})?$/.test(host)
   } catch {
     return false
   }
@@ -55,15 +57,19 @@ export function OfficeOpenBar({ onOpen, livePath }: Props) {
 
   const open = async () => {
     if (!canOpen || busy) return
-    if (isGoogle) {
+    await openPath(path.trim())
+  }
+
+  const openPath = async (raw: string) => {
+    if (isGoogleDocUrl(raw)) {
       // Google Docs/Sheets — normal access = authenticated browser view.
-      openInBrowser(path.trim())
+      openInBrowser(raw)
       setPath('')
       setHint(null)
       return
     }
     // P50.3.7 — refuse unsupported extensions before the engine round-trip.
-    const extErr = officeExtensionError(path)
+    const extErr = officeExtensionError(raw)
     if (extErr) {
       setHint(extErr)
       notify(extErr)
@@ -72,7 +78,33 @@ export function OfficeOpenBar({ onOpen, livePath }: Props) {
     setHint(null)
     setBusy(true)
     try {
-      await onOpen(path.trim())
+      await onOpen(raw)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Native file picker (Tauri shell only): no more guessing absolute paths.
+  // Falls back to the typed path when the dialog plugin is unavailable.
+  const browse = async () => {
+    if (!inTauri() || busy) return
+    setBusy(true)
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const picked = await open({
+        multiple: false,
+        directory: false,
+        title: 'Open a document',
+        filters: [{ name: 'Documents', extensions: [...OFFICE_EXTENSIONS] }],
+      })
+      if (typeof picked === 'string' && picked.length > 0) {
+        setPath(picked)
+        await openPath(picked)
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'file dialog unavailable — type the path instead'
+      setHint(msg)
+      notify(msg)
     } finally {
       setBusy(false)
     }
@@ -87,7 +119,7 @@ export function OfficeOpenBar({ onOpen, livePath }: Props) {
         onKeyDown={(e) => e.key === 'Enter' && open()}
         placeholder={
           inTauri()
-            ? 'Absolute path inside the workspace — /…/file.docx (.docx .xlsx .pptx .pdf)'
+            ? 'Browse… or paste an absolute path — /…/file.docx (.docx .xlsx .pptx .pdf)'
             : 'Open a real file (Tauri shell only) — demo shown'
         }
         disabled={!inTauri()}
@@ -103,6 +135,19 @@ export function OfficeOpenBar({ onOpen, livePath }: Props) {
         {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : isGoogle ? <Globe className="h-3 w-3" /> : <FolderOpen className="h-3 w-3" />}
         {isGoogle ? 'Open in browser' : 'Open'}
       </Button>
+      {inTauri() && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          className="h-6 gap-1 px-2 text-[10px]"
+          onClick={browse}
+          title="Browse for a file"
+        >
+          <FolderOpen className="h-3 w-3" />
+          Browse
+        </Button>
+      )}
       {livePath && (
         <span className="max-w-[180px] truncate font-mono text-[9px] text-muted-foreground/60">
           {livePath}

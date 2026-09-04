@@ -28,6 +28,10 @@ import {
   Route,
   ScanSearch,
   PanelRight,
+  Radar,
+  GitCompare,
+  GitBranch,
+  MonitorSmartphone,
 } from 'lucide-react'
 import {
   Dialog,
@@ -67,6 +71,8 @@ export function CommandPalette() {
   const autoRoute = useAppStore((s) => s.autoRoute)
   const powerMode = useAppStore((s) => s.powerMode)
   const togglePowerMode = useAppStore((s) => s.togglePowerMode)
+  const cockpitOpen = useAppStore((s) => s.cockpitOpen)
+  const setCockpitOpen = useAppStore((s) => s.setCockpitOpen)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const officePaths = useAppStore((s) => s.officePaths)
   const { theme, toggle } = useTheme()
@@ -80,14 +86,22 @@ export function CommandPalette() {
       { id: 'shell', label: 'Shell', icon: Terminal, shortcut: 'Ctrl+`' },
       { id: 'browse', label: 'Browse', icon: Globe, shortcut: '⌘⇧B' },
       { id: 'code', label: 'Code', icon: Code2, shortcut: '⌘⇧C' },
-      { id: 'office-xlsx', label: officePaths['office-xlsx'] ? `Excel · ${officePaths['office-xlsx']!.split(/[\\/]/).pop()}` : 'Excel · Q3-Financials', icon: FileSpreadsheet, shortcut: '⌘⇧O' },
-      { id: 'office-docx', label: officePaths['office-docx'] ? `Word · ${officePaths['office-docx']!.split(/[\\/]/).pop()}` : 'Word · exec-summary', icon: FileText, shortcut: '⌘⇧O' },
-      { id: 'office-pptx', label: officePaths['office-pptx'] ? `Slides · ${officePaths['office-pptx']!.split(/[\\/]/).pop()}` : 'Slides · quarterly-deck', icon: Presentation, shortcut: '⌘⇧O' },
-      { id: 'office-pdf', label: officePaths['office-pdf'] ? `PDF · ${officePaths['office-pdf']!.split(/[\\/]/).pop()}` : 'PDF · invoice-8402', icon: FileText, shortcut: '⌘⇧O' },
+      { id: 'office-xlsx', label: officePaths['office-xlsx'] ? `Excel · ${officePaths['office-xlsx']!.split(/[\\/]/).pop()}` : 'Excel · no file open', icon: FileSpreadsheet, shortcut: '⌘⇧O' },
+      { id: 'office-docx', label: officePaths['office-docx'] ? `Word · ${officePaths['office-docx']!.split(/[\\/]/).pop()}` : 'Word · no file open', icon: FileText, shortcut: '⌘⇧O' },
+      { id: 'office-pptx', label: officePaths['office-pptx'] ? `Slides · ${officePaths['office-pptx']!.split(/[\\/]/).pop()}` : 'Slides · no file open', icon: Presentation, shortcut: '⌘⇧O' },
+      { id: 'office-pdf', label: officePaths['office-pdf'] ? `PDF · ${officePaths['office-pdf']!.split(/[\\/]/).pop()}` : 'PDF · no file open', icon: FileText, shortcut: '⌘⇧O' },
       { id: 'progress', label: 'Progress timeline', icon: Activity, shortcut: '⌘⇧P' },
+      { id: 'diff', label: 'Diff (pending patches)', icon: GitCompare, shortcut: '⌘⇧D' },
+      { id: 'timeline', label: 'Session timeline', icon: Activity, shortcut: '' },
       { id: 'audit', label: 'Audit & Replay', icon: ShieldCheck, shortcut: '' },
       { id: 'storage', label: 'Storage intelligence', icon: BarChart3, shortcut: '' },
       { id: 'trajectory', label: 'Trajectory (context injection)', icon: ScanSearch, shortcut: '⌘⇧T' },
+      { id: 'blueprint', label: 'Blueprint (plan board)', icon: FileText, shortcut: '' },
+      { id: 'kanban', label: 'Kanban (parallel work)', icon: GitBranch, shortcut: '' },
+      { id: 'generative', label: 'Generative UI', icon: Sparkles, shortcut: '' },
+      { id: 'artifact', label: 'Artifact preview', icon: MonitorSmartphone, shortcut: '' },
+      { id: 'desktop', label: 'Computer use (desktop)', icon: MonitorSmartphone, shortcut: '' },
+      { id: 'local-server', label: 'Local OpenAI server', icon: Cpu, shortcut: '' },
     ]
 
     return [
@@ -122,6 +136,18 @@ export function CommandPalette() {
         keywords: 'casual power cockpit viewport rail',
         onSelect: () => {
           togglePowerMode()
+          setOpen(false)
+        },
+      },
+      {
+        id: 'toggle-cockpit',
+        label: cockpitOpen ? 'Close cockpit (multi-agent)' : 'Open cockpit (multi-agent)',
+        hint: 'Live agent cards, interrupts, and per-agent stop/undo',
+        icon: Radar,
+        group: 'actions',
+        keywords: 'cockpit flight deck agents interrupts',
+        onSelect: () => {
+          setCockpitOpen(!cockpitOpen)
           setOpen(false)
         },
       },
@@ -348,6 +374,7 @@ export function CommandPalette() {
   }, [query])
 
   React.useEffect(() => {
+    if (!open) return
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -355,7 +382,7 @@ export function CommandPalette() {
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         setSelectedIdx((i) => Math.max(i - 1, 0))
-      } else if (e.key === 'Enter' && open) {
+      } else if (e.key === 'Enter') {
         e.preventDefault()
         flatList[selectedIdx]?.onSelect()
       }

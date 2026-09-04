@@ -16,6 +16,24 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 export function CenterColumn() {
   const centerScreen = useAppStore((s) => s.centerScreen)
+  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  // Defensive: persisted/foreign state could carry an unknown screen id.
+  const known = (
+    [
+      'home',
+      'chat',
+      'activity',
+      'projects',
+      'files',
+      'automations',
+      'memory',
+      'guard',
+      'connectors',
+      'agents',
+      'analytics',
+      'settings',
+    ] as readonly string[]
+  ).includes(centerScreen)
 
   return (
     <div className="flex-1 min-w-0 flex flex-col bg-background relative overflow-hidden">
@@ -70,6 +88,21 @@ export function CenterColumn() {
           {centerScreen === 'settings' && (
             <div className="flex-1 min-h-0 overflow-y-auto scroll-thin">
               <SettingsPanel />
+            </div>
+          )}
+          {!known && (
+            <div className="grid flex-1 place-items-center p-6 text-center">
+              <p className="text-[11px] text-muted-foreground">
+                Unknown screen “{centerScreen}” —{' '}
+                <button
+                  type="button"
+                  onClick={() => setCenterScreen('home')}
+                  className="text-orange-300 underline-offset-2 hover:underline"
+                >
+                  back home
+                </button>
+                .
+              </p>
             </div>
           )}
         </motion.div>

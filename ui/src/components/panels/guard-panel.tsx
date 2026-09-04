@@ -113,10 +113,11 @@ export default function GuardPanel() {
     }
   }, [reload])
 
-  // F1 — the approval decision happens in the dedicated guard window, never
-  // in this renderer (which also displays browser/generative-UI/plugin
+  // The approval decision happens in the dedicated guard window, never in
+  // this renderer (which also displays browser/generative-UI/plugin
   // content). The panel surfaces the tickets and opens the window; the
   // human decides there, and the guard window's own poll clears the ticket.
+  // `action` only selects which ticket row shows busy while it opens.
   const respond = async (ticketId: string, _action: 'approve' | 'reject') => {
     setBusy(ticketId)
     try {
@@ -403,24 +404,16 @@ export default function GuardPanel() {
                     <span className="hidden shrink-0 rounded border border-border bg-background/40 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground sm:inline">
                       {a.scope}
                     </span>
-                    {a.status === 'pending' && (
+                    {a.status === 'pending' && activity.length > 0 && (
                       <div className="flex shrink-0 gap-1">
                         <Button
                           size="sm"
-                          className="h-6 bg-emerald-500 px-2 text-[10px] text-black hover:bg-emerald-400"
-                          onClick={() => notify('Guard-2: allowed “npm run deploy” once')}
+                          className="h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400"
+                          disabled={busy !== null}
+                          onClick={() => void respond('activity-row', 'approve')}
+                          title="Decide in the dedicated guard window"
                         >
-                          <Check className="h-3 w-3" />
-                          Allow
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 border-red-500/40 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
-                          onClick={() => notify('Guard-2: denied — logged to audit')}
-                        >
-                          <X className="h-3 w-3" />
-                          Deny
+                          Review
                         </Button>
                       </div>
                     )}
@@ -480,7 +473,11 @@ export default function GuardPanel() {
               stats={inTauri() ? '—' : '7 keys'}
               sub={inTauri() ? 'Live key count is unavailable here' : 'preview fixture'}
               cta="Open settings"
-              onCta={() => notify(inTauri() ? 'Open Settings → API keys to inspect the live vault' : 'Preview key-ring — no real credentials are present')}
+              onCta={() => {
+                const st = useAppStore.getState()
+                st.setCenterScreen('settings')
+                st.setSettingsSection('apikeys')
+              }}
             />
             <VaultCard
               icon={<Vault className="h-4 w-4 text-orange-400" />}
@@ -488,7 +485,7 @@ export default function GuardPanel() {
               stats={inTauri() ? '—' : '12 sessions'}
               sub={inTauri() ? 'Live session count is shown in the work list' : 'preview fixture'}
               cta="View sessions"
-              onCta={() => notify(inTauri() ? 'Select a work item to view live encrypted sessions' : 'Preview session vault — no real sessions are present')}
+              onCta={() => useAppStore.getState().setCenterScreen('chat')}
             />
           </section>
         </div>

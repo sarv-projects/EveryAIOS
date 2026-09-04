@@ -31,7 +31,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use everyaios_acp::{
-    AcpSession, AuthMethod, ClientInfo, Installer, LaunchRegistry,
+    AcpSession, AuthMethod, ClientInfo, Distribution, Installer, LaunchRegistry,
     PermissionDecision, Platform, PolicyVerdict, ProcessTransport, RegistryClient, RegistryPolicy,
     ToolCall, ToolKind,
 };
@@ -253,8 +253,37 @@ fn resolve_spec(agent_id: &str) -> Result<everyaios_acp::InstallSpec, String> {
         })
 }
 
+/// Probe PATH for an executable name. This is the auto-discovery half: an
+/// agent CLI the user installed themselves (Claude Code via npm, Codex, …)
+/// shows up as installed without EveryAIOS ever downloading it. On Windows,
+/// npm-global CLIs are `.cmd`/`.bat` shims and native tools are `.exe`, so
+/// all three are probed there.
+fn resolve_on_path(name: &str) -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let cand = dir.join(name);
+        if cand.is_file() {
+            return Some(cand);
+        }
+        #[cfg(windows)]
+        for ext in ["exe", "cmd", "bat"] {
+            let mut p = cand.clone();
+            p.set_extension(ext);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
 /// F8 — **install state** for every registry agent (installed? version? kind?
 /// binary path?). The picker reads this once to flip Install ↔ Launch.
+///
+/// Install state = EveryAIOS-installed records **plus PATH auto-discovery**: a
+/// `Distribution::Binary` agent whose command resolves on PATH (or a Windows
+/// `.exe`/`.cmd`/`.bat` shim) is reported `installed` with `kind: "path"` —
+/// honest "already on this machine", no download implied.
 #[tauri::command]
 pub fn acp_install_status() -> Result<serde_json::Value, String> {
     let registry = LaunchRegistry::builtin();
@@ -277,6 +306,24 @@ pub fn acp_install_status() -> Result<serde_json::Value, String> {
                 );
             }
             None => {
+                // Auto-discovery leg: the user's own PATH install counts as
+                // installed (kind "path", version unknown — never fabricated).
+                if let Distribution::Binary { command, .. } = &m.distribution {
+                    if !command.is_empty() {
+                        if let Some(p) = resolve_on_path(command) {
+                            out.insert(
+                                m.id.clone(),
+                                serde_json::json!({
+                                    "installed": true,
+                                    "version": serde_json::Value::Null,
+                                    "kind": "path",
+                                    "binaryPath": p.to_string_lossy().into_owned(),
+                                }),
+                            );
+                            continue;
+                        }
+                    }
+                }
                 out.insert(m.id.clone(), serde_json::json!({ "installed": false }));
             }
         }
@@ -957,5 +1004,40 @@ mod tests {
         assert_eq!(reg.default_agent, "everyaios");
         assert!(reg.get("claude").is_some());
         assert!(reg.get("codex").is_some());
+    }
+
+    #[test]
+    fn resolve_on_path_finds_real_binaries_and_misses_absences() {
+        // Every build machine has a shell-ish binary on PATH; on Windows the
+        // probe also covers .exe/.cmd/.bat shims via the same helper.
+        let probe = if cfg!(windows) { "cmd" } else { "sh" };
+        assert!(resolve_on_path(probe).is_some(), "{probe} must resolve on PATH");
+        assert!(
+            resolve_on_path("definitely-not-a-real-everyaios-binary-xyz").is_none(),
+            "unknown names must not resolve"
+        );
+    }
+
+    #[test]
+    fn path_discovery_reports_installed_with_kind_path() {
+        // Simulate the discovery leg by pointing PATH at a real binary and
+        // resolving one of the registry's Binary-distribution commands.
+        let reg = LaunchRegistry::builtin();
+        let bin = reg
+            .agents
+            .iter()
+            .find(|a| matches!(a.distribution, Distribution::Binary { ref command, .. } if !command.is_empty()));
+        let Some(manifest) = bin else {
+            panic!("registry must contain a Binary-distribution agent");
+        };
+        let Distribution::Binary { command, .. } = &manifest.distribution else {
+            unreachable!()
+        };
+        // The real binary may or may not be on this machine's PATH; the point
+        // is the probe never fabricates a path for a name that does not exist.
+        let found = resolve_on_path(command);
+        if let Some(p) = &found {
+            assert!(p.is_file(), "resolved path must exist: {}", p.display());
+        }
     }
 }

@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
-import { Brain, Check, ChevronRight, Copy, GitFork, RotateCw, Sparkles, ThumbsDown, ThumbsUp, User } from 'lucide-react'
+import { Brain, Check, ChevronRight, Copy, GitFork, RotateCw, Sparkles, User } from 'lucide-react'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github-dark.css'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -167,7 +167,7 @@ function TimeStamp({ ts }: { ts: string }) {
 
 function MessageActions({ message }: { message: ChatMessage }) {
   const [copied, setCopied] = useState(false)
-  const [vote, setVote] = useState<'up' | 'down' | null>(null)
+  const [regenerating, setRegenerating] = useState(false)
   const notify = useAppStore((s) => s.notify)
   const forkFromMessage = useAppStore((s) => s.forkFromMessage)
 
@@ -177,8 +177,33 @@ function MessageActions({ message }: { message: ChatMessage }) {
     setTimeout(() => setCopied(false), 1500)
   }
 
-  const act = (action: string) => {
-    notify(action)
+  // Regenerate = re-ask the user turn that produced this answer. No silent
+  // backend replay exists, so this dispatches a real new turn (visible in
+  // the transcript) instead of pretending to rewrite history.
+  const regenerate = () => {
+    void (async () => {
+      const st = useAppStore.getState()
+      const sess = st.sessions.find((s) => s.messages.some((m) => m.id === message.id))
+      const priorUser = sess
+        ? [...sess.messages]
+            .slice(0, sess.messages.findIndex((m) => m.id === message.id))
+            .reverse()
+            .find((m) => m.role === 'user')
+        : undefined
+      if (!priorUser) {
+        notify('Nothing to regenerate — no user turn before this message', 'error')
+        return
+      }
+      setRegenerating(true)
+      try {
+        const { sendUserMessage } = await import('@/lib/bridge')
+        await sendUserMessage(priorUser.content)
+      } catch (e) {
+        notify(e instanceof Error ? e.message : 'Regenerate failed', 'error')
+      } finally {
+        setRegenerating(false)
+      }
+    })()
   }
 
   const baseBtn =
@@ -189,34 +214,8 @@ function MessageActions({ message }: { message: ChatMessage }) {
       <button className={baseBtn} onClick={copy} title="Copy message">
         {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
       </button>
-      <button
-        className={cn(
-          baseBtn,
-          vote === 'up' && 'text-emerald-400 opacity-100 hover:text-emerald-300',
-        )}
-        onClick={() => {
-          setVote(vote === 'up' ? null : 'up')
-          if (vote !== 'up') act('Marked as helpful')
-        }}
-        title="Good response"
-      >
-        <ThumbsUp className="h-3 w-3" />
-      </button>
-      <button
-        className={cn(
-          baseBtn,
-          vote === 'down' && 'text-rose-400 opacity-100 hover:text-rose-300',
-        )}
-        onClick={() => {
-          setVote(vote === 'down' ? null : 'down')
-          if (vote !== 'down') act('Marked as needs improvement')
-        }}
-        title="Bad response"
-      >
-        <ThumbsDown className="h-3 w-3" />
-      </button>
-      <button className={baseBtn} onClick={() => act('Regenerating response…')} title="Regenerate">
-        <RotateCw className="h-3 w-3" />
+      <button className={baseBtn} onClick={regenerate} title="Re-ask the question behind this answer">
+        <RotateCw className={cn('h-3 w-3', regenerating && 'animate-spin')} />
       </button>
       <button
         className={baseBtn}

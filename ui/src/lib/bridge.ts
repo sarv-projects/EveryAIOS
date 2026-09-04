@@ -12,7 +12,15 @@ import {
   planExecute,
   type ChatWireEvent,
 } from "./tauri";
-import { acpAgents, acpInstallStatus, acpLaunch, acpPrompt, type HarnessManifest } from "./acp";
+import {
+  acpAgents,
+  acpIdFor,
+  acpInstallStatus,
+  acpLaunch,
+  acpPrompt,
+  type HarnessManifest,
+  type InstallState,
+} from "./acp";
 import { limitationFor } from "./plain-language";
 import { usageSnapshot } from "./spend";
 import { AGENTS, type AgentRuntime } from "./agents";
@@ -41,6 +49,52 @@ const ACP_TO_CATALOG: Record<string, string> = {
   aider: "aider",
   opencode: "opencode",
 };
+
+/** Merge the live ACP registry + per-agent install state over the static
+ * catalog. Install truth comes from the shell: an agent is `installed` only
+ * when EveryAIOS installed it (`acp_install_status`) or auto-discovery found
+ * its CLI on PATH (kind "path"). PATH-discovered agents carry no version —
+ * never fall back to a static example version. */
+function mergeAgentCatalog(
+  seed: AgentRuntime[],
+  manifests: HarnessManifest[],
+  installs: Record<string, InstallState>,
+): AgentRuntime[] {
+  const merged = seed.map((a) => ({ ...a }));
+  const seen = new Set(merged.map((a) => a.id));
+  for (const m of manifests) {
+    const catalogId = ACP_TO_CATALOG[m.id] ?? m.id;
+    const state = installs[m.id];
+    const status = state?.installed || m.id === "everyaios" ? "installed" : "available";
+    const existing = merged.find((a) => a.id === catalogId);
+    if (existing) {
+      existing.status = status;
+      existing.version =
+        state?.version ?? (state?.kind === "path" ? undefined : existing.version);
+      existing.path = state?.binaryPath ?? existing.path;
+      existing.note = m.description;
+    } else if (!seen.has(catalogId)) {
+      const row = synthesizeAgent(m);
+      row.status = status;
+      row.version = state?.version;
+      row.path = state?.binaryPath ?? undefined;
+      merged.push(row);
+      seen.add(catalogId);
+    }
+  }
+  return merged;
+}
+
+/** Re-run agent discovery on demand (Settings → Refresh / Health): re-fetch
+ * the ACP registry + install status (incl. PATH auto-discovery) and republish
+ * the merged catalog to the picker + settings. Throws on failure so callers
+ * can surface the error instead of silently keeping stale rows. */
+export async function refreshAgentCatalog(): Promise<void> {
+  const manifests = await acpAgents();
+  const installs = await acpInstallStatus();
+  const merged = mergeAgentCatalog(AGENTS, manifests, installs);
+  useAppStore.getState().setLiveAgents(merged);
+}
 
 /** Every ACP agent that has no curated catalog entry gets a synthesized
  * picker row (mark + accent + install state), so the full registry is
@@ -334,27 +388,7 @@ async function startBridge(): Promise<BridgeDisposer> {
       try {
         const manifests = await acpAgents();
         const installs = await acpInstallStatus();
-        const merged: AgentRuntime[] = AGENTS.map((a) => ({ ...a }));
-        const seen = new Set(merged.map((a) => a.id));
-        for (const m of manifests) {
-          const catalogId = ACP_TO_CATALOG[m.id] ?? m.id;
-          const state = installs[m.id];
-          const status = state?.installed || m.id === 'everyaios' ? 'installed' : 'available';
-          const existing = merged.find((a) => a.id === catalogId);
-          if (existing) {
-            existing.status = status;
-            existing.version = state?.version ?? existing.version;
-            existing.path = state?.binaryPath ?? existing.path;
-            existing.note = m.description;
-          } else if (!seen.has(catalogId)) {
-            const row = synthesizeAgent(m);
-            row.status = status;
-            row.version = state?.version;
-            row.path = state?.binaryPath ?? undefined;
-            merged.push(row);
-            seen.add(catalogId);
-          }
-        }
+        const merged = mergeAgentCatalog(AGENTS, manifests, installs);
         if (alive) useAppStore.getState().setLiveAgents(merged);
       } catch (error) {
         recordFault('agent registry', error);
@@ -531,7 +565,10 @@ async function startBridge(): Promise<BridgeDisposer> {
     void updateReadiness().then((status) => {
       if (status?.vault === 'ready' && status.sidecar && !hydrated) void loadLiveData();
     });
-  }, 2000);
+    // 5s: a status probe needs no faster cadence — sidecar restart detection
+    // within ~5s is fine and each tick is a Tauri IPC round-trip that can
+    // otherwise keep the UI busy on slower machines (P45 R4 micro-perf).
+  }, 5000);
 
   return () => {
     alive = false;
@@ -543,15 +580,8 @@ async function startBridge(): Promise<BridgeDisposer> {
   };
 }
 
-const CATALOG_TO_ACP: Record<string, string> = {
-  "everyaios-native": "everyaios",
-  "claude-code": "claude",
-  "codex-cli": "codex",
-  "grok-build": "grok",
-  "gemini-cli": "gemini",
-  "cursor-agent": "cursor",
-};
-
+// Single source of truth for catalog→registry id translation lives in
+// `./acp` (`acpIdFor`); do not re-introduce a second map here.
 function isInbuilt(agentId: string): boolean {
   return agentId === "everyaios-native" || agentId === "everyaios" || agentId === "";
 }
@@ -674,7 +704,7 @@ export async function sendUserMessage(
       // (pinned or defaulted), launch THAT agent on the ACP channel; when
       // only the selected agent is external, that agent is the Chief.
       const chiefId = !chiefInbuilt ? sessionChief : catalogId;
-      const acpId = CATALOG_TO_ACP[chiefId] ?? chiefId;
+      const acpId = acpIdFor(chiefId);
       let handle = st.acpHandles[catalogId];
       if (!handle) {
         const folder =

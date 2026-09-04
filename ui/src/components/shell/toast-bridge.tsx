@@ -19,7 +19,7 @@ export function ToastBridge() {
       prev.current = lastToast
       const isError = lastToastKind === 'error'
       toast({
-        title: isError ? 'MCP / connector' : lastToast,
+        title: isError ? 'Something needs attention' : lastToast,
         description: isError ? lastToast : undefined,
         variant: isError ? 'destructive' : 'default',
         duration: isError ? 6000 : 2500,

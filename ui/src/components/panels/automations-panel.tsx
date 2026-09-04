@@ -512,6 +512,7 @@ export default function AutomationsPanel() {
             <AutomationEditor
               automation={selected}
               onClose={() => setSelectedId(null)}
+              onSaved={() => setReload((x) => x + 1)}
             />
           )}
           </>

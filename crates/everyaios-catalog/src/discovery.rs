@@ -151,6 +151,14 @@ pub struct ResourceCard {
     /// for agents; `inbuilt` for first-party).
     #[serde(default)]
     pub governance: String,
+    /// Explicit endpoint when the catalog knows one (else empty — the SDK
+    /// default or a user override applies). Never a secret.
+    #[serde(default)]
+    pub base_url: String,
+    /// models.dev provider page — the full model list, pricing, and the
+    /// provider's own docs link. Derived from the id, never fetched.
+    #[serde(default)]
+    pub doc_url: String,
     pub status: ManagedResource,
 }
 
@@ -192,6 +200,8 @@ impl ResourceCard {
             capabilities: rec.capabilities.clone(),
             capabilities_verified: verified,
             governance: String::new(),
+            base_url: rec.base_url.clone().unwrap_or_default(),
+            doc_url: format!("https://models.dev/providers/{}", rec.id),
             status: if verified {
                 ManagedResource::Healthy
             } else {
@@ -312,6 +322,12 @@ mod tests {
             );
             // No card field may look like a live secret token.
             assert!(!card.auth.contains("sk-"));
+            // Detail-panel fields: models.dev page derives from the id, the
+            // endpoint mirrors the registry (empty = SDK default).
+            assert_eq!(
+                card.doc_url,
+                format!("https://models.dev/providers/{}", card.id)
+            );
         }
     }
 
@@ -332,6 +348,8 @@ mod tests {
                 capabilities: vec!["read".into()],
                 capabilities_verified: false,
                 governance: String::new(),
+                base_url: String::new(),
+                doc_url: String::new(),
                 status: ManagedResource::Enabled,
             },
             ResourceCard {
@@ -344,6 +362,8 @@ mod tests {
                 capabilities: vec![],
                 capabilities_verified: false,
                 governance: String::new(),
+                base_url: String::new(),
+                doc_url: String::new(),
                 status: ManagedResource::Installed,
             },
         ]);

@@ -137,6 +137,10 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
     ? new Set(opts.credentialedProviders.map(normalizeProviderId))
     : null;
   const candidates: Array<{ provider: string; model: string }> = [];
+  // P50.3.6 — providers that survived the credential gate (mirrors the Rust
+  // feed's gate-holding fallback: the taken route can never name a provider
+  // the picker showed excluded, even on the no-candidate path below).
+  const gatePassed: string[] = [];
   for (const provider of providers) {
     // P50.3.6 — exclude keyed providers with no vault credential before
     // ranking (keyless runtimes always pass). Mirrors the Rust feed gate so
@@ -148,6 +152,7 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
     ) {
       continue;
     }
+    gatePassed.push(provider);
     for (const m of catalogModels(provider)) {
       candidates.push({ provider, model: m.id });
     }
@@ -167,7 +172,15 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
     });
 
   if (pass.length === 0) {
-    const provider = opts.provider ?? "nvidia";
+    // P50.3.6 — the credential gate holds in the fallback too (mirrors the
+    // Rust feed): prefer an explicit lock that passed the gate, else the
+    // first gate-passing provider, else the "nvidia" default with the honest
+    // no-credential reason. Never name an excluded provider.
+    const fallbackProvider =
+      credentialed !== null
+        ? (opts.provider && gatePassed.includes(opts.provider) ? opts.provider : (gatePassed[0] ?? "nvidia"))
+        : (opts.provider ?? "nvidia");
+    const provider = fallbackProvider;
     const gateNote =
       credentialed !== null
         ? " — no vault credential for any candidate (add a provider key in Settings → Keys)"

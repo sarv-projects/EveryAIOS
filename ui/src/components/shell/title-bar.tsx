@@ -37,7 +37,46 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAppStore } from '@/lib/store'
 import { useTheme } from '@/components/theme-provider'
 import { cn } from '@/lib/utils'
+import { useRuntimeState } from '@/lib/runtime'
+import { inTauri } from '@/lib/tauri'
 import { NotificationsPopover } from './notifications-popover'
+
+/** Native window controls (Tauri shell only — static dots in preview). */
+function WindowControls() {
+  const [shell, setShell] = React.useState(false)
+  React.useEffect(() => {
+    setShell(inTauri())
+  }, [])
+  if (!shell) {
+    return (
+      <div className="flex items-center gap-1.5" aria-hidden>
+        <span className="h-3 w-3 rounded-full bg-red-500/90" />
+        <span className="h-3 w-3 rounded-full bg-yellow-500/90" />
+        <span className="h-3 w-3 rounded-full bg-emerald-500/90" />
+      </div>
+    )
+  }
+  const act = (fn: 'minimize' | 'toggleMaximize' | 'close') => () =>
+    void (async () => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window')
+        const w = getCurrentWindow()
+        if (fn === 'minimize') await w.minimize()
+        else if (fn === 'close') await w.close()
+        else await w.toggleMaximize()
+      } catch {
+        /* window API unavailable — controls stay inert */
+      }
+    })()
+  const btn = 'no-drag h-3 w-3 rounded-full transition-transform hover:scale-110'
+  return (
+    <div className="flex items-center gap-1.5">
+      <button type="button" aria-label="Minimize window" title="Minimize" onClick={act('minimize')} className={`${btn} bg-red-500/90`} />
+      <button type="button" aria-label="Maximize window" title="Maximize" onClick={act('toggleMaximize')} className={`${btn} bg-yellow-500/90`} />
+      <button type="button" aria-label="Close window" title="Close" onClick={act('close')} className={`${btn} bg-emerald-500/90`} />
+    </div>
+  )
+}
 
 const statusColor: Record<string, string> = {
   idle: 'bg-zinc-500',
@@ -68,22 +107,22 @@ export function TitleBar() {
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
   const powerMode = useAppStore((s) => s.powerMode)
   const togglePowerMode = useAppStore((s) => s.togglePowerMode)
-  const notify = useAppStore((s) => s.notify)
   const liveBudget = useAppStore((s) => s.liveBudget)
+  const taskFolder = useAppStore((s) => s.taskFolder)
+  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
+  const setSettingsSection = useAppStore((s) => s.setSettingsSection)
+  const runtime = useRuntimeState()
+  const live = runtime.status === 'live'
   const { theme, toggle } = useTheme()
   const spent = liveBudget?.spent ?? active?.spent ?? 0
   const cap = liveBudget?.cap ?? 5
   const tokens = liveBudget?.tokens ?? active?.tokens ?? 0
 
   return (
-    <header className="drag-region h-9 shrink-0 border-b border-border bg-sidebar/80 backdrop-blur-xl flex items-center px-2 gap-2 no-select">
-      {/* Left cluster — traffic lights + app identity */}
+    <header className="drag-region h-9 shrink-0 border-b border-border bg-sidebar flex items-center px-2 gap-2 no-select">
+      {/* Left cluster — traffic lights (Tauri shell) + app identity */}
       <div className="flex items-center gap-2 px-2">
-        <div className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-full bg-red-500/90" />
-          <span className="h-3 w-3 rounded-full bg-yellow-500/90" />
-          <span className="h-3 w-3 rounded-full bg-emerald-500/90" />
-        </div>
+        <WindowControls />
       </div>
 
       <div className="flex items-center gap-1.5 pl-2 pr-2 border-l border-border/60">
@@ -102,13 +141,14 @@ export function TitleBar() {
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <button
           type="button"
-          onClick={() => notify('Workspace menu — everyaios / work')}
+          onClick={() => setPaletteOpen(true)}
           className="no-drag hover:bg-accent rounded-md px-2 py-0.5 flex items-center gap-1 hover:text-foreground transition-colors"
-          aria-label="Open workspace menu"
+          aria-label="Switch session (opens the command palette)"
+          title="Switch session — opens the command palette"
         >
           <span className="font-medium text-foreground">everyaios</span>
           <span className="text-muted-foreground/60">/</span>
-          <span>work</span>
+          <span>{taskFolder ? taskFolder.split(/[\\/]/).pop() : 'work'}</span>
           <ChevronDown className="h-3 w-3 opacity-60" />
         </button>
         {active && (
@@ -177,10 +217,17 @@ export function TitleBar() {
             <button
               type="button"
               onClick={() => useAppStore.getState().setCenterScreen('guard')}
-              className="no-drag flex h-6 items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 font-mono text-[10.5px] hover:bg-emerald-500/20"
+              className={cn(
+                'no-drag flex h-6 items-center gap-1 rounded-md border px-2 font-mono text-[10.5px]',
+                live
+                  ? 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20'
+                  : 'border-border bg-background/40 hover:bg-accent',
+              )}
             >
-              <ShieldCheck className="h-3 w-3 text-emerald-400" />
-              <span className="text-emerald-300">Guard · Standard</span>
+              <ShieldCheck className={cn('h-3 w-3', live ? 'text-emerald-400' : 'text-muted-foreground')} />
+              <span className={live ? 'text-emerald-300' : 'text-muted-foreground'}>
+                Guard · {live ? 'Standard' : 'unknown'}
+              </span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -239,9 +286,25 @@ export function TitleBar() {
           <TooltipContent side="bottom">Toggle sidebar (Cmd+B)</TooltipContent>
         </Tooltip>
 
-        <Avatar className="h-6 w-6 ring-1 ring-border">
-          <AvatarFallback className="bg-zinc-700 text-[10px]">AA</AvatarFallback>
-        </Avatar>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => {
+                setCenterScreen('settings')
+                setSettingsSection('general')
+              }}
+              className="no-drag rounded-full hover:ring-2 hover:ring-orange-500/40 transition-shadow"
+              aria-label="Open settings"
+              title="Settings"
+            >
+              <Avatar className="h-6 w-6 ring-1 ring-border">
+                <AvatarFallback className="bg-zinc-700 text-[10px]">⋯</AvatarFallback>
+              </Avatar>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Settings</TooltipContent>
+        </Tooltip>
       </div>
     </header>
   )

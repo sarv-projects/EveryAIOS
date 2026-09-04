@@ -338,6 +338,12 @@ export function formatPrice(price: number): string {
 }
 
 // === Agent catalog ============================================================
+// Static catalog of the runtimes EveryAIOS can drive. **Status is honest**: a
+// runtime is only `installed` when the live ACP install-status probe (bridge
+// hydration, `acp_install_status`) found it — either EveryAIOS-installed or
+// auto-discovered on PATH. The static seed marks external runtimes
+// `available` (catalog entry, not an install claim) so the pre-hydration and
+// plain-browser UI never pretends a CLI exists on this machine.
 
 export const AGENTS: AgentRuntime[] = [
   {
@@ -347,7 +353,6 @@ export const AGENTS: AgentRuntime[] = [
     tagline: 'Built-in orchestrator — can shell out to any other runtime',
     status: 'installed',
     path: 'internal://everyaios/agent',
-    version: '0.9.4',
     mark: 'E',
     accent: 'bg-orange-500 text-black',
     capabilities: ['code', 'plan', 'research', 'browser', 'shell', 'office', 'tools', 'parallel'],
@@ -372,9 +377,7 @@ export const AGENTS: AgentRuntime[] = [
     name: 'Claude Code',
     vendor: 'Anthropic',
     tagline: 'Terminal coding agent with diff-first edits and MCP tools',
-    status: 'installed',
-    path: '/usr/local/bin/claude',
-    version: '2.0.4',
+    status: 'available',
     mark: 'CC',
     accent: 'bg-orange-500/90 text-black',
     capabilities: ['code', 'plan', 'shell', 'tools', 'vision'],
@@ -382,16 +385,14 @@ export const AGENTS: AgentRuntime[] = [
     defaultModel: 'claude-sonnet-4.5',
     headless: true,
     sandbox: 'soft',
-    note: 'Install via `npm i -g @anthropic-ai/claude-code`. Strong at agentic edits.',
+    note: 'Install via `npm i -g @anthropic-ai/claude-code` (or connect — detected on PATH if already installed). Strong at agentic edits.',
   },
   {
     id: 'codex-cli',
     name: 'Codex CLI',
     vendor: 'OpenAI',
     tagline: 'OpenAI coding agent — runs GPT-5-Codex with sandboxed shell',
-    status: 'installed',
-    path: '/usr/local/bin/codex',
-    version: '0.41.0',
+    status: 'available',
     mark: 'Cx',
     accent: 'bg-emerald-500/90 text-black',
     capabilities: ['code', 'plan', 'shell', 'tools', 'parallel'],
@@ -406,9 +407,7 @@ export const AGENTS: AgentRuntime[] = [
     name: 'Grok Build',
     vendor: 'xAI',
     tagline: 'Grok-powered builder with realtime web + tool calls',
-    status: 'installed',
-    path: '/usr/local/bin/grok',
-    version: '0.7.2',
+    status: 'available',
     mark: 'Gr',
     accent: 'bg-zinc-700 text-zinc-100',
     capabilities: ['code', 'research', 'browser', 'tools'],
@@ -423,9 +422,7 @@ export const AGENTS: AgentRuntime[] = [
     name: 'Gemini CLI',
     vendor: 'Google',
     tagline: 'Massive-context agent — drives Gemini 2.5 Pro (2M ctx)',
-    status: 'installed',
-    path: '/usr/local/bin/gemini',
-    version: '0.18.1',
+    status: 'available',
     mark: 'Ge',
     accent: 'bg-sky-500/90 text-black',
     capabilities: ['code', 'plan', 'research', 'vision', 'tools'],
@@ -455,9 +452,7 @@ export const AGENTS: AgentRuntime[] = [
     name: 'Aider',
     vendor: 'Open-source',
     tagline: 'Git-first pair-programmer — many models via LiteLLM',
-    status: 'installed',
-    path: '/usr/local/bin/aider',
-    version: '0.83.2',
+    status: 'available',
     mark: 'Ai',
     accent: 'bg-rose-500/90 text-black',
     capabilities: ['code', 'plan', 'shell'],
@@ -478,9 +473,7 @@ export const AGENTS: AgentRuntime[] = [
     name: 'OpenCode',
     vendor: 'Open-source',
     tagline: 'TUI agent — drop-in Aider/Claude Code alternative',
-    status: 'updating',
-    path: '/usr/local/bin/opencode',
-    version: '0.16.0',
+    status: 'available',
     mark: 'Oc',
     accent: 'bg-purple-500/90 text-black',
     capabilities: ['code', 'plan', 'shell', 'tools'],
@@ -504,6 +497,45 @@ export function getModelsForAgent(agentId: string): AgentModel[] {
   const a = AGENT_MAP[agentId]
   if (!a) return []
   return a.models.map((id) => MODEL_MAP[id]).filter(Boolean) as AgentModel[]
+}
+
+/** A runtime is usable when it is the inbuilt orchestrator (always live) or
+ * its install was verified on this machine. Anything else must not present
+ * models — the model list loads live only after install. */
+export function isRuntimeUsable(a: AgentRuntime | undefined): boolean {
+  if (!a) return false
+  return (
+    a.id === 'everyaios-native' || a.status === 'installed' || a.status === 'updating'
+  )
+}
+
+/** Live-gated model list: curated rows for installed runtimes, `[]` for
+ * anything not yet installed (plus `[]` for registry rows with no curated
+ * mapping). The picker/settings must render the honest empty state instead. */
+export function getModelsForAgentLive(
+  agentId: string,
+  live?: AgentRuntime[],
+): AgentModel[] {
+  const row = live?.find((a) => a.id === agentId) ?? AGENT_MAP[agentId]
+  if (!isRuntimeUsable(row)) return []
+  return getModelsForAgent(agentId)
+}
+
+/** Union of models reachable from installed runtimes (deduped, stable
+ * order). Drives the Models tab — uninstalled runtimes contribute nothing. */
+export function modelsForUsableRuntimes(runtimes: AgentRuntime[]): AgentModel[] {
+  const seen = new Set<string>()
+  const out: AgentModel[] = []
+  for (const r of runtimes) {
+    if (!isRuntimeUsable(r)) continue
+    for (const m of getModelsForAgent(r.id)) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id)
+        out.push(m)
+      }
+    }
+  }
+  return out
 }
 
 export function getDefaultModelForAgent(agentId: string): string {

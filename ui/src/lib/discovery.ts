@@ -22,6 +22,10 @@ export interface ResourceCard {
   capabilities: string[]
   capabilitiesVerified: boolean
   governance: string
+  /** Explicit endpoint when the catalog knows one ('' = SDK default). */
+  baseUrl?: string
+  /** models.dev provider page (full model list + provider docs link). */
+  docUrl?: string
   status: ManagedStatus
 }
 export interface ResourceCounts {

@@ -188,6 +188,7 @@ fn journey_install_byok_chat_tool_call() {
             soul_md: None,
             user_documents: None,
             primary_chief: None,
+            credentialed_providers: None,
         })
         .expect("start_stream");
     assert!(

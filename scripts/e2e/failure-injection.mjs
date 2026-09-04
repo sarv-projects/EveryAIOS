@@ -32,7 +32,7 @@
  */
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,6 +46,13 @@ if (!existsSync(CORE_BIN)) {
   console.log(`[P50.5.5] SKIP — no core binary at ${CORE_BIN} (set EVERYAIOS_E2E_CORE_BIN)`);
   process.exit(2);
 }
+
+// Cargo is not on PATH in every shell (notably non-interactive WSL shells);
+// resolve it the same way CI would: explicit env, else the rustup default
+// install location, else PATH. L5/L7 both go through here.
+const CARGO_BIN =
+  process.env.EVERYAIOS_E2E_CARGO_BIN ??
+  (existsSync(join(homedir(), ".cargo/bin/cargo")) ? join(homedir(), ".cargo/bin/cargo") : "cargo");
 
 const failures = [];
 const skips = [];
@@ -228,7 +235,7 @@ if (!existsSync(COORDINATOR_BIN)) {
   console.log("L5 — deny permissions: guard security suites…");
   const cargo = process.env.EVERYAIOS_E2E_CARGO ?? resolve(REPO_ROOT, "crates");
   try {
-    const out = execFileSync("cargo", ["test", "-p", "everyaios-guard", "--quiet"], {
+    const out = execFileSync(CARGO_BIN, ["test", "-p", "everyaios-guard", "--quiet"], {
       cwd: cargo,
       encoding: "utf8",
       timeout: 600_000,
@@ -273,7 +280,7 @@ if (!existsSync(COORDINATOR_BIN)) {
   if (process.env.EVERYAIOS_E2E_CHROME === "1" && found) {
     console.log(`  live Chrome leg via ${found}: running the ignored live suite…`);
     try {
-      execFileSync("cargo", ["test", "-p", "everyaios-browser", "--lib", "--", "--ignored", "--test-threads=1"], {
+      execFileSync(CARGO_BIN, ["test", "-p", "everyaios-browser", "--lib", "--", "--ignored", "--test-threads=1"], {
         cwd: resolve(REPO_ROOT, "crates"),
         encoding: "utf8",
         timeout: 600_000,

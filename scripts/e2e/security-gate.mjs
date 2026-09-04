@@ -26,6 +26,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,14 +52,21 @@ function have(cmd) {
   }
 }
 
-if (!have("cargo")) {
+// Cargo is not on PATH in every shell (notably non-interactive WSL shells);
+// resolve it like failure-injection.mjs does: explicit env, else the rustup
+// default install location, else PATH.
+const CARGO_BIN =
+  process.env.EVERYAIOS_E2E_CARGO_BIN ??
+  (existsSync(join(homedir(), ".cargo/bin/cargo")) ? join(homedir(), ".cargo/bin/cargo") : "cargo");
+
+if (!have(CARGO_BIN)) {
   console.log("[P50.5.7] SKIP — no cargo toolchain");
   process.exit(2);
 }
 
 function cargo(args, label, cwd = CRATES) {
   try {
-    const out = execFileSync("cargo", args, {
+    const out = execFileSync(CARGO_BIN, args, {
       cwd,
       encoding: "utf8",
       timeout: 600_000,

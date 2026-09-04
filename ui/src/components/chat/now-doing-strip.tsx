@@ -66,12 +66,16 @@ export default function NowDoingStrip({
       }${taskSnapshot ? ` · cfg ${taskSnapshot.configHash.slice(0, 6)}` : ''}`
     : info.mark
 
-  // Live elapsed ticker (1s) so the banner feels like a real running job.
+  // Elapsed ticker: re-renders once a second while the turn is running so
+  // the live clock advances. Idle when the session isn't running (no
+  // background churn).
+  const running = activeSession?.status === 'running'
   const [tick, setTick] = useState(0)
   useEffect(() => {
+    if (!running) return
     const t = setInterval(() => setTick((x) => x + 1), 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [running])
 
   const stepLabel =
     stepIndex && stepTotal ? `(step ${stepIndex}/${stepTotal})` : ''

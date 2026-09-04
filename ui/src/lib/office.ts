@@ -102,22 +102,6 @@ export const demoDocx: DocxPayload = {
   ],
 };
 
-export const demoPptx: PptxPayload = {
-  path: "demo.pptx",
-  deck: "# ppt/slides/slide1.xml\n[shape1 \"Title 1\"]\nRoadmap\n\n[shape2 \"Content Placeholder 2\"]\n• Ship P4\n• Harden security\n• Storage intelligence\n",
-  slides: [
-    {
-      part: "ppt/slides/slide1.xml",
-      text: "[shape1 \"Title 1\"]\nRoadmap\n\n[shape2 \"Content Placeholder 2\"]\n• Ship P4\n• Harden security\n• Storage intelligence\n",
-    },
-  ],
-};
-
-export const demoPdf: PdfPayload = {
-  path: "demo.pdf",
-  pages: 2,
-  texts: [
-    "Page one — the executive summary of the document.",
-    "Page two — supporting detail and figures.",
-  ],
-};
+// P50.2.x — removed: demoPptx/demoPdf (unimported fixture payloads). The
+// pptx/pdf views carry their own preview fallbacks; no shared fixture is
+// needed here.

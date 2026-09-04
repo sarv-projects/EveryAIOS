@@ -2,26 +2,25 @@
 
 import { useState } from 'react'
 import {
-  Folder,
-  Pencil,
-  BarChart3,
-  Globe,
-  FileText,
-  Code2,
+  MessageSquare,
+  Zap,
   FileDown,
   ChevronRight,
   ChevronDown,
   CheckCircle2,
   Loader2,
+  Radio,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import type { WorkEventEnvelope } from '@/lib/work'
 
-type EventKind = 'file' | 'edit' | 'browser' | 'shell' | 'code' | 'office' | 'export'
+type EventKind = 'message' | 'tool' | 'work'
 
 type Ev = {
+  id: string
   t: string
   icon: React.ReactNode
   kind: EventKind
@@ -30,85 +29,99 @@ type Ev = {
   detail?: string
 }
 
-const FILTERS = ['All', 'File', 'Edit', 'Browser', 'Shell', 'Code', 'Office', 'Export'] as const
+const FILTERS = ['All', 'Messages', 'Tools', 'Work'] as const
 
-const EVENTS: Ev[] = [
-  {
-    t: '09:15:02',
-    icon: <Folder className="h-3.5 w-3.5 text-orange-400" />,
-    kind: 'file',
-    label: 'Opened quarterly.xlsx',
-    status: 'done',
-  },
-  {
-    t: '09:15:04',
-    icon: <Pencil className="h-3.5 w-3.5 text-blue-400" />,
-    kind: 'edit',
-    label: 'Updated B7:B12',
-    status: 'done',
-    detail: '6 cells · range B7:B12 · applied formula =SUM(B2:B5)',
-  },
-  {
-    t: '09:15:08',
-    icon: <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />,
-    kind: 'office',
-    label: 'Regenerated chart',
-    status: 'done',
-    detail: 'Revenue trend chart · 4 series · embedded on Sheet1',
-  },
-  {
-    t: '09:15:12',
-    icon: <Globe className="h-3.5 w-3.5 text-sky-400" />,
-    kind: 'browser',
-    label: 'Searched Google for "Q3 industry benchmarks"',
-    status: 'done',
-    detail: 'Top 3 results captured · saved to /work/data/benchmarks.json',
-  },
-  {
-    t: '09:15:15',
-    icon: <FileText className="h-3.5 w-3.5 text-blue-400" />,
-    kind: 'file',
-    label: 'Opened report.docx',
-    status: 'done',
-  },
-  {
-    t: '09:15:18',
-    icon: <Pencil className="h-3.5 w-3.5 text-blue-400" />,
-    kind: 'edit',
-    label: 'Wrote §3.2 paragraph',
-    status: 'done',
-    detail: '+Revenue grew 20% QoQ, reaching $1.8M driven by enterprise deals.\n−Revenue improved this quarter.',
-  },
-  {
-    t: '09:15:22',
-    icon: <Code2 className="h-3.5 w-3.5 text-purple-400" />,
-    kind: 'shell',
-    label: 'Ran `npm test`',
-    status: 'done',
-    detail: '42 passed ✓ · 0 failed · 3.2s',
-  },
-  {
-    t: '09:15:25',
-    icon: <FileDown className="h-3.5 w-3.5 text-red-400" />,
-    kind: 'export',
-    label: 'Exported report.pdf',
-    status: 'active',
-    detail: 'Building PDF · 2 of 8 pages rendered',
-  },
-]
+function fmtTime(ts: string | number): string {
+  try {
+    const d = new Date(typeof ts === 'number' ? ts : ts)
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch {
+    return String(ts)
+  }
+}
+
+function summarizeWorkEvent(envelope: WorkEventEnvelope): { label: string; detail?: string } {
+  const ev = envelope.event as { type?: string; kind?: string; summary?: string; message?: string } | null
+  if (ev && typeof ev === 'object') {
+    const label = ev.summary ?? ev.message ?? ev.type ?? ev.kind ?? 'Work event'
+    return { label: `#${envelope.sequence} ${label}`, detail: JSON.stringify(envelope.event).slice(0, 300) }
+  }
+  return { label: `#${envelope.sequence} Work event`, detail: String(envelope.event).slice(0, 300) }
+}
+
+/** Session + gateway activity, derived live. Empty stays empty. */
+function buildEvents(
+  messages: { id: string; role: string; content: string; timestamp: string; toolCalls?: { id: string; toolId: string; status: string; error?: string }[]; artifacts?: { id: string; name: string }[] }[],
+  work: WorkEventEnvelope[],
+  running: boolean,
+): Ev[] {
+  const out: Ev[] = []
+  for (const m of messages) {
+    if (m.role === 'user') {
+      const text = m.content.length > 120 ? `${m.content.slice(0, 120)}…` : m.content
+      out.push({ id: `${m.id}-msg`, t: fmtTime(m.timestamp), icon: <MessageSquare className="h-3.5 w-3.5 text-blue-400" />, kind: 'message', label: text || '(empty message)', status: 'done' })
+    } else if (m.role === 'assistant') {
+      const tools = m.toolCalls ?? []
+      const first = m.content.split('\n')[0]?.slice(0, 120) || 'Assistant turn'
+      out.push({
+        id: `${m.id}-msg`,
+        t: fmtTime(m.timestamp),
+        icon: <Zap className="h-3.5 w-3.5 text-orange-400" />,
+        kind: 'message',
+        label: first,
+        status: 'done',
+        detail: tools.length > 0 ? `${tools.length} tool call(s): ${tools.map((t) => t.toolId).slice(0, 5).join(', ')}` : undefined,
+      })
+      for (const t of tools) {
+        out.push({
+          id: `${m.id}-tool-${t.id}`,
+          t: fmtTime(m.timestamp),
+          icon: <Zap className="h-3.5 w-3.5 text-orange-400" />,
+          kind: 'tool',
+          label: t.toolId,
+          status: t.status === 'running' ? 'active' : 'done',
+          detail: t.error ?? undefined,
+        })
+      }
+    }
+    for (const a of m.artifacts ?? []) {
+      out.push({ id: `${m.id}-art-${a.id}`, t: fmtTime(m.timestamp), icon: <FileDown className="h-3.5 w-3.5 text-emerald-400" />, kind: 'message', label: `Artifact: ${a.name}`, status: 'done' })
+    }
+  }
+  for (const w of work) {
+    const s = summarizeWorkEvent(w)
+    out.push({ id: `work-${w.sequence}`, t: fmtTime(w.timestamp), icon: <Radio className="h-3.5 w-3.5 text-violet-400" />, kind: 'work', label: s.label, status: 'done', detail: s.detail })
+  }
+  if (running && out.length > 0) out[out.length - 1] = { ...out[out.length - 1], status: 'active' }
+  return out
+}
 
 export default function ProgressView() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All')
-  const [expanded, setExpanded] = useState<string | null>('09:15:22')
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   const workItems = useAppStore((s) => s.workItems)
   const workPresence = useAppStore((s) => s.workPresence)
   const workEvents = useAppStore((s) => s.workEvents)
+  const session = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId))
+  const running = session?.status === 'running'
 
+  const events = buildEvents(session?.messages ?? [], workEvents, !!running)
+  const artifacts = (session?.messages ?? []).flatMap((m) =>
+    (m.artifacts ?? []).map((a) => a.name),
+  )
+
+  const kindForFilter: Record<(typeof FILTERS)[number], EventKind | null> = {
+    All: null,
+    Messages: 'message',
+    Tools: 'tool',
+    Work: 'work',
+  }
   const visible =
     filter === 'All'
-      ? EVENTS
-      : EVENTS.filter((e) => e.kind === filter.toLowerCase() || (filter === 'Office' && e.kind === 'office'))
+      ? events
+      : events.filter((e) => e.kind === kindForFilter[filter])
+  const doneCount = events.filter((e) => e.status === 'done').length
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -116,7 +129,7 @@ export default function ProgressView() {
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Summary</h2>
           <Badge variant="outline" className="text-[10px]">
-            {EVENTS.filter((e) => e.status === 'done').length}/{EVENTS.length} done
+            {doneCount}/{events.length} done
           </Badge>
         </div>
         <div className="flex flex-wrap gap-1">
@@ -157,13 +170,20 @@ export default function ProgressView() {
       )}
 
       <ScrollArea className="scroll-thin min-h-0 flex-1">
+        {visible.length === 0 ? (
+          <p className="px-4 py-8 text-center text-[11px] text-muted-foreground">
+            {events.length === 0
+              ? 'No activity yet — send a message or start work to fill this timeline.'
+              : 'Nothing in this class yet.'}
+          </p>
+        ) : (
         <div className="relative px-4 py-3">
           <div className="absolute bottom-4 left-[28px] top-4 w-px bg-border" />
           <div className="space-y-2.5">
             {visible.map((e) => {
-              const isOpen = expanded === e.t
+              const isOpen = expanded === e.id
               return (
-                <div key={e.t} className="relative pl-8">
+                <div key={e.id} className="relative pl-8">
                   <div
                     className={cn(
                       'absolute left-[22px] top-1 z-10 h-3 w-3 rounded-full border-2 border-background',
@@ -186,7 +206,7 @@ export default function ProgressView() {
                   >
                     <button
                       className="flex w-full items-center gap-2 text-left"
-                      onClick={() => setExpanded(isOpen ? null : e.t)}
+                      onClick={() => setExpanded(isOpen ? null : e.id)}
                     >
                       <span className="text-muted-foreground">{e.icon}</span>
                       <span className="font-mono text-[10px] text-muted-foreground">
@@ -229,18 +249,29 @@ export default function ProgressView() {
             })}
           </div>
         </div>
+        )}
         <div className="space-y-2 border-t border-border px-4 py-3">
           <div>
             <div className="text-xs font-medium">Progress</div>
-            <p className="text-[10px] text-muted-foreground">Tasks and todos for this session land here as they run.</p>
+            <p className="text-[10px] text-muted-foreground">
+              {events.length === 0
+                ? 'Tasks and todos for this session land here as they run.'
+                : `${doneCount} of ${events.length} entries complete.`}
+            </p>
           </div>
           <div>
             <div className="text-xs font-medium">Artifacts</div>
-            <p className="text-[10px] text-muted-foreground">No artifacts yet.</p>
-          </div>
-          <div>
-            <div className="text-xs font-medium">References</div>
-            <p className="text-[10px] text-muted-foreground">No references yet.</p>
+            {artifacts.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground">No artifacts yet.</p>
+            ) : (
+              <ul className="mt-1 space-y-0.5">
+                {artifacts.map((name, i) => (
+                  <li key={`${name}-${i}`} className="truncate font-mono text-[10px] text-foreground/80">
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </ScrollArea>

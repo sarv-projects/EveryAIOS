@@ -4,7 +4,6 @@ import { useState } from 'react'
 import {
   Check,
   FileCode2,
-  MoreHorizontal,
   Pencil,
   ShieldAlert,
   ShieldCheck,
@@ -14,7 +13,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
 import { useAppStore, type MCQInterrupt } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -96,8 +94,15 @@ function McqOptions({
   )
 }
 
-function AutonomyBody({ mcq }: { mcq: MCQInterrupt }) {
-  const [selected, setSelected] = useState<string | null>(null)
+function AutonomyBody({
+  mcq,
+  selected,
+  onSelect,
+}: {
+  mcq: MCQInterrupt
+  selected: string | null
+  onSelect: (v: string) => void
+}) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background/40 px-2.5 py-1.5">
@@ -113,7 +118,7 @@ function AutonomyBody({ mcq }: { mcq: MCQInterrupt }) {
         </p>
       )}
       {mcq.options && (
-        <McqOptions options={mcq.options} selected={selected} onSelect={setSelected} />
+        <McqOptions options={mcq.options} selected={selected} onSelect={onSelect} />
       )}
     </div>
   )
@@ -140,13 +145,9 @@ function BudgetBar({ used, cap }: { used: number; cap: number }) {
 
 export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
   const respondMcq = useAppStore((s) => s.respondMcq)
-  const notify = useAppStore((s) => s.notify)
   const [selected, setSelected] = useState<string | null>(
     mcq.options?.[0]?.value ?? null
   )
-  const [remember, setRemember] = useState(false)
-
-  const showRemember = mcq.kind === 'mcq' || mcq.kind === 'permission'
 
   const autonomyLevelLabel =
     (() => {
@@ -204,14 +205,14 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
       <div className="space-y-2.5 px-3 py-3">
         {mcq.kind === 'diff' && mcq.diff && <DiffView diff={mcq.diff} />}
 
-        {mcq.kind === 'autonomy' && <AutonomyBody mcq={mcq} />}
+        {mcq.kind === 'autonomy' && (
+          <AutonomyBody mcq={mcq} selected={selected} onSelect={setSelected} />
+        )}
 
-        {mcq.kind === 'permission' && (
+        {mcq.kind === 'permission' && mcq.description && (
           <div className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-[11px] text-muted-foreground">
-              Scope: <span className="font-mono text-foreground">workspace write</span>
-            </span>
+            <span className="text-[11px] text-muted-foreground">{mcq.description}</span>
           </div>
         )}
 
@@ -225,16 +226,6 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
 
         {mcq.kind === 'budget' && mcq.budget && (
           <BudgetBar used={mcq.budget.used} cap={mcq.budget.cap} />
-        )}
-
-        {showRemember && (
-          <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground">
-            <Checkbox
-              checked={remember}
-              onCheckedChange={(v) => setRemember(v === true)}
-            />
-            Remember choice for this site
-          </label>
         )}
       </div>
 
@@ -307,14 +298,6 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
             </Button>
           </>
         )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="ml-auto h-7 gap-1 px-2 text-[11px] text-muted-foreground"
-          onClick={() => notify('More options')}
-        >
-          <MoreHorizontal className="h-3.5 w-3.5" />
-        </Button>
       </div>
     </Card>
   )
