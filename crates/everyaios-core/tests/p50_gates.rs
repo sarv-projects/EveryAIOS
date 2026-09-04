@@ -142,14 +142,19 @@ fn corrupt_tasks_json_recovers_empty() {
 }
 
 #[test]
-fn wrong_vault_key_fails_closed() {    let dir = temp_dir("vault-locked");
+fn wrong_vault_key_fails_closed() {
+    let dir = temp_dir("vault-locked");
     let path = dir.join("vault.db");
     {
         let _vault = Vault::open(&path, "correct-key").expect("create vault");
     }
     // A wrong key must fail — never open plaintext, never silently recreate
-    // a vault the user may hold key material in.
-    let err = Vault::open(&path, "wrong-key").expect_err("P50.5.5: wrong key opened the vault");
+    // a vault the user may hold key material in. (`Vault` is not `Debug`, so
+    // `expect_err` cannot be used here — match instead.)
+    let err = match Vault::open(&path, "wrong-key") {
+        Ok(_) => panic!("P50.5.5: wrong key opened the vault"),
+        Err(e) => e,
+    };
     assert!(
         !format!("{err:?}").is_empty(),
         "P50.5.5: wrong-key failure must carry a reason"
@@ -167,8 +172,10 @@ fn vault_open_in_unwritable_location_fails_honestly() {
     let dir = temp_dir("vault-unwritable");
     let blocker = dir.join("blocked");
     std::fs::write(&blocker, "a file, not a dir").unwrap();
-    let err = Vault::open(&blocker.join("vault.db"), "k")
-        .expect_err("P50.2.1: vault open through a file must fail");
+    let err = match Vault::open(&blocker.join("vault.db"), "k") {
+        Ok(_) => panic!("P50.2.1: vault open through a file must fail"),
+        Err(e) => e,
+    };
     assert!(
         !format!("{err:?}").is_empty(),
         "P50.2.1: vault open failure must carry a reason"

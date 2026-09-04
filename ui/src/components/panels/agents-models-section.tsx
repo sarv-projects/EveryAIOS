@@ -11,6 +11,7 @@ import {
   Gauge,
   KeyRound,
   Layers,
+  Loader2,
   RefreshCw,
   Route,
   Settings2,
@@ -38,12 +39,23 @@ import {
   TASK_LABELS,
   formatContext,
   formatPrice,
-  getModelsForAgent,
+  getModelsForAgentLive,
+  isRuntimeUsable,
+  modelsForUsableRuntimes,
   type AgentRuntime,
   type TaskKind,
 } from '@/lib/agents'
+import { acpIdFor, acpInstallCommit, acpInstallRequest } from '@/lib/acp'
+import { refreshAgentCatalog } from '@/lib/bridge'
 import { cn } from '@/lib/utils'
 import { Row, SectionShell } from './settings-shared'
+
+function formatTokens(n: number): string {
+  if (!n || n <= 0) return '—'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`
+  return String(n)
+}
 
 // === Agent card ===============================================================
 
@@ -82,7 +94,63 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
   const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
   const notify = useAppStore((s) => s.notify)
   const isSelected = selectedAgentId === agent.id
-  const models = getModelsForAgent(agent.id)
+  // Live-gated: stub model counts for uninstalled runtimes are never shown —
+  // the list loads live only after install.
+  const liveAgents = useAppStore((s) => s.liveAgents)
+  const liveSource = liveAgents.length > 0 ? liveAgents : undefined
+  const models = getModelsForAgentLive(agent.id, liveSource)
+  const usable = isRuntimeUsable(
+    liveSource?.find((a) => a.id === agent.id) ?? agent,
+  )
+  const [busyInstall, setBusyInstall] = useState(false)
+  const [busyScan, setBusyScan] = useState(false)
+
+  // Re-run discovery (ACP registry + install status + PATH probe) so the
+  // row reflects what is actually on this machine right now.
+  const rescan = async () => {
+    setBusyScan(true)
+    try {
+      await refreshAgentCatalog()
+      const live = useAppStore.getState().liveAgents
+      const installed = live.filter((a) => a.status === 'installed').length
+      notify(`Discovery re-scan: ${live.length} runtimes, ${installed} installed`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Discovery re-scan failed', 'error')
+    } finally {
+      setBusyScan(false)
+    }
+  }
+
+  // F8 — real plan-before-touch install (Guard-2 ticket), same as the
+  // composer picker. Registry ids, not catalog ids (claude-code → claude).
+  const installAgent = async () => {
+    setBusyInstall(true)
+    try {
+      const rid = acpIdFor(agent.id)
+      const req = await acpInstallRequest(rid)
+      const cmd = (req.exactCommand ?? []).join(' ')
+      if (req.consentRequired && cmd) {
+        const ok = window.confirm(
+          `SEP-1024 exact-command consent\n\nInstall ${agent.name}?\n\n${cmd}${req.preferNative ? '\n\nPrefer verified native artifact.' : ''}`,
+        )
+        if (!ok) {
+          notify('Install cancelled')
+          return
+        }
+      }
+      if (req.action === 'allow') {
+        await acpInstallCommit(rid, req.ticketId)
+        notify(`${agent.name} installed — runtimes re-scanned`)
+        await rescan()
+      } else {
+        notify(`Approval needed — Guard-2 card #${req.ticketId.slice(0, 8)} is in the chat`)
+      }
+    } catch (e) {
+      notify(e instanceof Error ? e.message : `Installing ${agent.name} failed`, 'error')
+    } finally {
+      setBusyInstall(false)
+    }
+  }
 
   return (
     <div
@@ -122,7 +190,7 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
 
       <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
         <Layers className="h-3 w-3" />
-        <span>{models.length} models</span>
+        <span>{usable ? `${models.length} models` : 'models on install'}</span>
         <span className="text-muted-foreground/30">|</span>
         <Terminal className="h-3 w-3" />
         <span className={cn(agent.headless ? 'text-emerald-300' : 'text-yellow-300')}>
@@ -150,7 +218,7 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
       )}
 
       <div className="mt-2.5 flex items-center gap-1">
-        {agent.status === 'installed' || agent.status === 'updating' ? (
+        {agent.status === 'installed' || agent.status === 'updating' || agent.id === 'everyaios-native' ? (
           <Button
             size="sm"
             variant={isSelected ? 'default' : 'outline'}
@@ -175,30 +243,38 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
             size="sm"
             variant="outline"
             className="h-7 px-2 text-[10px]"
-            onClick={() => notify(`Installing ${agent.name}…`)}
+            disabled={busyInstall}
+            onClick={() => void installAgent()}
           >
-            <Download className="h-3 w-3" />
-            Install
+            {busyInstall ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+            {busyInstall ? 'installing…' : 'Install'}
           </Button>
         )}
         <Button
           size="sm"
           variant="ghost"
           className="h-7 px-2 text-[10px]"
-          onClick={() => notify(`Health check: ${agent.name}`)}
+          disabled={busyScan}
+          onClick={() => void rescan()}
         >
-          <RefreshCw className="h-3 w-3" />
-          Health
+          <RefreshCw className={cn('h-3 w-3', busyScan && 'animate-spin')} />
+          Re-scan
         </Button>
-        {agent.path && (
+        {agent.path && agent.path.startsWith('internal://') !== true && (
           <Button
             size="sm"
             variant="ghost"
-            className="ml-auto h-7 px-2 text-[10px] text-muted-foreground"
-            onClick={() => notify(`Copied ${agent.path}`)}
+            className="ml-auto h-7 max-w-[180px] px-2 text-[10px] text-muted-foreground"
+            title="Copy the detected binary path"
+            onClick={() => {
+              void navigator.clipboard
+                ?.writeText(agent.path ?? '')
+                .then(() => notify(`Copied ${agent.path}`))
+                .catch(() => notify(`Path: ${agent.path}`))
+            }}
           >
             <ExternalLink className="h-3 w-3" />
-            Open
+            {agent.path}
           </Button>
         )}
       </div>
@@ -208,24 +284,51 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
 
 function AgentsTab() {
   const notify = useAppStore((s) => s.notify)
+  const liveAgents = useAppStore((s) => s.liveAgents)
+  const [busyDiscover, setBusyDiscover] = useState(false)
+  // Live discovery (ACP registry + PATH probe) when the shell reported rows;
+  // the honest static catalog otherwise. Settings never invents installs.
+  const catalog = liveAgents.length > 0 ? liveAgents : AGENTS
+
+  const discoverMore = async () => {
+    setBusyDiscover(true)
+    try {
+      const { acpRegistryRefresh } = await import('@/lib/acp')
+      const snap = await acpRegistryRefresh()
+      await refreshAgentCatalog()
+      const live = useAppStore.getState().liveAgents
+      const installed = live.filter((a) => a.status === 'installed').length
+      notify(
+        snap.agentCount
+          ? `ACP registry refreshed (${snap.agentCount} agents) — ${live.length} runtimes shown, ${installed} installed`
+          : `Runtimes re-scanned — ${live.length} shown, ${installed} installed`,
+      )
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Registry refresh failed (offline?)', 'error')
+    } finally {
+      setBusyDiscover(false)
+    }
+  }
+
   return (
     <SectionShell
       title="Agent runtimes"
-      desc="The underlying coding-agent CLI / IDE plugin EveryAIOS can drive. Each runtime ships its own model support — Claude Code only drives Anthropic models, Codex CLI only OpenAI, etc."
+      desc="The underlying coding-agent CLI / IDE plugin EveryAIOS can drive. Installed state is detected live — EveryAIOS-installed or auto-discovered on PATH. Each runtime ships its own model support."
       action={
         <Button
           size="sm"
           variant="outline"
           className="h-8"
-          onClick={() => notify('Discover more — browsing the ACP registry (live in the shell)')}
+          disabled={busyDiscover}
+          onClick={() => void discoverMore()}
         >
           <Boxes className="h-3.5 w-3.5" />
-          Discover more
+          {busyDiscover ? 'Refreshing…' : 'Discover more'}
         </Button>
       }
     >
       <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-        {AGENTS.map((a) => (
+        {catalog.map((a) => (
           <AgentCard key={a.id} agent={a} />
         ))}
       </div>
@@ -239,8 +342,15 @@ function ModelsTab() {
   const selectedModelId = useAppStore((s) => s.selectedModelId)
   const setSelectedModel = useAppStore((s) => s.setSelectedModel)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
+  const liveAgents = useAppStore((s) => s.liveAgents)
   const [compareOpen, setCompareOpen] = useState(false)
   const [compareIds, setCompareIds] = useState<string[]>([])
+
+  // Only models reachable from installed runtimes are listed — uninstalled
+  // runtimes contribute nothing (their lists load live after install).
+  const liveSource = liveAgents.length > 0 ? liveAgents : AGENTS
+  const visibleModels = modelsForUsableRuntimes(liveSource)
+  const activeModels = getModelsForAgentLive(selectedAgentId, liveAgents.length > 0 ? liveAgents : undefined)
 
   const toggleCompare = (id: string) => {
     setCompareIds((prev) =>
@@ -252,7 +362,7 @@ function ModelsTab() {
     <>
       <SectionShell
         title="Model catalog"
-        desc="Every model reachable from any installed runtime. Pricing is per 1M tokens. Click to make it the active model — the active runtime must support it."
+        desc="Models reachable from installed runtimes only — install a runtime to unlock its models. Pricing is per 1M tokens. Click to make it the active model."
         action={
           <Button
             size="sm"
@@ -281,9 +391,17 @@ function ModelsTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
-            {MODELS.map((m) => {
+            {visibleModels.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-2 py-4 text-center text-[11px] text-muted-foreground">
+                  No installed runtime exposes models yet — install one from the
+                  Runtimes tab first.
+                </td>
+              </tr>
+            )}
+            {visibleModels.map((m) => {
               const isActive = m.id === selectedModelId
-              const supportedByActive = getModelsForAgent(selectedAgentId).some(
+              const supportedByActive = activeModels.some(
                 (x) => x.id === m.id,
               )
               return (
@@ -400,7 +518,7 @@ function ModelsTab() {
         {compareIds.length >= 2 && (
           <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.min(compareIds.length, 3)}, 1fr)` }}>
             {compareIds.map((id) => {
-              const m = MODELS.find((x) => x.id === id)
+              const m = visibleModels.find((x) => x.id === id) ?? MODELS.find((x) => x.id === id)
               if (!m) return null
               return (
                 <div key={m.id} className="rounded-lg border border-border/60 bg-background/40 p-3 accent-top-gradient">
@@ -475,6 +593,15 @@ function RoutingTab() {
   const setRouting = useAppStore((s) => s.setRouting)
   const autoRoute = useAppStore((s) => s.autoRoute)
   const setAutoRoute = useAppStore((s) => s.setAutoRoute)
+  const liveAgents = useAppStore((s) => s.liveAgents)
+  const streamStats = useAppStore((s) => s.streamStats)
+  const liveBudget = useAppStore((s) => s.liveBudget)
+  // Honest routing-table sources: live discovery first, static catalog
+  // fallback (never a claim that a runtime is installed).
+  const catalog = liveAgents.length > 0 ? liveAgents : AGENTS
+  const installedCount = catalog.filter(
+    (a) => a.status === 'installed' || a.status === 'updating',
+  ).length
 
   return (
     <SectionShell
@@ -499,7 +626,7 @@ function RoutingTab() {
           </thead>
           <tbody className="divide-y divide-border/40">
             {TASKS.map((t) => {
-              const agent = AGENTS.find((a) => a.id === routing[t]) ?? AGENTS[0]
+              const agent = catalog.find((a) => a.id === routing[t]) ?? catalog[0]
               return (
                 <tr key={t} className="hover:bg-accent/30">
                   <td className="px-3 py-2 font-medium text-foreground">{TASK_LABELS[t]}</td>
@@ -519,7 +646,7 @@ function RoutingTab() {
                         disabled={!autoRoute}
                         className="h-7 rounded border border-border bg-background px-1.5 font-mono text-[10px] text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {AGENTS.filter((a) => a.status === 'installed' || a.status === 'updating').map(
+                        {catalog.map(
                           (a) => (
                             <option key={a.id} value={a.id}>
                               {a.name}
@@ -545,23 +672,32 @@ function RoutingTab() {
         <div className="rounded-md border border-border/60 bg-background/40 p-2">
           <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground">
             <Zap className="h-3 w-3 text-orange-400" />
-            Turns routed today
+            Tokens tracked
           </div>
-          <div className="mt-1 font-mono text-lg text-foreground">47</div>
+          <div className="mt-1 font-mono text-lg text-foreground">
+            {formatTokens(liveBudget?.tokens ?? 0)}
+          </div>
+          <div className="text-[9px] text-muted-foreground/70">live usage ledger</div>
         </div>
         <div className="rounded-md border border-border/60 bg-background/40 p-2">
           <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground">
             <Gauge className="h-3 w-3 text-emerald-400" />
-            Avg latency
+            Active stream key
           </div>
-          <div className="mt-1 font-mono text-lg text-foreground">1.8s</div>
+          <div className="mt-1 truncate font-mono text-sm text-foreground">
+            {streamStats.activeKey ?? '—'}
+          </div>
+          <div className="text-[9px] text-muted-foreground/70">per-turn stream stats</div>
         </div>
         <div className="rounded-md border border-border/60 bg-background/40 p-2">
           <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground">
             <Cpu className="h-3 w-3 text-sky-400" />
-            Distinct runtimes used
+            Installed runtimes
           </div>
-          <div className="mt-1 font-mono text-lg text-foreground">5 / 7</div>
+          <div className="mt-1 font-mono text-lg text-foreground">
+            {installedCount} / {catalog.length}
+          </div>
+          <div className="text-[9px] text-muted-foreground/70">live discovery</div>
         </div>
       </div>
     </SectionShell>

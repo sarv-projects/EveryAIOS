@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Check, HeartPulse, KeyRound, Plus, Trash2 } from 'lucide-react'
+import { Check, Copy, ExternalLink, KeyRound, Plus, Search, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/components/theme-provider'
@@ -14,14 +14,17 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import { formatContext, formatPrice } from '@/lib/agents'
+import {
+  loadProviderDirectory,
+  type ProviderEntry,
+  type VaultKeyRow,
+} from '@/lib/providers'
 import { Row, SectionShell } from './settings-shared'
 import { CustomProvidersBlock, GeneralExtras } from './settings-sections-studio'
 
 // === General ===
 export function GeneralSection() {
-  const [startup, setStartup] = useState('last')
-  const [tray, setTray] = useState(true)
-  const [telemetry, setTelemetry] = useState(false)
   const powerMode = useAppStore((s) => s.powerMode)
   const setPowerMode = useAppStore((s) => s.setPowerMode)
   const devMode = useAppStore((s) => s.devMode)
@@ -39,32 +42,18 @@ export function GeneralSection() {
       <Row label="Developer Mode" desc="Show the full debug telemetry strip (sidecar, IPC, vault, audit, db)">
         <Switch checked={devMode} onCheckedChange={setDevMode} />
       </Row>
-      <Row label="Language">
-        <Select defaultValue="en">
-          <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="en">English</SelectItem>
-            <SelectItem value="ja">日本語</SelectItem>
-            <SelectItem value="zh">中文</SelectItem>
-            <SelectItem value="de">Deutsch</SelectItem>
-          </SelectContent>
-        </Select>
+      <Row label="Language" desc="Real switcher lives in Appearance">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          onClick={() => useAppStore.getState().setSettingsSection('appearance')}
+        >
+          Open Appearance
+        </Button>
       </Row>
-      <Row label="On startup">
-        <Select value={startup} onValueChange={setStartup}>
-          <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="last">Restore last session</SelectItem>
-            <SelectItem value="new">Open new session</SelectItem>
-            <SelectItem value="blank">Show blank state</SelectItem>
-          </SelectContent>
-        </Select>
-      </Row>
-      <Row label="Minimize to tray" desc="Keep the agent running when the window is closed">
-        <Switch checked={tray} onCheckedChange={setTray} />
-      </Row>
-      <Row label="Anonymous telemetry" desc="Crash + usage stats, never content">
-        <Switch checked={telemetry} onCheckedChange={setTelemetry} />
+      <Row label="Anonymous telemetry" desc="No telemetry sender exists in this build — nothing leaves the machine">
+        <Switch checked={false} disabled title="No telemetry sender in this build" />
       </Row>
       <GeneralExtras />
     </SectionShell>
@@ -151,14 +140,11 @@ export function AppearanceSection() {
   )
 }
 
-// === Models & BYOK ===
-const PROVIDERS = [
-  { id: 'p1', name: 'OpenAI', model: 'gpt-4o', status: 'healthy', priority: 1 },
-  { id: 'p2', name: 'Anthropic', model: 'claude-sonnet-4.5', status: 'healthy', priority: 2 },
-  { id: 'p3', name: 'Google', model: 'gemini-2.5-pro', status: 'healthy', priority: 3 },
-  { id: 'p4', name: 'DeepSeek', model: 'deepseek-v3', status: 'unverified', priority: 4 },
-  { id: 'p5', name: 'Ollama (local)', model: 'llama3:70b', status: 'offline', priority: 5 },
-]
+// === Providers & BYOK ===
+// Live registry dropdown (all 212 vendored models.dev providers) + per-row
+// detail panel: API-key slot (vault only), provider facts, curated models,
+// and the models.dev page for the full list + provider docs. No seeded rows:
+// an empty vault renders empty, never fake-healthy providers.
 
 function StatusPill({ status }: { status: string }) {
   const tone =
@@ -177,123 +163,349 @@ function StatusPill({ status }: { status: string }) {
 
 export function ModelsSection() {
   const notify = useAppStore((s) => s.notify)
-  const [keys, setKeys] = useState<Array<{ provider: string; keyId: string; opaqueHandle: string; status: string }>>([])
-  const [provider, setProvider] = useState('openai')
+  const [providers, setProviders] = useState<ProviderEntry[]>([])
+  const [live, setLive] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [selectedId, setSelectedId] = useState('')
+  const [keys, setKeys] = useState<VaultKeyRow[]>([])
   const [keyId, setKeyId] = useState('default')
   const [secret, setSecret] = useState('')
 
   const reload = useCallback(async () => {
+    setLoading(true)
     try {
+      const dir = await loadProviderDirectory()
+      setProviders(dir.providers)
+      setLive(dir.live)
+      if (!selectedId && dir.providers.length > 0) {
+        setSelectedId(dir.providers[0].id)
+      }
       const { invoke } = await import('@/lib/tauri')
-      const r = await invoke<{ keys: Array<{ provider: string; keyId: string; opaqueHandle: string; status: string }> }>('vault_keys_list', {})
-      setKeys(r.keys ?? [])
+      const r = await invoke<{ keys?: VaultKeyRow[] }>('vault_keys_list', {})
+      const rows = r.keys ?? []
+      setKeys(rows)
       // P50.4.1 — keep the live provider-configured fact in sync with the
       // vault (drives the setup gate + no-provider UX).
-      useAppStore.getState().setProviderKeysConfigured((r.keys ?? []).length > 0)
+      useAppStore.getState().setProviderKeysConfigured(rows.length > 0)
     } catch {
-      /* vault locked / preview */
+      /* vault locked / preview — honest empty states below */
+    } finally {
+      setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => { void reload() }, [reload])
 
+  const q = query.trim().toLowerCase()
+  const filtered = q
+    ? providers.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.id.toLowerCase().includes(q) ||
+          (p.envVar ?? '').toLowerCase().includes(q),
+      )
+    : providers
+  const selected =
+    providers.find((p) => p.id === selectedId) ?? filtered[0] ?? providers[0]
+  const selectedKeys = selected
+    ? keys.filter((k) => k.provider === selected.id)
+    : []
+
+  const addKey = async () => {
+    if (!selected || !secret.trim()) {
+      notify('Paste the API key first', 'error')
+      return
+    }
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      await invoke('vault_key_add', {
+        provider: selected.id,
+        keyId: keyId.trim() || 'default',
+        value: secret,
+      })
+      setSecret('')
+      notify(`Stored ${selected.name} key in the vault`)
+      await reload()
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), 'error')
+    }
+  }
+
+  const copyText = (text: string, label: string) => {
+    void navigator.clipboard
+      ?.writeText(text)
+      .then(() => notify(`Copied ${label}`))
+      .catch(() => notify(`Copy unavailable — ${label}: ${text}`, 'error'))
+  }
+
   return (
     <SectionShell
-      title="API Keys (BYOK)"
-      desc="Bring-your-own-key providers — stored in the local SQLCipher vault (opaque handles only in the UI)."
+      title="Providers / BYOK"
+      desc="Bring-your-own-key providers — pick a row for its key slot, facts, models, and docs link. Keys live in the local SQLCipher vault (opaque handles only in the UI)."
       action={
         <Button
           size="sm"
-          className="h-8 bg-orange-500 text-black hover:bg-orange-400"
-          onClick={async () => {
-            try {
-              const { invoke } = await import('@/lib/tauri')
-              await invoke('vault_key_add', { provider, keyId, value: secret })
-              setSecret('')
-              notify(`Stored ${provider}/${keyId} in the vault`)
-              await reload()
-            } catch (e) {
-              notify(String(e), 'error')
-            }
-          }}
+          variant="outline"
+          className="h-8"
+          disabled={loading}
+          onClick={() => void reload()}
         >
-          <Plus className="h-3.5 w-3.5" />
-          Add key
+          {loading ? 'Refreshing…' : `Refresh${live ? ` (${providers.length})` : ''}`}
         </Button>
       }
     >
-      <div className="mb-2 flex flex-wrap gap-1.5">
-        <input className="h-7 w-28 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]" value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="provider" />
-        <input className="h-7 w-24 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]" value={keyId} onChange={(e) => setKeyId(e.target.value)} placeholder="key id" />
-        <input className="h-7 flex-1 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="sk-…" />
+      {!live && (
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-300">
+          Live registry unreachable (preview or vault locked) — showing common
+          providers. The full 212-provider directory loads inside the Tauri shell.
+        </p>
+      )}
+
+      {/* Search + dropdown */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <div className="relative min-w-[160px] flex-1">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            className="h-8 w-full rounded border border-border bg-zinc-950 pl-7 pr-2 text-xs"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${providers.length || '…'} providers…`}
+          />
+        </div>
+        <select
+          value={selected?.id ?? ''}
+          onChange={(e) => setSelectedId(e.target.value)}
+          className="h-8 min-w-[200px] flex-1 rounded border border-border bg-zinc-950 px-2 font-mono text-xs text-foreground"
+          aria-label="Provider"
+        >
+          {filtered.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.keyConfigured ? '● ' : ''}
+              {p.name}
+            </option>
+          ))}
+        </select>
       </div>
-      <ul className="space-y-1.5">
-        {(keys.length ? keys.map((k, i) => ({
-          id: k.opaqueHandle,
-          name: `${k.provider} / ${k.keyId}`,
-          model: k.opaqueHandle.slice(0, 12) + '…',
-          status: k.status === 'primary' ? 'healthy' : 'unverified',
-          priority: i + 1,
-          keyId: k.keyId,
-          provider: k.provider,
-        })) : PROVIDERS).map((p) => (
-          <li
-            key={p.id}
-            className="flex items-center gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2"
+      {query && filtered.length === 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          No provider matches “{query}” — try the full list on{' '}
+          <button
+            type="button"
+            className="text-orange-300 underline-offset-2 hover:underline"
+            onClick={() => window.open('https://models.dev/providers/', '_blank')}
           >
-            <KeyRound className="h-4 w-4 shrink-0 text-orange-400" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">{p.name}</span>
-                <Badge variant="secondary" className="text-[9px]">#{p.priority}</Badge>
-              </div>
-              <div className="truncate font-mono text-[10px] text-muted-foreground">{p.model}</div>
-            </div>
-            <StatusPill status={p.status} />
-            <div className="flex gap-1">
+            models.dev
+          </button>
+          .
+        </p>
+      )}
+
+      {/* Detail panel for the selected provider */}
+      {selected ? (
+        <div className="rounded-lg border border-border/60 bg-background/40 p-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-semibold text-foreground">{selected.name}</span>
+            <Badge variant="secondary" className="font-mono text-[9px]">
+              {selected.id}
+            </Badge>
+            {selected.keyConfigured ? (
+              <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">
+                <Check className="h-2.5 w-2.5" /> key added
+              </Badge>
+            ) : (
+              <Badge className="bg-zinc-500/15 text-[9px] text-zinc-400">no key</Badge>
+            )}
+            <Badge variant="outline" className="text-[9px] text-muted-foreground">
+              {selected.source}
+            </Badge>
+            <div className="ml-auto flex items-center gap-1">
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-7 px-2 text-[10px]"
-                onClick={() => notify(`Health check ${p.name} — ${p.status === 'healthy' ? 'ok, 45ms' : p.status === 'unverified' ? 'unverified' : 'offline'}`)}
+                onClick={() => window.open(selected.docUrl, '_blank')}
+                title="Full model list, pricing, and provider docs on models.dev"
               >
-                <HeartPulse className="h-3 w-3" />
-                Health
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-[10px]"
-                onClick={() => notify(`Priority #${p.priority} — drag to reorder`)}
-              >
-                Priority
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
-                onClick={async () => {
-                  const row = p as { provider?: string; keyId?: string; name: string }
-                  if (!row.provider || !row.keyId) {
-                    notify('Select a vault-stored key to remove')
-                    return
-                  }
-                  try {
-                    const { invoke } = await import('@/lib/tauri')
-                    await invoke('vault_key_remove', { provider: row.provider, keyId: row.keyId })
-                    notify(`Removed ${row.provider}/${row.keyId}`)
-                    await reload()
-                  } catch (e) {
-                    notify(String(e), 'error')
-                  }
-                }}
-              >
-                <Trash2 className="h-3 w-3" />
+                <ExternalLink className="h-3 w-3" />
+                models.dev
               </Button>
             </div>
-          </li>
-        ))}
-      </ul>
+          </div>
+
+          <div className="mt-2 grid gap-1 font-mono text-[10px] text-muted-foreground sm:grid-cols-2">
+            <div className="flex items-center gap-1.5">
+              <span className="shrink-0 text-muted-foreground/70">auth</span>
+              <span className="truncate text-foreground/80">{selected.auth}</span>
+              {selected.envVar && (
+                <button
+                  type="button"
+                  className="flex shrink-0 items-center gap-0.5 text-orange-300 underline-offset-2 hover:underline"
+                  onClick={() => copyText(selected.envVar ?? '', 'env var name')}
+                  title="Copy the env-var name (never a secret)"
+                >
+                  <Copy className="h-2.5 w-2.5" />
+                  {selected.envVar}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="shrink-0 text-muted-foreground/70">endpoint</span>
+              <span className="truncate text-foreground/80">
+                {selected.baseUrl || 'SDK default'}
+              </span>
+            </div>
+          </div>
+          {selected.capabilities.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+              caps:{' '}
+              {selected.capabilities.map((c) => (
+                <span
+                  key={c}
+                  className="rounded border border-border/50 bg-background/40 px-1 py-0.5 font-mono text-[9px]"
+                >
+                  {c}
+                </span>
+              ))}
+              {selected.capabilitiesVerified ? (
+                <span className="text-emerald-400">✓ verified</span>
+              ) : (
+                <span className="text-amber-400">advertised</span>
+              )}
+            </div>
+          )}
+
+          {/* API-key slot (vault only) */}
+          <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-border/40 pt-2.5">
+            <input
+              className="h-7 w-24 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]"
+              value={keyId}
+              onChange={(e) => setKeyId(e.target.value)}
+              placeholder="key id"
+              aria-label="Key id"
+            />
+            <input
+              className="h-7 min-w-[160px] flex-1 rounded border border-border bg-zinc-950 px-2 font-mono text-[10px]"
+              type="password"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              placeholder="sk-… (stored in the vault, never shown again)"
+              aria-label="API key value"
+            />
+            <Button
+              size="sm"
+              className="h-7 bg-orange-500 text-black hover:bg-orange-400"
+              onClick={() => void addKey()}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add key
+            </Button>
+          </div>
+
+          {/* Stored keys for this provider — honest empty */}
+          {selectedKeys.length > 0 ? (
+            <ul className="mt-2 space-y-1">
+              {selectedKeys.map((k) => (
+                <li
+                  key={k.opaqueHandle}
+                  className="flex items-center gap-2 rounded-md border border-border/50 bg-background/30 px-2 py-1.5"
+                >
+                  <KeyRound className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                  <span className="font-mono text-[10px] text-foreground">
+                    {k.provider} / {k.keyId}
+                  </span>
+                  <span className="truncate font-mono text-[9px] text-muted-foreground">
+                    {k.opaqueHandle.slice(0, 12)}…
+                  </span>
+                  <StatusPill status={k.status === 'primary' ? 'healthy' : 'unverified'} />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto h-6 px-2 text-[10px] text-red-400 hover:bg-red-500/10"
+                    onClick={async () => {
+                      try {
+                        const { invoke } = await import('@/lib/tauri')
+                        await invoke('vault_key_remove', {
+                          provider: k.provider,
+                          keyId: k.keyId,
+                        })
+                        notify(`Removed ${k.provider}/${k.keyId}`)
+                        await reload()
+                      } catch (e) {
+                        notify(e instanceof Error ? e.message : String(e), 'error')
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+              No key stored for {selected.name} — paste one above
+              {selected.envVar ? ` (or set ${selected.envVar})` : ''}.
+            </p>
+          )}
+
+          {/* Models of this provider */}
+          <div className="mt-2.5 border-t border-border/40 pt-2">
+            <div className="mb-1 text-[10px] font-medium text-foreground">
+              Models{selected.models.length > 0 ? ` (${selected.models.length})` : ''}
+            </div>
+            {selected.models.length > 0 ? (
+              <ul className="space-y-1">
+                {selected.models.map((m) => (
+                  <li
+                    key={m.id}
+                    className="flex items-center gap-2 rounded border border-border/40 bg-background/30 px-2 py-1 text-[11px]"
+                  >
+                    <span className="font-medium text-foreground">{m.label}</span>
+                    <span className="font-mono text-[9px] text-muted-foreground">
+                      {formatContext(m.context)}
+                    </span>
+                    <span className="ml-auto font-mono text-[9px] text-emerald-300">
+                      {formatPrice(m.inputPrice)}/in
+                    </span>
+                    <span className="font-mono text-[9px] text-orange-300">
+                      {formatPrice(m.outputPrice)}/out
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[10px] text-muted-foreground">
+                No curated models for {selected.name} in this build — the full
+                list with pricing lives on{' '}
+                <button
+                  type="button"
+                  className="text-orange-300 underline-offset-2 hover:underline"
+                  onClick={() => window.open(selected.docUrl, '_blank')}
+                >
+                  its models.dev page
+                </button>
+                .
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <p className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
+          {loading ? 'Loading the provider directory…' : 'No providers discovered yet.'}
+        </p>
+      )}
+
+      {/* All stored keys across providers */}
+      {keys.length > 0 && (
+        <div className="mt-2 text-[10px] text-muted-foreground">
+          {keys.length} key{keys.length === 1 ? '' : 's'} in the vault
+          {selected && keys.some((k) => k.provider !== selected.id)
+            ? ` — stored for: ${[...new Set(keys.map((k) => k.provider))].join(', ')}`
+            : ''}
+          .
+        </div>
+      )}
       <CustomProvidersBlock />
     </SectionShell>
   )

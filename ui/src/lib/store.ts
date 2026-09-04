@@ -225,6 +225,18 @@ export interface Session {
  * store verbatim and render as broken chats. Pure (unit-tested); dropping is
  * always safe because the vault still holds the raw row.
  */
+/** Render a session transcript as Markdown (copy/export share this). */
+export function sessionTranscriptMarkdown(session: Session): string {
+  const lines = [`# ${session.title}`, '']
+  for (const m of session.messages) {
+    lines.push(m.role === 'user' ? '## You' : m.role === 'assistant' ? '## Assistant' : '## System', '', m.content, '')
+    for (const t of m.toolCalls ?? []) {
+      lines.push(`- tool \`${t.toolId}\` — ${t.status}${t.error ? `: ${t.error}` : ''}`)
+    }
+  }
+  return lines.join('\n')
+}
+
 export function sanitizeSessionRows(rows: unknown): Session[] {
   if (!Array.isArray(rows)) return []
   return rows.filter(
@@ -474,60 +486,9 @@ export const mockSessions: Session[] = [
   },
 ]
 
-export const mockAutomations: Automation[] = [
-  {
-    id: 'auto1',
-    name: 'Daily backup',
-    trigger: 'Every day at 02:00',
-    triggerKind: 'schedule',
-    action: 'Run session',
-    activity: [3, 5, 7, 5, 3, 1, 3, 5, 7, 5, 3, 1, 3, 5, 7, 5, 3, 1, 3, 5, 7, 5, 3, 1, 3, 5, 7, 5, 3],
-    enabled: true,
-    runs: 28,
-    success: 26,
-    failed: 2,
-    lastRun: 'today 02:00',
-  },
-  {
-    id: 'auto2',
-    name: 'CI failure fixer',
-    trigger: 'Webhook on red build',
-    triggerKind: 'webhook',
-    action: 'Start session',
-    activity: [3, 5, 7, 5, 3, 1, 1, 3, 5, 7, 5, 3, 1, 3, 5, 7, 5, 3, 1, 3, 5, 7, 5, 3, 1, 3, 5, 7, 5, 3],
-    enabled: true,
-    runs: 142,
-    success: 134,
-    failed: 8,
-    lastRun: '12m ago',
-  },
-  {
-    id: 'auto3',
-    name: 'Weekly deps security scan',
-    trigger: 'Every Monday 06:00',
-    triggerKind: 'schedule',
-    action: 'Run session',
-    activity: [0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 7, 0, 0],
-    enabled: true,
-    runs: 12,
-    success: 12,
-    failed: 0,
-    lastRun: 'Mon 06:00',
-  },
-  {
-    id: 'auto4',
-    name: 'Slack triage',
-    trigger: '#support new message',
-    triggerKind: 'slack',
-    action: 'Triage & summarize',
-    activity: [5, 7, 5, 3, 5, 7, 5, 3, 5, 7, 5, 3, 5, 7, 5, 3, 5, 7, 5, 3, 5, 7, 5, 3, 5, 7, 5, 3, 5],
-    enabled: false,
-    runs: 312,
-    success: 308,
-    failed: 4,
-    lastRun: '4h ago',
-  },
-]
+// P50.2.6 — removed: mockAutomations (Daily backup / CI fixer demo rows)
+// deleted with mockConnectors. Automations render from the live scheduler
+// ledger; an empty ledger renders empty, never seeded runs.
 
 // P50.2.6 — removed: mockConnectors (Composio/Slack/Linear demo rows) deleted
 // 2026-09-03. Only installed/attached/authenticated resources may appear
@@ -583,14 +544,9 @@ export const mockMemory: MemoryItem[] = [
   },
 ]
 
-export const mockPermissions: PermissionEntry[] = [
-  { id: 'pm1', action: 'Read', target: 'src/utils.ts', status: 'auto', timestamp: '09:15:02', scope: 'workspace read' },
-  { id: 'pm2', action: 'Write', target: 'src/api/handler.ts', status: 'auto', timestamp: '09:15:04', scope: 'workspace write' },
-  { id: 'pm3', action: 'Execute', target: 'npm run deploy', status: 'pending', timestamp: '09:15:08', scope: 'shell (restricted)' },
-  { id: 'pm4', action: 'Blocked', target: 'rm -rf /', status: 'blocked', timestamp: '09:15:09', scope: 'Guard-1 regex' },
-  { id: 'pm5', action: 'Browser', target: 'gmail.com (read-only)', status: 'approved', timestamp: '09:14:50', scope: 'browser (owned tabs)' },
-  { id: 'pm6', action: 'External API', target: 'api.openai.com (gpt-4o)', status: 'approved', timestamp: '09:14:45', scope: 'external api (with approval)' },
-]
+// P50.2.6 — removed: mockPermissions (Read/Write/Execute demo rows) deleted
+// with mockConnectors. The Guard panel renders live tickets/receipts; an
+// empty trail renders empty, never seeded approvals.
 
 // === Live-data bridge state (src/lib/bridge.ts) ===============================
 
@@ -632,6 +588,12 @@ function streamSessionId(sessionId?: string): string {
 /** True when `sessionId` has an in-flight assistant turn. */
 function hasActiveStream(sessionId: string): boolean {
   return !!activeStreamMsg[sessionId]
+}
+
+/** Live turn clock: ms since the current stream started (0 when idle). The
+ * Now-Doing strip reads this instead of a hardcoded elapsed figure. */
+export function streamElapsedMs(): number {
+  return streamT0 === 0 ? 0 : Math.max(0, Date.now() - streamT0)
 }
 
 function patchActiveAssistant(
@@ -772,6 +734,14 @@ interface AppState {
   setActiveSession: (id: string) => void
   newSession: () => void
   deleteSession: (id: string) => Promise<void>
+  /** Rename a session (title). Auto-persisted via the session subscription. */
+  renameSession: (id: string, title: string) => void
+  /** Flip the session's pinned flag. Auto-persisted. */
+  toggleSessionPinned: (id: string) => void
+  /** Clear a session's transcript (messages only — the session survives). */
+  clearSessionMessages: (id: string) => void
+  /** Fork a session: duplicate transcript into a new session. Returns the id. */
+  forkSession: (id: string) => string | null
   monitorBadge: { count: number; last?: string; stopped: boolean }
   pushMonitor: (ev: { notified: boolean; stopped: boolean; current: string; jobId?: string }) => void
   clearMonitorBadge: () => void
@@ -974,6 +944,10 @@ interface AppState {
   paletteOpen: boolean
   setPaletteOpen: (v: boolean) => void
 
+  // Cockpit slide-over (P3.2 multi-agent flight deck)
+  cockpitOpen: boolean
+  setCockpitOpen: (v: boolean) => void
+
   // Pause/resume
   agentPaused: boolean
   toggleAgentPause: () => void
@@ -1153,6 +1127,54 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeSessionId: nextActive,
       sessionChiefs: pins,
     })
+  },
+  renameSession: (id, title) => {
+    const name = title.trim()
+    if (!name) return
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id === id ? { ...x, title: name, updatedAt: new Date().toISOString() } : x,
+      ),
+    }))
+  },
+  toggleSessionPinned: (id) => {
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id === id ? { ...x, pinned: !x.pinned } : x,
+      ),
+    }))
+  },
+  clearSessionMessages: (id) => {
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id === id
+          ? { ...x, messages: [], status: 'idle' as const, preview: 'What would you like to do?', updatedAt: new Date().toISOString() }
+          : x,
+      ),
+    }))
+  },
+  forkSession: (id) => {
+    const src = get().sessions.find((x) => x.id === id)
+    if (!src) return null
+    const nid = `s-${Date.now()}`
+    const copy: Session = {
+      ...src,
+      id: nid,
+      title: `${src.title} (fork)`,
+      status: 'idle',
+      updatedAt: new Date().toISOString(),
+      messages: src.messages.map((m) => ({
+        ...m,
+        toolCalls: m.toolCalls?.map((t) => ({ ...t })),
+        steps: m.steps?.map((st) => ({ ...st })),
+        artifacts: m.artifacts?.map((a) => ({ ...a })),
+      })),
+      pinned: false,
+      chiefPin: undefined,
+      chiefUnpinned: undefined,
+    }
+    set((s) => ({ sessions: [copy, ...s.sessions], activeSessionId: nid }))
+    return nid
   },
 
   activeView: 'office-xlsx',
@@ -1599,6 +1621,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   paletteOpen: false,
   setPaletteOpen: (v) => set({ paletteOpen: v }),
+
+  cockpitOpen: false,
+  setCockpitOpen: (v) => set({ cockpitOpen: v }),
 
   agentPaused: false,
   toggleAgentPause: () => {

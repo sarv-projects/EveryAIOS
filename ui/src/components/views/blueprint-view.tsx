@@ -116,7 +116,17 @@ export default function BlueprintView() {
   const addTask = () => {
     if (!draft.trim()) return
     if (inTauri()) {
-      useAppStore.getState().notify('Blueprint task creation is not connected to the live task ledger yet', 'error')
+      // Draft into the store's pending plan — the same plan object plan-mode
+      // approval executes (composer → planExecute). No ledger write happens
+      // here; execution stays on the approved path.
+      const st = useAppStore.getState()
+      const existing = st.pendingPlan
+      const id = `t${(existing?.tasks.length ?? 0) + 1}`
+      st.setPendingPlan({
+        planId: existing?.planId ?? `plan-${Date.now()}`,
+        tasks: [...(existing?.tasks ?? []), { id, goal: draft.trim() }],
+      })
+      setDraft('')
       return
     }
     setTasks((prev) => [
@@ -132,8 +142,15 @@ export default function BlueprintView() {
   }
 
   const runTask = (id: string) => {
+    const goal = shown.find((t) => t.id === id)?.goal
     if (inTauri()) {
-      useAppStore.getState().notify('Run this plan from the composer after it has been approved', 'error')
+      // Plan steps execute through the agent loop, not inline: dispatch the
+      // step goal as a real turn so Guard-2 + audit cover it.
+      if (!goal) return
+      void (async () => {
+        const { sendUserMessage } = await import('@/lib/bridge')
+        await sendUserMessage(`Plan step (${id}): ${goal}`)
+      })()
       return
     }
     setTasks((prev) =>
@@ -254,7 +271,7 @@ export default function BlueprintView() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addTask()
           }}
-        />          <Button size="sm" onClick={addTask} className="h-8" disabled={inTauri()} title={inTauri() ? 'Create a plan from the chat composer' : undefined}>
+        />          <Button size="sm" onClick={addTask} className="h-8" title="Draft into the pending plan (runs via plan approval)">
             <Plus className="mr-1 h-3 w-3" /> Add
           </Button>
       </div>

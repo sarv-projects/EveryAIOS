@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { OfficeOpenBar } from './office-open-bar'
 import OfficeFileSwitcher from './office-file-switcher'
+import ChatOverlay from './chat-overlay'
 import { docxOpen, docxPatch, docxTracks, officeOpenExternal, isOfficeFloorError, demoDocx, type DocxPayload } from '@/lib/office'
 import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
@@ -19,6 +20,7 @@ export default function OfficeDocxView() {
   const [draft, setDraft] = useState('')
   const [tracks, setTracks] = useState<Array<{ kind: string; author: string; text: string }>>([])
   const [lastAttempted, setLastAttempted] = useState<string | null>(null)
+  const [overlayOpen, setOverlayOpen] = useState(false)
   const officePath = useAppStore((s) => s.officePaths['office-docx'])
   const running = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status === 'running')
   const paused = useAppStore((s) => s.pausedSessions[s.activeSessionId])
@@ -108,6 +110,11 @@ export default function OfficeDocxView() {
         <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={!payload || locked}
           onClick={() => payload && officeOpenExternal(payload.path).catch((e) => setError(String(e)))}>
           Open in LibreOffice
+        </Button>
+        <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={!payload}
+          onClick={() => setOverlayOpen(true)}
+          title="Ask about this document (scoped chat)">
+          Ask about doc
         </Button>
         {selected && (
           <Button size="sm" className="h-6 text-[10px]" disabled={locked}
@@ -282,6 +289,14 @@ export default function OfficeDocxView() {
           {payload ? 'Modified' : inTauri() ? 'No document' : 'Preview'}
         </Badge>
       </footer>
+
+      {overlayOpen && payload && (
+        <ChatOverlay
+          title={payload.path}
+          context={payload.text}
+          onClose={() => setOverlayOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -30,7 +30,7 @@ const MOOD_STYLE: Record<CompanionMood, { dot: string; label: string }> = {
 
 function moodForState(paused: boolean, running: boolean): CompanionMood {
   if (running) return paused ? 'resting' : 'focused'
-  return 'cheerful'
+  return 'neutral'
 }
 
 export function CompanionChip() {
@@ -48,9 +48,11 @@ export function CompanionChip() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div
-          className="flex cursor-default items-center gap-1.5 rounded-md border border-border/60 bg-background/40 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent/40"
-          aria-label={`Companion: ${agentName} — ${label}`}
+        <button
+          type="button"
+          onClick={() => useAppStore.getState().setCenterScreen('chat')}
+          className="flex items-center gap-1.5 rounded-md border border-border/60 bg-background/40 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent/40"
+          aria-label={`Companion: ${agentName} — ${label}. Open chat.`}
         >
           <Sparkles className="h-3 w-3 text-violet-400" />
           <span className="max-w-[140px] truncate font-medium text-foreground/80">
@@ -68,7 +70,7 @@ export function CompanionChip() {
             )}
             <span className={cn('h-1.5 w-1.5 rounded-full', dot)} />
           </span>
-        </div>
+        </button>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-[10px]">
         {running

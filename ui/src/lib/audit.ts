@@ -69,11 +69,8 @@ export async function watchEvents(
   return nativeCall('watch audit events', () => invoke<ReplayEvent[]>("watch_events", { documentId, sinceSeq }));
 }
 
-/** Stop: JSON-RPC agent/stop over the control channel. */
-export async function agentStop(sessionId: string): Promise<void> {
-  if (!inTauri()) return;
-  return nativeCall('agent stop', () => invoke<void>("agent_stop", { sessionId }));
-}
+/** Stop: JSON-RPC agent/stop over the control channel (canonical in `./tauri`). */
+export { agentStop } from './tauri'
 
 // ---------------------------------------------------------------------------
 // demo fallback (plain-browser preview)

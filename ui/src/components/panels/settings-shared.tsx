@@ -51,9 +51,13 @@ export function Row({
   )
 }
 
-export function LinkChip({ icon, label }: { icon: React.ReactNode; label: string }) {
+export function LinkChip({ icon, label, href }: { icon: React.ReactNode; label: string; href: string }) {
   return (
-    <button className="flex items-center gap-1.5 rounded-md border border-border bg-background/40 px-2.5 py-1 text-xs text-foreground/80 hover:border-orange-500/40 hover:bg-orange-500/10 hover:text-orange-300">
+    <button
+      type="button"
+      onClick={() => window.open(href, '_blank', 'noopener')}
+      className="flex items-center gap-1.5 rounded-md border border-border bg-background/40 px-2.5 py-1 text-xs text-foreground/80 hover:border-orange-500/40 hover:bg-orange-500/10 hover:text-orange-300"
+    >
       {icon}
       {label}
     </button>

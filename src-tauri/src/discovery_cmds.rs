@@ -194,18 +194,40 @@ fn collect_agents(data_dir: &PathBuf) -> Vec<ResourceCard> {
 fn collect_browsers() -> Vec<ResourceCard> {
     // Dependency-light discovery of installed browsers (same probe order as
     // doctor). We only report presence — never a profile or a cookie.
+    // PATH names first (Linux/macOS), then well-known absolute install paths
+    // — Windows Chrome/Edge/Brave and macOS apps are NOT on PATH, so the
+    // PATH probe alone would report zero browsers there.
     const CANDS: &[(&str, &[&str])] = &[
         ("chrome", &["google-chrome", "google-chrome-stable", "chrome"]),
         ("chromium", &["chromium", "chromium-browser"]),
         ("edge", &["msedge", "microsoft-edge"]),
         ("brave", &["brave-browser"]),
     ];
+    #[cfg(target_os = "windows")]
+    const KNOWN_PATHS: &[(&str, &str)] = &[
+        ("chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+        ("chrome", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+        ("edge", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+        ("edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+        ("brave", r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"),
+        ("brave", r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe"),
+    ];
+    #[cfg(target_os = "macos")]
+    const KNOWN_PATHS: &[(&str, &str)] = &[
+        ("chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        ("edge", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+        ("chromium", "/Applications/Chromium.app/Contents/MacOS/Chromium"),
+        ("brave", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+    ];
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    const KNOWN_PATHS: &[(&str, &str)] = &[];
+
     let path = std::env::var("PATH").unwrap_or_default();
     let sep = if cfg!(windows) { ';' } else { ':' };
     let dirs: Vec<&str> = path.split(sep).collect();
-    let mut out = Vec::new();
+    let mut found_ids: Vec<&str> = Vec::new();
     for (id, names) in CANDS {
-        let found = names.iter().any(|n| {
+        let on_path = names.iter().any(|n| {
             dirs.iter().any(|d| {
                 let mut p = PathBuf::from(d);
                 p.push(n);
@@ -215,20 +237,28 @@ fn collect_browsers() -> Vec<ResourceCard> {
                 }
             })
         });
-        if found {
-            out.push(ResourceCard {
-                kind: ResourceKind::Browser,
-                id: id.to_string(),
-                name: id.to_string(),
-                version: String::new(),
-                source: "system".into(),
-                auth: "none".into(),
-                capabilities: vec!["cdp".into()],
-                capabilities_verified: true,
-                governance: String::new(),
-                status: ManagedResource::Healthy,
-            });
+        if on_path {
+            found_ids.push(id);
         }
     }
-    out
+    for (id, p) in KNOWN_PATHS {
+        if PathBuf::from(p).is_file() && !found_ids.contains(id) {
+            found_ids.push(id);
+        }
+    }
+    found_ids
+        .into_iter()
+        .map(|id| ResourceCard {
+            kind: ResourceKind::Browser,
+            id: id.to_string(),
+            name: id.to_string(),
+            version: String::new(),
+            source: "system".into(),
+            auth: "none".into(),
+            capabilities: vec!["cdp".into()],
+            capabilities_verified: true,
+            governance: String::new(),
+            status: ManagedResource::Healthy,
+        })
+        .collect()
 }

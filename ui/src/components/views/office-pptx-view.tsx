@@ -280,7 +280,14 @@ export default function OfficePptxView() {
           ))}
           <button
             disabled={locked}
-            title={locked ? 'Read-only while the agent is running' : 'Add slide'}
+            title={locked ? 'Read-only while the agent is running' : 'Ask the agent to add a slide (Guard-2 ticketed)'}
+            onClick={() => {
+              const st = useAppStore.getState()
+              st.setComposerValue(
+                `Add a slide to ${st.officePaths['office-pptx'] ?? 'the open deck'}: `,
+              )
+              st.setCenterScreen('chat')
+            }}
             className="flex shrink-0 items-center justify-center rounded border border-dashed border-border px-3 text-orange-300 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
             +

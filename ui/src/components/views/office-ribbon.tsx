@@ -2,18 +2,6 @@
 
 import { useState } from 'react'
 import {
-  Bold,
-  Italic,
-  Underline,
-  PaintBucket,
-  ClipboardPaste,
-  Scissors,
-  Copy,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  DollarSign,
-  Percent,
   Sigma,
   Table2,
   Plus,
@@ -21,6 +9,8 @@ import {
   Wand2,
   ChevronDown,
   Sparkles,
+  ArrowUpDown,
+  Rows3,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -43,71 +33,69 @@ const TABS: RibbonTab[] = [
   { id: 'copilot', label: 'Copilot', copilot: true },
 ]
 
+/** Engine-backed actions the host view actually implements. Rich text
+ * formatting (bold/italic/fill/alignment/number formats) is NOT in the
+ * surgical engine — the ribbon only exposes what runs. */
+export type RibbonActionId =
+  | 'recalc'
+  | 'batch'
+  | 'pivot'
+  | 'shift'
+  | 'sortfill'
+  | 'ask'
+
 interface RibbonButton {
   icon: React.ElementType
   label: string
+  action: RibbonActionId
   hint?: string
 }
 
 const HOME_GROUPS: { name: string; buttons: RibbonButton[] }[] = [
   {
-    name: 'Clipboard',
+    name: 'Calc',
     buttons: [
-      { icon: ClipboardPaste, label: 'Paste' },
-      { icon: Scissors, label: 'Cut' },
-      { icon: Copy, label: 'Copy' },
+      { icon: Sigma, label: 'Recalc', action: 'recalc', hint: 'Recompute with IronCalc' },
+      { icon: Sigma, label: 'AutoSum', action: 'recalc', hint: 'Recompute with IronCalc' },
     ],
   },
   {
-    name: 'Font',
+    name: 'Edit',
     buttons: [
-      { icon: Bold, label: 'Bold' },
-      { icon: Italic, label: 'Italic' },
-      { icon: Underline, label: 'Underline' },
-      { icon: PaintBucket, label: 'Fill' },
-    ],
-  },
-  {
-    name: 'Alignment',
-    buttons: [
-      { icon: AlignLeft, label: 'Left' },
-      { icon: AlignCenter, label: 'Center' },
-      { icon: AlignRight, label: 'Right' },
-    ],
-  },
-  {
-    name: 'Number',
-    buttons: [
-      { icon: DollarSign, label: 'Currency' },
-      { icon: Percent, label: 'Percent' },
-      { icon: Sigma, label: 'Sum' },
+      { icon: Wand2, label: 'Batch edit', action: 'batch', hint: 'Guard-2 range edit' },
+      { icon: Table2, label: 'Pivot', action: 'pivot', hint: 'Read-only pivot' },
     ],
   },
   {
     name: 'Cells',
     buttons: [
-      { icon: Plus, label: 'Insert' },
-      { icon: Trash2, label: 'Delete' },
-      { icon: Table2, label: 'Format' },
+      { icon: Rows3, label: 'Rows/cols', action: 'shift', hint: 'Insert/delete rows or columns' },
+      { icon: Plus, label: 'Insert', action: 'shift', hint: 'Insert rows or columns' },
+      { icon: Trash2, label: 'Delete', action: 'shift', hint: 'Delete rows or columns' },
     ],
   },
   {
-    name: 'Editing',
+    name: 'Data',
     buttons: [
-      { icon: Sigma, label: 'AutoSum' },
-      { icon: Wand2, label: 'Fill' },
-      { icon: Sparkles, label: 'Sort' },
+      { icon: ArrowUpDown, label: 'Sort & fill', action: 'sortfill', hint: 'Bulk fill / sort' },
     ],
   },
 ]
 
 /**
- * Full-fidelity Office ribbon (ARCH/12 v3.1 — "nothing held back").
- * Reproduces the official Microsoft ribbon surface: tab strip + per-tab
- * groups/buttons + Copilot. Tab switching is real; buttons are the live
- * surface the agent drives and the user can touch on takeover (H21).
+ * Office ribbon (ARCH/12 v3.1). Tab switching is real; every Home button
+ * dispatches an engine-backed `RibbonActionId` to the host view (recalc,
+ * batch edit, pivot, row/col shift, sort/fill, ask-agent). Rich-text
+ * formatting is outside the surgical engine, so the ribbon does not pretend
+ * to offer it. Non-Home tabs are honest about being unbuilt.
  */
-export function OfficeRibbon({ app = 'Excel' }: { app?: 'Excel' | 'Word' | 'PowerPoint' }) {
+export function OfficeRibbon({
+  app = 'Excel',
+  onAction,
+}: {
+  app?: 'Excel' | 'Word' | 'PowerPoint'
+  onAction?: (action: RibbonActionId) => void
+}) {
   const [tab, setTab] = useState('home')
 
   return (
@@ -148,8 +136,10 @@ export function OfficeRibbon({ app = 'Excel' }: { app?: 'Excel' | 'Word' | 'Powe
                 return (
                   <button
                     key={b.label}
-                    title={b.label}
-                    className="group flex h-12 w-12 flex-col items-center justify-center gap-1 rounded text-muted-foreground transition-colors hover:bg-zinc-800 hover:text-foreground"
+                    title={b.hint ?? b.label}
+                    disabled={!onAction}
+                    onClick={() => onAction?.(b.action)}
+                    className="group flex h-12 w-12 flex-col items-center justify-center gap-1 rounded text-muted-foreground transition-colors hover:bg-zinc-800 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Icon className="h-4 w-4" />
                     <span className="max-w-[52px] truncate text-[8px] leading-none">{b.label}</span>
@@ -159,19 +149,23 @@ export function OfficeRibbon({ app = 'Excel' }: { app?: 'Excel' | 'Word' | 'Powe
               <span className="hidden text-[8px] text-muted-foreground/50 lg:block">{g.name}</span>
             </div>
           ))}
-          {/* Copilot — the AI surface in the ribbon */}
-          <button className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-orange-500/40 bg-orange-500/15 px-2.5 py-1 text-[10px] text-orange-300 transition-colors hover:bg-orange-500/25">
+          {/* Copilot — routes to the chat surface via the host view */}
+          <button
+            onClick={() => onAction?.('ask')}
+            disabled={!onAction}
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-orange-500/40 bg-orange-500/15 px-2.5 py-1 text-[10px] text-orange-300 transition-colors hover:bg-orange-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
             <Sparkles className="h-3 w-3" />
             Ask Copilot
           </button>
         </div>
       )}
 
-      {/* Non-Home tabs render the tab name as a placeholder surface */}
+      {/* Non-Home tabs are not in this build — say so plainly. */}
       {tab !== 'home' && (
         <div className="flex h-12 items-center px-3 font-mono text-[10px] text-muted-foreground">
-          {TABS.find((t) => t.id === tab)?.label} tab — full {app} group set renders here (Insert/Formulas/Data/…), same
-          fidelity contract.
+          {TABS.find((t) => t.id === tab)?.label} tab is not available in this build — Calc, Edit,
+          Cells, and Data on Home cover the engine-backed actions.
         </div>
       )}
     </div>

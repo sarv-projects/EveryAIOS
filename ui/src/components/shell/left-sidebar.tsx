@@ -161,7 +161,6 @@ export function LeftSidebar() {
   const setCenterScreen = useAppStore((s) => s.setCenterScreen)
   const centerScreen = useAppStore((s) => s.centerScreen)
   const setPaletteOpen = useAppStore((s) => s.setPaletteOpen)
-  const notify = useAppStore((s) => s.notify)
   const setSettingsSection = useAppStore((s) => s.setSettingsSection)
   const automations = sessions.filter((s) => s.status === 'scheduled').length
 
@@ -186,7 +185,12 @@ export function LeftSidebar() {
             <Sparkles className="h-4 w-4 text-orange-500" />
           </div>
         ) : (
-          <button type="button" className="flex h-8 w-full items-center gap-2 rounded-md px-2 hover:bg-accent">
+          <button
+            type="button"
+            onClick={() => setCenterScreen('home')}
+            className="flex h-8 w-full items-center gap-2 rounded-md px-2 hover:bg-accent"
+            aria-label="Go home"
+          >
             <div className="grid h-5 w-5 place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30">
               <Sparkles className="h-3 w-3 text-orange-500" />
             </div>
@@ -227,8 +231,11 @@ export function LeftSidebar() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => setPaletteOpen(true)}
-                placeholder="Search"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') setPaletteOpen(true)
+                }}
+                placeholder="Filter work (Enter for ⌘K)"
+                title="Type to filter the list below · Enter opens full search"
                 className="h-7 w-full rounded-md border border-border bg-background/60 pl-7 pr-2 text-[12px] placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-orange-500/40"
               />
             </div>
@@ -338,7 +345,7 @@ export function LeftSidebar() {
           icon={HelpCircle}
           label="Help"
           collapsed={collapsed}
-          onClick={() => notify('Opening docs in browser…')}
+          onClick={() => window.open('https://github.com/sarv-projects/EveryAIOS', '_blank', 'noopener')}
         />
         {!collapsed && (
           <button
@@ -348,9 +355,10 @@ export function LeftSidebar() {
               setCenterScreen('settings')
             }}
             className="mt-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
+            title="Local profile — opens general settings"
           >
-            <span className="grid h-6 w-6 place-items-center rounded-full bg-zinc-700 text-[10px] font-medium">S</span>
-            <span className="min-w-0 flex-1 truncate text-[12px]">Sarvesh</span>
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-zinc-700 text-[10px] font-medium">○</span>
+            <span className="min-w-0 flex-1 truncate text-[12px]">Local profile</span>
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         )}

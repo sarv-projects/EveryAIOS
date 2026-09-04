@@ -46,6 +46,10 @@ export default function AgentBuilderPanel() {
   const [acpCli, setAcpCli] = useState<string>('claude-code')
   const [provider, setProvider] = useState<string>('')
   const [model, setModel] = useState<string>('')
+  const [mcpServers, setMcpServers] = useState<string>('')
+  const [connectors, setConnectors] = useState<string>('')
+  const [skills, setSkills] = useState<string>('')
+  const [blueprints, setBlueprints] = useState<string>('')
   const [bundle, setBundle] = useState<AgentBundle | null>(null)
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -100,16 +104,27 @@ export default function AgentBuilderPanel() {
     const t = AGENT_TEMPLATES.find((x) => x.id === id)
     setName(t?.label ?? '')
     setEmoji(t?.emoji ?? '🤖')
+    setMcpServers(t?.preset.mcpServers.join(', ') ?? '')
+    setConnectors(t?.preset.connectors.join(', ') ?? '')
+    setSkills(t?.preset.skills.join(', ') ?? '')
+    setBlueprints(t?.preset.blueprints.join(', ') ?? '')
     setStep(1)
     setSaved(false)
     setBundle(null)
   }
+
+  const splitIds = (raw: string): string[] =>
+    raw.split(',').map((s) => s.trim()).filter(Boolean)
 
   const build = (): AgentBundle => {
     const b = bundleFromTemplate(templateId, name || 'My Agent', emoji)
     b.engine =
       engineKind === 'acp' ? { kind: 'acp', cli: acpCli } : { kind: engineKind }
     if (provider || model) b.model = { provider: provider || undefined, model: model || undefined }
+    b.mcpServers = splitIds(mcpServers)
+    b.connectors = splitIds(connectors)
+    b.skills = splitIds(skills)
+    b.blueprints = splitIds(blueprints)
     return b
   }
 
@@ -322,9 +337,9 @@ export default function AgentBuilderPanel() {
 
       {step === 3 && (
         <div className="space-y-3">
-          <EditChips label="MCP servers (exact subset, never all)" />
-          <EditChips label="Connectors" />
-          <EditChips label="Skills" />
+          <IdListField label="MCP servers (exact subset, never all)" value={mcpServers} onChange={setMcpServers} placeholder="filesystem, github" />
+          <IdListField label="Connectors" value={connectors} onChange={setConnectors} placeholder="gmail" />
+          <IdListField label="Skills" value={skills} onChange={setSkills} placeholder="spreadsheet" />
           <div className="flex justify-between">
             <button onClick={() => setStep(2)} className="text-sm text-muted-foreground hover:text-foreground">
               ← Back
@@ -349,6 +364,8 @@ export default function AgentBuilderPanel() {
           <div className="rounded-lg border border-border bg-card p-3">
             <div className="mb-2 text-xs font-medium text-foreground">Workflow ids</div>
             <input
+              value={blueprints}
+              onChange={(e) => setBlueprints(e.target.value)}
               placeholder="blueprint-id (comma separated)"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-orange-500/50"
             />
@@ -493,6 +510,10 @@ export default function AgentBuilderPanel() {
                       setBundle(b2)
                       setName(b2.name)
                       setEmoji(b2.emoji)
+                      setMcpServers(b2.mcpServers.join(', '))
+                      setConnectors(b2.connectors.join(', '))
+                      setSkills(b2.skills.join(', '))
+                      setBlueprints(b2.blueprints.join(', '))
                       setSaved(true)
                       navigator.clipboard.writeText(exportBundle(b2).content).catch(() => {})
                     }
@@ -518,14 +539,20 @@ export default function AgentBuilderPanel() {
   )
 }
 
-function EditChips({ label }: { label: string }) {
+function IdListField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="mb-1 flex items-center gap-2 text-xs font-medium text-foreground">
         <Plus className="h-3 w-3 text-orange-400" />
         {label}
       </div>
-      <div className="text-[11px] text-muted-foreground">Exact subset — unspecified items are never loaded.</div>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-orange-500/50"
+      />
+      <div className="mt-1 text-[11px] text-muted-foreground">Comma-separated ids — saved into the bundle.</div>
     </div>
   )
 }

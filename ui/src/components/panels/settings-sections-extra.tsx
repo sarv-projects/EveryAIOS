@@ -12,31 +12,32 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { LinkChip, Row, SectionShell } from './settings-shared'
 import { inTauri } from '@/lib/tauri'
+import { usePref } from '@/lib/ui-prefs'
 
 // === Privacy ===
 export function PrivacySection() {
-  const [audit, setAudit] = useState(30)
-  const [memory, setMemory] = useState(90)
+  const [audit, setAudit] = usePref('privacy.auditRetentionDays', 30)
+  const [memory, setMemory] = usePref('privacy.memoryRetentionDays', 90)
 
   return (
     <SectionShell title="Privacy" desc="Telemetry, audit and memory retention">
-      <Row label="Anonymous telemetry" desc="Crash + usage, never content">
-        <Switch defaultChecked />
+      <Row label="Anonymous telemetry" desc="No telemetry sender exists in this build — nothing leaves the machine">
+        <Switch checked={false} disabled title="No telemetry sender in this build" />
       </Row>
-      <Row label="Audit retention">
+      <Row label="Audit retention" desc="Stored preference — applied by the retention job">
         <div className="flex w-56 items-center gap-3">
           <Slider value={[audit]} min={7} max={365} step={1} onValueChange={(v) => setAudit(v[0])} />
           <span className="w-16 font-mono text-xs text-orange-300">{audit}d</span>
         </div>
       </Row>
-      <Row label="Memory retention">
+      <Row label="Memory retention" desc="Stored preference — applied by the retention job">
         <div className="flex w-56 items-center gap-3">
           <Slider value={[memory]} min={7} max={365} step={1} onValueChange={(v) => setMemory(v[0])} />
           <span className="w-16 font-mono text-xs text-orange-300">{memory}d</span>
         </div>
       </Row>
-      <Row label="Local-only mode" desc="All connectors and model calls blocked">
-        <Switch />
+      <Row label="Local-only mode" desc="Connector/model blocking is not built — switches nothing yet">
+        <Switch checked={false} disabled title="Local-only enforcement is not built" />
       </Row>
     </SectionShell>
   )
@@ -53,9 +54,8 @@ const SHORTCUTS = [
 ]
 
 export function KeyboardSection() {
-  const notify = useAppStore((s) => s.notify)
   return (
-    <SectionShell title="Keyboard" desc="Shortcut bindings">
+    <SectionShell title="Keyboard" desc="Shortcut bindings (fixed set — custom bindings are not editable in this build)">
       <ul className="divide-y divide-border/40 rounded-md border border-border/50 bg-background/30">
         {SHORTCUTS.map((s, i) => (
           <li key={i} className="flex items-center justify-between px-3 py-2">
@@ -71,14 +71,6 @@ export function KeyboardSection() {
                   </kbd>
                 ))}
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-[10px]"
-                onClick={() => notify(`Edit binding for “${s.action}” — press new keys`)}
-              >
-                Edit
-              </Button>
             </div>
           </li>
         ))}
@@ -88,22 +80,23 @@ export function KeyboardSection() {
 }
 
 // === Advanced ===
-const EXPERIMENTAL = [
-  { name: 'Multi-agent sessions', on: false },
-  { name: 'Local Whisper transcription', on: true },
-  { name: 'Vision grounding (VLM)', on: false },
-  { name: 'Pre-emptive memory compaction', on: true },
-  { name: 'Headless CI mode', on: false },
-]
-
 export function AdvancedSection() {
+  const [dataPath, setDataPath] = usePref('advanced.dataPath', '~/.everyaios/data')
+  const [logLevel, setLogLevel] = usePref('advanced.logLevel', 'info')
+  const [experimental, setExperimental] = usePref<Record<string, boolean>>('advanced.experimental', {
+    'Multi-agent sessions': false,
+    'Local Whisper transcription': true,
+    'Vision grounding (VLM)': false,
+    'Pre-emptive memory compaction': true,
+    'Headless CI mode': false,
+  })
   return (
-    <SectionShell title="Advanced" desc="Paths, logging and experimental features">
-      <Row label="Data path">
-        <Input defaultValue="~/.everyaios/data" className="h-8 w-64 font-mono text-xs" />
+    <SectionShell title="Advanced" desc="Paths, logging and experimental features (stored preferences — read by future builds)">
+      <Row label="Data path" desc="Stored preference">
+        <Input value={dataPath} onChange={(e) => setDataPath(e.target.value)} className="h-8 w-64 font-mono text-xs" />
       </Row>
-      <Row label="Log level">
-        <Select defaultValue="info">
+      <Row label="Log level" desc="Stored preference">
+        <Select value={logLevel} onValueChange={setLogLevel}>
           <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="trace">trace</SelectItem>
@@ -117,13 +110,16 @@ export function AdvancedSection() {
       <div className="pt-2">
         <div className="mb-2 text-xs font-medium text-foreground">Experimental features</div>
         <ul className="space-y-1.5">
-          {EXPERIMENTAL.map((f) => (
+          {Object.keys(experimental).map((name) => (
             <li
-              key={f.name}
+              key={name}
               className="flex items-center justify-between rounded-md border border-border/50 bg-background/30 px-3 py-2"
             >
-              <span className="text-xs text-foreground">{f.name}</span>
-              <Switch defaultChecked={f.on} />
+              <span className="text-xs text-foreground">{name}</span>
+              <Switch
+                checked={!!experimental[name]}
+                onCheckedChange={(v) => setExperimental({ ...experimental, [name]: v })}
+              />
             </li>
           ))}
         </ul>
@@ -188,9 +184,9 @@ export function AboutSection() {
           Agentic OS desktop runtime. Self-hosted, local-first.
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <LinkChip icon={<ExternalLink className="h-3 w-3" />} label="Docs" />
-          <LinkChip icon={<Github className="h-3 w-3" />} label="GitHub" />
-          <LinkChip icon={<ExternalLink className="h-3 w-3" />} label="Issues" />
+          <LinkChip icon={<ExternalLink className="h-3 w-3" />} label="Docs" href="https://github.com/sarv-projects/EveryAIOS#readme" />
+          <LinkChip icon={<Github className="h-3 w-3" />} label="GitHub" href="https://github.com/sarv-projects/EveryAIOS" />
+          <LinkChip icon={<ExternalLink className="h-3 w-3" />} label="Issues" href="https://github.com/sarv-projects/EveryAIOS/issues" />
         </div>
         {/* P8.8 auto-updater surface */}
         <div className="mt-3 border-t border-border/40 pt-3">

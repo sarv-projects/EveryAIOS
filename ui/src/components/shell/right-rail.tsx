@@ -26,8 +26,6 @@ import {
   GitCompare,
   MonitorSmartphone,
   ShieldCheck,
-  History,
-  Check,
   Download,
   RotateCw,
   Trash2,
@@ -52,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAppStore, type ViewId } from '@/lib/store'
 import { AGENT_MAP, DEFAULT_ROUTING, type TaskKind } from '@/lib/agents'
+import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -79,7 +78,6 @@ const XlsxView = React.lazy(() => import('@/components/views/office-xlsx-view'))
 const PdfView = React.lazy(() => import('@/components/views/office-pdf-view'))
 const GenerativeView = React.lazy(() => import('@/components/views/generative-view'))
 const ArtifactView = React.lazy(() => import('@/components/views/artifact-view'))
-const CodeView = React.lazy(() => import('@/components/views/code-view'))
 const DesktopView = React.lazy(() => import('@/components/views/desktop-view'))
 
 // Map viewport IDs to the task kind that determines which agent handles them
@@ -117,7 +115,7 @@ const railItems: RailItem[] = [
 ]
 
 const sessionItems: RailItem[] = [
-  { id: 'progress', icon: Activity, label: 'Progress', shortcut: '⌘⇧P', live: true },
+  { id: 'progress', icon: Activity, label: 'Progress', shortcut: '⌘⇧P' },
   { id: 'trajectory', icon: ScanSearch, label: 'Trajectory', shortcut: '⌘⇧T' },
 ]
 
@@ -191,7 +189,14 @@ function renderView(view: ViewId) {
     case 'generative': return <GenerativeView />
     case 'artifact': return <ArtifactView />
     case 'desktop': return <DesktopView />
-    default: return null
+    default:
+      return (
+        <div className="grid h-full w-full place-items-center p-6 text-center">
+          <p className="text-[11px] text-muted-foreground">
+            Unknown view “{view satisfies never}” — pick a lens from the rail.
+          </p>
+        </div>
+      )
   }
 }
 
@@ -206,6 +211,12 @@ export function ActivityRail() {
   const setRailCollapsed = useAppStore((s) => s.setRailCollapsed)
   // P50.3.7/8 — rail dots reflect live attachment, never static flags.
   const browserAttached = useAppStore((s) => s.browserAttached)
+  // Progress dot = real activity (running turn or gateway work), not a
+  // hardcoded flag.
+  const progressLive =
+    useAppStore((s) =>
+      s.sessions.some((x) => x.id === s.activeSessionId && x.status === 'running'),
+    ) || useAppStore((s) => s.workEvents.length > 0 || s.workItems.length > 0)
 
   const handleClick = (item: RailItem) => {
     if (item.id === activeView && !railCollapsed) {
@@ -216,7 +227,7 @@ export function ActivityRail() {
   }
 
   return (
-    <div className="shrink-0 w-12 border-l border-border bg-sidebar/80 backdrop-blur-xl flex flex-col items-center py-2 gap-1 no-select relative z-20">
+    <div className="shrink-0 w-12 border-l border-border bg-sidebar flex flex-col items-center py-2 gap-1 no-select relative z-20">
       {railItems.map((item) => {
         const Icon = item.icon
         const isActive = activeView === item.id && !railCollapsed
@@ -333,11 +344,27 @@ export function ActivityRail() {
             <div className="h-px bg-border my-1.5" />
             <button
               className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              onClick={() => {
-                const p = window.prompt('Path to a .docx / .xlsx / .pptx / .pdf')
-                if (p?.trim()) useAppStore.getState().openOfficeDoc(p.trim())
-                setOfficeFlyoutOpen(false)
-              }}
+              onClick={() =>
+                void (async () => {
+                  const st = useAppStore.getState()
+                  if (!inTauri()) {
+                    st.notify('File picker needs the Tauri shell — open a file from the Office views instead')
+                    return
+                  }
+                  try {
+                    const { open } = await import('@tauri-apps/plugin-dialog')
+                    const picked = await open({
+                      multiple: false,
+                      title: 'Open an Office document',
+                      filters: [{ name: 'Office', extensions: ['docx', 'xlsx', 'xlsm', 'pptx', 'pdf'] }],
+                    })
+                    if (typeof picked === 'string' && picked.trim()) st.openOfficeDoc(picked.trim())
+                  } catch (e) {
+                    st.notify(e instanceof Error ? e.message : 'File picker failed', 'error')
+                  }
+                  setOfficeFlyoutOpen(false)
+                })()
+              }
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Open another…</span>
@@ -351,6 +378,7 @@ export function ActivityRail() {
       {sessionItems.map((item) => {
         const Icon = item.icon
         const isActive = activeView === item.id && !railCollapsed
+        const showLive = item.id === 'progress' ? progressLive : item.live
         return (
           <Tooltip key={item.id}>
             <TooltipTrigger asChild>
@@ -366,7 +394,7 @@ export function ActivityRail() {
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {item.live && (
+                {showLive && (
                   <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-orange-500 live-dot ring-2 ring-sidebar" />
                 )}
               </button>
@@ -446,14 +474,64 @@ export function RightViewport() {
 
   const notify = useAppStore((s) => s.notify)
 
-  // View-specific action buttons — wired to store actions so every button
-  // does something real in the cockpit (mock-data preview + shell both work).
+  // Create an empty untitled file in the workspace folder and open it in the
+  // workbench. Human-gesture path (clicked button = trusted gesture); needs
+  // the shell + an attached folder, otherwise says so.
+  const newUntitledFile = () =>
+    void (async () => {
+      const st = useAppStore.getState()
+      if (!inTauri()) {
+        st.notify('New file needs the Tauri shell')
+        return
+      }
+      const folder = st.taskFolder
+      if (!folder) {
+        st.notify('Attach a workspace folder first (chat empty state → Open folder)', 'error')
+        return
+      }
+      const name = `untitled-${Date.now().toString(36)}.md`
+      const path = `${folder.replace(/\/+$/, '')}/${name}`
+      try {
+        const { fsWriteFile } = await import('@/lib/fs')
+        await fsWriteFile(path, '')
+        window.dispatchEvent(
+          new CustomEvent('everyaios:open-file', { detail: { path, content: '' } }),
+        )
+        st.setActiveView('code')
+        st.notify(`Created ${name}`)
+      } catch (e) {
+        st.notify(e instanceof Error ? e.message : 'New file failed', 'error')
+      }
+    })()
+
+  const exportWorkLog = () => {
+    const st = useAppStore.getState()
+    const events = st.workEvents ?? []
+    if (events.length === 0) {
+      st.notify('No work events to export yet')
+      return
+    }
+    const blob = new Blob([events.map((e) => JSON.stringify(e)).join('\n')], {
+      type: 'application/x-ndjson',
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'work-events.ndjson'
+    a.click()
+    URL.revokeObjectURL(url)
+    st.notify(`Exported ${events.length} work events`)
+  }
+
+  // View-specific action buttons — every button does something real (nav,
+  // IPC, or download). Rows without a backing action were removed, not
+  // left as toast-only stubs.
   const viewActions: Record<string, { icon: React.ElementType; label: string; action: () => void }[]> = {
     folder: [
       {
         icon: Plus,
         label: 'New file',
-        action: () => notify('New file — type a name to create it in the workspace'),
+        action: newUntitledFile,
       },
       {
         icon: GitCompare,
@@ -463,14 +541,9 @@ export function RightViewport() {
     ],
     shell: [
       {
-        icon: Plus,
-        label: 'New terminal',
-        action: () => notify('New terminal tab — agent shell session'),
-      },
-      {
-        icon: History,
-        label: 'History',
-        action: () => notify('Shell history — last 20 commands'),
+        icon: Terminal,
+        label: 'Focus terminal',
+        action: () => setActiveView('shell'),
       },
     ],
     browse: [
@@ -499,7 +572,7 @@ export function RightViewport() {
       {
         icon: Plus,
         label: 'New file',
-        action: () => notify('New file — untitled.ts in the workspace'),
+        action: newUntitledFile,
       },
       {
         icon: GitCompare,
@@ -512,7 +585,7 @@ export function RightViewport() {
       {
         icon: Download,
         label: 'Export log',
-        action: () => notify('Exporting progress log (NDJSON)…'),
+        action: exportWorkLog,
       },
     ],
     timeline: [
@@ -559,18 +632,18 @@ export function RightViewport() {
         },
       },
     ],
-    diff: [
-      { icon: Check, label: 'Accept all', action: () => notify('Accepted all changes — revision 9') },
-      { icon: X, label: 'Revert all', action: () => notify('Reverted — back to revision 7') },
-    ],
     audit: [
-      { icon: ShieldCheck, label: 'Live', action: () => notify('Watching live — append-only event stream') },
+      {
+        icon: ShieldCheck,
+        label: 'Open audit view',
+        action: () => setActiveView('audit'),
+      },
     ],
     storage: [
       {
         icon: Trash2,
-        label: 'Clean up',
-        action: () => notify('Cleanup plan — Guard-2 approval required'),
+        label: 'Review cleanup',
+        action: () => setActiveView('storage'),
       },
     ],
   }

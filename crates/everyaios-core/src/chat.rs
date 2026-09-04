@@ -195,6 +195,11 @@ pub struct ChatStreamParams {
     /// it; external Chiefs are refused by the coordinator (see
     /// `dispatchByChief` in `packages/coordinator/src/chat.ts`).
     pub primary_chief: Option<String>,
+    /// P50.3.6 — the shell's live vault key set (provider ids with keys),
+    /// forwarded so the coordinator gates the *taken* route on the same set
+    /// the display feed used. `None` ⇒ ungated (legacy/test callers); an
+    /// empty vec gates every keyed provider out (fail-closed).
+    pub credentialed_providers: Option<Vec<String>>,
 }
 
 /// P4.7 — a user-attached document for `<user_document>` wrapping (J6).
@@ -1324,6 +1329,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                 "soulMd": params.soul_md,
                 "userDocuments": params.user_documents,
                 "primaryChief": params.primary_chief,
+                "credentialedProviders": params.credentialed_providers,
             }),
         )?;
         if !ack
@@ -1976,6 +1982,7 @@ mod tests {
                 soul_md: None,
                 user_documents: None,
                 primary_chief: None,
+                credentialed_providers: None,
             })
             .unwrap_err();
         let msg = err.to_string();
@@ -2045,6 +2052,7 @@ mod tests {
                 soul_md: None,
                 user_documents: None,
                 primary_chief: None,
+                credentialed_providers: None,
             })
             .expect("start_stream");
 
@@ -2061,6 +2069,62 @@ mod tests {
             .iter()
             .any(|e| matches!(e, ChatWireEvent::BudgetExceeded { .. })));
         side.join().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_stream_forwards_credentialed_providers() {
+        // P50.3.6 — the shell's live key set must reach the coordinator's
+        // `chat/stream` params verbatim so the taken route is gated on the
+        // same set the display feed used. The fake sidecar captures the
+        // params instead of acking events.
+        let (a, b) = pair();
+        let seen: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
+        let seen_side = Arc::clone(&seen);
+        let side = std::thread::spawn(move || {
+            let mut s = b;
+            while let Ok(Some(payload)) = frame::decode(&mut s) {
+                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
+                if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
+                    *seen_side.lock().unwrap_or_else(|x| x.into_inner()) =
+                        v.get("params").cloned();
+                    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
+                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
+                    break;
+                }
+            }
+        });
+
+        let (_dir, vault) = temp_vault("cred-fwd");
+        let vault = Arc::new(Mutex::new(vault));
+        let relay = ChatRelay::new(link_from(a), vault, |_| {});
+        relay
+            .start_stream(ChatStreamParams {
+                session_id: "s1".into(),
+                stream_id: "st-cred".into(),
+                text: "hi".into(),
+                surface: None,
+                agent_id: None,
+                provider: None,
+                model: None,
+                persona_id: None,
+                soul_md: None,
+                user_documents: None,
+                primary_chief: None,
+                credentialed_providers: Some(vec!["openai".into(), "ollama".into()]),
+            })
+            .expect("start_stream");
+        side.join().unwrap();
+        let guard = seen.lock().unwrap_or_else(|x| x.into_inner());
+        let params = guard
+            .as_ref()
+            .expect("fake sidecar saw chat/stream");
+        assert_eq!(
+            params.get("credentialedProviders"),
+            Some(&serde_json::json!(["openai", "ollama"])),
+            "live key set must ride chat/stream: {params}"
+        );
     }
 
     #[cfg(unix)]
@@ -2331,6 +2395,7 @@ mod tests {
                 soul_md: None,
                 user_documents: None,
                 primary_chief: None,
+                credentialed_providers: None,
             })
             .expect("start_stream (1.99 < 2.00 pre-flight passes)");
 
@@ -2360,6 +2425,7 @@ mod tests {
                 soul_md: None,
                 user_documents: None,
                 primary_chief: None,
+                credentialed_providers: None,
             })
             .unwrap_err();
         assert!(matches!(err, ChatRelayError::BudgetExceeded { .. }));

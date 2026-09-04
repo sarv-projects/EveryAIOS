@@ -131,10 +131,24 @@ fn platform_candidates() -> Vec<PathBuf> {
                 r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
                 r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
                 r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
             ]
             .iter()
             .map(PathBuf::from),
         );
+        // Per-user installs (no admin rights needed) live under LocalAppData
+        // — the most common Windows Chrome layout of all.
+        if let Some(local) = env::var_os("LOCALAPPDATA") {
+            let local = PathBuf::from(local);
+            for rel in [
+                r"Google\Chrome\Application\chrome.exe",
+                r"Microsoft\Edge\Application\msedge.exe",
+                r"BraveSoftware\Brave-Browser\Application\brave.exe",
+            ] {
+                out.push(local.join(rel));
+            }
+        }
     }
     out
 }
@@ -179,10 +193,16 @@ pub fn locate_system_browser(browser_binary: Option<&Path>) -> Result<PathBuf, C
             return Ok(cached);
         }
     }
-    Err(CdpError::BrowserNotFound(
-        "no system Chrome/Edge found; use install_chrome_for_testing() or set a browser binary"
-            .into(),
-    ))
+    // Actionable failure: name what was probed so the UI can tell the user
+    // to install Chrome/Edge instead of showing a bare "not found".
+    let probed: Vec<String> = platform_candidates()
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
+    Err(CdpError::BrowserNotFound(format!(
+        "no system Chrome/Edge found (looked for: {}); install Chrome or Edge, or use install_chrome_for_testing(), or set a browser binary",
+        probed.join(", ")
+    )))
 }
 
 /// Spawn the browser with `--remote-debugging-port=0` and wait for

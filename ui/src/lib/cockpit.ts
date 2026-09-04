@@ -91,17 +91,8 @@ export async function cockpitQuiet(
   return nativeCall('cockpit quiet mode', () => invoke<void>("cockpit_quiet", { quiet, status: status ?? null }));
 }
 
-/** STOP: kill the agent loop over the control channel. */
-export async function agentStop(sessionId: string): Promise<void> {
-  if (!inTauri()) return;
-  return nativeCall('agent stop', () => invoke<void>("agent_stop", { sessionId }));
-}
-
-/** UNDO: revert the last action over the control channel. */
-export async function agentUndo(sessionId: string): Promise<void> {
-  if (!inTauri()) return;
-  return nativeCall('agent undo', () => invoke<void>("agent_undo", { sessionId }));
-}
+/** STOP/UNDO: control-channel agent controls (canonical in `./tauri`). */
+export { agentStop, agentUndo } from './tauri'
 
 /** Answer a circuit-break MCQ interrupt card. */
 export async function interruptRespond(

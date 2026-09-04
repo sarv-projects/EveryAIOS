@@ -251,6 +251,7 @@ fn real_chat_vertical_e2e() {
             soul_md: None,
             user_documents: None,
             primary_chief: None,
+            credentialed_providers: None,
         })
         .expect("chat/stream accepted");
 

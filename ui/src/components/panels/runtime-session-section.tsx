@@ -31,13 +31,25 @@ import {
  */
 export function RuntimeSessionSection() {
   const notify = useAppStore((s) => s.notify)
+  const taskFolder = useAppStore((s) => s.taskFolder)
+  const liveAgents = useAppStore((s) => s.liveAgents)
   const [works, setWorks] = useState<WorkAddress[]>([])
   const [workId, setWorkId] = useState<string>('')
   const [sessions, setSessions] = useState<AgentSession[]>([])
   const [pty, setPty] = useState<PtySession | null>(null)
   const [busy, setBusy] = useState(false)
   const [ptyId, setPtyId] = useState('agent-cli')
+  const [ptyCols, setPtyCols] = useState('80')
+  const [ptyRows, setPtyRows] = useState('24')
   const [wtBranch, setWtBranch] = useState('agent/worktree-1')
+  const [repoRoot, setRepoRoot] = useState('')
+  const [mergeTarget, setMergeTarget] = useState('main')
+  const [agentId, setAgentId] = useState('')
+
+  const runId = works.find((w) => w.workId === workId)?.currentRunId ?? ''
+  const runnableAgents = liveAgents.length > 0 ? liveAgents : []
+  const effectiveAgent = agentId || runnableAgents[0]?.id || 'everyaios-native'
+  const effectiveRoot = repoRoot.trim() || taskFolder || '.'
 
   const refresh = useCallback(async (id: string) => {
     if (!id) return
@@ -63,11 +75,13 @@ export function RuntimeSessionSection() {
 
   async function spawnPty() {
     if (!workId) return
+    const cols = Math.max(20, parseInt(ptyCols, 10) || 80)
+    const rows = Math.max(5, parseInt(ptyRows, 10) || 24)
     setBusy(true)
     try {
-      await workPtySpawn(workId, ptyId, 24, 80)
+      await workPtySpawn(workId, ptyId, rows, cols)
       setPty(await workPtySnapshot(ptyId))
-      notify(`PTY ${ptyId} spawned (persistent — survives client disconnect)`)
+      notify(`PTY ${ptyId} spawned ${cols}×${rows} (persistent — survives client disconnect)`)
     } catch (e) { notify(String(e)) } finally { setBusy(false) }
   }
   async function closePty() {
@@ -78,23 +92,31 @@ export function RuntimeSessionSection() {
   }
   async function createWorktree() {
     if (!workId) return
+    if (!runId) {
+      notify('This work item has no active run — start work first', 'error')
+      return
+    }
     setBusy(true)
     try {
       await workWorktreeCreate({
-        workId, runId: 'run-1', worktreeId: wtBranch, repoRoot: '.',
+        workId, runId, worktreeId: wtBranch, repoRoot: effectiveRoot,
         worktreeRoot: `.worktrees/${wtBranch}`, baseRevision: 'HEAD', branch: wtBranch,
       })
-      notify(`Worktree ${wtBranch} created — owned by the Run, not the agent`)
+      notify(`Worktree ${wtBranch} created in run ${runId} — owned by the Run, not the agent`)
     } catch (e) { notify(String(e)) } finally { setBusy(false) }
   }
   async function spawnAgent(lifetime: 'ephemeral' | 'persistent') {
     if (!workId) return
+    if (!runId) {
+      notify('This work item has no active run — start work first', 'error')
+      return
+    }
     setBusy(true)
     try {
       const asid = `agent-${Date.now().toString(36)}`
-      await workAgentSpawn({ workId, runId: 'run-1', agentSessionId: asid, agentId: 'claude-code', lifetime })
+      await workAgentSpawn({ workId, runId, agentSessionId: asid, agentId: effectiveAgent, lifetime })
       await refresh(workId)
-      notify(`${lifetime} agent session ${asid} spawned`)
+      notify(`${lifetime} agent session ${asid} spawned (${effectiveAgent})`)
     } catch (e) { notify(String(e)) } finally { setBusy(false) }
   }
   async function agentOp(id: string, op: 'attach' | 'detach' | 'checkpoint' | 'terminate') {
@@ -138,9 +160,13 @@ export function RuntimeSessionSection() {
         <div className="rounded-lg border border-border/50 bg-background/30 p-3">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
             <Terminal className="h-3.5 w-3.5 text-orange-400" /> Persistent PTY
+            {runId && <Badge variant="outline" className="ml-auto font-mono text-[9px]">run {runId}</Badge>}
           </div>
-          <div className="flex items-center gap-2">
-            <Input value={ptyId} onChange={(e) => setPtyId(e.target.value)} className="h-7 w-40 font-mono text-xs" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Input value={ptyId} onChange={(e) => setPtyId(e.target.value)} className="h-7 w-40 font-mono text-xs" aria-label="PTY id" />
+            <Input value={ptyCols} onChange={(e) => setPtyCols(e.target.value)} className="h-7 w-16 font-mono text-xs" aria-label="Columns" title="Columns" />
+            <span className="font-mono text-[10px] text-muted-foreground">×</span>
+            <Input value={ptyRows} onChange={(e) => setPtyRows(e.target.value)} className="h-7 w-16 font-mono text-xs" aria-label="Rows" title="Rows" />
             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy || !workId} onClick={spawnPty}>
               <Play className="h-3 w-3" /> Spawn
             </Button>
@@ -159,21 +185,34 @@ export function RuntimeSessionSection() {
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
             <GitBranch className="h-3.5 w-3.5 text-sky-400" /> Run-owned worktree
           </div>
-          <div className="flex items-center gap-2">
-            <Input value={wtBranch} onChange={(e) => setWtBranch(e.target.value)} className="h-7 w-48 font-mono text-xs" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Input value={wtBranch} onChange={(e) => setWtBranch(e.target.value)} className="h-7 w-48 font-mono text-xs" aria-label="Branch" />
+            <Input value={repoRoot} onChange={(e) => setRepoRoot(e.target.value)} placeholder={taskFolder || 'repo root (default: workspace)'} className="h-7 w-48 font-mono text-xs" aria-label="Repo root" />
             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy || !workId} onClick={createWorktree}>
               <Layers className="h-3 w-3" /> Create
             </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy || !workId} onClick={() => void workWorktreeOp(workId, wtBranch, 'merge', 'main').then(() => notify('merged')).catch((e) => notify(String(e)))}>
-              Merge → main
+            <Input value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)} className="h-7 w-28 font-mono text-xs" aria-label="Merge target" />
+            <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={busy || !workId} onClick={() => void workWorktreeOp(workId, wtBranch, 'merge', mergeTarget || undefined).then(() => notify(`Merged into ${mergeTarget || 'default'}`)).catch((e) => notify(String(e)))}>
+              Merge →
             </Button>
           </div>
         </div>
 
         {/* Agent sessions (P49.12) */}
         <div className="rounded-lg border border-border/50 bg-background/30 p-3">
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs font-medium">
             <Bot className="h-3.5 w-3.5 text-violet-400" /> Agent sessions
+            <select
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+              className="h-6 rounded border border-border bg-background px-1 font-mono text-[10px]"
+              title="Runtime for spawned agent sessions"
+            >
+              {runnableAgents.length === 0 && <option value="everyaios-native">everyaios-native</option>}
+              {runnableAgents.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
             <div className="ml-auto flex gap-1">
               <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={busy || !workId} onClick={() => spawnAgent('ephemeral')}>+ ephemeral</Button>
               <Button size="sm" variant="outline" className="h-6 text-[10px]" disabled={busy || !workId} onClick={() => spawnAgent('persistent')}>+ persistent</Button>

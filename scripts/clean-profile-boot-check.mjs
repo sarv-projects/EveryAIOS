@@ -25,7 +25,8 @@ import { spawnSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = resolve(HERE, '../..')
+// This script lives directly in scripts/ (one level below the repo root).
+const REPO_ROOT = resolve(HERE, '..')
 const EXE_SUFFIX = process.platform === 'win32' ? '.exe' : ''
 const DEFAULT_CORE_BIN = resolve(REPO_ROOT, `crates/target/debug/everyaios-core${EXE_SUFFIX}`)
 

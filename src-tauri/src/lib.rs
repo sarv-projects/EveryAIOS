@@ -54,6 +54,7 @@ pub use state::AppState;
 use everyaios_core::GuardService;
 use everyaios_guard::prescan::guard as compiled_guard;
 use everyaios_vault::Vault;
+use everyaios_vault::KeyRing;
 
 pub mod xlsx_cmds;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -264,6 +265,15 @@ fn chat_stream(
     // The reply is the streamId; all output arrives as `chat-event` emits
     // (ttft/batch/done/error/cancelled/budgetExceeded). J11 budget refusals
     // surface as the error string "stopped: $X limit".
+    // P50.3.6 — gate the *taken* route on the shell's live vault key set
+    // (same source as routing_feed_decide's display gate, read before the
+    // relay lock so the two mutexes never nest). Locked/empty vault ⇒ empty
+    // set ⇒ the coordinator excludes every keyed provider for this turn.
+    let credentialed_providers: Option<Vec<String>> = state
+        .vault
+        .lock()
+        .ok()
+        .and_then(|vault| KeyRing::new(&vault).providers_with_keys().ok());
     let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
     let relay = relay
         .as_ref()
@@ -286,6 +296,7 @@ fn chat_stream(
             soul_md,
             user_documents,
             primary_chief,
+            credentialed_providers,
         })
         .map_err(|e| e.to_string())?;
     Ok(stream_id)
@@ -691,6 +702,10 @@ pub fn run() {
         // P8.8: auto-updater (checks + downloads against the configured
         // endpoints; signing key is the release secret).
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Office/folder views: native file-open dialog (Browse buttons).
+        // Capability-gated (`dialog:allow-open`); the UI falls back to typed
+        // paths where the shell is absent (plain-browser preview).
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Tray must be non-fatal: on systems without appindicator/tray
             // support the app should still start (just without a tray icon).

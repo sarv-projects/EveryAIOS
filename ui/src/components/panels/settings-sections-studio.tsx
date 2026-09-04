@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Bell,
   Cpu,
@@ -25,6 +25,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import { inTauri } from '@/lib/tauri'
 import { type PermissionMode, usePref } from '@/lib/ui-prefs'
 import { Row, SectionShell } from './settings-shared'
 
@@ -118,10 +119,10 @@ export function NotificationsSection() {
               {label}
             </span>
             <div className="flex gap-1">
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => notify(`Preview “${label}” — no audio engine yet`)}>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled title="No audio engine in this build — notification sounds are a staged surface">
                 Preview
               </Button>
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => notify('Custom sound file — not wired')}>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled title="No audio engine in this build — custom sounds are a staged surface">
                 Replace
               </Button>
             </div>
@@ -172,7 +173,7 @@ export function VoiceSection() {
       <Row label="Shortcut" desc="Stays in sync with Keyboard shortcuts">
         <div className="flex items-center gap-1.5">
           <kbd className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">Ctrl+Shift+R</kbd>
-          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => notify('Edit voice shortcut — same as Keyboard section')}>
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => useAppStore.getState().setSettingsSection('keyboard')}>
             Edit
           </Button>
         </div>
@@ -331,29 +332,9 @@ export function ChatAutoRunSection() {
   )
 }
 
-export function PermissionsSection() {
-  const permissionMode = useAppStore((s) => s.permissionMode)
-  const setPermissionMode = useAppStore((s) => s.setPermissionMode)
-  const notify = useAppStore((s) => s.notify)
-  return (
-    <SectionShell
-      title="Permission approval"
-      desc="Same four modes as Chat & Auto-run — also available from the composer chip"
-    >
-      <div className="space-y-1.5">
-        <RadioCard selected={permissionMode === 'ask'} title="👀 Ask (default)" desc="Safe reads auto-allow. Mutations show a Guard-2 card." onSelect={() => setPermissionMode('ask')} />
-        <RadioCard selected={permissionMode === 'auto'} title="⚡ Auto" desc="Low-risk workspace writes auto-allow. Hard floors still ask." onSelect={() => setPermissionMode('auto')} />
-        <RadioCard selected={permissionMode === 'sandbox'} title="🛡 Sandbox" desc="Plan + read-only. Every mutation denied." onSelect={() => setPermissionMode('sandbox')} />
-        <RadioCard selected={permissionMode === 'full'} title="🚀 Maximum" desc="Maximum autonomy within hard floors — never a Guard bypass." onSelect={() => setPermissionMode('full')} />
-      </div>
-      <Row label="Custom configuration" desc="permissions.toml for file, network, security, approvers">
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Open permissions.toml — J21 file exists in the crate; editor pane not wired')}>
-          Open config
-        </Button>
-      </Row>
-    </SectionShell>
-  )
-}
+// P50.2.x — removed: PermissionsSection (duplicate of ChatAutoRunSection's
+// four RadioCards plus a config button with no editor). The permissions
+// settings route renders ChatAutoRunSection (see settings-panel SectionBody).
 
 export function BrowserNetworkSection() {
   const [engine, setEngine] = usePref('browser.engine', 'builtin')
@@ -406,12 +387,45 @@ export function BrowserNetworkSection() {
         <Input value={proxy} onChange={(e) => setProxy(e.target.value)} placeholder="none" className="h-8 w-56 font-mono text-xs" />
       </Row>
       <Row label="Required domains" desc="Must be reachable for models and MCP">
-        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => notify('Copy domains — huggingface.co, api hosts, user MCP URLs')}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 px-2 text-[10px]"
+          onClick={() => {
+            const domains = 'huggingface.co, api hosts of your configured providers, your MCP server URLs'
+            void navigator.clipboard
+              ?.writeText(domains)
+              .then(() => notify('Required-domains hint copied'))
+              .catch(() => notify(domains))
+          }}
+        >
           Copy · Show
         </Button>
       </Row>
       <Row label="Network diagnostics">
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Run diagnostic — E2 crate exists; this button is chrome')}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-[10px]"
+          onClick={() =>
+            void (async () => {
+              try {
+                const { doctorReport } = await import('@/lib/doctor')
+                const report = await doctorReport()
+                const bad = report.checks.filter((c) => c.status !== 'ok')
+                notify(
+                  bad.length === 0
+                    ? `Diagnostic: all ${report.checks.length} checks ok`
+                    : `Diagnostic: ${bad.length} attention — ${bad.map((c) => c.name).join(', ')} (see Doctor)`,
+                  bad.length === 0 ? 'default' : 'error',
+                )
+                if (bad.length > 0) useAppStore.getState().setSettingsSection('doctor')
+              } catch (e) {
+                notify(e instanceof Error ? e.message : 'Diagnostic failed', 'error')
+              }
+            })()
+          }
+        >
           <Globe className="h-3.5 w-3.5" /> Run diagnostic
         </Button>
       </Row>
@@ -440,7 +454,13 @@ export function IndexingSection() {
         <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
           <div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} />
         </div>
-        <Button size="sm" variant="ghost" className="mt-1 h-6 px-0 text-[10px]" onClick={() => notify('Reindex workspace — SeekStorm/FTS path is P20, not wired here')}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mt-1 h-6 px-0 text-[10px]"
+          disabled
+          title="Workspace reindex lands with the P20 SeekStorm/FTS path — not wired yet"
+        >
           Reindex
         </Button>
       </div>
@@ -456,7 +476,36 @@ export function IndexingSection() {
         <Switch checked={sym} onCheckedChange={setSym} />
       </Row>
       <Row label="Edit ignore file">
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Edit .everyaiosignore — file editor not attached')}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-[10px]"
+          onClick={() =>
+            void (async () => {
+              const st = useAppStore.getState()
+              if (!inTauri()) {
+                notify('Ignore-file editing needs the Tauri shell', 'error')
+                return
+              }
+              const folder = st.taskFolder
+              if (!folder) {
+                notify('Attach a workspace folder first (chat empty state → Open folder)', 'error')
+                return
+              }
+              const path = `${folder.replace(/\/+$/, '')}/.everyaiosignore`
+              try {
+                const { fsReadFile } = await import('@/lib/fs')
+                const f = await fsReadFile(path).catch(() => ({ content: '' }))
+                window.dispatchEvent(
+                  new CustomEvent('everyaios:open-file', { detail: { path, content: f.content } }),
+                )
+                st.setActiveView('code')
+              } catch (e) {
+                notify(e instanceof Error ? e.message : 'Could not open the ignore file', 'error')
+              }
+            })()
+          }
+        >
           Edit ignore
         </Button>
       </Row>
@@ -488,7 +537,12 @@ export function IndexingSection() {
         </Select>
       </Row>
       <Row label="Docs for AI Q&A" desc="URL or local upload as extra context">
-        <Button size="sm" className="h-7 bg-orange-500 text-black hover:bg-orange-400" onClick={() => notify('Add docs — retrieval index exists; this picker is chrome')}>
+        <Button
+          size="sm"
+          className="h-7 bg-orange-500 text-black hover:bg-orange-400"
+          disabled
+          title="Document ingestion for retrieval lands with the P20 index — not wired yet"
+        >
           <Plus className="h-3.5 w-3.5" /> Add docs
         </Button>
       </Row>
@@ -496,66 +550,10 @@ export function IndexingSection() {
   )
 }
 
-const MCP_DIRECTORY = [
-  { mark: 'G', name: 'GitHub', desc: 'Issues, PRs, file ops — user-supplied official server', kind: 'Local' },
-  { mark: 'P', name: 'Postgres', desc: 'Read-only SQL inspect', kind: 'Local' },
-  { mark: 'F', name: 'Filesystem', desc: 'Path-floored workspace files', kind: 'Native' },
-  { mark: 'S', name: 'Slack', desc: 'Channels + search — user-supplied', kind: 'HTTP' },
-  { mark: 'C', name: 'Chrome DevTools', desc: 'Page debug over CDP', kind: 'Local' },
-]
-
-export function McpMarketSection() {
-  const [q, setQ] = useState('')
-  const notify = useAppStore((s) => s.notify)
-  const notifyMcpError = useAppStore((s) => s.notifyMcpError)
-  const rows = useMemo(
-    () => MCP_DIRECTORY.filter((r) => r.name.toLowerCase().includes(q.toLowerCase())),
-    [q],
-  )
-  return (
-    <SectionShell
-      title="MCP"
-      desc="User-supplied servers + the inbuilt 42-tool catalog. We do not bundle third-party MCP binaries."
-      action={
-        <Button size="sm" className="h-7 bg-orange-500 text-black hover:bg-orange-400" onClick={() => notify('Add MCP — stdio command or HTTP URL. Attach is P6.6 crate; this form is chrome.')}>
-          <Plus className="h-3.5 w-3.5" /> Add
-        </Button>
-      }
-    >
-      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search directory…" className="h-8 text-xs" />
-      <ul className="space-y-1.5">
-        {rows.map((r) => (
-          <li key={r.name} className="flex items-center gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-orange-500/15 font-mono text-[11px] font-bold text-orange-300">
-              {r.mark}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-xs font-medium">
-                {r.name}
-                <Badge variant="secondary" className="text-[8px]">{r.kind}</Badge>
-              </div>
-              <p className="truncate text-[10px] text-muted-foreground">{r.desc}</p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-[10px]"
-              onClick={() => {
-                notify(`Queued attach for ${r.name}`)
-                notifyMcpError(`${r.name} is not running — start the user-supplied server, then retry. MCP is the connector platform; we do not host it.`)
-              }}
-            >
-              +
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <div className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center text-[11px] text-muted-foreground">
-        No extra servers attached. Empty MCP is a valid state.
-      </div>
-    </SectionShell>
-  )
-}
+// P50.2.6 — removed: McpMarketSection + MCP_DIRECTORY (static 5-row catalog
+// with a fake attach). The MCP surface is the live Connectors panel
+// (vault OAuth + attached servers + store catalog); the settings MCP route
+// renders it (see settings-panel SectionBody).
 
 const PLUGIN_CATS = ['Featured', 'Code review', 'Coding', 'Database', 'Design', 'DevOps', 'Knowledge', 'Workflow', 'Installed']
 
@@ -567,7 +565,13 @@ export function MarketplaceSection() {
       title="Marketplace"
       desc="Plugins that bundle MCPs, skills, and agents. Installed list is empty until you add one."
       action={
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Create plugin — P7.3 ABI exists; wizard is chrome')}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-[10px]"
+          disabled
+          title="Plugin authoring lands with the post-v1 marketplace fetch — not wired yet"
+        >
           Create plugin
         </Button>
       }
@@ -597,7 +601,12 @@ export function MarketplaceSection() {
           <div key={p.name} className="rounded-md border border-border/50 bg-background/30 p-3">
             <div className="text-xs font-medium">{p.name}</div>
             <p className="mt-1 text-[10px] text-muted-foreground">{p.desc}</p>
-            <Button size="sm" className="mt-2 h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400" onClick={() => notify(`Install “${p.name}” — marketplace fetch not wired; skill_store can load a local SKILL.md`)}>
+            <Button
+              size="sm"
+              className="mt-2 h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400"
+              disabled
+              title="Marketplace fetch is not wired — skill_store loads local SKILL.md files (see Skills)"
+            >
               Install
             </Button>
           </div>
@@ -645,10 +654,47 @@ export function ExpertsSection() {
       <div className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center">
         <div className="text-xs text-muted-foreground">No custom expert yet</div>
         <div className="mt-2 flex justify-center gap-2">
-          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Import agent bundle — P31 chrome')}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[10px]"
+            onClick={() =>
+              void (async () => {
+                const st = useAppStore.getState()
+                if (!inTauri()) {
+                  notify('Bundle import needs the Tauri shell', 'error')
+                  return
+                }
+                try {
+                  const { open } = await import('@tauri-apps/plugin-dialog')
+                  const picked = await open({
+                    multiple: false,
+                    title: 'Import an agent bundle (agent.toml)',
+                    filters: [{ name: 'Agent bundle', extensions: ['toml'] }],
+                  })
+                  if (typeof picked !== 'string') return
+                  const { fsReadFile } = await import('@/lib/fs')
+                  const { agentRegistrySave } = await import('@/lib/agent-registry')
+                  const f = await fsReadFile(picked)
+                  if (f.binary) {
+                    notify('That file is binary — pick an agent.toml', 'error')
+                    return
+                  }
+                  const id = await agentRegistrySave(f.content)
+                  notify(`Imported agent bundle as “${id}”`)
+                } catch (e) {
+                  notify(e instanceof Error ? e.message : 'Import failed', 'error')
+                }
+              })()
+            }
+          >
             Import
           </Button>
-          <Button size="sm" className="h-7 bg-orange-500 text-[10px] text-black hover:bg-orange-400" onClick={() => notify('New expert — B9 builder not wired from this screen')}>
+          <Button
+            size="sm"
+            className="h-7 bg-orange-500 text-[10px] text-black hover:bg-orange-400"
+            onClick={() => useAppStore.getState().setCenterScreen('agents')}
+          >
             + New
           </Button>
         </div>
@@ -657,47 +703,10 @@ export function ExpertsSection() {
   )
 }
 
-export function SkillsSection() {
-  const notify = useAppStore((s) => s.notify)
-  const [q, setQ] = useState('')
-  const [on, setOn] = usePref<Record<string, boolean>>('skills.toggle', {})
-  const rows: { id: string; name: string; desc: string }[] = []
-  const visible = rows.filter((r) => r.name.includes(q.toLowerCase()) || r.desc.toLowerCase().includes(q.toLowerCase()))
-  return (
-    <SectionShell
-      title="Skills"
-      desc="Workspace and personal skills. Enabled skills can be @-mentioned in chat."
-      action={
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Sync skills from this machine — skill_store scan exists; this button is chrome')}>
-          Sync from this machine
-        </Button>
-      }
-    >
-      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills…" className="h-8 text-xs" />
-      {visible.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border/60 px-3 py-8 text-center text-[11px] text-muted-foreground">
-          No skills installed. Drop a folder with SKILL.md, or install from Marketplace.
-        </div>
-      ) : (
-        <ul className="space-y-1">
-          {visible.map((r) => (
-            <li key={r.id} className="flex items-center gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <div className="font-mono text-[11px]">{r.name}</div>
-                <p className="truncate text-[10px] text-muted-foreground">{r.desc}</p>
-              </div>
-              <Badge variant="secondary" className="text-[8px]">Personal</Badge>
-              <Switch
-                checked={!!on[r.id]}
-                onCheckedChange={(v) => setOn({ ...on, [r.id]: v })}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-    </SectionShell>
-  )
-}
+// P50.2.x — removed: SkillsSection (always-empty `rows = []` plus a sync
+// toast). The skills surface is the live SkillsPanel (signed store
+// install/uninstall); the settings skills route renders it (see
+// settings-panel SectionBody).
 
 export function LaunchCliSection() {
   const notify = useAppStore((s) => s.notify)
@@ -758,7 +767,13 @@ export function CommandsSection() {
         </Button>
       </div>
       <Row label="CUE / tray shortcuts" desc="Tab to accept, import, rename">
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Tray shortcuts — OS tray is a General toggle; CUE rename is chrome')}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-[10px]"
+          disabled
+          title="Tray shortcut editing lands with the OS-tray runner — not wired yet"
+        >
           Edit tray
         </Button>
       </Row>
@@ -775,7 +790,12 @@ export function HooksSection() {
       title="Hooks"
       desc="Task-lifecycle commands. PreToolUse may deny only — it cannot skip a Guard-2 ticket."
       action={
-        <Button size="sm" className="h-7 bg-orange-500 text-black hover:bg-orange-400" onClick={() => notify(name ? `Hook “${name}” on ${event} — I6 executor hooks specified, not a live shell runner from this form` : 'Name the hook first')}>
+        <Button
+          size="sm"
+          className="h-7 bg-orange-500 text-black hover:bg-orange-400"
+          disabled
+          title="Hook execution lands with the I6 runner — the event/command form above is the staged surface"
+        >
           <Plus className="h-3.5 w-3.5" /> Add hook
         </Button>
       }
@@ -857,83 +877,56 @@ export function CloudEnvSection() {
           </SelectContent>
         </Select>
       </Row>
-      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Cloud env pull — not a founder-hosted runtime; BYO image only')}>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-[10px]"
+        disabled
+        title="Remote package pull is not built — local-first default is this machine"
+      >
         Pull package
       </Button>
     </SectionShell>
   )
 }
 
-const MIGRATE_FROM = ['Claude', 'Codex', 'OpenCode', 'Qwen', 'Cursor', 'VS Code']
+// P50.2.x — removed: ImportSection (six buttons whose parsers were never
+// built — every click ended in an error toast). Migration import returns
+// with the parser backend; until then the route falls back to General
+// (see settings-panel SectionBody).
 
-export function ImportSection() {
-  const notify = useAppStore((s) => s.notify)
-  const notifyMcpError = useAppStore((s) => s.notifyMcpError)
-  return (
-    <SectionShell title="Import & migrate" desc="Bring sessions, skills, MCP, commands, and AGENTS.md from another tool">
-      <div className="grid gap-2 sm:grid-cols-2">
-        {MIGRATE_FROM.map((src) => (
-          <button
-            key={src}
-            type="button"
-            onClick={() => {
-              notify(`Scan ${src} history on this machine`)
-              notifyMcpError(`Failed to read ${src} native history: workspace disconnected or path not found. Scan is chrome; parsers are not built.`)
-            }}
-            className="rounded-md border border-border/50 bg-background/30 px-3 py-2 text-left text-xs hover:border-orange-500/40"
-          >
-            From {src}
-          </button>
-        ))}
-      </div>
-      <ol className="list-decimal space-y-1 pl-4 text-[10px] text-muted-foreground">
-        <li>Sessions</li>
-        <li>Skills</li>
-        <li>MCP servers</li>
-        <li>Commands</li>
-        <li>AGENTS.md</li>
-        <li>Migration</li>
-      </ol>
-      <Row label="Import IDE config" desc="Extensions, settings, keybindings from VS Code or Cursor. Overwrites current and cannot be undone.">
-        <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('Import config — not wired; would overwrite')}>
-          Import
-        </Button>
-      </Row>
-    </SectionShell>
-  )
-}
-
-export function UsageSection() {
-  return (
-    <SectionShell title="Usage" desc="Local spend this month. Zeros until the ledger has a consumer in this profile.">
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          ['Requests', '0'],
-          ['Tokens', '0'],
-          ['USD', '$0.00'],
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-md border border-border/50 bg-background/30 px-3 py-3">
-            <div className="text-[10px] text-muted-foreground">{k}</div>
-            <div className="font-mono text-sm text-orange-300">{v}</div>
-          </div>
-        ))}
-      </div>
-      <p className="text-[10px] text-muted-foreground">No hosted plan quotas. BYOK + local only.</p>
-    </SectionShell>
-  )
-}
+// P50.2.x — removed: UsageSection (static Requests/Tokens/USD zeros that
+// duplicated AnalyticsPanel + UxMetricsSection). The usage route renders the
+// live UxMetricsSection (see settings-panel SectionBody).
 
 export function ResourcesSection() {
   const notify = useAppStore((s) => s.notify)
+  const [disk, setDisk] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const { doctorReport } = await import('@/lib/doctor')
+        const report = await doctorReport()
+        const diskCheck = report.checks.find((c) => c.name.toLowerCase().includes('disk'))
+        if (alive) setDisk(diskCheck?.detail ?? null)
+      } catch {
+        if (alive) setDisk(null)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
   return (
-    <SectionShell title="Resources" desc="CPU, memory, disk for this process. AI diagnose is a button, not a live profiler.">
+    <SectionShell title="Resources" desc="Disk from the Doctor report. Process CPU/memory are not sampled in this build.">
       <div className="grid gap-2 sm:grid-cols-3">
         {([
-          { label: 'CPU', val: '—', Icon: Cpu },
-          { label: 'Memory', val: '—', Icon: Radio },
-          { label: 'Disk', val: '—', Icon: HardDrive },
-        ]).map(({ label, val, Icon }) => (
-            <div key={label} className="rounded-md border border-border/50 bg-background/30 px-3 py-3">
+          { label: 'CPU', val: '—', Icon: Cpu, title: 'Process CPU is not sampled in this build' },
+          { label: 'Memory', val: '—', Icon: Radio, title: 'Process memory is not sampled in this build' },
+          { label: 'Disk', val: disk ?? '—', Icon: HardDrive, title: 'From the Doctor disk check' },
+        ]).map(({ label, val, Icon, title }) => (
+            <div key={label} className="rounded-md border border-border/50 bg-background/30 px-3 py-3" title={title}>
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                 <Icon className="h-3 w-3" /> {label}
               </div>
@@ -941,8 +934,13 @@ export function ResourcesSection() {
             </div>
         ))}
       </div>
-      <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => notify('AI diagnose — rss_measure crate exists; this panel does not sample live')}>
-        AI diagnose
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-[10px]"
+        onClick={() => useAppStore.getState().setSettingsSection('doctor')}
+      >
+        Open Doctor
       </Button>
     </SectionShell>
   )
@@ -950,13 +948,14 @@ export function ResourcesSection() {
 
 export function BetaSection() {
   const [beta, setBeta] = usePref('beta.on', false)
+  const [solo, setSolo] = usePref('beta.solo', false)
   return (
     <SectionShell title="Beta" desc="Preview flags. Off by default.">
       <Row label="Beta channel">
         <Switch checked={beta} onCheckedChange={setBeta} />
       </Row>
-      <Row label="SOLO / unattended long jobs" desc="Keep running when the window is in the tray">
-        <Switch />
+      <Row label="SOLO / unattended long jobs" desc="Preference only — tray keep-alive is not enforced yet">
+        <Switch checked={solo} onCheckedChange={setSolo} />
       </Row>
     </SectionShell>
   )
@@ -966,7 +965,7 @@ export function CustomProvidersBlock() {
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [key, setKey] = useState('')
-  const [fmt, setFmt] = useState('openai')
+  const [busy, setBusy] = useState(false)
   const notify = useAppStore((s) => s.notify)
   return (
     <div className="mt-4 space-y-2 rounded-md border border-border/50 bg-background/20 p-3">
@@ -974,26 +973,49 @@ export function CustomProvidersBlock() {
         <Sparkles className="h-3.5 w-3.5 text-orange-400" />
         Add custom provider
       </div>
-      <p className="text-[10px] text-muted-foreground">Name, base URL, key, wire format. Key stays in the vault when Tauri is live; this form is the chrome.</p>
+      <p className="text-[10px] text-muted-foreground">
+        Stores the key in the vault under a slugged provider id (OpenAI-compatible transports).
+        A custom base-URL override applies once user-config provider IPC lands — until then the
+        known endpoint for that provider is used.
+      </p>
       <div className="grid gap-2 sm:grid-cols-2">
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. DeepSeek)" className="h-8 text-xs" />
         <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://api.example.com/v1" className="h-8 font-mono text-xs" />
         <Input value={key} onChange={(e) => setKey(e.target.value)} type="password" placeholder="API key" className="h-8 font-mono text-xs" />
-        <Select value={fmt} onValueChange={setFmt}>
-          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="openai">OpenAI /v1/chat/completions</SelectItem>
-            <SelectItem value="anthropic">Anthropic /v1/messages</SelectItem>
-            <SelectItem value="compat">OpenAI-compat</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
       <Button
         size="sm"
         className="h-7 bg-orange-500 text-black hover:bg-orange-400"
-        onClick={() => notify(name && url ? `Provider “${name}” saved locally — vault write needs Tauri` : 'Name and base URL required')}
+        disabled={busy}
+        onClick={() =>
+          void (async () => {
+            if (!name.trim() || !url.trim() || !key) {
+              notify('Name, base URL, and key are all required', 'error')
+              return
+            }
+            if (!inTauri()) {
+              notify('Custom providers need the Tauri shell (vault write)', 'error')
+              return
+            }
+            setBusy(true)
+            try {
+              const { invoke } = await import('@/lib/tauri')
+              const provider = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+              await invoke('vault_key_add', { provider, keyId: 'default', value: key })
+              useAppStore.getState().setProviderKeysConfigured(true)
+              setName('')
+              setUrl('')
+              setKey('')
+              notify(`Stored key for custom provider “${provider}” in the vault`)
+            } catch (e) {
+              notify(e instanceof Error ? e.message : 'Custom provider save failed', 'error')
+            } finally {
+              setBusy(false)
+            }
+          })()
+        }
       >
-        Add provider
+        {busy ? 'Saving…' : 'Add provider'}
       </Button>
     </div>
   )

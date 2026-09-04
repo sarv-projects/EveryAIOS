@@ -11,13 +11,20 @@ import {
   AGENTS,
   formatContext,
   formatPrice,
-  getModelsForAgent,
+  getModelsForAgentLive,
+  isRuntimeUsable,
   CAPABILITY_LABELS,
   type AgentRuntime,
 } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 import { ensureLocal, listLocalModels, type LocalModelRow } from '@/lib/local-models'
-import { chiefDefaultGet, chiefDefaultSet, governanceLabel } from '@/lib/acp'
+import {
+  acpIdFor,
+  chiefDefaultGet,
+  chiefDefaultSet,
+  governanceLabel,
+} from '@/lib/acp'
+import { refreshAgentCatalog } from '@/lib/bridge'
 
 function StatusDot({ status }: { status: AgentRuntime['status'] }) {
   const tone =
@@ -68,6 +75,7 @@ export default function AgentModelPicker({ compact }: Props) {
   const [connecting, setConnecting] = useState(false)
   const [connected, setConnected] = useState<string | null>(null)
   const [localRows, setLocalRows] = useState<LocalModelRow[]>([])
+  const [localErr, setLocalErr] = useState<string | null>(null)
   const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
   const [auth, setAuth] = useState<{
     handle: string
@@ -149,11 +157,14 @@ export default function AgentModelPicker({ compact }: Props) {
 
   // F8 — plan-before-touch install: request (Guard-2 ticket or auto-allow),
   // then commit. The approved card shows in the transcript via the bridge.
+  // The ACP registry keys agents by registry id (`claude`), while this picker
+  // row carries the catalog id (`claude-code`) — always translate.
   const installAgent = async (agentId: string) => {
     setInstalling(true)
     try {
       const { acpInstallRequest, acpInstallCommit } = await import('@/lib/acp')
-      const req = await acpInstallRequest(agentId)
+      const rid = acpIdFor(agentId)
+      const req = await acpInstallRequest(rid)
       const cmd = (req.exactCommand ?? []).join(' ')
       if (req.consentRequired && cmd) {
         const ok = window.confirm(
@@ -166,8 +177,11 @@ export default function AgentModelPicker({ compact }: Props) {
       }
       if (req.action === 'allow') {
         // Auto-allowed still consumes its pre-approved single-use ticket.
-        await acpInstallCommit(agentId, req.ticketId)
+        await acpInstallCommit(rid, req.ticketId)
         notify(`${agent?.name} installed — pick it and send`)
+        // Re-run discovery so the row flips to installed (installer record
+        // now exists; PATH probe also sees the fresh binary).
+        void refreshAgentCatalog().catch(() => {})
         setOpen(false)
       } else {
         notify(`Approval needed — Guard-2 card #${req.ticketId.slice(0, 8)} is in the chat`)
@@ -186,7 +200,8 @@ export default function AgentModelPicker({ compact }: Props) {
     setAuth(null)
     try {
       const { acpLaunch } = await import('@/lib/acp')
-      const info = await acpLaunch(agentId, activeFolder ?? '~')
+      // Registry id, not the picker's catalog id (claude-code → claude).
+      const info = await acpLaunch(acpIdFor(agentId), activeFolder ?? '~')
       if (!info.authRequired || info.authMethods.length === 0) {
         setConnected(info.handle)
         notify(`${agent?.name} connected (${info.handle.slice(0, 8)}…)`)
@@ -223,9 +238,16 @@ export default function AgentModelPicker({ compact }: Props) {
   }
   useEffect(() => {
     if (!open) return
+    setLocalErr(null)
     void listLocalModels()
-      .then((r) => setLocalRows(r.models ?? []))
-      .catch(() => setLocalRows([]))
+      .then((r) => {
+        setLocalRows(r.models ?? [])
+        setLocalErr(null)
+      })
+      .catch((e) => {
+        setLocalRows([])
+        setLocalErr(e instanceof Error ? e.message : 'Local probe failed')
+      })
   }, [open])
 
   // P50.3.6 — when auto-route is on, consult the live routing feed
@@ -248,8 +270,14 @@ export default function AgentModelPicker({ compact }: Props) {
     }
   }, [open, autoRoute])
 
-  const model = getModelsForAgent(selectedAgentId).find((m) => m.id === selectedModelId)
-  const models = getModelsForAgent(selectedAgentId)
+  const model = getModelsForAgentLive(selectedAgentId, liveAgents).find(
+    (m) => m.id === selectedModelId,
+  )
+  const models = getModelsForAgentLive(selectedAgentId, liveAgents)
+  const agentUsable = isRuntimeUsable(
+    liveAgents.find((a) => a.id === selectedAgentId) ??
+      catalog.find((a) => a.id === selectedAgentId),
+  )
 
   const agentList = catalog
 
@@ -447,9 +475,11 @@ export default function AgentModelPicker({ compact }: Props) {
                   <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
                     Models for {agent.name}
                   </div>
-                  <div className="font-mono text-[9px] text-muted-foreground/60">
-                    {models.length} available
-                  </div>
+                  {models.length > 0 && (
+                    <div className="font-mono text-[9px] text-muted-foreground/60">
+                      {models.length} available
+                    </div>
+                  )}
                 </div>
 
                 {/* Agent capabilities strip */}
@@ -464,6 +494,22 @@ export default function AgentModelPicker({ compact }: Props) {
                     </Badge>
                   ))}
                 </div>
+
+                {models.length === 0 && agentUsable && (
+                  <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
+                    No curated model list for this runtime yet — {agent.name} drives its own
+                    models internally. Turn on <span className="text-orange-300">Auto-route by task</span>{' '}
+                    (below) and EveryAIOS picks the best provider per turn.
+                  </div>
+                )}
+
+                {models.length === 0 && !agentUsable && (
+                  <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
+                    {agent.name} is not installed — its model list loads live after
+                    install. Use <span className="text-orange-300">Install</span> below,
+                    then pick a model.
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   {models.map((m) => {
@@ -591,6 +637,11 @@ export default function AgentModelPicker({ compact }: Props) {
                     </div>
                   </>
                 )}
+                    {localErr && localRows.length === 0 && (
+                      <p className="px-1 pb-1 text-[9px] text-amber-300">
+                        Local probe failed: {localErr}
+                      </p>
+                    )}
                     {localRows.length === 0 && (
                       <button
                         type="button"
@@ -659,7 +710,12 @@ export default function AgentModelPicker({ compact }: Props) {
 
                 <div className="mt-1.5 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
                   <Sparkles className="h-2.5 w-2.5" />
-                  Selected: {agent.name} · {model?.label ?? '—'}
+                  Selected: {agent.name} ·{' '}
+                  {!agentUsable
+                    ? 'not installed'
+                    : models.length === 0
+                      ? 'auto (runtime-driven)'
+                      : (model?.label ?? '—')}
                 </div>
 
                 {/* Install + connect (F8/J17) — one click, then use */}

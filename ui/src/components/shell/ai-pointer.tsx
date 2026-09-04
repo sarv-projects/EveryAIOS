@@ -28,27 +28,26 @@ export function AiPointer() {
     }
   }, [open])
 
-  // ⌥Space toggles (registered here as a backup; the shortcuts handler also
-  // wires it for the catalog listing).
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.altKey && e.code === 'Space') {
-        e.preventDefault()
-        setOpen(!useAppStore.getState().aiPointerOpen)
-      }
-      if (e.key === 'Escape' && useAppStore.getState().aiPointerOpen) {
-        setOpen(false)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [setOpen])
+  // ⌥Space / Escape are owned by the global shortcuts handler
+  // (`keyboard-shortcuts.tsx`), which is the single listener for this box.
+  // (A duplicate local listener used to double-toggle the open state.)
 
+  const [sending, setSending] = useState(false)
   const send = async () => {
     const t = text.trim()
-    if (!t) return
-    setOpen(false)
-    await sendUserMessage(t)
+    if (!t || sending) return
+    setSending(true)
+    try {
+      setOpen(false)
+      await sendUserMessage(t)
+    } catch (e) {
+      useAppStore.getState().notify(
+        e instanceof Error ? e.message : 'Quick ask failed',
+        'error',
+      )
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -93,8 +92,8 @@ export function AiPointer() {
               <span className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground/50">
                 <CornerDownRight className="h-2.5 w-2.5" /> Enter to ask · ⇧Enter newline
               </span>
-              <Button size="sm" className="h-6 gap-1 px-2 text-[10px]" onClick={() => void send()}>
-                <Send className="h-3 w-3" /> Ask
+              <Button size="sm" className="h-6 gap-1 px-2 text-[10px]" disabled={sending || !text.trim()} onClick={() => void send()}>
+                <Send className="h-3 w-3" /> {sending ? 'Asking…' : 'Ask'}
               </Button>
             </div>
           </div>

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -10,7 +9,6 @@ import { BarChart3, Coins, Cpu, DollarSign, Layers, Timer } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
 import { usageSnapshot, sessionTotals } from '@/lib/spend'
@@ -52,10 +50,10 @@ const TOOLTIP_STYLE = {
 }
 
 export default function AnalyticsPanel() {
-  const [range, setRange] = useState('30d')
   const notify = useAppStore((s) => s.notify)
   const [live, setLive] = useState<{ spent: number; tokens: number; sessions: number } | null>(null)
   const [liveError, setLiveError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   useEffect(() => {
     if (!inTauri()) return
     let active = true
@@ -70,6 +68,44 @@ export default function AnalyticsPanel() {
     return () => { active = false }
   }, [])
 
+  const exportCsv = () => {
+    void (async () => {
+      setExporting(true)
+      try {
+        const rows = await sessionTotals()
+        if (rows.length === 0) {
+          notify('No ledger rows to export yet')
+          return
+        }
+        const csv = [
+          'session,tokens_in,tokens_out,cost_usd',
+          ...rows.map((r) => `${JSON.stringify(r.session)},${r.tokensIn},${r.tokensOut},${r.cost.toFixed(4)}`),
+        ].join('\n')
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'session-usage.csv'
+        a.click()
+        URL.revokeObjectURL(url)
+        notify(`Exported ${rows.length} ledger rows`)
+      } catch (e) {
+        notify(e instanceof Error ? e.message : 'CSV export failed', 'error')
+      } finally {
+        setExporting(false)
+      }
+    })()
+  }
+
+  const kpis = live
+    ? [
+        { label: 'Total spent', value: `$${live.spent.toFixed(2)}`, icon: DollarSign, tone: 'text-orange-300' },
+        { label: 'Tokens used', value: live.tokens >= 1_000_000 ? `${(live.tokens / 1_000_000).toFixed(1)}M` : `${Math.round(live.tokens / 1000)}K`, icon: Cpu, tone: 'text-sky-300' },
+        { label: 'Sessions', value: String(live.sessions), icon: Layers, tone: 'text-foreground' },
+        { label: 'Avg cost/session', value: live.sessions > 0 ? `$${(live.spent / live.sessions).toFixed(2)}` : '—', icon: Timer, tone: 'text-emerald-300' },
+      ]
+    : KPIS
+
   return (
     <div className="flex h-full w-full flex-col">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -77,36 +113,28 @@ export default function AnalyticsPanel() {
           <BarChart3 className="h-4 w-4 text-orange-400" />
           <h2 className="text-sm font-semibold text-foreground">Analytics</h2>
           <Badge variant="secondary" className="text-[9px]">token &amp; cost</Badge>
+          {inTauri() ? (
+            live ? (
+              <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">live ledger</Badge>
+            ) : liveError ? (
+              <Badge className="bg-rose-500/15 text-[9px] text-rose-300">ledger unavailable</Badge>
+            ) : null
+          ) : (
+            <Badge className="bg-orange-500/15 text-[9px] text-orange-300">sample data</Badge>
+          )}
         </div>
-        <Tabs value={range} onValueChange={setRange}>
-          <TabsList className="h-7">
-            <TabsTrigger value="today" className="text-xs">Today</TabsTrigger>
-            <TabsTrigger value="7d" className="text-xs">7d</TabsTrigger>
-            <TabsTrigger value="30d" className="text-xs">30d</TabsTrigger>
-            <TabsTrigger value="all" className="text-xs">All time</TabsTrigger>
-          </TabsList>
-        </Tabs>
       </header>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-        <AnimatePresence mode="wait">
-        <motion.div
-          key={range}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-          className="space-y-4 p-4"
-        >
-          {inTauri() ? (
+        <div className="space-y-4 p-4">
+          {inTauri() && !live && (
             <div className="rounded-lg border border-dashed border-border bg-card p-4 text-xs text-muted-foreground">
-              {live ? `Live ledger: $${live.spent.toFixed(2)} · ${live.tokens.toLocaleString()} tokens · ${live.sessions} sessions.` : liveError ? `Live ledger unavailable — ${liveError}` : 'Loading live analytics from the encrypted usage ledger…'}
+              {liveError ? `Live ledger unavailable — ${liveError}` : 'Loading live analytics from the encrypted usage ledger…'}
             </div>
-          ) : (
-          <>
-          {/* KPI cards */}
+          )}
+          {/* KPI cards — live ledger in the shell, labeled sample data in preview */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {KPIS.map((k) => {
+            {kpis.map((k) => {
               const Icon = k.icon
               return (
                 <div key={k.label} className="rounded-lg border border-border bg-card p-4">
@@ -120,10 +148,12 @@ export default function AnalyticsPanel() {
             })}
           </div>
 
-          {/* Main area chart */}
+          {!inTauri() && (
+          <>
+          {/* Sample charts — design preview only, never ledger data */}
           <ChartCard
             title="Daily spend"
-            subtitle="last 30 days · USD"
+            subtitle="sample data · design preview"
             right={<span className="font-mono text-xs text-orange-300">$5.42 total</span>}
           >
             <div className="chart-crossfade h-44 w-full">
@@ -144,9 +174,9 @@ export default function AnalyticsPanel() {
             </div>
           </ChartCard>
 
-          {/* Second row: tokens by model + cost donut */}
+          {/* Second row: tokens by model + cost donut (sample data) */}
           <div className="grid gap-3 lg:grid-cols-2">
-            <ChartCard title="Tokens by model" subtitle="last 30 days · K">
+            <ChartCard title="Tokens by model" subtitle="sample data · design preview">
               <div className="chart-crossfade h-40 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={TOKENS_BY_MODEL} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
@@ -159,7 +189,7 @@ export default function AnalyticsPanel() {
               </div>
             </ChartCard>
 
-            <ChartCard title="Cost by category" subtitle="share of spend">
+            <ChartCard title="Cost by category" subtitle="sample data · design preview">
               <div className="flex items-center gap-2">
                 <div className="h-32 w-1/2">
                   <ResponsiveContainer width="100%" height="100%">
@@ -195,22 +225,23 @@ export default function AnalyticsPanel() {
               <AgentBreakdown />
             </div>
           )}
-        </motion.div>
-        </AnimatePresence>
+        </div>
       </div>
 
       <footer className="flex items-center justify-between border-t border-border bg-card px-4 py-2">
         <span className="font-mono text-[10px] text-muted-foreground">
           <Coins className="mr-1 inline h-3 w-3" />
-          {inTauri() ? 'pricing metadata unavailable until the live provider registry responds' : 'preview pricing metadata'}
+          {inTauri() ? 'durable usage ledger · per-session aggregates' : 'preview pricing metadata'}
         </span>
         <Button
           size="sm"
           variant="outline"
           className="h-7 text-xs"
-          onClick={() => notify(inTauri() ? 'CSV export is not connected to the live ledger yet' : 'Exporting preview sessions.csv — 10 rows')}
+          disabled={exporting || !inTauri()}
+          title={inTauri() ? 'Download the live ledger as CSV' : 'CSV export needs the Tauri shell'}
+          onClick={exportCsv}
         >
-          Export CSV
+          {exporting ? 'Exporting…' : 'Export CSV'}
         </Button>
       </footer>
     </div>

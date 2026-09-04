@@ -199,7 +199,11 @@ export default function ArtifactView() {
             size="sm"
             variant="ghost"
             className="h-7 gap-1 px-2 text-[10px]"
-            onClick={() => notify('Preview opened in browser')}
+            disabled={artifactServer?.status !== 'serving' || !artifactServer?.url}
+            onClick={() => {
+              if (artifactServer?.url) window.open(artifactServer.url, '_blank', 'noopener')
+            }}
+            title={artifactServer?.status === 'serving' ? `Open ${artifactServer.url} in the browser` : 'Start serving first'}
           >
             <ExternalLink className="h-3 w-3" />
             Open

@@ -73,21 +73,18 @@ import {
   CommandsSection,
   ExpertsSection,
   HooksSection,
-  ImportSection,
   IndexingSection,
   LaunchCliSection,
   MarketplaceSection,
-  McpMarketSection,
   MobileSection,
   NotificationsSection,
-  PermissionsSection,
   ResourcesSection,
   RulesSection,
-  SkillsSection,
-  UsageSection,
   VoiceSection,
   WorktreeSection,
 } from './settings-sections-studio'
+import SkillsPanel from './skills-panel'
+import ConnectorsPanel from './connectors-panel'
 
 type SectionId = SettingsSectionId
 
@@ -150,7 +147,6 @@ const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: 
   {
     title: 'Developer',
     items: [
-      { id: 'import', label: 'Import & migrate', icon: Download },
       { id: 'usage', label: 'Usage', icon: Gauge },
       { id: 'ux', label: 'UX metrics', icon: Activity },
       { id: 'feedback', label: 'Feedback', icon: MessageSquareWarning },
@@ -189,17 +185,17 @@ function SectionBody({ section }: { section: SectionId }) {
     case 'chat':
       return <ChatAutoRunSection />
     case 'permissions':
-      return <PermissionsSection />
+      return <ChatAutoRunSection />
     case 'browser':
       return <BrowserNetworkSection />
     case 'indexing':
       return <IndexingSection />
     case 'mcp':
-      return <McpMarketSection />
+      return <ConnectorsPanel />
     case 'marketplace':
       return <MarketplaceSection />
     case 'skills':
-      return <SkillsSection />
+      return <SkillsPanel />
     case 'commands':
       return <CommandsSection />
     case 'hooks':
@@ -212,10 +208,8 @@ function SectionBody({ section }: { section: SectionId }) {
       return <MemoryPanel />
     case 'cloud':
       return <CloudEnvSection />
-    case 'import':
-      return <ImportSection />
     case 'usage':
-      return <UsageSection />
+      return <UxMetricsSection />
     case 'ux':
       return <UxMetricsSection />
     case 'feedback':
@@ -241,7 +235,7 @@ function SectionBody({ section }: { section: SectionId }) {
     case 'about':
       return <AboutSection />
     default:
-      return null
+      return <GeneralSection />
   }
 }
 

@@ -204,10 +204,16 @@ export function NotificationsPopover() {
 
   const markRead = (id: string) => {
     if (inTauri()) {
-      const { pushLiveNotification } = useAppStore.getState()
+      const st = useAppStore.getState()
       const item = liveItems.find((n) => n.id === id)
-      if (item && item.unread) {
-        pushLiveNotification({ ...item, unread: false })
+      if (item) {
+        if (item.unread) st.pushLiveNotification({ ...item, unread: false })
+        // Deep-link to the owning surface; the popover is a router, not a
+        // dead end.
+        if (item.source === 'Guard') st.setCenterScreen('guard')
+        else if (item.kind === 'cost') st.setCenterScreen('analytics')
+        else if (item.kind === 'error') st.setCenterScreen('chat')
+        setOpen(false)
       }
     } else {
       setPreviewItems((prev) =>
@@ -321,11 +327,26 @@ export function NotificationsPopover() {
 
           {/* Footer */}
           <div className="flex items-center justify-between border-t border-border/60 bg-background/30 px-3 py-1.5">
-            <button className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-orange-300">
+            <button
+              onClick={() => {
+                const st = useAppStore.getState()
+                st.setCenterScreen('settings')
+                st.setSettingsSection('notifications')
+                setOpen(false)
+              }}
+              className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-orange-300"
+            >
               <Zap className="h-3 w-3 text-orange-400" />
               {inTauri() ? 'Notification settings · live event stream' : 'Notification settings'}
             </button>
-            <button className="font-mono text-[10px] text-orange-300 transition-colors hover:text-orange-200">
+            <button
+              onClick={() => {
+                markAllRead()
+                useAppStore.getState().setCenterScreen('activity')
+                setOpen(false)
+              }}
+              className="font-mono text-[10px] text-orange-300 transition-colors hover:text-orange-200"
+            >
               View all activity →
             </button>
           </div>

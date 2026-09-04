@@ -104,6 +104,7 @@ export default function MemoryPanel() {
   const [skills, setSkills] = useState<SkillRowView[]>([])
   const [adding, setAdding] = useState(false)
   const [addText, setAddText] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
 
   // P50.2.2 — durable write: “Add knowledge” persists through `memory/write`
@@ -113,6 +114,19 @@ export default function MemoryPanel() {
     const text = addText.trim()
     if (!text) return
     const sessionId = useAppStore.getState().activeSessionId || 'default'
+    // Editing = forget the old row, then write the replacement below.
+    const editId = editingId
+    if (editId) {
+      setItems((prev) => prev.filter((i) => i.id !== editId))
+      if (inTauri()) {
+        try {
+          await memoryRequest('memory/forget', { id: editId })
+        } catch {
+          /* the replacement write below still lands; the old row may linger */
+        }
+      }
+      setEditingId(null)
+    }
     if (inTauri()) {
       try {
         const res = (await memoryRequest('memory/write', {
@@ -126,6 +140,22 @@ export default function MemoryPanel() {
         notify(e instanceof Error ? e.message : 'Memory write failed', 'error')
         return
       }
+    } else {
+      // Preview mirror: the fixture read never includes a new fact, so keep
+      // the local row the user just wrote.
+      setItems((prev) => [
+        ...prev,
+        {
+          id: `mem-${Date.now()}`,
+          title: text,
+          category: 'Project context',
+          trigger: 'manual',
+          macro: '',
+          scope: 'preview',
+          enabled: true,
+          source: 'manual' as const,
+        },
+      ])
     }
     setAddText('')
     setAdding(false)
@@ -135,6 +165,12 @@ export default function MemoryPanel() {
       .catch(() => {})
     void memoryEpisodes().then((e) => setLiveEpisodes(e.episodes)).catch(() => {})
     void memoryGraph().then(setLiveGraph).catch(() => {})
+  }
+
+  const startEdit = (id: string, title: string) => {
+    setEditingId(id)
+    setAddText(title)
+    setAdding(true)
   }
 
   // P5.22 — the knowledge/episodic/graph tabs read the live MemoryService
@@ -304,7 +340,8 @@ export default function MemoryPanel() {
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => notify(`${s.name} selected — ${storeSub(s.id)}`)}
+                  onClick={() => setTab(s.id)}
+                  aria-pressed={tab === s.id}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground/70 hover:bg-accent hover:text-foreground"
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0 text-orange-400/80" />
@@ -346,7 +383,8 @@ export default function MemoryPanel() {
                     size="sm"
                     variant="outline"
                     className="h-6 text-[10px]"
-                    onClick={() => notify('Generate wiki — retrieval exists; this write is not ticketed yet')}
+                    disabled
+                    title="Wiki generation from a folder is not built yet"
                   >
                     Generate
                   </Button>
@@ -366,7 +404,7 @@ export default function MemoryPanel() {
             {adding && (
               <section className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
                 <div className="mb-2 text-xs font-medium text-foreground">
-                  Add knowledge
+                  {editingId ? 'Edit knowledge' : 'Add knowledge'}
                   {inTauri() && (
                     <span className="ml-2 font-mono text-[9px] text-emerald-300">
                       memory/write → live store
@@ -382,6 +420,7 @@ export default function MemoryPanel() {
                       if (e.key === 'Escape') {
                         setAdding(false)
                         setAddText('')
+                        setEditingId(null)
                       }
                     }}
                     placeholder="A fact to remember…"
@@ -392,7 +431,7 @@ export default function MemoryPanel() {
                   <Button size="sm" className="h-8 bg-orange-500 text-black hover:bg-orange-400" onClick={() => void submitAdd()}>
                     Save
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8" onClick={() => { setAdding(false); setAddText('') }}>
+                  <Button size="sm" variant="outline" className="h-8" onClick={() => { setAdding(false); setAddText(''); setEditingId(null) }}>
                     Cancel
                   </Button>
                 </div>
@@ -424,7 +463,7 @@ export default function MemoryPanel() {
                     <KnowledgeCard
                       item={i}
                       onToggle={() => toggleItem(i.id)}
-                      onEdit={() => notify(`Edit knowledge “${i.title}” — opens the guarded memory editor`)}
+                      onEdit={() => startEdit(i.id, i.title)}
                       onDelete={() => dismiss(i.id)}
                     />
                   </div>

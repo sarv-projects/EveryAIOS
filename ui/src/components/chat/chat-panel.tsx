@@ -2,10 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import {
-  Archive,
   BarChart3,
   Bell,
-  Bookmark,
   ChevronRight,
   Clock,
   Copy,
@@ -42,7 +40,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useAppStore, type ProgressStep, type Session } from '@/lib/store'
+import { useAppStore, streamElapsedMs, sessionTranscriptMarkdown, type ProgressStep, type Session } from '@/lib/store'
 import { inTauri, invoke } from '@/lib/tauri'
 import { AGENT_MAP, MODEL_MAP } from '@/lib/agents'
 import {
@@ -94,11 +92,9 @@ const MENU_ITEMS: {
 }[] = [
   { icon: Pencil, label: 'Rename', shortcut: '⌘R' },
   { icon: Pin, label: 'Pin to top' },
-  { icon: Bookmark, label: 'Bookmark' },
   { icon: GitBranch, label: 'Fork session' },
   { icon: Copy, label: 'Copy transcript' },
   { icon: Download, label: 'Export', shortcut: '⌘E' },
-  { icon: Archive, label: 'Archive' },
   { icon: Trash2, label: 'Clear messages', destructive: true },
 ]
 
@@ -126,14 +122,21 @@ function deriveNowDoing(session: Session | undefined) {
   const steps: ProgressStep[] = withSteps.steps
   const idx = steps.findIndex((s) => s.status === 'active')
   if (idx < 0) return null
+  // Live figures: the turn clock + token counter from the streaming store.
+  // Zero/idle reads mean "just started", never a hardcoded demo figure.
+  const st = useAppStore.getState()
   return {
     title: steps[idx].label,
     detail: steps[idx].detail,
     stepIndex: idx + 1,
     stepTotal: steps.length,
-    elapsedMs: 1200,
-    tokensThisTurn: 12_000,
+    elapsedMs: streamElapsedMs(),
+    tokensThisTurn: st.streamStats.tokensThisTurn,
   }
+}
+
+function transcriptMarkdown(session: Session): string {
+  return sessionTranscriptMarkdown(session)
 }
 
 export default function ChatPanel() {
@@ -167,6 +170,83 @@ export default function ChatPanel() {
   const showStrip =
     !!nowDoing &&
     (activeSession?.status === 'running' || activeSession?.status === 'action-required')
+
+  // Session ⋯ menu: every row does its named thing. Rename prompts inline,
+  // Copy/Export use the real transcript, Fork duplicates into a new session,
+  // Clear empties the transcript (the session survives). No placeholder rows.
+  const onMenuAction = (label: string) => {
+    const st = useAppStore.getState()
+    const sid = st.activeSessionId
+    const sess = st.sessions.find((s) => s.id === sid)
+    if (!sess) {
+      notify('No active session', 'error')
+      return
+    }
+    switch (label) {
+      case 'Rename': {
+        const next = window.prompt('Rename session', sess.title)
+        if (next !== null) st.renameSession(sid, next)
+        break
+      }
+      case 'Pin to top':
+        st.toggleSessionPinned(sid)
+        notify(sess.pinned ? 'Unpinned from top' : 'Pinned to top')
+        break
+      case 'Fork session': {
+        const nid = st.forkSession(sid)
+        notify(nid ? 'Forked into a new session' : 'Fork failed — session not found', nid ? 'default' : 'error')
+        break
+      }
+      case 'Copy transcript':
+        void navigator.clipboard
+          ?.writeText(transcriptMarkdown(sess))
+          .then(() => notify('Transcript copied'))
+          .catch(() => notify('Copy failed — clipboard unavailable', 'error'))
+        break
+      case 'Export': {
+        const blob = new Blob([transcriptMarkdown(sess)], { type: 'text/markdown' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${sess.title.replace(/[^\w\- ]+/g, '').trim() || 'session'}.md`
+        a.click()
+        URL.revokeObjectURL(url)
+        notify('Transcript exported as Markdown')
+        break
+      }
+      case 'Clear messages':
+        if (window.confirm(`Clear all messages in “${sess.title}”? The session stays.`)) {
+          st.clearSessionMessages(sid)
+        }
+        break
+      default:
+        break
+    }
+  }
+
+  // ⌘F search / ⌘E export / ⌘R rename — the shortcuts printed in the menu.
+  // Skipped while typing in an input, except ⌘F (focuses search) and Escape.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      const el = document.activeElement
+      const typing = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+      const key = e.key.toLowerCase()
+      if (key === 'f') {
+        e.preventDefault()
+        setSearchOpen(true)
+      } else if (!typing && key === 'e') {
+        e.preventDefault()
+        onMenuAction('Export')
+      } else if (!typing && key === 'r') {
+        e.preventDefault()
+        onMenuAction('Rename')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.id])
 
   // Search state
   const [searchOpen, setSearchOpen] = useState(false)
@@ -257,7 +337,7 @@ export default function ChatPanel() {
           <div className="flex items-center gap-1 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 font-mono text-[10px] text-orange-300">
             <FileText className="h-3 w-3" />
             <span className="max-w-[140px] truncate">
-              Scoped to {scopedView === 'office-pdf' ? 'contract.pdf' : scopedView.replace('office-', '')}
+              Scoped to {store.scopedDoc?.title ?? (scopedView === 'office-pdf' ? 'open document' : scopedView.replace('office-', ''))}
             </span>
             <button
               onClick={() => setScopedView(undefined)}
@@ -291,7 +371,11 @@ export default function ChatPanel() {
             size="icon"
             variant="ghost"
             className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={() => notify('Session settings')}
+            onClick={() => {
+              store.setCenterScreen('settings')
+              store.setSettingsSection('chat')
+            }}
+            title="Chat & auto-run settings"
           >
             <Bell className="h-3.5 w-3.5" />
           </Button>
@@ -305,10 +389,10 @@ export default function ChatPanel() {
               <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">Session</DropdownMenuLabel>
               {MENU_ITEMS.map((item, i) => (
                 <span key={item.label}>
-                  {(i === 4 || i === 7) && <DropdownMenuSeparator />}
+                  {(i === 3 || i === 5) && <DropdownMenuSeparator />}
                   <DropdownMenuItem
                     variant={item.destructive ? 'destructive' : 'default'}
-                    onClick={() => notify(item.label)}
+                    onClick={() => onMenuAction(item.label)}
                   >
                     <item.icon className="h-3.5 w-3.5" />
                     {item.label}
@@ -611,7 +695,21 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
         })}
         <button
           type="button"
-          onClick={() => notify('Pick folder — native dialog needs Tauri; chrome only')}
+          onClick={() =>
+            void (async () => {
+              if (!inTauri()) {
+                notify('Folder picker needs the Tauri shell — type or pick Desktop / Documents for now')
+                return
+              }
+              try {
+                const { open } = await import('@tauri-apps/plugin-dialog')
+                const picked = await open({ directory: true, multiple: false, title: 'Pick a workspace folder' })
+                if (typeof picked === 'string') setTaskFolder(picked)
+              } catch (e) {
+                notify(e instanceof Error ? e.message : 'Folder picker failed', 'error')
+              }
+            })()
+          }
           className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2.5 py-1 text-[11px] text-muted-foreground hover:border-orange-500/40 hover:text-foreground"
         >
           <Folder className="h-3 w-3" />
