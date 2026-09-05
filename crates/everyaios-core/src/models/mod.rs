@@ -16,12 +16,20 @@
 //! - [`ModelsRuntime`] — bind a downloaded GGUF to a runtime (managed
 //!   llamafile serve, or `ollama create`), fail-closed when no runtime exists.
 
+pub mod best;
+pub mod cache;
+pub mod fit;
 pub mod hf;
 pub mod local_url;
+pub mod mlx;
 pub mod probe;
 pub mod store;
 
+pub use best::{best_variant, HwClass, VariantCandidate};
+pub use cache::{benchmark_from_samples, Benchmark, ModelCache};
+pub use fit::{estimate_fit, FitEstimate, FitTier, DEFAULT_QUANT};
 pub use hf::{HfClient, HfError, HfFile};
+pub use mlx::{mlx_quant_id, prefer_mlx, MlxServer};
 pub use local_url::{LocalUrl, LocalUrlError, LocalUrlResolver, ResolvedEndpoint};
 pub use probe::{
     discover_runtimes, find_runtime_processes, probe_hardware, probe_openai_endpoint,

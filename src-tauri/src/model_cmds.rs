@@ -445,3 +445,53 @@ pub fn model_serve(
 /// next to the commands).
 #[allow(dead_code)]
 fn _entry_shape(_e: &ModelEntry) {}
+
+/// P52.1 — dry-run fit estimate (no download): file GB + ctx tokens against
+/// live hardware. Returns the tier (fits/may_be_slow/wont_fit), the
+/// file/KV/total split, and the default quant. Nothing is downloaded.
+#[tauri::command]
+pub fn model_estimate_fit(
+    file_gb: f64,
+    ctx_tokens: u64,
+) -> Result<serde_json::Value, String> {
+    let hw = probe_hardware();
+    let ram_gb = hw.available_ram_bytes as f64 / 1_073_741_824.0;
+    let vram_gb = hw.gpu_vram_bytes.unwrap_or(0) as f64 / 1_073_741_824.0;
+    let est = everyaios_core::models::fit::estimate_fit(file_gb, ctx_tokens, ram_gb, vram_gb);
+    Ok(serde_json::json!({
+        "tier": est.tier,
+        "fileGb": est.file_gb,
+        "kvGb": est.kv_gb,
+        "totalGb": est.total_gb,
+        "ramGb": ram_gb,
+        "vramGb": vram_gb,
+        "defaultQuant": everyaios_core::models::fit::DEFAULT_QUANT,
+    }))
+}
+
+/// P52.2 — parse a LocalAI-style gallery `index.yaml` (no network, no
+/// install). Returns the index or a parse error.
+#[tauri::command]
+pub fn model_gallery_parse(yaml: String) -> Result<serde_json::Value, String> {
+    let index = everyaios_catalog::gallery::load_index_yaml(&yaml).map_err(|e| e.to_string())?;
+    serde_json::to_value(&index).map_err(|e| e.to_string())
+}
+
+/// P52.5 — pick the best weight build for this machine from a caller-supplied
+/// candidate list (`[{repo,file,hw,quant}]`, hw ∈ npu/gpu/cpu). Pure pick —
+/// download still goes through `model_download_start`.
+#[tauri::command]
+pub fn model_best_pick(
+    hw: String,
+    candidates: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let hw_class: everyaios_core::models::best::HwClass =
+        serde_json::from_value(serde_json::json!(hw)).map_err(|e| format!("bad hw: {e}"))?;
+    let list: Vec<everyaios_core::models::best::VariantCandidate> =
+        serde_json::from_value(candidates).map_err(|e| format!("bad candidates: {e}"))?;
+    Ok(
+        everyaios_core::models::best::best_variant(&hw_class, &list)
+            .map(|v| serde_json::to_value(v).unwrap_or(serde_json::Value::Null))
+            .unwrap_or(serde_json::Value::Null),
+    )
+}

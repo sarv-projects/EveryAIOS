@@ -64,3 +64,11 @@
 6. **Phase 5 (connectors):** Composio in-app per-user keys + MCP host
 7. **Phase 6 (automation):** tray → hybrid OS scheduling
 8. **Phase 7 (marketing):** "zero API key deep research" as the open-source hook
+
+---
+
+## ➕ 2026-09-04 addendum (doc 86, desktop_app/86-competitor-desktop-deep-dive-2026-09)
+
+Top new steals: **Jan fit-pill + quant tiers + pause/resume** (A5) · **Jan backend-store + OS keyring + migrate** (A BYOK) · **Cherry provider drawer** (rotation + Fetch + health + capability flags) · **Cherry artifact-pane routing** (P4) · **Hermes error cards** (layer-named + 5 matched actions) · **Hermes Bot=profile + namespaced-cron routines + typed-reason DMs** (B/P6) · **opencode always-patterns + compaction budget formula** (J/P5) · **OpenWorker risk×mode floors + MCP-EXTERNAL** (J) · **OpenClaw ledger+flows+push + acpx shape** (B/F — add the cost carrier they lack) · **Cowork 3-mode approvals + shared home** (H) · **OpenChamber goals + multi-run/fusion + per-session cost** (B) · **Zed tool_permissions schema** (H) · **Crush LSP + Catwalk** (F) · **Codex Seatbelt/bwrap profiles** (E).
+
+⚠️ License discipline (binding): Cherry = AGPL-3.0, Chatbox = GPL-3.0 (patterns only, never code); Crush = FSL-1.1-MIT, holaOS = Modified Apache 2.0, open-webui/computer = proprietary (observe only); opencode / open-cowork / hermes / AnythingLLM / Jan / OpenWorker / OpenChamber / OpenClaw = MIT-or-Apache (patterns OK with attribution).

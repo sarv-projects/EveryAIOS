@@ -116,7 +116,7 @@
 - `mcp-npx-resolution.test.ts` — MCP npx resolution
 - `artifact-icon.test.ts` — artifact management
 
-**Steal:** Sandboxed tool execution pattern, encrypted local store, scheduled task manager.
+**Steal:** sandboxed tool-execution composition (`isPathWithinRoot` + realpath double-check + command path extraction + argv exec) + scheduled-task slot logic + diagnostics `errorType→fix` codes. ⚠️ **Encrypted-store rotation scaffolding ONLY — its stable key is a hardcoded string and keychain integration was REMOVED upstream (v3.3.0); our key MUST be OS-keychain-bound** (doc 86). Sandbox is default-off host-exec + opt-in VM — default-deny for us.
 
 ---
 

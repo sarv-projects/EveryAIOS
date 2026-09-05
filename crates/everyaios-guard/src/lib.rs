@@ -27,6 +27,7 @@
 //! Guard-2 (diff-card approval, human-in-the-loop UX) is a separate gate
 //! (P7.5).
 
+pub mod approval_policy;
 pub mod autonomy;
 pub mod batch;
 pub mod blocklist;
@@ -37,6 +38,7 @@ pub mod decision;
 pub mod diffcard;
 pub mod ecc;
 pub mod egress;
+pub mod floors;
 pub mod fs_broker;
 pub mod granter;
 pub mod injection;
@@ -47,8 +49,10 @@ pub mod pathfloor;
 pub mod permissions;
 pub mod prescan;
 pub mod profiles;
+pub mod protected_paths;
 pub mod redteam;
 pub mod release;
+pub mod reviewer;
 pub mod sandbox;
 pub mod seccomp;
 pub mod skillstore;

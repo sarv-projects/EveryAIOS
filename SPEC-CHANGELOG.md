@@ -18,6 +18,34 @@ Each entry records the date or release marker, change category, affected section
 
 ## Historical entries
 
+## 2026-09-04 — Doc 87: local-model UX + composer/chat-UI deep-dive; TODO P52 (24 open); ledger section 36 (296 total)
+
+**Category:** Research evidence + maintenance
+**Status:** Recorded
+
+Three parallel live passes (no installs): local-model runtimes (AnythingLLM-local, LM Studio + `lms`, Ollama — no GUI exists, llamafile, LocalAI, GPT4All, MLX/mlx-lm/oMLX, llama.cpp server, Foundry, KoboldCPP, llama-cpp-python, vLLM) with repo architecture + lifecycle + hardware-fit per runtime; composer anatomy ×10 surfaces + 10 conventions + anti-patterns; thread/message UI (taxonomy L1–L4, action union, 5 gaps). Corrections: llamafile `Mozilla-Ocho` → `mozilla-ai` (docs 27/34/41; ledger transfer #2); Chatbox minimap UNVERIFIED (amends doc 86 §5); LM-Studio fit colors = REPORTED-not-doc-verified; Jan queue-chips unconfirmed. Outputs: `RESEARCH/desktop_app/87-local-models-composer-chat-ui-2026-09.md` (§8 key-URL appendix), ledger section 36 (10 new + 1 transfer → 296), doc 41 addendum → P52. TODO: new P52 queue (24 items, all open); counts 1244 = 1117 + 127 → **1268 = 1117 done + 151 open**, no flips. No capability IDs changed; no code touched.
+
+## 2026-09-04 — Doc-86 corrections applied + TODO P51 filed (33 open) + ledger section 35 (286 total)
+
+**Category:** Research maintenance
+**Status:** Recorded
+
+Applied every update the doc-86 deep-dive obliged: Chatbox identity corrected in 4 docs (`Bin-Huang` → `chatboxai/chatbox`, Tauri → Electron 35, GPL-3.0 pattern-only); open-cowork engine corrected (pi-agent since v3.0.0) + store-key DO-NOT-COPY guard; `anythingllm-desktop` standalone-repo notion removed; AnythingLLM engine specifics flagged carryover-unverified; holaOS refresh note (11.1K★, hosted-meter model); Crush FSL caveat; OpenClaw cost-carrier requirement on the task-ledger row; doc-86 self-fixes (§14 URL appendix, §11 → P51, §12 applied-state). Ledger: section 35 (openchamber, fathah/hermes-desktop, acpx, Hermes-Bot-Mode + chatboxai move) → 286 total; doc 41 addendum → P51. TODO: new P51 steal-queue section (33 items, all open); counts 1211 = 1117 + 94 → **1244 = 1117 done + 127 open**, no flips. No capability IDs changed; no code touched.
+
+## 2026-09-04 — P12.1 desktop deep-dive (doc 86): all named repos + full P12.1 batch, code/docs-level
+
+**Category:** Research evidence
+**Status:** Recorded
+
+Six parallel live passes (no installs — no GUI in this environment; hands-on legs stay open): opencode 1.18.27 + Electron `packages/desktop` deep-dive; open-cowork v3.3.1 (pi-agent-based, Claude-Code-only verdict corrected); Hermes v0.21.0 + in-tree Hermes Desktop + Bot Mode (+ unaffiliated community fork triaged); AnythingLLM 1.16.1 / Jan 0.8.4 / Cherry 2.0.12 / Chatbox 1.23.1; OpenWorker 0.2.1 / Open WebUI 0.11.3 + desktop + computer / Claude Code + Codex CLI loves-hates / holaOS 11.1K refresh; Anthropic Cowork / OpenChamber / OpenClaw + acpx / Crush / Zed / Cursor. Corrections applied: Chatbox is Electron (not Tauri — TODO row fixed), `Bin-Huang/chatbox` → `chatboxai/chatbox`, providers 50→75+, Jan Apache-2.0. Outputs: `RESEARCH/desktop_app/86-competitor-desktop-deep-dive-2026-09.md` (gap matrix vs top 5, positioning hooks, steal queue → spec rows, license discipline table), index row, steal-shortlist addendum, TODO P12.1 evidence notes (checkboxes stay open pending hands-on installs). No capability IDs changed; no code touched.
+
+## 2026-09-04 — From-clean verification pass (Windows): 3 real bugs fixed, env prerequisites mapped
+
+**Category:** Implementation evidence
+**Status:** Recorded
+
+Full clean-room rebuild + test after `cargo clean` (8.8GiB removed across `crates/` + `src-tauri/`), `tsconfig.tsbuildinfo` landmine removal (6 stale files, the known cross-OS copy hazard), `ui/dist` removal, and `npm cache clean`. No capability IDs added or changed; no TODO checkboxes flipped. **Real bugs caught + fixed by the clean rebuild:** (1) ACP `is_authenticated()` never became true for no-auth agents — `initialize` now marks the session authenticated when `authMethods` is empty, matching the documented `auth_methods` contract (zero production callers, zero enforcement change; 2 new unit tests pin empty→authenticated / advertised→unauthenticated, and the 3 auth-flow fixtures now advertise a method); (2) the mock ACP agent spoke a stale prompt shape (`params.text`) while the client sends v1 `params.prompt[]` — mock updated (legacy fallback kept); together these fix the `live_spawn` mock-CLI E2E, which fails deterministically from clean (it previously passed only on stale binaries); (3) `assemble_path` stripped `C:\` to drive-relative `C:` — re-anchored, fixing 2 USN path tests; (4) the `usn_winapi` doctest never compiled (missing import + `?` in `fn main`) — fixed, doctest green. **Collateral fix:** the `ResourceCard` `base_url`/`doc_url` extension broke 6 `src-tauri/discovery_cmds.rs` literals (non-provider cards get empty strings) — fixed; src-tauri 23/23 + registration_sync 2/2 green. **Environment findings (pre-existing, not regressions — all failures are in crates untouched by recent diffs):** clean Windows builds require `OPENSSL_DIR=C:\Program Files\OpenSSL-Win64` (+ `LIB` → `lib\VC\x64\MD`) for SQLCipher — previously masked by cached artifacts; remaining Windows failures are POSIX-separator assumptions (guard pathfloor/toctou/fs_broker/path_seal/urlfloor 12, mcp protocol root, core inventory, usn already fixed), no-inode semantics (core toctou), Linux-expecting wsl-detect, chrome-for-testing layout, and intermittent localhost aborts (OS 10053/10054 — sync_transport, pkce, tiers, llamafile flip green across runs; same flake class as the documented `llamafile` parallel-flake). These belong to the P50.5.8 cross-platform matrix, not this pass. `node_modules` on this box is a Linux-installed tree: rollup/esbuild lack win32 natives (fixed locally for `@rollup`, no manifest change), coordinator workspace symlinks are unreadable (Linux reparse points — `bun test` 231 pass / 8 link-ENOENT fail), and vite build is blocked by the stale tree (tsc clean + bun 67/67 green; release packaging stays on fresh-clone build machines per the NSIS precedent). `ipc-parity` 0 broken; `doc-sync` green. Flakes noted: `hash_cache::changed_file_misses` (temp race, green solo), `session-recording` ring-buffer (green solo).
+
 ## 2026-09-04 — UI truth pass: dead code removed, stub farms wired, duplicates collapsed
 
 **Category:** Implementation evidence

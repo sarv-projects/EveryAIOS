@@ -21,10 +21,10 @@
 - **What:** Unified cross-platform desktop app for multiple workspaces and models; connects to Ollama/LM Studio/local runtimes; lightweight, low RAM. Electron-based.
 - **Check later:** `src/` (main/renderer), providers config.
 
-### F3. Chatbox — `Bin-Huang/chatbox` (Community Edition)
-- **Repo:** https://github.com/Bin-Huang/chatbox | **Site:** chatboxai.app
-- **What:** Cross-platform desktop client for ChatGPT/Claude/other LLMs (BYOK). Note: some flows move to `chatboxai/chatbox` org — **live-verified 2026-08-08: `chatboxai/chatbox` = 41,366⭐ (TS)**; treat that as the canonical org.
-- **Check later:** `src/` (Tauri + React), provider adapters.
+### F3. Chatbox — `chatboxai/chatbox` (Community Edition)
+- **Repo:** https://github.com/chatboxai/chatbox | **Site:** chatboxai.app
+- **What:** Cross-platform desktop client for ChatGPT/Claude/other LLMs (BYOK). **2026-09-04 doc 86: canonical confirmed `chatboxai/chatbox** (`Bin-Huang/chatbox` redirects there); **Electron 35 + React 18, NOT Tauri; GPL-3.0 (patterns only)**; provider Spotlight + models.dev registry + collapsible branches + minimap + Work Mode.
+- **Check later:** `src/` (Electron main/renderer/preload + React), provider adapters.
 
 ### F4. Vellum Assistant — `vellum-ai/vellum-assistant` (open-source, MIT)
 - **Repo:** https://github.com/vellum-ai/vellum-assistant | **Docs:** vellum.ai
@@ -218,7 +218,7 @@
 |---|---|---|---|---|
 | Jan | github.com/janhq/jan | jan.ai/docs | TS/Rust | Tauri + llama.cpp router process; MCP host w/ approval cards |
 | Cherry Studio | github.com/CherryHQ/cherry-studio | (repo docs) | TS | workspaces + multi-provider |
-| Chatbox | github.com/Bin-Huang/chatbox | chatboxai.app | TS | Tauri BYOK client |
+| Chatbox | github.com/chatboxai/chatbox | chatboxai.app | TS | Electron BYOK client (GPL-3.0, patterns only) |
 | Vellum | github.com/vellum-ai/vellum-assistant | vellum.ai | (TS?) | **CES: creds in separate process, default-deny sandbox** |
 | GenOffice | github.com/genspark-ai/genoffice | (repo) | TS/Rust | Rust sidecar (calamine/IronCalc); block-patch docs |
 | Open WebUI | github.com/open-webui/open-webui | docs.openwebui.com | Py | FastAPI+Svelte; Pipes/Filters/Actions; chunk-merge RAG |

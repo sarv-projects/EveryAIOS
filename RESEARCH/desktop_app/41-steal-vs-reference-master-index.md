@@ -54,12 +54,12 @@
 
 | Repo | Consult for | Build phase |
 |---|---|---|
-| **Bin-Huang/chatbox** (41K⭐) | Tauri+React BYOK UI patterns | P1 UI |
+| **chatboxai/chatbox** (41K⭐, GPL-3.0 — patterns only) | Electron+React BYOK UI patterns (provider Spotlight, models.dev registry, localized errors, branches+minimap) | P1 UI |
 | **CherryHQ/cherry-studio** (50K⭐) | Multi-provider desktop UX, MCP integration | P1 UI |
 | **lencx/chatgpt** (54K⭐) | Tauri desktop packaging, auto-updater | P1 packaging |
 | **x1xhlol/system-prompts** (143K⭐) | System prompt reference library | P1 agent design |
 | **ollama/ollama** | `ollama serve` spawn + `GET /api/tags` + `GET /api/show` (model_info.context_length); `/api/chat` `format` accepts `"json"` or a JSON schema — **raw GBNF 500s on 0.21.x** (verified live) | P1.8 local.rs detection/spawn/list + broker `/api/chat` path |
-| **Mozilla-Ocho/llamafile** (25K⭐) | Single-file llama.cpp server (weights + server in one binary); native GBNF `grammar` field on `/v1/chat/completions` — the real GBNF home (B5) | P1.8 local.rs launch (`--ctx-size 16384`) + broker llamafile path |
+| **mozilla-ai/llamafile** (25K⭐ — moved from `Mozilla-Ocho`, doc 87) | Single-file llama.cpp server (weights + server in one binary); native GBNF `grammar` field on `/v1/chat/completions` — the real GBNF home (B5) | P1.8 local.rs launch (`--ctx-size 16384`) + broker llamafile path |
 
 ---
 
@@ -266,6 +266,48 @@
 | **coreyhaines31/marketingskills** (43K⭐) | Marketing automation skills |
 | **K-Dense-AI/scientific-agent-skills** (33K⭐) | Scientific research for agents |
 | **mukul975/Anthropic-Cybersecurity-Skills** (27K⭐) | Cyber skill packs |
+
+---
+
+## ➕ Doc 86 addendum (2026-09-04 — desktop deep-dive; filed as TODO P51, 33 items)
+
+| Repo | Verdict | Maps to |
+|---|---|---|
+| **CherryHQ/cherry-studio** (AGPL — patterns only) | 🔴 provider drawer (rotation+Fetch+health+capability) + artifact-pane routing + settings search + topics/citations | P51.1/P51.7/P51.24 |
+| **janhq/jan** (Apache-2.0) | 🔴 fit-pill + quant tiers + pause/resume + keyring store + queue-while-stream | P51.4/P51.5 |
+| **NousResearch/hermes-agent + apps/desktop** (MIT) | 🔴 error cards + Bot=profile + namespaced-cron routines + annotate loop + status bar + dual-provider remote-attach | P51.11/P51.15/P51.21/P51.25/P51.31/P51.32 |
+| **anomalyco/opencode** (MIT) | 🔴 always-patterns + compaction budget + tabs/multi-server + policies + background-subagent watch | P51.3/P51.23/P51.33 |
+| **andrewyng/openworker** (MIT) | 🔴 human-only floors + MCP-EXTERNAL + run-grant expiry + reviewer circuit breaker | P51.29 |
+| **openclaw/openclaw + acpx** (MIT) | 🔴 ledger+flows+push (+cost carrier) + acpx shape + ClawHub | P51.12/P51.19/P51.27 |
+| **Anthropic Cowork** (product) | 🔴 3-mode approvals + shared home + schedule/projects | P51.8/P51.22 |
+| **openchamber/openchamber** (MIT) | 🔴 goals + multi-run/fusion + walkthrough + skills catalog | P51.9/P51.10/P51.26 |
+| **Zed** (docs) | 🔴 tool_permissions schema + review/checkpoints + ACP boundary | P51.13/P51.30-adjacent |
+| **Claude Code / Codex CLI** (docs) | 🔴 deny-first + critical-path guards + Seatbelt/bwrap profiles + subagent frontmatter | P51.16/P51.30 |
+| **OpenCoworkAI/open-cowork** (MIT) | 🟡 npx-resolution + name-sanitize + diagnostics fix-codes (NOT the store key, NOT default-off sandbox) | P51.17 |
+| **Mintplex-Labs/anything-llm** (MIT) | 🟡 CoT rollup + true abort + MCP lazy-start + Foundry/GenieX embedded | P51.6/P51.18 |
+| **chatboxai/chatbox** (GPL — patterns only) | 🟡 Spotlight + localized errors + branches/minimap + queued-generate | P51.2/P51.5 |
+| **open-webui/open-webui** (mixed) | 🟡 workspace-as-model gateway + hybrid/Full-Context toggle + Channels | P51.20-adjacent/P49 |
+| **charmbracelet/crush** (FSL — observe) | 🟡 LSP integration + Catwalk registry | P51.28 |
+| **Cursor** (closed) | 🟡 agent cards + Awaiting-Input + automations matrix | P51.14 |
+| **holaboss-ai/holaOS** (Modified Apache — observe) | 🟢 workspace UX shape only (side-by-side, Combos, Hub recipes); never the toll | P51.20 |
+| **fathah/hermes-desktop** (MIT, unaffiliated) | 🟢 onboarding + `/usage` footer reference only; never the protocol | P51.21-adjacent |
+
+---
+
+## ➕ Doc 87 addendum (2026-09-04 — local-model UX + composer/chat UI; filed as TODO P52, 24 items)
+
+| Repo | Verdict | Maps to |
+|---|---|---|
+| **LM Studio fit UX + `lms`** (REPORTED, closed app + MIT CLI) | 🔴 fit-pill + Q4_K_M + estimator + `get/ls/ps/load` + `:1234` | P52.1/P1.8/P27 |
+| **mudler/LocalAI** (MIT) | 🔴 gallery YAML + sha256 + overrides + preload + Activity | P52.2/P27 |
+| **ggml-org/llama.cpp** (MIT) | 🔴 serve shape + `--fit` + `-ngl` + `-ctk/ctv` + observability | P52.3/P52.4 |
+| **jundot/omlx** (Apache-2.0) | 🔴 pin/TTL/LRU + benchmark + downloader (Mac reference) | P52.6/P52.7 |
+| **microsoft/Foundry-Local** (MIT SDK) | 🟡 auto best-variant one-click | P52.5 |
+| **ollama/ollama** (MIT) | 🔴 `:11434` + `ps`/TTL/env (no GUI exists — never assume one) | P52.3/P1.8 |
+| **nomic-ai/gpt4all** (MIT) | 🟡 Installed table + localhost-only default | P1.8/P52.3 |
+| **Composers** (Cherry+Hermes+Zed+Cowork+opencode+OpenClaw) | 🔴 queue/steer + sticky badge + scope line + `@`/`/` + attach contract + HUD | P52.8–P52.14 |
+| **Thread UI** (Cherry+Hermes+Zed+Cursor+Chatbox) | 🔴 topics/tabs + checkpoints + meter + find/rail + citations + export + actions | P52.15–P52.24 |
+| **mozilla-ai/llamafile + koboldcpp + llama-cpp-python + vLLM** | 🟢/WATCH fallback patterns + shim ideas (AGPL = patterns only for koboldcpp) | P27 notes |
 
 ---
 

@@ -249,8 +249,13 @@ impl FrnIndex {
 /// A live Windows USN journal reader bound to one volume.
 ///
 /// ```no_run
-/// let mut reader = NtfsJournalReader::open("C:\\")?;
-/// let (records, next) = reader.read_since(0)?;
+/// use everyaios_storage::usn_winapi::NtfsJournalReader;
+///
+/// fn main() -> Result<(), String> {
+///     let mut reader = NtfsJournalReader::open("C:\\")?;
+///     let (_records, _next) = reader.read_since(0)?;
+///     Ok(())
+/// }
 /// ```
 pub struct NtfsJournalReader {
     handle: HANDLE,

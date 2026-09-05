@@ -19,7 +19,7 @@
 //! - Nudge sentinels (B7): detect repeating patterns (same goal at the same
 //!   time-of-day/weekday) → suggest a schedule (H14 nudge-card surface).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use everyaios_blueprint::automation::AutomationStep;
 use serde_json::{json, Value};
@@ -261,6 +261,26 @@ pub enum RunState {
     },
 }
 
+/// Monitor-script mode (P51.32b): how a monitor produces observations.
+/// `Llm` is the default analyst path; `Script` runs a command whose stdout
+/// is stored verbatim as the observation.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MonitorSource {
+    Llm,
+    Script {
+        cmd: String,
+        #[serde(default, rename = "allowNet", alias = "allow_net")]
+        allow_net: bool,
+    },
+}
+
+impl Default for MonitorSource {
+    fn default() -> Self {
+        Self::Llm
+    }
+}
+
 /// Monitoring semantics (the ChatGPT "monitoring task" pattern): a recurring
 /// job whose runs *observe* state and notify only on a meaningful delta,
 /// remembering the previous observation between runs ("previous runs are
@@ -280,6 +300,50 @@ pub struct MonitorConfig {
     /// Notifications sent so far (the "run vs notify" accounting).
     #[serde(default)]
     pub notifications: u32,
+    /// Where observations come from (P51.32b). Defaults to `Llm` so existing
+    /// persisted monitors keep their semantics.
+    #[serde(default)]
+    pub source: MonitorSource,
+}
+
+impl MonitorConfig {
+    /// Script-mode evaluation (P51.32b): store `stdout` verbatim (no trim,
+    /// no normalization). Empty output combined with `silent_on_empty`
+    /// suppresses the notification (a quiet poll, not a delta).
+    /// Pure w.r.t. stored state — returns the verdict without mutating;
+    /// use [`SchedulerService::monitor_evaluate_script`] for the persisting path.
+    pub fn evaluate_script(&self, stdout: &str, silent_on_empty: bool) -> MonitorVerdict {
+        let current = stdout.to_string();
+        let previous = self.last_observation.clone();
+        let changed = previous.as_deref() != Some(stdout);
+        let notified = if stdout.is_empty() && silent_on_empty {
+            false
+        } else {
+            previous.is_none() || changed
+        };
+        let notifications = if notified {
+            self.notifications.saturating_add(1)
+        } else {
+            self.notifications
+        };
+        MonitorVerdict {
+            changed,
+            notified,
+            stopped: false,
+            previous,
+            current,
+            notifications,
+        }
+    }
+}
+
+/// Continuity snapshot (P51.32a): the durable per-job memory surfaced to the
+/// next run (last result summary + scratch notepad).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobContinuity {
+    pub last_output: String,
+    pub notepad: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -312,6 +376,20 @@ pub struct Job {
     /// Frozen context for the in-flight run (Task/Occurrence/Run snapshot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_run: Option<RunSnapshot>,
+    /// Last run result summary (P51.32a continuity; written on `lease_finish`).
+    #[serde(default)]
+    pub last_output: String,
+    /// Scratch notepad carried across runs (P51.32a continuity).
+    #[serde(default)]
+    pub notepad: String,
+    /// Drift-guard pins (P51.32d): expected model / effort + manifest hash.
+    /// Empty = unpinned (no enforcement, backward compatible).
+    #[serde(default)]
+    pub model_pin: String,
+    #[serde(default)]
+    pub effort_pin: String,
+    #[serde(default)]
+    pub manifest_hash: String,
 }
 
 /// Frozen per-run snapshot so a live session edit cannot mutate an in-flight
@@ -377,7 +455,30 @@ impl Job {
             failures: 0,
             monitor: None,
             current_run: None,
+            last_output: String::new(),
+            notepad: String::new(),
+            model_pin: String::new(),
+            effort_pin: String::new(),
+            manifest_hash: String::new(),
         }
+    }
+
+    /// Drift guard (P51.32d, fail-closed): a non-empty pin must match the
+    /// runtime value. Empty pin = unpinned (no enforcement).
+    pub fn check_drift(&self, model: &str, effort: &str) -> Result<(), String> {
+        if !self.model_pin.is_empty() && self.model_pin != model {
+            return Err(format!(
+                "drift: model pin {:?} != runtime {:?}",
+                self.model_pin, model
+            ));
+        }
+        if !self.effort_pin.is_empty() && self.effort_pin != effort {
+            return Err(format!(
+                "drift: effort pin {:?} != runtime {:?}",
+                self.effort_pin, effort
+            ));
+        }
+        Ok(())
     }
 
     /// Retry backoff with jitter + clamp (cronflow pattern):
@@ -424,6 +525,106 @@ pub const RETRY_BASE_MS: u64 = 30_000;
 pub const RETRY_MAX_MS: u64 = 3_600_000;
 pub const RETRY_JITTER: f64 = 0.2;
 pub const NUDGE_WINDOW_DAYS: u64 = 14;
+/// Runs-ledger bound (P51.32g): the service keeps at most this many records.
+pub const RUN_LEDGER_CAP: usize = 500;
+
+/// Dispatch preflight gate (P51.32c): pure, zero-LLM readiness check.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DispatchPreflight {
+    pub has_key: bool,
+    pub skills_ok: bool,
+    pub delivery_ok: bool,
+    pub reason: String,
+}
+
+impl DispatchPreflight {
+    pub fn ok() -> Self {
+        Self {
+            has_key: true,
+            skills_ok: true,
+            delivery_ok: true,
+            reason: String::new(),
+        }
+    }
+
+    pub fn can_dispatch(&self) -> bool {
+        self.has_key && self.skills_ok && self.delivery_ok
+    }
+}
+
+/// Pure, zero-LLM dispatch gate (P51.32c): no network, no model, no I/O —
+/// just key presence + required-skills subset check.
+pub fn dispatch_preflight(
+    has_key: bool,
+    skills: &[String],
+    requires: &[String],
+) -> DispatchPreflight {
+    if !has_key {
+        return DispatchPreflight {
+            has_key: false,
+            skills_ok: true,
+            delivery_ok: false,
+            reason: "missing api key".to_string(),
+        };
+    }
+    let missing: Vec<&String> = requires.iter().filter(|r| !skills.contains(r)).collect();
+    if !missing.is_empty() {
+        let names: Vec<&str> = missing.iter().map(|s| s.as_str()).collect();
+        return DispatchPreflight {
+            has_key: true,
+            skills_ok: false,
+            delivery_ok: false,
+            reason: format!("missing skills: {}", names.join(", ")),
+        };
+    }
+    DispatchPreflight::ok()
+}
+
+/// An incident (P51.32e): an explicit, ack-gated failure record.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Incident {
+    pub id: String,
+    pub job_id: String,
+    pub at_ms: u64,
+    pub kind: String,
+    pub detail: String,
+    pub acked: bool,
+}
+
+/// A single doctor check (P51.32f).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CronCheck {
+    pub name: String,
+    pub ok: bool,
+    pub detail: String,
+}
+
+/// Bounded runs-ledger state (P51.32g).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunLedgerState {
+    Claimed,
+    Running,
+    Completed,
+    Failed,
+}
+
+/// One runs-ledger entry (P51.32g).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunRecord {
+    pub run_id: String,
+    pub job_id: String,
+    pub claimed_at: u64,
+    #[serde(default)]
+    pub started_at_ms: Option<u64>,
+    #[serde(default)]
+    pub finished_at_ms: Option<u64>,
+    pub state: RunLedgerState,
+}
 
 pub struct SchedulerService {
     jobs: HashMap<String, Job>,
@@ -434,6 +635,20 @@ pub struct SchedulerService {
     /// written through to the JSON file (atomic tmp+rename, best-effort: a
     /// failed save is an error surfaced by `persist`, never a silent drop).
     persist_path: Option<std::path::PathBuf>,
+    /// P51.32e — explicit-ack incident store.
+    incidents: Vec<Incident>,
+    incident_seq: u64,
+    /// P51.32g — bounded runs ledger (cap [`RUN_LEDGER_CAP`]).
+    runs_ledger: VecDeque<RunRecord>,
+    /// P51.32c — whether an API key is present for dispatch preflight.
+    /// Defaults to `true` so pre-existing callers keep working; set to
+    /// `false` to exercise the fail-closed gate.
+    api_key_present: bool,
+    /// P51.32d — runtime model/effort the drift guard compares pins against.
+    /// Empty = unknown runtime (unpinned jobs still pass; pinned jobs fail
+    /// closed until the runtime is set to the pinned value).
+    active_model: String,
+    active_effort: String,
 }
 
 impl Default for SchedulerService {
@@ -450,6 +665,12 @@ impl SchedulerService {
             nudge_log: Vec::new(),
             webhook_token: None,
             persist_path: None,
+            incidents: Vec::new(),
+            incident_seq: 0,
+            runs_ledger: VecDeque::new(),
+            api_key_present: true,
+            active_model: String::new(),
+            active_effort: String::new(),
         }
     }
 
@@ -616,6 +837,334 @@ impl SchedulerService {
         })
     }
 
+    // -- continuity (P51.32a) --------------------------------------------------
+
+    /// Return the durable continuity snapshot for a job, if it exists.
+    pub fn continuity(&self, id: &str) -> Option<JobContinuity> {
+        self.jobs.get(id).map(|j| JobContinuity {
+            last_output: j.last_output.clone(),
+            notepad: j.notepad.clone(),
+        })
+    }
+
+    /// Append one line to a job's notepad. Returns `false` for unknown jobs.
+    pub fn append_notepad(&mut self, id: &str, line: &str) -> bool {
+        let Some(job) = self.jobs.get_mut(id) else {
+            return false;
+        };
+        if job.notepad.is_empty() {
+            job.notepad = line.to_string();
+        } else {
+            job.notepad.push('\n');
+            job.notepad.push_str(line);
+        }
+        self.persist_quiet();
+        true
+    }
+
+    // -- monitor-script mode (P51.32b) -----------------------------------------
+
+    /// Stateful script-mode evaluation: stores `stdout` verbatim as the job's
+    /// observation (no trim) with silent-empty semantics, mirroring
+    /// [`Self::monitor_evaluate`] accounting.
+    pub fn monitor_evaluate_script(
+        &mut self,
+        id: &str,
+        stdout: &str,
+        silent_on_empty: bool,
+    ) -> Result<MonitorVerdict, String> {
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        let monitor = job.monitor.get_or_insert_with(MonitorConfig::default);
+        let snapshot = monitor.clone();
+        let verdict = snapshot.evaluate_script(stdout, silent_on_empty);
+        monitor.last_observation = Some(stdout.to_string());
+        if verdict.notified {
+            monitor.notifications = monitor.notifications.saturating_add(1);
+        }
+        Ok(MonitorVerdict {
+            notifications: monitor.notifications,
+            ..verdict
+        })
+    }
+
+    /// Stateless script verdict helper on the service (same pure semantics as
+    /// [`MonitorConfig::evaluate_script`], with no stored observation).
+    pub fn evaluate_script(&self, stdout: &str, silent_on_empty: bool) -> MonitorVerdict {
+        MonitorConfig::default().evaluate_script(stdout, silent_on_empty)
+    }
+
+    // -- dispatch preflight (P51.32c) ------------------------------------------
+
+    /// Associated-function mirror of the free [`dispatch_preflight`] gate so
+    /// callers can use either `SchedulerService::dispatch_preflight(..)` or
+    /// the module-level function; both are pure and zero-LLM.
+    pub fn dispatch_preflight(
+        has_key: bool,
+        skills: &[String],
+        requires: &[String],
+    ) -> DispatchPreflight {
+        dispatch_preflight(has_key, skills, requires)
+    }
+
+    pub fn set_api_key_present(&mut self, present: bool) {
+        self.api_key_present = present;
+    }
+
+    pub fn set_has_key(&mut self, present: bool) {
+        self.api_key_present = present;
+    }
+
+    pub fn has_api_key(&self) -> bool {
+        self.api_key_present
+    }
+
+    // -- drift-guard runtime (P51.32d) ------------------------------------------
+
+    pub fn set_active_model(&mut self, model: impl Into<String>) {
+        self.active_model = model.into();
+    }
+
+    pub fn set_active_effort(&mut self, effort: impl Into<String>) {
+        self.active_effort = effort.into();
+    }
+
+    pub fn set_runtime_model(&mut self, model: impl Into<String>) {
+        self.active_model = model.into();
+    }
+
+    pub fn set_runtime_effort(&mut self, effort: impl Into<String>) {
+        self.active_effort = effort.into();
+    }
+
+    pub fn active_model(&self) -> &str {
+        &self.active_model
+    }
+
+    pub fn active_effort(&self) -> &str {
+        &self.active_effort
+    }
+
+    /// Pin (or re-pin) a job's drift expectations. Empty strings clear the pin.
+    pub fn set_job_pins(
+        &mut self,
+        id: &str,
+        model_pin: &str,
+        effort_pin: &str,
+        manifest_hash: &str,
+    ) -> Result<(), String> {
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        job.model_pin = model_pin.to_string();
+        job.effort_pin = effort_pin.to_string();
+        job.manifest_hash = manifest_hash.to_string();
+        self.persist_quiet();
+        Ok(())
+    }
+
+    pub fn set_model_pin(&mut self, id: &str, pin: &str) -> Result<(), String> {
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        job.model_pin = pin.to_string();
+        self.persist_quiet();
+        Ok(())
+    }
+
+    pub fn set_effort_pin(&mut self, id: &str, pin: &str) -> Result<(), String> {
+        let job = self
+            .jobs
+            .get_mut(id)
+            .ok_or_else(|| format!("unknown job {id:?}"))?;
+        job.effort_pin = pin.to_string();
+        self.persist_quiet();
+        Ok(())
+    }
+
+    // -- incidents (P51.32e) -----------------------------------------------------
+
+    /// Record an incident. Returns the new incident id. Incidents start
+    /// unacked and require an explicit [`Self::ack_incident`].
+    pub fn report_incident(
+        &mut self,
+        job_id: impl Into<String>,
+        kind: impl Into<String>,
+        detail: impl Into<String>,
+        at_ms: u64,
+    ) -> String {
+        self.incident_seq = self.incident_seq.saturating_add(1);
+        let id = format!("inc-{}", self.incident_seq);
+        self.incidents.push(Incident {
+            id: id.clone(),
+            job_id: job_id.into(),
+            at_ms,
+            kind: kind.into(),
+            detail: detail.into(),
+            acked: false,
+        });
+        id
+    }
+
+    /// Explicitly acknowledge an incident. Returns `false` for unknown ids.
+    pub fn ack_incident(&mut self, id: &str) -> bool {
+        if let Some(inc) = self.incidents.iter_mut().find(|i| i.id == id) {
+            inc.acked = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn get_incident(&self, id: &str) -> Option<&Incident> {
+        self.incidents.iter().find(|i| i.id == id)
+    }
+
+    /// Cloned incident list (ordered by report time).
+    pub fn list_incidents(&self) -> Vec<Incident> {
+        self.incidents.clone()
+    }
+
+    // -- doctor (P51.32f) --------------------------------------------------------
+
+    /// Pure read-only health check: `missed_runs` (enabled jobs whose
+    /// `next_run_at` lies in the past), `dead_lease` (Running leases already
+    /// expired) and `queue_depth` (registry size guard). Never mutates.
+    pub fn cron_doctor(&self, now_ms: u64) -> Vec<CronCheck> {
+        let mut missed = 0usize;
+        for job in self.jobs.values() {
+            if !job.enabled {
+                continue;
+            }
+            if !matches!(job.state, RunState::Idle | RunState::Failed { .. }) {
+                continue;
+            }
+            if let Some(t) = job.next_run_at {
+                if t < now_ms {
+                    missed += 1;
+                }
+            }
+        }
+        let mut dead = 0usize;
+        for job in self.jobs.values() {
+            if let RunState::Running {
+                lease_expires_at, ..
+            } = &job.state
+            {
+                if *lease_expires_at < now_ms {
+                    dead += 1;
+                }
+            }
+        }
+        let depth = self.jobs.len();
+        vec![
+            CronCheck {
+                name: "missed_runs".to_string(),
+                ok: missed == 0,
+                detail: if missed == 0 {
+                    "none".to_string()
+                } else {
+                    format!("{missed} missed")
+                },
+            },
+            CronCheck {
+                name: "dead_lease".to_string(),
+                ok: dead == 0,
+                detail: if dead == 0 {
+                    "none".to_string()
+                } else {
+                    format!("{dead} dead lease(s)")
+                },
+            },
+            CronCheck {
+                name: "queue_depth".to_string(),
+                ok: depth <= RUN_LEDGER_CAP,
+                detail: format!("depth={depth}"),
+            },
+        ]
+    }
+
+    // -- runs ledger (P51.32g) ----------------------------------------------------
+
+    /// Record a run-state transition. Creates the entry on first sight
+    /// (`claimed_at = at_ms`) and updates timestamps on later transitions;
+    /// the deque is bounded at [`RUN_LEDGER_CAP`] (oldest evicted first).
+    pub fn record_run_transition(
+        &mut self,
+        run_id: impl Into<String>,
+        job_id: impl Into<String>,
+        state: RunLedgerState,
+        at_ms: u64,
+    ) {
+        let run_id = run_id.into();
+        let job_id = job_id.into();
+        if let Some(rec) = self.runs_ledger.iter_mut().find(|r| r.run_id == run_id) {
+            rec.state = state;
+            match state {
+                RunLedgerState::Claimed => {}
+                RunLedgerState::Running => {
+                    if rec.started_at_ms.is_none() {
+                        rec.started_at_ms = Some(at_ms);
+                    }
+                }
+                RunLedgerState::Completed | RunLedgerState::Failed => {
+                    if rec.started_at_ms.is_none() {
+                        rec.started_at_ms = Some(at_ms);
+                    }
+                    rec.finished_at_ms = Some(at_ms);
+                }
+            }
+        } else {
+            let rec = match state {
+                RunLedgerState::Claimed => RunRecord {
+                    run_id,
+                    job_id,
+                    claimed_at: at_ms,
+                    started_at_ms: None,
+                    finished_at_ms: None,
+                    state,
+                },
+                RunLedgerState::Running => RunRecord {
+                    run_id,
+                    job_id,
+                    claimed_at: at_ms,
+                    started_at_ms: Some(at_ms),
+                    finished_at_ms: None,
+                    state,
+                },
+                RunLedgerState::Completed | RunLedgerState::Failed => RunRecord {
+                    run_id,
+                    job_id,
+                    claimed_at: at_ms,
+                    started_at_ms: Some(at_ms),
+                    finished_at_ms: Some(at_ms),
+                    state,
+                },
+            };
+            self.runs_ledger.push_back(rec);
+            while self.runs_ledger.len() > RUN_LEDGER_CAP {
+                self.runs_ledger.pop_front();
+            }
+        }
+    }
+
+    pub fn get_run(&self, run_id: &str) -> Option<&RunRecord> {
+        self.runs_ledger.iter().find(|r| r.run_id == run_id)
+    }
+
+    /// Cloned ledger contents (oldest first).
+    pub fn list_runs(&self) -> Vec<RunRecord> {
+        self.runs_ledger.iter().cloned().collect()
+    }
+
+    pub fn runs_ledger(&self) -> &VecDeque<RunRecord> {
+        &self.runs_ledger
+    }
+
     // -- HITL pause (cronflow: a first-class state with explicit transitions) -
 
     /// Pause every job bound to `session_id` (chat-delete cascade). Returns
@@ -669,20 +1218,45 @@ impl SchedulerService {
     // -- lease / heartbeat (Hatchet pattern) ---------------------------------
 
     /// Start a run: Idle/Paused-expired/Failed → Running with a lease + fence.
+    /// P51.32c preflight (pure, zero LLM) runs first and fails closed;
+    /// P51.32d drift guard refuses a lease when the pinned model/effort no
+    /// longer matches the runtime. A lease that is already `Running` resumes
+    /// without re-gating (the fence still guards the holder).
     pub fn lease_start(&mut self, id: &str, now: u64) -> Result<Value, String> {
+        // Resume path first: an in-flight holder keeps its lease.
+        if let Some(job) = self.jobs.get(id) {
+            if let RunState::Running { ref fence, .. } = job.state {
+                return Ok(json!({
+                    "ok": true,
+                    "resumed": true,
+                    "checkpoint": job.checkpoint,
+                    "fence": fence,
+                    "runId": job.current_run.as_ref().map(|r| r.run_id.clone()),
+                }));
+            }
+        } else {
+            return Err(format!("unknown job {id:?}"));
+        }
+        // P51.32c — pure preflight gate (zero LLM). Fail-closed.
+        let pre = dispatch_preflight(self.api_key_present, &[], &[]);
+        if !pre.can_dispatch() {
+            return Err(pre.reason);
+        }
+        // P51.32d — drift guard (fail-closed). Clone runtime first to satisfy
+        // the borrow checker, then check the job's pins.
+        let active_model = self.active_model.clone();
+        let active_effort = self.active_effort.clone();
+        {
+            let job = self
+                .jobs
+                .get(id)
+                .ok_or_else(|| format!("unknown job {id:?}"))?;
+            job.check_drift(&active_model, &active_effort)?;
+        }
         let job = self
             .jobs
             .get_mut(id)
             .ok_or_else(|| format!("unknown job {id:?}"))?;
-        if let RunState::Running { ref fence, .. } = job.state {
-            return Ok(json!({
-                "ok": true,
-                "resumed": true,
-                "checkpoint": job.checkpoint,
-                "fence": fence,
-                "runId": job.current_run.as_ref().map(|r| r.run_id.clone()),
-            }));
-        }
         let fence = format!("fence-{id}-{now}");
         job.state = RunState::Running {
             lease_expires_at: now + LEASE_SECS,
@@ -781,7 +1355,8 @@ impl SchedulerService {
     }
 
     /// Finish a run: success resets retries; failure schedules a retry with
-    /// backoff + jitter + clamp (cronflow pattern).
+    /// backoff + jitter + clamp (cronflow pattern). P51.32a: stores the last
+    /// result summary on `last_output` (continuity survives via persistence).
     pub fn lease_finish(
         &mut self,
         id: &str,
@@ -797,6 +1372,12 @@ impl SchedulerService {
         job.runs += 1;
         job.last_run_at = Some(now);
         job.recent_runs.push(now);
+        // P51.32a continuity: remember the last result summary.
+        job.last_output = if ok {
+            format!("run at {now}: ok")
+        } else {
+            format!("run at {now}: failed")
+        };
         if let Some(cap) = job.policy.max_runs_per_hour {
             let cutoff = now.saturating_sub(3600);
             job.recent_runs.retain(|t| *t >= cutoff);
@@ -2068,5 +2649,294 @@ mod tests {
                 .is_err());
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // -- P51.32a continuity ----------------------------------------------------
+
+    #[test]
+    fn continuity_roundtrips_last_output_and_notepad() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "j1",
+            "brief",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        assert!(svc.append_notepad("j1", "line one"));
+        assert!(svc.append_notepad("j1", "line two"));
+        let c0 = svc.continuity("j1").expect("continuity");
+        assert_eq!(c0.notepad, "line one\nline two");
+        assert_eq!(c0.last_output, "", "no run yet → empty summary");
+        let started = svc.lease_start("j1", now()).unwrap();
+        svc.lease_finish("j1", true, now(), started["fence"].as_str())
+            .unwrap();
+        let c1 = svc.continuity("j1").expect("continuity after finish");
+        assert!(
+            !c1.last_output.is_empty(),
+            "lease_finish stores the last result summary"
+        );
+        assert!(
+            c1.last_output.contains("ok"),
+            "summary records success: {}",
+            c1.last_output
+        );
+        assert_eq!(
+            c1.notepad, "line one\nline two",
+            "notepad survives lease_finish"
+        );
+        assert!(svc.continuity("ghost").is_none());
+        assert!(!svc.append_notepad("ghost", "x"));
+    }
+
+    // -- P51.32b monitor-script mode --------------------------------------------
+
+    #[test]
+    fn script_empty_is_silent() {
+        let cfg = MonitorConfig {
+            source: MonitorSource::Script {
+                cmd: "check.sh".into(),
+                allow_net: false,
+            },
+            ..MonitorConfig::default()
+        };
+        let silent = cfg.evaluate_script("", true);
+        assert!(
+            !silent.notified,
+            "empty + silent_on_empty → not notified"
+        );
+        assert_eq!(silent.current, "");
+        let baseline = cfg.evaluate_script("", false);
+        assert!(
+            baseline.notified,
+            "empty without the silent flag still notifies the baseline"
+        );
+    }
+
+    #[test]
+    fn script_stdout_verbatim_no_trim() {
+        let cfg = MonitorConfig::default();
+        let out = "  padded  \nline2  ";
+        let v = cfg.evaluate_script(out, false);
+        assert_eq!(v.current, out, "stdout stored verbatim, no trim");
+        // Stateful path also stores verbatim and dedupes identical polls.
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "m1",
+            "watch",
+            "s1",
+            TriggerSpec::Interval { secs: 3600 },
+            vec![],
+            None,
+            now(),
+        );
+        let v1 = svc.monitor_evaluate_script("m1", out, false).unwrap();
+        assert_eq!(v1.current, out);
+        assert!(v1.notified, "first script observation notifies");
+        let v2 = svc.monitor_evaluate_script("m1", out, false).unwrap();
+        assert!(!v2.changed, "identical stdout → unchanged");
+        assert!(!v2.notified, "identical stdout → no second notification");
+        assert_eq!(
+            svc.get("m1")
+                .unwrap()
+                .monitor
+                .as_ref()
+                .unwrap()
+                .last_observation
+                .as_deref(),
+            Some(out)
+        );
+    }
+
+    // -- P51.32c preflight -------------------------------------------------------
+
+    #[test]
+    fn preflight_blocks_missing_key_without_llm() {
+        // Pure gate: missing key blocks with a reason, no model involved.
+        let blocked = dispatch_preflight(false, &[], &[]);
+        assert!(!blocked.has_key);
+        assert!(!blocked.can_dispatch());
+        assert!(!blocked.delivery_ok);
+        assert!(!blocked.reason.is_empty());
+        // Skills subset check is pure as well.
+        let have = vec!["web".to_string()];
+        let need = vec!["web".to_string(), "db".to_string()];
+        let missing = dispatch_preflight(true, &have, &need);
+        assert!(!missing.skills_ok);
+        assert!(!missing.can_dispatch());
+        let satisfied =
+            dispatch_preflight(true, &have, &[String::from("web")]);
+        assert!(satisfied.can_dispatch());
+        // lease_start enforces the gate first (no LLM in the path).
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "j1",
+            "gated",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        svc.set_api_key_present(false);
+        assert!(
+            svc.lease_start("j1", now()).is_err(),
+            "missing key must refuse the lease without any LLM call"
+        );
+        svc.set_api_key_present(true);
+        assert!(svc.lease_start("j1", now()).is_ok());
+    }
+
+    // -- P51.32d drift guard ------------------------------------------------------
+
+    #[test]
+    fn drifted_model_refuses_lease_start() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "j1",
+            "pinned",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        svc.set_job_pins("j1", "model-a", "high", "hash-1")
+            .unwrap();
+        svc.set_active_model("model-a");
+        svc.set_active_effort("high");
+        {
+            let job = svc.get("j1").unwrap();
+            assert!(job.check_drift("model-a", "high").is_ok());
+            assert!(job.check_drift("model-b", "high").is_err());
+            assert!(job.check_drift("model-a", "low").is_err());
+        }
+        // Drifted runtime refuses the lease (fail-closed).
+        svc.set_active_model("model-b");
+        assert!(
+            svc.lease_start("j1", now()).is_err(),
+            "drifted model must refuse lease_start"
+        );
+        svc.set_active_model("model-a");
+        assert!(svc.lease_start("j1", now()).is_ok());
+        // Unpinned jobs never drift-block.
+        svc.upsert(
+            "j2",
+            "plain",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        assert!(svc.lease_start("j2", now()).is_ok());
+    }
+
+    // -- P51.32e incidents ----------------------------------------------------------
+
+    #[test]
+    fn incidents_require_explicit_ack() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "j1",
+            "fragile",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        let id = svc.report_incident("j1", "run_failed", "boom", now());
+        let list = svc.list_incidents();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].job_id, "j1");
+        assert!(!list[0].acked, "incidents start unacked");
+        assert!(!svc.ack_incident("inc-nope"), "unknown id → false");
+        // Still unacked until the explicit ack.
+        assert!(!svc.list_incidents()[0].acked);
+        assert!(svc.ack_incident(&id));
+        assert!(
+            svc.list_incidents()[0].acked,
+            "explicit ack flips the flag"
+        );
+        assert_eq!(svc.get_incident(&id).unwrap().detail, "boom");
+    }
+
+    // -- P51.32f doctor ----------------------------------------------------------------
+
+    #[test]
+    fn cron_doctor_flags_missed_and_dead_lease() {
+        let mut svc = SchedulerService::new();
+        svc.upsert(
+            "missed",
+            "m",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        {
+            let job = svc.jobs.get_mut("missed").unwrap();
+            job.next_run_at = Some(now() - 1000);
+            job.state = RunState::Idle;
+        }
+        svc.upsert(
+            "dead",
+            "d",
+            "s1",
+            TriggerSpec::Interval { secs: 60 },
+            vec![],
+            None,
+            now(),
+        );
+        // Lease taken in the past → already expired at `now()`.
+        let _ = svc.lease_start("dead", now() - 100).unwrap();
+        let checks = svc.cron_doctor(now());
+        let missed = checks.iter().find(|c| c.name == "missed_runs").unwrap();
+        let dead = checks.iter().find(|c| c.name == "dead_lease").unwrap();
+        let queue = checks.iter().find(|c| c.name == "queue_depth").unwrap();
+        assert!(!missed.ok, "overdue next_run_at flags: {}", missed.detail);
+        assert!(!dead.ok, "expired lease flags: {}", dead.detail);
+        assert!(queue.ok, "small registry is healthy: {}", queue.detail);
+        // Healthy service → all green.
+        let fresh = SchedulerService::new();
+        assert!(fresh.cron_doctor(now()).iter().all(|c| c.ok));
+    }
+
+    // -- P51.32g runs ledger ----------------------------------------------------------------
+
+    #[test]
+    fn runs_ledger_claimed_running_completed() {
+        let mut svc = SchedulerService::new();
+        svc.record_run_transition("run-1", "j1", RunLedgerState::Claimed, now());
+        svc.record_run_transition("run-1", "j1", RunLedgerState::Running, now() + 1);
+        svc.record_run_transition(
+            "run-1",
+            "j1",
+            RunLedgerState::Completed,
+            now() + 2,
+        );
+        let runs = svc.list_runs();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].run_id, "run-1");
+        assert_eq!(runs[0].job_id, "j1");
+        assert_eq!(runs[0].state, RunLedgerState::Completed);
+        assert_eq!(runs[0].claimed_at, now());
+        assert_eq!(runs[0].started_at_ms, Some(now() + 1));
+        assert_eq!(runs[0].finished_at_ms, Some(now() + 2));
+        assert_eq!(svc.get_run("run-1").unwrap().state, RunLedgerState::Completed);
+        // Bound enforcement: push past the cap, oldest evicted first.
+        for i in 0..(RUN_LEDGER_CAP as u64 + 5) {
+            svc.record_run_transition(
+                format!("r-{i}"),
+                "j1",
+                RunLedgerState::Claimed,
+                now() + i,
+            );
+        }
+        assert!(svc.list_runs().len() <= RUN_LEDGER_CAP);
     }
 }

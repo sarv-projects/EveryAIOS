@@ -7,8 +7,10 @@
 
 pub mod catalog;
 pub mod discovery;
+pub mod gallery;
 pub mod gateway;
 pub mod model;
+pub mod policy;
 pub mod pricing;
 pub mod probe;
 pub mod provider;

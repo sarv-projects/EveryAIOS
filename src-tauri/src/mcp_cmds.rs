@@ -356,6 +356,33 @@ pub fn mcp_detach(
     Ok(removed)
 }
 
+/// P51.18 — no-restart refresh: probe every live child with a non-blocking
+/// liveness check, drop the dead ones from `mcp_live` (rows stay as honestly
+/// `disconnected` identities for re-attach), and return the fresh row list.
+/// Start/Stop ride the existing flows: Stop = `mcp_detach`, Start =
+/// `mcp_attach_request` → `mcp_attach_commit` (Guard-2 ticketed).
+#[tauri::command]
+pub fn mcp_refresh(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<serde_json::Value, String> {
+    let mut pruned: Vec<String> = Vec::new();
+    {
+        let mut live = state.mcp_live.lock().map_err(|e| e.to_string())?;
+        live.retain(|name, server| {
+            let alive = server.is_alive();
+            if !alive {
+                pruned.push(name.clone());
+            }
+            alive
+        });
+    }
+    let rows = mcp_servers(state.clone())?;
+    Ok(serde_json::json!({
+        "servers": rows,
+        "prunedDead": pruned,
+    }))
+}
+
 // ---------------------------------------------------------------------------
 // Remote MCP + OAuth 2.1 (ARCH/15 Tier 2) — the Connect Store's "Connect"
 // button: discovery → dynamic client registration → PKCE loopback → token.

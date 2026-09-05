@@ -154,10 +154,14 @@ fn parse_one_record(rec: &[u8]) -> Option<UsnRawRecord> {
 
 /// Assemble an absolute `PathBuf` from a chain of names (root-first).
 pub fn assemble_path(volume: &str, chain: &[&str]) -> PathBuf {
+    // Never strip the root down to a drive-relative prefix: `PathBuf::from`
+    // + `push` on `"C:"` yields `C:child` (drive-relative, wrong volume).
+    // Re-anchor with one separator so joins stay absolute on any platform.
+    let base = volume.trim_end_matches(['\\', '/']);
     if chain.is_empty() {
-        return PathBuf::from(volume.trim_end_matches('\\'));
+        return PathBuf::from(base);
     }
-    let mut p = PathBuf::from(volume.trim_end_matches('\\'));
+    let mut p = PathBuf::from(format!("{base}{}", std::path::MAIN_SEPARATOR));
     for part in chain {
         p.push(part);
     }

@@ -100,4 +100,34 @@ describe("selectModelForTask with observations", () => {
     });
     expect(sel.reason).toContain("no vault credential");
   });
+
+  it("P51.3 use-policy excludes non-listed providers pre-rank", () => {
+    const sel = selectModelForTask({
+      task: "chat",
+      providers: ["nvidia", "openai"],
+      usePolicies: ["openai"],
+    });
+    expect(sel.provider).toBe("openai");
+  });
+
+  it("P51.3 use-policy never strands keyless local runtimes", () => {
+    const sel = selectModelForTask({
+      task: "chat",
+      providers: ["openai", "ollama"],
+      usePolicies: ["anthropic"],
+    });
+    // openai is excluded by the policy; ollama passes via keyless bypass.
+    expect(sel.provider).toBe("ollama");
+  });
+
+  it("P51.3 explicit lock wins over the use-policy", () => {
+    const sel = selectModelForTask({
+      task: "chat",
+      providers: ["nvidia", "openai"],
+      provider: "nvidia",
+      model: "test-model",
+      usePolicies: ["openai"],
+    });
+    expect(sel.provider).toBe("nvidia");
+  });
 });
