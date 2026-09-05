@@ -347,6 +347,11 @@ impl<'a> Broker<'a> {
                             usage,
                             cost,
                             tool: None,
+                            // Cloud broker turns carry no task scope here —
+                            // scoped callers record via `record_usage_scoped`.
+                            task_id: String::new(),
+                            run_id: String::new(),
+                            work_id: String::new(),
                         })
                         .map_err(BrokerError::Vault)?;
                     // J11: settle the session; the next call is refused once
@@ -485,6 +490,9 @@ impl<'a> Broker<'a> {
             usage,
             cost,
             tool: None,
+            task_id: String::new(),
+            run_id: String::new(),
+            work_id: String::new(),
         })?;
         self.budget.settle(session_id, cost);
         Ok(())

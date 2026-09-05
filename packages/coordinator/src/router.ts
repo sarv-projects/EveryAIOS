@@ -66,6 +66,14 @@ export interface RouterOptions {
    */
   credentialedProviders?: string[];
   /**
+   * P51.3 — `provider.use` allowlist for the *taken* route (mirrors the Rust
+   * `UsePolicy`). When present (non-empty), providers absent from this set
+   * are excluded before ranking — but an explicit provider/model lock still
+   * wins (user intent over policy), and keyless local runtimes always pass
+   * (a use-policy must never strand the user with zero local route).
+   */
+  usePolicies?: string[];
+  /**
    * P36 — live provider observations (`${provider}:${model}` → observation).
    * When present, ranking uses the deterministic RouteDecision consensus
    * scorer instead of raw cost-sort (the Rust `Scorer` port above).
@@ -136,6 +144,11 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
   const credentialed = opts.credentialedProviders
     ? new Set(opts.credentialedProviders.map(normalizeProviderId))
     : null;
+  // P51.3 — `provider.use` allowlist (empty/absent = allow all).
+  const useAllowed =
+    opts.usePolicies && opts.usePolicies.length > 0
+      ? new Set(opts.usePolicies.map(normalizeProviderId))
+      : null;
   const candidates: Array<{ provider: string; model: string }> = [];
   // P50.3.6 — providers that survived the credential gate (mirrors the Rust
   // feed's gate-holding fallback: the taken route can never name a provider
@@ -149,6 +162,14 @@ export function selectModelForTask(opts: RouterOptions): ModelSelection {
       credentialed !== null &&
       !KEYLESS_PROVIDERS.has(normalizeProviderId(provider)) &&
       !credentialed.has(normalizeProviderId(provider))
+    ) {
+      continue;
+    }
+    // P51.3 — use-policy exclusion (keyless local runtimes always pass).
+    if (
+      useAllowed !== null &&
+      !KEYLESS_PROVIDERS.has(normalizeProviderId(provider)) &&
+      !useAllowed.has(normalizeProviderId(provider))
     ) {
       continue;
     }

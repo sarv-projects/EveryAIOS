@@ -119,6 +119,24 @@ pub struct MemoryService {
     result_cache: everyaios_memory::ResultCache,
 }
 
+/// Per-category context-window breakdown (P52.18-Rust-half).
+///
+/// Derived from the [`everyaios_memory::UsageLedger`] totals: the ledger only
+/// measures aggregate tokens per key/session, so all observed tokens are
+/// reported under `conversation` and the remaining categories are zero
+/// (unmeasured — documented here rather than invented).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ContextBreakdown {
+    pub system: u64,
+    pub tools: u64,
+    pub skills: u64,
+    pub memory: u64,
+    pub rules: u64,
+    pub mcp: u64,
+    pub subagents: u64,
+    pub conversation: u64,
+}
+
 /// How often a write triggers a background consolidate+reinforce pass.
 const SYNTH_EVERY_WRITES: u32 = 8;
 
@@ -614,6 +632,24 @@ impl MemoryService {
             "byKey": keys,
             "bySession": sessions,
         })
+    }
+
+    /// P52.18-Rust-half `context/breakdown`: split the ledger total into
+    /// per-category buckets. Only the aggregate is measured in-process, so
+    /// `conversation` carries the full `tokens_in + tokens_out` total and the
+    /// other buckets are zero (see [`ContextBreakdown`]).
+    pub fn context_breakdown(&self) -> ContextBreakdown {
+        let t = self.usage.total();
+        ContextBreakdown {
+            system: 0,
+            tools: 0,
+            skills: 0,
+            memory: 0,
+            rules: 0,
+            mcp: 0,
+            subagents: 0,
+            conversation: t.tokens_in + t.tokens_out,
+        }
     }
 
     /// P5.10 — retest every built algorithm core across the sidecar process
@@ -1471,5 +1507,26 @@ mod tests {
         let s1 = eps.iter().find(|e| e["sessionId"] == "s1").unwrap();
         assert_eq!(s1["count"], 2);
         assert_eq!(s1["preview"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn context_breakdown_sums_to_snapshot_total() {
+        let mut m = MemoryService::new();
+        m.record_usage("k1", "s1", 1_000, 200, false, 0);
+        m.record_usage("k1", "s2", 500, 100, true, 50);
+        let snap = m.usage_snapshot();
+        let total_in = snap["total"]["tokens_in"].as_u64().unwrap();
+        let total_out = snap["total"]["tokens_out"].as_u64().unwrap();
+        let bd = m.context_breakdown();
+        let sum = bd.system
+            + bd.tools
+            + bd.skills
+            + bd.memory
+            + bd.rules
+            + bd.mcp
+            + bd.subagents
+            + bd.conversation;
+        assert_eq!(sum, total_in + total_out);
+        assert_eq!(sum, 1_800);
     }
 }

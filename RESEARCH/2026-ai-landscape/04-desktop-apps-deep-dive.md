@@ -7,7 +7,7 @@
 The closest thing to our vision (RAG + agents + MCP) — but **no memory algorithms, no KG,
 no self-planning, no crystallization.** We'd be building the next evolution.
 
-### 1a. Web Search Architecture (read from actual source)
+### 1a. Web Search Architecture (read from actual source — Aug source-read; engine list NOT re-verified Sep 2026, docs page thinned — doc 86)
 
 Files: `server/utils/agents/aibitat/plugins/web-browsing.js` + `web-scraping.js`
 
@@ -50,7 +50,7 @@ project: AI agents operating a **virtualized OS** (QEMU) instead of your real ma
 
 ### 1e. Desktop vs server
 
-- `anythingllm-desktop` package wraps the same server in Electron; search/agents identical.
+- No standalone `anythingllm-desktop` repo (404 — verified 2026-09-04 doc 86): desktop is a monorepo build target wrapping the same server in Electron; search/agents identical.
 - **Our comparison verdict:** our `WebSearchCascade` is already more advanced (true cascade + 12-instance
   pool + circuit breakers + races vs. their single-provider switch). They beat us on: **You.com keyless,
   token-counted introspect narration, first-class citations UI.**

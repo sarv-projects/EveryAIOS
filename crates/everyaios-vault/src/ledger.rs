@@ -187,6 +187,12 @@ pub fn default_pricing(provider: &str) -> Option<Pricing> {
 }
 
 /// One append-only `token_usage` ledger row (ARCH/05 §5.6, ARCH/03 §3.4).
+///
+/// P51.12 cost-carrier scope: `task_id`/`run_id`/`work_id` bind the row to the
+/// detached-work join (`Vault::usage_for_task` → `Vault::task_cost` →
+/// `TaskRecord::attach_cost`). Unscoped rows (broker turns with no task
+/// context) store `""` — the pre-P51.12 migration backfills `""` so old rows
+/// stay valid and read back with empty scope.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UsageRow {
     pub session: String,
@@ -199,6 +205,12 @@ pub struct UsageRow {
     pub cost: f64,
     /// Optional tool id for tool calls (nullable in the schema).
     pub tool: Option<String>,
+    /// Detached-work task this spend belongs to (`""` = unscoped).
+    pub task_id: String,
+    /// One execution attempt of the task (`""` = unscoped).
+    pub run_id: String,
+    /// Work-gateway work item (`""` = unscoped).
+    pub work_id: String,
 }
 
 /// One per-session aggregate row for the analytics cost table (P5.9) — the

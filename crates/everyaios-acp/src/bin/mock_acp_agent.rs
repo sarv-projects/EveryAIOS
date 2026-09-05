@@ -60,7 +60,13 @@ fn main() {
                 let _ = writeln!(stdout, "{resp}");
             }
             "session/prompt" => {
-                let text = req["params"]["text"].as_str().unwrap_or("");
+                // ACP v1 shape: `params.prompt` is a content-block array; fall
+                // back to the legacy flat `params.text` for tolerance.
+                let text = req["params"]["prompt"]
+                    .as_array()
+                    .and_then(|blocks| blocks.iter().find_map(|b| b["text"].as_str()))
+                    .or_else(|| req["params"]["text"].as_str())
+                    .unwrap_or("");
                 // Notification: params IS the SessionUpdate shape (camelCase).
                 let notif = serde_json::json!({
                     "jsonrpc": "2.0",

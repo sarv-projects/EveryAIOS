@@ -292,6 +292,10 @@ impl<T: AcpTransport> AcpSession<T> {
         }
         self.agent_info = Some(result.agent_info.clone());
         self.auth_methods = result.auth_methods.clone();
+        // An agent advertising no auth methods needs no auth: the session is
+        // authenticated by construction (see `auth_methods`). Anything
+        // advertised must still complete `authenticate` explicitly.
+        self.authenticated = self.auth_methods.is_empty();
         self.initialized = true;
         Ok(result)
     }
@@ -622,6 +626,38 @@ mod tests {
         })
     }
 
+    fn init_result_with_methods() -> Value {
+        json!({
+            "protocolVersion": 1,
+            "agentCapabilities": { "loadSession": true },
+            "agentInfo": { "name": "claude-acp", "title": "Claude", "version": "0.66.0" },
+            "authMethods": [
+                { "id": "agent-login", "name": "Agent login", "description": "Sign in with your account" }
+            ]
+        })
+    }
+
+    #[test]
+    fn initialize_with_no_auth_methods_marks_authenticated() {
+        // The documented contract (`auth_methods`): empty ⇒ the agent needs
+        // no auth, so the session is authenticated by construction. This is
+        // what the mock-CLI E2E (`live_spawn`) relies on.
+        let mut t = MockTransport::new(vec![&result_response(1, init_result())]);
+        let mut s = AcpSession::new(&mut t);
+        s.initialize(client_info()).unwrap();
+        assert!(s.auth_methods().is_empty());
+        assert!(s.is_authenticated());
+    }
+
+    #[test]
+    fn initialize_with_advertised_methods_stays_unauthenticated() {
+        let mut t = MockTransport::new(vec![&result_response(1, init_result_with_methods())]);
+        let mut s = AcpSession::new(&mut t);
+        s.initialize(client_info()).unwrap();
+        assert_eq!(s.auth_methods().len(), 1);
+        assert!(!s.is_authenticated());
+    }
+
     #[test]
     fn initialize_negotiates_version_and_capabilities() {
         let mut t = MockTransport::new(vec![&result_response(1, init_result())]);
@@ -771,7 +807,7 @@ mod tests {
     #[test]
     fn authenticate_agent_method_succeeds() {
         let mut t = MockTransport::new(vec![
-            &result_response(1, init_result()),
+            &result_response(1, init_result_with_methods()),
             &result_response(2, json!({})),
         ]);
         let mut s = AcpSession::new(&mut t);
@@ -791,7 +827,17 @@ mod tests {
     #[test]
     fn authenticate_url_method_returns_url_and_waits() {
         let mut t = MockTransport::new(vec![
-            &result_response(1, init_result()),
+            &result_response(
+                1,
+                json!({
+                    "protocolVersion": 1,
+                    "agentCapabilities": { "loadSession": true },
+                    "agentInfo": { "name": "claude-acp", "title": "Claude", "version": "0.66.0" },
+                    "authMethods": [
+                        { "id": "agent-login", "name": "Agent login", "type": "url", "description": "Open a browser" }
+                    ]
+                }),
+            ),
             // url-type: first call returns the browser URL, not yet authed.
             &result_response(
                 2,
@@ -856,7 +902,7 @@ mod tests {
     #[test]
     fn logout_sends_request_and_clears_auth() {
         let mut t = MockTransport::new(vec![
-            &result_response(1, init_result()),
+            &result_response(1, init_result_with_methods()),
             &result_response(2, json!({})),
             &result_response(3, json!({})),
         ]);

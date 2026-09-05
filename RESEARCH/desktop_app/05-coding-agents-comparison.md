@@ -144,7 +144,7 @@ Reasonix is **DeepSeek-only by design** because "every layer is tuned to the byt
 | **pi** | **Unified LLM API w/ token & cost tracking + auth resolution** — clean `pi-ai` abstraction | `packages/ai` |
 | **pi** | **Four modes (interactive/JSON/RPC/SDK)** — our Node sidecar can expose the same surface; desktop UI + CLI + SDK from one engine | `packages/coding-agent` |
 | **pi** | Skills/Prompt Templates/Themes/Pi Packages sharing model | `packages/coding-agent` docs |
-| **Crush/OpenCode** | **LSP integration for code intelligence** (Language Server Protocol for context) | opencode README / crush |
+| **Crush/OpenCode** | **LSP integration for code intelligence** (Language Server Protocol for context) | opencode README / crush (Crush = FSL-1.1-MIT source-available — patterns only, doc 86) |
 | **Crush** | MCP over `http`/`stdio`/`sse` (our MCP host covers stdio; add http/sse) | crush README |
 | **Claude Code** | Permission modes (`plan`/`acceptEdits`/`bypass`) as UX for Trust Ladder | docs (engine closed) |
 | **Hermes** | (doc 02) delegation security, memory, sandboxes, gateway | — |

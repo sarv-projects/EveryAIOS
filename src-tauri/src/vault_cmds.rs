@@ -75,3 +75,29 @@ pub fn vault_key_remove(
         .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "ok": true, "provider": provider, "keyId": key_id }))
 }
+
+/// P51.1 — rotate one provider key in place (mints a new opaque handle,
+/// zeroes the failure/cooldown counters). The new secret travels once over
+/// the already-trusted webview→shell invoke boundary into the vault.
+#[tauri::command]
+pub fn vault_key_rotate(
+    state: State<'_, AppState>,
+    provider: String,
+    key_id: String,
+    value: String,
+) -> Result<serde_json::Value, String> {
+    if value.trim().is_empty() {
+        return Err("refusing to rotate to an empty key".to_string());
+    }
+    let vault = state.vault.lock().map_err(|e| e.to_string())?;
+    let ring = KeyRing::new(&vault);
+    let handle = ring
+        .rotate_key(&provider, &key_id, value.as_bytes())
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "provider": provider,
+        "keyId": key_id,
+        "opaqueHandle": handle,
+    }))
+}

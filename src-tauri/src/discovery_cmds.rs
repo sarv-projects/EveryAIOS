@@ -99,6 +99,8 @@ fn collect_local_models() -> Vec<ResourceCard> {
             capabilities: vec![format!("ctx:{}", m.context_window)],
             capabilities_verified: true, // locally observed
             governance: "local".into(),
+            base_url: String::new(),
+            doc_url: String::new(),
             status: ManagedResource::Healthy,
         })
         .collect()
@@ -122,6 +124,8 @@ fn collect_installed_mcp(data_dir: &PathBuf) -> Vec<ResourceCard> {
                         capabilities: vec![],
                         capabilities_verified: false,
                         governance: String::new(),
+                        base_url: String::new(),
+                        doc_url: String::new(),
                         status: ManagedResource::Installed,
                     }
                 })
@@ -148,6 +152,8 @@ fn collect_installed_skills(data_dir: &PathBuf) -> Vec<ResourceCard> {
                         capabilities: vec![],
                         capabilities_verified: false,
                         governance: String::new(),
+                        base_url: String::new(),
+                        doc_url: String::new(),
                         status: ManagedResource::Installed,
                     }
                 })
@@ -168,6 +174,8 @@ fn collect_agents(data_dir: &PathBuf) -> Vec<ResourceCard> {
         capabilities: vec!["chat".into(), "tools".into(), "plan".into()],
         capabilities_verified: true,
         governance: "inbuilt".into(),
+        base_url: String::new(),
+        doc_url: String::new(),
         status: ManagedResource::Healthy,
     }];
     let dir = data_dir.join("agents");
@@ -184,6 +192,8 @@ fn collect_agents(data_dir: &PathBuf) -> Vec<ResourceCard> {
                 capabilities: vec![],
                 capabilities_verified: false,
                 governance: "custom".into(),
+                base_url: String::new(),
+                doc_url: String::new(),
                 status: ManagedResource::Installed,
             });
         }
@@ -258,7 +268,25 @@ fn collect_browsers() -> Vec<ResourceCard> {
             capabilities: vec!["cdp".into()],
             capabilities_verified: true,
             governance: String::new(),
+            base_url: String::new(),
+            doc_url: String::new(),
             status: ManagedResource::Healthy,
         })
         .collect()
+}
+
+/// P51.1 — live health ping for one provider base URL (`GET {base}/v1/models`,
+/// 2s timeout). Returns `{ reachable }` — the drawer health-check trigger.
+/// No credentials are sent; loopback and https only (fail-closed otherwise).
+#[tauri::command]
+pub fn provider_health_probe(url: String) -> Result<serde_json::Value, String> {
+    let base = url.trim_end_matches('/');
+    if !(base.starts_with("http://127.0.0.1")
+        || base.starts_with("http://localhost")
+        || base.starts_with("https://"))
+    {
+        return Err("probe refused: loopback or https only".to_string());
+    }
+    let reachable = everyaios_core::models::probe::probe_openai_endpoint(base);
+    Ok(serde_json::json!({ "url": base, "reachable": reachable }))
 }

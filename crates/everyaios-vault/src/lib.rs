@@ -54,7 +54,7 @@ use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
 
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 const INIT_SQL: &str = r#"
 PRAGMA journal_mode=WAL;
@@ -102,6 +102,10 @@ CREATE INDEX IF NOT EXISTS idx_key_ring_provider ON key_ring(provider);
 -- call records provider/model/key/session + cache-aware token counts + $ cost.
 -- Shared by per-key budgets (ARCH/03), session efficiency projections, and
 -- the UI's live token/cost stream. `tool` is nullable (set for tool calls).
+-- P51.12: `task_id`/`run_id`/`work_id` scope rows to detached work (the
+-- task-cost join carrier). NOT NULL DEFAULT '' so pre-P51.12 rows stay valid;
+-- pre-existing DBs gain the columns via `ensure_token_usage_scope_columns`
+-- (CREATE TABLE IF NOT EXISTS alone never alters an existing table).
 CREATE TABLE IF NOT EXISTS token_usage (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     ts           INTEGER NOT NULL,
@@ -114,10 +118,14 @@ CREATE TABLE IF NOT EXISTS token_usage (
     cache_read   INTEGER NOT NULL,
     cache_write  INTEGER NOT NULL,
     cost         REAL NOT NULL,
-    tool         TEXT
+    tool         TEXT,
+    task_id      TEXT NOT NULL DEFAULT '',
+    run_id       TEXT NOT NULL DEFAULT '',
+    work_id      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_token_usage_session ON token_usage(session);
 CREATE INDEX IF NOT EXISTS idx_token_usage_ts ON token_usage(ts);
+CREATE INDEX IF NOT EXISTS idx_token_usage_task ON token_usage(task_id);
 
 -- P1.7 (A4, doc 33 §7.4): OAuth subscription tokens — encrypted at rest in
 -- the SQLCipher vault, never visible to the sidecar. PK is (provider,
@@ -244,6 +252,7 @@ impl Vault {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "key", key)?;
         conn.pragma_update(None, "cipher_page_size", 4096)?;
+        ensure_token_usage_scope_columns(&conn)?;
         conn.execute_batch(INIT_SQL)?;
         conn.execute(
             "INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?1)
@@ -259,6 +268,7 @@ impl Vault {
     pub fn open_in_memory(key: &str) -> Result<Self, VaultError> {
         let conn = Connection::open_in_memory()?;
         conn.pragma_update(None, "key", key)?;
+        ensure_token_usage_scope_columns(&conn)?;
         conn.execute_batch(INIT_SQL)?;
         Ok(Self { conn })
     }
@@ -358,12 +368,14 @@ impl Vault {
     // ---- P1.3 cost ledger (A9) -----------------------------------------
 
     /// Append one `token_usage` row (single write owner — the vault).
+    /// The row carries its own P51.12 scope (`task_id`/`run_id`/`work_id`;
+    /// `""` = unscoped broker turn).
     pub fn record_usage(&self, row: &UsageRow) -> Result<(), VaultError> {
         self.conn.execute(
             "INSERT INTO token_usage
                 (ts, session, provider, model, key_id, in_tokens, out_tokens,
-                 cache_read, cache_write, cost, tool)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 cache_read, cache_write, cost, tool, task_id, run_id, work_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             rusqlite::params![
                 now_ms(),
                 row.session,
@@ -376,9 +388,30 @@ impl Vault {
                 row.usage.cache_write as i64,
                 row.cost,
                 row.tool,
+                row.task_id,
+                row.run_id,
+                row.work_id,
             ],
         )?;
         Ok(())
+    }
+
+    /// Append one scoped `token_usage` row: `row` supplies the call fields,
+    /// the three `&str` params supply the P51.12 cost-carrier scope. Thin
+    /// wrapper over [`Self::record_usage`] so existing unscoped callers keep
+    /// compiling unchanged.
+    pub fn record_usage_scoped(
+        &self,
+        row: &UsageRow,
+        task_id: &str,
+        run_id: &str,
+        work_id: &str,
+    ) -> Result<(), VaultError> {
+        let mut scoped = row.clone();
+        scoped.task_id = task_id.to_string();
+        scoped.run_id = run_id.to_string();
+        scoped.work_id = work_id.to_string();
+        self.record_usage(&scoped)
     }
 
     /// Total $ spent by a session (SUM over the ledger — the durable side of
@@ -437,6 +470,63 @@ impl Vault {
         Ok(out)
     }
 
+    /// P51.12 task-cost join (carrier read side): every ledger row scoped to
+    /// `task_id`, newest-first. Feeds `task_cost` and, across the crate
+    /// boundary, `TaskRecord::attach_cost`.
+    pub fn usage_for_task(&self, task_id: &str) -> Result<Vec<UsageRow>, VaultError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session, provider, model, key_id,
+                    in_tokens, out_tokens, cache_read, cache_write, cost, tool,
+                    task_id, run_id, work_id
+             FROM token_usage
+             WHERE task_id = ?1
+             ORDER BY id DESC",
+        )?;
+        let rows = stmt.query_map([task_id], |r| {
+            Ok(UsageRow {
+                session: r.get(0)?,
+                provider: r.get(1)?,
+                model: r.get(2)?,
+                key_id: r.get(3)?,
+                usage: crate::ledger::Usage {
+                    prompt: r.get::<_, i64>(4)?.max(0) as u64,
+                    output: r.get::<_, i64>(5)?.max(0) as u64,
+                    cache_read: r.get::<_, i64>(6)?.max(0) as u64,
+                    cache_write: r.get::<_, i64>(7)?.max(0) as u64,
+                },
+                cost: r.get(8)?,
+                tool: r.get(9)?,
+                task_id: r.get(10)?,
+                run_id: r.get(11)?,
+                work_id: r.get(12)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    /// P51.12 task-cost join (aggregate side): `(in_tokens, out_tokens, cost)`
+    /// summed over every row scoped to `task_id`. Unknown tasks sum to zero —
+    /// never an error.
+    pub fn task_cost(&self, task_id: &str) -> Result<(u64, u64, f64), VaultError> {
+        let (in_sum, out_sum, cost_sum): (i64, i64, f64) = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(in_tokens), 0),
+                        COALESCE(SUM(out_tokens), 0),
+                        COALESCE(SUM(cost), 0.0)
+                 FROM token_usage WHERE task_id = ?1",
+                [task_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?
+            .unwrap_or((0, 0, 0.0));
+        Ok((in_sum.max(0) as u64, out_sum.max(0) as u64, cost_sum))
+    }
+
     /// Per-session cost/token breakdown for the analytics table (P5.9) — the
     /// `token_usage` ledger grouped by session, most-expensive first.
     pub fn session_totals(&self) -> Result<Vec<SessionTotal>, VaultError> {
@@ -463,6 +553,45 @@ impl Vault {
         }
         Ok(out)
     }
+}
+
+/// P51.12 migration: `CREATE TABLE IF NOT EXISTS` never alters an existing
+/// table, so pre-P51.12 databases gain the cost-carrier scope columns here.
+/// `ADD COLUMN ... NOT NULL DEFAULT ''` keeps every old row valid (reads back
+/// as unscoped `""`). Idempotent — safe to run on every open.
+///
+/// Runs BEFORE `INIT_SQL`: the batch now contains an index on `task_id`,
+/// which would fail against a legacy table that lacks the column. Missing
+/// tables are left alone (fresh DBs get the v7 shape from `INIT_SQL`).
+fn ensure_token_usage_scope_columns(conn: &Connection) -> Result<(), VaultError> {
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'token_usage'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?
+        .unwrap_or(false);
+    if !exists {
+        return Ok(());
+    }
+    let mut stmt = conn.prepare("PRAGMA table_info(token_usage)")?;
+    let cols = stmt
+        .query_map([], |r| r.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    for col in ["task_id", "run_id", "work_id"] {
+        if !cols.iter().any(|c| c == col) {
+            conn.execute(
+                &format!("ALTER TABLE token_usage ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"),
+                [],
+            )?;
+        }
+    }
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_token_usage_task ON token_usage(task_id)",
+        [],
+    )?;
+    Ok(())
 }
 
 fn now_ms() -> i64 {
@@ -528,7 +657,7 @@ mod tests {
 
         {
             let vault = Vault::open(&path, "test-key").expect("open");
-            assert!(vault.status().contains("schema v6"));
+            assert!(vault.status().contains("schema v7"));
             vault.register_key("anthropic", "key-1").unwrap();
             vault.register_key("anthropic", "key-2").unwrap();
             vault.register_key("openai", "key-3").unwrap();
@@ -703,7 +832,7 @@ mod tests {
         // Reopen: version row must be bumped to the current schema.
         {
             let vault = Vault::open(&path, "test-key").expect("reopen");
-            assert!(vault.status().contains("schema v6"));
+            assert!(vault.status().contains("schema v7"));
             assert!(vault.ledger_count().unwrap() == 0);
         }
 
@@ -728,6 +857,9 @@ mod tests {
                 usage,
                 cost: 0.0012,
                 tool: None,
+                task_id: "".into(),
+                run_id: "".into(),
+                work_id: "".into(),
             })
             .unwrap();
         vault
@@ -739,6 +871,9 @@ mod tests {
                 usage: Usage::default(),
                 cost: 0.0008,
                 tool: Some("files.read".into()),
+                task_id: "".into(),
+                run_id: "".into(),
+                work_id: "".into(),
             })
             .unwrap();
         vault
@@ -750,6 +885,9 @@ mod tests {
                 usage: Usage::default(),
                 cost: 0.01,
                 tool: None,
+                task_id: "".into(),
+                run_id: "".into(),
+                work_id: "".into(),
             })
             .unwrap();
 
@@ -801,6 +939,9 @@ mod tests {
                         },
                         cost: 0.0005,
                         tool: None,
+                        task_id: "".into(),
+                        run_id: "".into(),
+                        work_id: "".into(),
                     })
                     .unwrap();
             }
@@ -813,6 +954,9 @@ mod tests {
                     usage: Usage::default(),
                     cost: 0.02,
                     tool: None,
+                    task_id: "".into(),
+                    run_id: "".into(),
+                    work_id: "".into(),
                 })
                 .unwrap();
             let totals = vault.session_totals().unwrap();
@@ -857,6 +1001,9 @@ mod tests {
                     },
                     cost: 0.001,
                     tool: None,
+                    task_id: "".into(),
+                    run_id: "".into(),
+                    work_id: "".into(),
                 })
                 .unwrap();
         }
@@ -874,6 +1021,9 @@ mod tests {
                 },
                 cost: 0.0001,
                 tool: None,
+                task_id: "".into(),
+                run_id: "".into(),
+                work_id: "".into(),
             })
             .unwrap();
 
@@ -898,6 +1048,151 @@ mod tests {
         assert!(v.get("inTokens").is_some());
         assert!(v.get("outTokens").is_some());
         assert!(v.get("cost").is_some());
+    }
+
+    /// P51.12 — the task-cost join carrier: scoped rows round-trip through
+    /// `usage_for_task`, and `task_cost` sums (in, out, $) across rows. Rows
+    /// scoped to other tasks (or unscoped `""`) never leak into the join.
+    #[test]
+    fn ledger_cost_carrier_joins_task() {
+        let vault = Vault::open_in_memory("mem-key").expect("open");
+        let base = UsageRow {
+            session: "s-join".into(),
+            provider: "openai".into(),
+            model: "gpt-4o".into(),
+            key_id: "k".into(),
+            usage: Usage {
+                prompt: 100,
+                output: 40,
+                cache_read: 0,
+                cache_write: 0,
+            },
+            cost: 0.001,
+            tool: None,
+            task_id: "".into(),
+            run_id: "".into(),
+            work_id: "".into(),
+        };
+        // Two rows for task-7 (distinct run/work scope), one for another
+        // task, one unscoped broker turn.
+        vault
+            .record_usage_scoped(&base, "task-7", "run-a", "work-1")
+            .unwrap();
+        let mut second = base.clone();
+        second.usage = Usage {
+            prompt: 50,
+            output: 10,
+            cache_read: 0,
+            cache_write: 0,
+        };
+        second.cost = 0.0005;
+        vault
+            .record_usage_scoped(&second, "task-7", "run-b", "work-2")
+            .unwrap();
+        vault
+            .record_usage_scoped(&base, "task-9", "run-a", "work-1")
+            .unwrap();
+        vault.record_usage(&base).unwrap();
+
+        let rows = vault.usage_for_task("task-7").unwrap();
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|r| r.task_id == "task-7"));
+        let mut run_ids: Vec<&str> = rows.iter().map(|r| r.run_id.as_str()).collect();
+        run_ids.sort_unstable();
+        assert_eq!(run_ids, vec!["run-a", "run-b"]);
+
+        let (tin, tout, cost) = vault.task_cost("task-7").unwrap();
+        assert_eq!(tin, 150);
+        assert_eq!(tout, 50);
+        assert!((cost - 0.0015).abs() < 1e-12);
+
+        // Other tasks and unscoped rows are excluded from this join.
+        assert_eq!(vault.usage_for_task("task-9").unwrap().len(), 1);
+        assert_eq!(vault.usage_for_task("").unwrap().len(), 1);
+        assert_eq!(vault.usage_for_task("task-none").unwrap(), Vec::new());
+        assert_eq!(vault.task_cost("task-none").unwrap(), (0, 0, 0.0));
+    }
+
+    /// P51.12 migration compat: a pre-P51.12 database file (a `token_usage`
+    /// table WITHOUT the scope columns) opens cleanly — the columns are added
+    /// with `DEFAULT ''`, the legacy row reads back unscoped, and new scoped
+    /// writes work on the migrated table.
+    #[test]
+    fn old_rows_read_with_empty_task_id() {
+        let dir =
+            std::env::temp_dir().join(format!("everyaios-vault-scope-mig-{}", std::process::id()));
+        let path = dir.join("vault.db");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Forge a legacy DB: the exact pre-P51.12 `token_usage` shape (no
+        // task_id/run_id/work_id) plus one spend row.
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.pragma_update(None, "key", "mig-key").unwrap();
+            conn.pragma_update(None, "cipher_page_size", 4096).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE token_usage (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts           INTEGER NOT NULL,
+                    session      TEXT NOT NULL,
+                    provider     TEXT NOT NULL,
+                    model        TEXT NOT NULL,
+                    key_id       TEXT NOT NULL,
+                    in_tokens    INTEGER NOT NULL,
+                    out_tokens   INTEGER NOT NULL,
+                    cache_read   INTEGER NOT NULL,
+                    cache_write  INTEGER NOT NULL,
+                    cost         REAL NOT NULL,
+                    tool         TEXT
+                );
+                INSERT INTO token_usage
+                    (ts, session, provider, model, key_id, in_tokens, out_tokens,
+                     cache_read, cache_write, cost, tool)
+                VALUES (1, 's-old', 'openai', 'gpt-4o', 'k', 100, 40, 0, 0, 0.001, NULL);",
+            )
+            .unwrap();
+        }
+
+        // Opening migrates (adds the scope columns) and bumps the version.
+        {
+            let vault = Vault::open(&path, "mig-key").expect("open migrates legacy db");
+            assert!(vault.status().contains("schema v7"));
+            assert_eq!(vault.ledger_count().unwrap(), 1);
+            // Legacy row reads back with empty scope — old rows stay valid.
+            let unscoped = vault.usage_for_task("").unwrap();
+            assert_eq!(unscoped.len(), 1);
+            assert_eq!(unscoped[0].session, "s-old");
+            assert_eq!(unscoped[0].task_id, "");
+            assert_eq!(unscoped[0].run_id, "");
+            assert_eq!(unscoped[0].work_id, "");
+            let (tin, tout, cost) = vault.task_cost("").unwrap();
+            assert_eq!((tin, tout), (100, 40));
+            assert!((cost - 0.001).abs() < 1e-12);
+            // New scoped writes land on the migrated table.
+            vault
+                .record_usage(&UsageRow {
+                    session: "s-old".into(),
+                    provider: "openai".into(),
+                    model: "gpt-4o".into(),
+                    key_id: "k".into(),
+                    usage: Usage {
+                        prompt: 10,
+                        output: 5,
+                        cache_read: 0,
+                        cache_write: 0,
+                    },
+                    cost: 0.0001,
+                    tool: None,
+                    task_id: "task-1".into(),
+                    run_id: "run-1".into(),
+                    work_id: "work-1".into(),
+                })
+                .unwrap();
+            assert_eq!(vault.usage_for_task("task-1").unwrap().len(), 1);
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

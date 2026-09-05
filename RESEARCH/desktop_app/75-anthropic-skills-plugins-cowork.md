@@ -51,7 +51,7 @@ So: **we don't re-implement Anthropic's skills — we become a host that can ins
 
 | Repo | Verdict |
 |---|---|
-| **OpenCoworkAI/open-cowork** | 🟡 **VALIDATION (not a steal)** — open-source Cowork desktop app (Win/macOS): one-click install Claude Code + MCP + Skills, sandbox isolation, multi-model. It is *exactly* our thesis (a desktop app that installs harnesses + MCP + skills) but **built on Claude Code only**; we are the cockpit that hosts many harnesses + our own engines. Confirms H2/F8/F12/J17 direction. |
+| **OpenCoworkAI/open-cowork** | 🟡 **VALIDATION (not a steal)** — open-source Cowork desktop app (Win/macOS): BYOK provider table + MCP + Skills, sandbox isolation, multi-model. It is *exactly* our thesis (a desktop app that installs harnesses + MCP + skills) but **single-harness-only (pi-agent loop since v3.0.0 — was Claude-Code-based, corrected doc 86)**; we are the cockpit that hosts many harnesses + our own engines. Confirms H2/F8/F12/J17 direction. |
 | **hesreallyhim/awesome-claude-code** | 🟢 REF — curated resource list = catalog seed for the skills/plugins marketplace tab. |
 | **anthropics/claude-cookbooks** | 🟢 REF — recipe notebooks (patterns for prompt/skill design). |
 | **anthropics/claude-code-action** | ⚪ SKIP — GitHub Action wrapper (CI surface, out of scope). |

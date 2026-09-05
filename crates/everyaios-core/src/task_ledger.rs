@@ -87,6 +87,11 @@ pub enum DeliveryState {
 }
 
 /// One detached-work task record.
+///
+/// P51.12 cost join: `tokens_in`/`tokens_out`/`cost_usd` accumulate the
+/// vault-side spend for this task (`Vault::task_cost` → `attach_cost`). Each
+/// carries `#[serde(default)]` so pre-P51.12 JSON rows (file store, coordinator
+/// mirrors) still parse — missing cost fields read back as zero.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub id: String,
@@ -104,6 +109,27 @@ pub struct TaskRecord {
     /// Fence: each retry spawns a fresh record at generation+1.
     pub retry_generation: u32,
     pub delivery: DeliveryState,
+    /// Accumulated input tokens charged to this task (vault join).
+    #[serde(default)]
+    pub tokens_in: u64,
+    /// Accumulated output tokens charged to this task (vault join).
+    #[serde(default)]
+    pub tokens_out: u64,
+    /// Accumulated $ cost charged to this task (vault join).
+    #[serde(default)]
+    pub cost_usd: f64,
+}
+
+impl TaskRecord {
+    /// Accumulate one vault-side cost observation into the record (the
+    /// task-side half of the P51.12 join — the caller feeds
+    /// `Vault::task_cost(task_id)` sums here). Token counters saturate;
+    /// cost adds (a task's spend is a running total, never negative).
+    pub fn attach_cost(&mut self, tokens_in: u64, tokens_out: u64, cost_usd: f64) {
+        self.tokens_in = self.tokens_in.saturating_add(tokens_in);
+        self.tokens_out = self.tokens_out.saturating_add(tokens_out);
+        self.cost_usd += cost_usd;
+    }
 }
 
 /// Storage seam — the ledger never writes files itself.
@@ -264,6 +290,9 @@ impl TaskLedger {
             error: None,
             retry_generation: 0,
             delivery: DeliveryState::Pending,
+            tokens_in: 0,
+            tokens_out: 0,
+            cost_usd: 0.0,
         });
         let _ = self.persist();
         id
@@ -422,6 +451,25 @@ impl TaskLedger {
         Ok(())
     }
 
+    // ---- cost join (P51.12: vault `task_cost` → record) ---------------------
+
+    /// Fold vault-side spend into a task record (the ledger-level half of the
+    /// P51.12 join — the caller passes `Vault::task_cost(task_id)` sums).
+    /// Applies to any lifecycle state: cost accrues while running and stays
+    /// readable on terminal records.
+    pub fn attach_cost(
+        &mut self,
+        id: &str,
+        tokens_in: u64,
+        tokens_out: u64,
+        cost_usd: f64,
+    ) -> Result<(), String> {
+        let r = self.find_mut(id)?;
+        r.attach_cost(tokens_in, tokens_out, cost_usd);
+        let _ = self.persist();
+        Ok(())
+    }
+
     // ---- retry (fenced generation) ----------------------------------------
 
     /// Re-run a terminal task: raises a fresh `queued` record at the next
@@ -447,6 +495,11 @@ impl TaskLedger {
             error: None,
             retry_generation: old.retry_generation + 1,
             delivery: DeliveryState::Pending,
+            // A fenced retry is a fresh spend scope — cost restarts at zero
+            // (the old record keeps its accumulated cost for audit).
+            tokens_in: 0,
+            tokens_out: 0,
+            cost_usd: 0.0,
         });
         let _ = self.persist();
         Ok(new_id)
@@ -824,6 +877,10 @@ mod tests {
     /// mirror (or vice versa) — the `tasks/*` responses would desync from the
     /// activity rail. Checked fields: names, casing (snake_case), the
     /// blocked-delivery payload shape, and the enum value spellings.
+    ///
+    /// P51.12 note: `tokens_in`/`tokens_out`/`cost_usd` extend this shape —
+    /// the coordinator mirror (`ui/src/lib/tasks.ts` `TaskRecord` +
+    /// `ui/src/lib/tasks-contract.test.ts`) must gain the same three fields.
     #[test]
     fn serialized_record_matches_ts_bridge_contract() {
         let record = TaskRecord {
@@ -842,6 +899,9 @@ mod tests {
                 retries: 2,
                 deadline_ms: 99,
             },
+            tokens_in: 111,
+            tokens_out: 22,
+            cost_usd: 0.004,
         };
         let v = serde_json::to_value(&record).unwrap();
         let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
@@ -849,6 +909,7 @@ mod tests {
         assert_eq!(
             keys,
             vec![
+                "cost_usd",
                 "created_ms",
                 "delivery",
                 "error",
@@ -861,6 +922,8 @@ mod tests {
                 "started_ms",
                 "status",
                 "title",
+                "tokens_in",
+                "tokens_out",
             ]
         );
         // Enum spellings (snake_case in both languages).
@@ -869,6 +932,10 @@ mod tests {
         // Struct variant: externally-tagged → `{ blocked: { retries, deadline_ms } }`.
         assert_eq!(v["delivery"]["blocked"]["retries"], 2);
         assert_eq!(v["delivery"]["blocked"]["deadline_ms"], 99);
+        // P51.12 cost join fields ride the same wire shape (snake_case).
+        assert_eq!(v["tokens_in"], 111);
+        assert_eq!(v["tokens_out"], 22);
+        assert!((v["cost_usd"].as_f64().unwrap() - 0.004).abs() < 1e-12);
 
         // Unit variants of the externally-tagged enum serialize as plain
         // strings ("pending"), not {"pending": null} — the TS mirror type
@@ -886,6 +953,9 @@ mod tests {
             error: None,
             retry_generation: 0,
             delivery: DeliveryState::Pending,
+            tokens_in: 0,
+            tokens_out: 0,
+            cost_usd: 0.0,
         };
         let v = serde_json::to_value(&empty).unwrap();
         // The optionals are present as null (TS: `field: T | null`), not absent.
@@ -894,5 +964,52 @@ mod tests {
         assert_eq!(v["kind"], "cli");
         assert_eq!(v["status"], "queued");
         assert_eq!(v["delivery"], "pending");
+    }
+
+    /// P51.12 — cost fields default to zero (fresh records, accumulator
+    /// behavior), and pre-P51.12 JSON without the cost fields still parses
+    /// (serde defaults — the file store never fails to load old rows).
+    #[test]
+    fn task_record_cost_defaults_zero() {
+        let (mut l, _) = ledger();
+        let id = l.enqueue(TaskKind::Subagent, "research", Some("s-1"));
+        let r = l.get(&id).unwrap();
+        assert_eq!((r.tokens_in, r.tokens_out, r.cost_usd), (0, 0, 0.0));
+
+        // Accumulator: two observations sum.
+        l.attach_cost(&id, 100, 40, 0.001).unwrap();
+        l.attach_cost(&id, 50, 10, 0.0005).unwrap();
+        let r = l.get(&id).unwrap();
+        assert_eq!(r.tokens_in, 150);
+        assert_eq!(r.tokens_out, 50);
+        assert!((r.cost_usd - 0.0015).abs() < 1e-12);
+        // Unknown ids fail loudly (never a silent drop).
+        assert!(l.attach_cost("task-999999", 1, 1, 0.1).is_err());
+
+        // Backward compat: old JSON (no cost fields) parses to zeros.
+        let old: TaskRecord = serde_json::from_value(serde_json::json!({
+            "id": "task-000007",
+            "kind": "cli",
+            "title": "old",
+            "status": "succeeded",
+            "requester": null,
+            "created_ms": 1,
+            "started_ms": 1,
+            "finished_ms": 2,
+            "last_heartbeat_ms": 2,
+            "error": null,
+            "retry_generation": 0,
+            "delivery": "delivered",
+        }))
+        .unwrap();
+        assert_eq!((old.tokens_in, old.tokens_out, old.cost_usd), (0, 0, 0.0));
+
+        // A fenced retry starts a fresh spend scope; the audit row keeps its own.
+        l.start(&id).unwrap();
+        l.complete(&id, true, None).unwrap();
+        let fresh = l.retry(&id).unwrap();
+        let f = l.get(&fresh).unwrap();
+        assert_eq!((f.tokens_in, f.tokens_out, f.cost_usd), (0, 0, 0.0));
+        assert_eq!(l.get(&id).unwrap().tokens_in, 150);
     }
 }

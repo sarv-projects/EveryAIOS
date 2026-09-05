@@ -2,11 +2,16 @@
 //! that composes the Guard-2 pieces into one deterministic pre-flight:
 //!
 //! 1. **estop** — pulled ⇒ refuse every privileged action.
-//! 2. **policy** — `~/.everyaios/permissions.toml` (`PermissionsPolicy`) maps
+//! 2. **hard floors** (P51.16/P51.29/P51.30) — critical `rm`, protected
+//!    settings paths, unlocated deletes, human-only floors, and explicit
+//!    tool-level denies. Every layer may only tighten.
+//! 3. **policy** — `~/.everyaios/permissions.toml` (`PermissionsPolicy`) maps
 //!    the operation → Allow/Ask/Block.
-//! 3. **profile** — minimal/standard/strict raises the human-approval
+//! 4. **profile** — minimal/standard/strict raises the human-approval
 //!    threshold (`Profile::human_approval_threshold`).
-//! 4. **ticket** — an `Ask` mints a single-use [`AuthorizationTicket`] (with
+//! 5. **reviewer** (P51.16) — may upgrade Ask→Allow only when configured
+//!    (default budget is zero ⇒ never upgrades), never downgrades.
+//! 6. **ticket** — an `Ask` mints a single-use [`AuthorizationTicket`] (with
 //!    its [`DecisionPackage`] kept for the card), which the executor later
 //!    consumes via [`GuardService::use_ticket`] before running.
 //!
@@ -20,6 +25,10 @@ use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use everyaios_guard::{
+    approval_policy::{Approval, ApprovalPolicy},
+    floors::HumanFloor,
+    protected_paths,
+    reviewer::{ReviewOutcome, ReviewerBreaker, ReviewerConfig},
     AuthorizationTicket, BatchOperation, BatchTicket, BatchTicketStore, DecisionPackage, Estop,
     GuardReceipt, Operation, PermissionsPolicy, PolicyAction, Profile, TicketStore,
 };
@@ -80,6 +89,14 @@ pub struct GuardService {
     policy: PermissionsPolicy,
     estop: Estop,
     profile: Profile,
+    /// P51.16 — tool-level allow/ask/deny (deny-wins). Empty by default.
+    approval_policy: ApprovalPolicy,
+    /// P51.29 — human-only floors (protected-in-project, persistent authority).
+    human_floor: HumanFloor,
+    /// P51.16 — reviewer auto-allow config (default budget zero ⇒ disabled).
+    reviewer_config: ReviewerConfig,
+    /// P51.16 — reviewer circuit breaker.
+    reviewer_breaker: ReviewerBreaker,
     /// ticket_id → the decision package that produced it (card rendering).
     decisions: HashMap<String, DecisionPackage>,
     /// Monotonic ticket-id source.
@@ -105,6 +122,10 @@ impl Default for GuardService {
             policy: PermissionsPolicy::default(),
             estop: Estop::new(),
             profile: Profile::Standard,
+            approval_policy: ApprovalPolicy::default(),
+            human_floor: HumanFloor::default(),
+            reviewer_config: ReviewerConfig::new(1.01, 0),
+            reviewer_breaker: ReviewerBreaker::new(3),
             decisions: HashMap::new(),
             counter: 0,
             waiters: HashMap::new(),
@@ -167,6 +188,26 @@ impl GuardService {
         &self.estop
     }
 
+    /// P51.16 — replace the tool-level allow/ask/deny policy (deny-wins).
+    pub fn set_approval_policy(&mut self, policy: ApprovalPolicy) {
+        self.approval_policy = policy;
+    }
+
+    /// P51.29 — replace the human-only floors.
+    pub fn set_human_floor(&mut self, floor: HumanFloor) {
+        self.human_floor = floor;
+    }
+
+    /// P51.16 — configure reviewer auto-allow (default budget zero: disabled).
+    pub fn set_reviewer_config(&mut self, config: ReviewerConfig) {
+        self.reviewer_config = config;
+    }
+
+    /// P51.16 — reset the reviewer circuit breaker (e.g. after human review).
+    pub fn reset_reviewer_breaker(&mut self) {
+        self.reviewer_breaker.reset();
+    }
+
     /// The **executor pre-flight**. Order matters: estop (hard stop) → policy
     /// (rule map) → profile (risk threshold) → confidence floor. **Every
     /// non-blocked outcome mints a single-use ticket**: `Ask` mints it
@@ -192,6 +233,61 @@ impl GuardService {
             };
         }
 
+        // P51.16/P51.29/P51.30 — hard floors. Every layer may only tighten;
+        // none can downgrade a Block or an Ask to Allow.
+        let op_name = operation.name();
+        let paths = &decision.affected_paths;
+        // P51.30: critical `rm` (destructive shell op against /, ~, ., .git/
+        // or a protected path) is refused outright.
+        let shell_like = tool_id.contains("shell")
+            || tool_id.contains("bash")
+            || tool_id.contains("exec")
+            || tool_id.contains("terminal")
+            || tool_id.contains("run");
+        if shell_like {
+            if let Operation::TerminalShell { destructive: true } = operation {
+                let targets: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+                if protected_paths::rm_critical("rm -r", &targets) {
+                    return GuardDecision::Block {
+                        reason: "critical rm target refused".to_string(),
+                    };
+                }
+            }
+        }
+        // P51.30: our own settings paths always need a human on mutating
+        // ops (Ask, never auto) — removal itself is refused by rm_critical.
+        let protected_hit = matches!(
+            operation,
+            Operation::DeleteFiles
+                | Operation::GenericWrite
+                | Operation::MultiFileEdit { .. }
+                | Operation::TerminalShell { .. }
+        ) && paths.iter().any(|p| protected_paths::is_protected(p));
+        // P51.29: a delete must name its targets (fail-closed unlocated).
+        if matches!(operation, Operation::DeleteFiles) && paths.is_empty() {
+            return GuardDecision::Block {
+                reason: "delete without located paths refused".to_string(),
+            };
+        }
+        // P51.29: human-only floors (protected-in-project prefixes,
+        // persistent-authority ops) force Ask — never auto, any preset.
+        let floor_ask = self.human_floor.requires_human(op_name, None)
+            || protected_hit
+            || paths
+                .iter()
+                .any(|p| self.human_floor.requires_human(op_name, Some(p)));
+        // P51.16: an explicit tool-level Deny always blocks. Allow/Ask arms
+        // are advisory (only Deny tightens), so a default-empty policy
+        // changes nothing and presets keep their tested behavior.
+        if matches!(
+            self.approval_policy.evaluate(tool_id, ""),
+            Approval::Deny
+        ) {
+            return GuardDecision::Block {
+                reason: format!("tool policy denies {tool_id}"),
+            };
+        }
+
         let policy_action = self.policy.evaluate(&operation);
         let needs_human = decision.risk >= self.profile.human_approval_threshold();
         // J21: a model-reported confidence below the policy floor forces the
@@ -211,7 +307,25 @@ impl GuardService {
             everyaios_guard::RiskTier::from_risk_and_op(decision.risk, operation.name(), false);
         // R4 is deny-by-default: even a policy Allow still asks (explicit).
         let r4_ask = tier == everyaios_guard::RiskTier::R4;
-        let ask = policy_action == PolicyAction::Ask || needs_human || low_confidence || r4_ask;
+        let mut ask = policy_action == PolicyAction::Ask
+            || needs_human
+            || low_confidence
+            || r4_ask
+            || floor_ask;
+        // P51.16: the reviewer may upgrade Ask→Allow only when configured
+        // (default budget is zero ⇒ never upgrades) — never a downgrade.
+        if ask && !matches!(policy_action, PolicyAction::Block) {
+            if matches!(
+                everyaios_guard::reviewer::auto_review(
+                    decision.confidence,
+                    &self.reviewer_config,
+                    &self.reviewer_breaker,
+                ),
+                ReviewOutcome::AutoAllow
+            ) {
+                ask = false;
+            }
+        }
         self.counter += 1;
         let ticket_id = format!("tkt:{}", self.counter);
         let ticket = AuthorizationTicket {
@@ -937,7 +1051,12 @@ mod tests {
             .handle_sidecar(
                 "guard/evaluate",
                 &json!({
-                    "operation": "delete", "argsHash": "h", "decision": { "risk": "high" }
+                    "operation": "delete", "argsHash": "h",
+                    // Located target: the P51.29 unlocated-delete floor
+                    // refuses pathless deletes, so this self-approval test
+                    // names its target (its subject is the approve path,
+                    // not the floor).
+                    "decision": { "risk": "high", "affectedPaths": ["/w/x"] }
                 }),
             )
             .unwrap();
@@ -1196,5 +1315,143 @@ mod tests {
         // guard/policy now carries the autonomy level too.
         let out = g.handle("guard/policy", &json!({})).unwrap();
         assert_eq!(out["autonomyLevel"], "sandbox");
+    }
+
+    #[test]
+    fn floor_blocks_unlocated_delete() {
+        // P51.29: a delete that names no targets is refused fail-closed.
+        let mut g = GuardService::new();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.delete",
+            Operation::DeleteFiles,
+            decision(RiskLevel::Low, &[]),
+            "h",
+            0,
+        );
+        assert!(
+            matches!(d, GuardDecision::Block { ref reason } if reason.contains("located")),
+            "unlocated delete must Block, got {d:?}"
+        );
+    }
+
+    #[test]
+    fn floor_forces_ask_on_protected_settings_write() {
+        // P51.30: our own settings paths always need a human (Ask, never
+        // auto) — even under an allow policy.
+        let mut g = GuardService::new();
+        g.policy = PermissionsPolicy::parse("[permissions]\nwrite = \"allow\"\n");
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/home/u/.everyaios/permissions.toml"]),
+            "h",
+            0,
+        );
+        assert!(
+            matches!(d, GuardDecision::Ask { .. }),
+            "protected settings write must Ask even under allow, got {d:?}"
+        );
+    }
+
+    #[test]
+    fn floor_forces_ask_on_git_hooks_write() {
+        // P51.29: protected-in-project prefixes force Ask under any preset.
+        let mut g = GuardService::new();
+        g.policy = PermissionsPolicy::parse("[permissions]\nwrite = \"allow\"\n");
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/proj/.git/hooks/pre-commit"]),
+            "h",
+            0,
+        );
+        assert!(
+            matches!(d, GuardDecision::Ask { .. }),
+            "git-hooks write must Ask even under allow, got {d:?}"
+        );
+    }
+
+    #[test]
+    fn floor_blocks_critical_rm() {
+        // P51.30: destructive shell against / is refused outright.
+        let mut g = GuardService::new();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "shell.exec",
+            Operation::TerminalShell { destructive: true },
+            decision(RiskLevel::High, &["/"]),
+            "h",
+            0,
+        );
+        assert!(
+            matches!(d, GuardDecision::Block { ref reason } if reason.contains("critical")),
+            "critical rm must Block, got {d:?}"
+        );
+    }
+
+    #[test]
+    fn approval_policy_deny_blocks() {
+        // P51.16: an explicit tool-level Deny always blocks.
+        use everyaios_guard::approval_policy::{Approval, ApprovalPolicy, ToolPattern};
+        let mut g = GuardService::new();
+        g.policy = PermissionsPolicy::parse("[permissions]\nwrite = \"allow\"\n");
+        g.set_approval_policy(ApprovalPolicy::new(vec![(
+            ToolPattern::new("fs.write", None),
+            Approval::Deny,
+        )]));
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/workspace/a.txt"]),
+            "h",
+            0,
+        );
+        assert!(
+            matches!(d, GuardDecision::Block { ref reason } if reason.contains("denies")),
+            "tool deny must Block, got {d:?}"
+        );
+    }
+
+    #[test]
+    fn reviewer_never_upgrades_by_default() {
+        // P51.16: default reviewer budget is zero — Ask stays Ask.
+        let mut g = GuardService::new();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/workspace/a.txt"]),
+            "h",
+            0,
+        );
+        assert!(
+            matches!(d, GuardDecision::Ask { .. }),
+            "default reviewer must not upgrade Ask, got {d:?}"
+        );
+    }
+
+    #[test]
+    fn reviewer_upgrades_when_configured() {
+        // P51.16: a configured reviewer may upgrade Ask→Allow on confidence.
+        use everyaios_guard::reviewer::ReviewerConfig;
+        let mut g = GuardService::new();
+        g.set_reviewer_config(ReviewerConfig::new(0.5, 10));
+        let mut pkg = decision(RiskLevel::Low, &["/workspace/a.txt"]);
+        pkg.confidence = Some(0.9);
+        let d = g.evaluate("s1", "a1", "fs.write", Operation::GenericWrite, pkg, "h", 0);
+        assert!(
+            matches!(d, GuardDecision::Allow { .. }),
+            "configured reviewer should upgrade confident Ask, got {d:?}"
+        );
     }
 }

@@ -121,6 +121,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         mcp_cmds::mcp_attach_request,
         mcp_cmds::mcp_attach_commit,
         mcp_cmds::mcp_detach,
+        // P51.18: no-restart refresh (prune dead children + relist).
+        mcp_cmds::mcp_refresh,
         mcp_cmds::store_catalog,
         mcp_cmds::mcp_connect_start,
         mcp_cmds::mcp_remote_status,
@@ -143,6 +145,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         vault_cmds::vault_keys_list,
         vault_cmds::vault_key_add,
         vault_cmds::vault_key_remove,
+        // P51.1: in-place key rotation.
+        vault_cmds::vault_key_rotate,
         acp_cmds::chief_default_get,
         acp_cmds::chief_default_set,
         agent_cmds::agent_registry_list,
@@ -181,6 +185,13 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         scheduler_cmds::scheduler_fire_webhook,
         scheduler_cmds::scheduler_nudges,
         scheduler_cmds::scheduler_nudge,
+        // P51.32: continuity/notepad, incidents, doctor, runs ledger.
+        scheduler_cmds::scheduler_continuity,
+        scheduler_cmds::scheduler_notepad_append,
+        scheduler_cmds::scheduler_incidents,
+        scheduler_cmds::scheduler_incident_ack,
+        scheduler_cmds::scheduler_doctor,
+        scheduler_cmds::scheduler_runs,
         tasks_cmds::tasks_list,
         tasks_cmds::tasks_show,
         tasks_cmds::tasks_cancel,
@@ -285,6 +296,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         // P44.7/44.8: discovery surface + routing feed.
         discovery_cmds::discovery_inventory,
         discovery_cmds::routing_feed_decide,
+        // P51.1: live provider health ping.
+        discovery_cmds::provider_health_probe,
         // P50.4.2: local model downloads (HF GGUF/MLX) + registry + serve.
         crate::model_cmds::model_download_start,
         crate::model_cmds::model_downloads,
@@ -293,5 +306,9 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::model_cmds::model_registry_remove,
         crate::model_cmds::model_recommend_quant,
         crate::model_cmds::model_serve,
+        // P52.1/P52.2/P52.5: fit estimate, gallery parse, best-variant pick.
+        crate::model_cmds::model_estimate_fit,
+        crate::model_cmds::model_gallery_parse,
+        crate::model_cmds::model_best_pick,
     ]
 }

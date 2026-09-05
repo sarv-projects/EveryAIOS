@@ -1963,6 +1963,9 @@ mod tests {
                 usage: Usage::default(),
                 cost: 2.50,
                 tool: None,
+                task_id: String::new(),
+                run_id: String::new(),
+                work_id: String::new(),
             })
             .unwrap();
         let vault = Arc::new(Mutex::new(vault));
@@ -2322,6 +2325,9 @@ mod tests {
                 usage: Usage::default(),
                 cost: 1.99,
                 tool: None,
+                task_id: String::new(),
+                run_id: String::new(),
+                work_id: String::new(),
             })
             .unwrap();
         {

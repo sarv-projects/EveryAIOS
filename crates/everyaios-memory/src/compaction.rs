@@ -377,6 +377,139 @@ where
     (out, step)
 }
 
+// ---------------------------------------------------------------------------
+// Budget formula + tail selection + overflow replay (P51.33 + P52.18-Rust-half)
+// ---------------------------------------------------------------------------
+
+/// Reserve kept free so a compact has headroom to emit without re-overflowing.
+pub const COMPACTION_BUFFER: usize = 20_000;
+
+/// Minimum retained size the prune step never compacts below.
+pub const PRUNE_MINIMUM: usize = 20_000;
+
+/// Number of recent full turns always preserved through a compact.
+pub const TAIL_TURNS: usize = 2;
+
+/// Input-budget formula: `usable = input_limit - reserved`, with
+/// `preserve_recent ≈ 25% of usable` clamped to 2K–15K tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BudgetFormula {
+    pub input_limit: usize,
+    pub reserved: usize,
+}
+
+impl BudgetFormula {
+    pub fn usable(&self) -> usize {
+        self.input_limit.saturating_sub(self.reserved)
+    }
+
+    pub fn preserve_recent_tokens(&self) -> usize {
+        (self.usable() / 4).clamp(2000, 15000)
+    }
+}
+
+/// Stats for a binary/partial-turn split.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PartialTurn {
+    pub kept_chars: usize,
+    pub dropped_chars: usize,
+}
+
+/// Binary/partial-turn split keeping the TAIL within `budget_chars`
+/// (complement to the linear whole-turn-prefix [`find_safe_split`]).
+/// Returns `(dropped head, stats, kept tail)`.
+pub fn split_turn(text: &str, budget_chars: usize) -> (String, PartialTurn, String) {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= budget_chars {
+        return (
+            String::new(),
+            PartialTurn {
+                kept_chars: chars.len(),
+                dropped_chars: 0,
+            },
+            text.to_string(),
+        );
+    }
+    if budget_chars == 0 {
+        return (
+            text.to_string(),
+            PartialTurn {
+                kept_chars: 0,
+                dropped_chars: chars.len(),
+            },
+            String::new(),
+        );
+    }
+    let split_at = chars.len() - budget_chars;
+    let dropped: String = chars[..split_at].iter().collect();
+    let kept: String = chars[split_at..].iter().collect();
+    (
+        dropped,
+        PartialTurn {
+            kept_chars: budget_chars,
+            dropped_chars: split_at,
+        },
+        kept,
+    )
+}
+
+/// Keep the recent tail within `preserve_budget` (chars): at most
+/// [`TAIL_TURNS`] full turns plus one partial boundary turn (via
+/// [`split_turn`]). Returns `(dropped prefix turns, kept suffix turns)` where
+/// the first kept entry may be a partial tail fragment.
+pub fn select_tail(turns: &[String], preserve_budget: usize) -> (Vec<String>, Vec<String>) {
+    if turns.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    if preserve_budget == 0 {
+        return (turns.to_vec(), Vec::new());
+    }
+    let mut kept_rev: Vec<String> = Vec::new();
+    let mut used = 0usize;
+    let mut full_kept = 0usize;
+    // `kept_start` = index of the first turn contributing to `kept`
+    // (full or partial). Everything before it is dropped.
+    let mut idx = turns.len();
+    while idx > 0 && full_kept < TAIL_TURNS {
+        let len = turns[idx - 1].chars().count();
+        if used + len > preserve_budget {
+            break;
+        }
+        kept_rev.push(turns[idx - 1].clone());
+        used += len;
+        full_kept += 1;
+        idx -= 1;
+    }
+    let mut kept_start = idx;
+    if idx > 0 && used < preserve_budget {
+        let remaining = preserve_budget - used;
+        let boundary = &turns[idx - 1];
+        let (_head, _info, tail) = split_turn(boundary, remaining);
+        if !tail.is_empty() {
+            kept_rev.push(tail);
+            kept_start = idx - 1;
+        }
+    }
+    kept_rev.reverse();
+    let dropped = turns[..kept_start].to_vec();
+    (dropped, kept_rev)
+}
+
+/// Synthetic marker re-injected when an overflow was replayed through
+/// prune → compact so the model sees the cut instead of silent loss.
+pub const CONTINUE_MARKER: &str = "[continued — earlier context compacted…]";
+
+/// Return the synthetic continue marker when an overflow was replayed through
+/// prune → compact (`was_overflow`) and bytes were actually pruned;
+/// otherwise `None` (emitted at most once per replay).
+pub fn overflow_replay(was_overflow: bool, pruned_bytes: usize) -> Option<String> {
+    if was_overflow && pruned_bytes > 0 {
+        Some(CONTINUE_MARKER.to_string())
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -616,5 +749,80 @@ mod tests {
         let (out, step) = c.maybe_compact(&"y".repeat(10_000), &[fail]).unwrap();
         assert_eq!(step, FallbackStep::TruncateWithMarker);
         assert!(out.contains("context truncated"));
+    }
+
+    #[test]
+    fn budget_is_25pct_clamped() {
+        // 100K usable → 25K capped to 15K.
+        let b = BudgetFormula {
+            input_limit: 120_000,
+            reserved: 20_000,
+        };
+        assert_eq!(b.usable(), 100_000);
+        assert_eq!(b.preserve_recent_tokens(), 15_000);
+        // 32K usable → 8K (within bounds).
+        let b2 = BudgetFormula {
+            input_limit: 32_000,
+            reserved: 0,
+        };
+        assert_eq!(b2.usable(), 32_000);
+        assert_eq!(b2.preserve_recent_tokens(), 8_000);
+        // 4K usable → 1K floored to 2K.
+        let b3 = BudgetFormula {
+            input_limit: 4_000,
+            reserved: 0,
+        };
+        assert_eq!(b3.usable(), 4_000);
+        assert_eq!(b3.preserve_recent_tokens(), 2_000);
+    }
+
+    #[test]
+    fn split_turn_keeps_partial_tail() {
+        let text = "abcdefghijklmnopqrstuvwxyz";
+        let (dropped, info, kept) = split_turn(text, 10);
+        assert_eq!(kept, "qrstuvwxyz");
+        assert_eq!(dropped, "abcdefghijklmnop");
+        assert_eq!(info.kept_chars, 10);
+        assert_eq!(info.dropped_chars, 16);
+        assert_eq!(dropped.len() + kept.len(), text.len());
+        // Fits fully → nothing dropped.
+        let (d2, info2, k2) = split_turn("hi", 10);
+        assert_eq!(k2, "hi");
+        assert!(d2.is_empty());
+        assert_eq!(info2.dropped_chars, 0);
+    }
+
+    #[test]
+    fn select_tail_keeps_two_full_turns_plus_partial() {
+        let turns = vec![
+            "a".repeat(100),
+            "b".repeat(100),
+            "c".repeat(100),
+            "d".repeat(100),
+        ];
+        // Budget 250: two full recent turns (200) + 50-char partial of boundary.
+        let (dropped, kept) = select_tail(&turns, 250);
+        assert_eq!(kept.len(), 3, "2 full + 1 partial: {kept:?}");
+        assert_eq!(kept[1], "c".repeat(100));
+        assert_eq!(kept[2], "d".repeat(100));
+        assert_eq!(kept[0].chars().count(), 50);
+        assert!(kept[0].chars().all(|c| c == 'b'));
+        assert_eq!(dropped, vec!["a".repeat(100)]);
+        // Exactly TAIL_TURNS full turns preserved, never more full turns.
+        assert_eq!(TAIL_TURNS, 2);
+    }
+
+    #[test]
+    fn overflow_replays_marker_once() {
+        assert_eq!(overflow_replay(false, 100), None);
+        assert_eq!(overflow_replay(true, 0), None);
+        let once = overflow_replay(true, 128);
+        assert_eq!(once.as_deref(), Some(CONTINUE_MARKER));
+    }
+
+    #[test]
+    fn continue_marker_present() {
+        assert!(CONTINUE_MARKER.contains("continued"));
+        assert!(CONTINUE_MARKER.contains("compacted"));
     }
 }

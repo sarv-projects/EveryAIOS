@@ -200,3 +200,65 @@ pub fn scheduler_nudge(
     svc.record_nudge(&goal, ts.unwrap_or_else(now_secs));
     Ok(true)
 }
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// P51.32a — a job's continuity bundle (last output + notepad) for the next run.
+#[tauri::command]
+pub fn scheduler_continuity(state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    let handle = svc(&state)?;
+    let svc = handle.lock().map_err(|e| e.to_string())?;
+    Ok(svc
+        .continuity(&id)
+        .map(|c| serde_json::to_value(c).unwrap_or(Value::Null))
+        .unwrap_or(Value::Null))
+}
+
+/// P51.32a — append one line to a job's durable notepad.
+#[tauri::command]
+pub fn scheduler_notepad_append(
+    state: State<'_, AppState>,
+    id: String,
+    line: String,
+) -> Result<bool, String> {
+    let handle = svc(&state)?;
+    let mut svc = handle.lock().map_err(|e| e.to_string())?;
+    Ok(svc.append_notepad(&id, &line))
+}
+
+/// P51.32e — open (unacked-first) incidents ledger.
+#[tauri::command]
+pub fn scheduler_incidents(state: State<'_, AppState>) -> Result<Value, String> {
+    let handle = svc(&state)?;
+    let svc = handle.lock().map_err(|e| e.to_string())?;
+    Ok(serde_json::to_value(svc.list_incidents()).unwrap_or(Value::Null))
+}
+
+/// P51.32e — acknowledge one incident (explicit only, no auto-clear).
+#[tauri::command]
+pub fn scheduler_incident_ack(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    let handle = svc(&state)?;
+    let mut svc = handle.lock().map_err(|e| e.to_string())?;
+    Ok(svc.ack_incident(&id))
+}
+
+/// P51.32f — read-only cron health (missed runs, dead leases, queue depth).
+#[tauri::command]
+pub fn scheduler_doctor(state: State<'_, AppState>) -> Result<Value, String> {
+    let handle = svc(&state)?;
+    let svc = handle.lock().map_err(|e| e.to_string())?;
+    Ok(serde_json::to_value(svc.cron_doctor(now_ms())).unwrap_or(Value::Null))
+}
+
+/// P51.32g — the claimed→running→completed/failed runs ledger (bounded).
+#[tauri::command]
+pub fn scheduler_runs(state: State<'_, AppState>) -> Result<Value, String> {
+    let handle = svc(&state)?;
+    let svc = handle.lock().map_err(|e| e.to_string())?;
+    Ok(serde_json::to_value(svc.list_runs()).unwrap_or(Value::Null))
+}

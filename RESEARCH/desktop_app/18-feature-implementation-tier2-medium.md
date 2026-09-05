@@ -30,7 +30,7 @@
 | App | URL | Features → where implemented |
 |---|---|---|
 | **Cherry Studio** | https://github.com/CherryHQ/cherry-studio | Workspaces, multi-provider (Ollama/LM Studio/cloud), assistants w/ knowledge bases, `src/` (main/renderer), MCP support. |
-| **Chatbox** | https://github.com/Bin-Huang/chatbox | BYOK desktop client (ChatGPT/Claude/others); Tauri+React; `src/` provider adapters. |
+| **Chatbox** | https://github.com/chatboxai/chatbox | BYOK desktop client (ChatGPT/Claude/others); **Electron 35 + React 18, GPL-3.0 (patterns only)**; provider Spotlight + models.dev registry. (Corrected 2026-09-04 doc 86 — was `Bin-Huang/chatbox`, Tauri.) |
 | **GenOffice** | https://github.com/genspark-ai/genoffice | ⬛ **deep-dive → doc 28.** 5 apps (docs/sheets/slides/pdf) + 10 engine packages; **docx block-patch** (text-patch.ts minimal w:t prefix/suffix, byte-preserving), **Rust sidecar** `apps/sheets/native/xlsx-engine` (calamine 0.36 + ironcalc 0.7), **deterministic-planner** (regex NLP→DSL, zero-LLM common ops), agent skill loop, watchdog streaming. |
 | **Open WebUI** | https://github.com/open-webui/open-webui | FastAPI+Svelte; **Pipes/Filters/Actions** (in-process Python functions), external Pipelines service; **RAG**: tiktoken/HF tokenizers + Markdown-Header splitting + `CHUNK_MIN_SIZE_TARGET` merge pass; vector backends ChromaDB/FAISS/Qdrant/Milvus/pgvector; auth SSO/OIDC/LDAP/SCIM + RBAC. |
 | **Ollama** | https://github.com/ollama/ollama | Go daemon :11434; GGUF + quantizations; OpenAI-compatible API; `server/` + `llm/` runner dispatch per backend; SDKs. |

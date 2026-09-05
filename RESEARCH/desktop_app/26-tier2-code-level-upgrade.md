@@ -16,7 +16,7 @@
 ## 2. Desktop apps
 
 - **Cherry Studio** (`CherryHQ/cherry-studio`) — ✅ Electron layout: `src/main/` `src/preload/` `src/renderer/` `src/shared/`.
-- **Chatbox** (`Bin-Huang/chatbox`) — ⚠️ `src` listing rate-limited this pass (doc 18: Tauri+React, provider adapters in `src/`).
+- **Chatbox** (`chatboxai/chatbox`) — ⚠️ `src` listing rate-limited this pass (doc 18: Tauri+React, provider adapters in `src/`). **2026-09-04 doc 86 correction: canonical `chatboxai/chatbox` (`Bin-Huang/` redirects), Electron 35 + React 18 (NOT Tauri), GPL-3.0 patterns-only.**
 - **GenOffice** (`genspark-ai/genoffice`) — ✅ `apps/: docs pdf sheets shell slides` (5 apps) + `packages/` (agent-core, ai-provider, docx-engine, pptx-engine/render, file-parse, ai-search, project-store, ui…). **Full source deep-dive → doc 28** (block-patch, xlsx-sidecar, deterministic planner, skill loop, watchdog).
 - **PyGPT** (`szczyglis-dev/py-gpt`) — ✅ root: `src/ tests/ data/ bin/ docs/ examples/ snap/` (Python desktop assistant).
 - **Open WebUI** (`open-webui/open-webui`) — ✅ `backend/open_webui/: retrieval/ tools/ routers/ socket/ models/ storage/ internal/ migrations/` — RAG (`retrieval/`), tool system (`tools/`), realtime (`socket/`) confirmed.
