@@ -4,7 +4,7 @@
 // Native command failures are recorded as degraded runtime state and are never
 // converted into preview data or synthetic success.
 
-import { useAppStore, sanitizeSessionRows, type LiveBudget } from "./store";
+import { useAppStore, sanitizeSessionRows, mergeHydratedSessions, type LiveBudget } from "./store";
 import {
   inTauri,
   chatStream,
@@ -464,10 +464,17 @@ async function startBridge(): Promise<BridgeDisposer> {
           for (const s of sessions) {
             if (s.chiefPin) sessionChiefs[s.id] = s.chiefPin
           }
-          useAppStore.setState({
-            sessions,
-            activeSessionId: sessions[0]?.id ?? '',
-            ...(Object.keys(sessionChiefs).length > 0 ? { sessionChiefs } : {}),
+          // P50.2.1 — hydration is authoritative for vault rows but never
+          // clobbers a session created while `session_list` was in flight
+          // (local-only, persisted later via session_put), and keeps the
+          // active target when it survives (no mid-conversation focus yank).
+          useAppStore.setState((st) => {
+            const merged = mergeHydratedSessions(st.sessions, sessions, st.activeSessionId)
+            return {
+              sessions: merged.sessions,
+              activeSessionId: merged.activeSessionId,
+              ...(Object.keys(sessionChiefs).length > 0 ? { sessionChiefs } : {}),
+            }
           });
         }
       } catch (error) {

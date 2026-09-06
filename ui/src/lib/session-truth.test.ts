@@ -10,7 +10,7 @@
 // returns becomes the store's rows verbatim — never a synthesized chat.
 
 import { describe, expect, test } from 'bun:test'
-import { useAppStore, mockSessions, sanitizeSessionRows } from './store'
+import { useAppStore, mockSessions, sanitizeSessionRows, mergeHydratedSessions } from './store'
 
 describe('P50.2.1 — sessions runtime truth', () => {
   test('a fresh store is NOT hydrated: the demo seed can never persist', () => {
@@ -128,5 +128,37 @@ describe('P50.2.1 — sessions runtime truth', () => {
     // And the message lands on it (the pre-fix behavior dropped it silently).
     st.pushUserMessage('hello?')
     expect(useAppStore.getState().sessions[0].messages).toHaveLength(1)
+  })
+
+  test('newSession-before-hydration race: the local session survives the vault merge', () => {
+    // The P50.2.1 race — user clicks New Session while `session_list` is
+    // still in flight. The bridge then lands with the vault rows; the merge
+    // must keep the user's local-only session and preserve it as active.
+    useAppStore.setState({ sessionsHydrated: false, sessions: [], activeSessionId: '' })
+    useAppStore.getState().newSession() // in-flight list; session X is local-only
+    const created = useAppStore.getState().sessions[0]
+    expect(created).toBeDefined()
+
+    const vault = [
+      { id: 'vault-1', title: 'older', status: 'idle', preview: '', updatedAt: '', messages: [] },
+    ] as never // Session shape kept loose for the pure-helper contract
+    const merged = mergeHydratedSessions([created], vault as import('./store').Session[], created.id)
+    expect(merged.sessions.map((s) => s.id)).toEqual([created.id, 'vault-1'])
+    expect(merged.activeSessionId).toBe(created.id) // no focus yank to vault[0]
+  })
+
+  test('fresh-boot hydration stays authoritative: empty store takes the vault rows verbatim', () => {
+    const vault = [{ id: 'vault-1' }, { id: 'vault-2' }] as import('./store').Session[]
+    const merged = mergeHydratedSessions([], vault, '')
+    expect(merged.sessions.map((s) => s.id)).toEqual(['vault-1', 'vault-2'])
+    expect(merged.activeSessionId).toBe('vault-1')
+  })
+
+  test('rehydrate keeps the active target when it survives, else falls back to the newest vault row', () => {
+    const vault = [{ id: 'vault-1' }] as import('./store').Session[]
+    // Active session is still in the vault: preserved.
+    expect(mergeHydratedSessions(vault, vault, 'vault-1').activeSessionId).toBe('vault-1')
+    // Active session vanished from the vault (deleted elsewhere): vault[0].
+    expect(mergeHydratedSessions([], vault, 'ghost').activeSessionId).toBe('vault-1')
   })
 })

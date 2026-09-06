@@ -290,6 +290,26 @@ export function sanitizeSessionRows(rows: unknown): Session[] {
   )
 }
 
+/**
+ * P50.2.1 — merge `session_list` vault rows into the live list.
+ * Vault rows are authoritative, but a session the user created while the
+ * list was in flight is local-only (not yet persisted — it reaches the vault
+ * later via `session_put`) and must survive the merge; likewise the active
+ * target is preserved whenever it still exists, so a late hydration (or a
+ * supervisor-restart rehydrate) never silently wipes the user's new session
+ * or yanks focus to the newest vault row mid-conversation.
+ */
+export function mergeHydratedSessions(
+  current: Session[],
+  vault: Session[],
+  activeId: string,
+): { sessions: Session[]; activeSessionId: string } {
+  const localOnly = current.filter((s) => !vault.some((v) => v.id === s.id))
+  const sessions = [...localOnly, ...vault]
+  const activeSessionId = sessions.some((m) => m.id === activeId) ? activeId : sessions[0]?.id ?? ''
+  return { sessions, activeSessionId }
+}
+
 export interface Automation {
   id: string
   name: string

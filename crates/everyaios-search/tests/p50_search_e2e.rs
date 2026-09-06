@@ -3,6 +3,14 @@
 //!
 //! Env contract (same discipline as P50.5.1):
 //!   EVERYAIOS_E2E_SEARXNG_URL=http://127.0.0.1:8888  (a live SearXNG instance)
+//!   Local instance (verified 2026-09-06):
+//!     docker run -d --name searxng -p 8888:8080 -v \
+//!       <repo>/scripts/e2e/searxng-settings.yml:/etc/searxng/settings.yml:ro \
+//!       searxng/searxng
+//!   (the override ships `use_default_settings: true` + a fixed dev secret +
+//!   `limiter: false` + `formats: [html, json]` — the image template's
+//!   `use_default_settings` marker is REQUIRED or the file replaces the
+//!   defaults and /search 500s on missing keys).
 //!
 //! When unset, the live legs SKIP with a message (release matrix runs them
 //! where SearXNG exists). When set, they must PASS against the real endpoint.

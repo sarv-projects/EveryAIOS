@@ -1,0 +1,13 @@
+# Local SearXNG override (P50.5.2 live leg). `use_default_settings: true`
+# merges this file over the base defaults (the image template ships this
+# marker — without it the file fully replaces the defaults).
+use_default_settings: true
+
+server:
+  # Dev-only secret for the loopback E2E instance (docker -p 127.0.0.1:8888).
+  secret_key: "local-e2e-searxng-dev-key-not-for-production"
+  limiter: false
+search:
+  formats:
+    - html
+    - json
