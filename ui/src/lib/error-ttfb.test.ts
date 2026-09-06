@@ -72,6 +72,39 @@ describe('P51.7/P51.21 — failed-turn error cards', () => {
   })
 })
 
+describe('P51.2 — request id on failed turns', () => {
+  test('a failed turn carries the live stream id as the copyable request id', () => {
+    const sid = freshSession()
+    const st = useAppStore.getState()
+    st.setLiveStreamId(sid, 'stream-turn-77')
+    st.streamStart(sid)
+    st.streamFail('boom', sid)
+    expect(lastMessage(sid)!.error?.requestId).toBe('stream-turn-77')
+  })
+
+  test('an explicit request id wins over the live stream id', () => {
+    const sid = freshSession()
+    const st = useAppStore.getState()
+    st.setLiveStreamId(sid, 'stream-turn-77')
+    st.streamStart(sid)
+    st.streamFail('boom', sid, {
+      layer: 'tool',
+      detail: 'boom',
+      retryable: true,
+      requestId: 'explicit-1',
+    })
+    expect(lastMessage(sid)!.error?.requestId).toBe('explicit-1')
+  })
+
+  test('no live stream id leaves the card without a request id (no fabricated id)', () => {
+    const sid = freshSession()
+    const st = useAppStore.getState()
+    st.streamStart(sid)
+    st.streamFail('boom', sid)
+    expect(lastMessage(sid)!.error?.requestId).toBeUndefined()
+  })
+})
+
 describe('P51.7 — TTFB', () => {
   test('first content delta measures ttfb from stream start to first byte', () => {
     const sid = freshSession()

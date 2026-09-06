@@ -253,9 +253,11 @@ pub fn fs_undo_list(state: State<'_, AppState>) -> Result<serde_json::Value, Str
     let undos = state.file_undos.lock().map_err(|e| e.to_string())?;
     let rows: Vec<serde_json::Value> = undos
         .iter()
-        .map(|u| {
+        .enumerate()
+        .map(|(i, u)| {
             let before_bytes = u.before.as_ref().map(|b| b.len()).unwrap_or(0);
             serde_json::json!({
+                "index": i,
                 "sessionId": u.session_id,
                 "path": u.path.display().to_string(),
                 "beforeBytes": before_bytes,
@@ -263,4 +265,86 @@ pub fn fs_undo_list(state: State<'_, AppState>) -> Result<serde_json::Value, Str
         })
         .collect();
     Ok(serde_json::json!({ "undos": rows, "count": rows.len() }))
+}
+
+/// P52.17 — restore one file to its pre-mutation snapshot. `path` must match
+/// a pending `FileUndo` (the newest snapshot for that path); its `before`
+/// bytes are written back (or the file removed when the snapshot is a
+/// creation). The snapshot is consumed, and the restore is audited as a
+/// **HumanGesture** on the Merkle chain — a human deciding the agent's edit
+/// was wrong is never an agent-ticket mutation. Nothing is faked: no
+/// snapshot, no change.
+#[tauri::command]
+pub fn fs_undo_restore(state: State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+    let p = std::path::PathBuf::from(&path);
+    let mut undos = state.file_undos.lock().map_err(|e| e.to_string())?;
+    // Newest-first match on the exact path (later mutations supersede).
+    let idx = undos
+        .iter()
+        .rposition(|u| u.path == p)
+        .ok_or_else(|| format!("no pending snapshot for {path}"))?;
+    let undo = undos.remove(idx);
+    let before_len = undo.before.as_ref().map(|b| b.len()).unwrap_or(0);
+    let undo_path = undo.path.display().to_string();
+    let undo_session = undo.session_id.clone();
+    drop(undos);
+
+    match undo.before {
+        Some(bytes) => {
+            if let Some(parent) = p.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&p, &bytes).map_err(|e| format!("{path}: {e}"))?;
+        }
+        None => {
+            // Snapshot was a creation — restore means delete the new file.
+            let _ = std::fs::remove_file(&p);
+        }
+    }
+    let seq = crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "fs.undo_restore",
+        serde_json::json!({
+            "path": undo_path,
+            "sessionId": undo_session,
+            "beforeBytes": before_len,
+        }),
+    );
+    Ok(serde_json::json!({ "ok": true, "path": path, "auditSeq": seq }))
+}
+
+/// P52.17 — read a pending snapshot's **content** (not just its size) so the
+/// diff view can render a true before-vs-after for text files. Binary content
+/// reports `binary: true` with bytes only; UTF-8 text returns `content`.
+/// Falls back to `{found:false}` when no snapshot exists for `path`.
+#[tauri::command]
+pub fn fs_undo_snapshot(state: State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+    let p = std::path::PathBuf::from(&path);
+    let undos = state.file_undos.lock().map_err(|e| e.to_string())?;
+    let undo = undos
+        .iter()
+        .rev()
+        .find(|u| u.path == p)
+        .ok_or_else(|| format!("no pending snapshot for {path}"))?;
+    match &undo.before {
+        Some(bytes) => {
+            let text = std::str::from_utf8(bytes);
+            Ok(serde_json::json!({
+                "found": true,
+                "path": p.display().to_string(),
+                "binary": text.is_err(),
+                "bytes": bytes.len(),
+                "content": text.ok(),
+            }))
+        }
+        None => Ok(serde_json::json!({
+            "found": true,
+            "path": p.display().to_string(),
+            "binary": false,
+            "bytes": 0,
+            "created": true,
+            "content": serde_json::Value::Null,
+        })),
+    }
 }

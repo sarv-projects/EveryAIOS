@@ -13,6 +13,7 @@ import {
   Pause,
   Play,
   Search,
+  Sparkles,
   Trash2,
   Wrench,
 } from 'lucide-react'
@@ -44,22 +45,80 @@ import {
   type LocalPrefs,
 } from '@/lib/local-models'
 import {
+  bestPick,
   cancelDownload,
   downloadsAvailable,
+  estimateFit,
   listDownloads,
   onModelDownloadEvent,
+  parseGalleryYaml,
   recommendQuant,
   registryList,
   removeModel,
   serveModel,
   startDownload,
+  type GalleryEntry,
+  type GalleryIndex,
   type ModelDownloadRow,
   type OrphanPart,
   type RegistryEntry,
 } from '@/lib/models-download'
+import {
+  buildCandidates,
+  bytesToGib,
+  DEFAULT_QUANT,
+  FIT_CTX,
+  FIT_CTX_LABEL,
+  hostHwClass,
+  tierTone,
+  type FitEstimate,
+} from '@/lib/model-fit'
 
-type Tab = 'discover' | 'mine' | 'hardware'
+type Tab = 'discover' | 'mine' | 'gallery' | 'hardware'
 type HubSort = 'downloads' | 'likes' | 'lastModified'
+
+/** Clearly-fake sample of the LocalAI-style index subset the native parser
+ * accepts — installed-id examples only, never a real weight pin. */
+const GALLERY_SAMPLE = `# index.yaml — LocalAI-style gallery subset (P52.2)
+# id = gallery@model · files carry path + sha256 pins · backend_override
+# merges over the default runtime · preload warms weights at startup.
+version: 1
+models:
+  - id: netlab@example-8b
+    backend_override: ollama
+    preload: false
+    files:
+      - path: example-8b-Q4_K_M.gguf
+        sha256: 0000000000000000000000000000000000000000000000000000000000000000
+      - path: example-8b-Q8_0.gguf
+        sha256: 1111111111111111111111111111111111111111111111111111111111111111
+  - id: netlab@example-3b
+    preload: true
+    files:
+      - path: example-3b-Q4_K_M.gguf
+        sha256: 2222222222222222222222222222222222222222222222222222222222222222
+`
+
+/** Traffic light for one fit estimate (P52.1). No estimate → dim dash. */
+function FitDot({ est }: { est?: FitEstimate | null }) {
+  if (!est) {
+    return <span className="inline-block h-1.5 w-1.5 rounded-full bg-border/60" title="Fit estimate unavailable outside the Tauri shell." />
+  }
+  const tone = tierTone(est.tier)
+  const dot =
+    tone.key === 'ok'
+      ? 'bg-emerald-400'
+      : tone.key === 'warn'
+        ? 'bg-amber-400'
+        : 'bg-red-400'
+  const split = `${est.fileGb.toFixed(1)} GiB file + ${(est.kvGb * 1000).toFixed(0)} MB KV ≈ ${est.totalGb.toFixed(2)} GiB total`
+  return (
+    <span
+      className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dot}`}
+      title={`Estimate at ${FIT_CTX_LABEL} ctx — ${split}. ${tone.hint}`}
+    />
+  )
+}
 
 function CapChip({
   on,
@@ -162,6 +221,16 @@ export default function LocalModelsPanel() {
   const [nativeError, setNativeError] = useState<string | null>(null)
   const [busyFile, setBusyFile] = useState<string | null>(null)
   const [prefs, setPrefs] = useState<LocalPrefs>(getLocalPrefs)
+  // P52.1 — per-quant fit traffic lights keyed by GGUF path.
+  const [fitMap, setFitMap] = useState<Record<string, FitEstimate>>({})
+  // P52.5 — one-click auto best-variant state.
+  const [pickingBest, setPickingBest] = useState(false)
+  const [autoPicked, setAutoPicked] = useState(false)
+  // P52.2 — gallery index import/inspect.
+  const [galleryYaml, setGalleryYaml] = useState(GALLERY_SAMPLE)
+  const [gallery, setGallery] = useState<GalleryIndex | null>(null)
+  const [galleryError, setGalleryError] = useState<string | null>(null)
+  const [galleryBusy, setGalleryBusy] = useState(false)
   const notify = useAppStore((s) => s.notify)
   const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
   const setSelectedModel = useAppStore((s) => s.setSelectedModel)
@@ -275,6 +344,35 @@ export default function LocalModelsPanel() {
 
   const ram = ramBytes(hw)
   const gguf = files.filter((f) => f.path.toLowerCase().endsWith('.gguf'))
+
+  // P52.1 — per-file fit pre-check at the serving context (native, read-only;
+  // silently skipped outside the shell — the lights stay dim there).
+  const ggufKey = gguf.map((f) => `${f.path}:${f.size}`).join('|')
+  useEffect(() => {
+    if (!canDownload || !selected || gguf.length === 0) {
+      setFitMap({})
+      return
+    }
+    let cancelled = false
+    void Promise.all(
+      gguf.map(async (f) => {
+        const est = await estimateFit(bytesToGib(f.size), FIT_CTX)
+        return [f.path, est] as const
+      }),
+    )
+      .then((rows) => {
+        if (!cancelled) setFitMap(Object.fromEntries(rows))
+      })
+      .catch(() => {
+        // Fit is a hint — never blocks the panel.
+        if (!cancelled) setFitMap({})
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canDownload, selected?.id, ggufKey])
+
   const chosen = useMemo(() => {
     if (picked) return files.find((f) => f.path === picked) ?? null
     const q = recommended?.quant?.toLowerCase()
@@ -363,13 +461,52 @@ export default function LocalModelsPanel() {
     }
   }
 
+  // P52.5 — one-click best variant for novices: build candidates from the
+  // repo's GGUF files and let the native picker choose for this hardware.
+  const autoPick = async () => {
+    if (!selected || !canDownload || gguf.length < 2) return
+    setPickingBest(true)
+    setAutoPicked(false)
+    setNativeError(null)
+    try {
+      const cands = buildCandidates(selected.id, gguf)
+      const best = await bestPick(hostHwClass(hw), cands)
+      if (best) {
+        setPicked(best.file)
+        setAutoPicked(true)
+        notify(`Auto-picked ${best.quant} (${best.hw}-class build) for this hardware.`)
+      } else {
+        notify('No downloadable build could be picked from this repo.')
+      }
+    } catch (e) {
+      setNativeError(e instanceof Error ? e.message : 'Auto-pick failed')
+    } finally {
+      setPickingBest(false)
+    }
+  }
+
+  // P52.2 — parse a LocalAI-style index.yaml (native parse only).
+  const parseGallery = async () => {
+    if (!canDownload || !galleryYaml.trim()) return
+    setGalleryBusy(true)
+    setGalleryError(null)
+    try {
+      setGallery(await parseGalleryYaml(galleryYaml))
+    } catch (e) {
+      setGallery(null)
+      setGalleryError(e instanceof Error ? e.message : 'Gallery index could not be parsed')
+    } finally {
+      setGalleryBusy(false)
+    }
+  }
+
   return (
     <div className="flex h-full min-h-[520px] flex-col">
       <div className="mb-3 flex items-center gap-1 rounded-md border border-border/60 bg-background/40 p-0.5">
-        {(
-          [
+        {          ([
             ['discover', 'Discover'],
             ['mine', 'My models'],
+            ['gallery', 'Gallery'],
             ['hardware', 'Hardware'],
           ] as const
         ).map(([id, label]) => (
@@ -609,22 +746,71 @@ export default function LocalModelsPanel() {
                       </div>
                     )}
                     {gguf.length > 1 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {gguf.slice(0, 10).map((f) => (
-                          <button
-                            key={f.path}
-                            type="button"
-                            onClick={() => setPicked(f.path)}
-                            className={cn(
-                              'rounded border px-1.5 py-0.5 font-mono text-[9px]',
-                              chosen?.path === f.path
-                                ? 'border-orange-500/60 bg-orange-500/10 text-orange-300'
-                                : 'border-border/50 text-muted-foreground hover:text-foreground',
+                      <div className="mt-2 space-y-1.5">
+                        <div className="flex flex-wrap gap-1">
+                          {gguf.slice(0, 10).map((f) => {
+                            const q = quantFromPath(f.path)
+                            const isDefault = q === (recommended?.quant ?? DEFAULT_QUANT)
+                            return (
+                              <button
+                                key={f.path}
+                                type="button"
+                                onClick={() => {
+                                  setPicked(f.path)
+                                  setAutoPicked(false)
+                                }}
+                                className={cn(
+                                  'flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[9px]',
+                                  chosen?.path === f.path
+                                    ? 'border-orange-500/60 bg-orange-500/10 text-orange-300'
+                                    : 'border-border/50 text-muted-foreground hover:text-foreground',
+                                )}
+                              >
+                                <FitDot est={fitMap[f.path]} />
+                                <span>{q}</span>
+                                {isDefault && (
+                                  <span className="rounded bg-emerald-500/20 px-1 text-[8px] text-emerald-300">
+                                    default
+                                  </span>
+                                )}
+                                <span className="opacity-70">{formatBytes(f.size)}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {canDownload && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                              fits
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                              slow
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />
+                              won't fit
+                              <span className="text-border-foreground/50">— estimate at {FIT_CTX_LABEL} ctx, file + KV vs RAM (+VRAM)</span>
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 border-orange-500/40 px-2 text-[10px] text-orange-300 hover:bg-orange-500/10"
+                              disabled={busyFile !== null || pickingBest}
+                              onClick={() => void autoPick()}
+                              title="Let the native picker choose the best build for this machine (prefers a Q4_K_M build, CPU fallback). Download still needs your confirm."
+                            >
+                              {pickingBest ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : (
+                                <Sparkles className="mr-1 h-3 w-3" />
+                              )}
+                              Auto-pick for this hardware
+                            </Button>
+                            {autoPicked && chosen && (
+                              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] text-emerald-300">
+                                Auto-picked {quantFromPath(chosen.path)} — you can switch below.
+                              </span>
                             )}
-                          >
-                            {quantFromPath(f.path)} · {formatBytes(f.size)}
-                          </button>
-                        ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -738,6 +924,118 @@ export default function LocalModelsPanel() {
               <Cpu className="h-3.5 w-3.5 text-orange-400" />
             </button>
           ))}
+        </div>
+      )}
+
+      {tab === 'gallery' && (
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
+          <div className="rounded-md border border-border/60 bg-background/40 px-2.5 py-2 text-[11px] text-muted-foreground">
+            LocalAI-style <span className="font-mono">index.yaml</span> gallery import — each{' '}
+            <span className="font-mono">id: gallery@model</span> entry pins files with{' '}
+            <span className="font-mono">sha256</span>, may set a{' '}
+            <span className="font-mono">backend_override</span> and a{' '}
+            <span className="font-mono">preload</span> flag. The native parser refuses half-pinned
+            files, so a parsed index is structurally safe to read. This tab only parses &
+            inspects — installing pinned files into a gallery dir and verifying their sha256 on
+            load is the Rust gallery-dir loader seam (parser landed; loader wiring remains).
+          </div>
+          {!canDownload && (
+            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11px] text-amber-300">
+              Parsing is a native command — this browser preview keeps the sample but cannot
+              call it.
+            </div>
+          )}
+          <textarea
+            value={galleryYaml}
+            onChange={(e) => setGalleryYaml(e.target.value)}
+            spellCheck={false}
+            className="h-28 w-full resize-y rounded-md border border-border/60 bg-background/40 p-2 font-mono text-[10px] text-foreground focus:border-orange-500/60 focus:outline-none"
+            placeholder="Paste a LocalAI-style index.yaml…"
+          />
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              className="h-7 bg-orange-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
+              disabled={!canDownload || galleryBusy || !galleryYaml.trim()}
+              onClick={() => void parseGallery()}
+            >
+              {galleryBusy ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <Wrench className="mr-1 h-3 w-3" />
+              )}
+              Parse &amp; inspect
+            </Button>
+            {galleryYaml !== GALLERY_SAMPLE && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setGalleryYaml(GALLERY_SAMPLE)
+                  setGallery(null)
+                  setGalleryError(null)
+                }}
+              >
+                Reset sample
+              </Button>
+            )}
+          </div>
+          {galleryError && (
+            <div className="rounded border border-red-500/30 bg-red-500/5 px-2 py-1.5 font-mono text-[10px] text-red-300">
+              {galleryError}
+            </div>
+          )}
+          {gallery && (
+            <div className="space-y-1.5">
+              <div className="font-mono text-[10px] text-muted-foreground">
+                {gallery.models.length} entr{gallery.models.length === 1 ? 'y' : 'ies'} · index
+                version {gallery.version} — sha pins shown are <em>declared</em>, not locally
+                verified.
+              </div>
+              {gallery.models.map((entry: GalleryEntry) => (
+                <div
+                  key={entry.id}
+                  className="rounded-md border border-border/60 bg-background/40 px-2.5 py-2"
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono text-[11px] font-medium text-foreground">
+                      {entry.id}
+                    </span>
+                    {entry.backend_override && (
+                      <Badge className="bg-sky-500/15 px-1 text-[8px] text-sky-300">
+                        runtime: {entry.backend_override}
+                      </Badge>
+                    )}
+                    {entry.preload && (
+                      <Badge className="bg-amber-500/15 px-1 text-[8px] text-amber-300">
+                        preload
+                      </Badge>
+                    )}
+                    <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+                      {entry.files.length} pinned
+                    </span>
+                  </div>
+                  <div className="mt-1.5 space-y-1">
+                    {entry.files.map((f) => (
+                      <div
+                        key={f.path}
+                        className="flex items-center gap-2 font-mono text-[9px] text-muted-foreground"
+                      >
+                        <span className="min-w-0 truncate">{f.path}</span>
+                        <span
+                          className="shrink-0 text-emerald-300/80"
+                          title={`sha256 ${f.sha256}`}
+                        >
+                          sha:{f.sha256.slice(0, 12)}…
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

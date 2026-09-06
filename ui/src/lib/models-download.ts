@@ -103,13 +103,100 @@ export async function recommendQuant(repo: string): Promise<{
   return invoke("model_recommend_quant", { repo })
 }
 
-export async function serveModel(id: string): Promise<{
+/** P52.1/P52.3 — dry-run fit estimate (file GB + ctx tokens vs live hardware).
+ * Nothing is downloaded or served; returns the tier + file/KV/total split.
+ * `file_gb` is in GiB (registry `size` bytes ÷ 2^30). */
+export async function estimateFit(
+  fileGb: number,
+  ctxTokens: number,
+): Promise<{
+  tier: 'fits' | 'may_be_slow' | 'wont_fit'
+  fileGb: number
+  kvGb: number
+  totalGb: number
+  ramGb: number
+  vramGb: number
+  defaultQuant: string
+}> {
+  return invoke("model_estimate_fit", { fileGb, ctxTokens })
+}
+
+/** P52.4 — per-serve llama.cpp options passed to `model_serve` (real launch
+ * flags; camelCase mirrors `ServeOptions` + the extra `kvCache` element
+ * type). Every field optional — absent = llama.cpp default. */
+export interface ServeOptions {
+  gpuLayers?: number
+  flashAttn?: 'on' | 'off' | 'auto'
+  numCtx?: number
+  noMmap?: boolean
+  mlock?: boolean
+  kvCache?: 'q8_0' | 'q4_0' | 'f32' | 'f16'
+  /** P52.7 — runtime: 'gguf' (llamafile, default) or 'mlx' (mlx_lm.server
+   * sidecar, Apple Silicon). MLX serves an HF id, not the local GGUF. */
+  runtime?: 'gguf' | 'mlx'
+  /** P52.7 — HF model id for the MLX sidecar (mlx-community/<name>-4bit);
+   * derived from the registry id when omitted. Ignored for the GGUF runtime. */
+  modelId?: string
+}
+
+export async function serveModel(id: string, options?: ServeOptions): Promise<{
   ok: boolean
   port: number
   baseUrl: string
   starting: boolean
 }> {
-  return invoke("model_serve", { id })
+  if (options) return invoke("model_serve", { id, serveOptions: options })
+  return invoke("model_serve", { id, serveOptions: null })
+}
+
+/** P52.2 — one pinned file inside a gallery entry (mirrors
+ * `everyaios_catalog::gallery::GalleryFile`). */
+export interface GalleryFile {
+  path: string
+  sha256: string
+}
+
+/** P52.2 — one `gallery@model` entry (mirrors `GalleryEntry`). */
+export interface GalleryEntry {
+  id: string
+  files: GalleryFile[]
+  /** Backend override (e.g. `ollama`); merges over the default runtime. */
+  backend_override: string | null
+  /** Preload the weights at startup when true. */
+  preload: boolean
+}
+
+/** P52.2 — parsed gallery index (mirrors `GalleryIndex`). */
+export interface GalleryIndex {
+  version: number
+  models: GalleryEntry[]
+}
+
+/** P52.2 — parse a LocalAI-style gallery `index.yaml` (no network, no
+ * install; the native parse also refuses half-pinned files). */
+export async function parseGalleryYaml(yaml: string): Promise<GalleryIndex> {
+  return invoke("model_gallery_parse", { yaml })
+}
+
+/** P52.5 — host accelerator class for the best-variant pick (lowercase,
+ * mirrors `HwClass`). */
+export type HwClass = "npu" | "gpu" | "cpu"
+
+/** P52.5 — one downloadable weight build (mirrors `VariantCandidate`). */
+export interface VariantCandidate {
+  repo: string
+  file: string
+  hw: HwClass
+  quant: string
+}
+
+/** P52.5 — best-variant pick (pure native pick; download still goes through
+ * `startDownload`). Returns `null` when no candidate can be chosen. */
+export async function bestPick(
+  hw: HwClass,
+  candidates: VariantCandidate[],
+): Promise<{ repo: string; file: string; hw: HwClass; quant: string } | null> {
+  return invoke("model_best_pick", { hw, candidates })
 }
 
 /** Subscribe to download/serve progress events; returns an unlisten fn. */

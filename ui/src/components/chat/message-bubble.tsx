@@ -13,6 +13,7 @@ import {
   Copy,
   Download,
   GitFork,
+  Hash,
   Pencil,
   Quote,
   RotateCw,
@@ -361,6 +362,19 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
           {copied ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : <Copy className="h-2.5 w-2.5" />}
           {copied ? 'Copied' : 'Copy error'}
         </button>
+        {err.requestId && (
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(err.requestId!)
+              notify('Request id copied — include it when reporting this turn')
+            }}
+            title="Request id — the exact turn this failure belongs to (copy for support)"
+            className="inline-flex h-5 items-center gap-1 rounded bg-rose-500/10 px-1.5 font-mono text-[9px] text-rose-200/70 transition-colors hover:bg-rose-500/20"
+          >
+            <Hash className="h-2.5 w-2.5" />
+            {err.requestId.slice(0, 12)}…
+          </button>
+        )}
       </div>
     </div>
   )

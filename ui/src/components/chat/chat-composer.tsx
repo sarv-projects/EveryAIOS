@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { classifyAttachment, validateImage } from '@/lib/attachments'
 import {
   ArrowUp,
   CircleDollarSign,
@@ -250,6 +251,25 @@ export default function ChatComposer({ budget, centered }: Props) {
 
   const onFileChosen = (file: File | undefined) => {
     if (!file) return
+    // P52.12 — classify before reading: images must NOT be readAsText'd into
+    // the text seam (that would attach binary garbage as a “user document”).
+    const cls = classifyAttachment(file.name, file.type)
+    if (cls === 'image') {
+      const gate = validateImage(file)
+      if (gate.ok) {
+        notify(
+          `“${file.name}” is a valid attach-candidate image (PNG/JPEG/GIF/WebP ≤ 20 MiB) but image message parts are wire-gated — only text/SVG attach today (P52.12). Nothing was attached.`,
+          'error',
+        )
+      } else {
+        notify(gate.reason, 'error')
+      }
+      return
+    }
+    if (cls === 'unsupported') {
+      notify(`“${file.name}” — binary files can't attach; only text, Markdown, CSV and SVG ride the context seam`, 'error')
+      return
+    }
     if (file.size > 512 * 1024) {
       notify(`“${file.name}” is ${(file.size / 1024).toFixed(0)} KB — attachments cap at 512 KB of text`, 'error')
       return
@@ -267,7 +287,7 @@ export default function ChatComposer({ budget, centered }: Props) {
     reader.readAsText(file)
   }
 
-  const runSlash = (text: string): boolean => {
+  const runSlash = (text: string, busy?: boolean): boolean => {
     const st = useAppStore.getState()
     const [head, ...rest] = text.trim().split(/\s+/)
     const arg = rest.join(' ')
@@ -290,6 +310,13 @@ export default function ChatComposer({ budget, centered }: Props) {
         setComposerValue(arg)
         return true
       case '/undo':
+        // Session-mutating: never run mid-turn (would desync the live stream)
+        // and never queue as an ask — consume with an honest refusal.
+        if (busy) {
+          notify('/undo waits for the current turn — pause or let it finish.', 'error')
+          setComposerValue(arg)
+          return true
+        }
         void (async () => {
           try {
             const { agentUndo } = await import('@/lib/tauri')
@@ -302,6 +329,11 @@ export default function ChatComposer({ budget, centered }: Props) {
         setComposerValue(arg)
         return true
       case '/clear':
+        if (busy) {
+          notify('/clear waits for the current turn — pause or let it finish.', 'error')
+          setComposerValue('')
+          return true
+        }
         st.clearSessionMessages(st.activeSessionId)
         setComposerValue('')
         return true
@@ -335,37 +367,36 @@ export default function ChatComposer({ budget, centered }: Props) {
       if (cur && cur.messages.length > 0) st.newSession()
       st.setCenterScreen('chat')
     }
+    // A slash command is *control*, not an ask: it executes locally before
+    // the queue branch so /help, /mode, /model, /export never queue behind a
+    // running turn. Mutating commands (/undo, /clear) refuse while busy
+    // rather than desyncing the live stream (handled inside runSlash).
+    if (composerValue.trimStart().startsWith('/') && runSlash(composerValue, agentBusy)) {
+      setAttachment(null)
+      return
+    }
     // P51.5 — when already generating, the send key queues the ask instead of
     // silently dropping it (the queue shows as pending chips and auto-fires).
-    if (agentBusy) {
-      const busy = st.sessions.some(
-        (s) =>
-          s.id === st.activeSessionId &&
-          (s.status === 'running' || s.status === 'action-required'),
-      )
-      if (busy) {
-        const text = composerValue.trim()
-        if (text) {
-          st.queueTurn(st.activeSessionId, text, attachment ?? undefined)
-          setComposerValue('')
-          setAttachment(null)
-          notify('Queued — starts when the current turn finishes')
-        }
-        return
+    const busy = st.sessions.some(
+      (s) =>
+        s.id === st.activeSessionId &&
+        (s.status === 'running' || s.status === 'action-required'),
+    )
+    if (busy) {
+      const text = composerValue.trim()
+      if (text) {
+        st.queueTurn(st.activeSessionId, text, attachment ?? undefined)
+        setComposerValue('')
+        setAttachment(null)
+        notify('Queued — starts when the current turn finishes')
       }
+      return
     }
     let text = composerValue
     // Macros expand to prompt augmentations (visible in the sent text).
     const first = text.trimStart().split(/\s+/, 1)[0]
     const macro = MACROS.find((m) => m.cmd === first)
     if (macro) text = `${text} ${macro.expand}`
-    // Slash commands execute locally and never reach the model as turns.
-    if (text.trimStart().startsWith('/')) {
-      if (runSlash(text)) {
-        setAttachment(null)
-        return
-      }
-    }
     if (!text.trim() && !attachment) return
     const ctx = attachment
     setAttachment(null)
@@ -423,7 +454,7 @@ export default function ChatComposer({ budget, centered }: Props) {
           ref={fileRef}
           type="file"
           className="hidden"
-          aria-label="Attach a text file"
+          aria-label="Attach a text file (images are wire-gated — see P52.12)"
           onChange={(e) => {
             onFileChosen(e.target.files?.[0])
             e.target.value = ''

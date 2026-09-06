@@ -30,9 +30,21 @@ export interface FsRead {
 }
 
 export interface FsUndo {
+  index: number
   sessionId: string
   path: string
   beforeBytes: number
+}
+
+/** P52.17 — a pending snapshot's content (text) or binary marker. */
+export interface FsUndoSnapshot {
+  found: boolean
+  path?: string
+  binary?: boolean
+  bytes?: number
+  /** True when the snapshot was a file creation (restore = delete). */
+  created?: boolean
+  content?: string | null
 }
 
 export async function fsHome(): Promise<string> {
@@ -87,6 +99,25 @@ export async function fsUndoList(): Promise<{ undos: FsUndo[]; count: number }> 
     return { undos: [], count: 0 }
   }
   return nativeCall('filesystem undo list', () => invoke('fs_undo_list'))
+}
+
+/** P52.17 — restore one file to its pre-mutation snapshot (human-gesture
+ * audited in Rust). Outside the shell this is refused — a restore is a real
+ * disk write and never happens in the browser preview. */
+export async function fsUndoRestore(path: string): Promise<{ ok: boolean; auditSeq: number }> {
+  if (!inTauri()) {
+    return Promise.reject(new Error('Restore is a shell capability'))
+  }
+  return nativeCall('filesystem undo restore', () => invoke('fs_undo_restore', { path }))
+}
+
+/** P52.17 — read a pending snapshot's content for a true before/after diff.
+ * Returns `{found:false}` outside the shell (no preview data invented). */
+export async function fsUndoSnapshot(path: string): Promise<FsUndoSnapshot> {
+  if (!inTauri()) {
+    return { found: false }
+  }
+  return nativeCall('filesystem undo snapshot', () => invoke('fs_undo_snapshot', { path }))
 }
 
 // Demo fallback — a small realistic tree (preview only; the Tauri path is real).

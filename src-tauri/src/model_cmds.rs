@@ -391,10 +391,15 @@ pub fn model_recommend_quant(repo: String) -> Result<serde_json::Value, String> 
 /// `ModelsRuntime::serve_gguf`). Honest-fail when no llamafile binary is
 /// configured. Serves on the config port; health is verified in the
 /// background thread and reported via a `serve` event.
+///
+/// P52.4 — `serve_options` (optional) carries the real llama.cpp/llamafile
+/// launch flags the UI exposes (gpu layers, flash attention, ctx override,
+/// mmap/mlock, KV cache type). `None` = the previous fixed-context launch.
 #[tauri::command]
 pub fn model_serve(
     app: AppHandle,
     id: String,
+    serve_options: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let base = models_base();
     let registry = ModelRegistry::load(base.clone());
@@ -404,11 +409,70 @@ pub fn model_serve(
         .ok_or_else(|| format!("model not in registry: {id}"))?;
     let cfg = everyaios_core::Config::load().unwrap_or_default();
     let mgr = everyaios_core::LocalManager::from_config(&cfg);
-    let bin = mgr
-        .find_llamafile(&cfg.data_dir)
-        .ok_or_else(|| "no llamafile binary found — drop one in `<data_dir>/bin` or set `EVERYAIOS_LLAMAFILE`".to_string())?;
     let port = cfg.local.llamafile_port;
     let num_ctx = cfg.local.num_ctx;
+
+    // Parse the optional P52.4 options (best-effort per-field; unknown /
+    // malformed fields fall back to the llama.cpp default rather than
+    // blocking the whole serve). `kvCache` is the P39.4 element type.
+    let mut kv_cache = None;
+    let mut opts = match serve_options {
+        Some(v) => {
+            use everyaios_core::models::{FlashAttn, ServeOptions};
+            let mut o = match serde_json::from_value::<ServeOptions>(v.clone()) {
+                Ok(o) => o,
+                Err(_) => ServeOptions::default(),
+            };
+            if let Some(kv) = v.get("kvCache").and_then(|k| k.as_str()) {
+                kv_cache = match kv.to_ascii_lowercase().as_str() {
+                    "q8_0" => Some(everyaios_core::models::KvCacheType::Q8_0),
+                    "q4_0" => Some(everyaios_core::models::KvCacheType::Q4_0),
+                    "f32" => Some(everyaios_core::models::KvCacheType::F32),
+                    _ => Some(everyaios_core::models::KvCacheType::F16),
+                };
+            }
+            if o.num_ctx.is_none() {
+                if let Some(n) = v.get("numCtx").and_then(|n| n.as_u64()) {
+                    o.num_ctx = Some(n as u32);
+                }
+            }
+            if o.flash_attn.is_none() {
+                if let Some(fa) = v.get("flashAttn").and_then(|f| f.as_str()) {
+                    o.flash_attn = match fa.to_ascii_lowercase().as_str() {
+                        "on" => Some(FlashAttn::On),
+                        "off" => Some(FlashAttn::Off),
+                        _ => Some(FlashAttn::Auto),
+                    };
+                }
+            }
+            if o.gpu_layers.is_none() {
+                if let Some(n) = v.get("gpuLayers").and_then(|g| g.as_i64()) {
+                    o.gpu_layers = Some(u32::try_from(n).unwrap_or(0));
+                }
+            }
+            o
+        }
+        None => everyaios_core::models::ServeOptions::default(),
+    };
+
+    // P52.7 — the MLX sidecar branch skips the llamafile requirement: it
+    // serves an HF model id via `mlx_lm.server` (Apple Silicon). When the
+    // caller picks the MLX runtime without a model id, derive the
+    // `mlx-community/<name>-4bit` id from the registry row's HF id.
+    use everyaios_core::models::{mlx_quant_id, ServeRuntime};
+    let is_mlx = opts.runtime == ServeRuntime::Mlx;
+    if is_mlx && opts.model_id.is_none() {
+        let hf_part = entry.id.rsplit(':').next().unwrap_or(&entry.id);
+        opts.model_id = Some(mlx_quant_id(hf_part));
+    }
+    let bin = if is_mlx {
+        None
+    } else {
+        Some(
+            mgr.find_llamafile(&cfg.data_dir)
+                .ok_or_else(|| "no llamafile binary found — drop one in `<data_dir>/bin` or set `EVERYAIOS_LLAMAFILE`".to_string())?,
+        )
+    };
 
     let status = Arc::new(Mutex::new(DownloadStatus {
         phase: "serving".into(),
@@ -417,8 +481,11 @@ pub fn model_serve(
     let app2 = app.clone();
     let status2 = Arc::clone(&status);
     let id2 = id.clone();
+    let opts2 = opts;
+    let kv2 = kv_cache;
     std::thread::spawn(move || {
-        let outcome = ModelsRuntime::serve_gguf(&entry, Some(&bin), port, num_ctx, None);
+        let outcome =
+            ModelsRuntime::serve_gguf_with_options(&entry, bin.as_deref(), port, num_ctx, kv2, opts2);
         let mut s = status2.lock().unwrap_or_else(|e| e.into_inner());
         match outcome {
             Ok(ep) => {

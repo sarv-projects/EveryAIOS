@@ -156,6 +156,9 @@ export default function ChatPanel() {
   const { agentPaused, toggleAgentPause, notify, setComposerValue, selectedAgentId, selectedModelId, powerMode } = store
   const scopedView = useAppStore((s) => s.scopedView)
   const setScopedView = useAppStore((s) => s.setScopedView)
+  // P52.15 — the closed ring (sessions deleted this run) feeds the Archive
+  // flyout in the session menu: reopen any row, or purge it for good.
+  const closedSessions = useAppStore((s) => s.closedSessions)
   const nowDoing = activeSession ? deriveNowDoing(activeSession) : null
 
   // Bugfix — Pause must actually stop the live Rust stream, not just flip the
@@ -241,6 +244,21 @@ export default function ChatPanel() {
       case 'Reopen last closed':
         notify(st.reopenClosedSession() ? 'Reopened the last closed session' : 'Nothing closed this run to reopen')
         break
+      case 'Empty archive':
+        if (window.confirm('Permanently forget every closed session from this run? Their transcripts are lost.')) {
+          st.purgeAllClosed()
+          notify('Archive emptied')
+        }
+        break
+      default:
+        if (label.startsWith('Reopen:')) {
+          const cid = label.slice('Reopen:'.length)
+          notify(
+            st.reopenClosedSessionId(cid) ? 'Reopened the closed session' : 'That closed session is no longer available',
+            st.closedSessions.some((c) => c.id === cid) ? 'default' : 'error',
+          )
+        }
+        break
       case 'Export': {
         const blob = new Blob([transcriptMarkdown(sess)], { type: 'text/markdown' })
         const url = URL.createObjectURL(blob)
@@ -256,8 +274,6 @@ export default function ChatPanel() {
         if (window.confirm(`Clear all messages in “${sess.title}”? The session stays.`)) {
           st.clearSessionMessages(sid)
         }
-        break
-      default:
         break
     }
   }
@@ -490,6 +506,37 @@ export default function ChatPanel() {
                   </DropdownMenuItem>
                 </span>
               ))}
+              {/* P52.15 — Archive/History: every session closed this run, in
+                  close order (most recent first). Reopen restores the full
+                  transcript; Empty archive forgets them permanently. Durable
+                  trash across restarts rides the session-trash command and is
+                  not faked here. */}
+              {closedSessions.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
+                    Closed this run ({closedSessions.length})
+                  </DropdownMenuLabel>
+                  {[...closedSessions].reverse().map((c) => (
+                    <DropdownMenuItem
+                      key={c.id}
+                      onClick={() => onMenuAction(`Reopen:${c.id}`)}
+                      className="gap-1.5"
+                      title="Reopen — restores the full transcript"
+                    >
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      <span className="max-w-[9rem] truncate">{c.title || 'New work'}</span>
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => onMenuAction('Empty archive')}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Empty archive
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

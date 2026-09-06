@@ -88,6 +88,74 @@ impl std::fmt::Display for ModelsError {
 /// The Modelfile template for `ollama create` (P27 runtime binding).
 pub const OLLAMA_MODELFILE: &str = "FROM {path}\n";
 
+/// P52.4 — per-serve options a caller may set (UI + `model_serve`). Each
+/// field maps to a real llama.cpp/llamafile server flag; `None` = llama.cpp
+/// default. Defaults keep byte-identical behavior to the previous fixed
+/// `--ctx-size N` launch so existing tests/consumers are unaffected.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServeOptions {
+    /// GPU offload: `--n-gpu-layers N`. `0` = CPU-only. `None` = llama.cpp
+    /// default (usually full offload when a GPU is present).
+    pub gpu_layers: Option<u32>,
+    /// Flash Attention: llama.cpp `--flash-attn on|off|auto`. `None` =
+    /// default (`auto`).
+    pub flash_attn: Option<FlashAttn>,
+    /// Context-size override (`--ctx-size N`). `None` = the caller's
+    /// configured `num_ctx` (kept as an explicit arg so the shape stays
+    /// deterministic and testable).
+    pub num_ctx: Option<u32>,
+    /// llama.cpp `--no-mmap`: force full weight read into memory (not the
+    /// page-cache-backed default). Off by default; the memory-constrained
+    /// fit path (P52.4) may set it when the OS would otherwise swap.
+    pub no_mmap: bool,
+    /// llama.cpp `--mlock`: lock the model in RAM. Off by default.
+    pub mlock: bool,
+    /// P52.7 — runtime to bind: llama.cpp-family GGUF (default) or the
+    /// Apple-Silicon MLX sidecar (`mlx_lm.server`). MLX serves a Hugging
+    /// Face model id ([`ServeOptions::model_id`], `mlx-community/...`)
+    /// instead of the local GGUF path and requires `mlx-lm` on PATH — the
+    /// spawn fails closed with an actionable error otherwise (no silent
+    /// fallback to llamafile).
+    pub runtime: ServeRuntime,
+    /// HF model id for the MLX sidecar (`mlx-community/<name>-4bit` via
+    /// [`mlx::mlx_quant_id`]). Required when `runtime == Mlx` (callers may
+    /// omit it and let the command derive it from the registry id); ignored
+    /// when the runtime is GGUF.
+    pub model_id: Option<String>,
+}
+
+/// llama.cpp Flash Attention mode (`--flash-attn`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FlashAttn {
+    On,
+    Off,
+    #[default]
+    Auto,
+}
+
+impl FlashAttn {
+    pub fn as_llama_arg(self) -> &'static str {
+        match self {
+            FlashAttn::On => "on",
+            FlashAttn::Off => "off",
+            FlashAttn::Auto => "auto",
+        }
+    }
+}
+
+/// P52.7 — which runtime serves the model: the portable llamafile/GGUF path
+/// or the Apple-Silicon MLX sidecar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ServeRuntime {
+    #[default]
+    Gguf,
+    /// Apple-Silicon unified-memory runtime (`mlx_lm.server`, OpenAI-compat).
+    Mlx,
+}
+
 /// The llamafile launch args for a GGUF (pure so tests can assert the exact
 /// wire, including the P39.4 KV-cache knob).
 pub fn gguf_args(
@@ -95,6 +163,18 @@ pub fn gguf_args(
     port: u16,
     num_ctx: u32,
     kv_cache: Option<KvCacheType>,
+) -> Vec<String> {
+    gguf_args_with_options(path, port, num_ctx, kv_cache, ServeOptions::default())
+}
+
+/// [`gguf_args`] plus the P52.4 per-serve options. `num_ctx` (the fixed
+/// caller argument) is used unless `ServeOptions::num_ctx` overrides it.
+pub fn gguf_args_with_options(
+    path: &Path,
+    port: u16,
+    num_ctx: u32,
+    kv_cache: Option<KvCacheType>,
+    opts: ServeOptions,
 ) -> Vec<String> {
     let mut args = vec![
         "--model".to_string(),
@@ -104,9 +184,24 @@ pub fn gguf_args(
         "--port".to_string(),
         port.to_string(),
         "--ctx-size".to_string(),
-        num_ctx.to_string(),
+        opts.num_ctx.unwrap_or(num_ctx).to_string(),
         "--nobrowser".to_string(),
     ];
+    if let Some(ngl) = opts.gpu_layers {
+        // llama.cpp `-ngl / --n-gpu-layers N` (offload N layers to the GPU).
+        args.push("--n-gpu-layers".to_string());
+        args.push(ngl.to_string());
+    }
+    if let Some(fa) = opts.flash_attn {
+        args.push("--flash-attn".to_string());
+        args.push(fa.as_llama_arg().to_string());
+    }
+    if opts.no_mmap {
+        args.push("--no-mmap".to_string());
+    }
+    if opts.mlock {
+        args.push("--mlock".to_string());
+    }
     if let Some(kv) = kv_cache {
         // llama.cpp `-ctk/-ctv`: quantize both K and V caches to the same type.
         let t = kv.as_llama_arg().to_string();
@@ -124,7 +219,7 @@ pub struct ModelsRuntime;
 impl ModelsRuntime {
     /// Serve `entry` with a managed **llamafile** (`--model <gguf>`), reusing
     /// the P1.8 health-wait discipline (≤60s). Returns the endpoint the broker
-    /// can route `local://` URLs to.
+    /// can route `local://` URLs to. Defaults to `ServeOptions::default()`.
     pub fn serve_gguf(
         entry: &ModelEntry,
         llamafile_bin: Option<&Path>,
@@ -132,6 +227,27 @@ impl ModelsRuntime {
         num_ctx: u32,
         kv_cache: Option<KvCacheType>,
     ) -> Result<LocalEndpoint, ModelsError> {
+        Self::serve_gguf_with_options(entry, llamafile_bin, port, num_ctx, kv_cache, ServeOptions::default())
+    }
+
+    /// [`ModelsRuntime::serve_gguf`] plus the P52.4 per-serve options
+    /// (gpu layers, flash attention, ctx override, mmap/mlock). The actual
+    /// context served is `opts.num_ctx.unwrap_or(num_ctx)`.
+    pub fn serve_gguf_with_options(
+        entry: &ModelEntry,
+        llamafile_bin: Option<&Path>,
+        port: u16,
+        num_ctx: u32,
+        kv_cache: Option<KvCacheType>,
+        opts: ServeOptions,
+    ) -> Result<LocalEndpoint, ModelsError> {
+        // P52.7 — the MLX sidecar branch: serve an HF model id via
+        // `mlx_lm.server` instead of the local GGUF via llamafile. Liveness
+        // is the documented `/v1/models` endpoint (≤60s; the first run may
+        // download the weights from HF).
+        if opts.runtime == ServeRuntime::Mlx {
+            return Self::serve_mlx_with_options(port, num_ctx, opts);
+        }
         let bin = llamafile_bin.ok_or(ModelsError::NoRuntime(
             "llamafile not found (set llamafile_bin / EVERYAIOS_LLAMAFILE / drop one in data_dir/bin)",
         ))?;
@@ -143,8 +259,9 @@ impl ModelsRuntime {
             return Err(ModelsError::Io(format!("gguf not on disk: {}", entry.path)));
         }
 
+        let effective_ctx = opts.num_ctx.unwrap_or(num_ctx);
         let mut cmd = Command::new(bin);
-        for arg in gguf_args(&path, port, num_ctx, kv_cache) {
+        for arg in gguf_args_with_options(&path, port, num_ctx, kv_cache, opts) {
             cmd.arg(arg);
         }
         let mut child = cmd
@@ -166,7 +283,67 @@ impl ModelsRuntime {
                 return Ok(LocalEndpoint {
                     runtime: everyaios_vault::LocalRuntime::Llamafile,
                     base_url: base,
-                    num_ctx,
+                    num_ctx: effective_ctx,
+                });
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        let _ = child.kill();
+        Err(ModelsError::HealthTimeout)
+    }
+
+    /// P52.7 — serve an HF model id with the MLX sidecar
+    /// (`mlx_lm.server --model <id> --port <p>`). Requires `mlx-lm` on PATH
+    /// (fail-closed with an actionable error — never a silent fallback to
+    /// llamafile). OpenAI-compatible `/v1/chat/completions`, like the
+    /// llamafile path; liveness probed on the documented `/v1/models`.
+    pub fn serve_mlx_with_options(
+        port: u16,
+        num_ctx: u32,
+        opts: ServeOptions,
+    ) -> Result<LocalEndpoint, ModelsError> {
+        let model_id = opts.model_id.clone().ok_or(ModelsError::NoRuntime(
+            "MLX runtime needs a model id (mlx-community/<name>-4bit) — set serveOptions.modelId",
+        ))?;
+        // Fail closed when the sidecar isn't installed (probe first, like
+        // bind_ollama probes `ollama --version`).
+        if Command::new("mlx_lm.server")
+            .arg("--help")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| !s.success())
+            .unwrap_or(true)
+        {
+            return Err(ModelsError::NoRuntime(
+                "mlx_lm.server not on PATH — install mlx-lm on Apple Silicon: pip install mlx-lm",
+            ));
+        }
+        let spec = MlxServer::new(model_id, port);
+        let mut cmd = Command::new(spec.argv().first().expect("mlx argv is non-empty"));
+        for arg in spec.argv().iter().skip(1) {
+            cmd.arg(arg);
+        }
+        let mut child = cmd
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| ModelsError::SpawnFailed(e.to_string()))?;
+
+        // Health wait ≤60s (first run may download the weights from HF).
+        let base = format!("http://127.0.0.1:{port}");
+        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        while std::time::Instant::now() < deadline {
+            if ureq::get(&format!("{base}/v1/models"))
+                .timeout(Duration::from_secs(1))
+                .call()
+                .map(|r| r.status() == 200)
+                .unwrap_or(false)
+            {
+                return Ok(LocalEndpoint {
+                    runtime: everyaios_vault::LocalRuntime::Mlx,
+                    base_url: base,
+                    num_ctx: opts.num_ctx.unwrap_or(num_ctx),
                 });
             }
             std::thread::sleep(Duration::from_millis(500));
@@ -235,6 +412,41 @@ mod tests {
     }
 
     #[test]
+    fn gguf_is_the_default_runtime() {
+        assert_eq!(ServeOptions::default().runtime, ServeRuntime::Gguf);
+    }
+
+    #[test]
+    fn mlx_runtime_skips_the_llamafile_requirement() {
+        // With runtime = Mlx the branch runs BEFORE the llamafile check, so
+        // a missing llamafile must not be the error — the model-id
+        // requirement is. This proves the MLX route exists and is not a
+        // silent llamafile fallback.
+        let e = entry();
+        let opts = ServeOptions {
+            runtime: ServeRuntime::Mlx,
+            ..ServeOptions::default()
+        };
+        let err = ModelsRuntime::serve_gguf_with_options(&e, None, 11435, 16384, None, opts).unwrap_err();
+        assert!(
+            matches!(err, ModelsError::NoRuntime(_)),
+            "expected a closed failure, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn serve_mlx_requires_a_model_id() {
+        // No model_id and no mlx_lm on PATH: the model-id requirement must
+        // fire before any PATH probe (deterministic regardless of machine).
+        let opts = ServeOptions {
+            runtime: ServeRuntime::Mlx,
+            ..ServeOptions::default()
+        };
+        let err = ModelsRuntime::serve_mlx_with_options(11436, 16384, opts).unwrap_err();
+        assert!(matches!(err, ModelsError::NoRuntime(_)));
+    }
+
+    #[test]
     fn serve_gguf_fails_closed_on_missing_binary_file() {
         let e = entry();
         let err = ModelsRuntime::serve_gguf(
@@ -290,6 +502,66 @@ mod tests {
         assert_eq!(KvCacheType::F16.as_llama_arg(), "F16");
         assert_eq!(KvCacheType::Q8_0.as_llama_arg(), "Q8_0");
         assert_eq!(KvCacheType::Q4_0.as_llama_arg(), "Q4_0");
+    }
+
+    #[test]
+    fn serve_options_default_keeps_base_args() {
+        // Defaults are byte-identical to the plain `gguf_args` launch.
+        let p = Path::new("/w/phi.gguf");
+        assert_eq!(
+            gguf_args(p, 11435, 16384, None),
+            gguf_args_with_options(p, 11435, 16384, None, ServeOptions::default())
+        );
+        assert_eq!(gguf_args_with_options(p, 11435, 16384, None, ServeOptions::default()),
+            vec![
+                "--model".to_string(), "/w/phi.gguf".to_string(),
+                "--host".to_string(), "127.0.0.1".to_string(),
+                "--port".to_string(), "11435".to_string(),
+                "--ctx-size".to_string(), "16384".to_string(),
+                "--nobrowser".to_string(),
+            ]);
+    }
+
+    #[test]
+    fn serve_options_add_real_llama_flags() {
+        let p = Path::new("/w/phi.gguf");
+        let opts = ServeOptions {
+            gpu_layers: Some(12),
+            flash_attn: Some(FlashAttn::On),
+            num_ctx: Some(8192),
+            no_mmap: true,
+            mlock: false,
+            ..ServeOptions::default()
+        };
+        let args = gguf_args_with_options(p, 11435, 16384, None, opts);
+        let ngl = args.iter().position(|a| a == "--n-gpu-layers").unwrap();
+        assert_eq!(args[ngl + 1], "12");
+        let fa = args.iter().position(|a| a == "--flash-attn").unwrap();
+        assert_eq!(args[fa + 1], "on");
+        let ctx = args.iter().position(|a| a == "--ctx-size").unwrap();
+        assert_eq!(args[ctx + 1], "8192"); // num_ctx override wins
+        assert!(args.contains(&"--no-mmap".to_string()));
+        assert!(!args.contains(&"--mlock".to_string()));
+    }
+
+    #[test]
+    fn serve_options_merge_with_kv_cache() {
+        let p = Path::new("/w/phi.gguf");
+        let opts = ServeOptions {
+            gpu_layers: Some(0), // CPU-only
+            ..ServeOptions::default()
+        };
+        let args = gguf_args_with_options(p, 11435, 16384, Some(KvCacheType::Q8_0), opts);
+        assert!(args.contains(&"--n-gpu-layers".to_string()));
+        assert!(args.contains(&"--cache-type-k".to_string()));
+        assert!(args.contains(&"Q8_0".to_string()));
+    }
+
+    #[test]
+    fn flash_attn_arg_values() {
+        assert_eq!(FlashAttn::On.as_llama_arg(), "on");
+        assert_eq!(FlashAttn::Off.as_llama_arg(), "off");
+        assert_eq!(FlashAttn::Auto.as_llama_arg(), "auto");
     }
 
     #[test]

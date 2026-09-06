@@ -108,8 +108,11 @@ impl ModelRegistry {
 mod tests {
     use super::*;
 
-    fn tmp() -> PathBuf {
-        let d = std::env::temp_dir().join(format!("eaios-models-test-{}", std::process::id()));
+    fn tmp(name: &str) -> PathBuf {
+        // Per-test subdir: tests run in parallel and a shared dir races on
+        // remove/create (spurious `NotFound`). Unique per test, so parallel
+        // runs are deterministic.
+        let d = std::env::temp_dir().join(format!("eaios-models-test-{}-{}", std::process::id(), name));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -127,7 +130,7 @@ mod tests {
 
     #[test]
     fn registry_round_trips_through_index_json() {
-        let base = tmp();
+        let base = tmp("roundtrip");
         let mut reg = ModelRegistry::new(base.clone());
         reg.add(ModelEntry {
             id: "microsoft/phi-4:q4_k_m".into(),
@@ -156,7 +159,7 @@ mod tests {
 
     #[test]
     fn missing_index_json_is_empty_registry() {
-        let base = tmp();
+        let base = tmp("empty");
         let reg = ModelRegistry::load(base.clone());
         assert!(reg.list().is_empty());
         let _ = std::fs::remove_dir_all(&base);

@@ -216,3 +216,50 @@ describe('P52.16 — reopen-closed', () => {
     expect(useAppStore.getState().closedSessions.length).toBeLessThanOrEqual(5)
   })
 })
+
+describe('P52.15 — Archive/History (closed ring)', () => {
+  test('reopenClosedSessionId restores any specific row, not just the last', () => {
+    resetStreamingTestState()
+    useAppStore.getState().markSessionsHydrated()
+    const st = useAppStore.getState()
+    // Two distinct closed sessions.
+    st.newSession()
+    const a = useAppStore.getState().activeSessionId
+    void st.deleteSession(a)
+    st.newSession()
+    const b = useAppStore.getState().activeSessionId
+    void st.deleteSession(b)
+    expect(useAppStore.getState().closedSessions).toHaveLength(2)
+
+    // Reopen the OLDER one first (id `a` — not the ring tail).
+    const st2 = useAppStore.getState()
+    expect(st2.reopenClosedSessionId(a)).toBe(true)
+    const st3 = useAppStore.getState()
+    expect(st3.closedSessions.map((c) => c.id)).toEqual([b])
+    // Reopen activates the restored copy under a fresh id.
+    const restored = st3.sessions.find((s) => s.id === st3.activeSessionId)!
+    expect(restored.id).not.toBe(a)
+    expect(st3.closedSessions.some((c) => c.id === restored.id)).toBe(false)
+    // Unknown id → false, ring untouched.
+    expect(st3.reopenClosedSessionId('nope')).toBe(false)
+    expect(useAppStore.getState().closedSessions).toHaveLength(1)
+  })
+
+  test('purge removes one row; purgeAll empties the ring', () => {
+    resetStreamingTestState()
+    useAppStore.getState().markSessionsHydrated()
+    const st = useAppStore.getState()
+    st.newSession()
+    const a = useAppStore.getState().activeSessionId
+    void st.deleteSession(a)
+    st.newSession()
+    const b = useAppStore.getState().activeSessionId
+    void st.deleteSession(b)
+
+    const st2 = useAppStore.getState()
+    st2.purgeClosedSession(a)
+    expect(useAppStore.getState().closedSessions.map((c) => c.id)).toEqual([b])
+    st2.purgeAllClosed()
+    expect(useAppStore.getState().closedSessions).toHaveLength(0)
+  })
+})

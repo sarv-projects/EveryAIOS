@@ -36,6 +36,11 @@ pub enum LocalRuntime {
     /// `/v1/chat/completions`; native GBNF `grammar`). Zero-setup single
     /// binary (doc 34 §2).
     Llamafile,
+    /// MLX sidecar (`mlx_lm.server`, OpenAI-compatible `/v1/chat/completions`
+    /// + `/v1/models`). Apple-Silicon unified-memory runtime (P52.7): serves
+    /// HF ids (`mlx-community/...`) instead of a local GGUF path; requires
+    /// `mlx-lm` on PATH.
+    Mlx,
 }
 
 /// A configured local runtime endpoint (provider name → this).
@@ -60,6 +65,14 @@ impl LocalEndpoint {
     pub fn llamafile(base_url: impl Into<String>) -> Self {
         Self {
             runtime: LocalRuntime::Llamafile,
+            base_url: base_url.into(),
+            num_ctx: DEFAULT_NUM_CTX,
+        }
+    }
+
+    pub fn mlx(base_url: impl Into<String>) -> Self {
+        Self {
+            runtime: LocalRuntime::Mlx,
             base_url: base_url.into(),
             num_ctx: DEFAULT_NUM_CTX,
         }

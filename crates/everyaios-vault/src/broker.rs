@@ -427,7 +427,11 @@ impl<'a> Broker<'a> {
                 let req = local::ollama_body(ep, model, &body);
                 local::ollama_chat(&ep.base_url, &req)?
             }
-            crate::local::LocalRuntime::Llamafile => {
+            // MLX is OpenAI-compatible like llamafile — same request shape.
+            // (mlx_lm.server honors `response_format` on recent versions and
+            // ignores what it doesn't know; a mismatch surfaces as a visible
+            // tool-call parse error, never silent corruption.)
+            crate::local::LocalRuntime::Llamafile | crate::local::LocalRuntime::Mlx => {
                 let req = local::llamafile_body(ep, model, &body);
                 local::llamafile_chat(&ep.base_url, &req)?
             }
@@ -460,7 +464,7 @@ impl<'a> Broker<'a> {
                 let req = local::ollama_body(ep, model, &body);
                 local::ollama_chat_stream(&ep.base_url, &req)?
             }
-            crate::local::LocalRuntime::Llamafile => {
+            crate::local::LocalRuntime::Llamafile | crate::local::LocalRuntime::Mlx => {
                 let req = local::llamafile_body(ep, model, &body);
                 local::llamafile_chat_stream(&ep.base_url, &req)?
             }

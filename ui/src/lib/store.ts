@@ -116,6 +116,10 @@ export interface ChatError {
   code?: string
   detail: string
   retryable: boolean
+  /** P51.2 — the failing turn's request id: the live stream id the send path
+   * returned (the same key `chat_cancel`/support uses). Surfaced as a
+   * copyable chip on the error card so a report can name the exact turn. */
+  requestId?: string
 }
 
 export interface ArtifactActionUi {
@@ -1191,6 +1195,12 @@ interface AppState {
   closedSessions: Session[]
   /** P52.16 — jump to the next/previous session (Ctrl+Tab cycling). */
   cycleSession: (dir: 1 | -1) => void
+  /** P52.15 — reopen a specific closed session from the ring (Archive view). */
+  reopenClosedSessionId: (id: string) => boolean
+  /** P52.15 — permanently forget one closed session (trash). */
+  purgeClosedSession: (id: string) => void
+  /** P52.15 — empty the whole closed ring. */
+  purgeAllClosed: () => void
 
   /** Live ACP handles keyed by catalog agent id. */
   acpHandles: Record<string, string>
@@ -1249,6 +1259,7 @@ streamTestReset = () => {
     pendingQueue: {},
     queuePaused: {},
     closedSessions: [],
+    liveStreamId: {},
   })
 }
 
@@ -1356,16 +1367,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     const st = get()
     const last = st.closedSessions[st.closedSessions.length - 1]
     if (!last) return false
-    // Restore under a fresh id (the old vault row is gone; this is a new live
-    // row the persist subscription will write on the next change).
+    return st.reopenClosedSessionId(last.id)
+  },
+  // P52.15 — restore a specific closed row under a fresh id (the old vault
+  // row is gone; this is a new live row the persist subscription writes on
+  // the next change). Shared by the Reopen-last action and the Archive flyout.
+  reopenClosedSessionId: (id) => {
+    const st = get()
+    const row = st.closedSessions.find((x) => x.id === id)
+    if (!row) return false
     const nid = freshId('s')
     const copy: Session = {
-      ...last,
+      ...row,
       id: nid,
       status: 'idle',
       updatedAt: new Date().toISOString(),
-      title: `${last.title}`,
-      messages: last.messages.map((m) => ({
+      title: `${row.title}`,
+      messages: row.messages.map((m) => ({
         ...m,
         toolCalls: m.toolCalls?.map((t) => ({ ...t })),
         steps: m.steps?.map((s) => ({ ...s })),
@@ -1375,11 +1393,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({
       sessions: [copy, ...s.sessions],
       activeSessionId: nid,
-      closedSessions: s.closedSessions.slice(0, -1),
+      closedSessions: s.closedSessions.filter((x) => x.id !== id),
       centerScreen: 'chat',
     }))
     return true
   },
+  purgeClosedSession: (id) =>
+    set((s) => ({ closedSessions: s.closedSessions.filter((x) => x.id !== id) })),
+  purgeAllClosed: () => set({ closedSessions: [] }),
   cycleSession: (dir) => {
     const st = get()
     const list = st.sessions
@@ -2158,6 +2179,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       layer: 'agent',
       detail: msg,
       retryable: true,
+    }
+    // P51.2 — stamp the failing turn's request id from the live stream id when
+    // the reporter didn't supply one, so every error card names its turn.
+    if (!err.requestId) {
+      const live = get().liveStreamId[sid]
+      if (live) err.requestId = live
     }
     set((s) => ({
       sessions: s.sessions.map((x) => {

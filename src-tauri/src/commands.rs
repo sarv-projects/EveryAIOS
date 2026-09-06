@@ -229,6 +229,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         fs_cmds::fs_write_ticket,
         fs_cmds::fs_write_commit,
         fs_cmds::fs_undo_list,
+        fs_cmds::fs_undo_restore,
+        fs_cmds::fs_undo_snapshot,
         shell_cmds::shell_spawn,
         shell_cmds::shell_write,
         shell_cmds::shell_kill,
