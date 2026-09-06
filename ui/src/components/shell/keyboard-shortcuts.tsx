@@ -18,6 +18,7 @@ const SHORTCUTS = [
     { keys: '⌘ \\', action: 'Toggle viewport' },
     { keys: '⌘ N', action: 'New work' },
     { keys: '⌘ 1–5', action: 'Switch to session 1–5' },
+    { keys: 'Ctrl Tab', action: 'Cycle session (Shift reverses)' },
   ]},
   { group: 'Views', items: [
     { keys: '⌘⇧ E', action: 'Folder view' },
@@ -229,6 +230,19 @@ export function KeyboardShortcuts() {
           notify('Agent paused')
           return
         }
+      }
+      // P52.16 — Ctrl/Cmd+Tab cycles sessions (Shift reverses). Must run
+      // before the generic Ctrl+Tab tab-switch handling (none exists in the
+      // webview, so this is a free chord here).
+      if (
+        e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        e.key === 'Tab'
+      ) {
+        e.preventDefault()
+        useAppStore.getState().cycleSession(e.shiftKey ? -1 : 1)
+        return
       }
       // Cmd/Ctrl + J / Cmd+1..5 — cycle sessions
       if ((e.metaKey || e.ctrlKey) && /^[1-5]$/.test(e.key)) {

@@ -88,72 +88,81 @@ import ConnectorsPanel from './connectors-panel'
 
 type SectionId = SettingsSectionId
 
-const NAV_GROUPS: { title: string; items: { id: SectionId; label: string; icon: typeof SettingsIcon }[] }[] = [
+type NavItem = {
+  id: SectionId
+  label: string
+  icon: typeof SettingsIcon
+  /** P51.24 — search keywords (feature synonyms) so a settings search finds
+   * the section by what the user *calls* it, not only by its label/id. */
+  keywords?: string[]
+}
+
+const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Workspace',
     items: [
-      { id: 'general', label: 'General', icon: SettingsIcon },
-      { id: 'appearance', label: 'Appearance', icon: Palette },
-      { id: 'notifications', label: 'Notifications', icon: Bell },
-      { id: 'privacy', label: 'Privacy', icon: Shield },
-      { id: 'keyboard', label: 'Keyboard', icon: Keyboard },
-      { id: 'voice', label: 'Voice', icon: Mic },
-      { id: 'mobile', label: 'Mobile', icon: Smartphone },
+      { id: 'general', label: 'General', icon: SettingsIcon, keywords: ['preferences', 'startup', 'defaults'] },
+      { id: 'appearance', label: 'Appearance', icon: Palette, keywords: ['theme', 'dark', 'light', 'accent', 'density'] },
+      { id: 'notifications', label: 'Notifications', icon: Bell, keywords: ['alerts', 'toast', 'sounds'] },
+      { id: 'privacy', label: 'Privacy', icon: Shield, keywords: ['data', 'telemetry', 'vault', 'collect', 'local'] },
+      { id: 'keyboard', label: 'Keyboard', icon: Keyboard, keywords: ['shortcuts', 'hotkeys', 'keybindings'] },
+      { id: 'voice', label: 'Voice', icon: Mic, keywords: ['speech', 'mic', 'stt', 'tts', 'read aloud'] },
+      { id: 'mobile', label: 'Mobile', icon: Smartphone, keywords: ['phone', 'remote', 'resume'] },
     ],
   },
   {
     title: 'Intelligence',
     items: [
-      { id: 'agents', label: 'Agents & Models', icon: Boxes },
-      { id: 'discover', label: 'Discover', icon: Compass },
-      { id: 'local', label: 'Local models', icon: Cpu },
-      { id: 'capabilities', label: 'Capabilities', icon: ShieldQuestion },
-      { id: 'apikeys', label: 'Providers / BYOK', icon: KeyRound },
-      { id: 'experts', label: 'Experts', icon: Users },
-      { id: 'chat', label: 'Chat & Auto-run', icon: MessageSquare },
-      { id: 'skills', label: 'Skills', icon: Sparkles },
-      { id: 'rules', label: 'Rules', icon: BookOpen },
-      { id: 'memory', label: 'Memory', icon: Sparkles },
+      { id: 'agents', label: 'Agents & Models', icon: Boxes, keywords: ['agent', 'runtime', 'llm', 'model', 'claude', 'codex', 'grok', 'gemini'] },
+      { id: 'discover', label: 'Discover', icon: Compass, keywords: ['model', 'install', 'registry'] },
+      { id: 'local', label: 'Local models', icon: Cpu, keywords: ['ollama', 'llamafile', 'gguf', 'vram', 'gpu', 'quant'] },
+      { id: 'capabilities', label: 'Capabilities', icon: ShieldQuestion, keywords: ['matrix', 'tools', 'computer use'] },
+      { id: 'apikeys', label: 'Providers / BYOK', icon: KeyRound, keywords: ['key', 'api', 'provider', 'openai', 'anthropic', 'nvidia', 'token', 'billing', 'credential'] },
+      { id: 'experts', label: 'Experts', icon: Users, keywords: ['persona', 'role', 'subagent'] },
+      { id: 'chat', label: 'Chat & Auto-run', icon: MessageSquare, keywords: ['composer', 'autoreply', 'auto run', 'behaviors'] },
+      { id: 'skills', label: 'Skills', icon: Sparkles, keywords: ['plugin', 'marketplace'] },
+      { id: 'rules', label: 'Rules', icon: BookOpen, keywords: ['constraints', 'policy', 'instructions'] },
+      { id: 'memory', label: 'Memory', icon: Sparkles, keywords: ['recall', 'remember', 'facts'] },
     ],
   },
   {
     title: 'Connections',
     items: [
-      { id: 'mcp', label: 'MCP', icon: Plug },
-      { id: 'marketplace', label: 'Marketplace', icon: Store },
-      { id: 'sync', label: 'Sync', icon: RefreshCw },
+      { id: 'mcp', label: 'MCP', icon: Plug, keywords: ['connector', 'server', 'tools'] },
+      { id: 'marketplace', label: 'Marketplace', icon: Store, keywords: ['extensions', 'install', 'hub'] },
+      { id: 'sync', label: 'Sync', icon: RefreshCw, keywords: ['backup', 'export', 'import', 'lan', 'peer', 'device'] },
     ],
   },
   {
     title: 'Runtime',
     items: [
-      { id: 'launch', label: 'Launch CLI', icon: Terminal },
-      { id: 'runtime', label: 'Session runtime', icon: Layers },
-      { id: 'worktree', label: 'Worktree', icon: FolderTree },
-      { id: 'resources', label: 'Resources', icon: HardDrive },
-      { id: 'cloud', label: 'Cloud env', icon: Cloud },
+      { id: 'launch', label: 'Launch CLI', icon: Terminal, keywords: ['command line', 'shell'] },
+      { id: 'runtime', label: 'Session runtime', icon: Layers, keywords: ['session', 'process', 'sidecar', 'logs'] },
+      { id: 'worktree', label: 'Worktree', icon: FolderTree, keywords: ['workspace', 'folder', 'project', 'repo'] },
+      { id: 'resources', label: 'Resources', icon: HardDrive, keywords: ['storage', 'disk', 'index', 'scan'] },
+      { id: 'cloud', label: 'Cloud env', icon: Cloud, keywords: ['environment', 'container', 'vm'] },
     ],
   },
   {
     title: 'Security',
     items: [
-      { id: 'permissions', label: 'Permissions', icon: ShieldCheck },
-      { id: 'browser', label: 'Browser & Network', icon: Globe },
-      { id: 'indexing', label: 'Indexing & LSP', icon: ScanSearch },
-      { id: 'hooks', label: 'Hooks', icon: Wrench },
-      { id: 'commands', label: 'Commands', icon: Command },
+      { id: 'permissions', label: 'Permissions', icon: ShieldCheck, keywords: ['guard', 'allow', 'approval', 'sandbox', 'risk', 'tickets'] },
+      { id: 'browser', label: 'Browser & Network', icon: Globe, keywords: ['web', 'proxy', 'cdp', 'http', 'download'] },
+      { id: 'indexing', label: 'Indexing & LSP', icon: ScanSearch, keywords: ['search', 'files', 'lsp', 'language server'] },
+      { id: 'hooks', label: 'Hooks', icon: Wrench, keywords: ['webhook', 'events', 'script'] },
+      { id: 'commands', label: 'Commands', icon: Command, keywords: ['slash', 'shortcuts', 'palette'] },
     ],
   },
   {
     title: 'Developer',
     items: [
-      { id: 'usage', label: 'Usage', icon: Gauge },
-      { id: 'ux', label: 'UX metrics', icon: Activity },
-      { id: 'feedback', label: 'Feedback', icon: MessageSquareWarning },
-      { id: 'beta', label: 'Beta', icon: Package },
-      { id: 'advanced', label: 'Advanced', icon: SlidersHorizontal },
-      { id: 'doctor', label: 'Doctor', icon: Stethoscope },
-      { id: 'about', label: 'About', icon: Info },
+      { id: 'usage', label: 'Usage', icon: Gauge, keywords: ['cost', 'spend', 'tokens', 'budget', 'price', 'billing', 'ledger'] },
+      { id: 'ux', label: 'UX metrics', icon: Activity, keywords: ['telemetry', 'analytics', 'interaction'] },
+      { id: 'feedback', label: 'Feedback', icon: MessageSquareWarning, keywords: ['nps', 'survey', 'report'] },
+      { id: 'beta', label: 'Beta', icon: Package, keywords: ['preview', 'experimental', 'flags'] },
+      { id: 'advanced', label: 'Advanced', icon: SlidersHorizontal, keywords: ['debug', 'power', 'expert', 'internals'] },
+      { id: 'doctor', label: 'Doctor', icon: Stethoscope, keywords: ['health', 'diagnostics', 'check', 'repair'] },
+      { id: 'about', label: 'About', icon: Info, keywords: ['version', 'update', 'license', 'credits'] },
     ],
   },
 ]
@@ -244,14 +253,32 @@ export default function SettingsPanel() {
   const setSection = useAppStore((s) => s.setSettingsSection)
   const [q, setQ] = useState('')
 
+  // P51.24 — settings search matches label + id + keyword synonyms (so
+  // "cost" finds Usage, "key" finds Providers/BYOK, "shortcut" finds both
+  // Keyboard and Commands) and tolerates typos via a subsequence match
+  // ("modelz" still finds "Models"). A query that matches nothing renders an
+  // explicit empty state instead of a silently blank sidebar.
   const groups = useMemo(() => {
     const needle = q.trim().toLowerCase()
     if (!needle) return NAV_GROUPS
+    const fuzzy = (s: string): boolean => {
+      let i = 0
+      for (const ch of s.toLowerCase()) {
+        if (ch === needle[i]) i += 1
+        if (i === needle.length) return true
+      }
+      return i === needle.length
+    }
     return NAV_GROUPS.map((g) => ({
       ...g,
-      items: g.items.filter((n) => n.label.toLowerCase().includes(needle) || n.id.includes(needle)),
+      items: g.items.filter((n) =>
+        fuzzy(n.label) ||
+        fuzzy(n.id) ||
+        (n.keywords ?? []).some((k) => fuzzy(k)),
+      ),
     })).filter((g) => g.items.length > 0)
   }, [q])
+  const noResults = q.trim() !== '' && groups.length === 0
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -271,6 +298,20 @@ export default function SettingsPanel() {
             className="mb-2 h-7 text-[11px]"
           />
           <nav className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto">
+            {noResults && (
+              <div className="px-2 py-6 text-center">
+                <div className="font-mono text-[10px] text-muted-foreground">
+                  No settings match “{q.trim()}”
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQ('')}
+                  className="mt-1 font-mono text-[9px] text-orange-300 underline-offset-2 hover:underline"
+                >
+                  clear search
+                </button>
+              </div>
+            )}
             {groups.map((g) => (
               <div key={g.title}>
                 <div className="px-2 pb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">

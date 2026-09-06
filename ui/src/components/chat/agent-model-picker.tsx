@@ -279,6 +279,35 @@ export default function AgentModelPicker({ compact }: Props) {
       catalog.find((a) => a.id === selectedAgentId),
   )
 
+  // P51.1 — is any session mid-turn right now? A model switch during a live
+  // stream applies to the *next* turn, never the in-flight one; surface that
+  // instead of letting the user believe the running turn switched too.
+  const anyBusy = useAppStore((s) =>
+    s.sessions.some((x) => x.status === 'running' || x.status === 'action-required'),
+  )
+
+  // P51.1 — picking a cloud model while auto-route is on must not be a dead
+  // click: the send path (`resolveProviderModel`) returns undefined/undefined
+  // whenever auto-route is on, so an explicit pick that leaves auto-route on
+  // is silently ignored. Make the pick effective by turning auto-route off
+  // (the pick then wins per the documented "explicit pick wins" rule).
+  const pickCloudModel = (mId: string) => {
+    const picked = models.find((m) => m.id === mId)
+    const pickedLabel = picked?.label ?? mId
+    if (autoRoute) {
+      setAutoRoute(false)
+      setSelectedModel(mId)
+      setLocalRuntime(undefined)
+      notify(`Pinned to ${pickedLabel} — auto-route off, this model now serves the chat`)
+      return
+    }
+    setSelectedModel(mId)
+    setLocalRuntime(undefined)
+    if (anyBusy) {
+      notify(`Running turn keeps its model — ${pickedLabel} applies to the next message`)
+    }
+  }
+
   const agentList = catalog
 
   return (
@@ -511,18 +540,49 @@ export default function AgentModelPicker({ compact }: Props) {
                   </div>
                 )}
 
+                {autoRoute && models.length > 0 && (
+                  <div className="mb-1.5 rounded-md border border-orange-500/20 bg-orange-500/5 px-2 py-1 font-mono text-[9px] leading-relaxed text-orange-200/80">
+                    Auto-route is on — the router picks the best model per turn.
+                    Click any model to pin it (auto-route turns off for this chat).
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   {models.map((m) => {
-                    const isActive = m.id === selectedModelId
+                    // P51.1 — under auto-route no row is the active pick (the
+                    // live router decides per turn); a row is active only when
+                    // auto-route is off and this is the pinned model. This
+                    // kills the misleading "highlighted yet ignored" state.
+                    const isActive = !autoRoute && m.id === selectedModelId
                     const disabled = !m.available
+                    // P52.9 — sticky-vs-default readout: under auto-route the
+                    // router's per-task default is the effective pick (rows
+                    // show the *default* tag on the agent's model); turning
+                    // auto-route off by pinning makes the row explicitly
+                    // sticky. Both are honest state, never a styling guess.
+                    const isAgentDefault = m.id === agent?.defaultModel
+                    const isSticky = isActive
+                    // P52.9 — mid-switch cost honesty: when an explicit pick
+                    // replaces a different explicit pick, name the $/1M delta
+                    // (input side) so the switch is never silent about cost.
+                    const activeModel = models.find((x) => x.id === selectedModelId)
+                    const costDelta =
+                      !isSticky && !autoRoute && activeModel && m.id !== activeModel.id
+                        ? m.inputPrice - (activeModel.inputPrice ?? 0)
+                        : 0
                     return (
                       <button
                         key={m.id}
                         type="button"
                         disabled={disabled}
+                        title={
+                          autoRoute
+                            ? `Auto-route is on — clicking pins ${m.label} and turns auto-route off`
+                            : `Use ${m.label} for this chat`
+                        }
                         onClick={() => {
-                          setSelectedModel(m.id)
-                          setLocalRuntime(undefined)
+                          if (disabled) return
+                          pickCloudModel(m.id)
                         }}
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40',
@@ -539,12 +599,34 @@ export default function AgentModelPicker({ compact }: Props) {
                             <span className={cn('text-[11px] font-medium', isActive ? 'text-orange-200' : 'text-foreground')}>
                               {m.label}
                             </span>
+                            {/* P52.9 — sticky (pinned, auto-route off) vs
+                                default (auto-route's per-agent fallback). */}
+                            {isSticky && (
+                              <Badge className="bg-orange-500/15 px-1 text-[8px] text-orange-300">
+                                sticky
+                              </Badge>
+                            )}
+                            {!isSticky && autoRoute && isAgentDefault && (
+                              <Badge className="bg-zinc-500/15 px-1 text-[8px] text-zinc-300">
+                                default
+                              </Badge>
+                            )}
                             {m.recommendedFor && (
                               <span className="truncate font-mono text-[9px] text-muted-foreground/60">
                                 · {m.recommendedFor}
                               </span>
                             )}
                           </div>
+                          {costDelta !== 0 && (
+                            <div
+                              className={cn(
+                                'font-mono text-[8px]',
+                                costDelta > 0 ? 'text-amber-400/90' : 'text-emerald-400/90',
+                              )}
+                            >
+                              {costDelta > 0 ? '+' : '−'}${(Math.abs(costDelta)).toFixed(0)}/1M in vs {activeModel?.label}
+                            </div>
+                          )}
                           <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
                             <span className="flex items-center gap-0.5">
                               <Gauge className="h-2.5 w-2.5" />

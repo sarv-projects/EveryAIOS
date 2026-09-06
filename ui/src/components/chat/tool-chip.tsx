@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { ChevronRight, Loader2, RotateCw, ShieldAlert, Wrench, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ToolCallRecord } from '@/lib/store'
@@ -24,6 +24,15 @@ function riskTone(risk?: string): string {
   return 'border-border bg-background/40 text-muted-foreground'
 }
 
+function fmtDuration(start?: number, end?: number): string | null {
+  if (!start) return null
+  const base = end && end >= start ? end : Date.now()
+  const ms = Math.max(0, base - start)
+  if (ms < 1000) return null
+  const s = Math.round(ms / 1000)
+  return s >= 60 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s` : `${s}s`
+}
+
 // P45.9 — memoized: tool-call rows only re-render when the record changes
 // (streaming updates mutate the running call's object identity; settled calls
 // keep identity, so untouched chips skip re-render entirely).
@@ -34,6 +43,15 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
   const resultText =
     rec.error ??
     (typeof rec.result === 'string' ? rec.result : rec.result != null ? JSON.stringify(rec.result, null, 2) : '')
+  // Live elapsed while running (settles to the final duration once the
+  // result lands — `endedAt` flips the interval off).
+  const [, force] = useState(0)
+  useEffect(() => {
+    if (rec.status !== 'running' || !rec.startedAt) return
+    const t = setInterval(() => force((v) => v + 1), 1000)
+    return () => clearInterval(t)
+  }, [rec.status, rec.startedAt])
+  const duration = fmtDuration(rec.startedAt, rec.endedAt)
 
   return (
     <div
@@ -71,12 +89,20 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
         {argsPreview && (
           <span className="truncate font-mono text-[10px] text-muted-foreground/80">{argsPreview}</span>
         )}
-        {rec.progress && rec.status === 'running' && (
-          <span className="ml-auto font-mono text-[9px] text-orange-300/80">{rec.progress}</span>
-        )}
-        <ChevronRight
-          className={cn('ml-auto h-3 w-3 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')}
-        />
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {rec.status === 'running' && (
+            <span className="font-mono text-[9px] text-orange-300/80">{rec.progress ?? 'working…'}</span>
+          )}
+          {duration && rec.status === 'running' && (
+            <span className="font-mono text-[9px] text-muted-foreground/60">{duration}</span>
+          )}
+          {duration && rec.status !== 'running' && !rec.error && (
+            <span className="font-mono text-[9px] text-muted-foreground/60">{duration}</span>
+          )}
+          <ChevronRight
+            className={cn('h-3 w-3 text-muted-foreground transition-transform', open && 'rotate-90')}
+          />
+        </span>
       </button>
       {open && (
         <div className="border-t border-border/60 bg-zinc-950/40 px-2.5 py-2">

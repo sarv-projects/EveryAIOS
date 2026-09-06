@@ -25,6 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useAppStore } from '@/lib/store'
 import * as perfLib from '@/lib/perf'
 import { AGENT_MAP, MODEL_MAP, AGENTS } from '@/lib/agents'
@@ -41,6 +42,97 @@ interface Stat {
   tooltip: string
   /** P50.3.7/8 — optional click-through to the owning surface. */
   onClick?: () => void
+}
+
+/** P52.10/P52.18 — live context + cost pill for the casual status bar.
+ * Renders only when the shell reported real figures (never a seeded look):
+ * context % + tokens/s while streaming, spend + cache hit once a budget
+ * snapshot exists. Click opens the breakdown popover (rows show only what
+ * the shell reported — absent figures are omitted, never zeroed). */
+function LiveContextMeter() {
+  const liveBudget = useAppStore((s) => s.liveBudget)
+  const streamStats = useAppStore((s) => s.streamStats)
+  const activeStatus = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status)
+  const tokens = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.tokens)
+  const spent = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.spent)
+
+  // Nothing real yet — keep the bar quiet.
+  if (!liveBudget && !streamStats.tokensPerSec && !streamStats.ctxPct) return null
+
+  const live = streamStats.tokensPerSec > 0 && (activeStatus === 'running' || activeStatus === 'action-required')
+  const ctxPct = streamStats.ctxPct
+  const tone =
+    ctxPct >= 90
+      ? 'text-red-400'
+      : ctxPct >= 75
+        ? 'text-amber-300'
+        : 'text-muted-foreground/70'
+  const cachePct =
+    liveBudget?.cacheHitRate != null ? `${Math.round(liveBudget.cacheHitRate * 100)}%` : null
+  const detailBits = [
+    ctxPct > 0 ? `context ${ctxPct}%` : null,
+    live && streamStats.tokensPerSec > 0 ? `${streamStats.tokensPerSec.toFixed(0)} tok/s` : null,
+    tokens ? `${(tokens / 1000).toFixed(1)}k tok` : null,
+    cachePct ? `cache ${cachePct}` : null,
+  ].filter(Boolean)
+  if (detailBits.length === 0) return null
+
+  const rows: { label: string; value: string }[] = []
+  if (ctxPct > 0) rows.push({ label: 'context', value: `${ctxPct}%` })
+  if (live && streamStats.tokensPerSec > 0)
+    rows.push({ label: 'throughput', value: `${streamStats.tokensPerSec.toFixed(0)} tok/s` })
+  if (tokens) rows.push({ label: 'session tokens', value: `${(tokens / 1000).toFixed(1)}k` })
+  if (liveBudget?.tokens) rows.push({ label: 'lifetime tokens', value: `${(liveBudget.tokens / 1000).toFixed(1)}k` })
+  if (cachePct) rows.push({ label: 'prompt cache', value: cachePct })
+  if (spent != null) rows.push({ label: 'session spend', value: `$${spent.toFixed(4)}` })
+  if (liveBudget) rows.push({ label: 'lifetime spend', value: `$${liveBudget.spent.toFixed(4)} / cap $${liveBudget.cap.toFixed(2)}` })
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Context and usage breakdown"
+          className="flex items-center gap-1 px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70 transition-colors hover:text-foreground"
+          title={`${detailBits.join(' · ')} — click for the full breakdown`}
+        >
+          <span className={cn('relative h-1 w-10 overflow-hidden rounded-full bg-border', tone)}>
+            {ctxPct > 0 && (
+              <span
+                className={cn(
+                  'absolute inset-y-0 left-0 rounded-full',
+                  ctxPct >= 90 ? 'bg-red-500/80' : ctxPct >= 75 ? 'bg-amber-400/80' : 'bg-orange-400/70',
+                )}
+                style={{ width: `${Math.min(100, ctxPct)}%` }}
+              />
+            )}
+          </span>
+          {live && streamStats.tokensPerSec > 0 && (
+            <span className="tabular-nums">{streamStats.tokensPerSec.toFixed(0)} t/s</span>
+          )}
+          {spent ? <span className="tabular-nums text-emerald-400/80">${spent.toFixed(2)}</span> : null}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-56 font-mono text-[10px]">
+        <div className="px-1 pb-1 text-[9px] uppercase tracking-wider text-muted-foreground/60">
+          Context &amp; usage
+        </div>
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between gap-3 py-0.5">
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className="tabular-nums text-foreground/90">{r.value}</span>
+          </div>
+        ))}
+        {ctxPct >= 75 && (
+          <div className="mt-1 border-t border-border/60 pt-1 text-[9px] text-amber-300/90">
+            {ctxPct >= 90
+              ? 'Context nearly full — clear this chat or fork before it stalls.'
+              : 'Context is high — clear or fork soon.'}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 export function StatusBar() {
@@ -194,6 +286,9 @@ export function StatusBar() {
             {runtime.status === 'live' ? 'Privacy depends on selected provider' : 'Privacy status unavailable'}
           </span>
         )}
+        {/* P52.10 — context + cost at a glance (live when the shell is up;
+            absent in preview). Clickless, hover explains. */}
+        <LiveContextMeter />
         <CompanionChip />
         <button
           type="button"

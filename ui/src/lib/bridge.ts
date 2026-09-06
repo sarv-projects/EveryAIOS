@@ -96,6 +96,19 @@ export async function refreshAgentCatalog(): Promise<void> {
   useAppStore.getState().setLiveAgents(merged);
 }
 
+/** Register the queue dispatcher once: the store calls it (cycle-free) when
+ * a queued turn should fire after the current one ends. */
+export function registerTurnDispatcher(): void {
+  useAppStore.getState().setTurnDispatcher((turn) => {
+    // Switch to the queued turn's session so it sends into the right work.
+    const st = useAppStore.getState()
+    if (st.activeSessionId !== turn.sessionId) {
+      st.setActiveSession(turn.sessionId)
+    }
+    void sendUserMessage(turn.text, turn.context, { bypassQueue: true })
+  })
+}
+
 /** Every ACP agent that has no curated catalog entry gets a synthesized
  * picker row (mark + accent + install state), so the full registry is
  * choosable even before its curated models land. */
@@ -169,6 +182,15 @@ function handleChatEvent(e: ChatWireEvent): void {
     case "ttft":
       st.streamStart(sid);
       break;
+    // P52.23 — provider reasoning (CoT) deltas. Forwarded all the way from
+    // the engine's `reasoning` stream; coalesced per thought block by the
+    // store so the collapsible renders whole thoughts, never wire fragments.
+    // Reasoning arrives *before* the first text batch on thinking models, so
+    // it also opens the assistant message (no ttft dependency).
+    case "reasoning":
+      st.streamStart(sid);
+      st.appendReasoning(e.text ?? "", sid);
+      break;
     case "batch":
       st.streamAppend(e.text ?? "", false, sid);
       st.noteStreamTick(e.tokenCount ?? Math.max(1, Math.round((e.text ?? "").length / 4)));
@@ -196,6 +218,13 @@ function handleChatEvent(e: ChatWireEvent): void {
         });
       } else if (e.code === "tool_failed" || e.toolId) {
         st.streamToolResult(e.toolId ?? "tool", undefined, e.message ?? "tool failed");
+        // P51.21 — the failure card is layer-named (Tool) and retryable.
+        st.streamFail(e.message ?? "tool failed", sid, {
+          layer: "tool",
+          code: e.code,
+          detail: e.message ?? "tool failed",
+          retryable: true,
+        });
         st.pushLiveNotification({
           id: `live:tool:${e.toolId ?? 'tool'}:${Date.now()}`,
           kind: 'warning',
@@ -329,6 +358,10 @@ export function initBridge(): Promise<BridgeDisposer> {
 
 async function startBridge(): Promise<BridgeDisposer> {
   if (!inTauri()) return () => undefined;
+
+  // P51.5 — the queue dispatcher must exist before any turn ends, or a
+  // queued ask would never fire. Register once at bridge start (idempotent).
+  registerTurnDispatcher();
 
   let alive = true;
   let hydrated = false;
@@ -613,6 +646,7 @@ function selectedProviderModel(modelId: string): { provider?: string; model?: st
 export async function sendUserMessage(
   text: string,
   context?: { title: string; content: string },
+  opts?: { bypassQueue?: boolean },
 ): Promise<void> {
   const st = useAppStore.getState();
   const trimmed = text.trim();
@@ -627,6 +661,23 @@ export async function sendUserMessage(
     st.newSession();
     sessionId = useAppStore.getState().activeSessionId;
   }
+
+  // P51.5 — queue-while-generating: while this session's agent is busy, a
+  // new ask becomes a pending chip (editable/removable above the composer)
+  // and fires when the current turn ends. The composer stays usable and no
+  // message is dropped or silently merged. The queue dispatcher passes
+  // bypassQueue so the FIFO always runs one-in-flight.
+  const busy = st.sessions.some(
+    (s) =>
+      s.id === sessionId &&
+      (s.status === 'running' || s.status === 'action-required'),
+  );
+  if (busy && !opts?.bypassQueue) {
+    st.queueTurn(sessionId, trimmed, context);
+    st.notify('Queued — I’ll start it when the current turn finishes');
+    return;
+  }
+
   const catalogId = st.selectedAgentId;
   const selectedInbuilt = isInbuilt(catalogId);
   // P38 — the session's effective Chief: session pin → user default →

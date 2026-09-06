@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   BarChart3,
   Bell,
+  Check,
   ChevronRight,
   Clock,
   Copy,
@@ -22,7 +23,9 @@ import {
   RotateCw,
   Search,
   Sparkles,
+  Square,
   SquareDot,
+  Target,
   Trash2,
   X,
   type LucideIcon,
@@ -92,9 +95,13 @@ const MENU_ITEMS: {
 }[] = [
   { icon: Pencil, label: 'Rename', shortcut: '⌘R' },
   { icon: Pin, label: 'Pin to top' },
+  // P51.9 — session goal (finish-line): setting one adds a banner under the
+  // header; achieving it is a one-click check. Persisted on the Session.
+  { icon: Target, label: 'Set / clear goal' },
   { icon: GitBranch, label: 'Fork session' },
   { icon: Copy, label: 'Copy transcript' },
   { icon: Download, label: 'Export', shortcut: '⌘E' },
+  { icon: RotateCw, label: 'Reopen last closed' },
   { icon: Trash2, label: 'Clear messages', destructive: true },
 ]
 
@@ -152,20 +159,33 @@ export default function ChatPanel() {
   // Bugfix — Pause must actually stop the live Rust stream, not just flip the
   // UI flag. The stream id captured by `sendUserMessage` drives `chat_cancel`;
   // Rust then emits the terminal `done`/`cancelled` event that ends the turn.
+  const cancelLiveStream = async (sessionId: string) => {
+    const streamId = store.liveStreamId[sessionId]
+    if (!streamId) return
+    const { chatCancel } = await import('@/lib/tauri')
+    try {
+      await chatCancel(streamId)
+    } catch {
+      /* stream already finished — nothing to cancel */
+    }
+  }
   const onTogglePause = async () => {
     if (!agentPaused) {
-      const sid = store.activeSessionId
-      const streamId = store.liveStreamId[sid]
-      if (streamId) {
-        const { chatCancel } = await import('@/lib/tauri')
-        try {
-          await chatCancel(streamId)
-        } catch {
-          /* stream already finished — nothing to cancel */
-        }
-      }
+      await cancelLiveStream(store.activeSessionId)
     }
     toggleAgentPause()
+  }
+  // P51.5 — Stop-all (header): cancels the live turn AND clears this
+  // session's queued asks. Stopping just the live turn (leaving the queue)
+  // is done per-chip (×) or by the single Stop-Stream control.
+  const queueCount = store.pendingQueue[store.activeSessionId]?.length ?? 0
+  const onStopAll = async () => {
+    const sid = store.activeSessionId
+    useAppStore.setState((s) => ({
+      pendingQueue: { ...s.pendingQueue, [sid]: [] },
+    }))
+    await cancelLiveStream(sid)
+    notify(queueCount > 0 ? `Stopped — cleared ${queueCount} queued ask(s)` : 'Stopped')
   }
   const showStrip =
     !!nowDoing &&
@@ -192,6 +212,19 @@ export default function ChatPanel() {
         st.toggleSessionPinned(sid)
         notify(sess.pinned ? 'Unpinned from top' : 'Pinned to top')
         break
+      case 'Set / clear goal': {
+        if (sess.goal) {
+          st.setSessionGoal(sid, undefined)
+          notify('Goal cleared')
+          break
+        }
+        const next = window.prompt('What should this work finish with?', '')
+        if (next !== null && next.trim()) {
+          st.setSessionGoal(sid, next.trim())
+          notify('Goal set — it shows as the finish-line above the chat')
+        }
+        break
+      }
       case 'Fork session': {
         const nid = st.forkSession(sid)
         notify(nid ? 'Forked into a new session' : 'Fork failed — session not found', nid ? 'default' : 'error')
@@ -202,6 +235,9 @@ export default function ChatPanel() {
           ?.writeText(transcriptMarkdown(sess))
           .then(() => notify('Transcript copied'))
           .catch(() => notify('Copy failed — clipboard unavailable', 'error'))
+        break
+      case 'Reopen last closed':
+        notify(st.reopenClosedSession() ? 'Reopened the last closed session' : 'Nothing closed this run to reopen')
         break
       case 'Export': {
         const blob = new Blob([transcriptMarkdown(sess)], { type: 'text/markdown' })
@@ -251,6 +287,11 @@ export default function ChatPanel() {
   // Search state
   const [searchOpen, setSearchOpen] = useState(false)
   const [query, setQuery] = useState('')
+  // P52.19 — find-in-page: cycling through matches (Enter next / Shift+Enter
+  // previous) and scrolling the active match into view, instead of only
+  // counting them. Reset whenever the query changes.
+  const [activeMatch, setActiveMatch] = useState(0)
+  useEffect(() => setActiveMatch(0), [query])
 
   // Auto-scroll: stick to the newest content while streaming / on session
   // switch; user scroll-up releases the stick.
@@ -288,6 +329,18 @@ export default function ChatPanel() {
 
   const matchCount = query.trim() ? filteredMessages.length : 0
   const col = useChatColumnClass()
+
+  // P52.19 — scroll the active match into view inside the message viewport.
+  const activeId = filteredMessages[activeMatch]?.id
+  useEffect(() => {
+    if (!activeId) return
+    const el = viewportRef.current?.querySelector(`[data-mid="${activeId}"]`)
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [activeId, searchOpen, query])
+  const stepMatch = (dir: 1 | -1) => {
+    if (matchCount === 0) return
+    setActiveMatch((i) => (i + dir + matchCount) % matchCount)
+  }
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col bg-background">
@@ -358,6 +411,25 @@ export default function ChatPanel() {
           >
             <Search className="h-3.5 w-3.5" />
           </Button>
+          {/* P51.5 — Stop-all: cancels the live turn AND clears queued asks.
+              Only live while the agent is busy; otherwise the pause toggle
+              (below) is the idle/resume control. */}
+          {(activeSession?.status === 'running' || activeSession?.status === 'action-required') && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 px-1.5 text-[10px] text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+              onClick={() => void onStopAll()}
+              title={
+                queueCount > 0
+                  ? `Stop the current turn and clear ${queueCount} queued ask(s)`
+                  : 'Stop the current turn'
+              }
+            >
+              <Square className="h-2.5 w-2.5" />
+              {queueCount > 0 ? `Stop · ${queueCount} queued` : 'Stop'}
+            </Button>
+          )}
           <Button
             size="icon"
             variant="ghost"
@@ -389,7 +461,8 @@ export default function ChatPanel() {
               <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">Session</DropdownMenuLabel>
               {MENU_ITEMS.map((item, i) => (
                 <span key={item.label}>
-                  {(i === 3 || i === 5) && <DropdownMenuSeparator />}
+                  {/* Separator before Fork (index 3) and Clear (last). */}
+                  {(i === 3 || i === MENU_ITEMS.length - 1) && <DropdownMenuSeparator />}
                   <DropdownMenuItem
                     variant={item.destructive ? 'destructive' : 'default'}
                     onClick={() => onMenuAction(item.label)}
@@ -404,6 +477,55 @@ export default function ChatPanel() {
           </DropdownMenu>
         </div>
       </header>
+
+      {/* P51.9 — session-goal finish-line banner: the goal the user set for
+          this work, with a one-click achieved check. Persists on the Session
+          (vault round-trip), so it survives close/restart. */}
+      {activeSession?.goal && (
+        <div
+          className={cn(
+            'flex shrink-0 items-center gap-2 border-b border-orange-500/20 bg-orange-500/5 px-3 py-1.5',
+            activeSession.goalAchieved && 'border-emerald-500/20 bg-emerald-500/5',
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => store.markGoalAchieved(activeSession.id, !activeSession.goalAchieved)}
+            className={cn(
+              'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+              activeSession.goalAchieved
+                ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'
+                : 'border-border text-transparent hover:border-orange-500/50',
+            )}
+            title={activeSession.goalAchieved ? 'Mark not achieved' : 'Mark achieved'}
+          >
+            <Check className="h-3 w-3" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground/60">
+              Goal{activeSession.goalAchieved ? ' · achieved' : ''}
+            </div>
+            <div
+              className={cn(
+                'truncate text-[11px]',
+                activeSession.goalAchieved
+                  ? 'text-emerald-300/80 line-through decoration-emerald-400/50'
+                  : 'text-orange-100/90',
+              )}
+            >
+              {activeSession.goal}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => store.setSessionGoal(activeSession.id, undefined)}
+            className="shrink-0 rounded p-1 text-muted-foreground/60 hover:bg-accent hover:text-foreground"
+            title="Clear goal"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {/* Search bar */}
       <AnimatePresence initial={false}>
@@ -421,13 +543,48 @@ export default function ChatPanel() {
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search messages…"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && query.trim()) {
+                    e.preventDefault()
+                    stepMatch(e.shiftKey ? -1 : 1)
+                  }
+                }}
+                placeholder="Search messages… (Enter next, Shift+Enter prev)"
                 className="h-6 flex-1 bg-transparent font-mono text-[11px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
               />
               {query && (
-                <span className="shrink-0 rounded-md border border-orange-500/30 bg-orange-500/15 px-2 py-0.5 font-mono text-[10px] font-medium text-orange-300">
-                  {matchCount} match{matchCount === 1 ? '' : 'es'}
-                </span>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => stepMatch(-1)}
+                    disabled={matchCount === 0}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    title="Previous match (Shift+Enter)"
+                  >
+                    <ChevronRight className="h-3 w-3 rotate-180" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stepMatch(1)}
+                    disabled={matchCount === 0}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                    title="Next match (Enter)"
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                  <span className="shrink-0 rounded-md border border-orange-500/30 bg-orange-500/15 px-2 py-0.5 font-mono text-[10px] font-medium text-orange-300">
+                    {matchCount === 0 ? 'no matches' : `${activeMatch + 1}/${matchCount}`}
+                  </span>
+                </>
+              )}
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => stepMatch(1)}
+                  className="hidden"
+                  aria-hidden
+                  tabIndex={-1}
+                />
               )}
               <Button
                 size="icon"
@@ -509,12 +666,18 @@ export default function ChatPanel() {
                       </p>
                     </div>
                   )
-                  : filteredMessages.map((m) => (
+                  : filteredMessages.map((m, i) => (
                     <motion.div
                       key={m.id}
+                      data-mid={m.id}
                       initial={{ opacity: 0, y: 10, scale: 0.995 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                      // P52.19 — ring the active match so a jump lands visibly.
+                      className={cn(
+                        'rounded-xl',
+                        query.trim() && i === activeMatch && 'ring-2 ring-orange-500/40 ring-offset-2 ring-offset-background',
+                      )}
                     >
                       <MessageBubble message={m} streaming={m.id === lastMsg?.id && streaming} />
                     </motion.div>

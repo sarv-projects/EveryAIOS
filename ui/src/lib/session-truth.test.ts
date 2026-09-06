@@ -10,10 +10,18 @@
 // returns becomes the store's rows verbatim — never a synthesized chat.
 
 import { describe, expect, test } from 'bun:test'
-import { useAppStore, sanitizeSessionRows } from './store'
+import { useAppStore, mockSessions, sanitizeSessionRows } from './store'
 
 describe('P50.2.1 — sessions runtime truth', () => {
   test('a fresh store is NOT hydrated: the demo seed can never persist', () => {
+    // Self-contained: other test files share the module-global store and may
+    // have hydrated/wiped it first, so this test restores the boot-time shape
+    // (preview seed present, gate shut) before asserting the contract.
+    useAppStore.setState({
+      sessionsHydrated: false,
+      sessions: mockSessions,
+      activeSessionId: mockSessions[0]?.id ?? '',
+    })
     const st = useAppStore.getState()
     expect(st.sessionsHydrated).toBe(false)
     // The gate check `if (!inTauri()) return; if (!s.sessionsHydrated) return`

@@ -71,6 +71,10 @@ export interface ToolCallRecord {
   risk?: string
   error?: string
   progress?: string
+  /** Wall-clock start (ms) — set when the call starts; the chip shows a live
+   * elapsed timer while running and the settled duration once done. */
+  startedAt?: number
+  endedAt?: number
 }
 
 export interface ChatMessage {
@@ -82,8 +86,35 @@ export interface ChatMessage {
   steps?: ProgressStep[]
   toolCalls?: ToolCallRecord[]
   mcq?: MCQInterrupt
+  /** Chain-of-thought text. Provider reasoning is a *delta stream* (many
+   * wire events per turn), so chunks coalesce onto the last entry while the
+   * turn streams and each entry ends as one displayable thought block.
+   * Populated only from live `reasoning` wire events — never seeded. */
   reasoning?: string[]
+  /** Wall-clock (ms) when this message's reasoning stream began. */
+  reasoningStartedAt?: number
+  /** Wall-clock (ms) when this message finished streaming (set on
+   * finalize/fail/budget-kill/plan-done), powers the live-turn clock. */
+  startedAt?: number
+  endedAt?: number
   pinned?: boolean
+  /** P51.7/P51.21 — structured failure on an assistant message. The partial
+   * content is preserved (never clobbered with a marker line); the bubble
+   * renders a layer-named error card with matched actions below the text. */
+  error?: ChatError
+  /** P51.7 — time-to-first-byte: ms from turn start to the first content or
+   * reasoning delta. Undefined when the turn died before any token arrived. */
+  ttfbMs?: number
+}
+
+/** P51.21 — which layer reported a failed turn, shown as the card's badge.
+ * `retryable` decides whether the card offers a one-click same-history retry
+ * (agent/provider/tool errors are; budget kills are not). */
+export interface ChatError {
+  layer: 'provider' | 'guard' | 'tool' | 'agent' | 'budget' | 'runtime'
+  code?: string
+  detail: string
+  retryable: boolean
 }
 
 export interface ArtifactActionUi {
@@ -216,6 +247,11 @@ export interface Session {
    * clearly shows the user default applies again instead of reading as
    * never-pinned. Cleared when a new pin is set. */
   chiefUnpinned?: boolean
+  /** P51.9 — the session's finish-line goal (rides the vault round-trip so
+   * it survives app restarts, same as `chiefPin`). */
+  goal?: string
+  /** P51.9 — the user marked the goal as achieved this run. */
+  goalAchieved?: boolean
 }
 
 /**
@@ -230,6 +266,7 @@ export function sessionTranscriptMarkdown(session: Session): string {
   const lines = [`# ${session.title}`, '']
   for (const m of session.messages) {
     lines.push(m.role === 'user' ? '## You' : m.role === 'assistant' ? '## Assistant' : '## System', '', m.content, '')
+    if (m.error) lines.push(`> ⛔ ${m.error.layer} error: ${m.error.detail}`, '')
     for (const t of m.toolCalls ?? []) {
       lines.push(`- tool \`${t.toolId}\` — ${t.status}${t.error ? `: ${t.error}` : ''}`)
     }
@@ -558,6 +595,21 @@ export interface LiveBudget {
   cacheHitRate?: number
 }
 
+/** P51.5 — one queued user turn (sent automatically once the current turn of
+ * the same session finishes). Created when the user sends while the agent is
+ * still generating; edited/deleted via the pending chips above the composer. */
+export interface QueuedTurn {
+  id: string
+  text: string
+  /** Attachment captured when the turn was queued (sent with it). */
+  context?: { title: string; content: string }
+}
+
+/** Bridge-side dispatcher the store calls when a queued turn should fire.
+ * Registered once by the bridge at startup (store stays import-free of the
+ * bridge to avoid a cycle). */
+export type TurnDispatcher = (turn: { sessionId: string; text: string; context?: { title: string; content: string }; bypassQueue: true }) => void
+
 /** P50.2.5 — one live notification row, fed by the bridge from real wire
  * events (chat errors, budget kills, Guard-2 tickets, monitor outcomes).
  * Never seeded: a fresh shell has zero rows until an event lands. */
@@ -579,6 +631,30 @@ export interface LiveNotification {
 let activeStreamMsg: Record<string, string> = {} // sessionId -> assistant msg id
 let streamT0 = 0
 let streamTok = 0
+/** P51.7 — first content/reasoning delta per session (ms), for the TTFB
+ * footer. Cleared when the turn settles. */
+let streamFirstDelta: Record<string, number> = {}
+
+/** P51.7 — record the first response byte for `sid` (first writer wins). */
+function markFirstDelta(sid: string) {
+  if (streamFirstDelta[sid] === undefined) streamFirstDelta[sid] = Date.now()
+}
+
+/** P51.7 — ttfbMs for a settling turn (undefined when no delta ever landed). */
+function ttfbFor(sid: string, startedAt?: number): number | undefined {
+  const t = streamFirstDelta[sid]
+  if (t === undefined || !startedAt || t < startedAt) return undefined
+  return Math.max(0, t - startedAt)
+}
+let turnDispatcher: TurnDispatcher | undefined
+let queueSeq = 0
+let idSeq = 0
+/** Monotonic id mint: `Date.now()` alone collides when two streams/sessions
+ * are created in the same millisecond (tests hit this; live fast forks too). */
+function freshId(prefix: string): string {
+  idSeq += 1
+  return `${prefix}-${Date.now()}-${idSeq}`
+}
 
 /** Resolve the session a stream action targets: explicit id > active session. */
 function streamSessionId(sessionId?: string): string {
@@ -596,6 +672,22 @@ export function streamElapsedMs(): number {
   return streamT0 === 0 ? 0 : Math.max(0, Date.now() - streamT0)
 }
 
+/** TEST-ONLY isolation helper: the zustand store and the module-level stream
+ * registry are process-global, and bun test files share one module instance,
+ * so tests exercising the streaming/queue lifecycle must reset before and
+ * after. Never called by app code. */
+export function resetStreamingTestState(): void {
+  activeStreamMsg = {}
+  streamT0 = 0
+  streamTok = 0
+  turnDispatcher = undefined
+  streamTestReset?.()
+}
+
+// Bound by the store creator below (TDZ-safe indirection: resetStreamingTestState
+// may run before the store exists only if a caller never awaits module init).
+let streamTestReset: (() => void) | undefined
+
 function patchActiveAssistant(
   set: (partial: object | ((s: { sessions: Session[]; activeSessionId: string }) => object)) => void,
   fn: (m: ChatMessage) => ChatMessage,
@@ -609,6 +701,26 @@ function patchActiveAssistant(
       return {
         ...x,
         messages: x.messages.map((m) => (m.id === targetId ? fn(m) : m)),
+      }
+    }),
+  }))
+}
+
+/** Patch the streaming assistant message (or any message by id in a
+ * session) without touching siblings — identity-stable for memoized bubbles. */
+function patchStreamMessage(
+  set: (partial: object | ((s: { sessions: Session[]; activeSessionId: string }) => object)) => void,
+  patch: (m: ChatMessage) => ChatMessage,
+  sessionId?: string,
+) {
+  set((s) => ({
+    sessions: s.sessions.map((x) => {
+      if (x.id !== streamSessionId(sessionId)) return x
+      const targetId = activeStreamMsg[x.id] ?? undefined
+      if (!targetId) return x
+      return {
+        ...x,
+        messages: x.messages.map((m) => (m.id === targetId ? patch(m) : m)),
       }
     }),
   }))
@@ -742,6 +854,22 @@ interface AppState {
   clearSessionMessages: (id: string) => void
   /** Fork a session: duplicate transcript into a new session. Returns the id. */
   forkSession: (id: string) => string | null
+  /** P52.22 — truncate-below edit. Given a user message, drop that message
+   * and everything after it from the transcript (session flips to idle) and
+   * return its text so the caller can prefill the composer — the corrected
+   * ask then *replaces* it on send, so no duplicate resubmit appears. Returns
+   * null when the message is not a user message or the session is streaming. */
+  rewindToUserMessage: (sessionId: string, messageId: string) => string | null
+  /** P52.22 — same-history regen for an assistant message: truncate from the
+   * user turn that produced it (inclusive) and return that prompt text for a
+   * real re-ask, so the corrected run reads in place. Null if not found or a
+   * turn is live. */
+  rewindBeforeAssistant: (sessionId: string, assistantMessageId: string) => string | null
+  /** P51.9 — per-session goal text (persisted on the Session via the vault
+   * round-trip). Cleared when achieved or dismissed. */
+  setSessionGoal: (sessionId: string, goal: string | undefined) => void
+  /** P51.9 — mark the session goal achieved (finish-line check). */
+  markGoalAchieved: (sessionId: string, achieved: boolean) => void
   monitorBadge: { count: number; last?: string; stopped: boolean }
   pushMonitor: (ev: { notified: boolean; stopped: boolean; current: string; jobId?: string }) => void
   clearMonitorBadge: () => void
@@ -980,9 +1108,38 @@ interface AppState {
   // Chat streaming (bridge) — real turns through the Tauri relay
   pushUserMessage: (text: string) => void
   streamStart: (sessionId?: string) => void
+  /** P52.23 — append a reasoning delta to the live assistant turn.
+   * Provider reasoning arrives as a *delta stream*, so consecutive chunks
+   * coalesce onto the last thought entry; the entry list therefore holds
+   * displayable thought blocks, not raw wire events. No-op when no assistant
+   * turn is streaming (a stray reasoning event is never fabricated into a
+   * message). */
+  appendReasoning: (text: string, sessionId?: string) => void
+
+  /** P51.5 — queue-while-generating: turns sent while the session's stream is
+   * live land here (pending chips above the composer) and fire automatically
+   * when the current turn ends. */
+  queueTurn: (sessionId: string, text: string, context?: { title: string; content: string }) => void
+  /** Edit a queued turn's text in place (pending-chip inline editing). */
+  editQueuedTurn: (sessionId: string, queueId: string, text: string) => void
+  /** Remove one queued turn (chip ×). */
+  removeQueuedTurn: (sessionId: string, queueId: string) => void
+  /** P52.8 — pause auto-fire of a session's queue (chips stay visible,
+   * nothing dispatches until resumed). */
+  setQueuePaused: (sessionId: string, paused: boolean) => void
+  /** P52.8 — move a queued turn to the head of the queue (Send-Now / steer). */
+  promoteQueuedTurn: (sessionId: string, queueId: string) => void
+  /** P52.16 — re-open a session deleted earlier this run (recent-closed). */
+  reopenClosedSession: () => boolean
+  /** Dispatch the head of a session's queue when its stream is idle. Called
+   * from every terminal stream action and from the chip's send button. */
+  dequeueNextTurn: (sessionId: string) => void
+  /** Register the bridge dispatcher (once). */
+  setTurnDispatcher: (fn: TurnDispatcher) => void
+
   streamAppend: (text: string, done: boolean, sessionId?: string) => void
   streamFinalize: (fullText: string, sessionId?: string) => void
-  streamFail: (msg: string, sessionId?: string) => void
+  streamFail: (msg: string, sessionId?: string, error?: ChatError) => void
   streamBudgetKill: (msg: string, sessionId?: string) => void
   streamStep: (label: string) => void
   streamToolCall: (toolId: string, args?: Record<string, unknown>, risk?: string) => void
@@ -993,6 +1150,12 @@ interface AppState {
   // Guard-2 tickets (bridge) — live approval cards in the transcript
   pushMcq: (mcq: MCQInterrupt, sessionId?: string) => void
   respondMcq: (id: string, choice: string) => void
+
+  /** P52.16 — sessions deleted this run (for reopen-closed). Each row keeps
+   * its transcript so reopening restores the full chat. */
+  closedSessions: Session[]
+  /** P52.16 — jump to the next/previous session (Ctrl+Tab cycling). */
+  cycleSession: (dir: 1 | -1) => void
 
   /** Live ACP handles keyed by catalog agent id. */
   acpHandles: Record<string, string>
@@ -1005,6 +1168,12 @@ interface AppState {
 
   // P41.3 — ticketed editor writes: ticketId → { path, content } waiting on
   // the Guard-2 approval card; the commit runs once the card is approved.
+  /** P51.5 — per-session FIFO of queued user turns (pending chips). */
+  pendingQueue: Record<string, QueuedTurn[]>
+  /** P52.8 — per-session queue pause: while true the queue holds (chips stay
+   * visible, dequeue is a no-op) until the user resumes. */
+  queuePaused: Record<string, boolean>
+
   pendingEditorWrites: Record<string, { path: string; content: string }>
   parkEditorWrite: (ticketId: string, w: { path: string; content: string }) => void
   takeEditorWrite: (ticketId: string) => { path: string; content: string } | undefined
@@ -1035,6 +1204,19 @@ interface AppState {
   setNlAutomationDraft: (v?: string) => void
 }
 
+// Bind the test-isolation hook to the store once it exists (see
+// resetStreamingTestState above).
+streamTestReset = () => {
+  useAppStore.setState({
+    sessions: [],
+    activeSessionId: '',
+    sessionsHydrated: false,
+    pendingQueue: {},
+    queuePaused: {},
+    closedSessions: [],
+  })
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Tauri starts with no client-side fixtures. The shell hydrates this list
   // from the encrypted vault; only the plain-browser preview uses mock data.
@@ -1062,7 +1244,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   newSession: () => {
-    const id = `s-${Date.now()}`
+    const id = freshId('s')
     // P11.6.4 — local UX metric: a user-created session.
     recordSessionCreated()
     // A user-created session is a real turn target — once one exists the
@@ -1126,7 +1308,51 @@ export const useAppStore = create<AppState>((set, get) => ({
       sessions: remaining,
       activeSessionId: nextActive,
       sessionChiefs: pins,
+      // P52.16 — keep the deleted session (with its transcript) so it can be
+      // reopened this run. Bounded ring: keep the last 5 closed.
+      closedSessions: (
+        [...st.closedSessions, st.sessions.find((x) => x.id === id)].filter(
+          (x): x is Session => Boolean(x),
+        ) as Session[]
+      ).slice(-5),
     })
+  },
+  reopenClosedSession: () => {
+    const st = get()
+    const last = st.closedSessions[st.closedSessions.length - 1]
+    if (!last) return false
+    // Restore under a fresh id (the old vault row is gone; this is a new live
+    // row the persist subscription will write on the next change).
+    const nid = freshId('s')
+    const copy: Session = {
+      ...last,
+      id: nid,
+      status: 'idle',
+      updatedAt: new Date().toISOString(),
+      title: `${last.title}`,
+      messages: last.messages.map((m) => ({
+        ...m,
+        toolCalls: m.toolCalls?.map((t) => ({ ...t })),
+        steps: m.steps?.map((s) => ({ ...s })),
+        artifacts: m.artifacts?.map((a) => ({ ...a })),
+      })),
+    }
+    set((s) => ({
+      sessions: [copy, ...s.sessions],
+      activeSessionId: nid,
+      closedSessions: s.closedSessions.slice(0, -1),
+      centerScreen: 'chat',
+    }))
+    return true
+  },
+  cycleSession: (dir) => {
+    const st = get()
+    const list = st.sessions
+    if (list.length === 0) return
+    const cur = list.findIndex((x) => x.id === st.activeSessionId)
+    const next = (cur + dir + list.length) % list.length
+    const target = list[next]
+    if (target) st.setActiveSession(target.id)
   },
   renameSession: (id, title) => {
     const name = title.trim()
@@ -1153,10 +1379,65 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     }))
   },
+  setSessionGoal: (id, goal) => {
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id === id
+          ? { ...x, goal: goal?.trim() ? goal.trim() : undefined, goalAchieved: goal ? x.goalAchieved : false }
+          : x,
+      ),
+    }))
+  },
+  markGoalAchieved: (id, achieved) => {
+    set((s) => ({
+      sessions: s.sessions.map((x) => (x.id === id ? { ...x, goalAchieved: achieved } : x)),
+    }))
+  },
+  rewindToUserMessage: (sessionId, messageId) => {
+    const s = get()
+    const sess = s.sessions.find((x) => x.id === sessionId)
+    if (!sess) return null
+    // Never rewrite a live transcript (the turn owns the tail).
+    if (sess.status === 'running' || sess.status === 'action-required') return null
+    const idx = sess.messages.findIndex((m) => m.id === messageId)
+    if (idx < 0 || sess.messages[idx]?.role !== 'user') return null
+    const text = sess.messages[idx]!.content
+    set((st) => ({
+      sessions: st.sessions.map((x) =>
+        x.id === sessionId
+          ? { ...x, messages: x.messages.slice(0, idx), status: 'idle' as const }
+          : x,
+      ),
+    }))
+    return text
+  },
+  rewindBeforeAssistant: (sessionId, assistantMessageId) => {
+    const s = get()
+    const sess = s.sessions.find((x) => x.id === sessionId)
+    if (!sess) return null
+    if (sess.status === 'running' || sess.status === 'action-required') return null
+    const idx = sess.messages.findIndex((m) => m.id === assistantMessageId)
+    if (idx < 0 || sess.messages[idx]?.role !== 'assistant') return null
+    // The user turn that produced this answer is the message before it. Cut
+    // from that prompt (inclusive) so the re-ask runs in place with full
+    // history intact above.
+    let promptIdx = idx - 1
+    while (promptIdx >= 0 && sess.messages[promptIdx]?.role !== 'user') promptIdx -= 1
+    if (promptIdx < 0) return null
+    const text = sess.messages[promptIdx]!.content
+    set((st) => ({
+      sessions: st.sessions.map((x) =>
+        x.id === sessionId
+          ? { ...x, messages: x.messages.slice(0, promptIdx), status: 'idle' as const }
+          : x,
+      ),
+    }))
+    return text
+  },
   forkSession: (id) => {
     const src = get().sessions.find((x) => x.id === id)
     if (!src) return null
-    const nid = `s-${Date.now()}`
+    const nid = freshId('s')
     const copy: Session = {
       ...src,
       id: nid,
@@ -1667,7 +1948,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ liveStreamId: { ...s.liveStreamId, [sessionId]: streamId } })),
 
   pushUserMessage: (text) => {
-    const id = `u-${Date.now()}`
+    const id = freshId('u')
     const msg: ChatMessage = {
       id,
       role: 'user',
@@ -1686,7 +1967,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   streamStart: (sessionId?) => {
     const sid = streamSessionId(sessionId)
     if (hasActiveStream(sid)) return
-    const id = `a-${Date.now()}-${sid.slice(-6)}`
+    const id = freshId(`a-${sid.slice(-6)}`)
     activeStreamMsg[sid] = id
     streamT0 = Date.now()
     streamTok = 0
@@ -1695,6 +1976,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       role: 'assistant',
       content: '',
       timestamp: new Date().toISOString(),
+      startedAt: Date.now(),
     }
     set((s) => ({
       sessions: s.sessions.map((x) =>
@@ -1704,10 +1986,41 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     }))
   },
+  appendReasoning: (text, sessionId?) => {
+    const sid = streamSessionId(sessionId)
+    const msgId = activeStreamMsg[sid]
+    if (!msgId) return
+    if (!text) return
+    markFirstDelta(sid)
+    patchStreamMessage(
+      set,
+      (m) => {
+        const list = m.reasoning ?? []
+        const prev = list.length > 0 ? list[list.length - 1]! : ''
+        // Coalesce the delta onto the in-flight thought block. The last
+        // entry stays open while this message is the active stream; a new
+        // wire `reasoning` event for a *settled* message opens a fresh block.
+        const reasoningStartedAt = m.reasoningStartedAt ?? Date.now()
+        return {
+          ...m,
+          reasoning: [...list.slice(0, -1), prev + text],
+          reasoningStartedAt,
+        }
+      },
+      sessionId,
+    )
+    // The first reasoning delta is a turn-start signal too (ttft may not
+    // have fired yet for pure-reasoning providers).
+    if (streamT0 === 0) streamT0 = Date.now()
+  },
   streamAppend: (text, done, sessionId?) => {
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
     if (!msgId) return
+    markFirstDelta(sid)
+    const endedAt = done ? Date.now() : undefined
+    const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((mm) => mm.id === msgId)?.startedAt
+    const ttfb = done ? ttfbFor(sid, startedAt) : undefined
     set((s) => ({
       sessions: s.sessions.map((x) => {
         if (x.id !== sid) return x
@@ -1715,13 +2028,21 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...x,
           status: done ? 'completed' : 'running',
           messages: x.messages.map((m) =>
-            m.id === msgId ? { ...m, content: m.content + text } : m,
+            m.id === msgId
+              ? {
+                  ...m,
+                  content: m.content + text,
+                  ...(endedAt ? { endedAt } : {}),
+                  ...(ttfb !== undefined ? { ttfbMs: ttfb } : {}),
+                }
+              : m,
           ),
         }
       }),
     }))
     if (done) {
       delete activeStreamMsg[sid]
+      delete streamFirstDelta[sid]
       streamT0 = 0
       // P44.6 — the turn is over: the frozen snapshot + any temporary
       // elevation expire here (live changes never leak into the next task).
@@ -1736,6 +2057,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
     if (!msgId) return
+    const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((mm) => mm.id === msgId)?.startedAt
+    const ttfb = ttfbFor(sid, startedAt)
     set((s) => ({
       sessions: s.sessions.map((x) => {
         if (x.id !== sid) return x
@@ -1743,23 +2066,43 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...x,
           status: 'completed',
           messages: x.messages.map((m) =>
-            m.id === msgId ? { ...m, content: fullText } : m,
+            m.id === msgId
+              ? {
+                  ...m,
+                  content: fullText,
+                  endedAt: Date.now(),
+                  ...(ttfb !== undefined ? { ttfbMs: ttfb } : {}),
+                }
+              : m,
           ),
         }
       }),
     }))
     delete activeStreamMsg[sid]
+    delete streamFirstDelta[sid]
     streamT0 = 0
     // P44.6 — turn complete: the frozen task scope + elevation expire.
     set({ taskSnapshot: undefined })
     // P11.6.4 — local UX metric: a completed turn.
     recordTurnCompleted()
+    // P51.5 — the turn ended: fire the next queued ask for this session.
+    get().dequeueNextTurn(sid)
   },
-  streamFail: (msg, sessionId?) => {
+  /** P51.7/P51.21 — a failed turn. The partial content streamed so far is
+   * **preserved** (never clobbered with a marker line); the structured
+   * `error` renders as a layer-named card with matched actions. */
+  streamFail: (msg, sessionId?, error?) => {
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
     // P11.6.4 — local UX metric: a failed turn (only when one was attempted).
     if (msgId) recordTurnFailed()
+    const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((mm) => mm.id === msgId)?.startedAt
+    const ttfb = ttfbFor(sid, startedAt)
+    const err: ChatError = error ?? {
+      layer: 'agent',
+      detail: msg,
+      retryable: true,
+    }
     set((s) => ({
       sessions: s.sessions.map((x) => {
         if (x.id !== sid) return x
@@ -1768,19 +2111,34 @@ export const useAppStore = create<AppState>((set, get) => ({
           status: 'failed',
           messages: msgId
             ? x.messages.map((m) =>
-                m.id === msgId ? { ...m, content: `⚠ ${msg}` } : m,
+                m.id === msgId
+                  ? {
+                      ...m,
+                      endedAt: Date.now(),
+                      error: err,
+                      ...(ttfb !== undefined ? { ttfbMs: ttfb } : {}),
+                    }
+                  : m,
               )
             : x.messages,
         }
       }),
     }))
     delete activeStreamMsg[sid]
+    delete streamFirstDelta[sid]
     // P44.6 — failed turn: the frozen task scope + elevation expire.
     set({ taskSnapshot: undefined })
+    // P51.5 — a failed turn also releases the queue (never silently stall).
+    get().dequeueNextTurn(sid)
   },
   streamBudgetKill: (msg, sessionId?) => {
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
+    const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((mm) => mm.id === msgId)?.startedAt
+    const ttfb = ttfbFor(sid, startedAt)
+    // P51.7 — partial-preserve: the text streamed before the wall stays in
+    // the transcript; the card explains the kill. Budget hits are not
+    // retryable (the same wall would re-trigger) — retry via the ledger.
     set((s) => ({
       sessions: s.sessions.map((x) => {
         if (x.id !== sid) return x
@@ -1789,22 +2147,35 @@ export const useAppStore = create<AppState>((set, get) => ({
           status: 'failed',
           messages: msgId
             ? x.messages.map((m) =>
-                m.id === msgId ? { ...m, content: `⛔ ${msg}` } : m,
+                m.id === msgId
+                  ? {
+                      ...m,
+                      endedAt: Date.now(),
+                      error: { layer: 'budget', code: 'budget_exceeded', detail: msg, retryable: false } satisfies ChatError,
+                      ...(ttfb !== undefined ? { ttfbMs: ttfb } : {}),
+                    }
+                  : m,
               )
             : x.messages,
         }
       }),
     }))
     delete activeStreamMsg[sid]
+    delete streamFirstDelta[sid]
     // P44.6 — budget kill ends the task: frozen scope + elevation expire.
     set({ taskSnapshot: undefined })
+    // P51.5 — budget kill releases the queue too (head fires, may hit the
+    // same wall — that is the honest loop, visible in the transcript).
+    get().dequeueNextTurn(sid)
   },
   streamToolCall: (toolId, args, risk) => {
     if (!hasActiveStream(streamSessionId())) get().streamStart()
+    const now = Date.now()
     const rec: ToolCallRecord = {
-      id: `tc-${Date.now()}-${toolId}`,
+      id: `tc-${now}-${toolId}`,
       toolId,
       status: 'running',
+      startedAt: now,
       ...(args ? { args } : {}),
       ...(risk ? { risk } : {}),
     }
@@ -1814,6 +2185,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
   streamToolResult: (toolId, result, error) => {
+    const endedAt = Date.now()
     patchActiveAssistant(set, (m) => {
       const list = [...(m.toolCalls ?? [])]
       const idx = [...list].reverse().findIndex((t) => t.toolId === toolId && t.status === 'running')
@@ -1824,14 +2196,17 @@ export const useAppStore = create<AppState>((set, get) => ({
           result,
           error,
           status: error ? 'failed' : 'done',
+          ...(endedAt ? { endedAt } : {}),
         }
       } else {
         list.push({
-          id: `tc-${Date.now()}-${toolId}`,
+          id: `tc-${endedAt}-${toolId}`,
           toolId,
           result,
           error,
           status: error ? 'failed' : 'done',
+          startedAt: endedAt,
+          endedAt,
         })
       }
       return { ...m, toolCalls: list }
@@ -2023,8 +2398,109 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAcpHandle: (agentId, handle) =>
     set((s) => ({ acpHandles: { ...s.acpHandles, [agentId]: handle } })),
 
+  closedSessions: [],
+
   pendingPlan: undefined,
   setPendingPlan: (p) => set({ pendingPlan: p }),
+
+  // P51.5 — queue-while-generating (per-session FIFO). The dispatcher is
+  // registered by the bridge at startup so the store can fire queued turns
+  // without importing the bridge (cycle-free).
+  pendingQueue: {},
+  queuePaused: {},
+  setTurnDispatcher: (fn) => {
+    turnDispatcher = fn
+  },
+  queueTurn: (sessionId, text, context) => {
+    const clean = text.trim()
+    if (!clean) return
+    set((s) => {
+      const list = s.pendingQueue[sessionId] ?? []
+      // Coalesce consecutive queued turns from the same composer burst?
+      // No — each send is a distinct ask; keep them ordered and discrete.
+      // `queueSeq` guarantees uniqueness even for same-ms burst queues (two
+      // turns must never share an id — edit/remove would hit both).
+      queueSeq += 1
+      return {
+        pendingQueue: {
+          ...s.pendingQueue,
+          [sessionId]: [
+            ...list,
+            { id: `q-${Date.now()}-${queueSeq}`, text: clean, ...(context ? { context } : {}) },
+          ],
+        },
+      }
+    })
+  },
+  editQueuedTurn: (sessionId, queueId, text) => {
+    set((s) => {
+      const list = s.pendingQueue[sessionId] ?? []
+      return {
+        pendingQueue: {
+          ...s.pendingQueue,
+          [sessionId]: list.map((q) => (q.id === queueId ? { ...q, text } : q)),
+        },
+      }
+    })
+  },
+  removeQueuedTurn: (sessionId, queueId) => {
+    set((s) => {
+      const list = (s.pendingQueue[sessionId] ?? []).filter((q) => q.id !== queueId)
+      return {
+        pendingQueue: {
+          ...s.pendingQueue,
+          [sessionId]: list,
+        },
+      }
+    })
+  },
+  setQueuePaused: (sessionId, paused) => {
+    set((s) => ({ queuePaused: { ...s.queuePaused, [sessionId]: paused } }))
+  },
+  promoteQueuedTurn: (sessionId, queueId) => {
+    set((s) => {
+      const list = [...(s.pendingQueue[sessionId] ?? [])]
+      const idx = list.findIndex((q) => q.id === queueId)
+      if (idx <= 0) return s
+      const item = list[idx]
+      if (!item) return s
+      list.splice(idx, 1)
+      return {
+        pendingQueue: {
+          ...s.pendingQueue,
+          [sessionId]: [item, ...list],
+        },
+      }
+    })
+  },
+  dequeueNextTurn: (sessionId) => {
+    if (!turnDispatcher) return
+    const s = get()
+    const session = s.sessions.find((x) => x.id === sessionId)
+    // P52.8 — a paused queue holds its chips and never auto-fires.
+    if (s.queuePaused[sessionId]) return
+    // Only dispatch when this session's stream is actually idle — never
+    // mid-turn (the current turn must finish first; the terminal action that
+    // calls us just cleared the active-stream marker, so status is the check).
+    if (!session || session.status === 'running' || session.status === 'action-required') return
+    const queue = s.pendingQueue[sessionId] ?? []
+    if (queue.length === 0) return
+    const head = queue[0]!
+    set((s2) => ({
+      pendingQueue: {
+        ...s2.pendingQueue,
+        [sessionId]: (s2.pendingQueue[sessionId] ?? []).slice(1),
+      },
+    }))
+    // Fire the next queued ask on the same session, never re-queued
+    // (bypassQueue keeps the FIFO strictly one-in-flight).
+    turnDispatcher({
+      sessionId,
+      text: head.text,
+      ...(head.context ? { context: head.context } : {}),
+      bypassQueue: true,
+    })
+  },
 
   pendingEditorWrites: {},
   parkEditorWrite: (ticketId, w) =>

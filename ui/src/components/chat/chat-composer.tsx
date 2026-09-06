@@ -14,7 +14,9 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useAppStore, sessionTranscriptMarkdown, type ChatMode } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { fuzzyRank } from '@/lib/fuzzy'
 import AgentModelPicker from './agent-model-picker'
+import PendingQueueChips from './pending-queue-chips'
 import { sendUserMessage } from '@/lib/bridge'
 import { getModelsForAgent } from '@/lib/agents'
 
@@ -176,6 +178,14 @@ export default function ChatComposer({ budget, centered }: Props) {
   const activeSession = useAppStore((s) =>
     s.sessions.find((x) => x.id === s.activeSessionId)
   )
+  // P51.5 — while the agent is generating, the composer stays enabled and a
+  // send lands in the pending queue instead of being dropped or disabled.
+  const agentBusy =
+    activeSession?.status === 'running' ||
+    activeSession?.status === 'action-required'
+  const queuedCount = useAppStore(
+    (s) => (s.pendingQueue[s.activeSessionId] ?? []).length,
+  )
 
   const spent = budget?.spent ?? activeSession?.spent ?? 0
   const cap = budget?.cap ?? 5
@@ -207,19 +217,26 @@ export default function ChatComposer({ budget, centered }: Props) {
     return null
   }, [composerValue])
 
-  const filterBy = (q: string) => <T extends { cmd: string }>(arr: T[]) =>
-    arr.filter((c) => c.cmd.includes(q))
-
+  // P52.11 — fuzzy subsequence match (typo-tolerant) instead of strict
+  // substring: '/mdoe' still surfaces '/mode', '@fl' finds '@files'.
   const hintList: { title: string; items: HintItem[] } | null = (() => {
     if (!hint) return null
-    const f = filterBy(hint.q)
+    const q = hint.q
     if (hint.kind === 'slash')
-      return { title: 'Slash commands', items: f(SLASH_COMMANDS).map((c) => ({ ...c, color: 'text-orange-300' })) }
+      return {
+        title: 'Slash commands',
+        items: fuzzyRank(q, SLASH_COMMANDS, (c) => c.cmd)
+          .map((c) => ({ ...c, color: 'text-orange-300' })),
+      }
     if (hint.kind === 'macro')
-      return { title: 'Macros', items: f(MACROS).map((c) => ({ ...c, color: 'text-orange-300' })) }
+      return {
+        title: 'Macros',
+        items: fuzzyRank(q, MACROS, (c) => c.cmd)
+          .map((c) => ({ ...c, color: 'text-orange-300' })),
+      }
     return {
       title: 'Mention',
-      items: f(MENTIONS).map((c) => ({ ...c, color: 'text-sky-300' })),
+      items: fuzzyRank(q, MENTIONS, (c) => c.cmd).map((c) => ({ ...c, color: 'text-sky-300' })),
     }
   })()
 
@@ -318,6 +335,25 @@ export default function ChatComposer({ budget, centered }: Props) {
       if (cur && cur.messages.length > 0) st.newSession()
       st.setCenterScreen('chat')
     }
+    // P51.5 — when already generating, the send key queues the ask instead of
+    // silently dropping it (the queue shows as pending chips and auto-fires).
+    if (agentBusy) {
+      const busy = st.sessions.some(
+        (s) =>
+          s.id === st.activeSessionId &&
+          (s.status === 'running' || s.status === 'action-required'),
+      )
+      if (busy) {
+        const text = composerValue.trim()
+        if (text) {
+          st.queueTurn(st.activeSessionId, text, attachment ?? undefined)
+          setComposerValue('')
+          setAttachment(null)
+          notify('Queued — starts when the current turn finishes')
+        }
+        return
+      }
+    }
     let text = composerValue
     // Macros expand to prompt augmentations (visible in the sent text).
     const first = text.trimStart().split(/\s+/, 1)[0]
@@ -364,6 +400,9 @@ export default function ChatComposer({ budget, centered }: Props) {
         </HintPopover>
       )}
 
+      {/* P51.5 — pending asks above the composer while the agent is busy. */}
+      {(agentBusy || queuedCount > 0) && <PendingQueueChips />}
+
       {/* The chat bar is the field. Controls live in a one-line footer, not a stack above. */}
       {attachment && (
         <div className="mx-2 mt-2 flex items-center gap-1.5 rounded-md border border-orange-500/30 bg-orange-500/5 px-2 py-1 font-mono text-[10px] text-orange-200">
@@ -398,16 +437,43 @@ export default function ChatComposer({ budget, centered }: Props) {
           value={composerValue}
           onChange={(e) => setComposerValue(e.target.value)}
           onKeyDown={(e) => {
+            // P52.14 — CJK/IME composition guard: while an IME is composing,
+            // Enter confirms the candidate (not the message). Browsers set
+            // isComposing (or keyCode 229); sending mid-composition would
+            // fire on a half-typed sentence.
+            const composing = e.nativeEvent?.isComposing || (e as unknown as { keyCode?: number }).keyCode === 229
             if (e.key === 'Enter' && !e.shiftKey) {
+              if (composing) return
               e.preventDefault()
               send()
+            }
+            // P52.14 — Tab accepts the top hint instead of leaving focus
+            // (completion is the hint's job; the user is still typing).
+            if (e.key === 'Tab' && !e.shiftKey && hintList && hintList.items.length > 0) {
+              e.preventDefault()
+              const first = hintList.items[0]
+              if (first) {
+                if (first.cmd === '@files') {
+                  setComposerValue('')
+                  pickFile()
+                } else {
+                  setComposerValue(`${first.cmd} `)
+                }
+              }
+              return
             }
             if (e.key === 'Escape') {
               e.stopPropagation()
               setComposerValue('')
             }
           }}
-          placeholder="Tell EveryAIOS what you need…"
+          placeholder={
+            agentBusy
+              ? queuedCount > 0
+                ? `Next queued ask will follow… (${queuedCount} pending)`
+                : 'Still working — type to queue your next ask…'
+              : 'Tell EveryAIOS what you need…'
+          }
           className="max-h-28 min-h-[36px] min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-[13px] leading-relaxed shadow-none focus-visible:ring-0"
           rows={1}
         />
@@ -425,9 +491,16 @@ export default function ChatComposer({ budget, centered }: Props) {
           />
           <Button
             size="icon"
-            className="h-8 w-8 shrink-0 rounded-md bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-40"
+            className={cn(
+              'h-8 w-8 shrink-0 rounded-md text-white transition-colors',
+              agentBusy
+                ? 'bg-emerald-500 hover:bg-emerald-600'
+                : 'bg-orange-500 hover:bg-orange-600',
+              'disabled:opacity-40',
+            )}
             disabled={!canSend}
             onClick={send}
+            title={agentBusy ? 'Queue this ask (runs after the current turn)' : 'Send'}
           >
             <ArrowUp className="h-4 w-4" />
           </Button>
@@ -457,7 +530,7 @@ export default function ChatComposer({ budget, centered }: Props) {
         <span>Shift+Enter newline</span>
         <span>·</span>
         <span>Esc clear</span>
-        <span className="ml-auto">@ mention · / command · ! macro</span>
+        <span className="ml-auto">Tab completes · @ mention · / command · ! macro</span>
       </div>
 
       {localRuntime && (localCtxWindow ?? ctxWindow) <= 20_000 && (
