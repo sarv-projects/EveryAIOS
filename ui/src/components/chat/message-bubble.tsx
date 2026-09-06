@@ -32,6 +32,7 @@ import {
 import type { ChatError, ChatMessage } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import { explainError } from '@/lib/errors'
 import ArtifactCard from './artifact-card'
 import { staggerStyle } from '@/lib/stagger'
 import McqInterruptCard from './mcq-interrupt-card'
@@ -321,6 +322,24 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
           </span>
         )}
       </div>
+      {/* P51.2 — localized translation: a plain-language read of the code
+          plus a concrete recovery hint, per layer. The raw detail stays
+          visible below so no signal is lost. */}
+      {(() => {
+        const x = explainError(err)
+        if (x.explain === err.detail) return null
+        return (
+          <p className="mt-1 text-[11px] leading-relaxed text-rose-100/70">
+            {x.explain}
+            {x.hint ? (
+              <>
+                {' '}
+                <span className="text-rose-100/50">{x.hint}</span>
+              </>
+            ) : null}
+          </p>
+        )
+      })()}
       <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-rose-100/80">
         {err.detail}
       </p>

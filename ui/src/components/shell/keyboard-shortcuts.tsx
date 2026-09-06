@@ -19,6 +19,7 @@ const SHORTCUTS = [
     { keys: '⌘ N', action: 'New work' },
     { keys: '⌘ 1–5', action: 'Switch to session 1–5' },
     { keys: 'Ctrl Tab', action: 'Cycle session (Shift reverses)' },
+    { keys: '⌘⇧ Q', action: 'Cycle model variant (⇧ reverses)' },
   ]},
   { group: 'Views', items: [
     { keys: '⌘⇧ E', action: 'Folder view' },
@@ -72,6 +73,7 @@ export function KeyboardShortcuts() {
   const toggleAgentPause = useAppStore((s) => s.toggleAgentPause)
   const setAiPointerOpen = useAppStore((s) => s.setAiPointerOpen)
   const notify = useAppStore((s) => s.notify)
+  const cycleModelVariant = useAppStore((s) => s.cycleModelVariant)
   const newSession = useAppStore((s) => s.newSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const sessions = useAppStore((s) => s.sessions)
@@ -207,6 +209,15 @@ export function KeyboardShortcuts() {
         setCenterScreen('chat')
         return
       }
+      // P51.3 — Ctrl+Shift+Q cycles model variants for the current agent
+      // (Shift+Q cycles backward). Pinning the variant turns auto-route off
+      // so the pick reaches the send path.
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'q') {
+        e.preventDefault()
+        const id = cycleModelVariant(e.key === 'Q' ? -1 : 1)
+        if (id) notify(`Model → ${id} (auto-route off)`)
+        return
+      }
       // Escape — close overlay or pause agent
       if (e.key === 'Escape') {
         if (useAppStore.getState().aiPointerOpen) {
@@ -274,6 +285,7 @@ export function KeyboardShortcuts() {
     setCenterScreen,
     toggleAgentPause,
     notify,
+    cycleModelVariant,
     newSession,
     setActiveSession,
     setAiPointerOpen,

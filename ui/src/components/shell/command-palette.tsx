@@ -67,6 +67,7 @@ export function CommandPalette() {
   const notify = useAppStore((s) => s.notify)
   const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
   const setSelectedModel = useAppStore((s) => s.setSelectedModel)
+  const cycleModelVariant = useAppStore((s) => s.cycleModelVariant)
   const setAutoRoute = useAppStore((s) => s.setAutoRoute)
   const autoRoute = useAppStore((s) => s.autoRoute)
   const powerMode = useAppStore((s) => s.powerMode)
@@ -331,6 +332,33 @@ export function CommandPalette() {
           setOpen(false)
         },
       })),
+      // === P51.3 — model variant cycle ===
+      {
+        id: 'cycle-model-next',
+        label: 'Next model variant',
+        hint: 'Pins the next available model and turns auto-route off (⌘⇧Q)',
+        icon: Route,
+        group: 'settings',
+        keywords: 'model variant cycle next switch',
+        onSelect: () => {
+          const id = cycleModelVariant(1)
+          if (id) notify(`Model → ${id} (auto-route off)`)
+          setOpen(false)
+        },
+      },
+      {
+        id: 'cycle-model-prev',
+        label: 'Previous model variant',
+        hint: 'Pins the previous available model and turns auto-route off (⇧⌘Q)',
+        icon: Route,
+        group: 'settings',
+        keywords: 'model variant cycle previous switch',
+        onSelect: () => {
+          const id = cycleModelVariant(-1)
+          if (id) notify(`Model → ${id} (auto-route off)`)
+          setOpen(false)
+        },
+      },
       // === Auto-route toggle ===
       {
         id: 'toggle-autoroute',
@@ -346,7 +374,7 @@ export function CommandPalette() {
         },
       },
     ]
-  }, [sessions, theme, toggle, powerMode, togglePowerMode, setActiveSession, setActiveView, setCenterScreen, setSettingsSection, newSession, setOpen, notify, setSelectedAgent, setSelectedModel, setAutoRoute, autoRoute, selectedAgentId])
+  }, [sessions, theme, toggle, powerMode, togglePowerMode, setActiveSession, setActiveView, setCenterScreen, setSettingsSection, newSession, setOpen, notify, setSelectedAgent, setSelectedModel, cycleModelVariant, setAutoRoute, autoRoute, selectedAgentId])
 
   const filtered = React.useMemo(() => {
     if (!query) return items

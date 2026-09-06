@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Loader2, Package, RotateCcw, ShieldCheck, Wand2 } from 'lucide-react'
+import { Check, Loader2, Package, RotateCcw, Search, ShieldCheck, Wand2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
+import { fuzzyRank } from '@/lib/fuzzy'
 import { skillsCatalog, skillsInstall, skillsUninstall, type SkillRowView } from '@/lib/skills'
 
 const PERM_TONE: Record<string, string> = {
@@ -19,6 +20,11 @@ export default function SkillsPanel() {
   const [skills, setSkills] = useState<SkillRowView[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
+  // P51.26 (UI slice) — catalog chrome: fuzzy search over name/description/
+  // permissions plus an installed/permission filter. Git sources + global/
+  // project scope + collision triage stay gated on the skills registry.
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<'all' | 'installed' | string>('all')
 
   const refresh = async () => {
     const rows = await skillsCatalog()
@@ -28,6 +34,23 @@ export default function SkillsPanel() {
   useEffect(() => {
     refresh()
   }, [])
+
+  const perms = useMemo(
+    () => Array.from(new Set(skills.flatMap((s) => s.permissions))).sort(),
+    [skills],
+  )
+
+  const visible = useMemo(() => {
+    let rows = skills
+    if (filter === 'installed') rows = rows.filter((s) => s.installed)
+    else if (filter !== 'all') rows = rows.filter((s) => s.permissions.includes(filter))
+    if (!query.trim()) return rows
+    return fuzzyRank(
+      query.trim(),
+      rows,
+      (s) => `${s.name} ${s.description} ${s.permissions.join(' ')} ${s.scopes_plain.join(' ')}`,
+    )
+  }, [skills, query, filter])
 
   const install = async (row: SkillRowView) => {
     setBusy(row.id)
@@ -78,8 +101,45 @@ export default function SkillsPanel() {
         </div>
       </div>
 
+      {/* P51.26 — catalog chrome: search + filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search skills, permissions, scopes…"
+            className="h-6 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              clear
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`All (${skills.length})`} />
+          <FilterChip active={filter === 'installed'} onClick={() => setFilter('installed')} label={`Installed (${installed.length})`} />
+          {perms.map((p) => (
+            <FilterChip key={p} active={filter === p} onClick={() => setFilter(p)} label={p} />
+          ))}
+        </div>
+      </div>
+
+      {visible.length === 0 && (
+        <p className="rounded-lg border border-border/50 bg-muted/30 px-3 py-4 text-center text-[11px] text-muted-foreground">
+          {query.trim()
+            ? `No skills match “${query}”${filter !== 'all' ? ` under ${filter}` : ''}.`
+            : 'No skills in this filter yet.'}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {skills.map((row, i) => (
+        {visible.map((row, i) => (
           <motion.div
             key={row.id}
             className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/50 p-4"
@@ -162,5 +222,21 @@ export default function SkillsPanel() {
         ))}
       </div>
     </div>
+  )
+}
+
+function FilterChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-2 py-0.5 font-mono text-[10px] transition-colors ${
+        active
+          ? 'border-orange-500/50 bg-orange-500/15 text-orange-200'
+          : 'border-border text-muted-foreground hover:border-orange-500/30 hover:text-foreground'
+      }`}
+    >
+      {label}
+    </button>
   )
 }

@@ -13,6 +13,7 @@ import {
   AGENT_MAP,
   DEFAULT_ROUTING,
   getDefaultModelForAgent,
+  getModelsForAgent,
   type AgentRuntime,
   type TaskKind,
 } from './agents'
@@ -726,6 +727,32 @@ function patchStreamMessage(
   }))
 }
 
+// P51.25 — per-pill status-bar customization, persisted to localStorage.
+// Toggles which live pills the casual footer may render (context meter,
+// throughput, cache, cost). Default: everything on.
+const STATUS_BAR_PILLS_KEY = 'everyaios.settings.ui.statusBarPills'
+const STATUS_BAR_PILLS_DEFAULT = { context: true, throughput: true, cache: true, cost: true }
+export type StatusBarPills = typeof STATUS_BAR_PILLS_DEFAULT
+export const readStatusBarPills = (): StatusBarPills => {
+  if (typeof window === 'undefined') return STATUS_BAR_PILLS_DEFAULT
+  try {
+    const raw = window.localStorage.getItem(STATUS_BAR_PILLS_KEY)
+    if (!raw) return STATUS_BAR_PILLS_DEFAULT
+    const parsed = JSON.parse(raw) as Partial<StatusBarPills>
+    return { ...STATUS_BAR_PILLS_DEFAULT, ...parsed }
+  } catch {
+    return STATUS_BAR_PILLS_DEFAULT
+  }
+}
+const writeStatusBarPills = (p: StatusBarPills) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(STATUS_BAR_PILLS_KEY, JSON.stringify(p))
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
 // Progressive-disclosure preference (B9/P31) persisted to localStorage.
 const POWER_MODE_KEY = 'everyaios.settings.ui.powerMode'
 const readPowerMode = (): boolean => {
@@ -981,6 +1008,10 @@ interface AppState {
   // Developer telemetry (status-bar debug strip) — off by default.
   devMode: boolean
   setDevMode: (v: boolean) => void
+  /** P51.25 — which live pills the status bar may render (per-pill
+   * customization, persisted to localStorage). */
+  statusBarPills: StatusBarPills
+  setStatusBarPills: (p: StatusBarPills) => void
 
   // Chat composer
   composerMode: ChatMode
@@ -993,6 +1024,10 @@ interface AppState {
   setSelectedAgent: (id: string) => void
   selectedModelId: string
   setSelectedModel: (id: string) => void
+  /** P51.3 (UI slice) — cycle the current agent's model variants (next /
+   * previous). Pinning a variant turns auto-route off so the pick is real,
+   * same semantics as clicking a row in the picker. Returns the chosen id. */
+  cycleModelVariant: (dir: 1 | -1) => string | undefined
   personaId: string
   setPersonaId: (id: string) => void
   soulId: string
@@ -1656,6 +1691,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   devMode: false,
   setDevMode: (v) => set({ devMode: v }),
+  // P51.25 — per-pill status-bar prefs (read once at boot, written on change).
+  statusBarPills: readStatusBarPills(),
+  setStatusBarPills: (p) => {
+    writeStatusBarPills(p)
+    set({ statusBarPills: p })
+  },
 
   composerMode: 'auto',
   setComposerMode: (m) => set({ composerMode: normalizeChatMode(m) }),
@@ -1679,6 +1720,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   selectedModelId: getDefaultModelForAgent('everyaios-native'),
   setSelectedModel: (id) => set({ selectedModelId: id }),
+  // P51.3 — variant cycle over the current agent's available models. The
+  // order is the picker's row order; auto-route is switched off so the
+  // pinned variant actually reaches the send path (see resolveProviderModel).
+  cycleModelVariant: (dir) => {
+    const { selectedAgentId, selectedModelId } = get()
+    const models = getModelsForAgent(selectedAgentId).filter((m) => m.available)
+    if (models.length === 0) return undefined
+    const idx = models.findIndex((m) => m.id === selectedModelId)
+    const next = models[(idx + dir + models.length) % models.length]!
+    set({
+      selectedModelId: next.id,
+      autoRoute: false,
+    })
+    return next.id
+  },
   personaId: 'straight-shooter',
   setPersonaId: (id) => set({ personaId: id }),
   soulId: 'default',

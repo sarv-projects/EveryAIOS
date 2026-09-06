@@ -1,7 +1,9 @@
 'use client'
 
-import { CheckCircle2, Circle, Folder, Sparkles } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { CheckCircle2, Circle, Folder, Search, Sparkles } from 'lucide-react'
 import ChatComposer from '@/components/chat/chat-composer'
+import { fuzzyRank } from '@/lib/fuzzy'
 import { useAppStore, type Session } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useChatColumnClass } from '@/lib/layout'
@@ -149,36 +151,80 @@ function Section({ title, items, onPick }: { title: string; items: Session[]; on
 export function ProjectsPanel() {
   const sessions = useAppStore((s) => s.sessions)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
-  const folders = Array.from(new Set(sessions.map((s) => s.folder).filter(Boolean))) as string[]
+  // P52.15 (UI slice) — fuzzy search across project paths and their work
+  // items; folders sort pinned-first, then by most-recent work. Archive/
+  // History + trash delete remain gated on the session-trash command.
+  const [query, setQuery] = useState('')
+  const folders = useMemo(() => {
+    const all = Array.from(new Set(sessions.map((s) => s.folder).filter(Boolean))) as string[]
+    const withRecency = all.map((f) => {
+      const inFolder = sessions.filter((s) => s.folder === f)
+      const newest = inFolder.reduce(
+        (acc, s) => (s.updatedAt > acc ? s.updatedAt : acc),
+        inFolder[0]?.updatedAt ?? '',
+      )
+      return { f, inFolder, newest }
+    })
+    withRecency.sort((a, b) => b.newest.localeCompare(a.newest))
+    if (!query.trim()) return withRecency
+    const q = query.trim()
+    return fuzzyRank(
+      q,
+      withRecency,
+      (x) => `${x.f} ${x.inFolder.map((s) => s.title).join(' ')}`,
+    )
+  }, [sessions, query])
   return (
     <div className="flex h-full w-full flex-col">
       <header className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold">Projects</h2>
         <p className="text-[11px] text-muted-foreground">Persistent bodies of work — folders EveryAIOS has used.</p>
       </header>
+      <div className="border-b border-border px-4 pb-2">
+        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/40 px-2.5 py-1.5">
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search projects and work items…"
+            className="h-6 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              clear
+            </button>
+          )}
+        </div>
+      </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4">
         {folders.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground">No projects yet. Start work from Home.</p>
+          <p className="text-[11px] text-muted-foreground">
+            {query.trim() ? `No projects match “${query}”.` : 'No projects yet. Start work from Home.'}
+          </p>
         ) : (
           <ul className="space-y-1">
-            {folders.map((f) => {
-              const inFolder = sessions.filter((s) => s.folder === f)
-              return (
-                <li key={f}>
-                  <button
-                    type="button"
-                    onClick={() => inFolder[0] && setActiveSession(inFolder[0].id)}
-                    className="flex w-full items-center gap-2 rounded-md border border-border/50 bg-background/30 px-3 py-2 text-left hover:border-orange-500/30"
-                  >
-                    <Folder className="h-4 w-4 text-orange-400" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-mono text-[12px]">{f}</span>
-                      <span className="text-[10px] text-muted-foreground">{inFolder.length} work item{inFolder.length === 1 ? '' : 's'}</span>
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
+            {folders.map(({ f, inFolder }) => (
+              <li key={f}>
+                <button
+                  type="button"
+                  onClick={() => inFolder[0] && setActiveSession(inFolder[0].id)}
+                  className="flex w-full items-center gap-2 rounded-md border border-border/50 bg-background/30 px-3 py-2 text-left hover:border-orange-500/30"
+                >
+                  <Folder className="h-4 w-4 shrink-0 text-orange-400" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-[12px]">{f}</span>
+                    <span className="text-[10px] text-muted-foreground">{inFolder.length} work item{inFolder.length === 1 ? '' : 's'}</span>
+                  </span>
+                  <span className="shrink-0 text-[9px] text-muted-foreground/50">
+                    {inFolder.slice(0, 2).map((s) => s.title).join(' · ').slice(0, 40)}
+                  </span>
+                </button>
+              </li>
+            ))}
           </ul>
         )}
       </div>

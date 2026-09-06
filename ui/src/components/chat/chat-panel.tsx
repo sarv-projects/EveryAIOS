@@ -56,6 +56,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ChatComposer from './chat-composer'
 import MessageBubble from './message-bubble'
 import NowDoingStrip from './now-doing-strip'
+import { SessionTabs } from './session-tabs'
+import { fsUndoList } from '@/lib/fs'
 
 const EXAMPLE_PROMPTS: { label: string; icon: LucideIcon }[] = [
   { label: 'Summarize this repo', icon: FileSearch },
@@ -259,6 +261,21 @@ export default function ChatPanel() {
         break
     }
   }
+
+  // P52.17 — refresh the pending-patch count whenever the active session
+  // changes. fsUndoList is a cheap in-memory ledger read (no disk scan); the
+  // count drives the review banner above the chat.
+  const pendingPatches = store.pendingPatches
+  useEffect(() => {
+    let alive = true
+    void fsUndoList().then((r) => {
+      if (alive) store.setPendingPatches(r.undos.map((u, i) => ({ id: `${i}`, sessionId: u.sessionId, path: u.path, beforeBytes: u.beforeBytes })))
+    })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.activeSessionId])
 
   // ⌘F search / ⌘E export / ⌘R rename — the shortcuts printed in the menu.
   // Skipped while typing in an input, except ⌘F (focuses search) and Escape.
@@ -477,6 +494,29 @@ export default function ChatPanel() {
           </DropdownMenu>
         </div>
       </header>
+
+      {/* P51.23 (UI slice) — session tabs: quick switching between recent
+          sessions above the chat. Hidden while only one session exists. */}
+      <SessionTabs />
+
+      {/* P52.17 (UI slice) — Review-changes banner: surfaces this session's
+          real pending file mutations (fs_undo_list) with a one-click jump to
+          the diff view. Per-hunk Keep/Reject + checkpoint restore remain
+          gated on the undo-restore command surface — not faked. */}
+      {pendingPatches.length > 0 && (
+        <button
+          type="button"
+          onClick={() => store.setActiveView('diff')}
+          className="flex shrink-0 items-center gap-2 border-b border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-left transition-colors hover:bg-emerald-500/10"
+          title="Review the files the agent changed this session — open the diff view"
+        >
+          <GitBranch className="h-3 w-3 shrink-0 text-emerald-300" />
+          <span className="text-[11px] text-emerald-100/90">
+            {pendingPatches.length} file change{pendingPatches.length === 1 ? '' : 's'} this session — review before they stack up
+          </span>
+          <ChevronRight className="h-3 w-3 shrink-0 text-emerald-300/70" />
+        </button>
+      )}
 
       {/* P51.9 — session-goal finish-line banner: the goal the user set for
           this work, with a one-click achieved check. Persists on the Session

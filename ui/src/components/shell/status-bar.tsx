@@ -55,6 +55,10 @@ function LiveContextMeter() {
   const activeStatus = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.status)
   const tokens = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.tokens)
   const spent = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId)?.spent)
+  // P51.25 — per-pill customization: the meter renders only the pill classes
+  // the user left on (localStorage-backed), and the popover hosts the toggles.
+  const pills = useAppStore((s) => s.statusBarPills)
+  const setPills = useAppStore((s) => s.setStatusBarPills)
 
   // Nothing real yet — keep the bar quiet.
   if (!liveBudget && !streamStats.tokensPerSec && !streamStats.ctxPct) return null
@@ -70,22 +74,22 @@ function LiveContextMeter() {
   const cachePct =
     liveBudget?.cacheHitRate != null ? `${Math.round(liveBudget.cacheHitRate * 100)}%` : null
   const detailBits = [
-    ctxPct > 0 ? `context ${ctxPct}%` : null,
-    live && streamStats.tokensPerSec > 0 ? `${streamStats.tokensPerSec.toFixed(0)} tok/s` : null,
-    tokens ? `${(tokens / 1000).toFixed(1)}k tok` : null,
-    cachePct ? `cache ${cachePct}` : null,
+    pills.context && ctxPct > 0 ? `context ${ctxPct}%` : null,
+    pills.throughput && live && streamStats.tokensPerSec > 0 ? `${streamStats.tokensPerSec.toFixed(0)} tok/s` : null,
+    pills.cache && cachePct ? `cache ${cachePct}` : null,
+    pills.cost && (tokens || spent != null) ? `${(tokens ?? 0) / 1000}kt · $${(spent ?? 0).toFixed(2)}` : null,
   ].filter(Boolean)
   if (detailBits.length === 0) return null
 
   const rows: { label: string; value: string }[] = []
-  if (ctxPct > 0) rows.push({ label: 'context', value: `${ctxPct}%` })
-  if (live && streamStats.tokensPerSec > 0)
+  if (pills.context && ctxPct > 0) rows.push({ label: 'context', value: `${ctxPct}%` })
+  if (pills.throughput && live && streamStats.tokensPerSec > 0)
     rows.push({ label: 'throughput', value: `${streamStats.tokensPerSec.toFixed(0)} tok/s` })
-  if (tokens) rows.push({ label: 'session tokens', value: `${(tokens / 1000).toFixed(1)}k` })
-  if (liveBudget?.tokens) rows.push({ label: 'lifetime tokens', value: `${(liveBudget.tokens / 1000).toFixed(1)}k` })
-  if (cachePct) rows.push({ label: 'prompt cache', value: cachePct })
-  if (spent != null) rows.push({ label: 'session spend', value: `$${spent.toFixed(4)}` })
-  if (liveBudget) rows.push({ label: 'lifetime spend', value: `$${liveBudget.spent.toFixed(4)} / cap $${liveBudget.cap.toFixed(2)}` })
+  if (pills.cost && tokens) rows.push({ label: 'session tokens', value: `${(tokens / 1000).toFixed(1)}k` })
+  if (pills.cost && liveBudget?.tokens) rows.push({ label: 'lifetime tokens', value: `${(liveBudget.tokens / 1000).toFixed(1)}k` })
+  if (pills.cache && cachePct) rows.push({ label: 'prompt cache', value: cachePct })
+  if (pills.cost && spent != null) rows.push({ label: 'session spend', value: `$${spent.toFixed(4)}` })
+  if (pills.cost && liveBudget) rows.push({ label: 'lifetime spend', value: `$${liveBudget.spent.toFixed(4)} / cap $${liveBudget.cap.toFixed(2)}` })
 
   return (
     <Popover>
@@ -96,21 +100,23 @@ function LiveContextMeter() {
           className="flex items-center gap-1 px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70 transition-colors hover:text-foreground"
           title={`${detailBits.join(' · ')} — click for the full breakdown`}
         >
-          <span className={cn('relative h-1 w-10 overflow-hidden rounded-full bg-border', tone)}>
-            {ctxPct > 0 && (
-              <span
-                className={cn(
-                  'absolute inset-y-0 left-0 rounded-full',
-                  ctxPct >= 90 ? 'bg-red-500/80' : ctxPct >= 75 ? 'bg-amber-400/80' : 'bg-orange-400/70',
-                )}
-                style={{ width: `${Math.min(100, ctxPct)}%` }}
-              />
-            )}
-          </span>
-          {live && streamStats.tokensPerSec > 0 && (
+          {pills.context && (
+            <span className={cn('relative h-1 w-10 overflow-hidden rounded-full bg-border', tone)}>
+              {ctxPct > 0 && (
+                <span
+                  className={cn(
+                    'absolute inset-y-0 left-0 rounded-full',
+                    ctxPct >= 90 ? 'bg-red-500/80' : ctxPct >= 75 ? 'bg-amber-400/80' : 'bg-orange-400/70',
+                  )}
+                  style={{ width: `${Math.min(100, ctxPct)}%` }}
+                />
+              )}
+            </span>
+          )}
+          {pills.throughput && live && streamStats.tokensPerSec > 0 && (
             <span className="tabular-nums">{streamStats.tokensPerSec.toFixed(0)} t/s</span>
           )}
-          {spent ? <span className="tabular-nums text-emerald-400/80">${spent.toFixed(2)}</span> : null}
+          {pills.cost && spent ? <span className="tabular-nums text-emerald-400/80">${spent.toFixed(2)}</span> : null}
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="end" className="w-56 font-mono text-[10px]">
@@ -122,14 +128,41 @@ function LiveContextMeter() {
             <span className="text-muted-foreground">{r.label}</span>
             <span className="tabular-nums text-foreground/90">{r.value}</span>
           </div>
-        ))}
-        {ctxPct >= 75 && (
+        ))}        {ctxPct >= 75 && (
           <div className="mt-1 border-t border-border/60 pt-1 text-[9px] text-amber-300/90">
             {ctxPct >= 90
               ? 'Context nearly full — clear this chat or fork before it stalls.'
               : 'Context is high — clear or fork soon.'}
           </div>
         )}
+        {/* P51.25 — per-pill customization: which live pills the status bar
+            may render. Persisted to localStorage via the store. */}
+        <div className="mt-1.5 flex items-center gap-1 border-t border-border/60 pt-1.5">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50">Pills</span>
+          {(
+            [
+              ['context', 'ctx'],
+              ['throughput', 't/s'],
+              ['cache', 'cache'],
+              ['cost', 'cost'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setPills({ ...pills, [key]: !pills[key] })}
+              className={cn(
+                'rounded border px-1.5 py-0.5 text-[9px] transition-colors',
+                pills[key]
+                  ? 'border-orange-500/40 bg-orange-500/15 text-orange-200'
+                  : 'border-border text-muted-foreground/50 hover:text-foreground',
+              )}
+              title={pills[key] ? `Hide the ${label} pill` : `Show the ${label} pill`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </PopoverContent>
     </Popover>
   )
@@ -157,6 +190,7 @@ export function StatusBar() {
   const desktopReason = useAppStore((s) => s.desktopReason)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const devMode = useAppStore((s) => s.devMode)
+  const statusBarPills = useAppStore((s) => s.statusBarPills)
   const monitorBadge = useAppStore((s) => s.monitorBadge)
   const clearMonitorBadge = useAppStore((s) => s.clearMonitorBadge)
   const cockpitOpen = useAppStore((s) => s.cockpitOpen)
@@ -236,13 +270,17 @@ export function StatusBar() {
     {
       icon: Zap,
       label: 'cache',
-      value: liveBudget?.cacheHitRate != null
+      // P51.25 — respects the per-pill cache toggle (hidden = still measured,
+      // just not rendered).
+      value: statusBarPills.cache && liveBudget?.cacheHitRate != null
         ? `${Math.round(liveBudget.cacheHitRate * 100)}%`
         : '—',
-      color: liveBudget?.cacheHitRate != null ? 'text-emerald-400' : 'text-muted-foreground',
-      tooltip: liveBudget?.cacheHitRate != null
+      color: statusBarPills.cache && liveBudget?.cacheHitRate != null ? 'text-emerald-400' : 'text-muted-foreground',
+      tooltip: statusBarPills.cache && liveBudget?.cacheHitRate != null
         ? `Prompt cache hit rate · ${Math.round(liveBudget.cacheHitRate * 100)}% (live)`
-        : 'Prompt cache hit rate is unavailable until the live usage ledger responds.',
+        : statusBarPills.cache
+          ? 'Prompt cache hit rate is unavailable until the live usage ledger responds.'
+          : 'The cache pill is hidden in status-bar pills — reopen its toggle from the context meter.',
     },
   ]
 

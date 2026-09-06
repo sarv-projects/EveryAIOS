@@ -8,6 +8,7 @@
 //   fresh session with the same transcript.
 
 import { afterAll, describe, expect, test } from 'bun:test'
+import { getModelsForAgent } from './agents'
 import { resetStreamingTestState, useAppStore } from './store'
 
 function freshSession(): string {
@@ -144,6 +145,41 @@ describe('P51.9 — session goals', () => {
     sess = useAppStore.getState().sessions.find((s) => s.id === sid)!
     expect(sess.goal).toBe('next goal')
     expect(sess.goalAchieved).toBeFalsy()
+  })
+})
+
+describe('P51.3 — model variant cycle', () => {
+  test('cycling pins the next available variant and turns auto-route off', () => {
+    resetStreamingTestState()
+    const st = useAppStore.getState()
+    const models = getModelsForAgent(st.selectedAgentId).filter((m) => m.available)
+    if (models.length < 2) return // nothing to cycle
+    const before = st.selectedModelId
+    st.setAutoRoute(true)
+    const next = st.cycleModelVariant(1)
+    expect(next).toBeTruthy()
+    const st2 = useAppStore.getState()
+    expect(st2.selectedModelId).toBe(next)
+    // Pinning a variant disables auto-route so the pick reaches the send path.
+    expect(st2.autoRoute).toBe(false)
+    // Backward cycle returns to the previously selected variant.
+    const back = st2.cycleModelVariant(-1)
+    expect(back).toBe(before)
+  })
+})
+
+describe('P51.25 — status-bar pill prefs', () => {
+  test('toggles merge over defaults and persist through the store setter', () => {
+    resetStreamingTestState()
+    const st = useAppStore.getState()
+    expect(st.statusBarPills.context).toBe(true)
+    expect(st.statusBarPills.cache).toBe(true)
+    st.setStatusBarPills({ ...st.statusBarPills, cost: false })
+    const after = useAppStore.getState()
+    expect(after.statusBarPills.cost).toBe(false)
+    // Untouched pills keep their defaults.
+    expect(after.statusBarPills.context).toBe(true)
+    expect(after.statusBarPills.throughput).toBe(true)
   })
 })
 
