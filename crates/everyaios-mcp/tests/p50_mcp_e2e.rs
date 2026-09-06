@@ -31,7 +31,12 @@ struct GateHandler {
 impl GateHandler {
     fn new() -> (Self, Arc<Mutex<bool>>) {
         let approved = Arc::new(Mutex::new(false));
-        (Self { approved: Arc::clone(&approved) }, approved)
+        (
+            Self {
+                approved: Arc::clone(&approved),
+            },
+            approved,
+        )
     }
 }
 
@@ -43,9 +48,7 @@ impl ToolCallHandler for GateHandler {
     ) -> Result<serde_json::Value, String> {
         match name {
             "gmail_list" => Ok(serde_json::json!({"threads": ["t1", "t2"]})),
-            "gmail_send" if *self.approved.lock().unwrap() => {
-                Ok(serde_json::json!({"sent": true}))
-            }
+            "gmail_send" if *self.approved.lock().unwrap() => Ok(serde_json::json!({"sent": true})),
             "gmail_send" => Err("approval required: gmail_send is a mutation".into()),
             other => Err(format!("unknown tool: {other}")),
         }

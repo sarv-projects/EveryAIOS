@@ -113,7 +113,8 @@ fn corrupt_scheduler_json_recovers_fresh() {
         None,
         0,
     );
-    svc.persist().expect("P50.5.5: persist after corrupt recovery");
+    svc.persist()
+        .expect("P50.5.5: persist after corrupt recovery");
     let reloaded = SchedulerService::load_or_new(path);
     assert!(
         reloaded.get("j1").is_some(),
@@ -131,7 +132,9 @@ fn corrupt_tasks_json_recovers_empty() {
     // FileStore::load is lenient (missing/corrupt ⇒ empty vec, never Err).
     let mut ledger = TaskLedger::new(Box::new(FileStore::new(path.clone())));
     let id = ledger.enqueue(TaskKind::Automation, "after corruption", None::<String>);
-    ledger.persist().expect("P50.5.5: persist after corrupt recovery");
+    ledger
+        .persist()
+        .expect("P50.5.5: persist after corrupt recovery");
     let reloaded = TaskLedger::new(Box::new(FileStore::new(path)));
     let rec = reloaded
         .get(&id)
@@ -272,8 +275,7 @@ fn kernel_crash_midrun_recovers_running_with_counter() {
         k.persist_to(&path).unwrap();
         ex.id.clone() // drop = SIGKILL mid-run.
     };
-    let recovered =
-        ExecutionKernel::recover_from(&path).expect("P50.5.6: kernel must recover");
+    let recovered = ExecutionKernel::recover_from(&path).expect("P50.5.6: kernel must recover");
     let ex = recovered
         .get(&exec_id)
         .expect("P50.5.6: crashed execution must survive");
@@ -296,8 +298,7 @@ fn audit_chain_survives_reopen_with_exact_order() {
         log.append(EventInput::new(EventType::TaskStarted, "s-crash", "a1"))
             .expect("append 1");
         log.append(
-            EventInput::new(EventType::ToolCompleted, "s-crash", "a1")
-                .with_tool("fs.write", "h1"),
+            EventInput::new(EventType::ToolCompleted, "s-crash", "a1").with_tool("fs.write", "h1"),
         )
         .expect("append 2");
         assert_eq!(log.seq(), 2);
@@ -306,9 +307,17 @@ fn audit_chain_survives_reopen_with_exact_order() {
     let mut log = SessionLog::open(&dir, "s-crash").expect("reopen log");
     assert_eq!(log.seq(), 2, "P50.5.6: seq must resume, not reset");
     let events = log.events().expect("read back");
-    assert_eq!(events.len(), 2, "P50.5.6: both pre-crash events must replay");
+    assert_eq!(
+        events.len(),
+        2,
+        "P50.5.6: both pre-crash events must replay"
+    );
     let seq3 = log
-        .append(EventInput::new(EventType::CheckpointCommitted, "s-crash", "a1"))
+        .append(EventInput::new(
+            EventType::CheckpointCommitted,
+            "s-crash",
+            "a1",
+        ))
         .expect("append after recovery");
     assert_eq!(seq3, 3, "P50.5.6: post-crash append continues the chain");
     let _ = std::fs::remove_dir_all(&dir);

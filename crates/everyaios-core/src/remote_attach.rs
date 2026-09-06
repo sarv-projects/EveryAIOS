@@ -63,9 +63,7 @@ pub fn plan(target: &RemoteTarget) -> AttachPlan {
             }
             if !is_lan_host(&host) {
                 return AttachPlan::Rejected {
-                    reason: format!(
-                        "userpass rejected: {host} is not loopback/LAN-private"
-                    ),
+                    reason: format!("userpass rejected: {host} is not loopback/LAN-private"),
                 };
             }
             if scheme == "http" && !is_loopback(&host) {

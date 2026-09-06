@@ -9,10 +9,12 @@
 //!   there is NO in-process mock provider. The socketpair peer only plays
 //!   the coordinator's protocol role (it is not the model).
 //!
-//!     EVERYAIOS_E2E_BASE_URL=http://127.0.0.1:11434/v1   (Ollama OpenAI shim)
-//!     EVERYAIOS_E2E_PROVIDER=ollama|e2e                  (default: e2e)
-//!     EVERYAIOS_E2E_MODEL=qwen2.5:0.5b                   (default)
-//!     EVERYAIOS_E2E_API_KEY=sk-…                         (BYOK providers)
+//!   ```text
+//!   EVERYAIOS_E2E_BASE_URL=http://127.0.0.1:11434/v1   (Ollama OpenAI shim)
+//!   EVERYAIOS_E2E_PROVIDER=ollama|e2e                  (default: e2e)
+//!   EVERYAIOS_E2E_MODEL=qwen2.5:0.5b                   (default)
+//!   EVERYAIOS_E2E_API_KEY=sk-…                         (BYOK providers)
+//!   ```
 //!
 //!   When `EVERYAIOS_E2E_BASE_URL` is unset the test SKIPS (release matrix
 //!   runs it where a provider exists). When set, it must PASS against the
@@ -156,11 +158,13 @@ fn real_chat_vertical_e2e() {
     // The relay: a real sidecar link (socketpair) + the real vault. The peer
     // plays the coordinator protocol role only — every model token comes
     // from the real provider over HTTP.
-    let (a, mut b) = pair();
+    let (a, b) = pair();
     let events: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let ev = Arc::clone(&events);
     let relay = ChatRelay::new(link_from(a), Arc::new(Mutex::new(vault)), move |_e| {
-        ev.lock().unwrap_or_else(|x| x.into_inner()).push("event".into());
+        ev.lock()
+            .unwrap_or_else(|x| x.into_inner())
+            .push("event".into());
     });
     // The peer signals (via this channel) the moment the REAL stream ends so
     // the main thread can issue the wire-level cancel without deadlocking on
@@ -178,8 +182,7 @@ fn real_chat_vertical_e2e() {
         let mut saw_cancel = false;
         let deadline = Instant::now() + Duration::from_secs(180);
         while Instant::now() < deadline {
-            let Some(payload) = everyaios_ipc::frame::decode(&mut s)
-                .expect("peer frame decode")
+            let Some(payload) = everyaios_ipc::frame::decode(&mut s).expect("peer frame decode")
             else {
                 continue;
             };
@@ -190,7 +193,8 @@ fn real_chat_vertical_e2e() {
                 let reply = serde_json::json!({
                     "jsonrpc": "2.0", "id": id, "result": { "accepted": true }
                 });
-                let _ = everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
+                let _ =
+                    everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
                 acked = true;
                 // 1) the real stream
                 let req = serde_json::json!({
@@ -201,7 +205,8 @@ fn real_chat_vertical_e2e() {
                         "messages": [{ "role": "user", "content": "Reply with exactly the single word: OK" }],
                     },
                 });
-                let _ = everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&req).unwrap());
+                let _ =
+                    everyaios_ipc::frame::write_frame(&mut s, &serde_json::to_vec(&req).unwrap());
                 continue;
             }
             if method == "chat/provider_chunk" {
@@ -214,11 +219,11 @@ fn real_chat_vertical_e2e() {
                     // 2) then expect the cancel notification on the wire
                     let cancel_deadline = Instant::now() + Duration::from_secs(10);
                     while Instant::now() < cancel_deadline {
-                        let Some(p2) = everyaios_ipc::frame::decode(&mut s).expect("cancel decode") else {
+                        let Some(p2) = everyaios_ipc::frame::decode(&mut s).expect("cancel decode")
+                        else {
                             continue;
                         };
-                        let v2: serde_json::Value =
-                            serde_json::from_slice(&p2).unwrap_or_default();
+                        let v2: serde_json::Value = serde_json::from_slice(&p2).unwrap_or_default();
                         if v2.get("method").and_then(|m| m.as_str()) == Some("chat/cancel") {
                             saw_cancel = true;
                             break;
@@ -302,9 +307,7 @@ fn real_chat_vertical_e2e() {
         ledger_before >= 1,
         "P50.5.1: ledger must carry the real turn after reopen"
     );
-    eprintln!(
-        "P50.5.1: durable ledger rows after reopen: {ledger_before}"
-    );
+    eprintln!("P50.5.1: durable ledger rows after reopen: {ledger_before}");
 
     // "error": a real failing endpoint must surface an honest provider error
     // + end marker (never a hang, never a synthetic success).
@@ -334,7 +337,9 @@ fn real_chat_vertical_e2e() {
                 .expect("add key");
         }
         let relay2 = ChatRelay::new(link_from(a2), Arc::new(Mutex::new(v2)), move |_e| {
-            ev2.lock().unwrap_or_else(|x| x.into_inner()).push("e".into());
+            ev2.lock()
+                .unwrap_or_else(|x| x.into_inner())
+                .push("e".into());
         });
         if provider == "ollama" || provider == "llamafile" {
             relay2.with_local(&provider, LocalEndpoint::ollama(&dead_base));
@@ -358,9 +363,7 @@ fn real_chat_vertical_e2e() {
             .find(|c| c.get("error").is_some())
             .and_then(|c| c.get("error").and_then(|e| e.as_str()))
             .unwrap_or_else(|| {
-                panic!(
-                    "P50.5.1: dead endpoint did not surface an error chunk — {chunks2:?}"
-                )
+                panic!("P50.5.1: dead endpoint did not surface an error chunk — {chunks2:?}")
             });
         assert!(
             !err.is_empty() && !err.contains("Ok("),

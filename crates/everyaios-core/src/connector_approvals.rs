@@ -112,10 +112,7 @@ mod tests {
         // A standing Blocked is never softened.
         let mut m2 = matrix();
         m2.set("github", "read", ConnectorRule::Blocked);
-        assert_eq!(
-            m2.resolve("github", "read", None),
-            ConnectorRule::Blocked
-        );
+        assert_eq!(m2.resolve("github", "read", None), ConnectorRule::Blocked);
         assert_eq!(
             m2.resolve("github", "read", Some("other-task")),
             ConnectorRule::Blocked

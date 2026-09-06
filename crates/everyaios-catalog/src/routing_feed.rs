@@ -172,7 +172,11 @@ impl RoutingFeed {
     /// (`openai`, `nvidia-nim`); without this an unkeyed provider could rank
     /// (or a keyed one could be wrongly excluded) on spelling alone.
     fn is_credentialed(&self, p: &ProviderRecord) -> bool {
-        if self.credentialed.iter().any(|c| normalize(c) == normalize(&p.id)) {
+        if self
+            .credentialed
+            .iter()
+            .any(|c| normalize(c) == normalize(&p.id))
+        {
             return true;
         }
         p.aliases.iter().any(|a| {

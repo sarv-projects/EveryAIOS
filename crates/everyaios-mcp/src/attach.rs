@@ -210,19 +210,17 @@ impl AttachedServer {
             })
     }
 
-    pub fn is_sandboxed(&self) -> bool {        self.sandboxed
+    pub fn is_sandboxed(&self) -> bool {
+        self.sandboxed
     }
 
     /// P51.18 — non-blocking liveness probe for the no-restart refresh path.
     /// `None` (already reaped / never spawned) counts as not alive.
     pub fn is_alive(&mut self) -> bool {
-        match self.child.as_mut() {
-            Some(child) => match child.try_wait() {
-                Ok(None) => true,
-                _ => false,
-            },
-            None => false,
-        }
+        matches!(
+            self.child.as_mut().map(|child| child.try_wait()),
+            Some(Ok(None))
+        )
     }
 
     pub fn import_root(&self) -> Option<&PathBuf> {

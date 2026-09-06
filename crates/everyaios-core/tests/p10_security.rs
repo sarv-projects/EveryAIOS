@@ -585,7 +585,7 @@ fn policy_blocks_delete_without_approval() {
         "a1",
         "delete",
         Operation::DeleteFiles,
-        DecisionPackage::new("del"),
+        DecisionPackage::new("del").with_paths(vec!["/workspace/x".to_string()]),
         "hash",
         0,
     );

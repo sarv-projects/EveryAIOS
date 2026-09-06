@@ -118,10 +118,7 @@ mod tests {
 
     #[test]
     fn bash_allowlist_exact_match_allows() {
-        let policy = ApprovalPolicy::new(vec![(
-            ToolPattern::new("bash", None),
-            Approval::Allow,
-        )]);
+        let policy = ApprovalPolicy::new(vec![(ToolPattern::new("bash", None), Approval::Allow)]);
         assert_eq!(policy.evaluate("bash", "ls -la"), Approval::Allow);
         // Case-insensitive tool match.
         assert_eq!(policy.evaluate("BASH", "ls"), Approval::Allow);
@@ -131,10 +128,7 @@ mod tests {
     fn deny_beats_allow_last_match() {
         let policy = ApprovalPolicy::new(vec![
             (ToolPattern::new("bash", None), Approval::Allow),
-            (
-                ToolPattern::new("bash", Some("rm -rf *")),
-                Approval::Deny,
-            ),
+            (ToolPattern::new("bash", Some("rm -rf *")), Approval::Deny),
         ]);
         // The deny rule is last and matches: deny wins.
         assert_eq!(policy.evaluate("bash", "rm -rf /"), Approval::Deny);
@@ -142,10 +136,7 @@ mod tests {
         assert_eq!(policy.evaluate("bash", "ls -la"), Approval::Allow);
         // Deny always wins even when an allow matches later.
         let inverted = ApprovalPolicy::new(vec![
-            (
-                ToolPattern::new("bash", Some("rm -rf *")),
-                Approval::Deny,
-            ),
+            (ToolPattern::new("bash", Some("rm -rf *")), Approval::Deny),
             (ToolPattern::new("bash", None), Approval::Allow),
         ]);
         assert_eq!(inverted.evaluate("bash", "rm -rf /"), Approval::Deny);
@@ -153,14 +144,8 @@ mod tests {
 
     #[test]
     fn unknown_tool_defaults_ask() {
-        let policy = ApprovalPolicy::new(vec![(
-            ToolPattern::new("bash", None),
-            Approval::Allow,
-        )]);
-        assert_eq!(
-            policy.evaluate("unknown_tool", "anything"),
-            Approval::Ask
-        );
+        let policy = ApprovalPolicy::new(vec![(ToolPattern::new("bash", None), Approval::Allow)]);
+        assert_eq!(policy.evaluate("unknown_tool", "anything"), Approval::Ask);
         assert_eq!(
             ApprovalPolicy::default().evaluate("bash", "ls"),
             Approval::Ask

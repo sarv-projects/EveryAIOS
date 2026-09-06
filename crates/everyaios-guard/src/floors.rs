@@ -21,10 +21,7 @@ pub struct HumanFloor {
 }
 
 impl HumanFloor {
-    pub fn new(
-        protected_in_project: Vec<String>,
-        persistent_authority: Vec<String>,
-    ) -> Self {
+    pub fn new(protected_in_project: Vec<String>, persistent_authority: Vec<String>) -> Self {
         Self {
             protected_in_project,
             persistent_authority,
@@ -125,10 +122,7 @@ mod tests {
     fn protected_in_project_requires_human() {
         let floor = HumanFloor::defaults();
         assert!(floor.requires_human("write", Some(".git/hooks/pre-commit")));
-        assert!(floor.requires_human(
-            "write",
-            Some("/proj/.github/workflows/ci.yml")
-        ));
+        assert!(floor.requires_human("write", Some("/proj/.github/workflows/ci.yml")));
         assert!(!floor.requires_human("write", Some("src/main.rs")));
         assert!(!floor.requires_human("write", None));
     }

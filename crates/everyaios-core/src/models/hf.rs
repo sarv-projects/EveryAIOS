@@ -42,9 +42,18 @@ pub type ProgressFn<'a> = &'a mut dyn FnMut(u64, u64);
 pub enum HfError {
     Network(String),
     NotFound(String),
-    ShaMismatch { expected: String, actual: String },
-    DiskPreflight { needed: u64, free: u64 },
-    LfsOidMismatch { expected: String, actual: String },
+    ShaMismatch {
+        expected: String,
+        actual: String,
+    },
+    DiskPreflight {
+        needed: u64,
+        free: u64,
+    },
+    LfsOidMismatch {
+        expected: String,
+        actual: String,
+    },
     Io(String),
     /// User cancelled — the `.part` staging file is kept for resume.
     Cancelled,

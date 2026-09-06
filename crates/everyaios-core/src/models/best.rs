@@ -54,7 +54,10 @@ impl VariantCandidate {
 ///    build runs anywhere, so "no NPU build" is not an error.
 /// 3. Otherwise the Q4_K_M build for any hw, else the first build.
 /// 4. Empty catalog → `None`.
-pub fn best_variant<'a>(hw: &HwClass, catalog: &'a [VariantCandidate]) -> Option<&'a VariantCandidate> {
+pub fn best_variant<'a>(
+    hw: &HwClass,
+    catalog: &'a [VariantCandidate],
+) -> Option<&'a VariantCandidate> {
     if catalog.is_empty() {
         return None;
     }
@@ -124,7 +127,12 @@ mod tests {
     fn falls_back_to_cpu() {
         // No NPU build at all → the portable CPU build (preferring Q4_K_M).
         let cat = vec![
-            VariantCandidate::new("org/m".into(), "m-q8.gguf".into(), HwClass::Cpu, "Q8_0".into()),
+            VariantCandidate::new(
+                "org/m".into(),
+                "m-q8.gguf".into(),
+                HwClass::Cpu,
+                "Q8_0".into(),
+            ),
             VariantCandidate::new(
                 "org/m".into(),
                 "m-q4.gguf".into(),

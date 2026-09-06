@@ -264,21 +264,16 @@ pub enum RunState {
 /// Monitor-script mode (P51.32b): how a monitor produces observations.
 /// `Llm` is the default analyst path; `Script` runs a command whose stdout
 /// is stored verbatim as the observation.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MonitorSource {
+    #[default]
     Llm,
     Script {
         cmd: String,
         #[serde(default, rename = "allowNet", alias = "allow_net")]
         allow_net: bool,
     },
-}
-
-impl Default for MonitorSource {
-    fn default() -> Self {
-        Self::Llm
-    }
 }
 
 /// Monitoring semantics (the ChatGPT "monitoring task" pattern): a recurring
@@ -2703,10 +2698,7 @@ mod tests {
             ..MonitorConfig::default()
         };
         let silent = cfg.evaluate_script("", true);
-        assert!(
-            !silent.notified,
-            "empty + silent_on_empty → not notified"
-        );
+        assert!(!silent.notified, "empty + silent_on_empty → not notified");
         assert_eq!(silent.current, "");
         let baseline = cfg.evaluate_script("", false);
         assert!(
@@ -2766,8 +2758,7 @@ mod tests {
         let missing = dispatch_preflight(true, &have, &need);
         assert!(!missing.skills_ok);
         assert!(!missing.can_dispatch());
-        let satisfied =
-            dispatch_preflight(true, &have, &[String::from("web")]);
+        let satisfied = dispatch_preflight(true, &have, &[String::from("web")]);
         assert!(satisfied.can_dispatch());
         // lease_start enforces the gate first (no LLM in the path).
         let mut svc = SchedulerService::new();
@@ -2803,8 +2794,7 @@ mod tests {
             None,
             now(),
         );
-        svc.set_job_pins("j1", "model-a", "high", "hash-1")
-            .unwrap();
+        svc.set_job_pins("j1", "model-a", "high", "hash-1").unwrap();
         svc.set_active_model("model-a");
         svc.set_active_effort("high");
         {
@@ -2857,10 +2847,7 @@ mod tests {
         // Still unacked until the explicit ack.
         assert!(!svc.list_incidents()[0].acked);
         assert!(svc.ack_incident(&id));
-        assert!(
-            svc.list_incidents()[0].acked,
-            "explicit ack flips the flag"
-        );
+        assert!(svc.list_incidents()[0].acked, "explicit ack flips the flag");
         assert_eq!(svc.get_incident(&id).unwrap().detail, "boom");
     }
 
@@ -2913,12 +2900,7 @@ mod tests {
         let mut svc = SchedulerService::new();
         svc.record_run_transition("run-1", "j1", RunLedgerState::Claimed, now());
         svc.record_run_transition("run-1", "j1", RunLedgerState::Running, now() + 1);
-        svc.record_run_transition(
-            "run-1",
-            "j1",
-            RunLedgerState::Completed,
-            now() + 2,
-        );
+        svc.record_run_transition("run-1", "j1", RunLedgerState::Completed, now() + 2);
         let runs = svc.list_runs();
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].run_id, "run-1");
@@ -2927,15 +2909,13 @@ mod tests {
         assert_eq!(runs[0].claimed_at, now());
         assert_eq!(runs[0].started_at_ms, Some(now() + 1));
         assert_eq!(runs[0].finished_at_ms, Some(now() + 2));
-        assert_eq!(svc.get_run("run-1").unwrap().state, RunLedgerState::Completed);
+        assert_eq!(
+            svc.get_run("run-1").unwrap().state,
+            RunLedgerState::Completed
+        );
         // Bound enforcement: push past the cap, oldest evicted first.
         for i in 0..(RUN_LEDGER_CAP as u64 + 5) {
-            svc.record_run_transition(
-                format!("r-{i}"),
-                "j1",
-                RunLedgerState::Claimed,
-                now() + i,
-            );
+            svc.record_run_transition(format!("r-{i}"), "j1", RunLedgerState::Claimed, now() + i);
         }
         assert!(svc.list_runs().len() <= RUN_LEDGER_CAP);
     }

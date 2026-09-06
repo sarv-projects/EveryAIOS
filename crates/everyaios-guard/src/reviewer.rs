@@ -112,12 +112,10 @@ pub fn auto_review(
     }
     match decision_confidence {
         None => ReviewOutcome::Escalate("missing decision confidence".to_string()),
-        Some(c) if !c.is_finite() || c < cfg.confidence_floor => {
-            ReviewOutcome::Escalate(format!(
-                "confidence {c} below floor {}",
-                cfg.confidence_floor
-            ))
-        }
+        Some(c) if !c.is_finite() || c < cfg.confidence_floor => ReviewOutcome::Escalate(format!(
+            "confidence {c} below floor {}",
+            cfg.confidence_floor
+        )),
         Some(_) => ReviewOutcome::AutoAllow,
     }
 }

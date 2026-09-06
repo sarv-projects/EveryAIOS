@@ -279,10 +279,7 @@ impl GuardService {
         // P51.16: an explicit tool-level Deny always blocks. Allow/Ask arms
         // are advisory (only Deny tightens), so a default-empty policy
         // changes nothing and presets keep their tested behavior.
-        if matches!(
-            self.approval_policy.evaluate(tool_id, ""),
-            Approval::Deny
-        ) {
+        if matches!(self.approval_policy.evaluate(tool_id, ""), Approval::Deny) {
             return GuardDecision::Block {
                 reason: format!("tool policy denies {tool_id}"),
             };
@@ -314,17 +311,18 @@ impl GuardService {
             || floor_ask;
         // P51.16: the reviewer may upgrade Ask→Allow only when configured
         // (default budget is zero ⇒ never upgrades) — never a downgrade.
-        if ask && !matches!(policy_action, PolicyAction::Block) {
-            if matches!(
+        if ask
+            && !matches!(policy_action, PolicyAction::Block)
+            && matches!(
                 everyaios_guard::reviewer::auto_review(
                     decision.confidence,
                     &self.reviewer_config,
                     &self.reviewer_breaker,
                 ),
                 ReviewOutcome::AutoAllow
-            ) {
-                ask = false;
-            }
+            )
+        {
+            ask = false;
         }
         self.counter += 1;
         let ticket_id = format!("tkt:{}", self.counter);

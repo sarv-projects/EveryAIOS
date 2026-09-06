@@ -29,8 +29,8 @@ pub use best::{best_variant, HwClass, VariantCandidate};
 pub use cache::{benchmark_from_samples, Benchmark, ModelCache};
 pub use fit::{estimate_fit, FitEstimate, FitTier, DEFAULT_QUANT};
 pub use hf::{HfClient, HfError, HfFile};
-pub use mlx::{mlx_quant_id, prefer_mlx, MlxServer};
 pub use local_url::{LocalUrl, LocalUrlError, LocalUrlResolver, ResolvedEndpoint};
+pub use mlx::{mlx_quant_id, prefer_mlx, MlxServer};
 pub use probe::{
     discover_runtimes, find_runtime_processes, probe_hardware, probe_openai_endpoint,
     DiscoveredRuntime, HardwareInfo, ProbeCache,

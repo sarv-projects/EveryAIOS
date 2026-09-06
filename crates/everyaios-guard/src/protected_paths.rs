@@ -20,9 +20,7 @@ pub static PROTECTED_PREFIXES: &[&str] = &[
 /// `/home/u/.everyaios/permissions.toml` still trip.
 pub fn is_protected(canonical_path: &str) -> bool {
     let normalized = canonical_path.replace('\\', "/");
-    PROTECTED_PREFIXES
-        .iter()
-        .any(|p| normalized.contains(p))
+    PROTECTED_PREFIXES.iter().any(|p| normalized.contains(p))
 }
 
 /// Workspace-root markers: any of these as an `rm` target is critical.
@@ -46,10 +44,7 @@ fn is_rm_like_recursive(command: &str) -> bool {
     let tokens: Vec<&str> = lower.split_whitespace().collect();
     let has_rm = tokens.iter().any(|t| {
         let bare = t.trim_matches(|c| c == '\'' || c == '"' || c == ';' || c == ',');
-        bare == "rm"
-            || bare == "rmdir"
-            || bare.ends_with("/rm")
-            || bare.ends_with("/rmdir")
+        bare == "rm" || bare == "rmdir" || bare.ends_with("/rm") || bare.ends_with("/rmdir")
     });
     if !has_rm {
         return false;
@@ -66,10 +61,7 @@ fn is_rm_like_recursive(command: &str) -> bool {
 }
 
 fn is_critical_target(target: &str) -> bool {
-    let trimmed = target
-        .trim()
-        .trim_matches(|c| c == '\'' || c == '"')
-        .trim();
+    let trimmed = target.trim().trim_matches(|c| c == '\'' || c == '"').trim();
     if trimmed.is_empty() {
         return false;
     }
@@ -78,10 +70,7 @@ fn is_critical_target(target: &str) -> bool {
     if normalized == "/" || normalized == "/*" {
         return true;
     }
-    if matches!(
-        normalized.as_str(),
-        "~" | "~/" | "$HOME" | "${HOME}"
-    ) {
+    if matches!(normalized.as_str(), "~" | "~/" | "$HOME" | "${HOME}") {
         return true;
     }
     if normalized == "." || normalized == "./" {

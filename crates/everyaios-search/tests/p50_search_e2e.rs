@@ -130,7 +130,11 @@ fn real_search_live_cascade_reports_and_cites() {
         .take(3)
         .map(|h| {
             (
-                format!("{} — {}", h.title, h.snippet.chars().take(120).collect::<String>()),
+                format!(
+                    "{} — {}",
+                    h.title,
+                    h.snippet.chars().take(120).collect::<String>()
+                ),
                 vec![h.url.clone()],
             )
         })

@@ -112,10 +112,7 @@ mod tests {
     fn tiers_at_thresholds() {
         // Budget = 10GB RAM, no VRAM.
         assert_eq!(estimate_fit(6.0, 0, 10.0, 0.0).tier, FitTier::Fits); // 60%
-        assert_eq!(
-            estimate_fit(6.01, 0, 10.0, 0.0).tier,
-            FitTier::MayBeSlow
-        );
+        assert_eq!(estimate_fit(6.01, 0, 10.0, 0.0).tier, FitTier::MayBeSlow);
         assert_eq!(estimate_fit(8.5, 0, 10.0, 0.0).tier, FitTier::MayBeSlow); // 85%
         assert_eq!(estimate_fit(8.51, 0, 10.0, 0.0).tier, FitTier::WontFit);
         // VRAM extends the budget (6GB file + 0 KV vs 8+4=12GB → 50%).
@@ -128,7 +125,10 @@ mod tests {
     fn q4_k_m_is_default() {
         assert_eq!(DEFAULT_QUANT, "Q4_K_M");
         // And it is in the quant vocabulary hf.rs parses from filenames.
-        assert_eq!(crate::models::hf::quant_from_filename("phi-4-Q4_K_M.gguf"), "q4_k_m");
+        assert_eq!(
+            crate::models::hf::quant_from_filename("phi-4-Q4_K_M.gguf"),
+            "q4_k_m"
+        );
         assert_eq!(
             DEFAULT_QUANT.to_ascii_lowercase(),
             crate::models::hf::quant_from_filename("phi-4-Q4_K_M.gguf")

@@ -234,9 +234,8 @@ fn live_tiered_stack_escalation() {
     // an env without the optional engine.
     let lightpanda_present = std::env::var_os("PATH")
         .map(|paths| {
-            std::env::split_paths(&paths).any(|d| {
-                d.join("lightpanda").is_file() || d.join("lightpanda.exe").is_file()
-            })
+            std::env::split_paths(&paths)
+                .any(|d| d.join("lightpanda").is_file() || d.join("lightpanda.exe").is_file())
         })
         .unwrap_or(false);
     let r1 = engine

@@ -2089,8 +2089,7 @@ mod tests {
             while let Ok(Some(payload)) = frame::decode(&mut s) {
                 let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
                 if v.get("method").and_then(|m| m.as_str()) == Some("chat/stream") {
-                    *seen_side.lock().unwrap_or_else(|x| x.into_inner()) =
-                        v.get("params").cloned();
+                    *seen_side.lock().unwrap_or_else(|x| x.into_inner()) = v.get("params").cloned();
                     let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
                     let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
                     let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
@@ -2120,9 +2119,7 @@ mod tests {
             .expect("start_stream");
         side.join().unwrap();
         let guard = seen.lock().unwrap_or_else(|x| x.into_inner());
-        let params = guard
-            .as_ref()
-            .expect("fake sidecar saw chat/stream");
+        let params = guard.as_ref().expect("fake sidecar saw chat/stream");
         assert_eq!(
             params.get("credentialedProviders"),
             Some(&serde_json::json!(["openai", "ollama"])),
