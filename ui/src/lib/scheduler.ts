@@ -212,6 +212,78 @@ export async function schedulerNudge(goal: string, ts?: number): Promise<boolean
   });
 }
 
+// ---- P51.32 — cron-continuity + incidents + doctor (Hermes pattern) --------
+
+/** One incident ledger row (unacked first, explicit ack only). */
+export interface SchedulerIncident {
+  id: string;
+  jobId?: string;
+  title: string;
+  detail?: string;
+  at?: string;
+  acked?: boolean;
+  [k: string]: unknown;
+}
+
+/** A job's continuity bundle (last output + notepad) for the next run. */
+export interface SchedulerContinuity {
+  [k: string]: unknown;
+}
+
+/** P51.32a — read a job's continuity bundle (last output + notepad). */
+export async function schedulerContinuity(id: string): Promise<SchedulerContinuity> {
+  return bridgeCall({
+    operation: 'scheduler continuity',
+    live: () => invoke<SchedulerContinuity>('scheduler_continuity', { id }),
+    preview: () => ({}),
+  });
+}
+
+/** P51.32a — append one line to a job's durable notepad. */
+export async function schedulerNotepadAppend(id: string, line: string): Promise<boolean> {
+  return bridgeCall({
+    operation: 'scheduler notepad',
+    live: () => invoke<boolean>('scheduler_notepad_append', { id, line }),
+    preview: () => true,
+  });
+}
+
+/** P51.32e — open (unacked-first) incidents ledger. */
+export async function schedulerIncidents(): Promise<SchedulerIncident[]> {
+  return bridgeCall({
+    operation: 'scheduler incidents',
+    live: () => invoke<SchedulerIncident[]>('scheduler_incidents'),
+    preview: () => [],
+  });
+}
+
+/** P51.32e — acknowledge one incident (explicit only, no auto-clear). */
+export async function schedulerIncidentAck(id: string): Promise<boolean> {
+  return bridgeCall({
+    operation: 'scheduler incident ack',
+    live: () => invoke<boolean>('scheduler_incident_ack', { id }),
+    preview: () => true,
+  });
+}
+
+/** P51.32f — read-only cron health (missed runs, dead leases, queue depth). */
+export async function schedulerDoctor(): Promise<Record<string, unknown>> {
+  return bridgeCall({
+    operation: 'scheduler doctor',
+    live: () => invoke<Record<string, unknown>>('scheduler_doctor'),
+    preview: () => ({}),
+  });
+}
+
+/** P51.32g — runs ledger (recent job runs with outcome). */
+export async function schedulerRuns(): Promise<unknown[]> {
+  return bridgeCall({
+    operation: 'scheduler runs',
+    live: () => invoke<unknown[]>('scheduler_runs'),
+    preview: () => [],
+  });
+}
+
 /** Human label for a trigger (the H14 list rows). */
 export function triggerLabel(t: SchedulerTrigger): string {
   switch (t.type) {

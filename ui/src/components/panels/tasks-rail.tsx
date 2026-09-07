@@ -200,6 +200,18 @@ export default function TasksRail() {
                     {t.error && (
                       <div className="mt-1 text-[11px] text-red-600">{t.error}</div>
                     )}
+                    {(t.tokens_in ?? 0) + (t.tokens_out ?? 0) > 0 || (t.cost_usd ?? 0) > 0 ? (
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        <span className="font-mono">
+                          {(t.tokens_in ?? 0) + (t.tokens_out ?? 0)} tok
+                        </span>
+                        <span>·</span>
+                        <span className="font-mono">
+                          ${(t.cost_usd ?? 0).toFixed(4)}
+                        </span>
+                        <span className="text-muted-foreground/70">ledger</span>
+                      </div>
+                    ) : null}
                     {blocked && (
                       <div className="mt-1 text-[11px] text-orange-600">
                         delivery blocked · retry {blocked.retries} — run itself{' '}

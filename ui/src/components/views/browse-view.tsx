@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Globe, Play, Square, RotateCcw, RefreshCw, ArrowRight, MousePointer2 } from 'lucide-react'
+import { Globe, Play, Square, RotateCcw, RefreshCw, ArrowRight, MousePointer2, Pin } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
@@ -239,6 +239,24 @@ export default function BrowseView() {
     }
   }
 
+  // P51.15 — annotate-to-composer: pin the current page + a snapshot ref
+  // into the composer as an instruction (the executor shares this browser
+  // session, so the [ref=eN] stays valid). Honest: no DOM-grouped batching
+  // yet — one ref per pin, and the page URL travels with it.
+  const annotateRef = () => {
+    const ref = inputRef.trim()
+    if (!/^e\d+$/.test(ref)) {
+      setError(`Bad ref “${ref}” — use the [ref=eN] value from the snapshot`)
+      return
+    }
+    const page = liveUrl || url.trim() || 'the current page'
+    const line = `In the page ${page}, act on the element marked [ref=${ref}] in the browser snapshot.`
+    const prev = useAppStore.getState().composerValue
+    useAppStore.getState().setComposerValue(prev.trim() ? `${prev}\n\n${line}` : line)
+    notify('Pinned ref to the composer — element [ref=' + ref + '] on ' + page)
+    setError(null)
+  }
+
   const typeInto = async () => {
     if (!typeText.trim()) {
       setError('Type some text first')
@@ -344,6 +362,15 @@ export default function BrowseView() {
               className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-40"
             >
               <MousePointer2 className="h-3 w-3" /> Click
+            </button>
+            <button
+              onClick={annotateRef}
+              disabled={!inputRef.trim()}
+              aria-label="Pin ref to composer"
+              title="Pin this element to the composer as an instruction"
+              className="flex items-center gap-1 rounded border border-orange-500/40 px-1.5 py-0.5 text-[10px] text-orange-300 hover:bg-orange-500/10 disabled:opacity-40"
+            >
+              <Pin className="h-3 w-3" /> Pin
             </button>
             <input
               value={typeText}

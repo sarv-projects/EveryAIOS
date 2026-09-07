@@ -21,14 +21,21 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   schedulerCreate,
   schedulerDelete,
+  schedulerDoctor,
   schedulerEnable,
+  schedulerIncidentAck,
+  schedulerIncidents,
   schedulerList,
+  schedulerNotepadAppend,
   schedulerPause,
   schedulerResume,
   schedulerRunNow,
+  schedulerRuns,
+  type SchedulerIncident,
   type SchedulerJob,
   triggerLabel,
 } from '@/lib/scheduler'
+import { Stethoscope, NotebookPen, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
@@ -69,6 +76,247 @@ const RUN_HISTORY = [
   { id: 'r6', job: 'Morning brief', ts: 'Sun 08:00', result: 'success' as const, detail: '9 sources · 2 highlights', cost: '$0.15', dur: '1m 48s' },
   { id: 'r7', job: 'Slack triage', ts: 'Fri 17:03', result: 'success' as const, detail: 'Triage: 3 urgent · 8 later', cost: '$0.21', dur: '3m 10s' },
 ]
+
+/** P51.32g — live runs ledger (replaces the fixture table in Tauri). */
+function LiveRuns() {
+  const [runs, setRuns] = useState<unknown[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    schedulerRuns()
+      .then((r) => alive && setRuns(r))
+      .catch((cause) => alive && setError(cause instanceof Error ? cause.message : 'runs ledger unavailable'))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-8 text-center text-xs text-red-300">
+        Runs ledger unavailable: {error}
+      </div>
+    )
+  }
+  if (runs === null) {
+    return (
+      <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
+        Loading runs ledger…
+      </div>
+    )
+  }
+  if (runs.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-xs text-muted-foreground">
+        No runs recorded yet — the ledger fills as the scheduler executes jobs.
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-1.5">
+      {runs.map((r, i) => {
+        const row = (r ?? {}) as Record<string, unknown>
+        const when = typeof row.at === 'string' || typeof row.at === 'number' ? String(row.at) : ''
+        const job = typeof row.jobId === 'string' || typeof row.name === 'string' ? String(row.jobId ?? row.name) : ''
+        const status = typeof row.status === 'string' || typeof row.outcome === 'string' ? String(row.status ?? row.outcome) : ''
+        return (
+          <div key={i} className="rounded-lg border border-border bg-card px-3 py-2 font-mono text-[11px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-foreground">{job || 'run'}</span>
+              <span className="shrink-0 text-muted-foreground">{when}</span>
+            </div>
+            <div className="mt-0.5 flex items-center justify-between gap-2 text-muted-foreground">
+              <span className="truncate">{status || 'recorded'}</span>
+              {typeof row.detail === 'string' && <span className="truncate">{row.detail}</span>}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** P51.32a/e/f — job notepad + incidents + doctor (live commands, honest states). */
+function SchedulerHealth({ jobs }: { jobs: SchedulerJob[] }) {
+  const [incidents, setIncidents] = useState<SchedulerIncident[] | null>(null)
+  const [doctor, setDoctor] = useState<Record<string, unknown> | null>(null)
+  const [notepadJob, setNotepadJob] = useState('')
+  const [notepadLine, setNotepadLine] = useState('')
+  const [notepadMsg, setNotepadMsg] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    schedulerIncidents()
+      .then((i) => alive && setIncidents(i))
+      .catch((cause) => alive && setError(cause instanceof Error ? cause.message : 'incidents unavailable'))
+    return () => {
+      alive = false
+    }
+  }, [reload])
+
+  const runDoctor = async () => {
+    try {
+      setDoctor(await schedulerDoctor())
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'doctor unavailable')
+    }
+  }
+
+  const ack = async (id: string) => {
+    try {
+      if (await schedulerIncidentAck(id)) setReload((v) => v + 1)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'ack failed')
+    }
+  }
+
+  const appendNotepad = async () => {
+    const line = notepadLine.trim()
+    if (!notepadJob || !line) return
+    try {
+      if (await schedulerNotepadAppend(notepadJob, line)) {
+        setNotepadLine('')
+        setNotepadMsg('notepad line saved — carries into the next run')
+        setError(null)
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'notepad append failed')
+    }
+  }
+
+  const unacked = (incidents ?? []).filter((i) => !i.acked)
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-xs text-red-300">
+          <span>{error}</span>
+          <Button size="sm" variant="outline" className="h-7 shrink-0 text-[10px]" onClick={() => setError(null)}>
+            Dismiss
+          </Button>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <Stethoscope className="h-3.5 w-3.5 text-orange-400" />
+            <span className="text-xs font-medium">Cron health (doctor)</span>
+          </div>
+          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => void runDoctor()}>
+            Run doctor
+          </Button>
+        </div>
+        <div className="px-4 py-3">
+          {doctor === null ? (
+            <p className="text-[11px] text-muted-foreground">
+              Missed runs, dead leases, and queue depth — read-only diagnostic.
+            </p>
+          ) : Object.keys(doctor).length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">No issues reported.</p>
+          ) : (
+            <div className="space-y-1">
+              {Object.entries(doctor).map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                  <span className="text-muted-foreground">{k}</span>
+                  <span className="text-foreground">{JSON.stringify(v)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 text-orange-400" />
+            <span className="text-xs font-medium">Incidents</span>
+            {unacked.length > 0 && (
+              <Badge variant="outline" className="border-red-500/40 bg-red-500/10 text-[9px] text-red-300">
+                {unacked.length} unacked
+              </Badge>
+            )}
+          </div>
+          <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => setReload((v) => v + 1)}>
+            Refresh
+          </Button>
+        </div>
+        <div className="space-y-1.5 p-3">
+          {incidents === null ? (
+            <p className="text-[11px] text-muted-foreground">Loading incidents…</p>
+          ) : incidents.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">No incidents recorded — acknowledgements are explicit, never auto-cleared.</p>
+          ) : (
+            incidents.map((i) => (
+              <div key={i.id} className="rounded-md border border-border/70 px-3 py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-medium text-foreground">
+                      {i.title}
+                    </div>
+                    <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                      {i.jobId ? `job ${i.jobId}` : ''}{i.at ? ` · ${String(i.at)}` : ''}{i.acked ? ' · acked' : ' · unacked'}
+                    </div>
+                  </div>
+                  {!i.acked && (
+                    <Button size="sm" variant="outline" className="h-6 shrink-0 px-2 text-[10px]" onClick={() => void ack(i.id)}>
+                      Ack
+                    </Button>
+                  )}
+                </div>
+                {typeof i.detail === 'string' && i.detail && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{i.detail}</p>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card">
+        <div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
+          <NotebookPen className="h-3.5 w-3.5 text-orange-400" />
+          <span className="text-xs font-medium">Job notepad</span>
+        </div>
+        <div className="space-y-2 p-3">
+          <select
+            value={notepadJob}
+            onChange={(e) => setNotepadJob(e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+          >
+            <option value="">Choose a job…</option>
+            {jobs.map((j) => (
+              <option key={j.id} value={j.id}>{j.name}</option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <input
+              value={notepadLine}
+              onChange={(e) => setNotepadLine(e.target.value)}
+              placeholder="One durable line for the next run…"
+              className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-xs"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void appendNotepad()
+              }}
+            />
+            <Button size="sm" className="h-8 shrink-0 text-[10px]" onClick={() => void appendNotepad()}>
+              Append
+            </Button>
+          </div>
+          {notepadMsg && <p className="text-[10px] text-emerald-500">{notepadMsg}</p>}
+          <p className="text-[10px] text-muted-foreground">
+            The notepad rides the continuity bundle — context survives between runs.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function AutomationsPanel() {
   const [automations, setAutomations] = useState<SchedulerJob[]>([])
@@ -248,6 +496,9 @@ export default function AutomationsPanel() {
             <TabsTrigger value="tasks" className="text-xs">
               Tasks
             </TabsTrigger>
+            <TabsTrigger value="health" className="text-xs">
+              Health
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </header>
@@ -373,9 +624,9 @@ export default function AutomationsPanel() {
               </div>
             </div>
           ) : tab === 'history' ? (
-            <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-xs text-muted-foreground">
-              Run history will appear here after the live scheduler records its first run.
-            </div>
+            <LiveRuns />
+          ) : tab === 'health' ? (
+            <SchedulerHealth jobs={automations} />
           ) : (
           <>
             {loading && (

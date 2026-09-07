@@ -29,12 +29,34 @@ fn svc(
 
 /// The full task list (activity rail / H19). `status` optionally filters:
 /// `queued` / `running` / `terminal` / omitted = all.
+///
+/// P51.12 cost join: every row is stamped with the live vault-side spend for
+/// its task id (`Vault::task_cost` — the detached-work half of the ledger
+/// join; `TaskRecord::attach_cost` keeps the stored record authoritative, the
+/// join here is display-time truth so a freshly-woken rail never shows stale
+/// zeros). Unknown tasks / vault lock / missing rows all degrade to the
+/// record's own stored fields — never an error, never a fabricated number.
 #[tauri::command]
 pub fn tasks_list(state: State<'_, AppState>, status: Option<String>) -> Result<Value, String> {
     let handle = svc(&state)?;
     let mut ledger = handle.lock().map_err(|e| e.to_string())?;
     let params = serde_json::json!({ "status": status });
-    ledger.handle("tasks/list", &params)
+    let mut out = ledger.handle("tasks/list", &params)?;
+    if let Some(rows) = out.as_array_mut() {
+        if let Ok(vault) = state.vault.lock() {
+            for row in rows {
+                let Some(id) = row.get("id").and_then(Value::as_str) else {
+                    continue;
+                };
+                if let Ok((tin, tout, cost)) = vault.task_cost(id) {
+                    row["tokens_in"] = serde_json::json!(tin);
+                    row["tokens_out"] = serde_json::json!(tout);
+                    row["cost_usd"] = serde_json::json!(cost);
+                }
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// One task record.

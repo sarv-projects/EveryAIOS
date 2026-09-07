@@ -153,6 +153,29 @@ function WorkRow({
   )
 }
 
+/**
+ * P51.13 — per-project thread rows. Groups top-level sessions by their
+ * `taskFolder` (projects), most-recent-first; forks (`parentId`) are left to
+ * their parent's group. Pure so the grouping contract is testable.
+ */
+export function groupSessionsByFolder<T extends { id: string; parentId?: string | null; taskFolder?: string; updatedAt?: string }>(
+  sessions: T[],
+): Array<{ folder: string; sessions: T[] }> {
+  const tops = sessions.filter((s) => !s.parentId)
+  const byFolder = new Map<string, typeof sessions>()
+  for (const s of tops) {
+    const folder = s.taskFolder?.trim() || '(no project)'
+    const list = byFolder.get(folder) ?? []
+    list.push(s)
+    byFolder.set(folder, list)
+  }
+  const sortNewest = (a: { updatedAt?: string }, b: { updatedAt?: string }) =>
+    (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
+  return [...byFolder.entries()]
+    .map(([folder, list]) => ({ folder, sessions: [...list].sort(sortNewest) }))
+    .sort((a, b) => sortNewest(a.sessions[0], b.sessions[0]))
+}
+
 export function LeftSidebar() {
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const sessions = useAppStore((s) => s.sessions)
@@ -302,24 +325,38 @@ export function LeftSidebar() {
         {/* P45.6 — content-visibility: auto skips layout/paint of off-screen
             session rows in long lists. */}
         <div className="scroll-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1 pb-2 [content-visibility:auto] [contain-intrinsic-size:auto_48px]">
-          {recent
-            // P11.5.1 — child sessions (forks) indent under their parent.
-            .filter((s) => !s.parentId)
-            .map((s, i) => (
-              // P35.2 — entrance stagger on the sessions list.
-              <div key={s.id} className="enter-stagger" style={staggerStyle(i)}>
-                <WorkRow session={s} collapsed={collapsed} active={activeId === s.id} />
-                {recent
-                  .filter((c) => c.parentId === s.id)
-                  .map((c) => (
-                    <WorkRow key={c.id} session={c} collapsed={collapsed} active={activeId === c.id} depth={1} />
+          {/* P51.13 — per-project thread rows: top-level sessions group under
+              their taskFolder; forks stay indented under their parent inside
+              the parent's group. Unfoldered rows sit in an implicit group. */}
+          {collapsed
+            ? recent.map((s, i) => (
+                <div key={s.id} className="enter-stagger" style={staggerStyle(i)}>
+                  <WorkRow session={s} collapsed={collapsed} active={activeId === s.id} depth={s.parentId ? 1 : 0} />
+                </div>
+              ))
+            : groupSessionsByFolder(recent).map((group) => (
+                <div key={group.folder} className="enter-stagger">
+                  <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-2">
+                    <Folder className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                    <span className="truncate text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60" title={group.folder}>
+                      {group.folder}
+                    </span>
+                    <span className="ml-auto font-mono text-[9px] text-muted-foreground/50">
+                      {group.sessions.length}
+                    </span>
+                  </div>
+                  {group.sessions.map((s, j) => (
+                    <div key={s.id} style={staggerStyle(j)}>
+                      <WorkRow session={s} collapsed={collapsed} active={activeId === s.id} />
+                      {recent
+                        .filter((c) => c.parentId === s.id)
+                        .map((c) => (
+                          <WorkRow key={c.id} session={c} collapsed={collapsed} active={activeId === c.id} depth={1} />
+                        ))}
+                    </div>
                   ))}
-              </div>
-            ))}
-          {recent.filter((s) => !s.parentId).length === 0 &&
-            recent.filter((s) => s.parentId).map((s) => (
-              <WorkRow key={s.id} session={s} collapsed={collapsed} active={activeId === s.id} depth={1} />
-            ))}
+                </div>
+              ))}
           {/* P50.2.1 — an empty vault renders an honest empty state, never a
               blank pane that reads as still loading. */}
           {recent.length === 0 && !collapsed && (

@@ -15,6 +15,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  Check,
   Wrench,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -213,6 +214,8 @@ export default function LocalModelsPanel() {
   const [hw, setHw] = useState<HardwareProfile | null>(null)
   const [installed, setInstalled] = useState<LocalModelRow[]>([])
   const [registry, setRegistry] = useState<RegistryEntry[]>([])
+  // P51.4 — bulk-remove selection (multi-select, space-freed shown live).
+  const [selectedForRemoval, setSelectedForRemoval] = useState<Set<string>>(new Set())
   const [downloads, setDownloads] = useState<ModelDownloadRow[]>([])
   const [orphans, setOrphans] = useState<OrphanPart[]>([])
   const [recommended, setRecommended] = useState<{ quant: string; availableRamBytes: number } | null>(null)
@@ -446,6 +449,31 @@ export default function LocalModelsPanel() {
     } catch (e) {
       setNativeError(e instanceof Error ? e.message : 'Remove failed')
     }
+  }
+
+  // P51.4 — Jan A5 bulk-delete-with-space-freed: one pass over the selected
+  // registry rows, honest per-row errors, selection cleared on success.
+  const bulkRemove = async () => {
+    if (!canDownload || selectedForRemoval.size === 0) return
+    const ids = [...selectedForRemoval]
+    setNativeError(null)
+    let removed = 0
+    let failed = 0
+    for (const id of ids) {
+      try {
+        await removeModel(id)
+        removed += 1
+      } catch (e) {
+        failed += 1
+        setNativeError(e instanceof Error ? e.message : `Remove failed: ${id}`)
+      }
+    }
+    await refreshNative()
+    if (removed > 0) {
+      setSelectedForRemoval(new Set())
+      notify(`Removed ${removed} model${removed === 1 ? '' : 's'} — space freed on disk`)
+    }
+    if (failed > 0) notify(`Bulk remove: ${failed} failed`, 'error')
   }
 
   const serve = async (id: string) => {
@@ -839,6 +867,36 @@ export default function LocalModelsPanel() {
 
       {tab === 'mine' && (
         <div className="space-y-2">
+          {selectedForRemoval.size > 0 && (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-2">
+              <span className="text-[11px] text-orange-200">
+                {selectedForRemoval.size} selected · frees{' '}
+                {formatBytes(
+                  registry
+                    .filter((r) => selectedForRemoval.has(r.id))
+                    .reduce((n, r) => n + r.size, 0),
+                )}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-[10px] text-muted-foreground"
+                  onClick={() => setSelectedForRemoval(new Set())}
+                >
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-6 bg-red-500/90 px-2 text-[10px] text-white hover:bg-red-600"
+                  onClick={() => void bulkRemove()}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Remove selected
+                </Button>
+              </div>
+            </div>
+          )}
           {registry.length === 0 && installed.length === 0 && (
             <div className="rounded-lg border border-dashed border-border p-6 text-center text-[12px] text-muted-foreground">
               No downloaded or installed models yet.
@@ -858,6 +916,25 @@ export default function LocalModelsPanel() {
               key={row.id}
               className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background/40 px-3 py-2"
             >
+              <button
+                type="button"
+                aria-label={`Select ${row.id}`}
+                onClick={() =>
+                  setSelectedForRemoval((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(row.id)) next.delete(row.id)
+                    else next.add(row.id)
+                    return next
+                  })
+                }
+                className={`flex size-4 shrink-0 items-center justify-center rounded border ${
+                  selectedForRemoval.has(row.id)
+                    ? 'border-orange-500 bg-orange-500 text-white'
+                    : 'border-border bg-background text-transparent'
+                }`}
+              >
+                <Check className="h-3 w-3" />
+              </button>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[12px] font-medium">{row.id}</span>

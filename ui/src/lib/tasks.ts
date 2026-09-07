@@ -43,6 +43,11 @@ export interface TaskRecord {
   error: string | null;
   retry_generation: number;
   delivery: DeliveryState;
+  /** P51.12 cost join — vault-side spend stamped per row (serde defaults to
+   * zero for pre-P51.12 mirrors; `tasks_list` re-joins at display time). */
+  tokens_in?: number;
+  tokens_out?: number;
+  cost_usd?: number;
 }
 
 /** Demo records — the preview-mode fallback (mirror the real shapes). */
