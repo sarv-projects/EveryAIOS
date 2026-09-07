@@ -23,7 +23,7 @@ pub mod remote;
 pub mod server;
 pub mod store;
 
-pub use attach::{AttachError, AttachRequest, AttachedServer};
+pub use attach::{sanitize_attach_name, AttachError, AttachRequest, AttachedServer};
 pub use hijack::{validate_external_tool, HijackError, ToolIdentity, ToolSource};
 pub use loopback::{LoopbackPool, PoolStats};
 pub use manager::{

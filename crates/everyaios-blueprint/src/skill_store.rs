@@ -23,6 +23,11 @@ use thiserror::Error;
 /// (Agent Zero / MAX_ACTIVE_SKILLS pattern).
 pub const MAX_ACTIVE_SKILLS: usize = 20;
 
+/// P51.28 — Crush/Zed-style skill line budget: a `SKILL.md` (frontmatter +
+/// body) over this many lines is refused at save time. Keeps skills focused,
+/// readable, and cheap to inject.
+pub const SKILL_MAX_LINES: usize = 500;
+
 /// SKILL.md frontmatter + ownership + body.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkillManifest {
@@ -99,6 +104,8 @@ pub enum SkillError {
     Exists(String),
     #[error("invalid skill name `{0}` (must be [a-z0-9-]+)")]
     InvalidName(String),
+    #[error("skill `{name}` is {lines} lines — over the {max}-line budget; split it into focused skills")]
+    TooLong { name: String, lines: usize, max: usize },
 }
 
 impl SkillManifest {
@@ -362,10 +369,23 @@ impl SkillStore {
 
     /// Write a skill to `<root>/<name>/SKILL.md`, creating directories.
     /// `overwrite: false` refuses an existing skill (no accidental clobber).
+    /// P51.28 — a skill body over [`SKILL_MAX_LINES`] is refused: the
+    /// Crush/Zed-style line budget keeps skills focused and readable (a
+    /// bloated skill is a maintenance + prompt-cost liability, not a
+    /// capability).
     pub fn save(&self, skill: &Skill, overwrite: bool) -> Result<PathBuf, SkillError> {
         let name = skill.manifest.name.clone();
         if !SkillManifest::valid_name(&name) {
             return Err(SkillError::InvalidName(name));
+        }
+        let md = skill.to_skill_md();
+        let lines = md.lines().count();
+        if lines > SKILL_MAX_LINES {
+            return Err(SkillError::TooLong {
+                name: name.clone(),
+                lines,
+                max: SKILL_MAX_LINES,
+            });
         }
         let dir = self.root.join(&name);
         let path = dir.join("SKILL.md");
@@ -373,7 +393,7 @@ impl SkillStore {
             return Err(SkillError::Exists(name));
         }
         std::fs::create_dir_all(&dir)?;
-        std::fs::write(&path, skill.to_skill_md())?;
+        std::fs::write(&path, md)?;
         Ok(path)
     }
 
@@ -924,6 +944,24 @@ mod tests {
         assert_eq!(t.manifest.author, "everyaios");
         assert!(t.manifest.triggers.iter().any(|x| x == "design"));
         assert!(t.body.contains("VARIANCE"));
+    }
+
+    #[test]
+    fn save_refuses_over_budget_skill() {
+        let dir = tmpdir();
+        let store = SkillStore::new(&dir);
+        let mut s = sample_skill();
+        // 600 body lines — far over the 500-line Crush/Zed budget.
+        s.body = "line\n".repeat(600);
+        let err = store.save(&s, true).unwrap_err();
+        assert!(matches!(err, SkillError::TooLong { .. }));
+        assert!(err.to_string().contains("line budget"));
+        // Nothing was written.
+        assert!(!dir.join("refactor-helper").exists());
+
+        // A normal-sized skill still saves.
+        s.body = "focused body\n".repeat(20);
+        assert!(store.save(&s, true).is_ok());
     }
 
     #[test]

@@ -903,6 +903,9 @@ interface AppState {
   toggleSessionPinned: (id: string) => void
   /** Clear a session's transcript (messages only — the session survives). */
   clearSessionMessages: (id: string) => void
+  /** P51.33 — apply a `/compact` verdict (keep from `keptFrom`, prepend the
+   * synthetic continue marker when Rust pruned an overflow). */
+  compactSessionMessages: (id: string, keptFrom: number, marker: string | null) => void
   /** Fork a session: duplicate transcript into a new session. Returns the id. */
   forkSession: (id: string) => string | null
   /** P52.22 — truncate-below edit. Given a user message, drop that message
@@ -1453,6 +1456,34 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? { ...x, messages: [], status: 'idle' as const, preview: 'What would you like to do?', updatedAt: new Date().toISOString() }
           : x,
       ),
+    }))
+  },
+  /** P51.33 — apply a `/compact` verdict to the transcript: keep everything
+   * from `keptFrom` (index into the pre-compact message list) and, when the
+   * Rust side pruned an overflow, prepend the synthetic continue marker as a
+   * system message so the visible cut is honest. Refuses to run mid-turn
+   * (caller checks), never drops the live stream. */
+  compactSessionMessages: (id, keptFrom, marker) => {
+    set((s) => ({
+      sessions: s.sessions.map((x) => {
+        if (x.id !== id || x.status === 'running' || x.status === 'action-required') return x
+        const kept = x.messages.slice(keptFrom)
+        if (kept.length === 0 || kept.length === x.messages.length) return x
+        const markerMsg = marker
+          ? [{
+              id: `compact-${Date.now()}`,
+              role: 'system' as const,
+              content: marker,
+              timestamp: new Date().toISOString(),
+            }]
+          : []
+        return {
+          ...x,
+          messages: [...markerMsg, ...kept],
+          preview: 'Context compacted',
+          updatedAt: new Date().toISOString(),
+        }
+      }),
     }))
   },
   setSessionGoal: (id, goal) => {

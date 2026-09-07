@@ -130,6 +130,24 @@ pub fn guard_estop(state: State<'_, AppState>, pulled: bool) -> Result<bool, Str
     Ok(svc.estop().is_pulled())
 }
 
+/// P51.22 — replace the tool allow-list rules (Allow/Ask/Deny per tool
+/// pattern + optional args glob) on the live GuardService. Rules are
+/// deny-wins and only ever tighten: hard floors (P51.16/29/30) stay, so the
+/// policy cannot widen the auto path past the autonomy preset. Returns the
+/// number of rules applied.
+#[tauri::command]
+pub fn guard_set_policy_rules(
+    state: State<'_, AppState>,
+    rules: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
+    svc.handle(
+        "guard/set_policy_rules",
+        &serde_json::json!({ "rules": rules }),
+    )
+    .map_err(|e| e.to_string())
+}
+
 /// P11.5.7 — one serializable recent-action row (from the J5 audit ledger).
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

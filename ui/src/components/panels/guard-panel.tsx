@@ -15,10 +15,12 @@ import {
   guardEstop,
   guardPermissionsMatrix,
   guardPolicy,
+  guardSetPolicyRules,
   guardTickets,
   type GuardPolicy,
   type GuardTicket,
   type MatrixCell,
+  type PolicyRule,
   type RecentAction,
 } from '@/lib/guard'
 
@@ -74,6 +76,8 @@ export default function GuardPanel() {
   const [busy, setBusy] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
+  // P51.22 — tool allow-list editor rows, seeded from the live policy.
+  const [draftRules, setDraftRules] = useState<PolicyRule[]>([])
   const notify = useAppStore((s) => s.notify)
 
   // Live bridge (P7.5/J21 + P11.5.7): poll pending tickets + policy + the
@@ -91,6 +95,9 @@ export default function GuardPanel() {
         if (!alive) return
         setTickets(t)
         setPolicy(p)
+        // P51.22 — seed the rules editor from the live policy summary (the
+        // rules array is only present when the shell returned it).
+        if (p?.approvalRules) setDraftRules(p.approvalRules)
         setActivity(a)
         setMatrix(m)
         setLoadError(null)
@@ -313,12 +320,98 @@ export default function GuardPanel() {
               projection is exposed by the GuardService. Never show it in the
               desktop shell as if it were user data. */}
           {inTauri() ? (
+            <>
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-foreground">Tool Allow-list (P51.22)</span>
+                <Button
+                  size="sm"
+                  className="h-5 gap-1 px-1.5 text-[9px]"
+                  onClick={() => {
+                    setDraftRules([...draftRules, { tool: '', approval: 'ask' }])
+                  }}
+                >
+                  + Rule
+                </Button>
+              </div>
+              <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
+                Deny-wins allow/ask/deny per tool pattern (e.g. <code className="font-mono">fs.write</code> or
+                <code className="font-mono"> browser.*</code>). Hard floors (destructive, protected paths) stay — rules can only
+                tighten the auto path, never widen it.
+              </p>
+              <div className="space-y-1.5">
+                {draftRules.map((r, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <input
+                      value={r.tool}
+                      onChange={(e) => {
+                        const next = [...draftRules]
+                        next[i] = { ...next[i], tool: e.target.value }
+                        setDraftRules(next)
+                      }}
+                      placeholder="tool.pattern"
+                      className="h-6 min-w-0 flex-1 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
+                    />
+                    <select
+                      value={r.approval}
+                      onChange={(e) => {
+                        const next = [...draftRules]
+                        next[i] = { ...next[i], approval: e.target.value as PolicyRule['approval'] }
+                        setDraftRules(next)
+                      }}
+                      className="h-6 rounded-md border border-border bg-background/40 px-1 font-mono text-[10px] text-foreground"
+                    >
+                      <option value="allow">allow</option>
+                      <option value="ask">ask</option>
+                      <option value="deny">deny</option>
+                    </select>
+                    <button
+                      type="button"
+                      aria-label="Remove rule"
+                      onClick={() => setDraftRules(draftRules.filter((_, j) => j !== i))}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2 h-6 gap-1 px-2 text-[10px]"
+                disabled={draftRules.some((r) => !r.tool.trim())}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const rules = draftRules.map((r) => ({
+                        tool: r.tool.trim(),
+                        ...(r.argsGlob?.trim() ? { argsGlob: r.argsGlob.trim() } : {}),
+                        approval: r.approval,
+                      }))
+                      const n = await guardSetPolicyRules(rules)
+                      useAppStore.getState().notify(`Policy applied — ${n} rule(s)`)
+                    } catch (e) {
+                      useAppStore.getState().notify(
+                        e instanceof Error ? e.message : 'Policy apply failed',
+                        'error',
+                      )
+                    }
+                  })()
+                }}
+              >
+                <ShieldCheck className="h-3 w-3" />
+                Apply rules
+              </Button>
+            </section>
+
             <section className="rounded-lg border border-dashed border-border bg-card p-4">
               <div className="text-xs font-medium text-foreground">Trust Level</div>
               <p className="mt-2 text-[11px] text-muted-foreground">
                 Trust score is unavailable until the live GuardService publishes a scored projection.
               </p>
             </section>
+            </>
           ) : (
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="mb-2 flex items-center justify-between">

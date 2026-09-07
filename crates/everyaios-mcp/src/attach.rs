@@ -248,3 +248,47 @@ pub struct AttachRequest {
     /// Human label recorded as tool provenance (e.g. "mcp:gmail").
     pub source: String,
 }
+
+/// P51.17 — MCP attach name sanitization. The name is bound into the guard
+/// ticket args-hash, rendered on the approval card (`mcp:{name}`), and used
+/// as a tool provenance label; an unsanitized name could inject into the
+/// card text or registry keys. Allowed: ASCII letters/digits plus `-` `_`
+/// `.` (MCP-friendly slug charset), 1–64 chars. Returns `None` for anything
+/// else (reject — never silently rewrite, so the caller shows the exact
+/// refusal).
+pub fn sanitize_attach_name(name: &str) -> Option<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.len() > 64 {
+        return None;
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_attach_name;
+
+    #[test]
+    fn name_sanitizer_accepts_slugs() {
+        assert_eq!(sanitize_attach_name("gmail"), Some("gmail".into()));
+        assert_eq!(sanitize_attach_name("my-server_2.v1"), Some("my-server_2.v1".into()));
+        assert_eq!(sanitize_attach_name("  trimmed  "), Some("trimmed".into()));
+    }
+
+    #[test]
+    fn name_sanitizer_rejects_hostile_names() {
+        assert_eq!(sanitize_attach_name(""), None);
+        assert_eq!(sanitize_attach_name("   "), None);
+        assert_eq!(sanitize_attach_name("a b"), None);
+        assert_eq!(sanitize_attach_name("a;rm -rf /"), None);
+        assert_eq!(sanitize_attach_name("a\nb"), None);
+        assert_eq!(sanitize_attach_name("server/../../etc"), None);
+        assert_eq!(sanitize_attach_name("x".repeat(65).as_str()), None);
+    }
+}

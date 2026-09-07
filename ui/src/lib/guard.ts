@@ -53,6 +53,8 @@ export interface GuardPolicy {
   userFeedbackLearning: boolean;
   profile: string;
   estopPulled: boolean;
+  /** P51.22 — the tool allow-list rules (deny-wins, args-glob aware). */
+  approvalRules?: PolicyRule[]
 }
 
 /** The pending tickets waiting on a human decision (polled by the page). */
@@ -169,6 +171,23 @@ export async function guardPolicy(): Promise<GuardPolicy> {
       estopPulled: false,
     }),
   });
+}
+
+/** P51.22 — replace the tool allow-list rules (Allow/Ask/Deny per tool
+ * pattern + optional args glob). Deny-wins; hard floors stay. Returns the
+ * number of rules applied. */
+export async function guardSetPolicyRules(rules: PolicyRule[]): Promise<number> {
+  return bridgeCall({
+    operation: 'guard policy rules',
+    live: () => invoke<{ applied: number }>("guard_set_policy_rules", { rules }).then((r) => r.applied),
+    preview: () => rules.length,
+  });
+}
+
+export interface PolicyRule {
+  tool: string
+  argsGlob?: string
+  approval: 'allow' | 'ask' | 'deny'
 }
 
 /** Pull (`pulled=true`) or reset the global estop. */

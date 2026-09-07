@@ -162,3 +162,50 @@ describe('P50.2.1 — sessions runtime truth', () => {
     expect(mergeHydratedSessions([], vault, 'ghost').activeSessionId).toBe('vault-1')
   })
 })
+describe('P51.33 — /compact transcript rewrite', () => {
+  test('compact keeps the tail from keptFrom and prepends the marker', () => {
+    useAppStore.setState({ sessionsHydrated: true, sessions: [], activeSessionId: '' })
+    const st = useAppStore.getState()
+    st.newSession()
+    const sid = useAppStore.getState().activeSessionId
+    const st2 = useAppStore.getState()
+    st2.pushUserMessage('first ask')
+    st2.pushUserMessage('second ask')
+    // pushUserMessage marks the session running; /compact only runs idle.
+    useAppStore.setState({
+      sessions: useAppStore.getState().sessions.map((s) =>
+        s.id === sid ? { ...s, status: 'idle' as const } : s,
+      ),
+    })
+    const before = useAppStore.getState().sessions.find((s) => s.id === sid)!.messages.length
+    expect(before).toBe(2)
+
+    useAppStore.getState().compactSessionMessages(sid, 1, '[continued — earlier context compacted…]')
+    const after = useAppStore.getState().sessions.find((s) => s.id === sid)!.messages
+    expect(after.length).toBe(2) // marker + kept tail
+    expect(after[0]!.role).toBe('system')
+    expect(after[0]!.content).toContain('continued')
+    expect(after[1]!.content).toBe('second ask')
+  })
+
+  test('compact is a no-op when nothing would be pruned or while streaming', () => {
+    useAppStore.setState({ sessionsHydrated: true, sessions: [], activeSessionId: '' })
+    const st = useAppStore.getState()
+    st.newSession()
+    const sid = useAppStore.getState().activeSessionId
+    st.pushUserMessage('only ask')
+    useAppStore.getState().compactSessionMessages(sid, 0, null)
+    let after = useAppStore.getState().sessions.find((s) => s.id === sid)!.messages
+    expect(after.length).toBe(1) // unchanged — keptFrom 0 prunes nothing
+
+    // Streaming session: refused (never desync the live stream).
+    useAppStore.setState({
+      sessions: useAppStore.getState().sessions.map((s) =>
+        s.id === sid ? { ...s, status: 'running' } : s,
+      ),
+    })
+    useAppStore.getState().compactSessionMessages(sid, 1, '[continued…]')
+    after = useAppStore.getState().sessions.find((s) => s.id === sid)!.messages
+    expect(after.length).toBe(1) // untouched
+  })
+})

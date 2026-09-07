@@ -713,14 +713,70 @@ impl GuardService {
             }
             "guard/policy" => {
                 // Summary of the loaded policy (for the Settings guard panel),
-                // incl. the applied H34 autonomy level (P44.5).
+                // incl. the applied H34 autonomy level (P44.5) and the
+                // P51.22 tool allow-list rules (deny-wins, args-glob aware).
+                let rules: Vec<Value> = self
+                    .approval_policy
+                    .rules
+                    .iter()
+                    .map(|(pat, approval)| {
+                        json!({
+                            "tool": pat.tool,
+                            "argsGlob": pat.args_glob,
+                            "approval": match approval {
+                                Approval::Allow => "allow",
+                                Approval::Ask => "ask",
+                                Approval::Deny => "deny",
+                            },
+                        })
+                    })
+                    .collect();
                 Ok(json!({
                     "minConfidenceForAuto": self.policy.min_confidence_for_auto,
                     "userFeedbackLearning": self.policy.user_feedback_learning,
                     "profile": self.profile().as_str(),
                     "estopPulled": self.estop.is_pulled(),
                     "autonomyLevel": self.autonomy_level().as_str(),
+                    "approvalRules": rules,
                 }))
+            }
+            "guard/set_policy_rules" => {
+                // P51.22 — replace the tool allow-list rules (Allow/Ask/Deny
+                // per tool pattern + optional args glob). Only explicit rules
+                // are ever tightened; the deny-wins engine and the hard floors
+                // (P51.16/29/30) stay untouched, so this can only reduce the
+                // auto path — never widen it past the autonomy preset.
+                let raw = params
+                    .get("rules")
+                    .and_then(Value::as_array)
+                    .ok_or("guard/set_policy_rules requires rules[]")?;
+                let mut rules = Vec::new();
+                for r in raw {
+                    let tool = r
+                        .get("tool")
+                        .and_then(Value::as_str)
+                        .ok_or("rule requires tool")?
+                        .to_string();
+                    if tool.is_empty() {
+                        return Err("rule tool must not be empty".into());
+                    }
+                    let args_glob = r.get("argsGlob").and_then(Value::as_str).map(str::to_string);
+                    let approval = match r.get("approval").and_then(Value::as_str) {
+                        Some("allow") => Approval::Allow,
+                        Some("ask") => Approval::Ask,
+                        Some("deny") => Approval::Deny,
+                        _ => return Err("approval must be allow|ask|deny".into()),
+                    };
+                    rules.push((
+                        everyaios_guard::approval_policy::ToolPattern::new(
+                            &tool,
+                            args_glob.as_deref(),
+                        ),
+                        approval,
+                    ));
+                }
+                self.set_approval_policy(ApprovalPolicy::new(rules));
+                Ok(json!({ "applied": raw.len() }))
             }
             "guard/autonomy" => {
                 // The currently applied H34 autonomy level (P44.5 preset) +
@@ -1332,6 +1388,61 @@ mod tests {
             matches!(d, GuardDecision::Block { ref reason } if reason.contains("located")),
             "unlocated delete must Block, got {d:?}"
         );
+    }
+
+    #[test]
+    fn set_policy_rules_applies_deny_wins_and_reports() {
+        let mut g = GuardService::new();
+        let out = g
+            .handle(
+                "guard/set_policy_rules",
+                &json!({
+                    "rules": [
+                        { "tool": "fs.write", "approval": "deny" },
+                        { "tool": "shell", "argsGlob": "rm -rf *", "approval": "deny" },
+                        { "tool": "browser.*", "approval": "allow" },
+                    ]
+                }),
+            )
+            .unwrap();
+        assert_eq!(out["applied"], 3);
+
+        // The deny now blocks the tool at the pre-flight boundary.
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/tmp/a.txt"]),
+            "h",
+            0,
+        );
+        assert!(
+            matches!(d, GuardDecision::Block { .. }),
+            "tool-policy deny must block, got {d:?}"
+        );
+
+        // Deny with args-glob matches the exact args string (args half of
+        // the pattern is exercised here — the guard boundary receives the
+        // tool name; the args half is checked via the policy itself).
+        let pol = &g.approval_policy;
+        assert!(pol.evaluate("shell", "rm -rf *") == Approval::Deny);
+        assert!(pol.evaluate("shell", "ls") == Approval::Ask);
+        assert!(pol.evaluate("browser.click", "") == Approval::Allow);
+
+        // Bad input is refused (fail-closed, never partial-apply).
+        assert!(g
+            .handle(
+                "guard/set_policy_rules",
+                &json!({ "rules": [{ "tool": "", "approval": "deny" }] }),
+            )
+            .is_err());
+        assert!(g
+            .handle(
+                "guard/set_policy_rules",
+                &json!({ "rules": [{ "tool": "x", "approval": "maybe" }] }),
+            )
+            .is_err());
     }
 
     #[test]

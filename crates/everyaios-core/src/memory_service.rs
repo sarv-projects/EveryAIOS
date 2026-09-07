@@ -953,6 +953,68 @@ impl MemoryService {
                 *self = Self::load_from(Path::new(path)).map_err(|e| e.to_string())?;
                 Ok(json!({ "loaded": self.facts.len() }))
             }
+            // P51.33 — the chat-side `/compact` consumer. The caller sends the
+            // session's recent turn texts (oldest first); the landed budget
+            // formula (usable = input_limit − reserved, preserve ≈25% of usable
+            // clamped 2K–15K, TAIL_TURNS=2 + one partial boundary turn) decides
+            // what stays, and the synthetic continue marker is returned when an
+            // overflow was actually pruned (emitted at most once). The kept
+            // tail comes back as indexes into the input so the UI can rewrite
+            // its transcript without a second guess.
+            "memory/compact" => {
+                let turns: Vec<String> = params
+                    .get("turns")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|t| {
+                                t.as_str().map(str::to_string).or_else(|| {
+                                    t.get("content")
+                                        .and_then(Value::as_str)
+                                        .map(str::to_string)
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if turns.is_empty() {
+                    return Ok(json!({
+                        "keptFrom": 0,
+                        "kept": Vec::<String>::new(),
+                        "preserveTokens": 0,
+                        "marker": null,
+                    }));
+                }
+                let input_limit = params
+                    .get("inputLimit")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(128_000) as usize;
+                let reserved = params
+                    .get("reserved")
+                    .and_then(Value::as_u64)
+                    .map(|v| v as usize)
+                    .unwrap_or(everyaios_memory::compaction::COMPACTION_BUFFER);
+                let formula = everyaios_memory::compaction::BudgetFormula {
+                    input_limit,
+                    reserved,
+                };
+                let preserve_tokens = formula.preserve_recent_tokens();
+                // ~4 chars/token — the same heuristic `approx_tokens` uses.
+                let preserve_chars = preserve_tokens * 4;
+                let (dropped, kept) =
+                    everyaios_memory::compaction::select_tail(&turns, preserve_chars);
+                let pruned_chars: usize = dropped.iter().map(|t| t.chars().count()).sum();
+                let marker = everyaios_memory::compaction::overflow_replay(
+                    !dropped.is_empty(),
+                    pruned_chars,
+                );
+                Ok(json!({
+                    "keptFrom": dropped.len(),
+                    "kept": kept,
+                    "preserveTokens": preserve_tokens,
+                    "marker": marker,
+                }))
+            }
             "usage/snapshot" => Ok(self.usage_snapshot()),
             // P1.3 (A9) — semantic/result cache lookup. The coordinator calls
             // this on read-only turns (no resolved tools) before streaming.
@@ -1162,6 +1224,42 @@ mod tests {
         assert!(m
             .handle("memory/ghost", &json!({ "kind": "removed" }))
             .is_err());
+    }
+
+    #[test]
+    fn compact_keeps_recent_tail_and_returns_marker() {
+        let mut m = MemoryService::new();
+        // 30 turns that far exceed the 2K-char floor of the preserve budget:
+        // the formula must drop the head, keep TAIL_TURNS + a boundary turn,
+        // and return a synthetic continue marker (overflow was pruned).
+        let turns: Vec<serde_json::Value> = (0..30)
+            .map(|i| json!({ "content": format!("turn {i}: ") + &"x".repeat(200) }))
+            .collect();
+        let out = m
+            .handle("memory/compact", &json!({ "turns": turns, "inputLimit": 128_000 }))
+            .unwrap();
+        let kept_from = out["keptFrom"].as_u64().unwrap() as usize;
+        assert!(kept_from > 0, "head must be pruned");
+        assert!(out["kept"].as_array().unwrap().len() > 0);
+        let marker = out["marker"].as_str();
+        assert!(marker.is_some() && marker.unwrap().contains("continued"));
+
+        // Empty transcript: nothing pruned, no marker.
+        let empty = m
+            .handle("memory/compact", &json!({ "turns": [] }))
+            .unwrap();
+        assert_eq!(empty["keptFrom"], 0);
+        assert!(empty["marker"].is_null());
+
+        // Short transcript (already fits): nothing dropped, no marker.
+        let short = m
+            .handle(
+                "memory/compact",
+                &json!({ "turns": [{"content": "hi"}] }),
+            )
+            .unwrap();
+        assert_eq!(short["keptFrom"], 0);
+        assert!(short["marker"].is_null());
     }
 
     #[test]

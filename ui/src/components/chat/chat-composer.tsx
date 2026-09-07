@@ -34,6 +34,7 @@ const SLASH_COMMANDS = [
   { cmd: '/mode', desc: 'Cycle work mode (Auto · Plan · Build · Research)' },
   { cmd: '/model', desc: 'Switch underlying model' },
   { cmd: '/undo', desc: 'Roll back last turn' },
+  { cmd: '/compact', desc: 'Compact older turns (keeps recent tail + marker)' },
   { cmd: '/clear', desc: 'Clear session messages' },
   { cmd: '/export', desc: 'Export session transcript' },
 ]
@@ -324,6 +325,39 @@ export default function ChatComposer({ budget, centered }: Props) {
             notify('Undo requested on the control channel')
           } catch (e) {
             notify(e instanceof Error ? e.message : 'Undo failed', 'error')
+          }
+        })()
+        setComposerValue(arg)
+        return true
+      case '/compact':
+        // Session-mutating: never run mid-turn (same desync rule as /undo).
+        if (busy) {
+          notify('/compact waits for the current turn — pause or let it finish.', 'error')
+          setComposerValue(arg)
+          return true
+        }
+        void (async () => {
+          try {
+            const sess = useAppStore.getState().sessions.find((s) => s.id === st.activeSessionId)
+            const turns = (sess?.messages ?? []).map((m) => m.content).filter((c) => c?.trim())
+            if (turns.length === 0) {
+              notify('Nothing to compact — the transcript is empty', 'error')
+              return
+            }
+            const { memoryRequest } = await import('@/lib/memory')
+            const verdict = (await memoryRequest('memory/compact', {
+              turns,
+            })) as { keptFrom: number; marker: string | null }
+            const sid = useAppStore.getState().activeSessionId
+            useAppStore.getState().compactSessionMessages(sid, verdict.keptFrom, verdict.marker)
+            const kept = sess?.messages.length ?? 0
+            notify(
+              kept - verdict.keptFrom > 0
+                ? `Compacted ${kept - verdict.keptFrom} older message(s) — tail kept`
+                : 'Transcript already fits — nothing pruned',
+            )
+          } catch (e) {
+            notify(e instanceof Error ? e.message : 'Compact failed', 'error')
           }
         })()
         setComposerValue(arg)

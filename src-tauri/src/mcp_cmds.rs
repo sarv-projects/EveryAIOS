@@ -225,6 +225,11 @@ pub fn mcp_attach_request(
     args: Vec<String>,
 ) -> Result<serde_json::Value, String> {
     use everyaios_guard::{Operation as GuardOp, RiskLevel};
+    // P51.17 — name sanitize before anything else: the name is bound into the
+    // ticket args-hash and rendered on the approval card (`mcp:{name}`), so a
+    // hostile name must never reach either surface. Reject, never rewrite.
+    let name = everyaios_mcp::sanitize_attach_name(&name)
+        .ok_or_else(|| "invalid MCP server name (letters/digits/-/_/., 1-64 chars)".to_string())?;
     let args_hash = call_args_hash(&["mcp.attach", &name, &command, &args.join("\u{1f}")]);
     let decision = everyaios_guard::DecisionPackage::new(format!(
         "Attach MCP server `{name}` (runs {command} {})",
