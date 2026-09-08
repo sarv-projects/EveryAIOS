@@ -24,10 +24,268 @@ export interface WorkEventEnvelope {
   workId: string
   sequence: number
   eventId: string
-  event: unknown
+  event: WorkEvent
   timestamp: number
   traceId?: string
   causalParent?: number
+}
+
+// ---------------------------------------------------------------------------
+// P51.14 — typed mirror of the Rust `WorkEvent` family (work_gateway.rs).
+// `WorkEvent` is tagged by `class`; each class is tagged by `kind` with a
+// `data` payload. The previous `event: unknown` mirror forced the timeline
+// to guess labels — these types render the real step/file/test/artifact
+// surfaces.
+// ---------------------------------------------------------------------------
+
+export type DomainEvent = {
+  kind: 'work_created'
+  data: { objective: string; projectId?: string; sessionId?: string }
+} | {
+  kind: 'work_updated'
+  data: { patch: Record<string, unknown> }
+} | {
+  kind: 'run_queued' | 'run_started' | 'run_paused' | 'run_completed'
+  data: { runId: string }
+} | {
+  kind: 'run_checkpointed'
+  data: { runId: string; checkpoint: number }
+} | {
+  kind: 'run_waiting'
+  data: { runId: string; reason: string }
+} | {
+  kind: 'run_failed'
+  data: { runId: string; reason: string }
+} | {
+  kind: 'run_cancelled'
+  data: { runId: string }
+} | {
+  kind: 'approval_requested'
+  data: { ticketId: string }
+} | {
+  kind: 'approval_resolved'
+  data: { ticketId: string; approved: boolean }
+} | {
+  kind: 'effect_attempted'
+  data: { effectId: string; capabilityGrantId?: string }
+} | {
+  kind: 'effect_observed'
+  data: { effectId: string; outcome: string }
+} | {
+  kind: 'effect_verified'
+  data: { effectId: string; verified: boolean }
+} | {
+  kind: 'artifact_created' | 'artifact_updated'
+  data: { artifactId: string }
+} | {
+  kind: 'review_requested'
+  data: { reviewId: string }
+}
+
+export type OperationalEvent = {
+  kind: 'tool_requested' | 'tool_started' | 'tool_completed'
+  data: { toolId: string }
+} | {
+  kind: 'tool_failed'
+  data: { toolId: string; error: string }
+} | {
+  kind: 'node_connected' | 'node_disconnected'
+  data: { nodeId: string }
+} | {
+  kind: 'session_attached' | 'session_detached'
+  data: { clientId: string }
+}
+
+export type PresenceEvent = {
+  kind: 'presence_changed'
+  data: { presence: WorkPresence }
+} | {
+  kind: 'agent_thought_summary'
+  data: { text: string }
+}
+
+export type RuntimeEvent = {
+  kind: 'pty_started'
+  data: { ptyId: string; processId?: number; rows: number; cols: number }
+} | {
+  kind: 'pty_output'
+  data: { ptyId: string; chunk: string }
+} | {
+  kind: 'pty_resize'
+  data: { ptyId: string; rows: number; cols: number }
+} | {
+  kind: 'pty_signal'
+  data: { ptyId: string; signal: string }
+} | {
+  kind: 'pty_exit'
+  data: { ptyId: string; code?: number }
+} | {
+  kind: 'worktree_created'
+  data: { worktreeId: string; branch: string }
+} | {
+  kind: 'worktree_attached'
+  data: { worktreeId: string; runId: string }
+} | {
+  kind: 'worktree_merged'
+  data: { worktreeId: string; into: string }
+} | {
+  kind: 'worktree_reverted' | 'worktree_destroyed'
+  data: { worktreeId: string }
+} | {
+  kind: 'agent_session_spawned'
+  data: { agentSessionId: string; agentId: string; lifetime: string }
+} | {
+  kind: 'agent_session_message'
+  data: { agentSessionId: string; direction: string }
+} | {
+  kind: 'agent_session_attached' | 'agent_session_detached' | 'agent_session_steered' | 'agent_session_terminated'
+  data: { agentSessionId: string }
+} | {
+  kind: 'agent_session_checkpointed'
+  data: { agentSessionId: string; checkpoint: number }
+}
+
+export type WorkEvent =
+  | { class: 'domain'; event: DomainEvent }
+  | { class: 'operational'; event: OperationalEvent }
+  | { class: 'presence'; event: PresenceEvent }
+  | { class: 'runtime'; event: RuntimeEvent }
+
+/** Human-readable label for a WorkPresenceState (wire: snake_case). */
+export function presenceLabel(state: string | undefined): string {
+  switch (state) {
+    case 'running': return 'Running'
+    case 'waiting_for_user': return 'Waiting for you'
+    case 'waiting_for_approval': return 'Waiting for approval'
+    case 'blocked': return 'Blocked'
+    case 'completed': return 'Completed'
+    case 'failed': return 'Failed'
+    case 'offline': return 'Offline'
+    case 'reconnecting': return 'Reconnecting'
+    default: return state ?? 'Connected'
+  }
+}
+
+export interface WorkEventDescription {
+  /** Short headline shown on the timeline card. */
+  label: string
+  /** Optional secondary detail (tool args, outcome, reason…). */
+  detail?: string
+  /** Timeline tone drives the icon + accent. */
+  tone: 'step' | 'tool' | 'file' | 'run' | 'approval' | 'thought' | 'session' | 'node' | 'worktree' | 'pty' | 'review'
+  /** done | active | failed — drives the status dot. */
+  status: 'done' | 'active' | 'failed'
+}
+
+/** Render a typed WorkEvent into a timeline card description (P51.14). */
+export function describeWorkEvent(envelope: WorkEventEnvelope): WorkEventDescription {
+  const w = envelope.event
+  const ev = w.event
+  switch (w.class) {
+    case 'domain':
+      switch (ev.kind) {
+        case 'work_created':
+          return { label: 'Work created', detail: ev.data.objective || undefined, tone: 'session', status: 'done' }
+        case 'work_updated':
+          return { label: 'Work updated', tone: 'run', status: 'done' }
+        case 'run_started':
+          return { label: `Run ${shortId(ev.data.runId)} started`, tone: 'run', status: 'active' }
+        case 'run_queued':
+          return { label: `Run ${shortId(ev.data.runId)} queued`, tone: 'run', status: 'done' }
+        case 'run_checkpointed':
+          return { label: `Run ${shortId(ev.data.runId)} checkpoint ${ev.data.checkpoint}`, tone: 'run', status: 'done' }
+        case 'run_waiting':
+          return { label: `Run ${shortId(ev.data.runId)} waiting`, detail: ev.data.reason, tone: 'approval', status: 'active' }
+        case 'run_paused':
+          return { label: `Run ${shortId(ev.data.runId)} paused`, tone: 'run', status: 'active' }
+        case 'run_completed':
+          return { label: `Run ${shortId(ev.data.runId)} completed`, tone: 'run', status: 'done' }
+        case 'run_failed':
+          return { label: `Run ${shortId(ev.data.runId)} failed`, detail: ev.data.reason, tone: 'run', status: 'failed' }
+        case 'run_cancelled':
+          return { label: `Run ${shortId(ev.data.runId)} cancelled`, tone: 'run', status: 'failed' }
+        case 'approval_requested':
+          return { label: 'Approval requested', detail: shortId(ev.data.ticketId), tone: 'approval', status: 'active' }
+        case 'approval_resolved':
+          return { label: ev.data.approved ? 'Approval granted' : 'Approval refused', detail: shortId(ev.data.ticketId), tone: 'approval', status: ev.data.approved ? 'done' : 'failed' }
+        case 'effect_attempted':
+          return { label: `Effect ${shortId(ev.data.effectId)} attempted`, tone: 'step', status: 'active' }
+        case 'effect_observed':
+          return { label: `Effect ${shortId(ev.data.effectId)} observed`, detail: ev.data.outcome, tone: 'step', status: 'done' }
+        case 'effect_verified':
+          return { label: `Effect ${shortId(ev.data.effectId)} verified`, tone: 'step', status: ev.data.verified ? 'done' : 'failed' }
+        case 'artifact_created':
+          return { label: `Artifact ${shortId(ev.data.artifactId)} created`, tone: 'file', status: 'done' }
+        case 'artifact_updated':
+          return { label: `Artifact ${shortId(ev.data.artifactId)} updated`, tone: 'file', status: 'done' }
+        case 'review_requested':
+          return { label: 'Review requested', detail: shortId(ev.data.reviewId), tone: 'review', status: 'active' }
+      }
+      break
+    case 'operational':
+      switch (ev.kind) {
+        case 'tool_requested':
+          return { label: `Tool ${ev.data.toolId} requested`, tone: 'tool', status: 'active' }
+        case 'tool_started':
+          return { label: `Tool ${ev.data.toolId} started`, tone: 'tool', status: 'active' }
+        case 'tool_completed':
+          return { label: `Tool ${ev.data.toolId} completed`, tone: 'tool', status: 'done' }
+        case 'tool_failed':
+          return { label: `Tool ${ev.data.toolId} failed`, detail: ev.data.error, tone: 'tool', status: 'failed' }
+        case 'node_connected':
+        case 'node_disconnected':
+          return { label: `Node ${shortId(ev.data.nodeId)} ${ev.kind === 'node_connected' ? 'connected' : 'disconnected'}`, tone: 'node', status: ev.kind === 'node_connected' ? 'done' : 'failed' }
+        case 'session_attached':
+        case 'session_detached':
+          return { label: `Client ${shortId(ev.data.clientId)} ${ev.kind === 'session_attached' ? 'attached' : 'detached'}`, tone: 'session', status: 'done' }
+      }
+      break
+    case 'presence':
+      if (ev.kind === 'agent_thought_summary') {
+        const text = ev.data.text.length > 140 ? `${ev.data.text.slice(0, 140)}…` : ev.data.text
+        return { label: text, detail: ev.data.text, tone: 'thought', status: 'active' }
+      }
+      return { label: 'Presence changed', tone: 'session', status: 'done' }
+    case 'runtime':
+      switch (ev.kind) {
+        case 'pty_started':
+          return { label: `PTY ${shortId(ev.data.ptyId)} started`, tone: 'pty', status: 'active' }
+        case 'pty_output':
+          return { label: `PTY ${shortId(ev.data.ptyId)} output`, tone: 'pty', status: 'active' }
+        case 'pty_exit':
+          return { label: `PTY ${shortId(ev.data.ptyId)} exited${ev.data.code !== undefined ? ` (${ev.data.code})` : ''}`, tone: 'pty', status: 'done' }
+        case 'pty_resize':
+        case 'pty_signal':
+          return { label: `PTY ${shortId(ev.data.ptyId)} ${ev.kind === 'pty_resize' ? 'resized' : 'signalled'}`, tone: 'pty', status: 'done' }
+        case 'worktree_created':
+          return { label: `Worktree ${shortId(ev.data.worktreeId)} created`, detail: ev.data.branch, tone: 'worktree', status: 'done' }
+        case 'worktree_attached':
+          return { label: `Worktree ${shortId(ev.data.worktreeId)} attached`, tone: 'worktree', status: 'done' }
+        case 'worktree_merged':
+          return { label: `Worktree ${shortId(ev.data.worktreeId)} merged into ${ev.data.into}`, tone: 'worktree', status: 'done' }
+        case 'worktree_reverted':
+          return { label: `Worktree ${shortId(ev.data.worktreeId)} reverted`, tone: 'worktree', status: 'done' }
+        case 'worktree_destroyed':
+          return { label: `Worktree ${shortId(ev.data.worktreeId)} destroyed`, tone: 'worktree', status: 'done' }
+        case 'agent_session_spawned':
+          return { label: `Agent session ${shortId(ev.data.agentSessionId)} spawned`, detail: `${ev.data.agentId} (${ev.data.lifetime})`, tone: 'session', status: 'active' }
+        case 'agent_session_message':
+          return { label: `Agent message ${ev.data.direction === 'toAgent' ? 'sent' : 'received'}`, detail: shortId(ev.data.agentSessionId), tone: 'session', status: 'done' }
+        case 'agent_session_attached':
+        case 'agent_session_detached':
+        case 'agent_session_steered':
+        case 'agent_session_terminated':
+          return { label: `Agent session ${shortId(ev.data.agentSessionId)} ${ev.kind.replace('agent_session_', '')}`, tone: 'session', status: ev.kind === 'agent_session_terminated' ? 'done' : 'active' }
+        case 'agent_session_checkpointed':
+          return { label: `Agent session ${shortId(ev.data.agentSessionId)} checkpoint ${ev.data.checkpoint}`, tone: 'session', status: 'done' }
+      }
+      break
+  }
+  return { label: `Work event #${envelope.sequence}`, tone: 'run', status: 'done' }
+}
+
+function shortId(id: string): string {
+  return id.length > 10 ? `${id.slice(0, 10)}…` : id
 }
 
 export interface WorkSnapshot {

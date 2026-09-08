@@ -1649,6 +1649,22 @@ fn handle_work_gateway(
                 .ok_or("work/presence requires workId")?;
             serde_json::to_value(gateway.presence(id)).map_err(|e| e.to_string())
         }
+        // P51.14 — live agent-thought summary from the coordinator's engine
+        // loop (the headline shown on the agent card while a run is in
+        // flight). Best-effort surface: an unknown work id is a hard error so
+        // callers notice, but the coordinator never blocks the stream on it.
+        "work/thought" => {
+            let id = params
+                .get("workId")
+                .and_then(|v| v.as_str())
+                .ok_or("work/thought requires workId")?;
+            let text = params
+                .get("text")
+                .and_then(|v| v.as_str())
+                .ok_or("work/thought requires text")?;
+            gateway.record_thought(id, text)?;
+            Ok(serde_json::json!({"recorded": true}))
+        }
         _ => Err(format!("method not found: {method}")),
     }
 }

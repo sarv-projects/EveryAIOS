@@ -1537,6 +1537,27 @@ impl WorkGateway {
         self.record_effect_with_grant(work_id, effect_id, phase, detail, None)
     }
 
+    /// P51.14 — record a live agent-thought summary (the headline the UI
+    /// shows on the agent card while a run is in flight). Appends a
+    /// `PresenceEvent::AgentThoughtSummary` and mirrors it onto the presence
+    /// record's `current_surface` so re-attaching clients see the last
+    /// summary immediately, before replaying the event log.
+    pub fn record_thought(&mut self, work_id: &str, text: &str) -> Result<(), String> {
+        if !self.works.contains_key(work_id) {
+            return Err("unknown work".into());
+        }
+        self.append(
+            work_id,
+            WorkEvent::Presence(PresenceEvent::AgentThoughtSummary { text: text.into() }),
+            None,
+        )
+        .ok_or("failed to append thought")?;
+        if let Some(p) = self.presence.get_mut(work_id) {
+            p.current_surface = Some(text.into());
+        }
+        Ok(())
+    }
+
     pub fn record_artifact(
         &mut self,
         work_id: &str,

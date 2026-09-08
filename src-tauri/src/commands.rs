@@ -103,6 +103,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         guard_cmds::guard_estop,
         guard_cmds::guard_activity,
         guard_cmds::guard_permissions_matrix,
+        guard_cmds::guard_combos,
+        guard_cmds::guard_apply_combo,
         cockpit_cmds::cockpit_snapshot,
         cockpit_cmds::cockpit_activity,
         cockpit_cmds::cockpit_tokens,

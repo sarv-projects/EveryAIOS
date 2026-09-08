@@ -60,6 +60,78 @@ pub enum GuardDecision {
 }
 
 /// A pending ticket + its decision package (the full card payload).
+
+/// P51.20 — a named one-click permission bundle (Combo). `rules` are
+/// canonical `permissions.toml` key → rule-string overrides; `tool_rules`
+/// are (tool pattern, allow|ask|deny) entries for the tool allow-list
+/// engine. Every bundle leaves the hard floors intact.
+struct ComboBundle {
+    name: &'static str,
+    description: &'static str,
+    rules: &'static [(&'static str, &'static str)],
+    tool_rules: &'static [(&'static str, &'static str)],
+}
+
+const COMBO_BUNDLES: &[ComboBundle] = &[
+    ComboBundle {
+        name: "approve_then_read",
+        description: "Sensitive-scope reads (vault/credential dirs, dotfile secrets, browser session data) require human approval — the default approve-then-read contract.",
+        rules: &[("read_sensitive", "always_ask")],
+        tool_rules: &[],
+    },
+    ComboBundle {
+        name: "open_reads",
+        description: "Sensitive-scope reads resolve without a card. Keeps every mutation gate unchanged.",
+        rules: &[("read_sensitive", "always_allow")],
+        tool_rules: &[],
+    },
+    ComboBundle {
+        name: "block_sensitive_reads",
+        description: "Refuse reads of sensitive scopes outright (vault/credentials/browser session data never reach the model).",
+        rules: &[("read_sensitive", "block")],
+        tool_rules: &[],
+    },
+    ComboBundle {
+        name: "dev_workflow",
+        description: "The everyday coding posture: workspace writes ask, destructive shell asks, new domains ask, sensitive reads ask.",
+        rules: &[
+            ("read_sensitive", "always_ask"),
+            ("write", "always_ask"),
+            ("terminal_shell", "ask_if_destructive"),
+            ("external_network", "ask_if_new_domain"),
+        ],
+        tool_rules: &[],
+    },
+    ComboBundle {
+        name: "hardened",
+        description: "Everything meaningful asks (writes, deletes, web, multi-file, sensitive reads, new domains, destructive shell) — maximum human-in-the-loop without blocking the product.",
+        rules: &[
+            ("read_sensitive", "always_ask"),
+            ("write", "always_ask"),
+            ("delete_files", "always_ask"),
+            ("web_action", "always_ask"),
+            ("multi_file_edit", "always_ask"),
+            ("external_network", "ask_if_new_domain"),
+            ("terminal_shell", "ask_if_destructive"),
+        ],
+        tool_rules: &[],
+    },
+    ComboBundle {
+        name: "browse_only",
+        description: "Research mode: reads + browsing free, every mutation refused (write/delete/shell blocked), sensitive reads ask.",
+        rules: &[
+            ("read_sensitive", "always_ask"),
+            ("write", "block"),
+            ("delete_files", "block"),
+            ("terminal_shell", "block"),
+            ("web_action", "always_ask"),
+            ("external_network", "ask_if_new_domain"),
+        ],
+        tool_rules: &[],
+    },
+];
+
+/// A pending ticket + its decision package (the full card payload).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingGuardCard {
@@ -778,6 +850,56 @@ impl GuardService {
                 self.set_approval_policy(ApprovalPolicy::new(rules));
                 Ok(json!({ "applied": raw.len() }))
             }
+            // P51.20 — one-click permission bundles (Combos). A combo is a
+            // named set of canonical `permissions.toml` rule overrides (plus
+            // optional tool allow-list rules) applied through the same
+            // engines as every other surface — never a bypass around the
+            // hard floors (destructive/delete, secrets, financial, security
+            // changes, irreversible external effects stay Ask-or-worse in
+            // every bundle).
+            "guard/combos" => {
+                Ok(json!({
+                    "combos": COMBO_BUNDLES.iter().map(|c| json!({
+                        "name": c.name,
+                        "description": c.description,
+                        "rules": c.rules,
+                        "toolRules": c.tool_rules,
+                    })).collect::<Vec<_>>(),
+                }))
+            }
+            "guard/apply_combo" => {
+                let name = params
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .ok_or("guard/apply_combo requires name")?;
+                let combo = COMBO_BUNDLES
+                    .iter()
+                    .find(|c| c.name == name)
+                    .ok_or_else(|| format!("unknown combo: {name}"))?;
+                let rules: Vec<(&'static str, &'static str)> = combo
+                    .rules
+                    .iter()
+                    .map(|&(k, v)| (k, v))
+                    .collect();
+                let applied = self.policy.apply_rules(&rules)?;
+                // Tool allow-list rules ride the same deny-wins engine as
+                // `guard/set_policy_rules`.
+                if !combo.tool_rules.is_empty() {
+                    let mut tr = Vec::new();
+                    for &(tool, approval) in combo.tool_rules {
+                        tr.push((
+                            everyaios_guard::approval_policy::ToolPattern::new(tool, None),
+                            match approval {
+                                "allow" => Approval::Allow,
+                                "ask" => Approval::Ask,
+                                _ => Approval::Deny,
+                            },
+                        ));
+                    }
+                    self.approval_policy = ApprovalPolicy::new(tr);
+                }
+                Ok(json!({ "applied": applied, "combo": name }))
+            }
             "guard/autonomy" => {
                 // The currently applied H34 autonomy level (P44.5 preset) +
                 // its confidence floor — what the UI indicator must read.
@@ -1369,6 +1491,98 @@ mod tests {
         // guard/policy now carries the autonomy level too.
         let out = g.handle("guard/policy", &json!({})).unwrap();
         assert_eq!(out["autonomyLevel"], "sandbox");
+    }
+
+    #[test]
+    fn read_operations_plain_allow_sensitive_asks() {
+        let mut g = GuardService::new();
+        // P51.20 — plain reads are executor-auto-approved (Allow), the
+        // sensitive-scope read resolves against the default approve-then-
+        // read rule (Ask).
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.read",
+            Operation::Read { sensitive: false },
+            decision(RiskLevel::Low, &["/w/x"]),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Allow { .. }), "plain read must be Allow");
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.read",
+            Operation::Read { sensitive: true },
+            decision(RiskLevel::Low, &["/home/u/.ssh/config"]),
+            "h",
+            0,
+        );
+        assert!(
+            matches!(d, GuardDecision::Ask { .. }),
+            "sensitive read must Ask under the default approve-then-read rule"
+        );
+        // The bundle can tighten it to Block — never widen past the preset.
+        g.handle(
+            "guard/apply_combo",
+            &json!({ "name": "block_sensitive_reads" }),
+        )
+        .unwrap();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.read",
+            Operation::Read { sensitive: true },
+            decision(RiskLevel::Low, &[]),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Block { .. }));
+    }
+
+    #[test]
+    fn combos_list_and_apply_with_unknown_refusal() {
+        let mut g = GuardService::new();
+        // The bundle catalog lists every combo with rules + descriptions.
+        let out = g.handle("guard/combos", &json!({})).unwrap();
+        let combos = out["combos"].as_array().unwrap();
+        assert!(combos.len() >= 6);
+        let names: Vec<&str> = combos
+            .iter()
+            .filter_map(|c| c["name"].as_str())
+            .collect();
+        assert!(names.contains(&"approve_then_read"));
+        assert!(names.contains(&"dev_workflow"));
+        assert!(names.contains(&"browse_only"));
+
+        // browse_only blocks writes and keeps sensitive reads asking.
+        g.handle("guard/apply_combo", &json!({ "name": "browse_only" }))
+            .unwrap();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &[]),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Block { .. }));
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.read",
+            Operation::Read { sensitive: true },
+            decision(RiskLevel::Low, &[]),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Ask { .. }));
+
+        // Unknown combo refuses; the policy is untouched.
+        assert!(g
+            .handle("guard/apply_combo", &json!({ "name": "nope" }))
+            .is_err());
     }
 
     #[test]

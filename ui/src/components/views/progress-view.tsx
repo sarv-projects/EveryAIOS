@@ -10,12 +10,25 @@ import {
   CheckCircle2,
   Loader2,
   Radio,
+  Wrench,
+  ShieldCheck,
+  Brain,
+  Bot,
+  Network,
+  GitBranch,
+  Terminal,
+  Eye,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
-import type { WorkEventEnvelope } from '@/lib/work'
+import {
+  describeWorkEvent,
+  presenceLabel,
+  type WorkEventEnvelope,
+  type WorkEventDescription,
+} from '@/lib/work'
 
 type EventKind = 'message' | 'tool' | 'work'
 
@@ -40,13 +53,27 @@ function fmtTime(ts: string | number): string {
   }
 }
 
-function summarizeWorkEvent(envelope: WorkEventEnvelope): { label: string; detail?: string } {
-  const ev = envelope.event as { type?: string; kind?: string; summary?: string; message?: string } | null
-  if (ev && typeof ev === 'object') {
-    const label = ev.summary ?? ev.message ?? ev.type ?? ev.kind ?? 'Work event'
-    return { label: `#${envelope.sequence} ${label}`, detail: JSON.stringify(envelope.event).slice(0, 300) }
+/** P51.14 — typed agent-card surface: every WorkEvent renders through the
+ * typed mirror (work.ts describeWorkEvent), never a shape guess. */
+function iconFor(tone: WorkEventDescription['tone']): React.ReactNode {
+  switch (tone) {
+    case 'step': return <Zap className="h-3.5 w-3.5 text-orange-400" />
+    case 'tool': return <Wrench className="h-3.5 w-3.5 text-amber-400" />
+    case 'file': return <FileDown className="h-3.5 w-3.5 text-emerald-400" />
+    case 'approval': return <ShieldCheck className="h-3.5 w-3.5 text-violet-400" />
+    case 'thought': return <Brain className="h-3.5 w-3.5 text-sky-400" />
+    case 'session': return <Bot className="h-3.5 w-3.5 text-blue-400" />
+    case 'node': return <Network className="h-3.5 w-3.5 text-cyan-400" />
+    case 'worktree': return <GitBranch className="h-3.5 w-3.5 text-teal-400" />
+    case 'pty': return <Terminal className="h-3.5 w-3.5 text-zinc-400" />
+    case 'review': return <Eye className="h-3.5 w-3.5 text-pink-400" />
+    default: return <Radio className="h-3.5 w-3.5 text-violet-400" />
   }
-  return { label: `#${envelope.sequence} Work event`, detail: String(envelope.event).slice(0, 300) }
+}
+
+function summarizeWorkEvent(envelope: WorkEventEnvelope): { label: string; detail?: string; tone: WorkEventDescription['tone']; status: WorkEventDescription['status'] } {
+  const d = describeWorkEvent(envelope)
+  return { label: `#${envelope.sequence} ${d.label}`, detail: d.detail, tone: d.tone, status: d.status }
 }
 
 /** Session + gateway activity, derived live. Empty stays empty. */
@@ -90,7 +117,7 @@ function buildEvents(
   }
   for (const w of work) {
     const s = summarizeWorkEvent(w)
-    out.push({ id: `work-${w.sequence}`, t: fmtTime(w.timestamp), icon: <Radio className="h-3.5 w-3.5 text-violet-400" />, kind: 'work', label: s.label, status: 'done', detail: s.detail })
+    out.push({ id: `work-${w.sequence}`, t: fmtTime(w.timestamp), icon: iconFor(s.tone), kind: 'work', label: s.label, status: s.status === 'active' ? 'active' : 'done', detail: s.detail })
   }
   if (running && out.length > 0) out[out.length - 1] = { ...out[out.length - 1], status: 'active' }
   return out
@@ -155,9 +182,14 @@ export default function ProgressView() {
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs font-semibold">Live Work</span>
             <Badge variant="outline" className="text-[10px]">
-              {workPresence?.state ?? 'connected'}
+              {presenceLabel(workPresence?.state)}
             </Badge>
           </div>
+          {workPresence?.currentSurface && workPresence.state === 'running' && (
+            <p className="mb-1 line-clamp-2 text-[10px] italic text-muted-foreground">
+              {workPresence.currentSurface}
+            </p>
+          )}
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
             <span className="font-mono">{workItems[0]?.workId}</span>
             <span>·</span>

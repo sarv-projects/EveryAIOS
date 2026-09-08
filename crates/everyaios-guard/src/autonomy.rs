@@ -46,6 +46,7 @@ impl RiskClass {
             Operation::ExternalNetwork { .. } | Operation::WebAction => RiskClass::External,
             Operation::TerminalShell { .. } | Operation::GenericWrite => RiskClass::Exec,
             Operation::DeleteFiles | Operation::MultiFileEdit { .. } => RiskClass::WriteLocal,
+            Operation::Read { .. } => RiskClass::Read,
         }
     }
 

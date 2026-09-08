@@ -219,6 +219,10 @@ export class ToolExecutor {
 
   constructor(
     private request: ToolRequest,
+    /** P51.14 — the Work Gateway work id this executor's effects belong to.
+     * Rust records attempted/observed/verified WorkEvents when `tool/exec`
+     * and `tool/commit` carry it (chat.rs `tool/*` arm). */
+    private workId?: string,
     private sleep: (ms: number) => Promise<void> = (ms) =>
       new Promise((r) => setTimeout(r, ms)),
   ) {}
@@ -294,6 +298,7 @@ export class ToolExecutor {
       agentId: ctx.agentId ?? "agent",
       args,
       argsHash,
+      ...(this.workId !== undefined ? { workId: this.workId } : {}),
       ...(ticketFromGuard ? { ticketId: ticketFromGuard } : {}),
     })) as ToolDecision;
 
@@ -319,6 +324,7 @@ export class ToolExecutor {
       argsHash: hash,
       args,
       ticketConsumed: consumed,
+      ...(this.workId !== undefined ? { workId: this.workId } : {}),
     })) as ToolCommitResult;
 
     if (!committed.ok) {

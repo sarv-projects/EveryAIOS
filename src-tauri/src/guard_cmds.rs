@@ -148,6 +148,25 @@ pub fn guard_set_policy_rules(
     .map_err(|e| e.to_string())
 }
 
+/// P51.20 — list the one-click permission bundles (Combos).
+#[tauri::command]
+pub fn guard_combos(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
+    svc.handle("guard/combos", &serde_json::json!({}))
+        .map_err(|e| e.to_string())
+}
+
+/// P51.20 — apply a named one-click permission bundle (Combos).
+#[tauri::command]
+pub fn guard_apply_combo(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<serde_json::Value, String> {
+    let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
+    svc.handle("guard/apply_combo", &serde_json::json!({ "name": name }))
+        .map_err(|e| e.to_string())
+}
+
 /// P11.5.7 — one serializable recent-action row (from the J5 audit ledger).
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -247,20 +266,37 @@ pub fn guard_permissions_matrix(state: State<'_, AppState>) -> Result<Vec<Matrix
     // Capabilities (rows) × scopes (columns), matching the UI's 5×5 grid.
     let capabilities = ["read", "write", "execute", "network", "browser"];
     let scopes = ["workspace", "home", "shell", "external", "browser"];
+    // P51.20 — sensitive read scopes resolve against the approve-then-read
+    // policy rule (`read_sensitive`); every other scope is the executor-
+    // auto-approved plain read.
+    let sensitive_read_scopes = ["home", "browser"];
     let mut cells = Vec::with_capacity(capabilities.len() * scopes.len());
     for cap in capabilities {
         for scope in scopes {
-            // Reads are read-only and auto-approved by the executor (they are
-            // never policy-gated — there is no read `Operation` variant). The
-            // matrix must show that truthfully as `allow`, not borrow the
-            // write policy (which previously made read look like it required
-            // approval when it does not).
+            // Reads are read-only; plain reads are auto-approved by the
+            // executor (no policy gate — `Operation::Read{sensitive:false}`
+            // is Allow by construction). Sensitive scopes (credential/
+            // vault dirs, browser session data) consult the
+            // `read_sensitive` rule — the approve-then-read surface.
             if cap == "read" {
-                cells.push(MatrixCell {
-                    capability: cap.into(),
-                    scope: scope.into(),
-                    decision: "allow".into(),
-                });
+                if sensitive_read_scopes.contains(&scope) {
+                    let decision = match policy.evaluate(&Operation::Read { sensitive: true }) {
+                        PolicyAction::Allow => "allow",
+                        PolicyAction::Ask => "ask",
+                        PolicyAction::Block => "block",
+                    };
+                    cells.push(MatrixCell {
+                        capability: cap.into(),
+                        scope: scope.into(),
+                        decision: decision.into(),
+                    });
+                } else {
+                    cells.push(MatrixCell {
+                        capability: cap.into(),
+                        scope: scope.into(),
+                        decision: "allow".into(),
+                    });
+                }
                 continue;
             }
             let op = match (cap, scope) {

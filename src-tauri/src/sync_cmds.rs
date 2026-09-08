@@ -195,18 +195,31 @@ pub fn sync_import_bundle(
     }))
 }
 
-/// P8.9 — start the live TCP sync server on `0.0.0.0:{port}` (default
-/// `47615`). Explicit trigger — no auto-sync. Covers LAN and Tailscale
-/// tailnets (both are plain IP to the socket). Returns the bound addr.
+/// P8.9/P51.31 — start the live TCP sync server. Binds **loopback by
+/// default** (`127.0.0.1:{port}`, default `47615`); a non-loopback bind
+/// (`0.0.0.0`/LAN/Tailscale) **requires a password** (user-pass
+/// trusted-LAN-only auth gate — every connection must present the matching
+/// auth frame before the ECDH handshake). Explicit trigger, no auto-sync.
 #[tauri::command]
 pub fn sync_serve_start(
     state: State<'_, AppState>,
     port: Option<u16>,
+    bind: Option<String>,
+    password: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let port = port.unwrap_or(DEFAULT_SYNC_PORT);
-    let bind: SocketAddr = format!("0.0.0.0:{port}")
+    let bind_host = bind.unwrap_or_else(|| "127.0.0.1".to_string());
+    let addr: SocketAddr = format!("{bind_host}:{port}")
         .parse::<SocketAddr>()
         .map_err(|e: std::net::AddrParseError| e.to_string())?;
+    // P51.31 — non-loopback binding without a password is refused outright:
+    // a keyless ECDH confirmation is a pairing trust model, not a network
+    // boundary. LAN exposure requires the explicit user-pass gate.
+    if !addr.ip().is_loopback() && password.as_deref().map(str::trim).unwrap_or("").is_empty() {
+        return Err(
+            "non-loopback bind requires a password (user-pass trusted-LAN-only)".to_string(),
+        );
+    }
     let mut slot = server_slot().lock().map_err(|e| e.to_string())?;
     if slot.is_some() {
         return Err("sync server already running — stop first".to_string());
@@ -215,7 +228,8 @@ pub fn sync_serve_start(
     let session_c = Arc::clone(&session);
     let on_synced: Arc<dyn Fn(&SyncSession) + Send + Sync> =
         Arc::new(|s: &SyncSession| persist_state(s));
-    let server = SyncServer::start(bind, session_c, Some(on_synced)).map_err(|e| e.to_string())?;
+    let server = SyncServer::start(addr, session_c, Some(on_synced), password)
+        .map_err(|e| e.to_string())?;
     let addr = server.addr.to_string();
     *slot = Some(server);
     Ok(serde_json::json!({ "ok": true, "addr": addr, "port": port }))
@@ -252,16 +266,21 @@ pub fn sync_serve_status() -> Result<serde_json::Value, String> {
 /// P8.9 — one-shot sync against a peer `target` (`ip:port`, e.g.
 /// `192.168.1.42:47615` or a Tailscale `100.x.y.z:47615`). Explicit trigger
 /// (no auto-sync). Mutates the local mirror and persists it.
+/// P8.9/P51.31 — one-shot sync against a peer `target` (`ip:port`). When
+/// the peer's server is password-gated, the same `password` must be supplied
+/// here — the auth frame rides before the handshake on both ends.
 #[tauri::command]
 pub fn sync_peer_sync(
     state: State<'_, AppState>,
     target: String,
+    password: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let addr: SocketAddr = target
         .parse::<SocketAddr>()
         .map_err(|e: std::net::AddrParseError| format!("invalid target {target}: {e}"))?;
     let mut session = load_or_create_state(&state);
-    let outcome = sync_with_peer(addr, &mut session).map_err(|e| e.to_string())?;
+    let outcome =
+        sync_with_peer(addr, &mut session, password.as_deref()).map_err(|e| e.to_string())?;
     persist_state(&session);
     Ok(serde_json::json!({
         "ok": true,
@@ -302,7 +321,7 @@ pub fn node_attach(
                 format!("invalid control plane {control_plane}: {e}")
             })?;
     let mut session = load_or_create_state(&state);
-    let outcome = sync_with_peer(addr, &mut session).map_err(|e| e.to_string())?;
+    let outcome = sync_with_peer(addr, &mut session, None).map_err(|e| e.to_string())?;
     persist_state(&session);
     Ok(serde_json::json!({
         "ok": true,

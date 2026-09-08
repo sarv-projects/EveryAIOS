@@ -12,11 +12,14 @@ import { inTauri } from '@/lib/tauri'
 import { staggerStyle } from '@/lib/stagger'
 import {
   guardActivity,
+  guardApplyCombo,
+  guardCombos,
   guardEstop,
   guardPermissionsMatrix,
   guardPolicy,
   guardSetPolicyRules,
   guardTickets,
+  type GuardCombo,
   type GuardPolicy,
   type GuardTicket,
   type MatrixCell,
@@ -78,6 +81,8 @@ export default function GuardPanel() {
   const [reload, setReload] = useState(0)
   // P51.22 — tool allow-list editor rows, seeded from the live policy.
   const [draftRules, setDraftRules] = useState<PolicyRule[]>([])
+  const [combos, setCombos] = useState<GuardCombo[]>([])
+  const [applying, setApplying] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
 
   // Live bridge (P7.5/J21 + P11.5.7): poll pending tickets + policy + the
@@ -86,11 +91,12 @@ export default function GuardPanel() {
     let alive = true
     const refresh = async () => {
       try {
-        const [t, p, a, m] = await Promise.all([
+        const [t, p, a, m, c] = await Promise.all([
           guardTickets(),
           guardPolicy(),
           guardActivity(12),
           guardPermissionsMatrix(),
+          guardCombos(),
         ])
         if (!alive) return
         setTickets(t)
@@ -100,6 +106,7 @@ export default function GuardPanel() {
         if (p?.approvalRules) setDraftRules(p.approvalRules)
         setActivity(a)
         setMatrix(m)
+        setCombos(c)
         setLoadError(null)
       } catch (error) {
         if (!alive) return
@@ -403,6 +410,72 @@ export default function GuardPanel() {
                 <ShieldCheck className="h-3 w-3" />
                 Apply rules
               </Button>
+            </section>
+
+            {/* P51.20 — Combos: one-click permission bundles (approve-then-
+                read defaults, dev workflow, browse-only, hardened…). Applied
+                through the same engines as every other surface; the hard
+                floors never move. */}
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-medium text-foreground">Combos</span>
+                <Badge variant="outline" className="text-[9px]">one-click bundles</Badge>
+              </div>
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                Permission postures applied in one click. Sensitive-scope reads default to
+                approve-then-read; destructive/delete, secrets, financial, and security
+                changes stay Ask-or-worse in every bundle.
+              </p>
+              <div className="space-y-1.5">
+                {combos.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground/70">
+                    {inTauri() ? 'Loading bundles…' : 'No bundles in preview.'}
+                  </p>
+                )}
+                {combos.map((c) => (
+                  <div key={c.name} className="flex items-start gap-2 rounded-md border border-border/60 bg-background/40 p-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-[10px] font-medium text-foreground">
+                        {c.name}
+                      </div>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+                        {c.description}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 shrink-0 px-2 text-[10px]"
+                      disabled={applying === c.name}
+                      onClick={() => {
+                        setApplying(c.name)
+                        ;(async () => {
+                          try {
+                            const n = await guardApplyCombo(c.name)
+                            const fresh = await guardPolicy()
+                            if (fresh) setPolicy(fresh)
+                            void guardPermissionsMatrix().then((m) => {
+                              if (m.length > 0) setMatrix(m)
+                            })
+                            useAppStore.getState().notify(
+                              `Combo ${c.name} applied (${n} rules)`,
+                            )
+                          } catch (e) {
+                            useAppStore.getState().notify(
+                              e instanceof Error ? e.message : 'Combo apply failed',
+                              'error',
+                            )
+                          } finally {
+                            setApplying(null)
+                          }
+                        })()
+                      }}
+                    >
+                      {applying === c.name ? 'Applying…' : 'Apply'}
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </section>
 
             <section className="rounded-lg border border-dashed border-border bg-card p-4">

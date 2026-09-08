@@ -232,7 +232,7 @@ describe("ToolExecutor", () => {
         return polls >= 2 ? "approved" : "pending";
       },
     });
-    const ex = new ToolExecutor(request, (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 5))));
+    const ex = new ToolExecutor(request, undefined, (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 5))));
     const out = await ex.executeTool("file_ops.delete", { path: "x" }, { sessionId: "s" });
     expect(out).toBe("hello");
     expect(polls).toBeGreaterThanOrEqual(2);

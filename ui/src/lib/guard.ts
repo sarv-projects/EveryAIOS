@@ -191,6 +191,29 @@ export interface PolicyRule {
 }
 
 /** Pull (`pulled=true`) or reset the global estop. */
+/** P51.20 — a named one-click permission bundle (Combo). */
+export interface GuardCombo {
+  name: string
+  description: string
+  rules: [string, string][]
+  toolRules: [string, string][]
+}
+
+/** List the one-click permission bundles. */
+export async function guardCombos(): Promise<GuardCombo[]> {
+  if (!inTauri()) return []
+  return nativeCall('guard combos', () =>
+    invoke<{ combos: GuardCombo[] }>('guard_combos').then((r) => r.combos ?? []),
+  )
+}
+
+/** Apply a named permission bundle (Combos). */
+export async function guardApplyCombo(name: string): Promise<number> {
+  return nativeCall('guard apply combo', () =>
+    invoke<{ applied: number }>('guard_apply_combo', { name }).then((r) => r.applied),
+  )
+}
+
 export async function guardEstop(pulled: boolean): Promise<boolean> {
   return bridgeCall({
     operation: 'guard estop',

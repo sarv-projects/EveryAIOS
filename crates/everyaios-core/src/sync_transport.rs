@@ -155,12 +155,63 @@ pub fn run_exchange(
     Ok(outcome)
 }
 
-/// A client-side sync against a listening peer.
+/// P51.31 — the optional pre-exchange auth frame a password-gated server
+/// requires before any handshake byte. Only present on the wire when a
+/// password is configured on BOTH ends (user-pass trusted-LAN-only); a
+/// password-less server/client never emits it, so the ECDH wire is
+/// unchanged for existing deployments.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthFrame {
+    pub r#type: String, // "auth"
+    pub password: String,
+}
+
+pub fn write_auth_frame(stream: &mut TcpStream, password: &str) -> Result<(), WireError> {
+    write_frame(
+        stream,
+        &serde_json::to_vec(&AuthFrame {
+            r#type: "auth".into(),
+            password: password.into(),
+        })?,
+    )
+}
+
+/// P51.31 — read one frame and verify it is an auth frame matching
+/// `password`. Any other payload (a legacy hello from a password-less
+/// client) is a failed auth.
+fn read_auth_frame(stream: &mut TcpStream, password: &str) -> Result<(), WireError> {
+    let raw = read_frame(stream)?;
+    let frame: AuthFrame = serde_json::from_slice(&raw).map_err(|_| WireError::HandshakeFailed)?;
+    if frame.r#type != "auth" {
+        return Err(WireError::HandshakeFailed);
+    }
+    // Constant-time-ish comparison (len-equal; the password is a passphrase,
+    // not a MAC key — the ECDH confirm token remains the real key proof).
+    let ok = frame.password.as_bytes().len() == password.as_bytes().len()
+        && frame
+            .password
+            .as_bytes()
+            .iter()
+            .zip(password.as_bytes())
+            .all(|(a, b)| a == b);
+    if !ok {
+        return Err(WireError::HandshakeFailed);
+    }
+    Ok(())
+}
+
+/// A client-side sync against a listening peer. `password` is required when
+/// the peer gate is password-gated (P51.31 user-pass trusted-LAN-only).
 pub fn sync_with_peer(
     addr: SocketAddr,
     session: &mut SyncSession,
+    password: Option<&str>,
 ) -> Result<ExchangeOutcome, WireError> {
-    let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(5))?;
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(5))?;
+    if let Some(pw) = password {
+        write_auth_frame(&mut stream, pw)?;
+    }
     run_exchange(stream, session)
 }
 
@@ -181,6 +232,11 @@ impl SyncServer {
         bind: SocketAddr,
         session: Arc<Mutex<SyncSession>>,
         on_synced: Option<SyncObserver>,
+        // P51.31 — optional user-pass gate. When set, every connection must
+        // present a matching `AuthFrame` before the ECDH handshake runs;
+        // anything else (legacy hello, wrong password) is dropped without
+        // touching the session.
+        password: Option<String>,
     ) -> Result<Self, WireError> {
         let listener = TcpListener::bind(bind)?;
         listener.set_nonblocking(true)?;
@@ -195,13 +251,21 @@ impl SyncServer {
                 break;
             }
             match listener.accept() {
-                Ok((stream, _peer)) => {
+                Ok((mut stream, _peer)) => {
                     let session = Arc::clone(&session);
                     let outcomes_conn = Arc::clone(&outcomes_c);
                     let on_synced_conn = on_synced.clone();
+                    let gate = password.clone();
                     std::thread::spawn(move || {
                         let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
                         let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
+                        // P51.31 — the auth gate runs BEFORE the handshake;
+                        // a failed gate never locks or mutates the session.
+                        if let Some(pw) = gate {
+                            if read_auth_frame(&mut stream, &pw).is_err() {
+                                return; // drop silently — no session contact
+                            }
+                        }
                         let mut guard = session.lock().unwrap_or_else(|e| e.into_inner());
                         match run_exchange(stream, &mut guard) {
                             Ok(outcome) => {
@@ -321,10 +385,11 @@ mod tests {
             "127.0.0.1:0".parse().unwrap(),
             Arc::clone(&shared),
             Some(hook),
+            None,
         )
         .unwrap();
 
-        let outcome = sync_with_peer(server.addr, &mut client_session).unwrap();
+        let outcome = sync_with_peer(server.addr, &mut client_session, None).unwrap();
         assert_eq!(outcome.peer_device, "dev-server");
         assert_eq!(outcome.applied, 1, "client applies server-only 'alpha'");
         assert_eq!(outcome.pushed, 1, "client has server-missing 'beta'");
@@ -358,12 +423,66 @@ mod tests {
             "127.0.0.1:0".parse().unwrap(),
             Arc::new(Mutex::new(a)),
             None,
+            None,
         )
         .unwrap();
-        let _outcome = sync_with_peer(server.addr, &mut b).unwrap();
+        let _outcome = sync_with_peer(server.addr, &mut b, None).unwrap();
         let item = b.set.get(SyncScope::Memory, "gone").unwrap();
         assert!(item.tombstone && item.rev == 3);
         server.stop();
+
+    #[test]
+    fn password_gate_blocks_wrong_and_missing_but_passes_match() {
+        // Server gated with a password; the client must present the same
+        // passphrase BEFORE the ECDH handshake (P51.31).
+        let mut server_session = SyncSession::new("auth-server", [5u8; 32]);
+        seed(&mut server_session, "secret-item", 1);
+        let server = SyncServer::start(
+            "127.0.0.1:0".parse().unwrap(),
+            Arc::new(Mutex::new(server_session)),
+            None,
+            Some("lan-pass".into()),
+        )
+        .unwrap();
+
+        // Wrong password → handshake refused, client sees an error.
+        let mut bad = SyncSession::new("bad-client", [6u8; 32]);
+        assert!(sync_with_peer(server.addr, &mut bad, Some("nope")).is_err());
+        // Missing password (legacy client) → refused.
+        let mut bare = SyncSession::new("bare-client", [7u8; 32]);
+        assert!(sync_with_peer(server.addr, &mut bare, None).is_err());
+        // The gate failure never touched the session: still zero outcomes.
+        assert!(server.outcomes().is_empty());
+
+        // Correct password → full exchange runs.
+        let mut good = SyncSession::new("good-client", [8u8; 32]);
+        seed(&mut good, "local-item", 2);
+        let outcome = sync_with_peer(server.addr, &mut good, Some("lan-pass")).unwrap();
+        assert_eq!(outcome.peer_device, "auth-server");
+        assert_eq!(outcome.applied, 1);
+        assert_eq!(server.outcomes().len(), 1);
+        server.stop();
+    }
+
+    #[test]
+    fn no_password_server_ignores_auth_wire_changes() {
+        // A password-less server keeps the legacy wire: a client that sends
+        // an auth frame anyway must be refused (its first frame is treated as
+        // the hello and fails parsing) — honest, never silently accepted.
+        let mut server_session = SyncSession::new("open-server", [9u8; 32]);
+        seed(&mut server_session, "item", 1);
+        let server = SyncServer::start(
+            "127.0.0.1:0".parse().unwrap(),
+            Arc::new(Mutex::new(server_session)),
+            None,
+            None,
+        )
+        .unwrap();
+        let mut client = SyncSession::new("legacy-client", [10u8; 32]);
+        assert!(sync_with_peer(server.addr, &mut client, Some("stray-pass")).is_err());
+        assert!(server.outcomes().is_empty());
+        server.stop();
+    }
     }
 
     #[test]

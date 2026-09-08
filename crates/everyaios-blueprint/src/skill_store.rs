@@ -58,6 +58,17 @@ pub struct SkillManifest {
     pub author: String,
     pub created: String,
     pub version: String,
+    /// P51.28 — user-invocable: the skill is listed in the user's skill
+    /// picker and can be invoked by the human directly. Default false
+    /// (model-selected skills are not automatically user-invocable).
+    #[serde(default)]
+    pub user_invocable: bool,
+    /// P51.28 — disable-model-invocation: the model must never auto-select
+    /// this skill (human-only surface). The compose stack refuses it with
+    /// [`RejectionReason::ModelInvocationDisabled`]; only an explicit user
+    /// invocation may use it.
+    #[serde(default)]
+    pub disable_model_invocation: bool,
 }
 
 /// A script shipped with a skill (I2). Lazy by design — the registry never
@@ -213,6 +224,8 @@ fn parse_manifest(fm: &str, path: &str) -> Result<SkillManifest, SkillError> {
         assets: Vec::new(),
         author: String::new(),
         created: String::new(),
+        user_invocable: false,
+        disable_model_invocation: false,
         version: String::new(),
     };
     let mut list_key: Option<String> = None;
@@ -302,6 +315,13 @@ fn parse_manifest(fm: &str, path: &str) -> Result<SkillManifest, SkillError> {
             "author" => m.author = value.into(),
             "created" => m.created = value.into(),
             "version" => m.version = value.into(),
+            // P51.28 — invocation-control flags (user-invocable /
+            // disable-model-invocation). Only explicit `true` enables them;
+            // anything else stays the default (false).
+            "user-invocable" => m.user_invocable = value.eq_ignore_ascii_case("true"),
+            "disable-model-invocation" => {
+                m.disable_model_invocation = value.eq_ignore_ascii_case("true")
+            }
             "tools" | "triggers" | "when_to_use" | "scripts" | "references" | "assets" => {
                 list_key = Some(key.to_string());
             }

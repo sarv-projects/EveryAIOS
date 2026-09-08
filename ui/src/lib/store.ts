@@ -888,6 +888,11 @@ interface AppState {
   workPresence?: WorkPresence
   workEvents: WorkEventEnvelope[]
   setWorkProjection: (items: WorkAddress[], presence?: WorkPresence, events?: WorkEventEnvelope[]) => void
+  /** P51.8 — Chat/Cowork lens. Cowork mode folds the live Work Gateway
+   * projection (agent cards) into the chat column instead of hiding it in
+   * the right rail; ephemeral view state, never persisted. */
+  coworkMode: boolean
+  setCoworkMode: (on: boolean) => void
   activeSessionId: string
   /** True once the shell has taken ownership of the sessions list (loaded via
    * `session_list` or a new session was created). Until then the list is the
@@ -1293,6 +1298,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   workItems: [],
   workEvents: [],
   setWorkProjection: (items, presence, events = []) => set({ workItems: items, workPresence: presence, workEvents: events }),
+  coworkMode: false,
+  setCoworkMode: (on) => set({ coworkMode: on }),
   activeSessionId: inTauri() ? '' : 's1',
   sessionsHydrated: false,
   markSessionsHydrated: () => set({ sessionsHydrated: true }),

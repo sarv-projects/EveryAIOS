@@ -50,6 +50,13 @@ pub enum Operation {
     WebAction,
     /// Any other privileged mutation (write, exec, …).
     GenericWrite,
+    /// P51.20 — a read of a *sensitive* location (vault/credential dirs,
+    /// dotfile secrets, browser session data). Plain reads stay executor-
+    /// auto-approved (there is no policy gate for them); this variant is the
+    /// approve-then-read surface the agent path emits when the target path
+    /// resolves inside a sensitive scope. `sensitive: false` is the identity
+    /// of a plain read (always Allow).
+    Read { sensitive: bool },
 }
 
 impl Operation {
@@ -62,6 +69,7 @@ impl Operation {
             Operation::TerminalShell { .. } => "terminal_shell",
             Operation::WebAction => "web_action",
             Operation::GenericWrite => "write",
+            Operation::Read { .. } => "read",
         }
     }
 }
@@ -157,6 +165,9 @@ struct RawTable {
     terminal_shell: Option<String>,
     web_action: Option<String>,
     write: Option<String>,
+    /// P51.20 — approve-then-read rule for reads of sensitive scopes
+    /// (vault/credential dirs, dotfile secrets, browser session data).
+    read_sensitive: Option<String>,
     min_confidence_for_auto: Option<f64>,
     #[serde(default)]
     user_feedback_learning: Option<bool>,
@@ -171,6 +182,11 @@ pub struct PermissionsPolicy {
     terminal_shell: Rule,
     web_action: Rule,
     write: Rule,
+    /// P51.20 — approve-then-read: sensitive-scope reads (vault/credential
+    /// dirs, dotfile secrets, browser session data) resolve against this
+    /// rule. Default AlwaysAsk — the approve-then-read contract. Plain
+    /// reads never consult it (they are executor-auto-approved).
+    read_sensitive: Rule,
     /// Below this confidence the auto path must ask.
     pub min_confidence_for_auto: f64,
     /// Approvals/denials feed the taste profile.
@@ -186,6 +202,7 @@ impl Default for PermissionsPolicy {
             terminal_shell: Rule::AskIfDestructive,
             web_action: Rule::AlwaysAsk,
             write: Rule::AlwaysAsk,
+            read_sensitive: Rule::AlwaysAsk,
             min_confidence_for_auto: 0.85,
             user_feedback_learning: true,
         }
@@ -269,6 +286,7 @@ impl PermissionsPolicy {
                 terminal_shell: Rule::Block,
                 web_action: Rule::Block,
                 write: Rule::Block,
+                read_sensitive: Rule::Block,
                 min_confidence_for_auto: 1.0,
                 user_feedback_learning: false,
             },
@@ -279,6 +297,7 @@ impl PermissionsPolicy {
                 terminal_shell: Rule::AskIfDestructive,
                 web_action: Rule::AlwaysAsk,
                 write: Rule::AlwaysAsk,
+                read_sensitive: Rule::AlwaysAsk,
                 min_confidence_for_auto: 0.85,
                 user_feedback_learning: true,
             },
@@ -290,6 +309,7 @@ impl PermissionsPolicy {
                 terminal_shell: Rule::AskIfDestructive,
                 web_action: Rule::AlwaysAsk,
                 write: Rule::AlwaysAllow,
+                read_sensitive: Rule::AlwaysAsk,
                 min_confidence_for_auto: 0.75,
                 user_feedback_learning: true,
             },
@@ -301,6 +321,7 @@ impl PermissionsPolicy {
                 terminal_shell: Rule::AskIfDestructive,
                 web_action: Rule::AlwaysAsk,
                 write: Rule::AlwaysAllow,
+                read_sensitive: Rule::AlwaysAsk,
                 min_confidence_for_auto: 0.6,
                 user_feedback_learning: true,
             },
@@ -320,6 +341,7 @@ impl PermissionsPolicy {
              terminal_shell = \"{shell}\"\n\
              web_action = \"{web}\"\n\
              write = \"{write}\"\n\
+             read_sensitive = \"{read_sensitive}\"\n\
              min_confidence_for_auto = {conf}\n\
              user_feedback_learning = {feedback}\n",
             name = level.as_str(),
@@ -329,6 +351,7 @@ impl PermissionsPolicy {
             shell = rule_str(p.terminal_shell),
             web = rule_str(p.web_action),
             write = rule_str(p.write),
+            read_sensitive = rule_str(p.read_sensitive),
             conf = p.min_confidence_for_auto,
             feedback = p.user_feedback_learning,
         )
@@ -372,6 +395,11 @@ impl PermissionsPolicy {
                 p.write = r;
             }
         }
+        if let Some(s) = &t.read_sensitive {
+            if let Some(r) = Rule::parse(s) {
+                p.read_sensitive = r;
+            }
+        }
         if let Some(m) = t.min_confidence_for_auto {
             p.min_confidence_for_auto = m.clamp(0.0, 1.0);
         }
@@ -391,7 +419,31 @@ impl PermissionsPolicy {
             && p.terminal_shell == self.terminal_shell
             && p.web_action == self.web_action
             && p.write == self.write
+            && p.read_sensitive == self.read_sensitive
             && (p.min_confidence_for_auto - self.min_confidence_for_auto).abs() < f64::EPSILON
+    }
+
+    /// P51.20 — apply a named rule bundle (a one-click combo). Keys are the
+    /// canonical permission keys; unknown keys and unparseable rules are
+    /// refused (never silently over-grant). Returns the number of rules
+    /// applied.
+    pub fn apply_rules(&mut self, rules: &[(&str, &str)]) -> Result<usize, String> {
+        let mut applied = 0usize;
+        for (key, rule) in rules {
+            let parsed = Rule::parse(rule).ok_or_else(|| format!("unknown rule: {rule}"))?;
+            match *key {
+                "delete_files" => self.delete_files = parsed,
+                "multi_file_edit" => self.multi_file_edit = parsed,
+                "external_network" => self.external_network = parsed,
+                "terminal_shell" => self.terminal_shell = parsed,
+                "web_action" => self.web_action = parsed,
+                "write" => self.write = parsed,
+                "read_sensitive" => self.read_sensitive = parsed,
+                other => return Err(format!("unknown permission key: {other}")),
+            }
+            applied += 1;
+        }
+        Ok(applied)
     }
 
     /// Evaluate one operation under the policy. This is the executor's
@@ -405,6 +457,11 @@ impl PermissionsPolicy {
             Operation::TerminalShell { .. } => self.terminal_shell.evaluate(op),
             Operation::WebAction => self.web_action.evaluate(op),
             Operation::GenericWrite => self.write.evaluate(op),
+            // P51.20 — plain reads are executor-auto-approved (no policy
+            // gate); only sensitive-scope reads resolve against the
+            // approve-then-read rule.
+            Operation::Read { sensitive: false } => PolicyAction::Allow,
+            Operation::Read { sensitive: true } => self.read_sensitive.evaluate(op),
         }
     }
 

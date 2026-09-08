@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   BarChart3,
   Bell,
+  Bot,
   Check,
   ChevronRight,
   Clock,
@@ -52,6 +53,7 @@ import {
 } from '@/lib/scheduler'
 import { cn } from '@/lib/utils'
 import { useChatColumnClass } from '@/lib/layout'
+import { describeWorkEvent, presenceLabel } from '@/lib/work'
 import { motion, AnimatePresence } from 'framer-motion'
 import ChatComposer from './chat-composer'
 import MessageBubble from './message-bubble'
@@ -434,6 +436,31 @@ export default function ChatPanel() {
             </button>
           </div>
         )}
+        {/* P51.8 — Chat/Cowork lens switch. One composer, one product (ARCH/12):
+            Cowork folds the live Work projection (agent cards) into the chat
+            column; the right rail keeps its own lens either way. */}
+        <div className="flex items-center rounded-md border border-border/70 bg-background/50 p-0.5">
+          {(['chat', 'cowork'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => store.setCoworkMode(mode === 'cowork')}
+              className={cn(
+                'rounded px-2 py-0.5 font-mono text-[10px] transition-colors',
+                (mode === 'cowork') === store.coworkMode
+                  ? 'bg-orange-500 text-black'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              title={
+                mode === 'cowork'
+                  ? 'Cowork: live agent cards (steps/files/artifacts) inline in the chat'
+                  : 'Chat: messages only'
+              }
+            >
+              {mode === 'cowork' ? 'Cowork' : 'Chat'}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-0.5">
           <Button
             size="icon"
@@ -791,6 +818,10 @@ export default function ChatPanel() {
             </ScrollArea>
           </div>
 
+          {/* P51.8 — Cowork lens: the live Work Gateway projection (agent
+              cards) inline above the composer, fed by the typed event mirror
+              (P51.14). Ephemeral view state — off by default. */}
+          {store.coworkMode && <InlineWorkStream />}
           <div className={cn('shrink-0 pb-3', col)}>
             <ChatComposer
               budget={
@@ -1032,4 +1063,88 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
       )}
     </div>
   )
+}
+
+/** P51.8/P51.14 — the Cowork lens: the active session's Work Gateway
+ * projection rendered as compact agent cards (typed events, presence state),
+ * folded into the chat column above the composer. Purely derived from the
+ * store projection the bridge polls — no fake state. */
+function InlineWorkStream() {
+  const workItems = useAppStore((s) => s.workItems)
+  const workPresence = useAppStore((s) => s.workPresence)
+  const workEvents = useAppStore((s) => s.workEvents)
+  const session = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId))
+
+  const mine = workItems.find((w) => w.sessionId === session?.id)
+  const events = mine ? workEvents : []
+  const lastThought = [...events]
+    .reverse()
+    .find((e) => e.event.class === 'presence' && e.event.event.kind === 'agent_thought_summary')
+  const active = [...events]
+    .reverse()
+    .find((e) => describeWorkEvent(e).status === 'active')
+
+  return (
+    <div className="mx-3 mb-2 shrink-0 overflow-hidden rounded-lg border border-border/70 bg-card/40">
+      <div className="flex items-center justify-between border-b border-border/60 px-2.5 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <Bot className="h-3 w-3 text-orange-400" />
+          <span className="font-mono text-[10px] font-semibold text-foreground">Cowork</span>
+          {mine && (
+            <span className="font-mono text-[9px] text-muted-foreground">
+              {shortWorkId(mine.workId)}
+            </span>
+          )}
+        </div>
+        <Badge variant="outline" className="px-1.5 py-0 text-[9px]">
+          {presenceLabel(workPresence?.state)}
+        </Badge>
+      </div>
+      <div className="max-h-40 overflow-y-auto scroll-thin px-2.5 py-2">
+        {lastThought && lastThought.event.class === 'presence' && lastThought.event.event.kind === 'agent_thought_summary' && (
+          <p className="mb-1.5 line-clamp-2 text-[10px] italic text-muted-foreground">
+            “{lastThought.event.event.data.text}”
+          </p>
+        )}
+        {events.length === 0 ? (
+          <p className="py-1 text-[10px] text-muted-foreground/70">
+            No live work yet — the agent's steps, files, and artifacts appear here as they run.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {events.slice(-12).map((e) => {
+              const d = describeWorkEvent(e)
+              return (
+                <div key={e.eventId} className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 shrink-0 rounded-full',
+                      d.status === 'active'
+                        ? 'bg-orange-500'
+                        : d.status === 'failed'
+                          ? 'bg-rose-500'
+                          : 'bg-emerald-500',
+                    )}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[10px] text-foreground/85">
+                    {d.label}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {active && (
+          <div className="mt-1.5 flex items-center gap-1 text-[9px] text-orange-400/90">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            <span>working…</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function shortWorkId(id: string): string {
+  return id.length > 16 ? `${id.slice(0, 16)}…` : id
 }

@@ -44,6 +44,7 @@ import { hintsFor } from "./catalog";
 import { budgetJson, refRegistry } from "./budget";
 import { assertAllLogged, ContextTrace, type ContextSource } from "./context-trace";
 import { runStage, type WaterfallHooks } from "./waterfall";
+import { ensureWork, recordThought, recordTransition } from "./work-events";
 export { evaluateGuard, useTicket, guardGate } from "./guard";
 export { assertAllLogged, ContextTrace, type ContextSource } from "./context-trace";
 export { composeHooks, runStage, type WaterfallHooks } from "./waterfall";
@@ -587,11 +588,28 @@ async function runInbuiltTurn(
 
   const controller = new AbortController();
   active.set(streamId, controller);
-  if (request) {
+  // P51.14 — the Rust side sends `workId = sessionId` on every chat/stream
+  // turn (chat.rs start_stream), so the Work Gateway projection for this
+  // session is the live agent-card surface. Ensure the Work item exists and
+  // bind/start the run before the engine begins; the UI's poll loop picks the
+  // events up on its next tick.
+  if (request && params.workId !== undefined) {
+    void ensureWork(request, params.workId, sessionId, text).then(() =>
+      recordTransition(request, params.workId as string, streamId, "running"),
+    );
     void request("execution/begin", {
       trigger: surface === "automation" ? "scheduler" : "chat",
       sessionId,
-      ...(params.workId !== undefined ? { workId: params.workId } : {}),
+      workId: params.workId,
+      objective: text,
+      contextSnapshot: { sessionId, streamId },
+    }).catch(() => {
+      /* kernel optional */
+    });
+  } else if (request) {
+    void request("execution/begin", {
+      trigger: surface === "automation" ? "scheduler" : "chat",
+      sessionId,
       objective: text,
       contextSnapshot: { sessionId, streamId },
     }).catch(() => {
@@ -620,7 +638,7 @@ async function runInbuiltTurn(
     }
   }, { batchIntervalMs });
 
-  const toolExecutor = request ? new ToolExecutor(request) : undefined;
+  const toolExecutor = request ? new ToolExecutor(request, params.workId) : undefined;
   let openaiTools: OpenAIFunctionTool[] | undefined;
   let catalogIndex: string[] = [];
   const riskById = new Map<string, string>();
@@ -689,6 +707,10 @@ async function runInbuiltTurn(
           fullText: cached.response,
           totalTokens: estimateTokens(cached.response),
         });
+        if (request && params.workId !== undefined) {
+          void recordTransition(request, params.workId, streamId, "completed");
+          void recordThought(request, params.workId, cached.response);
+        }
         active.delete(streamId);
         return;
       }
@@ -890,6 +912,9 @@ async function runInbuiltTurn(
     const ctx = await runStage("preStep", hooks, { stage: "preStep", streamId, sessionId, text });
     if (ctx.abort === true) {
       emit({ type: "done", streamId, turnId: `${sessionId}:${++turnCounter}:aborted`, fullText: "", totalTokens: 0 });
+      if (request && params.workId !== undefined) {
+        void recordTransition(request, params.workId, streamId, "cancelled");
+      }
       active.delete(streamId);
       return;
     }
@@ -995,6 +1020,9 @@ async function runInbuiltTurn(
           }
           if (controller.signal.aborted) {
             emit({ type: "cancelled", streamId });
+            if (request && params.workId !== undefined) {
+              void recordTransition(request, params.workId, streamId, "cancelled");
+            }
           } else {
             emit({
               type: "error",
@@ -1002,6 +1030,9 @@ async function runInbuiltTurn(
               code: isBudgetError(ev.error) ? "budget_exceeded" : "engine",
               message: ev.error,
             });
+            if (request && params.workId !== undefined) {
+              void recordTransition(request, params.workId, streamId, "failed");
+            }
           }
           return;
       }
@@ -1021,6 +1052,9 @@ async function runInbuiltTurn(
 
     if (controller.signal.aborted) {
       emit({ type: "cancelled", streamId });
+      if (request && params.workId !== undefined) {
+        void recordTransition(request, params.workId, streamId, "cancelled");
+      }
     } else {
       // P36 — record the successful outcome (health 1, latency, cost
       // estimate) so the next routing decision sees a live observation.
@@ -1038,6 +1072,12 @@ async function runInbuiltTurn(
         totalTokens: batcher.getTokenCount(),
         ...(usage ? { usage } : {}),
       });
+      // P51.14 — close the run on the Work Gateway: completed transition +
+      // the final summary as the agent-card thought.
+      if (request && params.workId !== undefined) {
+        void recordTransition(request, params.workId, streamId, "completed");
+        void recordThought(request, params.workId, fullText);
+      }
       // P1.3 (A9) — store a successful read-only turn's response so the next
       // identical prompt is served from the semantic cache (never mutation
       // turns). Best-effort: a missing handler never blocks the done event.
@@ -1067,6 +1107,9 @@ async function runInbuiltTurn(
       code: isBudgetError(message) ? "budget_exceeded" : "engine",
       message,
     });
+    if (request && params.workId !== undefined) {
+      void recordTransition(request, params.workId, streamId, "failed");
+    }
   } finally {
     batcher.destroy();
     active.delete(streamId);
