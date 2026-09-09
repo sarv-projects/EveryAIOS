@@ -116,7 +116,11 @@ pub enum SkillError {
     #[error("invalid skill name `{0}` (must be [a-z0-9-]+)")]
     InvalidName(String),
     #[error("skill `{name}` is {lines} lines — over the {max}-line budget; split it into focused skills")]
-    TooLong { name: String, lines: usize, max: usize },
+    TooLong {
+        name: String,
+        lines: usize,
+        max: usize,
+    },
 }
 
 impl SkillManifest {
@@ -679,6 +683,8 @@ pub fn taste_skill() -> Skill {
             author: "everyaios".into(),
             created: "2026-08-20".into(),
             version: "1.0.0".into(),
+            user_invocable: false,
+            disable_model_invocation: false,
         },
         body: "Design discipline (apply before writing UI code):\n\n\
 - VARIANCE dial (0–3): how far a screen may deviate from the established grid/pattern. Default 0; raise only with a reason.\n\
@@ -722,6 +728,8 @@ pub fn grow_from_task(
             author: author.into(),
             created: "2026-08-20".into(),
             version: final_version,
+            user_invocable: false,
+            disable_model_invocation: false,
         },
         body: solution.to_string(),
     };
@@ -807,6 +815,8 @@ mod tests {
                 author: "tester".into(),
                 created: "2026-08-20".into(),
                 version: "1.0.0".into(),
+                user_invocable: false,
+                disable_model_invocation: false,
             },
             body: "1. Read all callers before renaming.\n2. Prefer one atomic diff.".into(),
         }
@@ -914,6 +924,8 @@ mod tests {
                     author: "a".into(),
                     created: "c".into(),
                     version: "1".into(),
+                    user_invocable: false,
+                    disable_model_invocation: false,
                 },
                 body: String::new(),
             },
@@ -940,6 +952,8 @@ mod tests {
                     author: "a".into(),
                     created: "c".into(),
                     version: "1".into(),
+                    user_invocable: false,
+                    disable_model_invocation: false,
                 },
                 body: String::new(),
             })

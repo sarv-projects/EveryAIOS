@@ -275,7 +275,10 @@ pub fn fs_undo_list(state: State<'_, AppState>) -> Result<serde_json::Value, Str
 /// was wrong is never an agent-ticket mutation. Nothing is faked: no
 /// snapshot, no change.
 #[tauri::command]
-pub fn fs_undo_restore(state: State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+pub fn fs_undo_restore(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<serde_json::Value, String> {
     let p = std::path::PathBuf::from(&path);
     let mut undos = state.file_undos.lock().map_err(|e| e.to_string())?;
     // Newest-first match on the exact path (later mutations supersede).
@@ -319,7 +322,10 @@ pub fn fs_undo_restore(state: State<'_, AppState>, path: String) -> Result<serde
 /// reports `binary: true` with bytes only; UTF-8 text returns `content`.
 /// Falls back to `{found:false}` when no snapshot exists for `path`.
 #[tauri::command]
-pub fn fs_undo_snapshot(state: State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+pub fn fs_undo_snapshot(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<serde_json::Value, String> {
     let p = std::path::PathBuf::from(&path);
     let undos = state.file_undos.lock().map_err(|e| e.to_string())?;
     let undo = undos

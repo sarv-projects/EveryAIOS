@@ -112,7 +112,8 @@ mod tests {
         // Per-test subdir: tests run in parallel and a shared dir races on
         // remove/create (spurious `NotFound`). Unique per test, so parallel
         // runs are deterministic.
-        let d = std::env::temp_dir().join(format!("eaios-models-test-{}-{}", std::process::id(), name));
+        let d =
+            std::env::temp_dir().join(format!("eaios-models-test-{}-{}", std::process::id(), name));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

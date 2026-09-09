@@ -228,8 +228,8 @@ pub fn sync_serve_start(
     let session_c = Arc::clone(&session);
     let on_synced: Arc<dyn Fn(&SyncSession) + Send + Sync> =
         Arc::new(|s: &SyncSession| persist_state(s));
-    let server = SyncServer::start(addr, session_c, Some(on_synced), password)
-        .map_err(|e| e.to_string())?;
+    let server =
+        SyncServer::start(addr, session_c, Some(on_synced), password).map_err(|e| e.to_string())?;
     let addr = server.addr.to_string();
     *slot = Some(server);
     Ok(serde_json::json!({ "ok": true, "addr": addr, "port": port }))

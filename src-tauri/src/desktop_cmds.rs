@@ -32,22 +32,13 @@ use crate::AppState;
 /// platform backend attach; on headless / no-display it honest-fails (matches
 /// the "honest-fail → live" browser posture). Also caches an `AppHandle` so
 /// the engine's Guard-2 audit sink can reach `record_mutation`.
+#[derive(Default)]
 pub struct DesktopSlot {
     engine: Option<Arc<everyaios_computeruse::DesktopEngine>>,
     /// Why the engine is unavailable when `None` (empty until first attempt).
     last_error: Option<String>,
     /// The audit sink bridge (holds the `AppHandle` to feed the Merkle chain).
     sink: Option<Arc<AuditSinkToChain>>,
-}
-
-impl Default for DesktopSlot {
-    fn default() -> Self {
-        Self {
-            engine: None,
-            last_error: None,
-            sink: None,
-        }
-    }
 }
 
 /// Fail-closed human gate: the engine's preflight already lets routine acts
@@ -256,6 +247,7 @@ pub fn desktop_see(
 /// and audited on the same Merkle chain as every other effect. Fail-closed:
 /// risky classes are Denied by `FailClosedGate`; hard-denied apps never run.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Tauri command signature — fixed arity by contract
 pub fn desktop_act(
     state: State<'_, AppState>,
     app: tauri::AppHandle,

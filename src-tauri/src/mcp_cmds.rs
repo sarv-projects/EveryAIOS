@@ -96,8 +96,7 @@ fn call_args_hash(parts: &[&str]) -> String {
 fn persist_attached(state: &crate::AppState) -> Result<(), String> {
     let path = everyaios_core::default_data_dir().join("mcp_servers.json");
     let attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
-    let json =
-        serde_json::to_vec_pretty(&*attached).map_err(|e| format!("encode: {e}"))?;
+    let json = serde_json::to_vec_pretty(&*attached).map_err(|e| format!("encode: {e}"))?;
     drop(attached);
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, &json).map_err(|e| format!("write: {e}"))?;
@@ -114,9 +113,9 @@ pub fn load_attached_servers() -> std::collections::HashMap<String, McpServerRow
     let Ok(bytes) = std::fs::read(&path) else {
         return Default::default();
     };
-    let Ok(rows) = serde_json::from_slice::<std::collections::HashMap<String, McpServerRow>>(
-        &bytes,
-    ) else {
+    let Ok(rows) =
+        serde_json::from_slice::<std::collections::HashMap<String, McpServerRow>>(&bytes)
+    else {
         return Default::default();
     };
     rows.into_iter()
@@ -149,7 +148,11 @@ pub fn mcp_servers(state: tauri::State<'_, crate::AppState>) -> Result<Vec<McpSe
     // previous shell) honestly report disconnected until re-attached.
     let live = state.mcp_live.lock().map_err(|e| e.to_string())?;
     for (name, info) in attached.iter() {
-        let status = if live.contains_key(name) { "connected" } else { "disconnected" };
+        let status = if live.contains_key(name) {
+            "connected"
+        } else {
+            "disconnected"
+        };
         rows.push(McpServerRow {
             name: name.clone(),
             status: status.into(),
@@ -236,7 +239,10 @@ pub fn mcp_attach_request(
         args.join(" ")
     ))
     .with_risk(RiskLevel::High)
-    .with_script(vec![format!("{command} {}", args.join(" "))], format!("mcp:{name}"));
+    .with_script(
+        vec![format!("{command} {}", args.join(" "))],
+        format!("mcp:{name}"),
+    );
     let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     let verdict = guard.evaluate(
         "mcp",
@@ -333,10 +339,7 @@ pub fn mcp_attach_commit(
 /// P50.3.5 — detach: remove the row + kill the live child, and persist the
 /// disconnect so the server does not reappear connected after a restart.
 #[tauri::command]
-pub fn mcp_detach(
-    state: tauri::State<'_, crate::AppState>,
-    name: String,
-) -> Result<bool, String> {
+pub fn mcp_detach(state: tauri::State<'_, crate::AppState>, name: String) -> Result<bool, String> {
     let removed_live = state
         .mcp_live
         .lock()
@@ -367,9 +370,7 @@ pub fn mcp_detach(
 /// Start/Stop ride the existing flows: Stop = `mcp_detach`, Start =
 /// `mcp_attach_request` → `mcp_attach_commit` (Guard-2 ticketed).
 #[tauri::command]
-pub fn mcp_refresh(
-    state: tauri::State<'_, crate::AppState>,
-) -> Result<serde_json::Value, String> {
+pub fn mcp_refresh(state: tauri::State<'_, crate::AppState>) -> Result<serde_json::Value, String> {
     let mut pruned: Vec<String> = Vec::new();
     {
         let mut live = state.mcp_live.lock().map_err(|e| e.to_string())?;
@@ -561,8 +562,8 @@ pub fn mcp_remote_call(
             .ok_or_else(|| format!("`{store_id}` is not connected"))?;
         let http = everyaios_mcp::UreqTransport;
         let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
-        let resp =
-            everyaios_mcp::rpc(&target, &token, &method, params, &http).map_err(|e| e.to_string())?;
+        let resp = everyaios_mcp::rpc(&target, &token, &method, params, &http)
+            .map_err(|e| e.to_string())?;
         return Ok(resp);
     }
 
@@ -574,12 +575,16 @@ pub fn mcp_remote_call(
         .unwrap_or("<unnamed>")
         .to_string();
     let url = store_url(&store_id)?;
-    let args_hash = call_args_hash(&["mcp.remote_tools_call", &store_id, &tool, &params.to_string()]);
-    let decision = everyaios_guard::DecisionPackage::new(format!(
-        "Remote MCP call: {tool} on {store_id}"
-    ))
-    .with_risk(RiskLevel::High)
-    .with_network(vec![url]);
+    let args_hash = call_args_hash(&[
+        "mcp.remote_tools_call",
+        &store_id,
+        &tool,
+        &params.to_string(),
+    ]);
+    let decision =
+        everyaios_guard::DecisionPackage::new(format!("Remote MCP call: {tool} on {store_id}"))
+            .with_risk(RiskLevel::High)
+            .with_network(vec![url]);
     let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
     let verdict = guard.evaluate(
         "mcp",
@@ -645,8 +650,14 @@ pub fn mcp_remote_call_commit(
         .ok_or_else(|| format!("`{}` is not connected", pending.store_id))?;
     let http = everyaios_mcp::UreqTransport;
     let target = everyaios_mcp::connect(&url, &http).map_err(|e| e.to_string())?;
-    let resp = everyaios_mcp::rpc(&target, &token, &pending.method, pending.params.clone(), &http)
-        .map_err(|e| e.to_string())?;
+    let resp = everyaios_mcp::rpc(
+        &target,
+        &token,
+        &pending.method,
+        pending.params.clone(),
+        &http,
+    )
+    .map_err(|e| e.to_string())?;
 
     crate::control::record_mutation(
         &state,

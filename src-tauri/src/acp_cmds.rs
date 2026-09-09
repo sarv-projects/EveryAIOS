@@ -471,7 +471,7 @@ pub fn acp_install_commit(
 
     let outcome = installer().install(&spec).map_err(|e| e.to_string())?;
     let audit_seq = crate::control::record_mutation(
-        &*state,
+        &state,
         crate::control::AuthKind::AgentTicket,
         "acp.install",
         serde_json::json!({
@@ -1011,7 +1011,10 @@ mod tests {
         // Every build machine has a shell-ish binary on PATH; on Windows the
         // probe also covers .exe/.cmd/.bat shims via the same helper.
         let probe = if cfg!(windows) { "cmd" } else { "sh" };
-        assert!(resolve_on_path(probe).is_some(), "{probe} must resolve on PATH");
+        assert!(
+            resolve_on_path(probe).is_some(),
+            "{probe} must resolve on PATH"
+        );
         assert!(
             resolve_on_path("definitely-not-a-real-everyaios-binary-xyz").is_none(),
             "unknown names must not resolve"

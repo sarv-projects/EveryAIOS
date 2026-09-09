@@ -60,7 +60,7 @@ pub enum GuardDecision {
 }
 
 /// A pending ticket + its decision package (the full card payload).
-
+///
 /// P51.20 — a named one-click permission bundle (Combo). `rules` are
 /// canonical `permissions.toml` key → rule-string overrides; `tool_rules`
 /// are (tool pattern, allow|ask|deny) entries for the tool allow-list
@@ -832,7 +832,10 @@ impl GuardService {
                     if tool.is_empty() {
                         return Err("rule tool must not be empty".into());
                     }
-                    let args_glob = r.get("argsGlob").and_then(Value::as_str).map(str::to_string);
+                    let args_glob = r
+                        .get("argsGlob")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
                     let approval = match r.get("approval").and_then(Value::as_str) {
                         Some("allow") => Approval::Allow,
                         Some("ask") => Approval::Ask,
@@ -857,16 +860,14 @@ impl GuardService {
             // hard floors (destructive/delete, secrets, financial, security
             // changes, irreversible external effects stay Ask-or-worse in
             // every bundle).
-            "guard/combos" => {
-                Ok(json!({
-                    "combos": COMBO_BUNDLES.iter().map(|c| json!({
-                        "name": c.name,
-                        "description": c.description,
-                        "rules": c.rules,
-                        "toolRules": c.tool_rules,
-                    })).collect::<Vec<_>>(),
-                }))
-            }
+            "guard/combos" => Ok(json!({
+                "combos": COMBO_BUNDLES.iter().map(|c| json!({
+                    "name": c.name,
+                    "description": c.description,
+                    "rules": c.rules,
+                    "toolRules": c.tool_rules,
+                })).collect::<Vec<_>>(),
+            })),
             "guard/apply_combo" => {
                 let name = params
                     .get("name")
@@ -876,11 +877,8 @@ impl GuardService {
                     .iter()
                     .find(|c| c.name == name)
                     .ok_or_else(|| format!("unknown combo: {name}"))?;
-                let rules: Vec<(&'static str, &'static str)> = combo
-                    .rules
-                    .iter()
-                    .map(|&(k, v)| (k, v))
-                    .collect();
+                let rules: Vec<(&'static str, &'static str)> =
+                    combo.rules.iter().map(|&(k, v)| (k, v)).collect();
                 let applied = self.policy.apply_rules(&rules)?;
                 // Tool allow-list rules ride the same deny-wins engine as
                 // `guard/set_policy_rules`.
@@ -1508,7 +1506,10 @@ mod tests {
             "h",
             0,
         );
-        assert!(matches!(d, GuardDecision::Allow { .. }), "plain read must be Allow");
+        assert!(
+            matches!(d, GuardDecision::Allow { .. }),
+            "plain read must be Allow"
+        );
         let d = g.evaluate(
             "s1",
             "a1",
@@ -1547,10 +1548,7 @@ mod tests {
         let out = g.handle("guard/combos", &json!({})).unwrap();
         let combos = out["combos"].as_array().unwrap();
         assert!(combos.len() >= 6);
-        let names: Vec<&str> = combos
-            .iter()
-            .filter_map(|c| c["name"].as_str())
-            .collect();
+        let names: Vec<&str> = combos.iter().filter_map(|c| c["name"].as_str()).collect();
         assert!(names.contains(&"approve_then_read"));
         assert!(names.contains(&"dev_workflow"));
         assert!(names.contains(&"browse_only"));

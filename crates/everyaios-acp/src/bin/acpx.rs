@@ -64,8 +64,11 @@ impl SessionStore {
         let path = store_path();
         let dir = path.parent().ok_or("no parent dir")?;
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        fs::write(&path, serde_json::to_string_pretty(self).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(self).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())
     }
 }
 
@@ -146,7 +149,14 @@ fn doctor(registry: &LaunchRegistry, json: bool) -> i32 {
                 width = 1
             );
         }
-        println!("{}", if all_ok { "doctor: ALL OK" } else { "doctor: agents missing — install before run" });
+        println!(
+            "{}",
+            if all_ok {
+                "doctor: ALL OK"
+            } else {
+                "doctor: agents missing — install before run"
+            }
+        );
     }
     if all_ok {
         0
@@ -197,7 +207,11 @@ fn run_prompt(
     if !opts.quiet && !opts.json {
         eprintln!("acpx: spawning {} in {}", plan.agent_id, opts.cwd);
     }
-    let env: Vec<(&str, &str)> = plan.env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let env: Vec<(&str, &str)> = plan
+        .env
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
     let args: Vec<&str> = plan.args.iter().map(String::as_str).collect();
     let transport = ProcessTransport::spawn(&plan.command, &args, &env)
         .map_err(|e| format!("spawn failed: {e}"))?;
@@ -244,11 +258,14 @@ fn run_prompt(
     session.shutdown();
 
     if let Some(name) = opts.session_name {
-        let entry = store.sessions.entry(name.to_string()).or_insert_with(|| SessionEntry {
-            agent: opts.agent.to_string(),
-            cwd: opts.cwd.to_string(),
-            history: Vec::new(),
-        });
+        let entry = store
+            .sessions
+            .entry(name.to_string())
+            .or_insert_with(|| SessionEntry {
+                agent: opts.agent.to_string(),
+                cwd: opts.cwd.to_string(),
+                history: Vec::new(),
+            });
         entry.history.push(text.to_string());
         let _ = store.save();
     }
@@ -432,7 +449,9 @@ fn main() {
                 }
             }
             Some("new") => {
-                let Some(name) = positional.get(1) else { usage() };
+                let Some(name) = positional.get(1) else {
+                    usage()
+                };
                 let Some(agent_id) = agent else { usage() };
                 let mut store = SessionStore::load();
                 store.sessions.insert(
@@ -455,7 +474,9 @@ fn main() {
                 }
             }
             Some("rm") => {
-                let Some(name) = positional.get(1) else { usage() };
+                let Some(name) = positional.get(1) else {
+                    usage()
+                };
                 let mut store = SessionStore::load();
                 if store.sessions.remove(name).is_some() {
                     let _ = store.save();
@@ -470,14 +491,23 @@ fn main() {
         },
         "queue" => match positional.first().map(String::as_str) {
             Some("add") => {
-                let Some(name) = positional.get(1) else { usage() };
-                let prompt = positional.iter().skip(2).cloned().collect::<Vec<_>>().join(" ");
+                let Some(name) = positional.get(1) else {
+                    usage()
+                };
+                let prompt = positional
+                    .iter()
+                    .skip(2)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 if prompt.trim().is_empty() {
                     usage();
                 }
                 let mut store = SessionStore::load();
                 let Some(entry) = store.sessions.get_mut(name) else {
-                    eprintln!("acpx: no session {name} — `acpx session new {name} --agent X` first");
+                    eprintln!(
+                        "acpx: no session {name} — `acpx session new {name} --agent X` first"
+                    );
                     return;
                 };
                 entry.history.push(prompt);
@@ -513,7 +543,7 @@ fn main() {
                         (
                             entry.agent.clone(),
                             entry.cwd.clone(),
-                            entry.history.drain(..).collect::<Vec<String>>(),
+                            std::mem::take(&mut entry.history),
                         )
                     };
                     if pending.is_empty() {
@@ -554,7 +584,9 @@ fn main() {
             _ => usage(),
         },
         "flow" => {
-            let Some(file) = positional.first() else { usage() };
+            let Some(file) = positional.first() else {
+                usage()
+            };
             let Some(agent_id) = agent else { usage() };
             let text = match fs::read_to_string(file) {
                 Ok(t) => t,
@@ -609,4 +641,3 @@ fn main() {
     };
     std::process::exit(exit);
 }
-

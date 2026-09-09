@@ -127,6 +127,17 @@ fn registered_terminal_names(texts: &[(PathBuf, String)]) -> BTreeSet<String> {
                 panic!("unterminated generate_handler! [ ... ] in src");
             };
             let body = &text[open_abs + 1..close_abs];
+            // Comments inside the list (e.g. `// P51.32: ..., incidents, doctor, ...`)
+            // must not be parsed as registrations — strip `//` line comments first.
+            let body: String = body
+                .lines()
+                .map(|l| {
+                    l.find("//")
+                        .map(|p| &l[..p])
+                        .unwrap_or(l)
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
             // Split on top-level commas (naive but lists are identifier-only).
             for term in body.split(',') {
                 let term = term.trim();

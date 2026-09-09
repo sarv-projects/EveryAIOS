@@ -11,7 +11,7 @@
 //! *why* a provider is or isn't a route candidate, and so the value is
 //! test-observable end to end.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use everyaios_catalog::{
     base_registry, DiscoveryInventory, Health, ManagedResource, ResourceCard, ResourceKind,
@@ -106,7 +106,7 @@ fn collect_local_models() -> Vec<ResourceCard> {
         .collect()
 }
 
-fn collect_installed_mcp(data_dir: &PathBuf) -> Vec<ResourceCard> {
+fn collect_installed_mcp(data_dir: &Path) -> Vec<ResourceCard> {
     let dir = data_dir.join("mcp");
     std::fs::read_dir(&dir)
         .map(|rd| {
@@ -134,7 +134,7 @@ fn collect_installed_mcp(data_dir: &PathBuf) -> Vec<ResourceCard> {
         .unwrap_or_default()
 }
 
-fn collect_installed_skills(data_dir: &PathBuf) -> Vec<ResourceCard> {
+fn collect_installed_skills(data_dir: &Path) -> Vec<ResourceCard> {
     let dir = data_dir.join("skills");
     std::fs::read_dir(&dir)
         .map(|rd| {
@@ -162,7 +162,7 @@ fn collect_installed_skills(data_dir: &PathBuf) -> Vec<ResourceCard> {
         .unwrap_or_default()
 }
 
-fn collect_agents(data_dir: &PathBuf) -> Vec<ResourceCard> {
+fn collect_agents(data_dir: &Path) -> Vec<ResourceCard> {
     // The inbuilt agent is always present; on-disk bundles live under agents/.
     let mut cards = vec![ResourceCard {
         kind: ResourceKind::Agent,
@@ -208,26 +208,59 @@ fn collect_browsers() -> Vec<ResourceCard> {
     // — Windows Chrome/Edge/Brave and macOS apps are NOT on PATH, so the
     // PATH probe alone would report zero browsers there.
     const CANDS: &[(&str, &[&str])] = &[
-        ("chrome", &["google-chrome", "google-chrome-stable", "chrome"]),
+        (
+            "chrome",
+            &["google-chrome", "google-chrome-stable", "chrome"],
+        ),
         ("chromium", &["chromium", "chromium-browser"]),
         ("edge", &["msedge", "microsoft-edge"]),
         ("brave", &["brave-browser"]),
     ];
     #[cfg(target_os = "windows")]
     const KNOWN_PATHS: &[(&str, &str)] = &[
-        ("chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-        ("chrome", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
-        ("edge", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
-        ("edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
-        ("brave", r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"),
-        ("brave", r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe"),
+        (
+            "chrome",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        ),
+        (
+            "chrome",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        ),
+        (
+            "edge",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        ),
+        (
+            "edge",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        ),
+        (
+            "brave",
+            r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+        ),
+        (
+            "brave",
+            r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+        ),
     ];
     #[cfg(target_os = "macos")]
     const KNOWN_PATHS: &[(&str, &str)] = &[
-        ("chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-        ("edge", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
-        ("chromium", "/Applications/Chromium.app/Contents/MacOS/Chromium"),
-        ("brave", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+        (
+            "chrome",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ),
+        (
+            "edge",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        ),
+        (
+            "chromium",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ),
+        (
+            "brave",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        ),
     ];
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     const KNOWN_PATHS: &[(&str, &str)] = &[];

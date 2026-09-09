@@ -69,7 +69,14 @@ fn models_base() -> PathBuf {
     everyaios_core::default_data_dir().join("models")
 }
 
-fn emit_download(app: &AppHandle, kind: &str, id: &str, repo: &str, filename: &str, status: &DownloadStatus) {
+fn emit_download(
+    app: &AppHandle,
+    kind: &str,
+    id: &str,
+    repo: &str,
+    filename: &str,
+    status: &DownloadStatus,
+) {
     let _ = app.emit(
         MODEL_DOWNLOAD_EVENT,
         serde_json::json!({
@@ -126,7 +133,11 @@ pub fn model_download_start(
         let map = state.model_downloads.lock().map_err(|e| e.to_string())?;
         for (id, slot) in map.iter() {
             if slot.dest == dest {
-                let status = slot.status.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                let status = slot
+                    .status
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
                 return Ok(serde_json::json!({
                     "ok": true, "alreadyInstalled": false, "id": id,
                     "resuming": status.done_bytes > 0,
@@ -263,7 +274,11 @@ pub fn model_downloads(state: State<'_, AppState>) -> Result<serde_json::Value, 
     let active: Vec<serde_json::Value> = map
         .iter()
         .map(|(id, slot)| {
-            let s = slot.status.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let s = slot
+                .status
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             serde_json::json!({
                 "id": id,
                 "repo": slot.repo,
@@ -320,7 +335,10 @@ fn walk_parts(dir: &std::path::Path, active: &[PathBuf], out: &mut Vec<serde_jso
 /// Cooperative cancel: the download thread stops at the next chunk boundary
 /// and keeps the `.part` file (resume via `model_download_start`).
 #[tauri::command]
-pub fn model_download_cancel(state: State<'_, AppState>, id: String) -> Result<serde_json::Value, String> {
+pub fn model_download_cancel(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<serde_json::Value, String> {
     let map = state.model_downloads.lock().map_err(|e| e.to_string())?;
     match map.get(&id) {
         Some(slot) => {
@@ -419,10 +437,7 @@ pub fn model_serve(
     let mut opts = match serve_options {
         Some(v) => {
             use everyaios_core::models::{FlashAttn, ServeOptions};
-            let mut o = match serde_json::from_value::<ServeOptions>(v.clone()) {
-                Ok(o) => o,
-                Err(_) => ServeOptions::default(),
-            };
+            let mut o = serde_json::from_value::<ServeOptions>(v.clone()).unwrap_or_default();
             if let Some(kv) = v.get("kvCache").and_then(|k| k.as_str()) {
                 kv_cache = match kv.to_ascii_lowercase().as_str() {
                     "q8_0" => Some(everyaios_core::models::KvCacheType::Q8_0),
@@ -484,8 +499,14 @@ pub fn model_serve(
     let opts2 = opts;
     let kv2 = kv_cache;
     std::thread::spawn(move || {
-        let outcome =
-            ModelsRuntime::serve_gguf_with_options(&entry, bin.as_deref(), port, num_ctx, kv2, opts2);
+        let outcome = ModelsRuntime::serve_gguf_with_options(
+            &entry,
+            bin.as_deref(),
+            port,
+            num_ctx,
+            kv2,
+            opts2,
+        );
         let mut s = status2.lock().unwrap_or_else(|e| e.into_inner());
         match outcome {
             Ok(ep) => {
@@ -517,10 +538,7 @@ fn _entry_shape(_e: &ModelEntry) {}
 /// live hardware. Returns the tier (fits/may_be_slow/wont_fit), the
 /// file/KV/total split, and the default quant. Nothing is downloaded.
 #[tauri::command]
-pub fn model_estimate_fit(
-    file_gb: f64,
-    ctx_tokens: u64,
-) -> Result<serde_json::Value, String> {
+pub fn model_estimate_fit(file_gb: f64, ctx_tokens: u64) -> Result<serde_json::Value, String> {
     let hw = probe_hardware();
     let ram_gb = hw.available_ram_bytes as f64 / 1_073_741_824.0;
     let vram_gb = hw.gpu_vram_bytes.unwrap_or(0) as f64 / 1_073_741_824.0;
@@ -556,9 +574,7 @@ pub fn model_best_pick(
         serde_json::from_value(serde_json::json!(hw)).map_err(|e| format!("bad hw: {e}"))?;
     let list: Vec<everyaios_core::models::best::VariantCandidate> =
         serde_json::from_value(candidates).map_err(|e| format!("bad candidates: {e}"))?;
-    Ok(
-        everyaios_core::models::best::best_variant(&hw_class, &list)
-            .map(|v| serde_json::to_value(v).unwrap_or(serde_json::Value::Null))
-            .unwrap_or(serde_json::Value::Null),
-    )
+    Ok(everyaios_core::models::best::best_variant(&hw_class, &list)
+        .map(|v| serde_json::to_value(v).unwrap_or(serde_json::Value::Null))
+        .unwrap_or(serde_json::Value::Null))
 }

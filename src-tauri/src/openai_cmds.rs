@@ -18,8 +18,7 @@
 use std::sync::{Arc, Mutex};
 
 use everyaios_core::{
-    ChatCompletionRequest, CompletionBackend, CompletionResult, ModelLister, ModelRow,
-    OpenAiServer,
+    ChatCompletionRequest, CompletionBackend, CompletionResult, ModelLister, ModelRow, OpenAiServer,
 };
 use tauri::State;
 
@@ -48,7 +47,11 @@ impl BrokerBackend {
             return (self.default_provider.clone(), self.default_model.clone());
         }
         // Alias table (config MODEL_ALIASES).
-        let resolved = self.aliases.get(model).cloned().unwrap_or_else(|| model.to_string());
+        let resolved = self
+            .aliases
+            .get(model)
+            .cloned()
+            .unwrap_or_else(|| model.to_string());
         if let Some((prov, m)) = resolved.split_once('/') {
             (prov.to_string(), m.to_string())
         } else {
@@ -153,7 +156,10 @@ pub fn openai_server_start(
     let (default_provider, default_model) = aliases
         .values()
         .next()
-        .and_then(|v| v.split_once('/').map(|(p, m)| (p.to_string(), m.to_string())))
+        .and_then(|v| {
+            v.split_once('/')
+                .map(|(p, m)| (p.to_string(), m.to_string()))
+        })
         .unwrap_or_else(|| ("openai".to_string(), "gpt-4o-mini".to_string()));
 
     // Installed local models (best-effort; empty if no runtime).

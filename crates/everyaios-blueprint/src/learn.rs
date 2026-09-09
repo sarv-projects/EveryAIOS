@@ -203,6 +203,8 @@ pub fn learn_from_evidence(
         author: req.author.clone(),
         created: cron_like_now(),
         version: version.clone(),
+        user_invocable: false,
+        disable_model_invocation: false,
     };
     let next_version = manifest.version.clone();
     let skill = Skill {

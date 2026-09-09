@@ -53,7 +53,6 @@ pub fn work_reviews(state: State<'_, AppState>, work_id: String) -> Result<Value
     serde_json::to_value(gateway.reviews(&work_id)).map_err(|e| e.to_string())
 }
 
-
 // =============================================================================
 // P49.10–12 — session-runtime lifecycle commands (PtySession / WorktreeBinding
 // / AgentSession). The gateway owns the durable descriptors + event fan-out;
@@ -184,7 +183,11 @@ pub fn work_worktree_op(
     let gateway = gateway(&state)?;
     let mut g = gateway.lock().map_err(|e| e.to_string())?;
     let ev = match op.as_str() {
-        "merge" => g.merge_worktree(&work_id, &worktree_id, &into.unwrap_or_else(|| "main".into()))?,
+        "merge" => g.merge_worktree(
+            &work_id,
+            &worktree_id,
+            &into.unwrap_or_else(|| "main".into()),
+        )?,
         "revert" => g.revert_worktree(&work_id, &worktree_id)?,
         "destroy" => g.destroy_worktree(&work_id, &worktree_id)?,
         other => return Err(format!("unknown worktree op: {other}")),
@@ -212,7 +215,15 @@ pub fn work_agent_spawn(
     };
     let gateway = gateway(&state)?;
     let mut g = gateway.lock().map_err(|e| e.to_string())?;
-    let ev = g.spawn_subagent(&work_id, &run_id, &agent_session_id, &agent_id, lt, pty_id, worktree_id)?;
+    let ev = g.spawn_subagent(
+        &work_id,
+        &run_id,
+        &agent_session_id,
+        &agent_id,
+        lt,
+        pty_id,
+        worktree_id,
+    )?;
     serde_json::to_value(ev).map_err(|e| e.to_string())
 }
 

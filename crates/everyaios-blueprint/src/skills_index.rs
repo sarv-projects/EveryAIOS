@@ -344,6 +344,8 @@ mod tests {
                 author: "tester".into(),
                 created: "2026-08-20".into(),
                 version: "1.0.0".into(),
+                user_invocable: false,
+                disable_model_invocation: false,
             },
             body: String::new(),
         }];

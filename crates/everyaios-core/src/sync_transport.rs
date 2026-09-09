@@ -188,13 +188,13 @@ fn read_auth_frame(stream: &mut TcpStream, password: &str) -> Result<(), WireErr
     }
     // Constant-time-ish comparison (len-equal; the password is a passphrase,
     // not a MAC key — the ECDH confirm token remains the real key proof).
-    let ok = frame.password.as_bytes().len() == password.as_bytes().len()
+    let ok = frame.password.len() == password.len()
         && frame
             .password
             .as_bytes()
             .iter()
-            .zip(password.as_bytes())
-            .all(|(a, b)| a == b);
+            .zip(password.bytes())
+            .all(|(a, b)| *a == b);
     if !ok {
         return Err(WireError::HandshakeFailed);
     }
@@ -430,6 +430,7 @@ mod tests {
         let item = b.set.get(SyncScope::Memory, "gone").unwrap();
         assert!(item.tombstone && item.rev == 3);
         server.stop();
+    }
 
     #[test]
     fn password_gate_blocks_wrong_and_missing_but_passes_match() {
@@ -482,7 +483,6 @@ mod tests {
         assert!(sync_with_peer(server.addr, &mut client, Some("stray-pass")).is_err());
         assert!(server.outcomes().is_empty());
         server.stop();
-    }
     }
 
     #[test]

@@ -227,7 +227,14 @@ impl ModelsRuntime {
         num_ctx: u32,
         kv_cache: Option<KvCacheType>,
     ) -> Result<LocalEndpoint, ModelsError> {
-        Self::serve_gguf_with_options(entry, llamafile_bin, port, num_ctx, kv_cache, ServeOptions::default())
+        Self::serve_gguf_with_options(
+            entry,
+            llamafile_bin,
+            port,
+            num_ctx,
+            kv_cache,
+            ServeOptions::default(),
+        )
     }
 
     /// [`ModelsRuntime::serve_gguf`] plus the P52.4 per-serve options
@@ -427,7 +434,8 @@ mod tests {
             runtime: ServeRuntime::Mlx,
             ..ServeOptions::default()
         };
-        let err = ModelsRuntime::serve_gguf_with_options(&e, None, 11435, 16384, None, opts).unwrap_err();
+        let err =
+            ModelsRuntime::serve_gguf_with_options(&e, None, 11435, 16384, None, opts).unwrap_err();
         assert!(
             matches!(err, ModelsError::NoRuntime(_)),
             "expected a closed failure, got {err:?}"
@@ -512,14 +520,20 @@ mod tests {
             gguf_args(p, 11435, 16384, None),
             gguf_args_with_options(p, 11435, 16384, None, ServeOptions::default())
         );
-        assert_eq!(gguf_args_with_options(p, 11435, 16384, None, ServeOptions::default()),
+        assert_eq!(
+            gguf_args_with_options(p, 11435, 16384, None, ServeOptions::default()),
             vec![
-                "--model".to_string(), "/w/phi.gguf".to_string(),
-                "--host".to_string(), "127.0.0.1".to_string(),
-                "--port".to_string(), "11435".to_string(),
-                "--ctx-size".to_string(), "16384".to_string(),
+                "--model".to_string(),
+                "/w/phi.gguf".to_string(),
+                "--host".to_string(),
+                "127.0.0.1".to_string(),
+                "--port".to_string(),
+                "11435".to_string(),
+                "--ctx-size".to_string(),
+                "16384".to_string(),
                 "--nobrowser".to_string(),
-            ]);
+            ]
+        );
     }
 
     #[test]

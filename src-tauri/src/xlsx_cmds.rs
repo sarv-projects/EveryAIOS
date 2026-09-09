@@ -166,7 +166,7 @@ pub fn xlsx_edit_commit(
         .map_err(|e| format!("edit ticket not consumable: {e}"))?;
     drop(guard);
 
-    crate::control::snapshot_file(&*state, "office", &path);
+    crate::control::snapshot_file(&state, "office", &path);
     let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
     let mut batch = WorkbookCommandBatch::new(0, format!("Set {address} to {value}"));
     batch.operations.push(XlsxOp::SetCell {
@@ -178,7 +178,7 @@ pub fn xlsx_edit_commit(
     atomic_write(&path, &outcome.bytes).map_err(|e| e.to_string())?;
 
     let audit_seq = crate::control::record_mutation(
-        &*state,
+        &state,
         crate::control::AuthKind::AgentTicket,
         "office.xlsx_edit",
         serde_json::json!({
@@ -271,13 +271,13 @@ pub fn xlsx_batch_commit(
         .map_err(|e| format!("batch ticket not consumable: {e}"))?;
     drop(guard);
 
-    crate::control::snapshot_file(&*state, "office", &path);
+    crate::control::snapshot_file(&state, "office", &path);
     let bytes = std::fs::read(PathBuf::from(&path)).map_err(|e| e.to_string())?;
     let outcome = apply_batch(&bytes, &batch, &sheet).map_err(|e| e.to_string())?;
     atomic_write(&path, &outcome.bytes).map_err(|e| e.to_string())?;
 
     let audit_seq = crate::control::record_mutation(
-        &*state,
+        &state,
         crate::control::AuthKind::AgentTicket,
         "office.xlsx_batch",
         serde_json::json!({

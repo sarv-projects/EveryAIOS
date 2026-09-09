@@ -138,6 +138,8 @@ fn make(
         author: "everyaios".into(),
         created: "2026-08-24".into(),
         version: "1.0.0".into(),
+        user_invocable: false,
+        disable_model_invocation: false,
     };
     (
         name.into(),

@@ -969,9 +969,7 @@ impl MemoryService {
                         a.iter()
                             .filter_map(|t| {
                                 t.as_str().map(str::to_string).or_else(|| {
-                                    t.get("content")
-                                        .and_then(Value::as_str)
-                                        .map(str::to_string)
+                                    t.get("content").and_then(Value::as_str).map(str::to_string)
                                 })
                             })
                             .collect()
@@ -1236,27 +1234,25 @@ mod tests {
             .map(|i| json!({ "content": format!("turn {i}: ") + &"x".repeat(200) }))
             .collect();
         let out = m
-            .handle("memory/compact", &json!({ "turns": turns, "inputLimit": 128_000 }))
+            .handle(
+                "memory/compact",
+                &json!({ "turns": turns, "inputLimit": 128_000 }),
+            )
             .unwrap();
         let kept_from = out["keptFrom"].as_u64().unwrap() as usize;
         assert!(kept_from > 0, "head must be pruned");
-        assert!(out["kept"].as_array().unwrap().len() > 0);
+        assert!(!out["kept"].as_array().unwrap().is_empty());
         let marker = out["marker"].as_str();
         assert!(marker.is_some() && marker.unwrap().contains("continued"));
 
         // Empty transcript: nothing pruned, no marker.
-        let empty = m
-            .handle("memory/compact", &json!({ "turns": [] }))
-            .unwrap();
+        let empty = m.handle("memory/compact", &json!({ "turns": [] })).unwrap();
         assert_eq!(empty["keptFrom"], 0);
         assert!(empty["marker"].is_null());
 
         // Short transcript (already fits): nothing dropped, no marker.
         let short = m
-            .handle(
-                "memory/compact",
-                &json!({ "turns": [{"content": "hi"}] }),
-            )
+            .handle("memory/compact", &json!({ "turns": [{"content": "hi"}] }))
             .unwrap();
         assert_eq!(short["keptFrom"], 0);
         assert!(short["marker"].is_null());

@@ -277,7 +277,10 @@ mod tests {
     #[test]
     fn name_sanitizer_accepts_slugs() {
         assert_eq!(sanitize_attach_name("gmail"), Some("gmail".into()));
-        assert_eq!(sanitize_attach_name("my-server_2.v1"), Some("my-server_2.v1".into()));
+        assert_eq!(
+            sanitize_attach_name("my-server_2.v1"),
+            Some("my-server_2.v1".into())
+        );
         assert_eq!(sanitize_attach_name("  trimmed  "), Some("trimmed".into()));
     }
 

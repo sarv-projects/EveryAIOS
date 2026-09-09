@@ -31,11 +31,11 @@ mod local_cmds;
 mod lsp_cmds;
 mod maintenance_cmds;
 mod mcp_cmds;
-mod model_cmds;
 mod memory_cmds;
+mod model_cmds;
 mod oauth_cmds;
-mod openai_cmds;
 mod office_cmds;
+mod openai_cmds;
 mod replay_cmds;
 mod scheduler_cmds;
 mod shell_cmds;
@@ -53,8 +53,8 @@ pub use state::AppState;
 
 use everyaios_core::GuardService;
 use everyaios_guard::prescan::guard as compiled_guard;
-use everyaios_vault::Vault;
 use everyaios_vault::KeyRing;
+use everyaios_vault::Vault;
 
 pub mod xlsx_cmds;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -113,7 +113,10 @@ fn connect_chat_relay(
 ) {
     let handle = app.clone();
     let state = app.state::<AppState>();
-    *state.sidecar_activity_ms.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&activity));
+    *state
+        .sidecar_activity_ms
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&activity));
     // The SidecarLink reader re-arms the supervisor's idle-watchdog clock on
     // every decoded frame (session/ready + session/heartbeat).
     let link = everyaios_core::SidecarLink::new_with_activity(stdin, stdout, Some(activity));
@@ -195,7 +198,13 @@ fn runtime_status(state: State<'_, AppState>) -> RuntimeStatus {
         .boot_report
         .lock()
         .ok()
-        .map(|r| if r.contains("EPHEMERAL VAULT") { "ephemeral" } else { "durable" })
+        .map(|r| {
+            if r.contains("EPHEMERAL VAULT") {
+                "ephemeral"
+            } else {
+                "durable"
+            }
+        })
         .unwrap_or("unknown");
     let sidecar = state
         .chat_relay
@@ -212,7 +221,11 @@ fn runtime_status(state: State<'_, AppState>) -> RuntimeStatus {
                 last > 0 && now_ms().saturating_sub(last) <= 30_000
             })
             .unwrap_or(false);
-    RuntimeStatus { vault, sidecar, persistence }
+    RuntimeStatus {
+        vault,
+        sidecar,
+        persistence,
+    }
 }
 
 fn now_ms() -> u64 {

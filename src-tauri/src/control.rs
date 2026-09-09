@@ -214,6 +214,40 @@ fn with_authorization(authorization: AuthKind, mut payload: Value) -> Value {
     payload
 }
 
+pub fn record_mutation(
+    state: &AppState,
+    authorization: AuthKind,
+    kind: &str,
+    payload: Value,
+) -> u64 {
+    let payload = with_authorization(authorization, payload);
+    let seq = {
+        let mut chain = state.audit.lock().unwrap_or_else(|e| e.into_inner());
+        let seq = (chain.len() as u64) + 1;
+        let event = everyaios_audit::AuditEvent {
+            seq,
+            ts_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+            kind: kind.into(),
+            payload: payload.clone(),
+            trace_id: String::new(),
+            span_id: String::new(),
+        };
+        chain.push(event);
+        seq
+    };
+    if let Ok(mut log) = state.audit_log.lock() {
+        if let Some(w) = log.as_mut() {
+            if let Ok(s) = w.write(kind, payload) {
+                return s;
+            }
+        }
+    }
+    seq
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,38 +294,4 @@ mod tests {
         // Preserves the surrounding payload.
         assert_eq!(v["kind"], "shell.command");
     }
-}
-
-pub fn record_mutation(
-    state: &AppState,
-    authorization: AuthKind,
-    kind: &str,
-    payload: Value,
-) -> u64 {
-    let payload = with_authorization(authorization, payload);
-    let seq = {
-        let mut chain = state.audit.lock().unwrap_or_else(|e| e.into_inner());
-        let seq = (chain.len() as u64) + 1;
-        let event = everyaios_audit::AuditEvent {
-            seq,
-            ts_ms: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0),
-            kind: kind.into(),
-            payload: payload.clone(),
-            trace_id: String::new(),
-            span_id: String::new(),
-        };
-        chain.push(event);
-        seq
-    };
-    if let Ok(mut log) = state.audit_log.lock() {
-        if let Some(w) = log.as_mut() {
-            if let Ok(s) = w.write(kind, payload) {
-                return s;
-            }
-        }
-    }
-    seq
 }

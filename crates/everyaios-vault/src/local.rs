@@ -38,8 +38,8 @@ pub enum LocalRuntime {
     Llamafile,
     /// MLX sidecar (`mlx_lm.server`, OpenAI-compatible `/v1/chat/completions`
     /// + `/v1/models`). Apple-Silicon unified-memory runtime (P52.7): serves
-    /// HF ids (`mlx-community/...`) instead of a local GGUF path; requires
-    /// `mlx-lm` on PATH.
+    ///   HF ids (`mlx-community/...`) instead of a local GGUF path; requires
+    ///   `mlx-lm` on PATH.
     Mlx,
 }
 
