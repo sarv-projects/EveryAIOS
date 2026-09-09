@@ -68,7 +68,7 @@ describe('P51.7/P51.21 — failed-turn error cards', () => {
     expect(m.content).toBe('Started the analysis…')
     expect(m.error).toMatchObject({ layer: 'budget', retryable: false })
     expect(m.error!.code).toBe('budget_exceeded')
-    expect(useAppStore.getState().sessions.find((s) => s.id === sid)!.status).toBe('failed')
+    expect(useAppStore.getState().sessions.find((s) => s.id === sid)!.status).toBe('budget_exceeded')
   })
 })
 

@@ -10,6 +10,7 @@
 // happened.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { recordApprovalDecision } from "./lib/ux-metrics";
 
 interface GuardDecision {
@@ -37,6 +38,8 @@ interface GuardTicket {
   approvalSource: string;
   approvalNonce: string;
   expiresAtMs: number;
+  /** P52.x — why this ticket asked instead of auto-running. */
+  reason?: string;
   decision?: GuardDecision;
 }
 
@@ -74,6 +77,13 @@ function render(tickets: GuardTicket[]): void {
     card.appendChild(sub);
     const risk = el("span", `risk ${riskTone(t.risk)}`, t.riskTier ?? t.risk);
     card.appendChild(risk);
+    // P52.x — why-asked: the card says why it asked.
+    if (t.reason) {
+      const why = el("div", "section");
+      why.appendChild(el("div", "label", "Why this asked"));
+      why.appendChild(el("div", undefined, t.reason));
+      card.appendChild(why);
+    }
 
     const d = t.decision;
     if (d?.goal) {
@@ -148,9 +158,37 @@ function render(tickets: GuardTicket[]): void {
     actions.append(approve, reject);
     card.appendChild(actions);
 
-    const expiry = t.expiresAtMs - Date.now();
-    if (expiry > 0 && expiry < 60_000) {
-      card.appendChild(el("div", "note", `Expires in ${Math.max(1, Math.round(expiry / 1000))}s — the nonce binds this card to the ticket.`));
+    // P52.x — always-visible TTL + Extend (nonce rotates; the old card dies
+    // with it). The shell re-renders on the next `guard-event` / poll.
+    {
+      const expiry = t.expiresAtMs - Date.now();
+      const ttl = el(
+        "div",
+        "note",
+        expiry > 0
+          ? `Expires in ${Math.max(1, Math.round(expiry / 1000))}s — the nonce binds this card to the ticket.`
+          : "Expired — ask the agent to re-run the step for a fresh card.",
+      );
+      card.appendChild(ttl);
+      if (expiry > 0) {
+        const extend = el("button", undefined, "Extend 60s") as HTMLButtonElement;
+        extend.addEventListener("click", async () => {
+          extend.disabled = true;
+          try {
+            const out = await invoke<{ expiresAtMs: number; approvalNonce: string }>(
+              "guard_extend_ttl",
+              { ticketId: t.ticketId, extraMs: 60_000 },
+            );
+            t.expiresAtMs = out.expiresAtMs;
+            t.approvalNonce = out.approvalNonce;
+            render(await ticketsNow());
+          } catch (e) {
+            card.appendChild(el("div", "error", `Extend refused: ${e}`));
+            extend.disabled = false;
+          }
+        });
+        card.appendChild(extend);
+      }
     }
     stackEl.appendChild(card);
   }
@@ -165,9 +203,22 @@ async function ticketsNow(): Promise<GuardTicket[]> {
 }
 
 async function main(): Promise<void> {
-  // First paint immediately, then poll (the main UI opens this window when a
-  // ticket is waiting, so a fast first paint matters).
+  // First paint immediately, then push-first via `guard-event` (2s poll is
+  // only the missed-emit fallback — same contract as the Guard panel).
   render(await ticketsNow());
+  try {
+    await listen("guard-event", () => {
+      void (async () => {
+        try {
+          render(await ticketsNow());
+        } catch {
+          /* shell not ready */
+        }
+      })();
+    });
+  } catch {
+    /* preview mode — poll fallback covers it */
+  }
   setInterval(async () => {
     try {
       render(await ticketsNow());

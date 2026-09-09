@@ -65,6 +65,13 @@ static STREAM_COUNTER: AtomicU64 = AtomicU64::new(1);
 /// Event name the UI listens to for chat stream updates.
 pub const CHAT_EVENT: &str = "chat-event";
 
+/// P52.x (guard-UX wave) — push-style Guard-2 lifecycle event
+/// (`{ kind: minted|approved|rejected|expired, ticketId, batch }`).
+/// Emitted from the shared `GuardService` lifecycle hook so both the Guard
+/// panel and the guard window re-render instantly; polling remains only as
+/// a fallback for missed emits.
+pub const GUARD_EVENT: &str = "guard-event";
+
 /// P11.5.11 — AG-UI live transport event (raw encoded envelope line in
 /// `{ "line": … }`). Emitted for every `agui/event` notification the
 /// coordinator pushes.
@@ -273,6 +280,8 @@ fn chat_stream(
     soul_md: Option<String>,
     user_documents: Option<Vec<everyaios_core::UserDocument>>,
     primary_chief: Option<String>,
+    work_id: Option<String>,
+    project_id: Option<String>,
 ) -> Result<String, String> {
     // P1.4: dispatch one turn through the coordinator's ConversationEngine.
     // The reply is the streamId; all output arrives as `chat-event` emits
@@ -308,8 +317,10 @@ fn chat_stream(
             persona_id,
             soul_md,
             user_documents,
+            project_id,
             primary_chief,
             credentialed_providers,
+            work_id,
         })
         .map_err(|e| e.to_string())?;
     Ok(stream_id)
@@ -405,6 +416,7 @@ fn chat_tool_retry(
     tool_id: String,
     args: serde_json::Value,
     agent_id: Option<String>,
+    work_id: Option<String>,
 ) -> Result<(), String> {
     let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
     let relay = relay
@@ -720,6 +732,38 @@ pub fn run() {
         // paths where the shell is absent (plain-browser preview).
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // P52.x — bridge the shared GuardService lifecycle hook to
+            // `guard-event` emits (same fire-and-forget pattern as
+            // CHAT_EVENT). Narrow lock: subscribe once, then move only the
+            // receiver + handle into the forwarder thread.
+            {
+                let rx = app
+                    .state::<AppState>()
+                    .guard_service
+                    .lock()
+                    .map(|mut svc| svc.subscribe_lifecycle())
+                    .unwrap_or_else(|e| e.into_inner().subscribe_lifecycle());
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    for ev in rx {
+                        let payload = match &ev {
+                            everyaios_core::GuardLifecycle::Minted { ticket_id, batch } => {
+                                serde_json::json!({ "kind": "minted", "ticketId": ticket_id, "batch": batch })
+                            }
+                            everyaios_core::GuardLifecycle::Approved { ticket_id, batch } => {
+                                serde_json::json!({ "kind": "approved", "ticketId": ticket_id, "batch": batch })
+                            }
+                            everyaios_core::GuardLifecycle::Rejected { ticket_id, batch } => {
+                                serde_json::json!({ "kind": "rejected", "ticketId": ticket_id, "batch": batch })
+                            }
+                            everyaios_core::GuardLifecycle::Expired { ticket_id, batch } => {
+                                serde_json::json!({ "kind": "expired", "ticketId": ticket_id, "batch": batch })
+                            }
+                        };
+                        let _ = handle.emit(GUARD_EVENT, payload);
+                    }
+                });
+            }
             // Tray must be non-fatal: on systems without appindicator/tray
             // support the app should still start (just without a tray icon).
             if let Err(e) = boot::setup_tray(app.handle()) {

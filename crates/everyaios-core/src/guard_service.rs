@@ -147,8 +147,65 @@ pub struct PendingGuardCard {
     /// Card-bound nonce required by the human approval command.
     pub approval_nonce: String,
     pub expires_at_ms: u64,
+    /// P52.x (guard-UX wave) — why this ticket asked instead of auto-running.
+    /// One stable machine-readable code + human sentence, e.g.
+    /// `policy:ask op=write` / `profile:standard risk high>=high` /
+    /// `confidence 0.62<0.85` / `floor:protected-settings` /
+    /// `floor:human-only(op)` / `tier:R4 deny-by-default` /
+    /// `reviewer:disabled(budget-zero)`. Skipped when unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decision: Option<DecisionPackage>,
+}
+
+/// P52.x (guard-UX wave) — the machine-readable why-asked code + human
+/// sentence carried on a pending card. Pure data; no authority.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AskReason {
+    pub code: String,
+    pub detail: String,
+}
+
+impl AskReason {
+    fn new(code: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            detail: detail.into(),
+        }
+    }
+
+    /// Render `code detail` for the card line (`Why this asked: …`).
+    pub fn render(&self) -> String {
+        if self.detail.is_empty() {
+            self.code.clone()
+        } else {
+            format!("{} {}", self.code, self.detail)
+        }
+    }
+}
+
+/// P52.x (guard-UX wave) — a push-style lifecycle event for the shell to fan
+/// out over `guard-event`. The shell subscribes via
+/// [`GuardService::subscribe_lifecycle`]; snapshots are cloned out from under
+/// the lock so slow consumers can never block the executor.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum GuardLifecycle {
+    Minted { ticket_id: String, batch: bool },
+    Approved { ticket_id: String, batch: bool },
+    Rejected { ticket_id: String, batch: bool },
+    Expired { ticket_id: String, batch: bool },
+}
+
+/// P52.x (guard-UX wave) — human explanation for a Block reason: the guard
+/// class, a safe alternative, and a one-click feedback hook label. Data only.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockExplanation {
+    pub class: String,
+    pub hint: String,
 }
 
 /// The executor's pre-flight state (estop + policy + profile + tickets).
@@ -171,6 +228,12 @@ pub struct GuardService {
     reviewer_breaker: ReviewerBreaker,
     /// ticket_id → the decision package that produced it (card rendering).
     decisions: HashMap<String, DecisionPackage>,
+    /// P52.x — why-asked reason per pending ticket (card rendering).
+    reasons: HashMap<String, AskReason>,
+    /// P52.x — push-style lifecycle subscribers (shell `guard-event` fan-out).
+    /// `std::sync::mpsc` senders: `send` never blocks the executor; a dead
+    /// receiver is pruned on next emit.
+    lifecycle: Vec<std::sync::mpsc::Sender<GuardLifecycle>>,
     /// Monotonic ticket-id source.
     counter: u64,
     /// H4: waiters blocked on Ask (ACP prompt).
@@ -199,6 +262,8 @@ impl Default for GuardService {
             reviewer_config: ReviewerConfig::new(1.01, 0),
             reviewer_breaker: ReviewerBreaker::new(3),
             decisions: HashMap::new(),
+            reasons: HashMap::new(),
+            lifecycle: Vec::new(),
             counter: 0,
             waiters: HashMap::new(),
             outcomes: HashMap::new(),
@@ -376,6 +441,58 @@ impl GuardService {
             everyaios_guard::RiskTier::from_risk_and_op(decision.risk, operation.name(), false);
         // R4 is deny-by-default: even a policy Allow still asks (explicit).
         let r4_ask = tier == everyaios_guard::RiskTier::R4;
+        // P52.x — why-asked: first firing cause wins (stable order), so the
+        // card can say `Why this asked: …` instead of leaving the human to
+        // guess. Order: floor → policy → tier → profile → confidence.
+        let ask_reason = if floor_ask {
+            if protected_hit {
+                Some(AskReason::new(
+                    "floor:protected-settings",
+                    "this path is EveryAIOS-protected — a human must approve",
+                ))
+            } else {
+                Some(AskReason::new(
+                    "floor:human-only",
+                    format!("{op_name} needs a human in every preset"),
+                ))
+            }
+        } else if policy_action == PolicyAction::Ask {
+            Some(AskReason::new(
+                "policy:ask",
+                format!("permissions rule for {} says ask", operation.name()),
+            ))
+        } else if r4_ask {
+            Some(AskReason::new(
+                "tier:R4",
+                "high-privilege credential/network/system — explicit by default",
+            ))
+        } else if needs_human {
+            Some(AskReason::new(
+                "profile",
+                format!(
+                    "profile {} asks at {:?} (this is {:?})",
+                    self.profile.as_str(),
+                    self.profile.human_approval_threshold(),
+                    decision.risk
+                ),
+            ))
+        } else if low_confidence {
+            match decision.confidence {
+                Some(c) => Some(AskReason::new(
+                    "confidence",
+                    format!(
+                        "model confidence {c:.2} is below the auto floor {:.2}",
+                        self.policy.min_confidence_for_auto
+                    ),
+                )),
+                None => Some(AskReason::new(
+                    "confidence",
+                    "no model confidence reported — fail-closed to ask",
+                )),
+            }
+        } else {
+            None
+        };
         let mut ask = policy_action == PolicyAction::Ask
             || needs_human
             || low_confidence
@@ -426,6 +543,16 @@ impl GuardService {
         self.decisions.insert(ticket_id.clone(), decision);
 
         if ask {
+            // P52.x — record the why-asked reason for the card. (A reviewer
+            // upgrade that flipped ask→Allow lands in the else branch, so an
+            // auto-run never carries a stale reason.)
+            if let Some(r) = ask_reason.as_ref() {
+                self.reasons.insert(ticket_id.clone(), r.clone());
+            }
+            self.emit_lifecycle(GuardLifecycle::Minted {
+                ticket_id: ticket_id.clone(),
+                batch: false,
+            });
             GuardDecision::Ask { ticket_id }
         } else {
             GuardDecision::Allow { ticket_id }
@@ -468,6 +595,45 @@ impl GuardService {
             .unwrap_or(false);
         let tier = everyaios_guard::RiskTier::from_risk_and_op(decision.risk, "batch", false);
         let r4_ask = tier == everyaios_guard::RiskTier::R4;
+        // P52.x — same why-asked order as evaluate (batch has no path floors;
+        // it is one write-class decision unit).
+        let batch_reason = if policy_action == PolicyAction::Ask {
+            Some(AskReason::new(
+                "policy:ask",
+                "permissions rule for batch write says ask",
+            ))
+        } else if r4_ask {
+            Some(AskReason::new(
+                "tier:R4",
+                "batch risk is high-privilege — explicit by default",
+            ))
+        } else if needs_human {
+            Some(AskReason::new(
+                "profile",
+                format!(
+                    "profile {} asks at {:?} (this batch is {:?})",
+                    self.profile.as_str(),
+                    self.profile.human_approval_threshold(),
+                    decision.risk
+                ),
+            ))
+        } else if low_confidence {
+            match decision.confidence {
+                Some(c) => Some(AskReason::new(
+                    "confidence",
+                    format!(
+                        "model confidence {c:.2} is below the auto floor {:.2}",
+                        self.policy.min_confidence_for_auto
+                    ),
+                )),
+                None => Some(AskReason::new(
+                    "confidence",
+                    "no model confidence reported — fail-closed to ask",
+                )),
+            }
+        } else {
+            None
+        };
         let ask = policy_action == PolicyAction::Ask || needs_human || low_confidence || r4_ask;
 
         self.counter += 1;
@@ -488,6 +654,13 @@ impl GuardService {
         self.decisions.insert(ticket_id.clone(), decision);
 
         if ask {
+            if let Some(r) = batch_reason.as_ref() {
+                self.reasons.insert(ticket_id.clone(), r.clone());
+            }
+            self.emit_lifecycle(GuardLifecycle::Minted {
+                ticket_id: ticket_id.clone(),
+                batch: true,
+            });
             GuardDecision::Ask { ticket_id }
         } else {
             GuardDecision::Allow { ticket_id }
@@ -567,6 +740,10 @@ impl GuardService {
         let ok = self.tickets.approve(ticket_id);
         if ok {
             self.signal_ticket(ticket_id, true);
+            self.emit_lifecycle(GuardLifecycle::Approved {
+                ticket_id: ticket_id.to_string(),
+                batch: false,
+            });
         }
         ok
     }
@@ -577,6 +754,10 @@ impl GuardService {
         let ok = self.tickets.approve_with_nonce(ticket_id, nonce);
         if ok {
             self.signal_ticket(ticket_id, true);
+            self.emit_lifecycle(GuardLifecycle::Approved {
+                ticket_id: ticket_id.to_string(),
+                batch: false,
+            });
         }
         ok
     }
@@ -585,6 +766,10 @@ impl GuardService {
         let ok = self.tickets.reject(ticket_id);
         if ok {
             self.signal_ticket(ticket_id, false);
+            self.emit_lifecycle(GuardLifecycle::Rejected {
+                ticket_id: ticket_id.to_string(),
+                batch: false,
+            });
         }
         ok
     }
@@ -594,6 +779,10 @@ impl GuardService {
         let ok = self.tickets.reject_with_nonce(ticket_id, nonce);
         if ok {
             self.signal_ticket(ticket_id, false);
+            self.emit_lifecycle(GuardLifecycle::Rejected {
+                ticket_id: ticket_id.to_string(),
+                batch: false,
+            });
         }
         ok
     }
@@ -604,6 +793,10 @@ impl GuardService {
         let ok = self.batches.approve_with_nonce(ticket_id, nonce);
         if ok {
             self.signal_ticket(ticket_id, true);
+            self.emit_lifecycle(GuardLifecycle::Approved {
+                ticket_id: ticket_id.to_string(),
+                batch: true,
+            });
         }
         ok
     }
@@ -613,6 +806,10 @@ impl GuardService {
         let ok = self.batches.approve(ticket_id);
         if ok {
             self.signal_ticket(ticket_id, true);
+            self.emit_lifecycle(GuardLifecycle::Approved {
+                ticket_id: ticket_id.to_string(),
+                batch: true,
+            });
         }
         ok
     }
@@ -622,6 +819,10 @@ impl GuardService {
         let ok = self.batches.reject_with_nonce(ticket_id, nonce);
         if ok {
             self.signal_ticket(ticket_id, false);
+            self.emit_lifecycle(GuardLifecycle::Rejected {
+                ticket_id: ticket_id.to_string(),
+                batch: true,
+            });
         }
         ok
     }
@@ -669,9 +870,124 @@ impl GuardService {
                 approval_source: format!("{:?}", t.approval_source).to_lowercase(),
                 approval_nonce: t.approval_nonce.clone(),
                 expires_at_ms: t.expires_at_ms,
+                reason: self.reasons.get(&t.ticket_id).map(|r| r.render()),
                 decision: self.decisions.get(&t.ticket_id).cloned(),
             })
             .collect()
+    }
+
+    /// P52.x — subscribe a push-style lifecycle listener. Returns the
+    /// receiver; the shell bridges each event to a `guard-event` emit.
+    /// Senders never block the executor (`mpsc::send` on an unbounded
+    /// channel cannot block); dead receivers are pruned on next emit.
+    pub fn subscribe_lifecycle(&mut self) -> std::sync::mpsc::Receiver<GuardLifecycle> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.lifecycle.push(tx);
+        rx
+    }
+
+    /// P52.x — fan one lifecycle snapshot out to every subscriber. Lock-free
+    /// w.r.t. consumers: only `send` (non-blocking) happens here.
+    fn emit_lifecycle(&mut self, ev: GuardLifecycle) {
+        self.lifecycle.retain(|tx| tx.send(ev.clone()).is_ok());
+    }
+
+    /// P52.x — extend a Pending ticket's TTL (card `Extend 60s`). Only
+    /// Pending tickets; re-mints the card nonce (the old card dies with it),
+    /// caps each extension at 60s and total lifetime at 5min from now.
+    /// Never touches Approved/Used/Revoked/Expired state or floors.
+    pub fn extend_ticket_ttl(
+        &mut self,
+        ticket_id: &str,
+        extra_ms: u64,
+    ) -> Result<(u64, String), String> {
+        const STEP_CAP_MS: u64 = 60_000;
+        const TOTAL_CAP_MS: u64 = 5 * 60_000;
+        let extra = extra_ms.min(STEP_CAP_MS);
+        if extra == 0 {
+            return Err("extension must be > 0ms".to_string());
+        }
+        let now = now_ms();
+        if ticket_id.starts_with("btk:") {
+            let t = self
+                .batches
+                .get_mut(ticket_id)
+                .ok_or_else(|| format!("unknown batch ticket: {ticket_id}"))?;
+            if t.state != everyaios_guard::TicketState::Pending {
+                return Err("only pending tickets can be extended".to_string());
+            }
+            let new_exp = (t.expires_at_ms.max(now) + extra).min(now + TOTAL_CAP_MS);
+            t.expires_at_ms = new_exp;
+            t.approval_nonce = everyaios_guard::ticket::new_approval_nonce();
+            let out = (new_exp, t.approval_nonce.clone());
+            self.emit_lifecycle(GuardLifecycle::Minted {
+                ticket_id: ticket_id.to_string(),
+                batch: true,
+            });
+            return Ok(out);
+        }
+        let t = self
+            .tickets
+            .get_mut(ticket_id)
+            .ok_or_else(|| format!("unknown ticket: {ticket_id}"))?;
+        if t.state != everyaios_guard::TicketState::Pending {
+            return Err("only pending tickets can be extended".to_string());
+        }
+        let new_exp = (t.expires_at_ms.max(now) + extra).min(now + TOTAL_CAP_MS);
+        t.expires_at_ms = new_exp;
+        t.approval_nonce = everyaios_guard::ticket::new_approval_nonce();
+        let out = (new_exp, t.approval_nonce.clone());
+        self.emit_lifecycle(GuardLifecycle::Minted {
+            ticket_id: ticket_id.to_string(),
+            batch: false,
+        });
+        Ok(out)
+    }
+
+    /// P52.x — human explanation for a Block reason (Guard-1 opacity fix).
+    /// Pure string mapping over the stable reason vocabulary minted in
+    /// `evaluate`/`evaluate_batch`; unknown reasons map to a generic class.
+    /// No authority, no policy change.
+    pub fn explain_block(reason: &str) -> BlockExplanation {
+        let r = reason.to_lowercase();
+        if r.contains("estop") {
+            BlockExplanation {
+                class: "emergency-stop".to_string(),
+                hint: "The emergency stop is pulled — reset it in the Guard panel before retrying."
+                    .to_string(),
+            }
+        } else if r.contains("critical rm") {
+            BlockExplanation {
+                class: "destructive-shell".to_string(),
+                hint: "This delete targets /, ~, ., .git or an EveryAIOS-protected path. Narrow the target to the workspace folder and retry.".to_string(),
+            }
+        } else if r.contains("without located paths") {
+            BlockExplanation {
+                class: "unlocated-delete".to_string(),
+                hint: "Deletes must name their targets. Re-run with the exact file or folder path."
+                    .to_string(),
+            }
+        } else if r.contains("tool policy denies") {
+            BlockExplanation {
+                class: "tool-denied".to_string(),
+                hint: "Your tool allow-list denies this tool. Change the rule to ask (or remove the deny) in Guard → Tool Allow-list.".to_string(),
+            }
+        } else if r.contains("policy denies") {
+            BlockExplanation {
+                class: "policy-denied".to_string(),
+                hint: "permissions.toml denies this operation class. Switch autonomy preset or edit the policy, then retry.".to_string(),
+            }
+        } else if r.contains("mcp attach blocked") || r.contains("mcp") {
+            BlockExplanation {
+                class: "connector-blocked".to_string(),
+                hint: "The connector attach was refused. Check the server command/args and attach again from Connectors.".to_string(),
+            }
+        } else {
+            BlockExplanation {
+                class: "blocked".to_string(),
+                hint: "Refused by the guard. Open the Guard panel for the policy detail, or send this to Feedback.".to_string(),
+            }
+        }
     }
 
     pub fn receipts(&self) -> Vec<GuardReceipt> {
@@ -810,6 +1126,12 @@ impl GuardService {
                     "estopPulled": self.estop.is_pulled(),
                     "autonomyLevel": self.autonomy_level().as_str(),
                     "approvalRules": rules,
+                    // P52.x — live trust state for the panel (no fixtures):
+                    // the profile's human-approval threshold name + the
+                    // reviewer auto-allow budget (0 = disabled, the default).
+                    "humanApprovalThreshold": format!("{:?}", self.profile.human_approval_threshold()).to_lowercase(),
+                    "reviewerBudget": self.reviewer_config.max_auto_per_run,
+                    "reviewerConfidenceFloor": self.reviewer_config.confidence_floor,
                 }))
             }
             "guard/set_policy_rules" => {
@@ -931,6 +1253,34 @@ impl GuardService {
                     None => Ok(json!({ "ticketId": id, "state": "unknown" })),
                 }
             }
+            "guard/extend_ttl" => {
+                // Control-plane only (human card action): Pending-gated,
+                // nonce-rotating TTL extension. The sidecar must never extend
+                // its own wait.
+                if !control_plane {
+                    return Err(
+                        "guard/extend_ttl is a control-plane operation, not available to the sidecar"
+                            .to_string(),
+                    );
+                }
+                let id =
+                    str_param(params, "ticketId").ok_or("guard/extend_ttl requires ticketId")?;
+                let extra = params
+                    .get("extraMs")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(60_000);
+                let (expires_at_ms, approval_nonce) = self.extend_ticket_ttl(id, extra)?;
+                Ok(json!({
+                    "ticketId": id,
+                    "expiresAtMs": expires_at_ms,
+                    "approvalNonce": approval_nonce,
+                }))
+            }
+            "guard/explain_block" => {
+                let reason = str_param(params, "reason").unwrap_or("");
+                let exp = Self::explain_block(reason);
+                Ok(json!({ "class": exp.class, "hint": exp.hint }))
+            }
             _ => Err(format!("method not found: {method}")),
         }
     }
@@ -1026,17 +1376,224 @@ mod tests {
             other => panic!("expected Ask, got {other:?}"),
         };
 
-        // Card payload carries the decision package.
+        // Card payload carries the decision package + the why-asked reason.
         let cards = g.pending();
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].ticket_id, ticket_id);
         assert!(cards[0].decision.is_some());
         assert_eq!(cards[0].decision.as_ref().unwrap().goal, "test goal");
+        let reason = cards[0].reason.clone().unwrap_or_default();
+        assert!(
+            !reason.is_empty(),
+            "every Ask card must carry a why-asked reason"
+        );
 
         // Approve then consume (single-use; args must match).
         assert!(g.approve(&ticket_id));
         assert!(g.use_ticket(&ticket_id, "args-h").is_ok());
         assert!(g.use_ticket(&ticket_id, "args-h").is_err());
+    }
+
+    #[test]
+    fn p52_why_asked_reason_stable_per_cause() {
+        // policy:ask — generic write defaults to always_ask under the
+        // default policy.
+        let mut g = GuardService::new();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["/workspace/a.txt"]),
+            "h",
+            0,
+        );
+        assert!(matches!(d, GuardDecision::Ask { .. }));
+        let reason = g.pending()[0].reason.clone().unwrap_or_default();
+        assert!(
+            reason.starts_with("policy:ask"),
+            "expected policy:ask, got {reason}"
+        );
+
+        // profile — allow-write policy + high risk still asks via the
+        // standard profile threshold.
+        let mut g2 = GuardService::new();
+        g2.policy = PermissionsPolicy::parse("[permissions]\nwrite = \"allow\"\n");
+        let d2 = g2.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::High, &["/workspace/a.txt"]),
+            "h",
+            0,
+        );
+        assert!(matches!(d2, GuardDecision::Ask { .. }));
+        let r2 = g2.pending()[0].reason.clone().unwrap_or_default();
+        assert!(r2.starts_with("profile"), "expected profile, got {r2}");
+
+        // floor — protected settings paths always ask, any preset.
+        let mut g3 = GuardService::new();
+        g3.policy = PermissionsPolicy::parse("[permissions]\nwrite = \"allow\"\n");
+        let d3 = g3.evaluate(
+            "s1",
+            "a1",
+            "fs.write",
+            Operation::GenericWrite,
+            decision(RiskLevel::Low, &["~/.everyaios/vault.db"]),
+            "h",
+            0,
+        );
+        assert!(matches!(d3, GuardDecision::Ask { .. }));
+        let r3 = g3.pending()[0].reason.clone().unwrap_or_default();
+        assert!(r3.starts_with("floor:"), "expected floor:, got {r3}");
+    }
+
+    #[test]
+    fn p52_lifecycle_hook_fires_on_mint_approve_reject() {
+        let mut g = GuardService::new();
+        let rx = g.subscribe_lifecycle();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.delete",
+            Operation::DeleteFiles,
+            decision(RiskLevel::High, &["/workspace/x"]),
+            "h",
+            0,
+        );
+        let tid = match d {
+            GuardDecision::Ask { ref ticket_id } => ticket_id.clone(),
+            other => panic!("expected Ask, got {other:?}"),
+        };
+        match rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap() {
+            GuardLifecycle::Minted { ticket_id, batch } => {
+                assert_eq!(ticket_id, tid);
+                assert!(!batch);
+            }
+            other => panic!("expected Minted, got {other:?}"),
+        }
+        assert!(g.approve(&tid));
+        match rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap() {
+            GuardLifecycle::Approved { ticket_id, batch } => {
+                assert_eq!(ticket_id, tid);
+                assert!(!batch);
+            }
+            other => panic!("expected Approved, got {other:?}"),
+        }
+
+        let d2 = g.evaluate(
+            "s1",
+            "a1",
+            "fs.delete",
+            Operation::DeleteFiles,
+            decision(RiskLevel::High, &["/workspace/y"]),
+            "h2",
+            0,
+        );
+        let tid2 = match d2 {
+            GuardDecision::Ask { ref ticket_id } => ticket_id.clone(),
+            other => panic!("expected Ask, got {other:?}"),
+        };
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap(),
+            GuardLifecycle::Minted { .. }
+        ));
+        assert!(g.reject(&tid2));
+        match rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap() {
+            GuardLifecycle::Rejected { ticket_id, batch } => {
+                assert_eq!(ticket_id, tid2);
+                assert!(!batch);
+            }
+            other => panic!("expected Rejected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn p52_extend_ttl_renonces_and_caps() {
+        let mut g = GuardService::new();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.delete",
+            Operation::DeleteFiles,
+            decision(RiskLevel::High, &["/workspace/x"]),
+            "h",
+            0,
+        );
+        let tid = match d {
+            GuardDecision::Ask { ref ticket_id } => ticket_id.clone(),
+            other => panic!("expected Ask, got {other:?}"),
+        };
+        let before = g.pending()[0].clone();
+        let (exp, nonce) = g.extend_ticket_ttl(&tid, 60_000).unwrap();
+        assert!(exp >= before.expires_at_ms);
+        assert_ne!(nonce, before.approval_nonce);
+        // Old nonce dies with the rotation.
+        assert!(!g.approve_with_nonce(&tid, &before.approval_nonce));
+        assert!(g.approve_with_nonce(&tid, &nonce));
+        // Non-pending tickets refuse extension.
+        assert!(g.extend_ticket_ttl(&tid, 60_000).is_err());
+        // Unknown tickets refuse extension.
+        assert!(g.extend_ticket_ttl("tkt:nope", 60_000).is_err());
+        // Zero extension refused.
+        let mut g2 = GuardService::new();
+        let d2 = g2.evaluate(
+            "s1",
+            "a1",
+            "fs.delete",
+            Operation::DeleteFiles,
+            decision(RiskLevel::High, &["/workspace/x"]),
+            "h",
+            0,
+        );
+        let tid2 = match d2 {
+            GuardDecision::Ask { ref ticket_id } => ticket_id.clone(),
+            other => panic!("expected Ask, got {other:?}"),
+        };
+        assert!(g2.extend_ticket_ttl(&tid2, 0).is_err());
+    }
+
+    #[test]
+    fn p52_explain_block_covers_block_vocabulary() {
+        for (reason, class) in [
+            ("estop pulled", "emergency-stop"),
+            ("critical rm target refused", "destructive-shell"),
+            ("delete without located paths refused", "unlocated-delete"),
+            ("tool policy denies shell.exec", "tool-denied"),
+            ("policy denies write", "policy-denied"),
+        ] {
+            let exp = GuardService::explain_block(reason);
+            assert_eq!(exp.class, class, "reason: {reason}");
+            assert!(!exp.hint.is_empty());
+        }
+        let generic = GuardService::explain_block("something new");
+        assert_eq!(generic.class, "blocked");
+    }
+
+    #[test]
+    fn p52_sidecar_cannot_extend_ttl() {
+        let mut g = GuardService::new();
+        let d = g.evaluate(
+            "s1",
+            "a1",
+            "fs.delete",
+            Operation::DeleteFiles,
+            decision(RiskLevel::High, &["/workspace/x"]),
+            "h",
+            0,
+        );
+        let tid = match d {
+            GuardDecision::Ask { ref ticket_id } => ticket_id.clone(),
+            other => panic!("expected Ask, got {other:?}"),
+        };
+        let out = g.handle_sidecar("guard/extend_ttl", &serde_json::json!({ "ticketId": tid }));
+        assert!(out.is_err(), "sidecar must not extend its own wait");
+        // Control plane can.
+        let ok = g
+            .handle("guard/extend_ttl", &serde_json::json!({ "ticketId": tid }))
+            .unwrap();
+        assert!(ok.get("approvalNonce").is_some());
     }
 
     #[test]

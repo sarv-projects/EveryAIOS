@@ -49,6 +49,7 @@ import {
   type PlanTask,
 } from "./plan";
 import { startScheduler } from "./scheduler";
+import { envelopeEvent, type RunIdentity } from "./run-identity";
 import { hydrateObservations, type DurableUsageRow } from "./observations";
 import { connectorCatalog, queryConnectors } from "./connector-bridge";
 import { searchExternalMcp } from "./mcp-bridge";
@@ -86,6 +87,29 @@ export const DEFAULT_CAPABILITIES: Capabilities = {
  */
 const frameBridge = new FrameProviderBridge(sendRequest);
 
+/** streamId → session/work/execution identity for notification enrichment. */
+type StreamIdentity = RunIdentity & { plan?: boolean };
+const streamSessions = new Map<string, StreamIdentity>();
+
+function registerStreamIdentity(params: StreamIdentity): void {
+  streamSessions.set(params.streamId, params);
+}
+
+function emitChatEvent(e: ChatEvent): void {
+  const identity = streamSessions.get(e.streamId);
+  if (!identity) return;
+  const enriched = envelopeEvent(e, identity);
+  notify(`chat/${e.type}`, enriched as unknown as Record<string, unknown>);
+  if (
+    e.type === "error" ||
+    e.type === "cancelled" ||
+    e.type === "plan_done" ||
+    (e.type === "done" && !identity?.plan)
+  ) {
+    streamSessions.delete(e.streamId);
+  }
+}
+
 /** Outbound request correlation: id → pending promise (sidecar → Rust). */
 const pending = new Map<
   string,
@@ -103,11 +127,6 @@ function sendRequest(method: string, params: unknown): Promise<unknown> {
     pending.set(id, { resolve, reject });
     process.stdout.write(encodeJson({ jsonrpc: "2.0", method, params, id }));
   });
-}
-
-/** Forward a chat engine event to the UI as a `chat/<type>` notification. */
-function emitChatEvent(e: ChatEvent): void {
-  notify(`chat/${e.type}`, e);
 }
 
 export const VERSION = "0.1.0";
@@ -280,8 +299,19 @@ export function handleRequest(req: Request): Response | null {
         );
         break;
       }
+      registerStreamIdentity({ streamId: p.streamId, sessionId: p.sessionId, ...(p.workId !== undefined ? { workId: p.workId } : {}) });
+      const chatParams = {
+        ...p,
+        onExecutionId: (executionId: string) => {
+          const identity = streamSessions.get(p.streamId!);
+          if (identity) {
+            identity.executionId = executionId;
+            streamSessions.set(p.streamId!, identity);
+          }
+        },
+      } as ChatStreamParams;
       void runChatStream(
-        p as ChatStreamParams,
+        chatParams,
         emitChatEvent,
         frameBridge,
         33,
@@ -308,6 +338,7 @@ export function handleRequest(req: Request): Response | null {
         toolId?: string;
         args?: Record<string, unknown>;
         agentId?: string;
+        workId?: string;
       };
       if (
         typeof p.sessionId !== "string" ||
@@ -327,7 +358,9 @@ export function handleRequest(req: Request): Response | null {
         toolId: p.toolId,
         args: p.args ?? {},
         ...(p.agentId !== undefined ? { agentId: p.agentId } : {}),
+        ...(p.workId !== undefined ? { workId: p.workId } : {}),
       };
+      registerStreamIdentity({ streamId: p.streamId, sessionId: p.sessionId, ...(p.workId !== undefined ? { workId: p.workId } : {}) });
       void runToolRetry(retry, emitChatEvent, sendRequest);
       response = ok(id, { accepted: true });
       break;
@@ -377,9 +410,21 @@ export function handleRequest(req: Request): Response | null {
         );
         break;
       }
+      const planSessionId = p.sessionId;
+      registerStreamIdentity({ streamId: p.streamId, sessionId: planSessionId, plan: true, ...(p.workId !== undefined ? { workId: p.workId } : {}) });
+      const planParams = {
+        ...p,
+        onExecutionId: (executionId: string) => {
+          const identity = streamSessions.get(p.streamId!);
+          if (identity) {
+            identity.executionId = executionId;
+            streamSessions.set(p.streamId!, identity);
+          }
+        },
+      } as PlanExecutionParams;
       void runPlanExecution(
-        p as PlanExecutionParams,
-        (e) => notify(`chat/${e.type}`, e as unknown as Record<string, unknown>),
+        planParams,
+        emitChatEvent,
         emitChatEvent,
         frameBridge,
         sendRequest,
@@ -652,7 +697,7 @@ export function run(reader: NodeJS.ReadableStream = process.stdin): void {
 /** P6.4: the scheduled-task executor (started in main; tests use the handle). */
 export const schedulerRuntime = startScheduler(
   sendRequest,
-  (e) => notify(`chat/${e.type}`, e as unknown as Record<string, unknown>),
+  emitChatEvent,
   frameBridge,
 );
 

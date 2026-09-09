@@ -59,6 +59,8 @@ export type SessionStatus =
   | 'action-required'
   | 'completed'
   | 'failed'
+  | 'cancelled'
+  | 'budget_exceeded'
   | 'paused'
   | 'scheduled'
   | 'reconnecting'
@@ -87,6 +89,9 @@ export interface ChatMessage {
   steps?: ProgressStep[]
   toolCalls?: ToolCallRecord[]
   mcq?: MCQInterrupt
+  /** Native stream identity. Kept on the message so a late terminal event
+   * cannot settle a newer turn in the same session. */
+  streamId?: string
   /** Chain-of-thought text. Provider reasoning is a *delta stream* (many
    * wire events per turn), so chunks coalesce onto the last entry while the
    * turn streams and each entry ends as one displayable thought block.
@@ -654,8 +659,12 @@ export interface LiveNotification {
 // carry a sessionId; see the bridge). module-level since zustand actions can't
 // hold instance state.
 let activeStreamMsg: Record<string, string> = {} // sessionId -> assistant msg id
-let streamT0 = 0
-let streamTok = 0
+let activeStreamId: Record<string, string> = {} // sessionId -> native stream id
+/** Last terminal stream per session; late events from it must never bind to a
+ * newer turn whose assistant message has not received its first event yet. */
+let lastTerminalStreamId: Record<string, string> = {}
+let streamT0BySession: Record<string, number> = {}
+let streamTokBySession: Record<string, number> = {}
 /** P51.7 — first content/reasoning delta per session (ms), for the TTFB
  * footer. Cleared when the turn settles. */
 let streamFirstDelta: Record<string, number> = {}
@@ -691,10 +700,31 @@ function hasActiveStream(sessionId: string): boolean {
   return !!activeStreamMsg[sessionId]
 }
 
+/** Bind an event's native stream id to the session's in-flight message. A
+ * different id is a stale/concurrent event and must not mutate this turn. */
+function bindStreamId(sessionId: string, streamId?: string): boolean {
+  if (!streamId) return true
+  const current = activeStreamId[sessionId]
+  if (current !== undefined && current !== streamId) return false
+  // A terminal event clears the active binding, but the stream id remains a
+  // tombstone so a late batch/tool event cannot start mutating the next turn.
+  if (current === undefined && lastTerminalStreamId[sessionId] === streamId) return false
+  activeStreamId[sessionId] = streamId
+  return true
+}
+
+function retireStream(sessionId: string): void {
+  const streamId = activeStreamId[sessionId]
+  if (streamId !== undefined) lastTerminalStreamId[sessionId] = streamId
+}
+
 /** Live turn clock: ms since the current stream started (0 when idle). The
- * Now-Doing strip reads this instead of a hardcoded elapsed figure. */
-export function streamElapsedMs(): number {
-  return streamT0 === 0 ? 0 : Math.max(0, Date.now() - streamT0)
+ * clock is session-scoped so two sessions cannot inflate each other's elapsed
+ * time. */
+export function streamElapsedMs(sessionId?: string): number {
+  const sid = streamSessionId(sessionId)
+  const started = streamT0BySession[sid] ?? 0
+  return started === 0 ? 0 : Math.max(0, Date.now() - started)
 }
 
 /** TEST-ONLY isolation helper: the zustand store and the module-level stream
@@ -703,8 +733,10 @@ export function streamElapsedMs(): number {
  * after. Never called by app code. */
 export function resetStreamingTestState(): void {
   activeStreamMsg = {}
-  streamT0 = 0
-  streamTok = 0
+  activeStreamId = {}
+  lastTerminalStreamId = {}
+  streamT0BySession = {}
+  streamTokBySession = {}
   turnDispatcher = undefined
   streamTestReset?.()
 }
@@ -1075,7 +1107,7 @@ interface AppState {
   // P11.5.12 — reconnect chip state (dropped IPC stream → auto-resume).
   reconnect: { show: boolean; lastToken: string; tokens: number }
   setReconnect: (r: { show: boolean; lastToken: string; tokens: number }) => void
-  noteStreamTick: (tokenCount: number) => void
+  noteStreamTick: (tokenCount: number, sessionId?: string, streamId?: string) => void
   forkFromMessage: (messageId: string) => void
 
   // Auto-route per task kind — when true, agent selection follows routing table
@@ -1171,17 +1203,18 @@ interface AppState {
    * the real Rust stream (`chat_cancel`) instead of only flipping local state. */
   liveStreamId: Record<string, string>
   setLiveStreamId: (sessionId: string, streamId: string) => void
+  clearLiveStreamId: (sessionId: string, streamId?: string) => void
 
   // Chat streaming (bridge) — real turns through the Tauri relay
   pushUserMessage: (text: string) => void
-  streamStart: (sessionId?: string) => void
+  streamStart: (sessionId?: string, streamId?: string) => void
   /** P52.23 — append a reasoning delta to the live assistant turn.
    * Provider reasoning arrives as a *delta stream*, so consecutive chunks
    * coalesce onto the last thought entry; the entry list therefore holds
    * displayable thought blocks, not raw wire events. No-op when no assistant
    * turn is streaming (a stray reasoning event is never fabricated into a
    * message). */
-  appendReasoning: (text: string, sessionId?: string) => void
+  appendReasoning: (text: string, sessionId?: string, streamId?: string) => void
 
   /** P51.5 — queue-while-generating: turns sent while the session's stream is
    * live land here (pending chips above the composer) and fire automatically
@@ -1204,14 +1237,15 @@ interface AppState {
   /** Register the bridge dispatcher (once). */
   setTurnDispatcher: (fn: TurnDispatcher) => void
 
-  streamAppend: (text: string, done: boolean, sessionId?: string) => void
-  streamFinalize: (fullText: string, sessionId?: string) => void
-  streamFail: (msg: string, sessionId?: string, error?: ChatError) => void
-  streamBudgetKill: (msg: string, sessionId?: string) => void
-  streamStep: (label: string) => void
-  streamToolCall: (toolId: string, args?: Record<string, unknown>, risk?: string) => void
-  streamToolResult: (toolId: string, result?: unknown, error?: string) => void
-  streamToolProgress: (toolId: string, progress: string) => void
+  streamAppend: (text: string, done: boolean, sessionId?: string, streamId?: string) => void
+  streamFinalize: (fullText: string, sessionId?: string, streamId?: string) => void
+  streamFail: (msg: string, sessionId?: string, error?: ChatError, streamId?: string) => void
+  streamBudgetKill: (msg: string, sessionId?: string, streamId?: string) => void
+  streamCancelled: (sessionId?: string, streamId?: string) => void
+  streamStep: (label: string, sessionId?: string, streamId?: string) => void
+  streamToolCall: (toolId: string, args?: Record<string, unknown>, risk?: string, sessionId?: string, streamId?: string) => void
+  streamToolResult: (toolId: string, result?: unknown, error?: string, sessionId?: string, streamId?: string) => void
+  streamToolProgress: (toolId: string, progress: string, sessionId?: string, streamId?: string) => void
   retryToolCall: (recordId: string) => Promise<void>
 
   // Guard-2 tickets (bridge) — live approval cards in the transcript
@@ -1234,9 +1268,21 @@ interface AppState {
   acpHandles: Record<string, string>
   setAcpHandle: (agentId: string, handle: string) => void
 
-  pendingPlan?: { planId: string; tasks: { id: string; goal: string; dependsOn?: string[] }[] }
+  pendingPlan?: {
+    planId: string
+    sessionId: string
+    streamId?: string
+    workId?: string
+    tasks: { id: string; goal: string; dependsOn?: string[] }[]
+  }
   setPendingPlan: (
-    p: { planId: string; tasks: { id: string; goal: string; dependsOn?: string[] }[] } | undefined,
+    p: {
+      planId: string
+      sessionId: string
+      streamId?: string
+      workId?: string
+      tasks: { id: string; goal: string; dependsOn?: string[] }[]
+    } | undefined,
   ) => void
 
   // P41.3 — ticketed editor writes: ticketId → { path, content } waiting on
@@ -1828,19 +1874,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   // when the stream resumes or the user dismisses the chip.
   reconnect: { show: false, lastToken: '', tokens: 0 },
   setReconnect: (r) => set({ reconnect: r }),
-  noteStreamTick: (tokenCount) => {
+  noteStreamTick: (tokenCount, sessionId?, streamId?) => {
+    const sid = streamSessionId(sessionId)
+    if (streamId !== undefined && !bindStreamId(sid, streamId)) return
     const now = Date.now()
-    if (streamT0 === 0) streamT0 = now
-    streamTok += tokenCount
-    const elapsed = Math.max(0.25, (now - streamT0) / 1000)
+    if (streamT0BySession[sid] === undefined) streamT0BySession[sid] = now
+    streamTokBySession[sid] = (streamTokBySession[sid] ?? 0) + tokenCount
+    const elapsed = Math.max(0.25, (now - streamT0BySession[sid]!) / 1000)
     set((s) => {
-      const sess = s.sessions.find((x) => x.id === s.activeSessionId)
-      const used = (sess?.tokens ?? 0) + streamTok
+      // Keep the status-bar counters tied to the visible session; background
+      // sessions still retain independent counters for when the user returns.
+      if (s.activeSessionId !== sid) return s
+      const sess = s.sessions.find((x) => x.id === sid)
+      const tokens = streamTokBySession[sid] ?? 0
+      const used = (sess?.tokens ?? 0) + tokens
       const ctxWindow = 128_000
       return {
         streamStats: {
-          tokensPerSec: streamTok / elapsed,
-          tokensThisTurn: streamTok,
+          tokensPerSec: tokens / elapsed,
+          tokensThisTurn: tokens,
           ctxPct: Math.min(100, Math.round((used / ctxWindow) * 100)),
           activeKey: s.streamStats.activeKey,
         },
@@ -2081,6 +2133,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   liveStreamId: {},
   setLiveStreamId: (sessionId, streamId) =>
     set((s) => ({ liveStreamId: { ...s.liveStreamId, [sessionId]: streamId } })),
+  clearLiveStreamId: (sessionId, streamId) =>
+    set((s) => {
+      if (streamId !== undefined && s.liveStreamId[sessionId] !== streamId) return s
+      const next = { ...s.liveStreamId }
+      delete next[sessionId]
+      return { liveStreamId: next }
+    }),
 
   pushUserMessage: (text) => {
     const id = freshId('u')
@@ -2099,19 +2158,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     }))
   },
-  streamStart: (sessionId?) => {
+  streamStart: (sessionId?, streamId?) => {
     const sid = streamSessionId(sessionId)
-    if (hasActiveStream(sid)) return
+    if (!bindStreamId(sid, streamId) || hasActiveStream(sid)) return
     const id = freshId(`a-${sid.slice(-6)}`)
     activeStreamMsg[sid] = id
-    streamT0 = Date.now()
-    streamTok = 0
+    streamT0BySession[sid] = Date.now()
+    streamTokBySession[sid] = 0
     const msg: ChatMessage = {
       id,
       role: 'assistant',
       content: '',
       timestamp: new Date().toISOString(),
       startedAt: Date.now(),
+      ...(streamId !== undefined ? { streamId } : {}),
     }
     set((s) => ({
       sessions: s.sessions.map((x) =>
@@ -2121,10 +2181,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     }))
   },
-  appendReasoning: (text, sessionId?) => {
+  appendReasoning: (text, sessionId?, streamId?) => {
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
-    if (!msgId) return
+    if (!msgId || (streamId !== undefined && !bindStreamId(sid, streamId))) return
     if (!text) return
     markFirstDelta(sid)
     patchStreamMessage(
@@ -2146,12 +2206,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     )
     // The first reasoning delta is a turn-start signal too (ttft may not
     // have fired yet for pure-reasoning providers).
-    if (streamT0 === 0) streamT0 = Date.now()
+    if (streamT0BySession[sid] === undefined) streamT0BySession[sid] = Date.now()
   },
-  streamAppend: (text, done, sessionId?) => {
+  streamAppend: (text, done, sessionId?, streamId?) => {
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
-    if (!msgId) return
+    if (!msgId || !bindStreamId(sid, streamId)) return
     markFirstDelta(sid)
     const endedAt = done ? Date.now() : undefined
     const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((mm) => mm.id === msgId)?.startedAt
@@ -2176,22 +2236,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       }),
     }))
     if (done) {
+      retireStream(sid)
       delete activeStreamMsg[sid]
+      delete activeStreamId[sid]
       delete streamFirstDelta[sid]
-      streamT0 = 0
+      delete streamT0BySession[sid]
+      delete streamTokBySession[sid]
+      get().clearLiveStreamId(sid)
       // P44.6 — the turn is over: the frozen snapshot + any temporary
       // elevation expire here (live changes never leak into the next task).
-      set((s) => ({ taskSnapshot: undefined }))
+      set({ taskSnapshot: undefined })
+      recordTurnCompleted()
+      get().dequeueNextTurn(sid)
     }
   },
   /** P-bugfix 1: the `done` chat-event carries the *whole* message (fullText)
    * after `batch` deltas were already appended token-by-token. Appending it
    * would duplicate the reply, so this **replaces** the streamed content with
    * the authoritative final text (and clears the in-flight cursor). */
-  streamFinalize: (fullText, sessionId?) => {
+  streamFinalize: (fullText, sessionId?, streamId?) => {
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
-    if (!msgId) return
+    if (!msgId || !bindStreamId(sid, streamId)) return
     const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((mm) => mm.id === msgId)?.startedAt
     const ttfb = ttfbFor(sid, startedAt)
     set((s) => ({
@@ -2213,9 +2279,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }),
     }))
+    retireStream(sid)
     delete activeStreamMsg[sid]
+    delete activeStreamId[sid]
     delete streamFirstDelta[sid]
-    streamT0 = 0
+    delete streamT0BySession[sid]
+    delete streamTokBySession[sid]
+    get().clearLiveStreamId(sid)
     // P44.6 — turn complete: the frozen task scope + elevation expire.
     set({ taskSnapshot: undefined })
     // P11.6.4 — local UX metric: a completed turn.
@@ -2226,9 +2296,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   /** P51.7/P51.21 — a failed turn. The partial content streamed so far is
    * **preserved** (never clobbered with a marker line); the structured
    * `error` renders as a layer-named card with matched actions. */
-  streamFail: (msg, sessionId?, error?) => {
+  streamFail: (msg, sessionId?, error?, streamId?) => {
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
+    if (streamId !== undefined && !bindStreamId(sid, streamId)) return
     // P11.6.4 — local UX metric: a failed turn (only when one was attempted).
     if (msgId) recordTurnFailed()
     const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((mm) => mm.id === msgId)?.startedAt
@@ -2265,16 +2336,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }),
     }))
+    retireStream(sid)
     delete activeStreamMsg[sid]
+    delete activeStreamId[sid]
     delete streamFirstDelta[sid]
+    delete streamT0BySession[sid]
+    delete streamTokBySession[sid]
+    get().clearLiveStreamId(sid)
     // P44.6 — failed turn: the frozen task scope + elevation expire.
     set({ taskSnapshot: undefined })
     // P51.5 — a failed turn also releases the queue (never silently stall).
     get().dequeueNextTurn(sid)
   },
-  streamBudgetKill: (msg, sessionId?) => {
+  streamBudgetKill: (msg, sessionId?, streamId?) => {
     const sid = streamSessionId(sessionId)
     const msgId = activeStreamMsg[sid]
+    if (streamId !== undefined && !bindStreamId(sid, streamId)) return
     const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((mm) => mm.id === msgId)?.startedAt
     const ttfb = ttfbFor(sid, startedAt)
     // P51.7 — partial-preserve: the text streamed before the wall stays in
@@ -2285,7 +2362,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (x.id !== sid) return x
         return {
           ...x,
-          status: 'failed',
+          status: 'budget_exceeded',
           messages: msgId
             ? x.messages.map((m) =>
                 m.id === msgId
@@ -2301,16 +2378,56 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }),
     }))
+    retireStream(sid)
     delete activeStreamMsg[sid]
+    delete activeStreamId[sid]
     delete streamFirstDelta[sid]
+    delete streamT0BySession[sid]
+    delete streamTokBySession[sid]
+    get().clearLiveStreamId(sid)
     // P44.6 — budget kill ends the task: frozen scope + elevation expire.
     set({ taskSnapshot: undefined })
     // P51.5 — budget kill releases the queue too (head fires, may hit the
     // same wall — that is the honest loop, visible in the transcript).
     get().dequeueNextTurn(sid)
   },
-  streamToolCall: (toolId, args, risk) => {
-    if (!hasActiveStream(streamSessionId())) get().streamStart()
+  streamCancelled: (sessionId?, streamId?) => {
+    const sid = streamSessionId(sessionId)
+    const msgId = activeStreamMsg[sid]
+    if (streamId !== undefined && !bindStreamId(sid, streamId)) return
+    const startedAt = get().sessions.find((x) => x.id === sid)?.messages.find((m) => m.id === msgId)?.startedAt
+    const ttfb = ttfbFor(sid, startedAt)
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id !== sid
+          ? x
+          : {
+              ...x,
+              status: 'cancelled',
+              messages: msgId
+                ? x.messages.map((m) =>
+                    m.id === msgId
+                      ? { ...m, endedAt: Date.now(), ...(ttfb !== undefined ? { ttfbMs: ttfb } : {}) }
+                      : m,
+                  )
+                : x.messages,
+            },
+      ),
+    }))
+    retireStream(sid)
+    delete activeStreamMsg[sid]
+    delete activeStreamId[sid]
+    delete streamFirstDelta[sid]
+    delete streamT0BySession[sid]
+    delete streamTokBySession[sid]
+    get().clearLiveStreamId(sid)
+    set({ taskSnapshot: undefined })
+    get().dequeueNextTurn(sid)
+  },
+  streamToolCall: (toolId, args, risk, sessionId?, streamId?) => {
+    const sid = streamSessionId(sessionId)
+    if (!bindStreamId(sid, streamId)) return
+    if (!hasActiveStream(sid)) get().streamStart(sid, streamId)
     const now = Date.now()
     const rec: ToolCallRecord = {
       id: `tc-${now}-${toolId}`,
@@ -2323,9 +2440,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     patchActiveAssistant(set, (m) => ({
       ...m,
       toolCalls: [...(m.toolCalls ?? []), rec],
-    }))
+    }), sid)
   },
-  streamToolResult: (toolId, result, error) => {
+  streamToolResult: (toolId, result, error, sessionId?, streamId?) => {
+    const sid = streamSessionId(sessionId)
+    if (!bindStreamId(sid, streamId)) return
     const endedAt = Date.now()
     patchActiveAssistant(set, (m) => {
       const list = [...(m.toolCalls ?? [])]
@@ -2351,17 +2470,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         })
       }
       return { ...m, toolCalls: list }
-    })
+    }, sid)
     // P11.6.4 — local UX metric: first successful tool result = time-to-value.
     if (!error) recordToolResult()
   },
-  streamToolProgress: (toolId, progress) => {
+  streamToolProgress: (toolId, progress, sessionId?, streamId?) => {
+    const sid = streamSessionId(sessionId)
+    if (!bindStreamId(sid, streamId)) return
     patchActiveAssistant(set, (m) => {
       const list = (m.toolCalls ?? []).map((t) =>
         t.toolId === toolId && t.status === 'running' ? { ...t, progress } : t,
       )
       return { ...m, toolCalls: list }
-    })
+    }, sid)
   },
   retryToolCall: async (recordId) => {
     const st = get()
@@ -2403,9 +2524,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       }))
     }
   },
-  streamStep: (label) => {
+  streamStep: (label, sessionId?, streamId?) => {
+    const sid = streamSessionId(sessionId)
+    if (!bindStreamId(sid, streamId)) return
     set((s) => {
-      const session = s.sessions.find((x) => x.id === s.activeSessionId)
+      const session = s.sessions.find((x) => x.id === sid)
       if (!session) return {}
       const steps: ProgressStep[] = session.messages
         .flatMap((m) => m.steps ?? [])
@@ -2416,7 +2539,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         : [...steps, { id: `p-${Date.now()}`, label, status: 'active' as const, type: 'tool' as const }]
       return {
         sessions: s.sessions.map((x) => {
-          if (x.id !== s.activeSessionId) return x
+          if (x.id !== sid) return x
           const lastMsg = x.messages[x.messages.length - 1]
           if (!lastMsg || lastMsg.role !== 'assistant') return x
           return {
@@ -2496,9 +2619,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           if (choice === 'approve' && pending) {
             const { planExecute } = await import('./tauri')
             await planExecute({
-              sessionId: get().activeSessionId,
+              sessionId: pending.sessionId,
               planId: pending.planId,
               tasks: pending.tasks,
+              ...(pending.workId ? { workId: pending.workId } : {}),
             })
           }
           get().setPendingPlan(undefined)

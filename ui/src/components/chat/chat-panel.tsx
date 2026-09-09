@@ -10,6 +10,7 @@ import {
   Clock,
   Copy,
   Download,
+  DollarSign,
   FileSearch,
   FileText,
   Folder,
@@ -86,6 +87,8 @@ const STATUS_META: Record<
   paused: { label: 'Paused', cls: 'border-border bg-muted text-muted-foreground' },
   completed: { label: 'Done', cls: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' },
   failed: { label: 'Failed', cls: 'border-rose-500/40 bg-rose-500/10 text-rose-300' },
+  cancelled: { label: 'Cancelled', cls: 'border-border bg-muted text-muted-foreground', icon: Square },
+  budget_exceeded: { label: 'Budget reached', cls: 'border-amber-500/40 bg-amber-500/10 text-amber-300', icon: DollarSign },
   scheduled: { label: 'Scheduled', cls: 'border-sky-500/40 bg-sky-500/10 text-sky-300', icon: Clock },
   reconnecting: { label: 'Reconnecting', cls: 'border-amber-500/40 bg-amber-500/10 text-amber-300', icon: RotateCw },
   idle: { label: 'Idle', cls: 'border-border bg-muted text-muted-foreground' },
@@ -141,7 +144,7 @@ function deriveNowDoing(session: Session | undefined) {
     detail: steps[idx].detail,
     stepIndex: idx + 1,
     stepTotal: steps.length,
-    elapsedMs: streamElapsedMs(),
+    elapsedMs: streamElapsedMs(session.id),
     tokensThisTurn: st.streamStats.tokensThisTurn,
   }
 }

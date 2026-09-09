@@ -79,8 +79,9 @@ export default function NowDoingStrip({
 
   const stepLabel =
     stepIndex && stepTotal ? `(step ${stepIndex}/${stepTotal})` : ''
+  const elapsedLabel =
+    elapsedMs
 
-  const elapsedLabel = elapsedMs
     ? `${((elapsedMs + tick * 1000) / 1000).toFixed(0)}s elapsed`
     : null
   const tokensLabel = tokensThisTurn

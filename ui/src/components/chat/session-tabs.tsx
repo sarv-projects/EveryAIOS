@@ -38,6 +38,10 @@ function statusDot(status: Session['status']): string {
       return 'bg-rose-500'
     case 'completed':
       return 'bg-emerald-400'
+    case 'cancelled':
+      return 'bg-zinc-400'
+    case 'budget_exceeded':
+      return 'bg-amber-400'
     default:
       return 'bg-zinc-500'
   }

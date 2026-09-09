@@ -2,7 +2,7 @@
 // the `guard_cmds` / `PendingGuardCard` shape (camelCase); in a plain-browser
 // preview the caller falls back to demo data so the card is explorable.
 
-import { inTauri, invoke } from "./tauri";
+import { inTauri, invoke, listen } from "./tauri";
 import { bridgeCall, nativeCall } from './runtime';
 
 /** The structured escalation bundle (doc 52 §2) rendered on the card. */
@@ -32,6 +32,8 @@ export interface GuardTicket {
   approvalSource: string;
   approvalNonce: string;
   expiresAtMs: number;
+  /** P52.x — why this ticket asked instead of auto-running (`code detail`). */
+  reason?: string;
   decision?: GuardDecision;
 }
 
@@ -55,6 +57,11 @@ export interface GuardPolicy {
   estopPulled: boolean;
   /** P51.22 — the tool allow-list rules (deny-wins, args-glob aware). */
   approvalRules?: PolicyRule[]
+  /** P52.x — live trust state (replaces the old hardcoded fixtures). */
+  autonomyLevel?: string;
+  humanApprovalThreshold?: string;
+  reviewerBudget?: number;
+  reviewerConfidenceFloor?: number;
 }
 
 /** The pending tickets waiting on a human decision (polled by the page). */
@@ -157,6 +164,70 @@ function demoMatrix(): MatrixCell[] {
   const out: MatrixCell[] = []
   for (const c of caps) for (const s of scopes) out.push({ capability: c, scope: s, decision: grid[c][s] })
   return out
+}
+
+/** P52.x — push-style Guard-2 lifecycle event (shell `guard-event` emit). */
+export interface GuardLifecycleEvent {
+  kind: 'minted' | 'approved' | 'rejected' | 'expired';
+  ticketId: string;
+  batch: boolean;
+}
+
+/**
+ * P52.x — subscribe to instant Guard-2 updates. The panel + guard window
+ * re-render on each emit; the 3s/2s polls remain only as a missed-emit
+ * fallback. No-op outside Tauri (returns a no-op unlisten).
+ */
+export async function listenGuardEvent(
+  cb: (ev: GuardLifecycleEvent) => void,
+): Promise<() => void> {
+  if (!inTauri()) return () => {};
+  return listen<GuardLifecycleEvent>('guard-event', (e) => cb(e.payload));
+}
+
+/** P52.x — extend a Pending ticket's TTL (rotates the nonce). */
+export interface GuardTtlExtension {
+  ticketId: string;
+  expiresAtMs: number;
+  approvalNonce: string;
+}
+
+export async function guardExtendTtl(
+  ticketId: string,
+  extraMs = 60_000,
+): Promise<GuardTtlExtension> {
+  return bridgeCall({
+    operation: 'guard extend ttl',
+    live: () =>
+      invoke<GuardTtlExtension>('guard_extend_ttl', {
+        ticketId,
+        extraMs,
+      }),
+    preview: () => ({
+      ticketId,
+      expiresAtMs: Date.now() + extraMs,
+      approvalNonce: 'preview-nonce',
+    }),
+  });
+}
+
+/** P52.x — human explanation for a Block reason (Guard-1 opacity fix). */
+export interface GuardBlockExplanation {
+  class: string;
+  hint: string;
+}
+
+export async function guardExplainBlock(reason: string): Promise<GuardBlockExplanation> {
+  return bridgeCall({
+    operation: 'guard explain block',
+    live: () => invoke<GuardBlockExplanation>('guard_explain_block', { reason }),
+    preview: () => ({ class: 'blocked', hint: 'Refused by the guard (preview).' }),
+  });
+}
+
+/** P52.x — seconds left on a ticket (pure; clamped at 0). */
+export function ttlSecondsLeft(expiresAtMs: number, nowMs = Date.now()): number {
+  return Math.max(0, Math.ceil((expiresAtMs - nowMs) / 1000));
 }
 
 /** The policy + profile + estop summary. */

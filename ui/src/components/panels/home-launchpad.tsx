@@ -22,6 +22,8 @@ function statusLine(s: Session) {
   if (s.status === 'scheduled') return s.preview || 'Scheduled'
   if (s.status === 'paused') return 'Paused'
   if (s.status === 'failed') return 'Failed'
+  if (s.status === 'cancelled') return 'Cancelled'
+  if (s.status === 'budget_exceeded') return 'Budget limit reached'
   return s.preview
 }
 
@@ -82,6 +84,8 @@ export default function HomeLaunchpad() {
                           s.status === 'action-required' && 'text-orange-400',
                           s.status === 'running' && 'text-blue-400',
                           s.status === 'scheduled' && 'text-violet-400',
+                          s.status === 'cancelled' && 'text-zinc-400',
+                          s.status === 'budget_exceeded' && 'text-amber-400',
                         )}
                       />
                     )}
@@ -104,7 +108,7 @@ export function ActivityPanel() {
   const sessions = useAppStore((s) => s.sessions)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const live = sessions.filter((s) => s.status === 'running' || s.status === 'action-required' || s.status === 'scheduled')
-  const done = sessions.filter((s) => s.status === 'completed' || s.status === 'failed' || s.status === 'paused')
+  const done = sessions.filter((s) => s.status === 'completed' || s.status === 'failed' || s.status === 'cancelled' || s.status === 'budget_exceeded' || s.status === 'paused')
   return (
     <div className="flex h-full w-full flex-col">
       <header className="border-b border-border px-4 py-3">

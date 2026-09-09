@@ -613,7 +613,7 @@ flowchart TD
     MACHINE --> GUARD1{"Guard-1 — deterministic pre-exec scan<br/>regex blocklist · path floors · URL scheme guard"}
     GUARD1 -->|"deny (blocklist hit)"| AUDIT["Append-only audit event → replay"]
     GUARD1 -->|"auto-safe (read-only, in-scope)"| TICKET["AuthorizationTicket<br/>ticket_id · agent_id · session_id · tool_id · args-hash · paths · expiry · single-use · risk · audit-seq"]
-    GUARD1 -->|"needs consent"| GUARD2["Guard-2 — dedicated approval window (dedicated approval window)<br/>guard.html only · nonce-bound · exact paths · script lines · targets · env · network<br/>main renderer cannot approve · native OS card = open hardening item"]
+    GUARD1 -->|"needs consent"| GUARD2["Guard-2 — dedicated approval window<br/>guard.html only · nonce-bound · exact paths · script lines · targets · env · network<br/>card carries a machine-computed why-asked reason (floor → policy → tier → profile → confidence)<br/>lifecycle events push to open windows (guard-event: minted/approved/rejected/expired)<br/>TTL extend is control-plane-only, Pending-gated, re-mints the nonce (old card dies)<br/>main renderer cannot approve · native OS card = open hardening item"]
     GUARD2 -->|"approve"| TICKET
     GUARD2 -->|"reject"| AUDIT
 
@@ -993,7 +993,7 @@ Native OS sandboxing is the target policy (Anthropic's `@anthropic-ai/sandbox-ru
 3. Coordinator sidecar (blueprint loader, agent loops, events) + ProcessSupervisor
 4. Key-ring vault (A2/A3) + OAuth subscription flows (A4) + Session Vault (E11) + session inheritance (E13)
 5. Browser tiers: **Lightpanda integration (default — `lightpanda serve` spawn, SSRF/file:// defaults, the browser/session contract), Obscura opt-in (`obscura serve` spawn)**, Camoufox/Fortress user-gated (E10); ⚠️ CloakBrowser deprecated (proprietary binary); challenge handler (E12); behavioral realism (E14); **browser network containment (06 §6.15 — WebRTC disable + worker fail-closed + SSRF-defaults)**; Session Vault full storage context
-6. Office engine (D1–D8): docx block-patch, IronCalc xlsx sidecar + deterministic planner, pptx part-editor, pdf suite, LibreOffice conformance oracle — **⏸ ON HOLD (2026-08-22; partial lift  honest viewers landed on the engines; full-fidelity tiers remain post-hold)**
+6. Office engine (D1–D8): docx block-patch, IronCalc xlsx (in-process Rust library — no sidecar binary; see ARCH/04 §4.5) + deterministic planner, pptx part-editor, pdf suite, LibreOffice conformance oracle — **⏸ ON HOLD (2026-08-22; partial lift 2026-08-26 — honest viewers landed on the engines; full-fidelity tiers remain post-hold)**
 7. Token economy (05): compaction pipeline with Reasonix ratios, snip rules, prefix-stability, cache-cost dashboard
 8. Memory fusion (C3) + Rust-native graph store (C6) + Letta paging (C2) — on top of the C-series memory/context plane and 34-algorithm index
 9. Harness-driving (F12) via **ACP client bridge (J17)** + messaging bridges (F13) + harness installer (F8)

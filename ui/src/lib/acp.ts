@@ -72,12 +72,25 @@ export interface AcpHandleInfo {
   authMethods: AuthMethod[];
 }
 
+export interface AcpPromptUpdate {
+  sessionId?: string;
+  sessionUpdate?: string;
+  content?: { type?: string; text?: string }[];
+  toolCallId?: string;
+  title?: string;
+  status?: string;
+}
+
 export interface AcpPromptResult {
   handle: string;
   stopReason: string;
   updateCount: number;
   permissionCount: number;
   pendingTickets: string[];
+  /** Actual assistant/session output collected by the ACP client. */
+  finalText?: string;
+  updates?: AcpPromptUpdate[];
+  executionId?: string;
 }
 
 /** One agent's install state (F8 — flip Install ↔ Launch in the picker). */

@@ -85,6 +85,10 @@ export interface ChatStreamParams {
   projectId?: string;
   /** P30.11 — interceptable turn/step waterfall hooks (default: pass-through). */
   hooks?: WaterfallHooks;
+  /** Native host callback used to publish the durable execution id before
+   * lifecycle events are emitted. This is process-local and never serialized
+   * over the sidecar wire. */
+  onExecutionId?: (executionId: string) => void;
 }
 
 /**
@@ -190,66 +194,33 @@ export function chiefAdapterFor(chiefId: string): ChiefAdapter {
 }
 
 /** Events the coordinator forwards to the UI as `chat/<type>` notifications. */
-export type ChatEvent =
+export type ChatEvent = (
   | { type: "ttft"; streamId: string; latencyMs: number }
   | { type: "batch"; streamId: string; text: string; tokenCount: number }
   | { type: "reasoning"; streamId: string; text: string }
   | { type: "stage"; streamId: string; stage: string }
-  | {
-      type: "tool_call";
-      streamId: string;
-      toolId: string;
-      args?: Record<string, unknown>;
-      risk?: string;
-    }
+  | { type: "tool_call"; streamId: string; toolId: string; args?: Record<string, unknown>; risk?: string }
   | { type: "tool_result"; streamId: string; toolId: string; result?: unknown }
-  | {
-      type: "done";
-      streamId: string;
-      turnId: string;
-      fullText: string;
-      totalTokens: number;
-      usage?: { promptTokens: number; completionTokens: number };
-    }
-  | {
-      type: "error";
-      streamId: string;
-      code: string;
-      message: string;
-      retryable?: boolean;
-      toolId?: string;
-      args?: Record<string, unknown>;
-    }
+  | { type: "done"; streamId: string; turnId: string; fullText: string; totalTokens: number; usage?: { promptTokens: number; completionTokens: number } }
+  | { type: "error"; streamId: string; code: string; message: string; retryable?: boolean; toolId?: string; args?: Record<string, unknown> }
   | { type: "cancelled"; streamId: string }
-  | {
-      /** P41.4 — K1 verification receipt (inline in the editor's Diff rail):
-       * model-reported pass/fail per plan-task check, never claimed as
-       * executed. `passed: null` = the report was ambiguous. */
-      type: "verification";
-      streamId: string;
-      taskId: string;
-      checks: string[];
-      report: string;
-      passed: boolean | null;
-    }
-  | {
-      type: "memory_extracted";
-      streamId: string;
-      sessionId: string;
-      facts: string[];
-    }
-  | {
-      /** Monitoring-run verdict (P6.4): the "notify vs silent" split. Emitted
-       * after `scheduler/monitor` evaluates a monitoring job's observation. */
-      type: "monitor";
-      streamId: string;
-      jobId: string;
-      changed: boolean;
-      notified: boolean;
-      stopped: boolean;
-      current: string;
-      notifications: number;
-    };
+  | { type: "verification"; streamId: string; taskId: string; checks: string[]; report: string; passed: boolean | null }
+  | { type: "memory_extracted"; streamId: string; sessionId: string; facts: string[] }
+  | { type: "monitor"; streamId: string; jobId: string; changed: boolean; notified: boolean; stopped: boolean; current: string; notifications: number }
+  | { type: "plan_start"; streamId: string; planId: string; tasks: number }
+  | { type: "plan_step"; streamId: string; planId: string; taskId: string; status: "running" | "done" | "skipped" }
+  | { type: "interrupt"; streamId: string; planId: string; breakId: string; title: string; description: string; options: string[] }
+  | { type: "plan_done"; streamId: string; planId: string; tasksDone: number; error?: string; verification?: { verified?: boolean; status?: string } }
+) & {
+  sessionId?: string;
+  workId?: string;
+  executionId?: string;
+  runId?: string;
+  eventId?: string;
+  sequence?: number;
+  schemaVersion?: number;
+  timestamp?: number;
+};
 
 /** One chat-completions message, including native tool-result turns. */
 export interface ProviderMessage {
@@ -588,33 +559,39 @@ async function runInbuiltTurn(
 
   const controller = new AbortController();
   active.set(streamId, controller);
-  // P51.14 — the Rust side sends `workId = sessionId` on every chat/stream
-  // turn (chat.rs start_stream), so the Work Gateway projection for this
-  // session is the live agent-card surface. Ensure the Work item exists and
-  // bind/start the run before the engine begins; the UI's poll loop picks the
-  // events up on its next tick.
-  if (request && params.workId !== undefined) {
-    void ensureWork(request, params.workId, sessionId, text).then(() =>
-      recordTransition(request, params.workId as string, streamId, "running"),
-    );
-    void request("execution/begin", {
-      trigger: surface === "automation" ? "scheduler" : "chat",
-      sessionId,
-      workId: params.workId,
-      objective: text,
-      contextSnapshot: { sessionId, streamId },
-    }).catch(() => {
-      /* kernel optional */
-    });
-  } else if (request) {
-    void request("execution/begin", {
-      trigger: surface === "automation" ? "scheduler" : "chat",
-      sessionId,
-      objective: text,
-      contextSnapshot: { sessionId, streamId },
-    }).catch(() => {
-      /* kernel optional */
-    });
+  let executionId: string | undefined;
+  // P51.14 — establish the durable execution before the engine emits any
+  // lifecycle event. Work and execution identities are deliberately distinct:
+  // `workId` groups a conversation, while `executionId` identifies this one
+  // attempt. All later Work Gateway transitions use the returned execution id.
+  if (request) {
+    if (params.workId !== undefined) {
+      await ensureWork(request, params.workId, sessionId, text);
+    }
+    try {
+      const started = (await request("execution/begin", {
+        trigger: surface === "automation" ? "scheduler" : "chat",
+        sessionId,
+        ...(params.workId !== undefined ? { workId: params.workId } : {}),
+        objective: text,
+        contextSnapshot: {
+          sessionId,
+          streamId,
+          surface,
+          ...(params.projectId !== undefined ? { projectId: params.projectId } : {}),
+          ...(params.agentId !== undefined ? { agentId: params.agentId } : {}),
+        },
+      })) as { id?: unknown };
+      if (typeof started?.id === "string" && started.id.length > 0) {
+        executionId = started.id;
+        params.onExecutionId?.(executionId);
+        if (params.workId !== undefined) {
+          await recordTransition(request, params.workId, executionId, "running");
+        }
+      }
+    } catch {
+      /* kernel optional — chat remains usable in headless/test mode */
+    }
   }
 
   // StreamSession (core-ai A-10): TTFT + 33ms batch flush. Checkpoints are
@@ -708,7 +685,7 @@ async function runInbuiltTurn(
           totalTokens: estimateTokens(cached.response),
         });
         if (request && params.workId !== undefined) {
-          void recordTransition(request, params.workId, streamId, "completed");
+          void recordTransition(request, params.workId, executionId ?? streamId, "completed");
           void recordThought(request, params.workId, cached.response);
         }
         active.delete(streamId);
@@ -913,7 +890,7 @@ async function runInbuiltTurn(
     if (ctx.abort === true) {
       emit({ type: "done", streamId, turnId: `${sessionId}:${++turnCounter}:aborted`, fullText: "", totalTokens: 0 });
       if (request && params.workId !== undefined) {
-        void recordTransition(request, params.workId, streamId, "cancelled");
+        void recordTransition(request, params.workId, executionId ?? streamId, "cancelled");
       }
       active.delete(streamId);
       return;
@@ -1021,7 +998,7 @@ async function runInbuiltTurn(
           if (controller.signal.aborted) {
             emit({ type: "cancelled", streamId });
             if (request && params.workId !== undefined) {
-              void recordTransition(request, params.workId, streamId, "cancelled");
+              void recordTransition(request, params.workId, executionId ?? streamId, "cancelled");
             }
           } else {
             emit({
@@ -1031,7 +1008,7 @@ async function runInbuiltTurn(
               message: ev.error,
             });
             if (request && params.workId !== undefined) {
-              void recordTransition(request, params.workId, streamId, "failed");
+              void recordTransition(request, params.workId, executionId ?? streamId, "failed");
             }
           }
           return;
@@ -1053,7 +1030,7 @@ async function runInbuiltTurn(
     if (controller.signal.aborted) {
       emit({ type: "cancelled", streamId });
       if (request && params.workId !== undefined) {
-        void recordTransition(request, params.workId, streamId, "cancelled");
+        void recordTransition(request, params.workId, executionId ?? streamId, "cancelled");
       }
     } else {
       // P36 — record the successful outcome (health 1, latency, cost
@@ -1075,7 +1052,7 @@ async function runInbuiltTurn(
       // P51.14 — close the run on the Work Gateway: completed transition +
       // the final summary as the agent-card thought.
       if (request && params.workId !== undefined) {
-        void recordTransition(request, params.workId, streamId, "completed");
+        void recordTransition(request, params.workId, executionId ?? streamId, "completed");
         void recordThought(request, params.workId, fullText);
       }
       // P1.3 (A9) — store a successful read-only turn's response so the next
@@ -1108,7 +1085,7 @@ async function runInbuiltTurn(
       message,
     });
     if (request && params.workId !== undefined) {
-      void recordTransition(request, params.workId, streamId, "failed");
+      void recordTransition(request, params.workId, executionId ?? streamId, "failed");
     }
   } finally {
     batcher.destroy();
@@ -1224,6 +1201,7 @@ export interface ToolRetryParams {
   toolId: string;
   args: Record<string, unknown>;
   agentId?: string;
+  workId?: string;
 }
 
 /** S0.5 — re-run one tool through the same Guard-2 exec→commit path. */
@@ -1236,7 +1214,7 @@ export async function runToolRetry(
   emit({ type: "tool_call", streamId, toolId, args });
   emit({ type: "stage", streamId, stage: `tool:${toolId}:running` });
   try {
-    const ex = new ToolExecutor(request);
+    const ex = new ToolExecutor(request, params.workId);
     const ctx: { sessionId: string; agentId?: string } = { sessionId };
     if (params.agentId !== undefined) ctx.agentId = params.agentId;
     const result = await ex.executeTool(toolId, args, ctx);

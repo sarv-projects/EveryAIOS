@@ -84,11 +84,45 @@ pub fn guard_receipts(
 
 /// The current Guard-2 policy + profile + estop summary (Settings guard panel),
 /// incl. the applied H34 autonomy level.
+///
+/// P52.x — the payload also carries the confidence floor, the profile's
+/// human-approval threshold name, and the reviewer auto-allow budget flag so
+/// the panel can render the live trust state instead of fixtures.
 #[tauri::command]
 pub fn guard_policy(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
     svc.handle("guard/policy", &serde_json::json!({}))
         .map_err(|e| e.to_string())
+}
+
+/// P52.x (guard-UX wave) — extend a Pending ticket's TTL (`Extend 60s` on the
+/// card). Only Pending tickets; the nonce rotates (the old card dies with
+/// it). Each step caps at 60s, total lifetime at 5min. Returns the new
+/// expiry + nonce so the card can update in place. Never touches floors.
+#[tauri::command]
+pub fn guard_extend_ttl(
+    state: State<'_, AppState>,
+    ticket_id: String,
+    extra_ms: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    let mut svc = state.guard_service.lock().map_err(|e| e.to_string())?;
+    let (expires_at_ms, approval_nonce) = svc
+        .extend_ticket_ttl(&ticket_id, extra_ms.unwrap_or(60_000))
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "ticketId": ticket_id,
+        "expiresAtMs": expires_at_ms,
+        "approvalNonce": approval_nonce,
+    }))
+}
+
+/// P52.x (guard-UX wave) — human explanation for a Block reason (Guard-1
+/// opacity fix): the guard class + a safe alternative. Pure data mapping —
+/// no policy change, no authority.
+#[tauri::command]
+pub fn guard_explain_block(reason: String) -> Result<serde_json::Value, String> {
+    let exp = everyaios_core::GuardService::explain_block(&reason);
+    Ok(serde_json::json!({ "class": exp.class, "hint": exp.hint }))
 }
 
 /// P44.5 — the currently applied H34 autonomy level + its confidence floor.

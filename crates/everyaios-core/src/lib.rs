@@ -111,7 +111,9 @@ pub use export::{
     render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
     MemoryMirror, ObsidianNote, WipeScope,
 };
-pub use guard_service::{GuardDecision, GuardService, PendingGuardCard};
+pub use guard_service::{
+    AskReason, BlockExplanation, GuardDecision, GuardLifecycle, GuardService, PendingGuardCard,
+};
 pub use hwfit::{
     detect as detect_hardware, recommend, score_model, GpuClass, HardwareProfile,
     LocalModelCandidate, ModelFit,

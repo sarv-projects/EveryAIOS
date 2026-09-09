@@ -56,46 +56,113 @@ fn persist_memory(memory: &MemoryService) {
 /// UI event sink (pre-existing; alias keeps clippy's type_complexity quiet).
 type EventSink = Box<dyn Fn(ChatWireEvent) + Send>;
 
+/// Identity carried by the coordinator's normalized event envelope. The
+/// stream/session pair is kept as the stable routing key; these additional
+/// fields preserve durable Work/execution correlation through the Rust/Tauri
+/// hop instead of silently dropping it at the enum conversion boundary.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatEventMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    work_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    execution_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sequence: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    schema_version: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timestamp: Option<u64>,
+}
+
+fn event_metadata(params: &serde_json::Value) -> ChatEventMetadata {
+    ChatEventMetadata {
+        work_id: params
+            .get("workId")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        execution_id: params
+            .get("executionId")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        run_id: params
+            .get("runId")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        event_id: params
+            .get("eventId")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        sequence: params.get("sequence").and_then(|v| v.as_u64()),
+        schema_version: params.get("schemaVersion").and_then(|v| v.as_u64()),
+        timestamp: params.get("timestamp").and_then(|v| v.as_u64()),
+    }
+}
+
 /// Wire events forwarded to the UI (Tauri emits a single `chat-event`).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ChatWireEvent {
     Ttft {
         stream_id: String,
+        session_id: String,
         latency_ms: u64,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     Batch {
         stream_id: String,
+        session_id: String,
         text: String,
         token_count: u64,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     Reasoning {
         stream_id: String,
+        session_id: String,
         text: String,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     Stage {
         stream_id: String,
+        session_id: String,
         stage: String,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     ToolCall {
         #[serde(rename = "streamId")]
         stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
         #[serde(rename = "toolId")]
         tool_id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         args: Option<serde_json::Value>,
         #[serde(skip_serializing_if = "Option::is_none")]
         risk: Option<String>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     ToolResult {
         #[serde(rename = "streamId")]
         stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
         #[serde(rename = "toolId")]
         tool_id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         result: Option<serde_json::Value>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     /// P41.4 — K1 verification receipt for the editor's Diff rail
     /// (model-reported pass/fail per plan-task check; `passed: null` =
@@ -103,6 +170,8 @@ pub enum ChatWireEvent {
     Verification {
         #[serde(rename = "streamId")]
         stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
         #[serde(rename = "taskId")]
         task_id: String,
         #[serde(rename = "checks")]
@@ -111,15 +180,21 @@ pub enum ChatWireEvent {
         report: String,
         #[serde(rename = "passed")]
         passed: Option<bool>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     Done {
         stream_id: String,
+        session_id: String,
         turn_id: String,
         full_text: String,
         total_tokens: u64,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     Error {
         stream_id: String,
+        session_id: String,
         code: String,
         message: String,
         #[serde(skip_serializing_if = "Option::is_none", rename = "toolId")]
@@ -128,15 +203,23 @@ pub enum ChatWireEvent {
         retryable: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
         args: Option<serde_json::Value>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     Cancelled {
         stream_id: String,
+        session_id: String,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     /// J11 kill surface: "stopped: $X limit".
     BudgetExceeded {
+        stream_id: String,
         session_id: String,
         limit: f64,
         spent: f64,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     /// Stage-0 plan executor: a circuit-break MCQ card for the H2 cockpit
     /// (the coordinator emitted `chat/interrupt` when `CircuitBreaker::step`
@@ -144,24 +227,32 @@ pub enum ChatWireEvent {
     /// actionable labels and returns the choice via `plan/respond`.
     Interrupt {
         stream_id: String,
+        session_id: String,
         plan_id: String,
         break_id: String,
         title: String,
         description: String,
         options: Vec<String>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     /// Stage-0 plan executor: the plan finished (or halted). `error` is
     /// present when it halted on an interrupt/escalation.
     PlanDone {
         stream_id: String,
+        session_id: String,
         plan_id: String,
         tasks_done: u32,
         error: Option<String>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
     /// P6.4 / H2 — monitoring verdict for the UI badge (notify vs silent).
     Monitor {
         #[serde(rename = "streamId")]
         stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
         #[serde(rename = "jobId")]
         job_id: String,
         changed: bool,
@@ -169,6 +260,44 @@ pub enum ChatWireEvent {
         stopped: bool,
         current: String,
         notifications: u32,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
+    },
+    /// Plan lifecycle events use the same normalized chat-event channel as
+    /// ordinary turns. Keeping them here prevents plan_start/plan_step from
+    /// disappearing at the Rust relay boundary.
+    PlanStart {
+        #[serde(rename = "streamId")]
+        stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(rename = "planId")]
+        plan_id: String,
+        tasks: u32,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
+    },
+    PlanStep {
+        #[serde(rename = "streamId")]
+        stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        #[serde(rename = "planId")]
+        plan_id: String,
+        #[serde(rename = "taskId")]
+        task_id: String,
+        status: String,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
+    },
+    MemoryExtracted {
+        #[serde(rename = "streamId")]
+        stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        facts: Vec<String>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
     },
 }
 
@@ -176,6 +305,8 @@ pub enum ChatWireEvent {
 #[derive(Debug, Clone)]
 pub struct ChatStreamParams {
     pub session_id: String,
+    /// Durable Work grouping key. Defaults to the session at the Tauri boundary.
+    pub work_id: Option<String>,
     pub stream_id: String,
     pub text: String,
     pub surface: Option<String>,
@@ -190,6 +321,8 @@ pub struct ChatStreamParams {
     /// `<user_document>` wrapping); the chat-overlay scopes a turn to an
     /// open document by passing its extracted text here.
     pub user_documents: Option<Vec<UserDocument>>,
+    /// P5/P6 project scope carried into the coordinator prompt/policy context.
+    pub project_id: Option<String>,
     /// P38 — the session's effective Chief (pin → user default → inbuilt),
     /// forwarded to the coordinator's single dispatch guard. The UI resolves
     /// it; external Chiefs are refused by the coordinator (see
@@ -997,20 +1130,40 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         .and_then(|s| s.as_str())
                         .unwrap_or("")
                         .to_string();
+                    // The coordinator carries the originating session on the
+                    // event. The stream registry is the compatibility path
+                    // for older sidecars and for events emitted immediately
+                    // after the Rust request is acknowledged. Never infer a
+                    // session from the UI's active tab.
+                    let event_session_id = params
+                        .get("sessionId")
+                        .and_then(|s| s.as_str())
+                        .map(str::to_string)
+                        .or_else(|| {
+                            sessions
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .get(&stream_id)
+                                .cloned()
+                        })
+                        .unwrap_or_default();
                     match method.as_str() {
                         "chat/ttft" => emit(
                             &on_event,
                             ChatWireEvent::Ttft {
+                                session_id: event_session_id.clone(),
                                 latency_ms: params
                                     .get("latencyMs")
                                     .and_then(|v| v.as_u64())
                                     .unwrap_or(0),
                                 stream_id,
+                                metadata: event_metadata(&params),
                             },
                         ),
                         "chat/batch" => emit(
                             &on_event,
                             ChatWireEvent::Batch {
+                                session_id: event_session_id.clone(),
                                 text: params
                                     .get("text")
                                     .and_then(|t| t.as_str())
@@ -1021,33 +1174,39 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                     .and_then(|t| t.as_u64())
                                     .unwrap_or(0),
                                 stream_id,
+                                metadata: event_metadata(&params),
                             },
                         ),
                         "chat/reasoning" => emit(
                             &on_event,
                             ChatWireEvent::Reasoning {
+                                session_id: event_session_id.clone(),
                                 text: params
                                     .get("text")
                                     .and_then(|t| t.as_str())
                                     .unwrap_or("")
                                     .to_string(),
                                 stream_id,
+                                metadata: event_metadata(&params),
                             },
                         ),
                         "chat/stage" => emit(
                             &on_event,
                             ChatWireEvent::Stage {
+                                session_id: event_session_id.clone(),
                                 stage: params
                                     .get("stage")
                                     .and_then(|s| s.as_str())
                                     .unwrap_or("")
                                     .to_string(),
                                 stream_id,
+                                metadata: event_metadata(&params),
                             },
                         ),
                         "chat/tool_call" => emit(
                             &on_event,
                             ChatWireEvent::ToolCall {
+                                session_id: event_session_id.clone(),
                                 tool_id: params
                                     .get("toolId")
                                     .and_then(|t| t.as_str())
@@ -1059,6 +1218,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                     .and_then(|r| r.as_str())
                                     .map(str::to_string),
                                 stream_id,
+                                metadata: event_metadata(&params),
                             },
                         ),
                         // P11.5.11 — AG-UI live transport: forward the raw
@@ -1074,6 +1234,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             &on_event,
                             ChatWireEvent::Verification {
                                 stream_id,
+                                session_id: event_session_id.clone(),
                                 task_id: params
                                     .get("taskId")
                                     .and_then(|t| t.as_str())
@@ -1094,11 +1255,13 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                     .unwrap_or("")
                                     .to_string(),
                                 passed: params.get("passed").and_then(|p| p.as_bool()),
+                                metadata: event_metadata(&params),
                             },
                         ),
                         "chat/tool_result" => emit(
                             &on_event,
                             ChatWireEvent::ToolResult {
+                                session_id: event_session_id.clone(),
                                 tool_id: params
                                     .get("toolId")
                                     .and_then(|t| t.as_str())
@@ -1117,57 +1280,63 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                         })
                                     }),
                                 stream_id,
+                                metadata: event_metadata(&params),
                             },
                         ),
                         "chat/done" => {
-                            emit(
-                                &on_event,
-                                ChatWireEvent::Done {
-                                    turn_id: params
-                                        .get("turnId")
-                                        .and_then(|t| t.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    full_text: params
-                                        .get("fullText")
-                                        .and_then(|t| t.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    total_tokens: params
-                                        .get("totalTokens")
-                                        .and_then(|t| t.as_u64())
-                                        .unwrap_or(0),
-                                    stream_id: stream_id.clone(),
-                                },
-                            );
-                            // J11 post-turn kill: a session that just crossed
-                            // its $ limit gets the "stopped: $X limit" surface.
-                            let session_id = sessions
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .get(&stream_id)
-                                .cloned();
-                            if let Some(session_id) = session_id {
-                                let spent = vault
+                            // Check the post-turn ledger before publishing a
+                            // successful terminal event. Budget enforcement is
+                            // terminal: the UI must never briefly mark a run
+                            // completed and then replace it with a kill card.
+                            let spent = if event_session_id.is_empty() {
+                                0.0
+                            } else {
+                                vault
                                     .lock()
                                     .unwrap_or_else(|e| e.into_inner())
-                                    .session_spend(&session_id)
-                                    .unwrap_or(0.0);
-                                if spent >= DEFAULT_SESSION_BUDGET_USD {
-                                    emit(
-                                        &on_event,
-                                        ChatWireEvent::BudgetExceeded {
-                                            session_id,
-                                            limit: DEFAULT_SESSION_BUDGET_USD,
-                                            spent,
-                                        },
-                                    );
-                                }
+                                    .session_spend(&event_session_id)
+                                    .unwrap_or(0.0)
+                            };
+                            if !event_session_id.is_empty() && spent >= DEFAULT_SESSION_BUDGET_USD {
+                                emit(
+                                    &on_event,
+                                    ChatWireEvent::BudgetExceeded {
+                                        stream_id: stream_id.clone(),
+                                        session_id: event_session_id.clone(),
+                                        limit: DEFAULT_SESSION_BUDGET_USD,
+                                        spent,
+                                        metadata: event_metadata(&params),
+                                    },
+                                );
+                            } else {
+                                emit(
+                                    &on_event,
+                                    ChatWireEvent::Done {
+                                        session_id: event_session_id.clone(),
+                                        turn_id: params
+                                            .get("turnId")
+                                            .and_then(|t| t.as_str())
+                                            .unwrap_or("")
+                                            .to_string(),
+                                        full_text: params
+                                            .get("fullText")
+                                            .and_then(|t| t.as_str())
+                                            .unwrap_or("")
+                                            .to_string(),
+                                        total_tokens: params
+                                            .get("totalTokens")
+                                            .and_then(|t| t.as_u64())
+                                            .unwrap_or(0),
+                                        stream_id: stream_id.clone(),
+                                        metadata: event_metadata(&params),
+                                    },
+                                );
                             }
                         }
                         "chat/error" => emit(
                             &on_event,
                             ChatWireEvent::Error {
+                                session_id: event_session_id.clone(),
                                 code: params
                                     .get("code")
                                     .and_then(|c| c.as_str())
@@ -1185,9 +1354,17 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 retryable: params.get("retryable").and_then(|r| r.as_bool()),
                                 args: params.get("args").cloned(),
                                 stream_id,
+                                metadata: event_metadata(&params),
                             },
                         ),
-                        "chat/cancelled" => emit(&on_event, ChatWireEvent::Cancelled { stream_id }),
+                        "chat/cancelled" => emit(
+                            &on_event,
+                            ChatWireEvent::Cancelled {
+                                stream_id,
+                                session_id: event_session_id,
+                                metadata: event_metadata(&params),
+                            },
+                        ),
                         // Stage-0 (P6.3): a plan executor circuit-break trip.
                         // The coordinator emits the full MCQ card payload;
                         // Rust relays it to the UI verbatim.
@@ -1225,11 +1402,13 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 &on_event,
                                 ChatWireEvent::Interrupt {
                                     stream_id: stream_id.clone(),
+                                    session_id: event_session_id.clone(),
                                     plan_id,
                                     break_id,
                                     title,
                                     description,
                                     options,
+                                    metadata: event_metadata(&params),
                                 },
                             );
                         }
@@ -1237,6 +1416,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             emit(
                                 &on_event,
                                 ChatWireEvent::PlanDone {
+                                    session_id: event_session_id.clone(),
                                     plan_id: params
                                         .get("planId")
                                         .and_then(|s| s.as_str())
@@ -1252,12 +1432,69 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                         .and_then(|s| s.as_str())
                                         .map(str::to_string),
                                     stream_id,
+                                    metadata: event_metadata(&params),
                                 },
                             );
                         }
+                        "chat/plan_start" => emit(
+                            &on_event,
+                            ChatWireEvent::PlanStart {
+                                session_id: event_session_id.clone(),
+                                plan_id: params
+                                    .get("planId")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                tasks: params.get("tasks").and_then(|v| v.as_u64()).unwrap_or(0)
+                                    as u32,
+                                stream_id,
+                                metadata: event_metadata(&params),
+                            },
+                        ),
+                        "chat/plan_step" => emit(
+                            &on_event,
+                            ChatWireEvent::PlanStep {
+                                session_id: event_session_id.clone(),
+                                plan_id: params
+                                    .get("planId")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                task_id: params
+                                    .get("taskId")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                status: params
+                                    .get("status")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                stream_id,
+                                metadata: event_metadata(&params),
+                            },
+                        ),
+                        "chat/memory_extracted" => emit(
+                            &on_event,
+                            ChatWireEvent::MemoryExtracted {
+                                session_id: event_session_id.clone(),
+                                facts: params
+                                    .get("facts")
+                                    .and_then(|v| v.as_array())
+                                    .map(|a| {
+                                        a.iter()
+                                            .filter_map(|v| v.as_str().map(str::to_string))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default(),
+                                stream_id,
+                                metadata: event_metadata(&params),
+                            },
+                        ),
                         "chat/monitor" => emit(
                             &on_event,
                             ChatWireEvent::Monitor {
+                                session_id: event_session_id.clone(),
                                 job_id: params
                                     .get("jobId")
                                     .and_then(|s| s.as_str())
@@ -1286,6 +1523,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                     .unwrap_or(0)
                                     as u32,
                                 stream_id,
+                                metadata: event_metadata(&params),
                             },
                         ),
                         _ => {}
@@ -1301,6 +1539,8 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     pub fn start_stream(&self, params: ChatStreamParams) -> Result<(), ChatRelayError> {
         // J11 pre-flight: refuse before ANY dispatch when the session is at or
         // over its hard $ budget (the ledger is the durable spend record).
+        // Do this before registering the stream so a refused request cannot
+        // leave a stale stream→session entry behind.
         let spent = self
             .vault
             .lock()
@@ -1314,11 +1554,19 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             });
         }
 
+        // Register immediately before dispatch. The sidecar may acknowledge
+        // and emit the first notification in the same frame burst, so this
+        // must happen before `request()`.
+        self.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(params.stream_id.clone(), params.session_id.clone());
+
         let ack = self.link.request(
             "chat/stream",
             serde_json::json!({
                 "sessionId": params.session_id,
-                "workId": params.session_id,
+                "workId": params.work_id.unwrap_or_else(|| params.session_id.clone()),
                 "streamId": params.stream_id,
                 "text": params.text,
                 "surface": params.surface,
@@ -1328,22 +1576,33 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                 "personaId": params.persona_id,
                 "soulMd": params.soul_md,
                 "userDocuments": params.user_documents,
+                "projectId": params.project_id,
                 "primaryChief": params.primary_chief,
                 "credentialedProviders": params.credentialed_providers,
             }),
-        )?;
+        );
+        let ack = match ack {
+            Ok(value) => value,
+            Err(error) => {
+                self.sessions
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(&params.stream_id);
+                return Err(error.into());
+            }
+        };
         if !ack
             .get("accepted")
             .and_then(|a| a.as_bool())
             .unwrap_or(false)
         {
+            self.sessions
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&params.stream_id);
             return Err(ChatRelayError::SidecarRejected(ack.to_string()));
         }
 
-        self.sessions
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(params.stream_id.clone(), params.session_id.clone());
         Ok(())
     }
 
@@ -1361,6 +1620,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             "streamId": stream_id,
             "toolId": tool_id,
             "args": args,
+            "workId": session_id,
         });
         if let Some(a) = agent_id {
             body["agentId"] = serde_json::Value::String(a.to_string());
@@ -1991,6 +2251,7 @@ mod tests {
         let err = relay
             .start_stream(ChatStreamParams {
                 session_id: "s-over".into(),
+                work_id: None,
                 stream_id: "st-1".into(),
                 text: "hi".into(),
                 surface: None,
@@ -2000,6 +2261,7 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                project_id: None,
                 primary_chief: None,
                 credentialed_providers: None,
             })
@@ -2061,6 +2323,7 @@ mod tests {
         relay
             .start_stream(ChatStreamParams {
                 session_id: "s1".into(),
+                work_id: None,
                 stream_id: "st-1".into(),
                 text: "hi".into(),
                 surface: None,
@@ -2070,6 +2333,7 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                project_id: None,
                 primary_chief: None,
                 credentialed_providers: None,
             })
@@ -2120,6 +2384,7 @@ mod tests {
         relay
             .start_stream(ChatStreamParams {
                 session_id: "s1".into(),
+                work_id: None,
                 stream_id: "st-cred".into(),
                 text: "hi".into(),
                 surface: None,
@@ -2129,6 +2394,7 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                project_id: None,
                 primary_chief: None,
                 credentialed_providers: Some(vec!["openai".into(), "ollama".into()]),
             })
@@ -2404,6 +2670,7 @@ mod tests {
         relay
             .start_stream(ChatStreamParams {
                 session_id: "s-kill".into(),
+                work_id: None,
                 stream_id: "st-1".into(),
                 text: "x".into(),
                 surface: None,
@@ -2413,20 +2680,22 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                project_id: None,
                 primary_chief: None,
                 credentialed_providers: None,
             })
             .expect("start_stream (1.99 < 2.00 pre-flight passes)");
 
         assert!(
-            wait_events(&events, 2, Duration::from_secs(5)),
-            "expected Done+BudgetExceeded, got {:?}",
+            wait_events(&events, 1, Duration::from_secs(5)),
+            "expected BudgetExceeded, got {:?}",
             events.lock().unwrap_or_else(|x| x.into_inner())
         );
         let evs = events.lock().unwrap_or_else(|x| x.into_inner());
-        assert!(matches!(evs[0], ChatWireEvent::Done { .. }));
+        // Budget enforcement is terminal and is emitted before `done`, so a
+        // queued follow-up cannot observe a transient completed state.
         assert!(matches!(
-            evs[1],
+            evs[0],
             ChatWireEvent::BudgetExceeded { ref session_id, spent, .. }
                 if session_id == "s-kill" && spent >= 2.01
         ));
@@ -2434,6 +2703,7 @@ mod tests {
         let err = relay
             .start_stream(ChatStreamParams {
                 session_id: "s-kill".into(),
+                work_id: None,
                 stream_id: "st-2".into(),
                 text: "again".into(),
                 surface: None,
@@ -2443,6 +2713,7 @@ mod tests {
                 persona_id: None,
                 soul_md: None,
                 user_documents: None,
+                project_id: None,
                 primary_chief: None,
                 credentialed_providers: None,
             })

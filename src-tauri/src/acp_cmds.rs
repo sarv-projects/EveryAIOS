@@ -822,12 +822,27 @@ pub fn acp_prompt(
         }
     }
 
+    let final_text = outcome
+        .updates
+        .iter()
+        .flat_map(|u| u.content.iter())
+        .filter_map(|block| {
+            if block.r#type == "text" || !block.text.is_empty() {
+                Some(block.text.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<String>();
+
     Ok(serde_json::json!({
         "handle": handle,
         "stopReason": outcome.stop_reason.as_str(),
         "updateCount": outcome.updates.len(),
         "permissionCount": outcome.permissions.len(),
         "pendingTickets": pending_tickets,
+        "finalText": final_text,
+        "updates": outcome.updates,
         "executionId": exec_id,
     }))
 }

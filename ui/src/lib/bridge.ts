@@ -170,17 +170,49 @@ function budgetKillText(message: string): string {
   return `stopped: $${m[2]} / $${m[1]}`;
 }
 
+function budgetEventText(e: ChatWireEvent): string {
+  if (typeof e.spent === 'number' && typeof e.limit === 'number') {
+    return `stopped: $${e.spent.toFixed(2)} / $${e.limit.toFixed(2)}`;
+  }
+  return budgetKillText(e.message ?? 'Budget limit reached');
+}
+
+function updateLiveBudget(e: ChatWireEvent, st: ReturnType<typeof useAppStore.getState>): void {
+  if (typeof e.spent !== 'number' && typeof e.limit !== 'number') return;
+  const current = st.liveBudget;
+  st.setLiveBudget({
+    spent: e.spent ?? current?.spent ?? 0,
+    cap: e.limit ?? current?.cap ?? 2,
+    tokens: current?.tokens ?? 0,
+    ...(current?.cacheHitRate !== undefined ? { cacheHitRate: current.cacheHitRate } : {}),
+  });
+}
+
 /** Route a live chat wire event into the session it belongs to. Chat-events
  * carry a `sessionId` so switching chats mid-stream never lands tokens on the
- * wrong transcript (bugfix 2); fall back to the active session only when the
- * event omits one. */
-function handleChatEvent(e: ChatWireEvent): void {
+ * wrong transcript (bugfix 2). Events without identity are rejected rather
+ * than routed through the active session. */
+export function handleChatEvent(e: ChatWireEvent): void {
   const st = useAppStore.getState();
-  const sid = e.sessionId ?? st.activeSessionId;
+  // Runtime events must be self-routing. A missing identity is a protocol
+  // defect, not permission to mutate whichever tab is active now.
+  const sid = e.sessionId;
+  if (!sid || !e.streamId) {
+    st.pushLiveNotification({
+      id: `live:protocol:${e.eventId ?? `${e.type}:${Date.now()}`}`,
+      kind: 'error',
+      title: 'Agent event was ignored',
+      detail: 'The runtime returned an event without a session or stream identity.',
+      ts: Date.now(),
+      unread: true,
+      source: 'Runtime',
+    });
+    return;
+  }
 
   switch (e.type) {
     case "ttft":
-      st.streamStart(sid);
+      st.streamStart(sid, e.streamId);
       break;
     // P52.23 — provider reasoning (CoT) deltas. Forwarded all the way from
     // the engine's `reasoning` stream; coalesced per thought block by the
@@ -188,43 +220,69 @@ function handleChatEvent(e: ChatWireEvent): void {
     // Reasoning arrives *before* the first text batch on thinking models, so
     // it also opens the assistant message (no ttft dependency).
     case "reasoning":
-      st.streamStart(sid);
-      st.appendReasoning(e.text ?? "", sid);
+      st.streamStart(sid, e.streamId);
+      st.appendReasoning(e.text ?? "", sid, e.streamId);
       break;
     case "batch":
-      st.streamAppend(e.text ?? "", false, sid);
-      st.noteStreamTick(e.tokenCount ?? Math.max(1, Math.round((e.text ?? "").length / 4)));
+      st.streamAppend(e.text ?? "", false, sid, e.streamId);
+      st.noteStreamTick(e.tokenCount ?? Math.max(1, Math.round((e.text ?? "").length / 4)), sid, e.streamId);
       break;
     case "done":
-      // `fullText` is the authoritative whole message; `batch` deltas were
-      // already appended token-by-token, so replace (never concat) it.
-      if (e.fullText) {
-        st.streamFinalize(e.fullText, sid);
-      } else if (e.text) {
-        st.streamAppend(e.text, true, sid);
-      }
+      // `fullText` is authoritative even when it is intentionally empty.
+      // A falsy check here used to leave empty successful turns stuck in the
+      // running state forever.
+      st.streamFinalize(e.fullText ?? e.text ?? "", sid, e.streamId);
+      break;
+    case "budgetExceeded": {
+      const detail = budgetEventText(e);
+      updateLiveBudget(e, st);
+      st.streamBudgetKill(detail, sid, e.streamId);
+      st.pushLiveNotification({
+        id: `live:cost:${e.streamId ?? sid}:${e.eventId ?? Date.now()}`,
+        kind: 'cost',
+        title: 'Budget limit reached',
+        detail,
+        ts: Date.now(),
+        unread: true,
+        source: 'Spend',
+      });
+      break;
+    }
+    case "cancelled":
+      st.streamCancelled(sid, e.streamId);
+      st.pushLiveNotification({
+        id: `live:cancelled:${e.streamId}:${e.eventId ?? Date.now()}`,
+        kind: 'info',
+        title: 'Turn cancelled',
+        detail: 'The agent stopped before completing this turn.',
+        ts: Date.now(),
+        unread: true,
+        source: 'Agent',
+      });
       break;
     case "error":
       if (e.code === "budget_exceeded") {
-        st.streamBudgetKill(budgetKillText(e.message ?? ""), sid);
+        const detail = budgetKillText(e.message ?? "");
+        updateLiveBudget(e, st);
+        st.streamBudgetKill(detail, sid, e.streamId);
         st.pushLiveNotification({
           id: `live:cost:${e.streamId ?? sid}:${Date.now()}`,
           kind: 'cost',
           title: 'Budget limit reached',
-          detail: budgetKillText(e.message ?? ""),
+          detail,
           ts: Date.now(),
           unread: true,
           source: 'Spend',
         });
       } else if (e.code === "tool_failed" || e.toolId) {
-        st.streamToolResult(e.toolId ?? "tool", undefined, e.message ?? "tool failed");
+        st.streamToolResult(e.toolId ?? "tool", undefined, e.message ?? "tool failed", sid, e.streamId);
         // P51.21 — the failure card is layer-named (Tool) and retryable.
         st.streamFail(e.message ?? "tool failed", sid, {
           layer: "tool",
           code: e.code,
           detail: e.message ?? "tool failed",
           retryable: true,
-        });
+        }, e.streamId);
         st.pushLiveNotification({
           id: `live:tool:${e.toolId ?? 'tool'}:${Date.now()}`,
           kind: 'warning',
@@ -238,7 +296,7 @@ function handleChatEvent(e: ChatWireEvent): void {
         // P32.4 — honest-limitation surfacing: say plainly what failed +
         // offer the nearest alternative (Wharton: no technical framing).
         const lim = limitationFor(e.message ?? "Agent error");
-        st.streamFail(`${lim.plain} — ${lim.alternative}`, sid);
+        st.streamFail(`${lim.plain} — ${lim.alternative}`, sid, undefined, e.streamId);
         st.pushLiveNotification({
           id: `live:error:${e.streamId ?? sid}:${Date.now()}`,
           kind: 'error',
@@ -250,13 +308,27 @@ function handleChatEvent(e: ChatWireEvent): void {
         });
       }
       break;
-    case "stage":
-      if (typeof e.stage === "string" && e.stage.startsWith("tool:")) {
-        const parts = e.stage.split(":");
-        const toolId = parts[1] ?? "tool";
-        const phase = parts[2] ?? "";
-        st.streamToolProgress(toolId, phase);
+    case "stage": {
+      if (typeof e.stage !== "string") break;
+      const parts = e.stage.split(":");
+      if (parts[0] === "tool") {
+        st.streamToolProgress(parts[1] ?? "tool", parts.slice(2).join(":") || "running", sid, e.streamId);
+      } else {
+        // Every non-tool lifecycle stage is visible in Now Doing. Keep the
+        // wire value as the detail while plain-language rendering owns the
+        // user-facing label.
+        st.streamStep(e.stage, sid, e.streamId);
       }
+      break;
+    }
+    case "planStart":
+      st.streamStep(`plan:${e.tasks ?? 0} task(s)`, sid, e.streamId);
+      break;
+    case "planStep":
+      st.streamStep(`plan:${e.planId ?? 'plan'}:${e.taskId ?? 'task'}:${e.status ?? 'running'}`, sid, e.streamId);
+      break;
+    case "memoryExtracted":
+      st.streamStep(`memory: saved ${e.facts?.length ?? 0} fact(s)`, sid, e.streamId);
       break;
     case "monitor":
       if (e.notified || e.stopped) {
@@ -278,7 +350,7 @@ function handleChatEvent(e: ChatWireEvent): void {
       }
       break;
     case "toolCall":
-      st.streamToolCall(e.toolId ?? e.text ?? e.code ?? "tool", e.args, e.risk);
+      st.streamToolCall(e.toolId ?? e.text ?? e.code ?? "tool", e.args, e.risk, sid, e.streamId);
       break;
     case "verification": {
       // P41.4 — K1 verification receipt: model-reported pass/fail per check,
@@ -298,7 +370,7 @@ function handleChatEvent(e: ChatWireEvent): void {
         (e.result && typeof e.result === "object" && e.result !== null && "error" in e.result
           ? String((e.result as { error?: unknown }).error ?? "")
           : undefined);
-      st.streamToolResult(e.toolId ?? "tool", e.result, err || undefined);
+      st.streamToolResult(e.toolId ?? "tool", e.result, err || undefined, sid, e.streamId);
       break;
     }
     // P6.3 Stage-0: the plan executor's circuit breaker tripped — render the
@@ -314,7 +386,7 @@ function handleChatEvent(e: ChatWireEvent): void {
           kind: "mcq",
           options: (e.options ?? []).map((v) => ({ label: mcqLabel(v), value: v })),
         },
-        undefined,
+        sid,
       );
       break;
     // P6.3 Stage-0: the plan finished (or halted) — end the streaming state.
@@ -324,6 +396,8 @@ function handleChatEvent(e: ChatWireEvent): void {
           ? `⚠ Plan halted: ${e.error}`
           : `✅ Plan complete · ${e.tasksDone ?? 0} task(s) done`,
         true,
+        sid,
+        e.streamId,
       );
       break;
     default:
@@ -738,13 +812,14 @@ export async function sendUserMessage(
       const { draftPlanTasks } = await import("./plan-draft");
       const tasks = draftPlanTasks(trimmed);
       const planId = `plan-${Date.now()}`;
-      st.setPendingPlan({ planId, tasks });
-      st.streamStart();
+      const workId = sessionId;
+      st.setPendingPlan({ planId, sessionId, streamId: `plan-draft-${Date.now()}`, workId, tasks });
+      st.streamStart(sessionId);
       const body = [
         "Plan (read-only — Codex/Claude plan mode). Approve to execute:",
         ...tasks.map((t, i) => `${i + 1}. ${t.goal}`),
       ].join("\n");
-      st.streamAppend(body, false);
+      st.streamAppend(body, false, sessionId);
       st.pushMcq({
         id: planId,
         title: "Approve this plan?",
@@ -775,16 +850,26 @@ export async function sendUserMessage(
       const pending = result.pendingTickets?.length
         ? ` · ${result.pendingTickets.length} approval(s)`
         : "";
-      st.streamStart();
-      st.streamAppend(
-        `ACP ${result.stopReason ?? "done"}${pending}`,
-        true,
-      );
+      st.streamStart(sessionId);
+      // ACP currently returns collected session updates rather than streaming
+      // them over Tauri. Render the actual returned assistant text when the
+      // native contract provides it; never replace it with an "ACP done"
+      // status-only placeholder. Older shells still get an honest fallback.
+      const finalText = result.finalText?.trim() ||
+        (result.updates ?? [])
+          .flatMap((u) => u.content ?? [])
+          .map((b) => b.text)
+          .filter(Boolean)
+          .join('') ||
+        `ACP ${result.stopReason ?? "done"}${pending}`;
+      st.streamAppend(finalText, true, sessionId);
       return;
     }
     const { SOUL_PRESETS } = await import("./personas");
     const streamId = await chatStream({
       sessionId,
+      workId: sessionId,
+      projectId: st.sessions.find((s) => s.id === sessionId)?.folder,
       text: trimmed,
       agentId,
       provider,

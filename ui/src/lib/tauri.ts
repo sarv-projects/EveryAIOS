@@ -44,6 +44,9 @@ export interface ChatWireEvent {
     | "cancelled"
     | "budgetExceeded"
     | "interrupt"
+    | "planStart"
+    | "planStep"
+    | "memoryExtracted"
     | "planDone"
     | "monitor"
     | "verification";
@@ -66,6 +69,10 @@ export interface ChatWireEvent {
   sessionId?: string;
   limit?: number;
   spent?: number;
+  /** Plan lifecycle fields share the chat-event envelope. */
+  tasks?: number;
+  status?: string;
+  facts?: string[];
   /** P6.3 Stage-0 — circuit-break interrupt card payload. */
   planId?: string;
   breakId?: string;
@@ -81,6 +88,15 @@ export interface ChatWireEvent {
   notifications?: number;
   /** P41.4 — K1 verification receipt (Diff rail). */
   taskId?: string;
+  /** Canonical execution correlation. Native events always provide this for
+   * live streams; consumers must never infer it from the active tab. */
+  workId?: string;
+  executionId?: string;
+  runId?: string;
+  eventId?: string;
+  sequence?: number;
+  schemaVersion?: number;
+  timestamp?: number;
   checks?: string[];
   report?: string;
   passed?: boolean | null;
@@ -99,16 +115,23 @@ export async function chatStream(args: {
   model?: string;
   /** P1.5 — persona tone overlay (core-ai PERSONA_PRESETS). */
   personaId?: string;
+  /** IPC surface used by the native chat_stream command. */
+  surface?: "chat" | "reader" | "bubble" | "automation";
   /** P1.5 — Hermes SOUL.md identity block (Slot #1, injection-scanned). */
   soulMd?: string;
   /** F12/J17 — selected agent id (None = inbuilt engine). */
   agentId?: string;
   /** P4.7 — documents to inject below the cache boundary (J6 wrapping). */
   userDocuments?: { title: string; content: string }[];
+  /** P50.3.6 — live provider-key set used by the route credential gate. */
+  credentialedProviders?: string[];
   /** P38 — the session's effective Chief (pin → default → inbuilt); the
    * coordinator's dispatch guard asserts it so an external Chief never runs
    * inbuilt by accident. */
   primaryChief?: string;
+  /** Canonical Work identity; native defaults this to sessionId. */
+  workId?: string;
+  projectId?: string;
 }): Promise<string> {
   return invoke<string>("chat_stream", args);
 }
@@ -125,6 +148,7 @@ export async function chatToolRetry(args: {
   toolId: string;
   args: Record<string, unknown>;
   agentId?: string;
+  workId?: string;
 }): Promise<void> {
   return invoke("chat_tool_retry", args);
 }
@@ -138,6 +162,7 @@ export async function planExecute(args: {
   tasks: unknown[];
   provider?: string;
   model?: string;
+  workId?: string;
 }): Promise<string> {
   return invoke<string>("plan_execute", args);
 }

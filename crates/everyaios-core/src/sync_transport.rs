@@ -461,6 +461,13 @@ mod tests {
         let outcome = sync_with_peer(server.addr, &mut good, Some("lan-pass")).unwrap();
         assert_eq!(outcome.peer_device, "auth-server");
         assert_eq!(outcome.applied, 1);
+        // The connection worker records the outcome asynchronously after the
+        // client receives its reply. Wait briefly for that durable projection
+        // instead of racing the worker thread.
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while server.outcomes().len() < 1 && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
         assert_eq!(server.outcomes().len(), 1);
         server.stop();
     }

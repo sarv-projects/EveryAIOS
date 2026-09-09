@@ -89,6 +89,10 @@ export interface PlanExecutionParams {
   tasks: PlanTask[];
   provider?: string;
   model?: string;
+  /** Native host callback used to publish the durable execution id before
+   * lifecycle events are emitted. This is process-local and never serialized
+   * over the sidecar wire. */
+  onExecutionId?: (executionId: string) => void;
 }
 
 /** The interruption event the executor emits on a circuit-break trip. */
@@ -190,8 +194,6 @@ export async function runPlanExecution(
   const controller = new AbortController();
   active.set(planId, controller);
 
-  emitPlan({ type: "plan_start", streamId, planId, tasks: tasks.length });
-
   try {
     // Rust owns the breaker state — begin it (never fails a run: a missing
     // handler is tolerated so plan/execute stays available headless).
@@ -201,16 +203,45 @@ export async function runPlanExecution(
       /* best-effort */
     }
     try {
-      await request("execution/begin", {
+      if (params.workId !== undefined) {
+        try {
+          await request("work/create", {
+            workId: params.workId,
+            sessionId,
+            objective: planId,
+          });
+        } catch {
+          /* existing work / optional gateway */
+        }
+      }
+      const started = (await request("execution/begin", {
         trigger: "plan",
         sessionId,
         ...(params.workId !== undefined ? { workId: params.workId } : {}),
         objective: planId,
         contextSnapshot: { sessionId, planId, streamId },
-      });
+      })) as { id?: unknown };
+      if (typeof started?.id === "string" && started.id.length > 0) {
+        params.onExecutionId?.(started.id);
+        if (params.workId !== undefined) {
+          try {
+            await request("execution/transition", {
+              workId: params.workId,
+              id: started.id,
+              state: "running",
+            });
+          } catch {
+            /* optional gateway */
+          }
+        }
+      }
     } catch {
       /* kernel optional */
     }
+
+    // Publish plan_start only after the execution identity is available, so
+    // the first lifecycle event is correlated just like all later events.
+    emitPlan({ type: "plan_start", streamId, planId, tasks: tasks.length });
 
     const order = topologicalOrder(tasks);
     let tasksDone = 0;

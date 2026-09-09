@@ -28,8 +28,34 @@ import {
 } from '@/lib/guard'
 
 const TRUST_LEVELS = ['Read', 'Write', 'Execute', 'Autonomous']
-const TRUST_SCORE = 75
-const CURRENT_LEVEL = 1 // Write
+
+/**
+ * P52.x — live trust meter from `guard_policy` (profile + autonomy level +
+ * confidence floor + approval threshold). Replaces the old hardcoded
+ * TRUST_SCORE/CURRENT_LEVEL fixtures, which made auto-behavior feel
+ * arbitrary. Preview mode (no policy) falls back to a labelled fixture.
+ */
+function trustMeter(policy: GuardPolicy | null): { score: number; level: number; label: string } {
+  if (!policy) return { score: 75, level: 1, label: 'preview fixture' }
+  const levelByAutonomy: Record<string, number> = {
+    sandbox: 0,
+    ask: 1,
+    auto: 2,
+    maximum: 3,
+    full: 3,
+  }
+  const level = levelByAutonomy[policy.autonomyLevel ?? ''] ?? levelByAutonomy[policy.profile] ?? 1
+  // The score is a display projection of the live posture (not a second
+  // trust engine): base per level, nudged by the confidence floor so a
+  // stricter floor reads stricter.
+  const floor = policy.minConfidenceForAuto ?? 0.85
+  const score = Math.round(Math.min(100, [25, 55, 78, 92][Math.min(3, Math.max(0, level))] - (floor - 0.85) * 40))
+  return {
+    score,
+    level: Math.min(3, Math.max(0, level)),
+    label: `${policy.profile} · ${policy.autonomyLevel ?? 'ask'} · auto ≥ ${Math.round(floor * 100)}%`,
+  }
+}
 
 // P11.5.7 — the capability×scope grid labels (rows/columns of the live
 // matrix; the DECISIONS come from `guard_permissions_matrix`, not here).
@@ -85,8 +111,8 @@ export default function GuardPanel() {
   const [applying, setApplying] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
 
-  // Live bridge (P7.5/J21 + P11.5.7): poll pending tickets + policy + the
-  // activity log + permissions matrix while in the shell.
+  // Live bridge (P7.5/J21 + P11.5.7): push-first via `guard-event`, with the
+  // 3s poll kept only as a missed-emit fallback.
   useEffect(() => {
     let alive = true
     const refresh = async () => {
@@ -121,9 +147,22 @@ export default function GuardPanel() {
     }
     void refresh()
     const timer = setInterval(refresh, 3000)
+    // P52.x — instant refresh on guard lifecycle emits (mint/approve/reject).
+    let unlisten: (() => void) | undefined
+    void (async () => {
+      try {
+        const { listenGuardEvent } = await import('@/lib/guard')
+        unlisten = await listenGuardEvent(() => {
+          if (alive) void refresh()
+        })
+      } catch {
+        /* preview mode — poll fallback covers it */
+      }
+    })()
     return () => {
       alive = false
       clearInterval(timer)
+      unlisten?.()
     }
   }, [reload])
 
@@ -201,6 +240,14 @@ export default function GuardPanel() {
                         <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
                           {t.paths.join(' · ')}
                         </div>
+                        {/* P52.x — why-asked: the card says why it asked. */}
+                        {t.reason && (
+                          <div className="mt-1 text-[10px] text-sky-300/90">
+                            Why this asked: {t.reason}
+                          </div>
+                        )}
+                        {/* P52.x — TTL chip + Extend (nonce rotates; old card dies). */}
+                        <TicketTtl ticketId={t.ticketId} expiresAtMs={t.expiresAtMs} />
                         {t.decision?.networkDestinations && t.decision.networkDestinations.length > 0 && (
                           <div className="mt-1 font-mono text-[10px] text-amber-400/90">
                             data leaving device: {t.decision.networkDestinations.join(' · ')}
@@ -343,8 +390,9 @@ export default function GuardPanel() {
               </div>
               <p className="mb-2 text-[10px] leading-relaxed text-muted-foreground">
                 Deny-wins allow/ask/deny per tool pattern (e.g. <code className="font-mono">fs.write</code> or
-                <code className="font-mono"> browser.*</code>). Hard floors (destructive, protected paths) stay — rules can only
-                tighten the auto path, never widen it.
+                <code className="font-mono"> browser.*</code>) with an optional args glob
+                (e.g. <code className="font-mono">rm -rf *</code>). Rules can only
+                tighten the auto path — hard floors (destructive, protected paths) stay.
               </p>
               <div className="space-y-1.5">
                 {draftRules.map((r, i) => (
@@ -357,6 +405,18 @@ export default function GuardPanel() {
                         setDraftRules(next)
                       }}
                       placeholder="tool.pattern"
+                      className="h-6 min-w-0 flex-1 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
+                    />
+                    {/* P52.x — args-glob half: visible input, wired into the payload. */}
+                    <input
+                      value={r.argsGlob ?? ''}
+                      onChange={(e) => {
+                        const next = [...draftRules]
+                        next[i] = { ...next[i], argsGlob: e.target.value }
+                        setDraftRules(next)
+                      }}
+                      placeholder="args glob (optional)"
+                      title="Optional args glob, e.g. rm -rf * — deny always wins"
                       className="h-6 min-w-0 flex-1 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
                     />
                     <select
@@ -479,9 +539,53 @@ export default function GuardPanel() {
             </section>
 
             <section className="rounded-lg border border-dashed border-border bg-card p-4">
-              <div className="text-xs font-medium text-foreground">Trust Level</div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                Trust score is unavailable until the live GuardService publishes a scored projection.
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-foreground">Trust Level</span>
+                <span className="font-mono text-sm font-semibold text-orange-300">{trustMeter(policy).score}/100</span>
+              </div>
+              <div className="flex gap-1">
+                {TRUST_LEVELS.map((lvl, i) => {
+                  const reached = i <= trustMeter(policy).level
+                  const isCurrent = i === trustMeter(policy).level
+                  return (
+                    <div
+                      key={lvl}
+                      className={cn(
+                        'score-roll flex-1 rounded-md border px-3 py-2 text-center transition-colors',
+                        isCurrent
+                          ? 'border-orange-500 bg-orange-500/15'
+                          : reached
+                            ? 'border-emerald-500/40 bg-emerald-500/10'
+                            : 'border-border bg-background/40',
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'text-xs font-medium',
+                          isCurrent ? 'text-orange-300' : reached ? 'text-emerald-300' : 'text-muted-foreground',
+                        )}
+                      >
+                        {lvl}
+                      </div>
+                      {isCurrent && (
+                        <div className="mt-0.5 text-[9px] uppercase tracking-wide text-orange-400">current</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-orange-500 to-orange-400"
+                  style={{ width: `${trustMeter(policy).score}%` }}
+                />
+              </div>
+              <p className="mt-1.5 font-mono text-[10px] text-muted-foreground">
+                live: {trustMeter(policy).label}
+                {policy?.humanApprovalThreshold ? ` · asks at ${policy.humanApprovalThreshold}+` : ''}
+                {typeof policy?.reviewerBudget === 'number' && policy.reviewerBudget > 0
+                  ? ` · reviewer auto-budget ${policy.reviewerBudget}`
+                  : ' · reviewer off'}
               </p>
             </section>
             </>
@@ -489,12 +593,12 @@ export default function GuardPanel() {
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">Trust Level</span>
-              <span className="font-mono text-sm font-semibold text-orange-300">{TRUST_SCORE}/100</span>
+              <span className="font-mono text-sm font-semibold text-orange-300">{trustMeter(null).score}/100</span>
             </div>
             <div className="flex gap-1">
               {TRUST_LEVELS.map((lvl, i) => {
-                const reached = i <= CURRENT_LEVEL
-                const isCurrent = i === CURRENT_LEVEL
+                const reached = i <= trustMeter(null).level
+                const isCurrent = i === trustMeter(null).level
                 return (
                   <div
                     key={lvl}
@@ -525,9 +629,12 @@ export default function GuardPanel() {
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-orange-500 to-orange-400"
-                style={{ width: `${TRUST_SCORE}%` }}
+                style={{ width: `${trustMeter(null).score}%` }}
               />
             </div>
+            <p className="mt-1.5 font-mono text-[10px] text-muted-foreground">
+              preview fixture — live posture appears in the desktop shell
+            </p>
           </section>
           )}
 
@@ -656,6 +763,69 @@ export default function GuardPanel() {
           </section>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * P52.x — TTL chip + Extend button for one ticket. Ticks once per second
+ * (local-only, no IPC); Extend calls `guard_extend_ttl` (Pending-gated,
+ * nonce-rotating) and bumps the row's expiry + nonce in place via `onExtended`.
+ * Outlives unmount safely (interval cleared).
+ */
+function TicketTtl({
+  ticketId,
+  expiresAtMs,
+  onExtended,
+}: {
+  ticketId: string;
+  expiresAtMs: number;
+  onExtended?: (ext: { expiresAtMs: number; approvalNonce: string }) => void;
+}) {
+  const [, setTick] = useState(0)
+  const [extending, setExtending] = useState(false)
+  const [extended, setExtended] = useState<{ expiresAtMs: number } | null>(null)
+  const effective = extended?.expiresAtMs ?? expiresAtMs
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const left = Math.max(0, Math.ceil((effective - Date.now()) / 1000))
+  const urgent = left < 60
+  return (
+    <div className="mt-1 flex items-center gap-2 font-mono text-[10px]">
+      <span className={urgent ? 'text-amber-300' : 'text-muted-foreground'}>
+        {left > 0 ? `Expires in ${left}s` : 'Expired'}
+      </span>
+      {left > 0 && (
+        <button
+          type="button"
+          disabled={extending}
+          title="Extend 60s — rotates the card nonce (the old card dies with it)"
+          className="rounded border border-border px-1.5 py-0.5 text-[9px] text-foreground/80 hover:bg-background/60 disabled:opacity-50"
+          onClick={() => {
+            void (async () => {
+              setExtending(true)
+              try {
+                const { guardExtendTtl } = await import('@/lib/guard')
+                const ext = await guardExtendTtl(ticketId, 60_000)
+                setExtended({ expiresAtMs: ext.expiresAtMs })
+                onExtended?.(ext)
+                useAppStore.getState().notify('Approval extended 60s — nonce rotated')
+              } catch (e) {
+                useAppStore.getState().notify(
+                  e instanceof Error ? e.message : 'Extend failed',
+                  'error',
+                )
+              } finally {
+                setExtending(false)
+              }
+            })()
+          }}
+        >
+          {extending ? 'Extending…' : 'Extend 60s'}
+        </button>
+      )}
     </div>
   )
 }

@@ -196,15 +196,20 @@ Displayed when the agent creates/edits a file. Shows:
 |---------|----------|
 | `+` button | Attach files, images, screenshots, URLs |
 | Text input | Main prompt area (multiline, auto-expand) |
-| Mode selector | Normal / Plan / Research / Quick / Code |
+| Mode selector | Normal / Plan / Research / Quick / Code — **SUPERSEDED (2026-09-10):** the shipped composer is the SPEC three-control taxonomy (WHO Agent ▾ / WHAT Work-Mode Auto·Plan·Build·Research / HOW MUCH Autonomy Sandbox·Ask·Auto·Maximum, default `[Auto] [Ask]`); Code/browser/Office/terminal are capabilities inside Build, not modes. See SPEC composer section. |
 | 🎙 Microphone | Voice-to-text recording |
 | 🔊 Speaker | Read-aloud toggle (H28 — offline sherpa-onnx TTS by default; hosts Piper voices, ⚠️ piper archived) |
 | ▶ Send | Submit message (Enter also works) |
-| Slash commands | `/help`, `/mode`, `/model`, `/undo`, `/clear`, `/export` |
+| Slash commands | `/help`, `/mode`, `/model`, `/undo`, `/clear`, `/export` — *superseded (2026-09-10):* command surface is set by the shipped composer (chat-composer.tsx); code/browser/office/terminal are capabilities inside Build, not modes |
 | `!macro` | Knowledge macro expansion (e.g., `!deploy-checklist`) |
 | `@mention` | Reference blueprints, skills, files |
 
 ### 3.4 Chat Modes
+
+> **SUPERSEDED (2026-09-10):** the five-mode table below predates the shipped
+> composer. Canonical: SPEC three-control taxonomy (Agent WHO / Work-Mode
+> WHAT Auto·Plan·Build·Research / Autonomy HOW MUCH Sandbox·Ask·Auto·Maximum).
+> Kept for history.
 
 | Mode | Behavior |
 |------|----------|
@@ -692,6 +697,13 @@ Unified timeline of all agent actions:
 ---
 
 ## 10. Design Tokens & Visual Language
+
+> **SUPERSEDED (2026-09-10):** the token values in §10.1–10.2 below are the
+> pre-v2.1 draft (`#FFFFFF/#FF6B00`). The canonical production tokens live in
+> `UI-DESIGN-PROMPT.md` (warm-cream `#F7F7F4` + orange `#F54E00`) and the
+> implementation in `ui/src/globals.css` — per the v2.1 note at the top of
+> this doc, UI-DESIGN-PROMPT.md wins on pixels. This section is kept for
+> history; do not build from it.
 
 ### 10.1 Colors
 - Background: #FFFFFF (light) / #1A1A1A (dark)

@@ -213,6 +213,12 @@ impl BatchTicketStore {
         self.tickets.get(id)
     }
 
+    /// P52.x — mutable access for Pending-gated TTL extension (same rule as
+    /// single tickets; callers enforce the Pending gate).
+    pub fn get_mut(&mut self, id: &str) -> Option<&mut BatchTicket> {
+        self.tickets.get_mut(id)
+    }
+
     /// The open batch tickets the approval card renders.
     pub fn pending(&self) -> Vec<&BatchTicket> {
         self.tickets

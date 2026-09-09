@@ -97,6 +97,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         guard_cmds::guard_open_window,
         guard_cmds::guard_receipts,
         guard_cmds::guard_policy,
+        guard_cmds::guard_extend_ttl,
+        guard_cmds::guard_explain_block,
         guard_cmds::guard_set_policy_rules,
         guard_cmds::guard_autonomy,
         guard_cmds::guard_set_autonomy,

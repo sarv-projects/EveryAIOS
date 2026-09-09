@@ -38,6 +38,8 @@ const statusMeta: Record<
   'action-required': { color: 'text-orange-400', ring: 'bg-orange-500', Icon: AlertCircle, label: 'Waiting for approval' },
   completed: { color: 'text-emerald-400', ring: 'bg-emerald-500', Icon: CheckCircle2, label: 'Completed' },
   failed: { color: 'text-red-400', ring: 'bg-red-500', Icon: AlertCircle, label: 'Failed' },
+  cancelled: { color: 'text-zinc-400', ring: 'bg-zinc-400', Icon: Circle, label: 'Cancelled' },
+  budget_exceeded: { color: 'text-amber-400', ring: 'bg-amber-500', Icon: AlertCircle, label: 'Budget reached' },
   paused: { color: 'text-zinc-400', ring: 'bg-zinc-400', Icon: Pause, label: 'Paused' },
   scheduled: { color: 'text-violet-400', ring: 'bg-violet-500', Icon: Star, label: 'Scheduled' },
   reconnecting: { color: 'text-amber-400', ring: 'bg-amber-500', Icon: RefreshCw, label: 'Reconnecting' },

@@ -16,6 +16,12 @@ LLM output ──► [1] Trust Ladder policy (sidecar, proposes)
             ──► [7] Append-only audit (Rust everyaios-audit)
 ```
 
+**2026-09-10 (guard-UX wave):** three additions to this pipeline, all implemented in `everyaios-guard::guard_service` and wired to the Tauri shell + UI:
+
+- **Why-asked reason on every card.** When `evaluate`/`evaluate_batch` escalates a ticket to a human card, it computes a machine-readable `AskReason` (precedence: path/policy floor → explicit policy rule → trust-ladder tier → agent profile → confidence below floor) and stamps it on the `PendingGuardCard` (`card.reason`). The UI renders it verbatim — the card always answers "why am I being asked".
+- **Card lifecycle is pushed, not polled.** `GuardService::subscribe_lifecycle()` emits a batched `GuardLifecycle` event (minted / approved / rejected / expired, per ticket and batch) on every state transition; the shell bridges it to the `guard-event` Tauri event so open guard windows refresh on push (a short poll remains as fallback only). Expiry transitions originate from the same service — no second expiry clock in the UI.
+- **TTL extend is a control-plane-only RPC** (`guard/extend_ttl` — explicitly denied to the coordinator sidecar): Pending-gated (approved/rejected/expired cards never extend), caps each extension at 60s and total lifetime at 5 minutes, and **re-mints the card nonce on every extend — the previously displayed card dies immediately** (stale-window and replay surface stay closed).
+
 ## 6.2 The Trust Ladder (kept from core-tools, 0–100)
 
 - Score grows from successful task completions; decays slowly on repeated failures.
@@ -31,6 +37,8 @@ LLM output ──► [1] Trust Ladder policy (sidecar, proposes)
 ## 6.4 Guard 2 — human diff-card handshake (Rust)
 
 Escalated actions freeze the loop and render a human approval card (not LLM-generated): exact file paths (pre/post), script lines, execution target (host vs sandbox vs browser), env vars being set, network destinations. **Approval = an explicit human action** — the card payload is owned by the **Tauri/Rust side** and every approval/denial is audit-logged with a receipt. The webview currently renders the presentation and calls `guard_respond`; the command requires the card-bound cryptographic nonce, so synthesized or mismatched ticket/nonce requests fail. This prevents approval forgery but does not make the webview a native OS trust boundary; a native OS card remains a separate open hardening item.
+
+**2026-09-10 additions (guard-UX wave, same trust path):** (1) every card carries a machine-computed **why-asked reason** (`AskReason` — floor → policy → tier → profile → confidence precedence) so the human sees *why* the ladder escalated, not just *what* is being requested; (2) **blocked** evaluations expose `explain_block()` — a mapped, non-secret explanation of which floor/pattern/tier refused the action (never the raw regex set); (3) card **lifecycle** (minted/approved/rejected/expired) is pushed to the dedicated window via the `guard-event` bridge — refresh-on-push with poll fallback, driven only by the owning `GuardService`; (4) **`guard/extend_ttl`** lets the control plane extend a pending card (max 60s per step, 5min total) but re-mints the nonce each time, so a card displayed elsewhere stops being approvable the moment it is extended. All four ride the existing evaluate/respond/audit path — no second mutation engine, no new authority.
 
 ## 6.5 Prompt-injection defense (browser + files + web)
 

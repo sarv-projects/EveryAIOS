@@ -124,6 +124,9 @@ export default function BlueprintView() {
       const id = `t${(existing?.tasks.length ?? 0) + 1}`
       st.setPendingPlan({
         planId: existing?.planId ?? `plan-${Date.now()}`,
+        sessionId: existing?.sessionId ?? st.activeSessionId,
+        ...(existing?.streamId ? { streamId: existing.streamId } : {}),
+        ...(existing?.workId ? { workId: existing.workId } : {}),
         tasks: [...(existing?.tasks ?? []), { id, goal: draft.trim() }],
       })
       setDraft('')
