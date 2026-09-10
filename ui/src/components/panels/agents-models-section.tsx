@@ -606,7 +606,7 @@ function RoutingTab() {
   return (
     <SectionShell
       title="Task → runtime routing"
-      desc="When auto-route is on, EveryAIOS picks the best runtime per turn based on the task kind. Override the table below to taste."
+      desc="Occupancy is the composer picker: Browse, Computer use, Office, and the right rail all run as the currently picked Chief. This table is not that path. Auto-route only affects model-tier (A7) inside the same Chief — it must not swap Claude/Codex/Grok per view."
       action={
         <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/40 px-2 py-1">
           <Route className="h-3 w-3 text-orange-400" />

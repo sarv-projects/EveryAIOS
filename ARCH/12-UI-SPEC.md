@@ -6,6 +6,14 @@
 > **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H25 — H20 redefined doc 67), ARCH/DIAGRAMS #7 (MCQ interrupt), doc 67 §6 (finalization record)
 > **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, full screen/panel/tab/overlay inventory, motion + mock-data tables) that supersedes this doc's visual details. The cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
 >
+> **v3.8 (2026-09-10):** Two surfaces — Browse + Office inbuilt (no vision); Computer use = real OS see-pane + primary rail icon. Vision-gate modal. Progress renders CUA DAG.
+>
+> **v3.7 (2026-09-10):** Cockpit live-vs-stale table in spec §4.1 (P58). Keyboard cheat sheet, About stamp, Office `live: false`, status-bar `AGENTS`, picker curated models, composer slash, missing Computer use / Subagents nav.
+>
+> **v3.6 (2026-09-10):** Provider **+** opens a **new activate screen**: models.dev name/package/API/docs, key bar → Enter → green tick → **+ under the bar** for more keys, then dropdown + full models.dev model table (id, context, output, price, reasoning, tools, images).
+>
+> **v3.5 (2026-09-10):** Settings → Providers is a **full searchable list** with **+** / verify / green tick, OpenCode-shaped custom inference, OpenCode-free + `big-pickle`, NVIDIA/NIM; Computer use allow-list by exact path. Live-vs-chrome table lives in spec §4.1.
+>
 > **v3.4 (2026-08-21):** settings + composer chrome expanded from inspiration **screenshots as layout reference** (Cursor auto-run / browser+network / LSP; Qoder voice+mobile+wiki+schedule+Spec Q&A; Ollama launch cards; TRAE Work/Code/Design + permission modes; ZCode skills/hooks/migrate; Cowork folder chips). EveryAIOS naming only. Canonical pixels stay in `UI-DESIGN-PROMPT.md` §5.6.
 >
 > **v3.3 (2026-08-19):** resolved the layout identity split: the activity rail remains the navigation lens, while the right viewport is a persistent multi-view tab container; only the active tab renders at once. Updated H20, the diagrams, and the index to use this single contract. Cache/server status and deferred-runtime boundaries remain explicit.
@@ -200,9 +208,9 @@ Displayed when the agent creates/edits a file. Shows:
 | 🎙 Microphone | Voice-to-text recording |
 | 🔊 Speaker | Read-aloud toggle (H28 — offline sherpa-onnx TTS by default; hosts Piper voices, ⚠️ piper archived) |
 | ▶ Send | Submit message (Enter also works) |
-| Slash commands | `/help`, `/mode`, `/model`, `/undo`, `/clear`, `/export` — *superseded (2026-09-10):* command surface is set by the shipped composer (chat-composer.tsx); code/browser/office/terminal are capabilities inside Build, not modes |
-| `!macro` | Knowledge macro expansion (e.g., `!deploy-checklist`) |
-| `@mention` | Reference blueprints, skills, files |
+| Slash commands | **Chief-dependent (H32).** Inbuilt Chief: EveryAIOS `/help` `/mode` `/model` `/undo` `/compact` `/clear` `/export` (local intercept). ACP Chief: live `available_commands_update` list; submit `/name args` as `session/prompt` text — do **not** intercept EveryAIOS slash. No per-harness hardcoded tables. |
+| `!macro` | Knowledge macro expansion (e.g., `!deploy-checklist`) — inbuilt composer only |
+| `@mention` | Workspace file refs (path / ACP resource block when `embeddedContext`); not a per-CLI `@agent` table |
 
 ### 3.4 Chat Modes
 
@@ -363,30 +371,27 @@ Unified timeline of all agent actions:
 - Expandable entries (click to see details/output)
 - Filterable by type (shell/code/browser/office/file)
 
-### 4.4 Shell View (view.shell)
+### 4.4 Shell View (view.shell) — H36 terminal profiles
 
 ```
-┌───────────────────────────────────────┐
-│ Shell                    [▸ History]   │
-├───────────────────────────────────────┤
-│ $ npm install                          │
-│ added 142 packages in 3.2s            │
-│                                        │
-│ $ npm test                             │
-│ PASS src/utils.test.ts                │
-│ PASS src/api.test.ts                  │
-│ 42 tests passed                        │
-│                                        │
-│ $ _                                    │
-├───────────────────────────────────────┤
-│ [Read-only ∨]  Toggle to run commands │
-└───────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ ☰ PowerShell ▾   [+ ▾]  [split]              [▸ History] │
+│    PowerShell · cmd · Git Bash · Ubuntu (WSL) · bash     │
+├──────────────────────────────────────────────────────────┤
+│ PS C:\work> npm test                                     │
+│ PASS 42 tests                                            │
+│ PS C:\work> _                                            │
+├──────────────────────────────────────────────────────────┤
+│ profile: PowerShell · backend: Local · ConPTY            │
+└──────────────────────────────────────────────────────────┘
 ```
-- Default: read-only (watching agent)
-- Toggle → writable (user can type commands)
-- Command History panel (expandable sidebar within tab)
-- Copy button per command + output
-- Time-travel: click past commands to jump in history
+- **`+` dropdown** lists detected profiles (VS Code model): PowerShell, cmd, Git Bash, each WSL distro, `$SHELL`/bash/zsh/fish. Not one hardcoded `sh`/`cmd`.
+- Default profile per OS; **Select Default Profile** at the bottom of the dropdown.
+- **Automation profile** (tasks/agent `script.run`) is separate from the user shell.
+- Multiple tabs + splits. Each tab is a `PtySession` (`pty_id` + `profile_id` + `backend`).
+- Human typing = `human_gesture`; agent/ACP terminals stay ticketed.
+- **Honest ceiling today:** `shell_cmds.rs` is piped `sh -i`/`cmd`, one process per session, no PTY. P54 replaces that with ConPTY/unix-pty + xterm.js.
+- Remote profile (`backend: Remote`) targets a user-owned ExecutionNode (H33 v1 attach) — that is the cloud terminal, not a founder host.
 
 ### 4.5 Code View (view.code)
 

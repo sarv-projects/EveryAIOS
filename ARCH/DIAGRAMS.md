@@ -2,7 +2,7 @@
 
 > **Generated:** 2026-08-09 · **Spec version:** v3.55 (version history: `SPEC-CHANGELOG.md`) · **Diagrams:** 25
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
-> **Surgical hierarchy (doc 52 §1) + v3.45 Dynamic Chief:** the harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12) — Aider-class precision editors included in the harness list — and the **brain tier itself is a swappable `primary_chief` slot** (inbuilt | Claude Code | Codex); an external Chief is governed by the `GovernedSession` capability-negotiation boundary (omitted `fs`/`terminal` capabilities = UNSUPPORTED per ACP spec). Storage-intelligence flows (D9–D12) and the tiered search cascade (G8) are described in docs 49/52.
+> **Surgical hierarchy (doc 52 §1) + Dynamic Chief:** harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12). The **brain tier is a swappable `primary_chief` slot** (inbuilt or **any installed** ACP loop — Claude Code, Codex, Grok Build, OpenCode, …). An external Chief runs that product's loop; omitted `fs`/`terminal` means Self-contained (not “UNSUPPORTED → MCP”). Slash = `available_commands_update`. Handoff = compacted live view. Storage-intelligence (D9–D12) and G8 cascade: docs 49/52.
 
 ---
 
@@ -148,14 +148,16 @@ flowchart TD
     G -->|no| H[Return key_id + sealed handle<br/>raw key injected by vault fetch layer]
     H --> I[Make LLM API call]
     I -->|200 OK| J[success_count++ / update usage]
-    I -->|429| K[Set cooldown = cooldown_s × 2^failures<br/>cap 5min]
-    I -->|401/403| L[Suspend key + alert user<br/>likely revoked]
-    I -->|5xx/timeout| M[Backoff + retry]
+    I -->|429| K[Set cooldown = Retry-After or 5s×2^n<br/>cap 5min; next key; first key retries after cooldown]
+    I -->|401/403| L[Suspend key + alert user<br/>likely revoked; next key if any]
+    I -->|generic 5xx| M[Backoff + retry SAME key<br/>do not rotate]
+    I -->|timeout/408| T[Retry SAME key once]
     K --> N{switches < max_429_switches?}
     L --> N
-    M --> N
+    M --> O[Surface error if same-key retries exhausted]
+    T --> O
     N -->|yes| C
-    N -->|no, all exhausted| O[Surface aggregated error<br/>offer 'retry in Ns']
+    N -->|no, all 429/suspended| O[Surface aggregated error<br/>offer 'retry in Ns']
 
     style H fill:#2d6,stroke:#333
     style O fill:#d33,stroke:#333
@@ -619,7 +621,7 @@ sequenceDiagram
     Browser-->>Agent: Authenticated page ready
     
     Note over Vault: On session end: revoke injected cookies
-    Note over Vault: Rotation: 429/blocked → next account
+    Note over Vault: Rotation: 429 → next key, retry first after cooldown; generic 5xx does not rotate
     Note over Vault: Expiry: TTL tracking + re-auth nudge card
 ```
 
@@ -1057,3 +1059,19 @@ flowchart TD
 
 Kinds: model runner · MCP server · ACP agent · browser child · sandbox · worker.  
 **Not kinds:** Office (ticketed mutation engine) · Providers (vault credentials) · Coolify-style deployments.
+
+---
+
+## 26. Terminal profiles + backends (H36 / §4.5)
+
+```mermaid
+flowchart LR
+    UI["Shell view · + dropdown · xterm"] -->|"pty_id + profile_id"| HOST["PTY host (Rust)"]
+    HOST --> BE["TerminalBackend"]
+    BE -->|"Local"| PTY["unix pty / ConPTY"]
+    BE -->|"Wsl"| F10["F10 wsl.exe -d distro"]
+    BE -->|"Remote"| NODE["H33 user-owned ExecutionNode"]
+    HOST --> AUDIT["audit: human_gesture or ticket"]
+```
+
+Detected profiles (never a hardcoded two-shell list): PowerShell · cmd · Git Bash · each WSL distro · `$SHELL` / bash / zsh / fish. Cloud = Remote on the user's node, not a founder host.

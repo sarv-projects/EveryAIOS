@@ -5,14 +5,12 @@
 //! host wires `policy::PermissionGate` to the ticket store and `AuditSink` to
 //! the Merkle audit chain, exactly like every other effect in the product."
 //!
-//! Honest closure: the engine is attached to the effect funnel on the
-//! **human-gesture path only** (the user drives the desktop view directly,
-//! exactly like the shell/git/office human path — option (b)). There is no
-//! agent/automation path to the desktop engine yet: an agent reaches effects
-//! only via the ticketed executor, and desktop is not (yet) a loop tool. Until
-//! that tool-exposes-desktop seam is built and ticket-audited, the matrix cell
-//! stays honest — this module attaches the *engine* to the funnel, not the
-//! agent to the engine.
+//! Honest closure: this module attaches the engine to the effect funnel on the
+//! **human-gesture path** (`desktop_act` / see / read). The agent catalog
+//! already lists `desktop.windows` / `desktop.read` / `desktop.act` in
+//! `ToolService` (P48.3), but the host **never calls `attach_desktop`** — a
+//! live agent turn gets `desktop session not attached`. Wiring the engine into
+//! the loop (plus P57 path-launch / background) is the remaining seam.
 //!
 //! Gating model (fail-closed, per the spec's dual-guard + honesty invariant):
 //! each human `act` is routed through the engine's own Guard-2 preflight. The

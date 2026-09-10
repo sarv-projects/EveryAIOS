@@ -18,6 +18,143 @@ Each entry records the date or release marker, change category, affected section
 
 ## Historical entries
 
+## 2026-09-10 — Occupancy: Browse / CUA / rail follow the picked Chief
+
+**Category:** Contract + chrome. Session occupancy is the composer picker (or session pin). `DEFAULT_ROUTING` must not label or dispatch Browse/Shell/Computer use to a random catalog agent. Rail tooltip + progress-steps now show `selectedAgentId`. Settings task→runtime table is not occupancy (P60.11 remainder).
+
+## 2026-09-10 — Agent Runtime (§4.2.5b): Chief ≠ workhorse; vision-first; harness ⊥ model
+
+**Category:** Architecture lock. Census unchanged.
+**Decision:** Canonical runtime = Governance · Chief (executive) · Orchestrator (code) · Scout/Worker/Verifier · Harness×model independently. GUI/vision is **first-class ground truth**; DOM/A11y/API augment. Owned Office/Browse stay cheap **execution**. Cheapest reliable combo **per subtask**. Mechanical verify first. BLOCKED ≠ FAILED. Chief reclaim ×3. Target Chief spend <20%. P60 (10). Does not replace P53 occupancy or P59 CUA DAG.
+
+## 2026-09-10 — High-accuracy CUA: ladder, Rust orchestrator, contracts, verifier
+
+**Category:** Architecture lock. Census unchanged. **Yes, hierarchical subtasks + top governance is viable and required; not sufficient.** Accuracy = decompose × ground × verify × recover × constrain. Ladder: native/Office/CLI → inbuilt Browse → CUA last (Cowork/Codex). Orchestrator is **code**; LLM only plans/replans. Subtask pre/postconditions. Screen text untrusted. Skills reuse. P59.11–16.
+
+## 2026-09-10 — TODO carries architecture copy for implementers
+
+**Category:** Docs. Spec stays contract. `TODO.md` now starts with **Architecture for implementers** (two surfaces, CUA DAG, providers, Chief, UI layouts, file map, P53–P59 index). Spec wins on disagreement.
+
+## 2026-09-10 — Spec hygiene: contract vs TODO; stale catalog/count lines
+
+**Category:** Docs. Spec banner: this file is product contract, not a build plan. A6 fetch is `api.json` only (not `/api/providers.json`). A11 provider count is live-drifting, not 186 frozen. §6 dropped a rotting TODO count (`1179=…`). UI layouts for Provider activate / vision modal / rail / DAG are normative in §4.1. TODO P53–P59 gained how/from-where file pointers.
+
+## 2026-09-10 — Two-surface CUA + vision gate + Manager DAG (P59)
+
+**Category:** Architecture lock (user). Census unchanged.
+**Decision:** Inbuilt **Browse** (CDP, a11y) and **Office** (engines) do not need vision. **Computer use** is the real OS (path-launch HWND); rail is see-pane only; **vision required** (`cua_requires_vision` + UI modal). Loop = Manager DAG → Worker observe→one-act→verify → adaptive replan remaining nodes. v1 serial spine (no VM clone). Steal: MACU DAG/replan, Lybic Module_IO, Agent-S PHP, Cua no-foreground, Plover visible plan. Computer use becomes a **primary rail icon**.
+
+## 2026-09-10 — Cockpit UI stale/missing inventory (P58)
+
+**Category:** Honesty. Census unchanged. **No product UI this slice.**
+**Audit vs `ui/src`:** Keyboard Settings 6-row sheet ≠ `keyboard-shortcuts.tsx`; About `v0.7.2 · 2026.01.15`; Settings nav missing Computer use + Subagents; composer slash hardcoded; Office flyout all `live: false`; status-bar imports `AGENTS`; picker uses curated `MODELS`; Browse is a11y tree not pixels; notifications prefs unread; Advanced experimental unread. Provider activate screen remains P56; PTY P54; path-launch P57.
+**Also:** models.dev `/api/providers.json` is **not live** (HTML SPA) — P56.1 fetch is `api.json` + ETag only.
+
+## 2026-09-10 — Provider activate screen (+ → new screen, keys, models.dev table)
+
+**Category:** UI contract (user). Census unchanged.
+**Decision:** Settings list **+** opens a **new Provider activate screen**, not a confirm dialog. Header = models.dev `name` / `npm` (package) / `api` / `doc`. One key bar; Enter → MetadataOnly verify → green tick; **then + below that bar** for the next key (repeat). Below keys: **dropdown + entire model list** with model, model id, context, output, price, reasoning?, tool call?, images? (and remaining catalog fields). All columns from `api.json`. P56.2 / P56.3 / P56.7.
+
+## 2026-09-10 — OpenCode is three Settings provider rows: Zen, Go, Free
+
+**Category:** Contract restatement (user). Census unchanged.
+**Decision:** Settings → Providers lists **OpenCode Zen** (`opencode`, `/zen/v1`, API key), **OpenCode Go** (`opencode-go`, `/zen/go/v1`, Go key), and **OpenCode Free** (`opencode-free`, keyless overlay, `x-opencode-session`) as **three separate rows**, not one OpenCode. Search aliases zen / go / free. P56.6 owns the wiring.
+
+## 2026-09-10 — Correction: Zen free is keyless; gate is `x-opencode-session`
+
+**Category:** Contract correction. The previous probe write-up overclaimed that a Zen API key was required to test free models.
+**Live:** `POST /zen/v1/chat/completions` with **no Authorization**, `User-Agent: EveryAIOS/0.7.2`, `x-opencode-session`, `x-opencode-request`, `x-opencode-client` → `ling-3.0-flash-fin-free` HTTP **200**. Dummy Bearer → 401. Missing session → 400 `MissingSessionID`. Paid Zen still uses a key. `opencode-free` is keyless.
+
+## 2026-09-10 — Zen headers live-probed; module audit (agents/skills/office/browser/computer-use)
+
+**Category:** Contract honesty + live probe. Census unchanged. No product broker wiring (no `OPENCODE_API_KEY` in this environment; `~/.local/share/opencode/auth.json` has github-copilot + orcarouter only).
+**Zen headers (https://opencode.ai/docs/go + live POST `https://opencode.ai/zen/v1/chat/completions`):**
+- Missing `x-opencode-session` → HTTP 400 `MissingSessionID` (“free tier can only be used in OpenCode”).
+- `User-Agent: EveryAIOS/0.7` + session, no key → HTTP 429 `FreeUsageLimitError`.
+- `Authorization: Bearer sk-dummy` + session → HTTP 401 Invalid API key.
+- `User-Agent: opencode/1.0.0` + session, no key → 200 on `big-pickle`. Free path is **keyless**; later `ling-3.0-flash-fin-free` 200 with EveryAIOS UA + session, no key. Paid Zen still uses a key. See correction entry above.
+- Live free ids from `GET /zen/v1/models`: `big-pickle`, `mimo-v2.5-free`, `ling-3.0-flash-fin-free`, `nemotron-3-ultra-free`, `nemotron-3.5-lightning-free`, `muse-spark-1.3-contributor-free`, `muse-spark-1.2-contributor-free`, `deepseek-v4-flash-free`.
+**Inbuilt agentic loop (unit):** coordinator `chat.test.ts` + `chief-dispatch.test.ts` + `tools.test.ts` = 46 pass (ConversationEngine → tool/list → guard/evaluate → tool/exec → tool/commit). That is the mocked loop, not a Zen round-trip.
+**Module live vs catalog:**
+- Agents/Chief: `KNOWN_CHIEFS` still `inbuilt|claude-code|codex` (P53.3). External Chief refuses inbuilt fallback (tests green).
+- Skills: `skills_install` writes SKILL.md after signed-index verify; **no Guard ticket** (P55 honesty). Thin instruction files.
+- Office: agent `office.docx_*` / `office.pptx_patch` / `office.pdf_*` in `ToolService`. Viewer PPT still read-only (P55.10).
+- Browser: `browser_start` attaches Chrome to `ChatRelay.attach_browser` — agent `navigate`/`snapshot`/`act` can run **after** start. Default is headless Chrome, not Lightpanda (P55.7).
+- Computer use: `desktop.windows|read|act` are in the tool catalog, but **`attach_desktop` is never called from the host** (only FakeDesktop tests). Agent path returns `desktop session not attached`. Human path is `desktop_cmds` + fail-closed risky gate. Deeper control (path-launch, no-foreground) remains P57.
+**Decision:** headers land in A1/P56.6. Do not add a spoofed-UA free path.
+
+## 2026-09-10 — Providers UI + catalog cron + OpenCode-free + 429 honesty + local-model bar + E9 path-launch/background
+
+**Category:** Contract restatement (user). Census unchanged (157). Kernel gate clear. **No product code this slice.**
+**Research (primary):**
+- OpenCode providers: https://opencode.ai/docs/providers — models.dev catalog; custom `npm`/`package` + `baseURL` (to `/v1`) + optional `apiKey` + `headers`/`body` + `models`/`limit`; format via `@ai-sdk/openai-compatible` | `@ai-sdk/anthropic` | `@ai-sdk/openai` (responses). NVIDIA + NIM `localhost:8000/v1`. LM Studio `:1234`, Ollama `:11434`, llama.cpp `:8080`.
+- OpenCode Zen: https://opencode.ai/docs/zen — `GET https://opencode.ai/zen/v1/models`; ids `opencode/<id>`; **Big Pickle** free stealth (`big-pickle`, openai-compatible `/v1/chat/completions`); other free ids currently `*-free` and change. Privacy: free models may train.
+- models.dev: `https://models.dev/api.json`, `https://models.dev/api/providers.json`, `@opencode-ai/models`.
+- Cua no-foreground: https://cua.ai/docs/concepts/the-no-foreground-contract.md — UIA/PostMessage, `SW_SHOWNOACTIVATE`, Session 0 cannot drive the desktop.
+- Local: LM Studio (HF browser, fit, `:1234`), AnythingLLM (RAG workspaces), Jan (private GGUF), Ollama (API).
+**Decision:**
+- A1 = entire models.dev catalog **+** OpenCode-shaped custom inference **+** NVIDIA/NIM **+** virtual `opencode-free` (regex on Zen `/v1/models` for `free` **plus explicit `big-pickle`**). Catalog refresh every **4 hours** (A6 v1, not post-v1). Settings list with **+** / all-character search / verify → green tick / N keys.
+- A3: **429 rotates; generic 5xx does not.** Retry first key after cooldown. Live `broker.rs` already 429-only (`non_429_error_surfaces_immediately`); spec/ARCH/03/DIAGRAMS previously overclaimed 5xx rotation — corrected.
+- A5: compete with LM Studio/AnythingLLM/Jan/Ollama as a **broker provider**, not a chat-only runner. RAG stays C-series.
+- E9 H3/H3a: background default + exact-path launch from allow-list. Live `LaunchApp` is still a name + `Command::new`.
+- Settings live-vs-chrome **table** (user audit) is binding in spec §4.1.
+**Implementation impact:** P56 (8) + P57 (8) queued. P55.5/P55.6 stay the broker persist bugs.
+
+## 2026-09-10 — A1 locked: all models.dev + custom inference
+
+**Category:** Contract restatement (user). Census unchanged.
+**Decision:** Provider set = **entire models.dev catalog** + **user-set custom inference** (`base_url` + key) + NVIDIA + OAuth-when-flagged + Ollama/llamafile. A named allow-list in A1 was the wrong shape. OmniRoute remains routing/failover/catalog-as-data (ARCH/03 §3.7) — not a vendored gateway, not a free-tier stacker, not an EveryAIOS-hosted `/v1`. Implementation gap stays P55.5 (broker must consume catalog `base_url`) and P55.6 (persist custom URL).
+
+## 2026-09-10 — Honesty pass vs live source (A1/A4/A5/A11/C3/D3/E1/E10/F7/F8/G1/G8 + Settings)
+
+**Category:** Contract honesty. Census stays **157**. Kernel gate clear.
+**Status:** Spec/TODO updated. One code fix: `models/probe.rs` RAM units.
+
+Adversarial read of Settings tabs, vault→chat, local-model fit/download/serve, office viewers, ACP install, browser_start, search cascade, MCP attach, Work Gateway:
+
+- **A1:** vault stores any catalog key; chat broker serves a small set. `routing_feed_decide` is picker-only.
+- **A4:** OAuth compiled, off unless `EVERYAIOS_OAUTH=1`.
+- **A5:** download/serve/ollama live; fit RAM was *1024 (sysinfo 0.30 is already bytes) — **fixed**; VRAM = nvidia-smi only; MLX not on ChatRelay boot.
+- **C3:** BM25 only on `MemoryService::read`.
+- **D3:** PPT viewer read-only; agent `pptx_patch` exists.
+- **E1/E10:** `browser_start` = Chrome, not Lightpanda.
+- **F7:** Channel B is protocol + test harness, not a hosted production executor.
+- **F8:** launch path writes for binaries; ACP `quarantine.json` unused; Chief still three ids (P53.3).
+- **G1/G8:** no `searx.space` client; localhost then DDG.
+- **Settings:** Permissions=Chat; Usage=UX counters; Experts≠Subagents; Cloud env=chrome; Agents empty-live can paint static catalog.
+
+Queued **P55** (1 done / 11 open). Did not delete capability IDs (append-only).
+
+## 2026-09-10 — v3.67 terminal profiles (H36), capability backends, user-owned cloud slot
+
+**Category:** New capability H36 + contract restatement on H33 / F10 / B1 / §4.5
+**Status:** Recorded (docs only; implementation = TODO P54). Census **156 → 157**. Kernel gate remains clear.
+
+- **H36:** VS Code-shaped integrated terminal. Profiles (`source` PowerShell/GitBash, `path` arrays, per-WSL-distro, `$SHELL`/`/etc/shells`), `TerminalBackend` Local (unix pty / ConPTY) / Wsl (F10) / Remote (H33 ExecutionNode), automation vs user profile, unsafe-path confirmation, tabs/splits, xterm.js renderer. Current `shell_cmds.rs` piped `sh`/`cmd` is the honest ceiling until P54.
+- **§4.5:** every engine is a versioned `CapabilityBackend`. New shells = profile rows. New OS = backend impl. New machine = ExecutionNode. UI never calls OS APIs.
+- **Cloud, figured:** user-owned ExecutionNode (Mode C). V1 = attach over P8.9 so a VPS PTY is a terminal. Post-v1 = `--headless` 24/7. Founder SaaS stays §8 non-goal. A user VPS is not a founder server.
+- **B1:** cancel/interrupt injects synthetic tool-results (Goose conversation-validity).
+- **F10:** consumed by H36 WSL profiles; does not re-implement UNC mapping.
+- **Stale fix:** ARCH/09 and ARCH/10 F12 no longer say “own context each.”
+
+Docs updated: `DESKTOP-APP-SPEC.md`, `capabilities.yaml`, `ARCH/00`, `ARCH/01`, `ARCH/02`, `ARCH/09`, `ARCH/10`, `ARCH/12`, `TODO.md` (P54 8 open), `UI-DESIGN-PROMPT.md`, `README.md`.
+
+## 2026-09-09 — Dynamic Chief occupancy, ACP slash protocol, compact handoff (no new capability IDs)
+
+**Category:** Contract restatement on B9 / B3 / F12 / H32 / J17 / §4.2.5a
+**Status:** Recorded (docs only; implementation = TODO P53)
+
+User-confirmed product model (not a model faucet):
+
+- External Chief = **that product's loop** (Claude Code / Codex / Grok Build / OpenCode / …). EveryAIOS stays the workspace shell.
+- Occupancy = **installed** (PATH or F8 path written back). Hardcoded `inbuilt | claude-code | codex` is a bug vs the contract.
+- **Slash:** ACP `available_commands_update` + `/name` as `session/prompt` text. No per-harness command map. EveryAIOS slash intercepts only while inbuilt is Chief.
+- **Handoff:** compacted transcript + passport + taste + goal/plan/tickets + file refs. Not raw history, not snipped tool blobs. Return = visible reply. Tool log = per-session observability file.
+- **Subagents:** Settings → Subagents, installed CLIs only, editable when-to-use descriptions exposed to the Chief. Swarms deferred.
+- Guard: `session/request_permission` → Guard-2; Self-contained internal writes stay unaudited unless brokered.
+
+Docs updated: `DESKTOP-APP-SPEC.md`, `ARCH/01`, `ARCH/09`, `ARCH/10`, `ARCH/12`, `ARCH/DIAGRAMS.md`, `UI-DESIGN-PROMPT.md`, `ui/DESIGN-SYSTEM.md`, `README.md`. Census stays **156**. P38 crate seams remain `[DONE]`; product gaps queued as **P53**.
+
 ## 2026-09-04 — Doc 87: local-model UX + composer/chat-UI deep-dive; TODO P52 (24 open); ledger section 36 (296 total)
 
 **Category:** Research evidence + maintenance

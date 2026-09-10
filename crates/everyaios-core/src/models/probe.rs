@@ -31,8 +31,11 @@ pub struct DiscoveredRuntime {
 /// Probe the host hardware.
 pub fn probe_hardware() -> HardwareInfo {
     let sys = sysinfo::System::new_all();
-    let total_ram_bytes = sys.total_memory() * 1024;
-    let available_ram_bytes = sys.available_memory() * 1024;
+    // sysinfo 0.30 returns memory in bytes (not KiB). Multiplying by 1024
+    // overstated RAM ~1024× and made `model_estimate_fit` report Fits for
+    // every GGUF. Keep this aligned with `hwfit::detect`.
+    let total_ram_bytes = sys.total_memory();
+    let available_ram_bytes = sys.available_memory();
 
     let cpu_name = std::fs::read_to_string("/proc/cpuinfo")
         .ok()

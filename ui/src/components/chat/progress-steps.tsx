@@ -15,22 +15,9 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import type { ProgressStep } from '@/lib/store'
+import { useAppStore, type ProgressStep } from '@/lib/store'
 import { AGENT_MAP } from '@/lib/agents'
 import { cn } from '@/lib/utils'
-
-// Map step types to which agent would handle them (visual annotation)
-const STEP_AGENT: Record<ProgressStep['type'], string> = {
-  file: 'everyaios-native',
-  edit: 'claude-code',
-  chart: 'everyaios-native',
-  browser: 'grok-build',
-  shell: 'codex-cli',
-  code: 'claude-code',
-  office: 'everyaios-native',
-  export: 'everyaios-native',
-  tool: 'everyaios-native',
-}
 
 function StepTypeIcon({ type }: { type: ProgressStep['type'] }) {
   const cls = 'h-3 w-3'
@@ -89,6 +76,8 @@ interface Props {
 }
 
 export default function ProgressSteps({ steps }: Props) {
+  const selectedAgentId = useAppStore((s) => s.selectedAgentId)
+  const occupancy = AGENT_MAP[selectedAgentId]
   return (
     <div className="mt-2 rounded-lg border border-border bg-background/40 px-2.5 py-2">
       <ul className="space-y-0">
@@ -142,14 +131,9 @@ export default function ProgressSteps({ steps }: Props) {
                   >
                     {step.label}
                   </span>
-                  {/* Agent mark annotation — which runtime handled this step */}
-                  {(() => {
-                    const a = AGENT_MAP[STEP_AGENT[step.type]]
-                    if (!a) return null
-                    return (
-                      <span className={cn('ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded text-[6px] font-bold opacity-60', a.accent)}>{a.mark}</span>
-                    )
-                  })()}
+                  {occupancy && (
+                      <span className={cn('ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded text-[6px] font-bold opacity-60', occupancy.accent)}>{occupancy.mark}</span>
+                  )}
                   {step.timestamp && (
                     <span className="ml-auto font-mono text-[9px] text-muted-foreground/60">
                       {step.timestamp}

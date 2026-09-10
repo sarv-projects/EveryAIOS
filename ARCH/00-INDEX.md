@@ -2,7 +2,7 @@
 
 > **Status:** Architecture reference. It works alongside the master spec `../DESKTOP-APP-SPEC.md`; this ARCH series defines architecture boundaries, module ownership, and diagrams. Capability identity is mirrored in `09-FEATURE-MATRIX.md`; historical decisions are recorded in `../SPEC-CHANGELOG.md`. Delivery status remains in `../TODO.md`.
 > **Docs:** 00–15 define the architecture, module layout, security, routing, memory, caching, office, browser, MCP, algorithms, repository map, UI surfaces, prompt anatomy, visual grounding, and connector store. Research provenance and adoption decisions remain in `RESEARCH/desktop_app/`; delivery status remains in `TODO.md`; historical changes remain in `SPEC-CHANGELOG.md`.
-> **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (new `everyaios-storage` crate, doc 49). **No scope compromise**: every capability in the research corpus (docs 01–85, **282 repos**) is derived in `09-FEATURE-MATRIX.md` (156 rows).
+> **Decision (user-confirmed):** **Hybrid** — the existing `@personal-ai/core-*` TypeScript engine (≈100 test files in `APP/packages/`) stays as a supervised Bun-compiled sidecar; a **Rust layer owns the paths where research proved Rust wins**: browser/CDP control, script-eval sandbox (rquickjs), security guards, audit/replay ingest, **storage intelligence** (new `everyaios-storage` crate, doc 49). **No scope compromise**: every capability in the research corpus (docs 01–85, **282 repos**) is derived in `09-FEATURE-MATRIX.md` (157 rows).
 > **Working name:** "EveryAIOS" (from the v2.0 spec's `~/.everyaios/`) — canonical across code + docs. Final branding is a **P12.6 GTM item**, not an open build dependency.
 
 ## The two specs reconciled
@@ -25,19 +25,20 @@
 
 1. **01-SYSTEM-ARCHITECTURE.md** — processes, layers, IPC, lifecycle (the map)
 2. **02-MODULE-LAYOUT.md** — Rust crates + TS packages, ownership, what's new vs exists
-3. **03-BYOK-KEYRINGS.md** — multi-key per provider, fallback/rotation, routing, OAuth subscriptions
+3. **03-BYOK-KEYRINGS.md** — multi-key per provider, **429-only** failover (5xx does not rotate), 4h models.dev catalog, OpenCode custom inference, **OpenCode Zen / Go / Free** (three rows), OAuth subscriptions
 4. **04-OFFICE-ENGINE.md** — open + edit Word/Excel/PPT/PDF (surgical, byte-preserving)
 5. **05-TOKEN-ECONOMY.md** — input control: prefix-cache, compaction, snip, budgets, crystallization
 6. **06-SECURITY-GUARDRAILS.md** — trust ladder, dual-guard, sandboxes, ownership, audit, injection defense
 7. **07-MEMORY-CONTEXT.md** — 5-tier memory, 7 algorithms, multi-scope, SOTA retrieval
-8. **08-BROWSER-LAYER.md** — CDP, 37 tools, a11y snapshot/refs/diff, script-eval, replay
+8. **08-BROWSER-LAYER.md** — inbuilt CDP Browse (DOM/a11y, no vision required). E9 computer use is the real OS (vision + DAG) — not this crate
 9. **09-FEATURE-MATRIX.md** — the complete capability→feature→module→status derivation
 10. **10-BUILD-PLAN.md** — phases with exit criteria
 11. **11-AI-CHAT-FEATURES.md** — AI chat derivation: copy (from APP engine + Hermes/etc.), convert, reject
-12. **12-UI-SPEC.md** — UI/UX specification **v3.4**: 48px activity rail + multi-view tabbed viewport (Folder/Shell/Browse/Code + ONE Office flyout + session views + plugin slot), views contract, takeover/resume, per-session tab/layout persistence (multi-view work-cockpit design)
+12. **12-UI-SPEC.md** — UI/UX specification **v3.8**: rail Folder/Shell/Browse/**Computer use**/Code + Office flyout; CUA see-pane + vision modal + DAG on Progress
 13. **13-PROMPT-ANATOMY.md** — the assembled desktop prompt (`packages/coordinator/src/prompt.ts`): identity/persona scanned before insertion, third-party retrieval as data-only content, `<user_document>` delimiting, byte-stable prefix above `CACHE_BOUNDARY`, prompt-is-not-permission (P1.5)
 14. **14-SHOWUI-ALOHA-REFERENCE.md** — visual grounding + action-representation reference: a11y/UIA/CDP first, OCR/vision only when necessary, verify after one action, opt-in weights (P9.1)
 15. **15-CONNECT-STORE.md** — the Connect Store (v1.0, 2026-08-29): the curated "click → sign in → use" connector surface — remote MCP + OAuth 2.1 (`everyaios-mcp::store`), device-flow/loopback PKCE for the big four (GitHub/Google/Microsoft/Slack), Guard-2 consent payloads (`ConnectConsent`), first-class remote MCP via `remote_plan`
+16. **spec §4.5** — `CapabilityBackend` (Local / Wsl / Remote); H36 terminal profiles; user-owned cloud slot. Not a new ARCH file — lives in the spec.
 16. **16-CHAT-LOOP-RUST-PORT.md** — SCOPE (2026-08-29, not implemented): porting `ConversationEngine.run()` + `runChatStream` to Rust — the verified scope is ~2,770 TS lines (engine.ts + chat.ts orchestration + prompt.ts 12-segment assembler) ≈ ~3,400 Rust + ~1,200 tests, because every I/O dep (broker, ToolService+Guard, MemoryService, gate/risk/plan/contract) already lives in Rust; M0–M4 migration with a keep-TS-behind-toggle cut-over + the two hard seams (P30.8 context-audit parity, A9 cache-affine byte-stability)
 15. **research docs 49–51** — storage intelligence (49: eDirStat/UltraSearch/WinDirStat/fclones → `everyaios-storage` + matrix D9–D11/G7), generative UI/image/voice/email gaps (50: AG-UI → H25, A10, F14–F15, H26–H28, H15 ext), aider recheck (51: doc 46 corrections — edit formats ~9, providers 100+, "4.2×/71%" flagged third-party)
 16. **research doc 52** — gap pass 2 (Aider-in-F12 + surgical hierarchy, J21 escalation rules & decision packages, D12 storage health, G8 tiered search cascade + Algorithm #33, E9/J14 refs; 26 repos live-verified, 8 hallucinated flagged → ledger 218)

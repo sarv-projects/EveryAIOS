@@ -49,7 +49,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useAppStore, type ViewId } from '@/lib/store'
-import { AGENT_MAP, DEFAULT_ROUTING, type TaskKind } from '@/lib/agents'
+import { AGENT_MAP } from '@/lib/agents'
 import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -79,25 +79,6 @@ const PdfView = React.lazy(() => import('@/components/views/office-pdf-view'))
 const GenerativeView = React.lazy(() => import('@/components/views/generative-view'))
 const ArtifactView = React.lazy(() => import('@/components/views/artifact-view'))
 const DesktopView = React.lazy(() => import('@/components/views/desktop-view'))
-
-// Map viewport IDs to the task kind that determines which agent handles them
-const VIEW_TASK_MAP: Partial<Record<ViewId, TaskKind>> = {
-  folder: 'code',
-  shell: 'shell',
-  browse: 'browser',
-  code: 'code',
-  'office-xlsx': 'office',
-  'office-docx': 'office',
-  'office-pptx': 'office',
-  'office-pdf': 'office',
-  progress: 'plan',
-  diff: 'diff',
-  audit: 'plan',
-  storage: 'code',
-  timeline: 'plan',
-  trajectory: 'plan',
-  desktop: 'browser',
-}
 
 interface RailItem {
   id: ViewId
@@ -217,6 +198,9 @@ export function ActivityRail() {
     useAppStore((s) =>
       s.sessions.some((x) => x.id === s.activeSessionId && x.status === 'running'),
     ) || useAppStore((s) => s.workEvents.length > 0 || s.workItems.length > 0)
+  // Occupancy is the currently picked Chief — not DEFAULT_ROUTING per view.
+  const selectedAgentId = useAppStore((s) => s.selectedAgentId)
+  const occupancyAgent = AGENT_MAP[selectedAgentId]
 
   const handleClick = (item: RailItem) => {
     if (item.id === activeView && !railCollapsed) {
@@ -264,20 +248,12 @@ export function ActivityRail() {
                   <span className="h-1 w-1 rounded-full bg-orange-500 live-dot" /> Live
                 </span>
               )}
-              {/* Show which agent handles this view type via routing */}
-              {(() => {
-                const task = VIEW_TASK_MAP[item.id]
-                if (!task) return null
-                const aId = DEFAULT_ROUTING[task]
-                const a = AGENT_MAP[aId]
-                if (!a) return null
-                return (
+              {occupancyAgent && (
                   <span className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground/80">
-                    <span className={cn('h-3 w-3 rounded text-[6px] font-bold flex items-center justify-center', a.accent)}>{a.mark}</span>
-                    {a.name}
+                    <span className={cn('h-3 w-3 rounded text-[6px] font-bold flex items-center justify-center', occupancyAgent.accent)}>{occupancyAgent.mark}</span>
+                    {occupancyAgent.name}
                   </span>
-                )
-              })()}
+              )}
             </TooltipContent>
           </Tooltip>
         )

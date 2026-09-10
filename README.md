@@ -52,7 +52,7 @@ cd ui && bun install && cd ..
 cd src-tauri && cargo tauri dev
 ```
 
-Keys go in Settings (OpenAI, Anthropic, Gemini, OpenRouter, Groq, xAI, Azure, Bedrock, DeepSeek, …) or you point at Ollama / llamafile / MLX / llama.cpp on this machine.
+Keys go in Settings → Providers / BYOK: the **models.dev catalog** (refreshed every few hours), **NVIDIA**, **three OpenCode rows (Zen / Go / Free)**, and **custom inference** (OpenAI- or Anthropic-compatible URL). Free is keyless (`x-opencode-session`). Or you point at Ollama / llamafile / MLX / LM Studio / llama.cpp on this machine. 429 on a key rotates to the next key; generic 5xx does not.
 
 ---
 
@@ -73,7 +73,7 @@ Same loop every time: say the job → plan → guarded execution → receipt. Ex
 
 ## Models
 
-Paste keys. Ring several keys per provider. Fail over on 429/401/5xx. OAuth for ChatGPT / Copilot if you already pay them. Local models with a hardware-fit picker and live Hugging Face GGUF search — no hardcoded model names.
+Paste keys. Ring several keys per provider. **429 rotates** to the next key then retries the first after cooldown; **generic 5xx does not rotate**. OAuth for ChatGPT / Copilot if you already pay them (flag-gated). Local models with a hardware-fit picker and live Hugging Face GGUF search — no hardcoded model names.
 
 Catalog comes from [models.dev](https://models.dev), refreshed and pinned. Router scores Fast / Quality / Private / Cheap plus live health, cost, and latency. Planner can be a frontier model while workers stay cheap. Cache accounting is real (prompt cache, semantic cache, result cache). Image gen is a provider endpoint like anything else.
 
@@ -87,7 +87,7 @@ The composer has three controls:
 
 | | |
 |---|---|
-| **Agent** | Who. Built-in coworker, a custom bundle, or an ACP harness (Claude Code, Codex, OpenCode, Aider, Copilot CLI, …). Any of those can be the Chief. |
+| **Agent** | Who. Built-in coworker, a custom bundle, or an **installed** ACP harness (Claude Code, Codex, Grok Build, OpenCode, Aider, Copilot CLI, …). Any **installed** one can be the Chief — that product's loop, `/`, and `@`, not a model faucet. Missing binaries fail closed. |
 | **Work mode** | What. Auto · Plan · Build · Research. |
 | **Autonomy** | How much without asking. Sandbox (read-only) · Ask · Auto · Maximum. Maximum still cannot send money, dump secrets, or smash the disk. |
 
@@ -167,7 +167,7 @@ RepoMap (tree-sitter + PageRank), SCIP, LSP (hover, def, rename, diagnostics). E
 
 Skills live in `~/.everyaios/skills/` (SKILL.md). Forge: write → sandbox → test → persist. Plugins are versioned bundles with allow-lists, never a core fork. `/learn` turns a URL, PDF, repo, or thread into a tested skill.
 
-The Code rail is a real workbench (explorer, SCM, problems, editor, terminal). It is a surface on this workspace, not a VS Code clone you are supposed to live in.
+The Code rail is a real workbench (explorer, SCM, problems, editor, terminal). The Shell is a **profile-backed PTY** (H36): PowerShell, cmd, Git Bash, each WSL distro, bash/zsh/fish, plus a user-owned remote node — VS Code's profile model, not a VS Code clone you are supposed to live in.
 
 ---
 

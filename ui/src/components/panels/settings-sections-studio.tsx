@@ -283,7 +283,7 @@ export function ChatAutoRunSection() {
   return (
     <SectionShell title="Chat & Auto-run" desc="How much the agent may do without asking — and local context">
       <Honest>
-        Modes are stored and shown on the composer. The executor still uses Guard-2 Ask for mutations until this preference is honored at ticket mint (open).
+        Autonomy radios call `guard_set_autonomy` (H34). Local context, cloud-net, and queue on this page are localStorage only — they do not change the next turn. Settings → Permissions is the same panel; the Guard rule matrix lives on the Guard surface (`guard_permissions_matrix`), not here.
       </Honest>
       <div className="space-y-1.5">
         <div className="text-xs font-medium">Auto-run</div>
@@ -866,7 +866,7 @@ export function CloudEnvSection() {
   const [pkg, setPkg] = usePref('cloud.pkg', 'none')
   const notify = useAppStore((s) => s.notify)
   return (
-    <SectionShell title="Cloud environments" desc="Optional remote packages. Local-first default is none.">
+    <SectionShell title="Cloud environments" desc="User-owned ExecutionNode attach (H33), not a founder image pull. This dropdown is chrome until P54.7 / P55.">
       <Row label="Environment package">
         <Select value={pkg} onValueChange={setPkg}>
           <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
