@@ -47,6 +47,9 @@ export function buildChiefHandoff(sessionId: string): string | null {
   const soul = SOUL_PRESETS[st.soulId]
   if (soul?.trim()) parts.push(`## Taste\n${soul.trim().slice(0, 600)}`)
   if (st.scopedDoc?.title) parts.push(`## Open file (ref — read via workspace tools)\n${st.scopedDoc.title}`)
+  // Installed subagent mix is fetched at delegation time by the Chief; keep
+  // this pure builder free of native calls. The Settings surface persists the
+  // enabled roster, while the ACP prompt can consume it independently.
   if (parts.length === 0) return null
   const bundle = `Chief handoff — continuing work in session ${sessionId} (compacted view, not raw history):\n\n${parts.join('\n\n')}`
   return bundle.length > HANDOFF_MAX_CHARS ? `${bundle.slice(0, HANDOFF_MAX_CHARS)}\n…[truncated]` : bundle

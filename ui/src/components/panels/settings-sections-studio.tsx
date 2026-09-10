@@ -670,6 +670,61 @@ export function ToolLogSection() {
   )
 }
 
+export function SubagentsSection() {
+  const notify = useAppStore((s) => s.notify)
+  const [rows, setRows] = useState<import('@/lib/acp').SubagentRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const load = () => {
+    if (!inTauri()) return
+    void import('@/lib/acp').then(({ chiefSubagents }) => chiefSubagents())
+      .then(setRows)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+  }
+  useEffect(load, [])
+  return (
+    <SectionShell title="Subagents" desc="Installed agent CLIs the Chief may delegate to; built-in Experts are configured separately.">
+      <Honest>B3 delegation is bounded at depth ≤2 and concurrency ≤6. Only discovered or installed CLIs appear here. Enable a row to include it in the delegation mix; the shipped when-to-use text is editable.</Honest>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">Installed delegation candidates {rows === null ? '…' : `(${rows.length})`}</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => useAppStore.getState().setSettingsSection('agents')}><Plus className="mr-1 h-3 w-3" />Discover agents</Button>
+          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={load}>Refresh</Button>
+        </div>
+      </div>
+      {error && <p className="text-[10px] text-red-300">Could not load installed CLIs: {error}</p>}
+      {!inTauri() && <p className="text-xs text-muted-foreground">Subagent discovery is available in the desktop shell.</p>}
+      {rows?.length === 0 && !error && <p className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center text-[10px] text-muted-foreground">No installed agent CLIs yet. Use Discover agents to install or connect one.</p>}
+      <ul className="space-y-2">
+        {(rows ?? []).map((r) => (
+          <li key={r.agentId} className="rounded-md border border-border/50 bg-background/30 px-3 py-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-medium">{r.name} <span className="font-mono text-[9px] text-muted-foreground">{r.agentId}</span></div>
+                {editing === r.agentId ? <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={r.defaultWhenToUse} className="mt-1 min-h-[56px] font-mono text-[11px]" /> : <p className="mt-1 text-[10px] text-muted-foreground">{r.whenToUse}{r.customized ? ' (customized)' : ''}</p>}
+              </div>
+              <Switch checked={r.enabled} onCheckedChange={(enabled) => void (async () => {
+                try {
+                  const { chiefSubagentSetEnabled, chiefSubagents } = await import('@/lib/acp')
+                  await chiefSubagentSetEnabled(r.agentId, enabled)
+                  setRows(await chiefSubagents())
+                } catch (e) { notify(e instanceof Error ? e.message : 'Could not update delegation mix', 'error') }
+              })()} aria-label={`Delegate to ${r.name}`} />
+            </div>
+            <div className="mt-1.5 flex gap-2">
+              {editing === r.agentId ? <>
+                <Button size="sm" className="h-6 bg-orange-500 px-2 text-[10px] text-black" onClick={() => void (async () => { try { const { chiefSubagentSetNote, chiefSubagents } = await import('@/lib/acp'); await chiefSubagentSetNote(r.agentId, draft); setRows(await chiefSubagents()); setEditing(null) } catch (e) { notify(e instanceof Error ? e.message : 'Save failed', 'error') } })()}>Save</Button>
+                <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setEditing(null)}>Cancel</Button>
+              </> : <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => { setEditing(r.agentId); setDraft(r.customized ? r.whenToUse : '') }}>Edit when-to-use</Button>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </SectionShell>
+  )
+}
+
 export function ExpertsSection() {
   const notify = useAppStore((s) => s.notify)
   const [on, setOn] = usePref<Record<string, boolean>>(
@@ -678,7 +733,7 @@ export function ExpertsSection() {
   )
   // P53.6 — Settings → Subagents: installed CLIs only (same `agent_installed`
   // predicate Chief occupancy uses) + user-editable when-to-use per row.
-  const [subs, setSubs] = useState<{ agentId: string; name: string; defaultWhenToUse: string; whenToUse: string; customized: boolean }[] | null>(null)
+  const [subs, setSubs] = useState<{ agentId: string; name: string; defaultWhenToUse: string; whenToUse: string; customized: boolean; enabled: boolean }[] | null>(null)
   const [subsErr, setSubsErr] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -745,7 +800,21 @@ export function ExpertsSection() {
                     )}
                   </div>
                 </div>
-                <div className="mt-1.5 flex gap-2">
+                <div className="mt-1.5 flex items-center gap-2">
+                  <Switch
+                    checked={r.enabled}
+                    onCheckedChange={(enabled) => void (async () => {
+                      try {
+                        const { chiefSubagentSetEnabled, chiefSubagents } = await import('@/lib/acp')
+                        await chiefSubagentSetEnabled(r.agentId, enabled)
+                        setSubs(await chiefSubagents())
+                      } catch (e) {
+                        notify(e instanceof Error ? e.message : 'Could not update delegation mix', 'error')
+                      }
+                    })()}
+                    aria-label={`Delegate to ${r.name}`}
+                  />
+                  <span className="text-[10px] text-muted-foreground">{r.enabled ? 'In delegation mix' : 'Excluded from delegation mix'}</span>
                   {editing === r.agentId ? (
                     <>
                       <Button size="sm" className="h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400" onClick={() => saveNote(r.agentId)}>Save</Button>

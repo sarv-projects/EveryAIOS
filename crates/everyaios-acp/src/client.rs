@@ -388,7 +388,7 @@ impl<T: AcpTransport> AcpSession<T> {
     pub fn prompt(
         &mut self,
         text: &str,
-        mut on_permission: impl FnMut(&PermissionRequestParams) -> PermissionDecision,
+        on_permission: impl FnMut(&PermissionRequestParams) -> PermissionDecision,
     ) -> Result<PromptOutcome, AcpError> {
         self.prompt_with_content(vec![PromptContent::text(text)], on_permission)
     }

@@ -244,6 +244,7 @@ export interface SubagentRow {
   defaultWhenToUse: string
   whenToUse: string
   customized: boolean
+  enabled: boolean
 }
 
 /** P53.6 — installed CLIs only (same `agent_installed` predicate Chief
@@ -256,6 +257,16 @@ export async function chiefSubagents(): Promise<SubagentRow[]> {
  * when-to-use override. Refuses unknown/uninstalled ids fail-closed. */
 export async function chiefSubagentSetNote(agentId: string, note: string): Promise<string> {
   return nativeCall('chief subagent note', () => invoke<string>("chief_subagent_set_note", { agentId, note }));
+}
+
+/** P53.6 — include/exclude an installed CLI from the Chief delegation mix. */
+export async function chiefSubagentSetEnabled(agentId: string, enabled: boolean): Promise<boolean> {
+  return nativeCall('chief subagent enabled', () => invoke<boolean>("chief_subagent_set_enabled", { agentId, enabled }));
+}
+
+/** P53.6 — enabled installed CLIs, for handoff/delegation context. */
+export async function chiefSubagentMix(): Promise<SubagentRow[]> {
+  return nativeCall('chief subagent mix', () => invoke<SubagentRow[]>("chief_subagent_mix"));
 }
 
 /** F8 — refresh the official ACP registry cache from the CDN (network).

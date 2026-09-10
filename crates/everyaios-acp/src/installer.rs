@@ -523,6 +523,21 @@ mod tests {
     }
 
     #[test]
+    fn path_discovery_records_exact_absolute_path() {
+        let root = tmp_root("path");
+        let installer = Installer::new(root.clone());
+        let path = root.join("bin").join("agent");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"agent").unwrap();
+        installer.record_path("agent", &path).unwrap();
+        let loaded = installer.installed("agent").unwrap();
+        assert_eq!(loaded.kind, "path");
+        assert_eq!(loaded.binary_path, Some(path));
+        assert_eq!(installer.ownership("agent").unwrap().source, "PATH discovery");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn rel_path_strips_leading_dot_slash() {
         assert_eq!(rel_path("./bin/devin"), PathBuf::from("bin/devin"));
         assert_eq!(rel_path("kilo.exe"), PathBuf::from("kilo.exe"));

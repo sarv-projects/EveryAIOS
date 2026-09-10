@@ -43,6 +43,10 @@ pub struct Config {
     /// default; exposed to the Chief at delegate time. Empty = use default.
     #[serde(default)]
     pub subagent_notes: std::collections::HashMap<String, String>,
+    /// P53.6 — installed subagent CLIs enabled for Chief delegation.
+    /// Missing entries default to enabled for backwards-compatible config.
+    #[serde(default)]
+    pub subagent_enabled: std::collections::HashMap<String, bool>,
 }
 
 fn default_primary_chief() -> String {
@@ -62,6 +66,7 @@ impl Default for Config {
             model_aliases: std::collections::HashMap::new(),
             primary_chief: default_primary_chief(),
             subagent_notes: std::collections::HashMap::new(),
+            subagent_enabled: std::collections::HashMap::new(),
         }
     }
 }

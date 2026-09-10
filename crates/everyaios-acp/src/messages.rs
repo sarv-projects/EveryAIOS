@@ -611,6 +611,16 @@ mod tests {
     }
 
     #[test]
+    fn prompt_content_resource_uses_acp_embedded_shape() {
+        let c = PromptContent::resource("file:///workspace/a.rs", "text/plain", "fn main() {}");
+        let v = serde_json::to_value(c).unwrap();
+        assert_eq!(v["type"], "resource");
+        assert_eq!(v["resource"]["uri"], "file:///workspace/a.rs");
+        assert_eq!(v["resource"]["mimeType"], "text/plain");
+        assert_eq!(v["resource"]["text"], "fn main() {}");
+    }
+
+    #[test]
     fn available_commands_update_parses_live_slash_vocab() {
         // P53.1 — the exact ACP wire shape: `sessionUpdate:
         // "available_commands_update"` + `availableCommands[]`. `input` is

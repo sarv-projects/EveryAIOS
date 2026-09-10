@@ -785,7 +785,29 @@ fn build_acp_prompt_with_passport(
             })
             .unwrap_or_default()
     };
-    everyaios_acp::build_chief_prompt(text, &core_facts, &governance)
+    let mut prompt = everyaios_acp::build_chief_prompt(text, &core_facts, &governance);
+    // P53.6 — expose the persisted installed-CLI delegation mix at the
+    // moment the Chief receives a turn. This is advisory context only; every
+    // child launch remains subject to the B3 limits and Guard-2 policy.
+    if let Ok(cfg) = Config::load() {
+        let mix: Vec<String> = LaunchRegistry::builtin()
+            .agents
+            .iter()
+            .filter(|m| m.protocol != everyaios_acp::HarnessProtocol::Inbuilt)
+            .filter(|m| agent_installed(&m.id))
+            .filter(|m| cfg.subagent_enabled.get(&m.id).copied().unwrap_or(true))
+            .map(|m| {
+                let note = cfg.subagent_notes.get(&m.id).cloned().unwrap_or_default();
+                format!("- {}: {}", m.name, if note.is_empty() { m.description.clone() } else { note })
+            })
+            .collect();
+        if !mix.is_empty() {
+            prompt.push_str("\\n\\n## Installed subagent delegation mix\\n");
+            prompt.push_str(&mix.join("\\n"));
+            prompt.push_str("\\nUse only within the declared B3 depth/concurrency limits.");
+        }
+    }
+    prompt
 }
 
 /// P53.5 — per-session tool observability file. Each ACP turn appends one
@@ -875,12 +897,14 @@ pub fn chief_subagents() -> Result<Vec<serde_json::Value>, String> {
             continue;
         }
         let note = cfg.subagent_notes.get(&m.id).cloned().unwrap_or_default();
+        let enabled = cfg.subagent_enabled.get(&m.id).copied().unwrap_or(true);
         rows.push(serde_json::json!({
             "agentId": m.id,
             "name": m.name,
             "defaultWhenToUse": m.description,
             "whenToUse": if note.is_empty() { m.description.clone() } else { note.clone() },
             "customized": !note.is_empty(),
+            "enabled": enabled,
         }));
     }
     Ok(rows)
@@ -908,6 +932,32 @@ pub fn chief_subagent_set_note(agent_id: String, note: String) -> Result<String,
     cfg.save(&path).map_err(|e| e.to_string())?;
     Ok(agent_id)
 }
+
+/// P53.6 — enable or disable an installed CLI in the Chief's delegation mix.
+#[tauri::command]
+pub fn chief_subagent_set_enabled(agent_id: String, enabled: bool) -> Result<bool, String> {
+    if LaunchRegistry::builtin().get(&agent_id).is_none() {
+        return Err(format!("unknown agent id: {agent_id}"));
+    }
+    if !agent_installed(&agent_id) {
+        return Err(format!("agent {agent_id} is not installed"));
+    }
+    let path = Config::config_path().map_err(|e| e.to_string())?;
+    let mut cfg = Config::load().map_err(|e| e.to_string())?;
+    cfg.subagent_enabled.insert(agent_id, enabled);
+    cfg.save(&path).map_err(|e| e.to_string())?;
+    Ok(enabled)
+}
+
+/// P53.6 — the current enabled delegation mix, consumed by Chief handoff.
+#[tauri::command]
+pub fn chief_subagent_mix() -> Result<Vec<serde_json::Value>, String> {
+    Ok(chief_subagents()?
+        .into_iter()
+        .filter(|row| row.get("enabled").and_then(serde_json::Value::as_bool).unwrap_or(true))
+        .collect())
+}
+
 #[tauri::command]
 pub fn acp_session_commands(
     state: State<'_, AppState>,

@@ -72,6 +72,7 @@ import {
   CloudEnvSection,
   CommandsSection,
   ExpertsSection,
+  SubagentsSection,
   ToolLogSection,
   HooksSection,
   IndexingSection,
@@ -193,7 +194,7 @@ function SectionBody({ section }: { section: SectionId }) {
     case 'experts':
       return <ExpertsSection />
     case 'subagents':
-      return <ExpertsSection />
+      return <SubagentsSection />
     case 'tool-log':
       return <ToolLogSection />
     case 'launch':

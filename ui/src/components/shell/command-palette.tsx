@@ -278,6 +278,8 @@ export function CommandPalette() {
       },
       ...([
         ['chat', 'Chat & Auto-run'],
+        ['subagents', 'Subagents'],
+        ['tool-log', 'Tool log'],
         ['permissions', 'Permissions'],
         ['browser', 'Browser & Network'],
         ['indexing', 'Indexing & LSP'],
