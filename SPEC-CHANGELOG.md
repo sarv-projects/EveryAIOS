@@ -18,6 +18,11 @@ Each entry records the date or release marker, change category, affected section
 
 ## Historical entries
 
+## 2026-09-10 — Spec honesty patch: browser-tier default (E10 live note → §6/§7)
+
+**Category:** Honesty. Census unchanged. No capability rows touched.
+**Decision:** §6 item 5 and the §7 P2 row still read as "Lightpanda default". Verified against `src-tauri/src/browser_cmds.rs` + `everyaios-cdp`: `browser_start` spawns system Chrome; `spawn_light()` is crate/tests only; the Settings engine dropdown is localStorage chrome. Both rows now point at the E10 live note. The A1 "Live HTTP" note (DEFAULT_BASE_URLS choke, no `x-opencode-session`, URL discarded by `vault_key_add`) was re-verified true today — no change.
+
 ## 2026-09-10 — Occupancy: Browse / CUA / rail follow the picked Chief
 
 **Category:** Contract + chrome. Session occupancy is the composer picker (or session pin). `DEFAULT_ROUTING` must not label or dispatch Browse/Shell/Computer use to a random catalog agent. Rail tooltip + progress-steps now show `selectedAgentId`. Settings task→runtime table is not occupancy (P60.11 remainder).
