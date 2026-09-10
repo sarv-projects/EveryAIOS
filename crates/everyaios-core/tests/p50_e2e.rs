@@ -246,6 +246,7 @@ fn real_chat_vertical_e2e() {
     relay
         .start_stream(ChatStreamParams {
             session_id: "s-e2e".into(),
+            work_id: None,
             stream_id: "st-e2e".into(),
             text: "Reply with exactly the single word: OK".into(),
             surface: None,
@@ -255,6 +256,7 @@ fn real_chat_vertical_e2e() {
             persona_id: None,
             soul_md: None,
             user_documents: None,
+            project_id: None,
             primary_chief: None,
             credentialed_providers: None,
         })

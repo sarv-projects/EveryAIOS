@@ -178,6 +178,7 @@ fn journey_install_byok_chat_tool_call() {
     relay
         .start_stream(ChatStreamParams {
             session_id: "s1".into(),
+            work_id: None,
             stream_id: "st-1".into(),
             text: "hi".into(),
             surface: None,
@@ -187,6 +188,7 @@ fn journey_install_byok_chat_tool_call() {
             persona_id: None,
             soul_md: None,
             user_documents: None,
+            project_id: None,
             primary_chief: None,
             credentialed_providers: None,
         })
