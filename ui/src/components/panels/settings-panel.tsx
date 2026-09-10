@@ -72,6 +72,7 @@ import {
   CloudEnvSection,
   CommandsSection,
   ExpertsSection,
+  ToolLogSection,
   HooksSection,
   IndexingSection,
   LaunchCliSection,
@@ -118,7 +119,9 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'local', label: 'Local models', icon: Cpu, keywords: ['ollama', 'llamafile', 'gguf', 'vram', 'gpu', 'quant'] },
       { id: 'capabilities', label: 'Capabilities', icon: ShieldQuestion, keywords: ['matrix', 'tools', 'computer use'] },
       { id: 'apikeys', label: 'Providers / BYOK', icon: KeyRound, keywords: ['key', 'api', 'provider', 'openai', 'anthropic', 'nvidia', 'token', 'billing', 'credential'] },
-      { id: 'experts', label: 'Experts', icon: Users, keywords: ['persona', 'role', 'subagent'] },
+      { id: 'experts', label: 'Experts', icon: Users, keywords: ['persona', 'role', 'built-in'] },
+      { id: 'subagents', label: 'Subagents', icon: Users, keywords: ['delegate', 'installed', 'discover', 'cli'] },
+      { id: 'tool-log', label: 'Tool log', icon: Activity, keywords: ['acp', 'observability', 'metrics', 'tools'] },
       { id: 'chat', label: 'Chat & Auto-run', icon: MessageSquare, keywords: ['composer', 'autoreply', 'auto run', 'behaviors'] },
       { id: 'skills', label: 'Skills', icon: Sparkles, keywords: ['plugin', 'marketplace'] },
       { id: 'rules', label: 'Rules', icon: BookOpen, keywords: ['constraints', 'policy', 'instructions'] },
@@ -189,6 +192,10 @@ function SectionBody({ section }: { section: SectionId }) {
       return <ModelsSection />
     case 'experts':
       return <ExpertsSection />
+    case 'subagents':
+      return <ExpertsSection />
+    case 'tool-log':
+      return <ToolLogSection />
     case 'launch':
       return <LaunchCliSection />
     case 'chat':

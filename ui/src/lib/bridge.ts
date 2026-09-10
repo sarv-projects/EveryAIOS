@@ -858,7 +858,11 @@ export async function sendUserMessage(
         const { buildChiefHandoff } = await import("./chief-handoff");
         handoff = buildChiefHandoff(sessionId) ?? undefined;
       }
-      const result = await acpPrompt(handle, trimmed, handoff);
+      // P53.8 — refs are sent separately so an ACP agent with
+      // `embeddedContext` receives resource blocks; the native bridge keeps
+      // the text suffix as the fallback for agents that do not advertise it.
+      const refPaths = [...trimmed.matchAll(/(?:^|\s)@([A-Za-z0-9_.\-][\w\-./]*)/g)].map((m) => m[1]).filter(Boolean);
+      const result = await acpPrompt(handle, trimmed, handoff, refPaths);
       // P53.5 — visible assistant text folds into the compacted session;
       // tool history stays in the per-session observability file (never
       // imported into chat context). Refresh the cached live slash vocab

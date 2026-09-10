@@ -32,7 +32,7 @@ use std::sync::Arc;
 
 use everyaios_acp::{
     AcpSession, AuthMethod, AvailableCommand, ClientInfo, Distribution, Installer, LaunchRegistry,
-    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, PromptOutcome, RegistryClient,
+    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, PromptContent, PromptOutcome, RegistryClient,
     RegistryPolicy, ToolCall, ToolKind,
 };
 use everyaios_core::config::Config;
@@ -125,6 +125,8 @@ pub(crate) struct AcpHandle {
     pub auth_required: bool,
     /// The methods the agent advertised in `initialize` (`authMethods`).
     pub auth_methods: Vec<AuthMethod>,
+    /// P53.8 — capabilities advertised by the agent at initialize.
+    pub embedded_context: bool,
     /// P53.1 — the agent's last advertised slash vocabulary (from the most
     /// recent `available_commands_update` on this handle; empty until the
     /// agent sends one). Served to the composer via `acp_session_commands`.
@@ -147,6 +149,8 @@ pub struct AcpHandleInfo {
     auth_required: bool,
     #[serde(default)]
     auth_methods: Vec<AuthMethod>,
+    #[serde(default)]
+    embedded_context: bool,
 }
 
 impl From<(&AcpHandle, &str)> for AcpHandleInfo {
@@ -159,6 +163,7 @@ impl From<(&AcpHandle, &str)> for AcpHandleInfo {
             protocol: "acp".to_string(),
             auth_required: h.auth_required,
             auth_methods: h.auth_methods.clone(),
+            embedded_context: h.embedded_context,
         }
     }
 }
@@ -355,6 +360,10 @@ pub fn acp_install_status() -> Result<serde_json::Value, String> {
                 if let Distribution::Binary { command, .. } = &m.distribution {
                     if !command.is_empty() {
                         if let Some(p) = resolve_on_path(command) {
+                            // P53.7 — write the discovered absolute path back
+                            // before reporting occupancy. A later launch can
+                            // therefore avoid a bare-name PATH guess.
+                            let _ = inst.record_path(&m.id, &p);
                             out.insert(
                                 m.id.clone(),
                                 serde_json::json!({
@@ -583,6 +592,7 @@ pub fn acp_launch(
             protocol: "inbuilt".to_string(),
             auth_required: false,
             auth_methods: vec![],
+            embedded_context: false,
         });
     }
 
@@ -610,8 +620,28 @@ pub fn acp_launch(
         .as_ref()
         .and_then(|o| o.binary_path.as_ref())
         .map(|p| p.to_string_lossy().into_owned())
-        .or(path_resolved)
-        .unwrap_or_else(|| plan.command.clone());
+        .or_else(|| {
+            path_resolved.clone().map(|path| {
+                // P53.7 — F8's PATH leg is durable: persist the exact path
+                // before this launch so the next Chief pin is deterministic.
+                let _ = installer().record_path(&agent_id, std::path::Path::new(&path));
+                path
+            })
+        })
+        .or_else(|| {
+            // Binary agents must never silently fall back to an unresolved
+            // catalog command. npx/uvx are intentionally resolved by their
+            // package managers and are handled below.
+            if matches!(
+                registry.get(&agent_id).map(|m| &m.distribution),
+                Some(Distribution::Binary { .. })
+            ) {
+                None
+            } else {
+                Some(plan.command.clone())
+            }
+        })
+        .ok_or_else(|| format!("agent {agent_id} has no installed or PATH-resolved launch path"))?;
 
     let mut env: Vec<(&str, &str)> = plan
         .env
@@ -635,6 +665,11 @@ pub fn acp_launch(
             version: "0.1.0".to_string(),
         })
         .map_err(|e| format!("acp initialize failed: {e}"))?;
+    let init = session
+        .agent_capabilities()
+        .cloned()
+        .unwrap_or_default();
+    let embedded_context = init.prompt_capabilities.embedded_context;
     let auth_methods = session.auth_methods().to_vec();
 
     // Try to create the session. `auth_required` is not a failure — it is a
@@ -659,6 +694,7 @@ pub fn acp_launch(
                 cwd,
                 auth_required,
                 auth_methods: auth_methods.clone(),
+                embedded_context,
                 available_commands: Vec::new(),
                 session,
             },
@@ -672,6 +708,7 @@ pub fn acp_launch(
         protocol: "acp".to_string(),
         auth_required,
         auth_methods,
+        embedded_context,
     })
 }
 
@@ -924,12 +961,12 @@ pub fn acp_tool_log(session_id: String) -> Result<Vec<serde_json::Value>, String
 /// requests route through the shared Guard-2 service: `Allow` auto-allows,
 /// `Block` denies, and `Ask` denies the current turn while minting a ticket
 /// the user can approve (then re-prompt). Never auto-allows an `Ask`.
-#[tauri::command]
-pub fn acp_prompt(
+#[tauri::command]    pub fn acp_prompt(
     state: State<'_, AppState>,
     handle: String,
     text: String,
     handoff: Option<String>,
+    refs: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     let entry = sessions
@@ -984,10 +1021,29 @@ pub fn acp_prompt(
         prompt_text = format!("<chief_handoff>\n{capped}\n</chief_handoff>\n\n{prompt_text}");
     }
 
+    // P53.8 — send resource blocks only when the agent advertised
+    // `promptCapabilities.embeddedContext`; otherwise the text suffix remains
+    // the honest fallback. Paths are confined to the requested workspace.
+    let content = if entry.embedded_context {
+        let mut blocks = vec![PromptContent::text(prompt_text.clone())];
+        for reference in refs.as_deref().unwrap_or_default() {
+            if let Some(resource) = read_workspace_resource(&entry.cwd, reference) {
+                blocks.push(PromptContent::resource(
+                    resource.0,
+                    resource.1,
+                    resource.2,
+                ));
+            }
+        }
+        blocks
+    } else {
+        vec![PromptContent::text(prompt_text.clone())]
+    };
+
     let mut pending_tickets: Vec<String> = Vec::new();
     let outcome = entry
         .session
-        .prompt(&prompt_text, |req| {
+        .prompt_with_content(content, |req| {
             let mut g = guard.lock().expect("guard_service poisoned");
             let (op, risk) = map_tool_call(&req.tool_call);
             let paths: Vec<String> = req
@@ -1134,6 +1190,36 @@ pub fn acp_sessions(state: State<'_, AppState>) -> Result<Vec<AcpHandleInfo>, St
         .iter()
         .map(|(handle, entry)| AcpHandleInfo::from((entry, handle.as_str())))
         .collect())
+}
+
+/// Read one user-selected workspace file for an ACP resource block. The
+/// canonical path check prevents `@` refs from escaping the session folder;
+/// oversized files are truncated before crossing the ACP boundary.
+fn read_workspace_resource(cwd: &str, reference: &str) -> Option<(String, String, String)> {
+    let raw = reference.trim().trim_start_matches('@');
+    if raw.is_empty() || raw.contains('\0') {
+        return None;
+    }
+    let base = std::fs::canonicalize(cwd).ok()?;
+    let path = std::path::Path::new(raw);
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base.join(path)
+    };
+    let canonical = std::fs::canonicalize(candidate).ok()?;
+    if !canonical.starts_with(&base) || !canonical.is_file() {
+        return None;
+    }
+    let bytes = std::fs::read(&canonical).ok()?;
+    let text = String::from_utf8_lossy(&bytes[..bytes.len().min(128 * 1024)]).into_owned();
+    let mime = match canonical.extension().and_then(|e| e.to_str()).unwrap_or("") {
+        "json" => "application/json",
+        "md" | "markdown" => "text/markdown",
+        "rs" | "ts" | "tsx" | "js" | "jsx" | "py" => "text/plain",
+        _ => "text/plain",
+    };
+    Some((format!("file://{}", canonical.to_string_lossy()), mime.to_string(), text))
 }
 
 /// Map an ACP tool call onto a Guard-2 operation + risk tier so it routes

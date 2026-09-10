@@ -43,6 +43,7 @@ pub use installer::{InstallError, InstallOutcome, Installer, OwnershipMarker};
 pub use messages::{
     AgentCapabilities, AgentInfo, AuthMethod, AuthMethodType, AuthenticateParams,
     AuthenticateResult, AvailableCommand, ClientCapabilities, ClientInfo, ContentBlock,
+    EmbeddedResource,
     FsCapabilities, InitializeParams, InitializeResult, Location, McpServer, PermissionDecision,
     PermissionOption, PermissionOptionKind, PermissionOutcome, PermissionRequestParams,
     PermissionResult, Position, PromptCapabilities, PromptContent, SessionNewParams,

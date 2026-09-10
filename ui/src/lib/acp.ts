@@ -70,6 +70,8 @@ export interface AcpHandleInfo {
   /** True when the agent needs sign-in before it accepts a session. */
   authRequired: boolean;
   authMethods: AuthMethod[];
+  /** P53.8 — the agent advertised `promptCapabilities.embeddedContext`. */
+  embeddedContext: boolean;
 }
 
 /** One live slash command advertised by the agent (P53.1). */
@@ -201,8 +203,14 @@ export async function acpPrompt(
   handle: string,
   text: string,
   handoff?: string,
+  refs?: string[],
 ): Promise<AcpPromptResult> {
-  return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", handoff ? { handle, text, handoff } : { handle, text }));
+  return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", {
+    handle,
+    text,
+    ...(handoff ? { handoff } : {}),
+    ...(refs?.length ? { refs } : {}),
+  }));
 }
 
 /** P53.1 — the agent's live slash vocabulary for one ACP handle (from the

@@ -842,6 +842,8 @@ export const SETTINGS_SECTION_IDS = [
   'capabilities',
   'apikeys',
   'experts',
+  'subagents',
+  'tool-log',
   'launch',
   'chat',
   'permissions',

@@ -127,6 +127,24 @@ impl Installer {
     }
 
     /// Load a prior install outcome (if this agent/version is installed).
+    /// Persist a user-owned PATH discovery so future launches use the exact
+    /// executable instead of relying on a mutable child PATH. This is not an
+    /// EveryAIOS download; the state is explicitly marked `kind: "path"`.
+    pub fn record_path(&self, agent_id: &str, path: &Path) -> Result<(), InstallError> {
+        let outcome = InstallOutcome {
+            agent_id: agent_id.to_string(),
+            version: "path".to_string(),
+            kind: "path".to_string(),
+            binary_path: Some(path.to_path_buf()),
+            env: vec![],
+        };
+        self.record(&outcome, &Ownership::new(
+            "PATH discovery",
+            String::new(),
+            vec![path.to_string_lossy().into_owned()],
+        ))
+    }
+
     pub fn installed(&self, agent_id: &str) -> Option<InstallOutcome> {
         let dir = self.install_root.join(agent_id);
         let state: InstallState =

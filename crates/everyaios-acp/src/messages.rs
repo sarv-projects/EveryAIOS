@@ -176,15 +176,38 @@ pub struct SessionNewResult {
 pub enum PromptContent {
     #[serde(rename = "text")]
     Text { text: String },
-    // image/audio/embedded/context are v1-capability-gated; modeled loosely
-    // so unknown variants don't break a peer that sends them.
+    /// A workspace file embedded as an ACP resource. Agents must advertise
+    /// `promptCapabilities.embeddedContext` before the client sends this
+    /// capability-gated block.
+    #[serde(rename = "resource")]
+    Resource { resource: EmbeddedResource },
+    // image/audio/other v1 content is capability-gated; unknown variants do
+    // not break a peer that sends them.
     #[serde(other)]
     Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddedResource {
+    pub uri: String,
+    pub mime_type: String,
+    pub text: String,
 }
 
 impl PromptContent {
     pub fn text(s: impl Into<String>) -> Self {
         PromptContent::Text { text: s.into() }
+    }
+
+    pub fn resource(uri: impl Into<String>, mime_type: impl Into<String>, text: impl Into<String>) -> Self {
+        PromptContent::Resource {
+            resource: EmbeddedResource {
+                uri: uri.into(),
+                mime_type: mime_type.into(),
+                text: text.into(),
+            },
+        }
     }
 }
 

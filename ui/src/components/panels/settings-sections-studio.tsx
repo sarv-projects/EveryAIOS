@@ -13,6 +13,8 @@ import {
   Smartphone,
   Sparkles,
   Trash2,
+  FileSearch,
+  UsersRound,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +25,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
@@ -627,6 +630,45 @@ const EXPERTS = [
   { id: 'debug', name: 'Debug engineer', desc: 'Reproduce failures, find root cause, suggest a fix. Writes only after a ticket.' },
   { id: 'general', name: 'General purpose', desc: 'Default subagent when no specialist matches.' },
 ]
+
+export function ToolLogSection() {
+  const sessionId = useAppStore((s) => s.activeSessionId)
+  const [rows, setRows] = useState<import('@/lib/acp').AcpToolLogEntry[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const load = () => {
+    if (!inTauri() || !sessionId) return
+    setLoading(true)
+    void import('@/lib/acp').then(({ acpToolLog }) => acpToolLog(sessionId))
+      .then((next) => { setRows(next); setError(null) })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false))
+  }
+  useEffect(load, [sessionId])
+  return (
+    <SectionShell title="Tool log" desc="ACP session observability — metrics only, never added to chat context.">
+      <Honest>External agents keep their private tool history outside the transcript. This view shows the sanitized per-session turn log written by the ACP bridge.</Honest>
+      {!inTauri() ? <p className="text-xs text-muted-foreground">Tool logs are available in the desktop shell.</p> : !sessionId ? <p className="text-xs text-muted-foreground">Open a session to inspect its tool log.</p> : (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">{rows === null ? 'Not loaded' : `${rows.length} turn${rows.length === 1 ? '' : 's'}`}</span>
+            <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={load} disabled={loading}><FileSearch className="mr-1 h-3 w-3" />{loading ? 'Loading…' : 'Refresh'}</Button>
+          </div>
+          {error && <p className="text-[10px] text-red-300">Could not load tool log: {error}</p>}
+          {rows !== null && rows.length === 0 && !error && <p className="rounded-md border border-dashed border-border/60 px-3 py-5 text-center text-[10px] text-muted-foreground">No ACP turns recorded for this session.</p>}
+          {rows && rows.length > 0 && <ScrollArea className="max-h-[28rem] rounded-md border border-border/50"><div className="space-y-2 p-2">
+            {rows.map((row, i) => <div key={`${row.tsMs}-${i}`} className="rounded border border-border/40 bg-background/30 p-2 text-[10px]">
+              <div className="flex justify-between gap-2 font-mono text-muted-foreground"><span>{new Date(row.tsMs).toLocaleString()}</span><span>{row.stopReason}</span></div>
+              <div className="mt-1 truncate text-foreground">{row.promptPrefix}</div>
+              <div className="mt-1 text-muted-foreground">{row.toolCalls.length === 0 ? 'No tool calls' : `${row.toolCalls.length} tool call${row.toolCalls.length === 1 ? '' : 's'}`}</div>
+              {row.toolCalls.length > 0 && <ul className="mt-1 space-y-0.5 text-muted-foreground">{row.toolCalls.map((tool) => <li key={tool.toolCallId} className="truncate">{tool.kind ?? 'tool'} · {tool.title} · {tool.status ?? 'unknown'}</li>)}</ul>}
+            </div>)}
+          </div></ScrollArea>}
+        </>
+      )}
+    </SectionShell>
+  )
+}
 
 export function ExpertsSection() {
   const notify = useAppStore((s) => s.notify)

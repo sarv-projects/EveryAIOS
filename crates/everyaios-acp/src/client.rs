@@ -215,6 +215,7 @@ pub struct AcpSession<T: AcpTransport> {
     session_id: Option<String>,
     agent_info: Option<AgentInfo>,
     auth_methods: Vec<AuthMethod>,
+    agent_capabilities: Option<AgentCapabilities>,
     authenticated: bool,
 }
 
@@ -227,6 +228,7 @@ impl<T: AcpTransport> AcpSession<T> {
             session_id: None,
             agent_info: None,
             auth_methods: Vec::new(),
+            agent_capabilities: None,
             authenticated: false,
         }
     }
@@ -243,6 +245,11 @@ impl<T: AcpTransport> AcpSession<T> {
     /// (`authMethods`). Empty ⇒ the agent needs no auth.
     pub fn auth_methods(&self) -> &[AuthMethod] {
         &self.auth_methods
+    }
+
+    /// The agent capability set advertised during `initialize`.
+    pub fn agent_capabilities(&self) -> Option<&AgentCapabilities> {
+        self.agent_capabilities.as_ref()
     }
 
     /// Whether `authenticate` has succeeded on this connection.
@@ -291,6 +298,7 @@ impl<T: AcpTransport> AcpSession<T> {
             return Err(AcpError::ProtocolMismatch(result.protocol_version));
         }
         self.agent_info = Some(result.agent_info.clone());
+        self.agent_capabilities = Some(result.agent_capabilities.clone());
         self.auth_methods = result.auth_methods.clone();
         // An agent advertising no auth methods needs no auth: the session is
         // authenticated by construction (see `auth_methods`). Anything
@@ -382,6 +390,17 @@ impl<T: AcpTransport> AcpSession<T> {
         text: &str,
         mut on_permission: impl FnMut(&PermissionRequestParams) -> PermissionDecision,
     ) -> Result<PromptOutcome, AcpError> {
+        self.prompt_with_content(vec![PromptContent::text(text)], on_permission)
+    }
+
+    /// Drive one prompt with capability-gated content blocks. The caller is
+    /// responsible for checking the agent's advertised capabilities before
+    /// adding resource blocks; plain text remains the safe fallback.
+    pub fn prompt_with_content(
+        &mut self,
+        prompt: Vec<PromptContent>,
+        mut on_permission: impl FnMut(&PermissionRequestParams) -> PermissionDecision,
+    ) -> Result<PromptOutcome, AcpError> {
         self.ensure_ready()?;
         let session_id = self.session_id.clone().ok_or(AcpError::NotReady)?;
         let id = self.next_id;
@@ -392,7 +411,7 @@ impl<T: AcpTransport> AcpSession<T> {
             "method": "session/prompt",
             "params": {
                 "sessionId": session_id,
-                "prompt": [{ "type": "text", "text": text }],
+                "prompt": prompt,
             }
         });
         self.transport.send(&req.to_string())?;
