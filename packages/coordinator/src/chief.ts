@@ -19,6 +19,15 @@
 export type ChiefId = string;
 
 export const INBUILT_CHIEF = "inbuilt";
+/**
+ * P53.3 — installed-any Chief: `KNOWN_CHIEFS` is documentation of the
+ * long-standing ids (the trio the old allow-list knew), NOT an allow-list.
+ * Resolution accepts any non-empty id (installed-ness is enforced where the
+ * install truth lives — the Rust shell's `agent_installed` predicate via
+ * `chief_default_set` / ACP launch); `inbuilt` is always valid. Unknown to
+ * the coordinator means non-empty-but-unverified — it routes to the external
+ * adapter and is refused on the inbuilt path, never silently run inbuilt.
+ */
 export const KNOWN_CHIEFS: readonly string[] = ["inbuilt", "claude-code", "codex"];
 
 /** The governance badge per agent (spec §4.2.5a §3, corrected v3.46). */
@@ -40,24 +49,16 @@ export function governanceBadge(mode: GovernanceMode): string {
 
 /**
  * Fail-closed resolution (spec §4.2.5a §1): explicit session value → user
- * default → `inbuilt`. Unknown ids throw — never a silent fallback to the
- * inbuilt engine.
+ * default → `inbuilt`. P53.3 — any non-empty id is accepted (installed-any
+ * Chief: occupancy truth = the Rust shell's install predicate, not a
+ * coordinator enum). Empty/missing falls through to the next precedence
+ * level; only empty-everywhere resolves `inbuilt`.
  */
 export function resolveChiefId(explicit?: string, userDefault?: string): ChiefId {
   if (explicit !== undefined && explicit !== "") {
-    if (!KNOWN_CHIEFS.includes(explicit)) {
-      throw new Error(
-        `unknown primary_chief "${explicit}" — fail-closed (no silent fallback)`,
-      );
-    }
     return explicit;
   }
   if (userDefault !== undefined && userDefault !== "" && userDefault !== INBUILT_CHIEF) {
-    if (!KNOWN_CHIEFS.includes(userDefault)) {
-      throw new Error(
-        `unknown primary_chief default "${userDefault}" — fail-closed (no silent fallback)`,
-      );
-    }
     return userDefault;
   }
   return INBUILT_CHIEF;
@@ -79,13 +80,14 @@ export function resolveSessionChief(opts: {
 }
 
 /**
- * P38 — validate a session-level Chief pin before recording it. Returns the
- * pin when known; throws fail-closed for unknown ids (same vocabulary as
- * `resolveChiefId`).
+ * P38 — validate a session-level Chief pin before recording it. P53.3:
+ * any non-empty id pins (installed-any Chief — occupancy truth lives in
+ * the Rust shell); empty pins throw fail-closed (they would silently read
+ * as "no pin" and misroute to the user default).
  */
 export function validateSessionChiefPin(pin: string): ChiefId {
-  if (!KNOWN_CHIEFS.includes(pin)) {
-    throw new Error(`unknown primary_chief "${pin}" — fail-closed (no silent fallback)`);
+  if (pin === "") {
+    throw new Error(`empty primary_chief pin — fail-closed (no silent fallback)`);
   }
   return pin;
 }
@@ -213,7 +215,8 @@ export class ChiefRegistry {
   private records = new Map<string, ChiefRecord>();
   /** P38 — session-level pins: sessionId → pinned Chief (`inbuilt` | ACP id).
    * A pin outranks the user default for every turn of that session; absent a
-   * pin, the user default applies. Fail-closed on unknown ids. */
+   * pin, the user default applies. P53.3: any non-empty id pins
+   * (installed-any Chief — occupancy truth lives in the Rust shell). */
   private pins = new Map<string, ChiefId>();
 
   record(r: ChiefRecord): void {

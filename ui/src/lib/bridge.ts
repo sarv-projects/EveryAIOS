@@ -836,17 +836,41 @@ export async function sendUserMessage(
       // P38 — the session runs under its Chief. When the Chief is external
       // (pinned or defaulted), launch THAT agent on the ACP channel; when
       // only the selected agent is external, that agent is the Chief.
+      // P53.4 — the FIRST ACP turn after inbuilt work carries the
+      // compact-before-swap handoff bundle (compacted transcript + goal +
+      // taste + file refs; tool blobs stripped). Follow-up turns on the same
+      // handle send no bundle (the agent already holds the context).
       const chiefId = !chiefInbuilt ? sessionChief : catalogId;
       const acpId = acpIdFor(chiefId);
-      let handle = st.acpHandles[catalogId];
+      const handleKey = !chiefInbuilt ? chiefId : catalogId;
+      let handle = st.acpHandles[handleKey];
+      let firstTurn = false;
       if (!handle) {
         const folder =
           st.sessions.find((s) => s.id === sessionId)?.folder ?? "~";
         const info = await acpLaunch(acpId, folder);
         handle = info.handle;
-        st.setAcpHandle(catalogId, handle);
+        st.setAcpHandle(handleKey, handle);
+        firstTurn = true;
       }
-      const result = await acpPrompt(handle, trimmed);
+      let handoff: string | undefined;
+      if (firstTurn && !chiefInbuilt) {
+        const { buildChiefHandoff } = await import("./chief-handoff");
+        handoff = buildChiefHandoff(sessionId) ?? undefined;
+      }
+      const result = await acpPrompt(handle, trimmed, handoff);
+      // P53.5 — visible assistant text folds into the compacted session;
+      // tool history stays in the per-session observability file (never
+      // imported into chat context). Refresh the cached live slash vocab
+      // (P53.1) so the composer's next `/` reflects this turn's advert.
+      const seenCommands = (result.updates ?? []).some(
+        (u) => u.sessionUpdate === "available_commands_update" && (u.availableCommands?.length ?? 0) > 0,
+      );
+      if (seenCommands) {
+        void import("./acp").then(({ acpSessionCommands }) =>
+          acpSessionCommands(handle).catch(() => []),
+        );
+      }
       const pending = result.pendingTickets?.length
         ? ` · ${result.pendingTickets.length} approval(s)`
         : "";

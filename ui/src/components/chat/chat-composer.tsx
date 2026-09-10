@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { classifyAttachment, validateImage } from '@/lib/attachments'
 import {
   ArrowUp,
@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAppStore, sessionTranscriptMarkdown, type ChatMode } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { fuzzyRank } from '@/lib/fuzzy'
+import { splitAtRefs } from '@/lib/at-refs'
 import AgentModelPicker from './agent-model-picker'
 import PendingQueueChips from './pending-queue-chips'
 import { sendUserMessage } from '@/lib/bridge'
@@ -49,6 +50,9 @@ const MACROS: { cmd: string; desc: string; expand: string }[] = [
 const MENTIONS: { cmd: string; desc: string; icon: LucideIcon }[] = [
   { cmd: '@files', desc: 'Attach a workspace file as turn context', icon: FileText },
 ]
+
+export { splitAtRefs } from '@/lib/at-refs'
+// (Re-exported for the P53.8 test path — the composer imports it from the lib.)
 
 function HintPopover({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -221,15 +225,61 @@ export default function ChatComposer({ budget, centered }: Props) {
 
   // P52.11 — fuzzy subsequence match (typo-tolerant) instead of strict
   // substring: '/mdoe' still surfaces '/mode', '@fl' finds '@files'.
+  // P53.1/53.2 — while an external Chief is pinned, the local EveryAIOS
+  // slash table is hidden: the agent's live vocabulary (from the most
+  // recent `available_commands_update`) is the only `/` source, and its
+  // items submit as `session/prompt` text (never a local intercept).
+  const externalChief = useAppStore((s) => {
+    const sid = s.activeSessionId
+    const chief = s.sessionChiefs[sid] ?? s.userDefaultChief ?? 'inbuilt'
+    return chief !== 'inbuilt' && chief !== 'everyaios-native' && chief !== 'everyaios' && chief !== ''
+      ? chief
+      : null
+  })
+  const [liveSlash, setLiveSlash] = useState<{ name: string; description: string }[]>([])
+  useEffect(() => {
+    // Only fetch while external — inbuilt keeps the static table.
+    if (!externalChief) {
+      setLiveSlash([])
+      return
+    }
+    let alive = true
+    void (async () => {
+      try {
+        const st = useAppStore.getState()
+        const catalogId = st.selectedAgentId
+        const handle = st.acpHandles[catalogId] ?? st.acpHandles[externalChief]
+        if (!handle) return
+        const { acpSessionCommands } = await import('@/lib/acp')
+        const rows = await acpSessionCommands(handle)
+        if (alive) setLiveSlash(rows.map((r) => ({ name: r.name, description: r.description })))
+      } catch {
+        if (alive) setLiveSlash([])
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [externalChief, composerValue === '' ? 'empty' : 'typing'])
   const hintList: { title: string; items: HintItem[] } | null = (() => {
     if (!hint) return null
     const q = hint.q
-    if (hint.kind === 'slash')
+    if (hint.kind === 'slash') {
+      if (externalChief) {
+        // P53.2 — no local intercept: show only the agent's live commands.
+        const live = liveSlash.map((c) => ({ cmd: `/${c.name}`, desc: c.description }))
+        if (live.length === 0) return null
+        return {
+          title: `/${externalChief} commands (live)`,
+          items: fuzzyRank(q, live, (c) => c.cmd).map((c) => ({ ...c, color: 'text-emerald-300' })),
+        }
+      }
       return {
         title: 'Slash commands',
         items: fuzzyRank(q, SLASH_COMMANDS, (c) => c.cmd)
           .map((c) => ({ ...c, color: 'text-orange-300' })),
       }
+    }
     if (hint.kind === 'macro')
       return {
         title: 'Macros',
@@ -290,6 +340,14 @@ export default function ChatComposer({ budget, centered }: Props) {
 
   const runSlash = (text: string, busy?: boolean): boolean => {
     const st = useAppStore.getState()
+    // P53.2 — Chief-dependent slash intercept: while an external Chief is
+    // pinned, EveryAIOS `/help /mode /model /undo /compact /clear /export`
+    // must NOT steal the agent's `/` (e.g. Claude Code `/compact`). Return
+    // false so the text goes to the ACP channel as `session/prompt` text.
+    const effChief = st.sessionChiefs[st.activeSessionId] ?? st.userDefaultChief ?? 'inbuilt'
+    const externalPinned =
+      effChief !== 'inbuilt' && effChief !== 'everyaios-native' && effChief !== 'everyaios' && effChief !== ''
+    if (externalPinned) return false
     const [head, ...rest] = text.trim().split(/\s+/)
     const arg = rest.join(' ')
     switch (head) {
@@ -432,9 +490,17 @@ export default function ChatComposer({ budget, centered }: Props) {
     const macro = MACROS.find((m) => m.cmd === first)
     if (macro) text = `${text} ${macro.expand}`
     if (!text.trim() && !attachment) return
+    // P53.8 — `@path` file refs: extract refs (path refs for the ACP
+    // resource seam when advertised) and send the clean text. The `@files`
+    // picker attachment still rides as `userDocuments` text.
+    // Sync import (the splitter is pure) — the send path stays sync.
+    const { clean, refs } = splitAtRefs(text)
+    const refSuffix = refs.length > 0 ? `\n\n[refs: ${refs.map((r) => `@${r}`).join(' ')}]` : ''
+    const sendText = (clean.trim() ? clean : text) + refSuffix
     const ctx = attachment
+    setComposerValue('')
     setAttachment(null)
-    void sendUserMessage(text, ctx ? { title: ctx.title, content: ctx.content } : undefined)
+    void sendUserMessage(sendText, ctx ? { title: ctx.title, content: ctx.content } : undefined)
   }
 
   return (

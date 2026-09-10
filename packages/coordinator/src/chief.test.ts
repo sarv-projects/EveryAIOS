@@ -37,9 +37,18 @@ describe("resolveSessionChief — per-session pin precedence", () => {
     expect(resolveSessionChief({})).toBe("inbuilt");
   });
 
-  test("unknown pin refuses fail-closed", () => {
-    expect(() => validateSessionChiefPin("not-a-chief")).toThrow(/fail-closed/);
-    expect(() => chiefRegistry.setSessionPin("s-pin", "not-a-chief")).toThrow(/fail-closed/);
+  test("P53.3 installed-any Chief: any non-empty pin pins (no enum gate)", () => {
+    expect(chiefRegistry.setSessionPin("s-pin", "grok")).toBe("grok");
+    expect(chiefRegistry.sessionPin("s-pin")).toBe("grok");
+    chiefRegistry.clearSessionPin("s-pin");
+    expect(chiefRegistry.setSessionPin("s-pin", "not-a-chief")).toBe("not-a-chief");
+    expect(chiefRegistry.sessionPin("s-pin")).toBe("not-a-chief");
+  });
+
+  test("empty pin refuses fail-closed (would silently read as no pin)", () => {
+    chiefRegistry.clearSessionPin("s-pin");
+    expect(() => validateSessionChiefPin("")).toThrow(/fail-closed/);
+    expect(() => chiefRegistry.setSessionPin("s-pin", "")).toThrow(/fail-closed/);
     expect(chiefRegistry.sessionPin("s-pin")).toBeUndefined();
   });
 
@@ -57,21 +66,21 @@ describe("resolveSessionChief — per-session pin precedence", () => {
   });
 });
 
-describe("resolveChiefId — fail-closed resolution", () => {
-  test("explicit session value wins", () => {
+describe("resolveChiefId — installed-any resolution (P53.3)", () => {
+  test("explicit session value wins (any non-empty id, not an enum)", () => {
     expect(resolveChiefId("codex", "inbuilt")).toBe("codex");
     expect(resolveChiefId("claude-code", "inbuilt")).toBe("claude-code");
+    expect(resolveChiefId("grok", "inbuilt")).toBe("grok");
+    expect(resolveChiefId("opencode", "codex")).toBe("opencode");
   });
 
   test("falls back to the user default then inbuilt", () => {
     expect(resolveChiefId(undefined, "codex")).toBe("codex");
+    expect(resolveChiefId(undefined, "grok")).toBe("grok");
     expect(resolveChiefId(undefined, undefined)).toBe("inbuilt");
     expect(resolveChiefId(undefined, "inbuilt")).toBe("inbuilt");
-  });
-
-  test("unknown ids refuse — never a silent fallback", () => {
-    expect(() => resolveChiefId("not-a-chief", "inbuilt")).toThrow(/fail-closed/);
-    expect(() => resolveChiefId(undefined, "not-a-chief")).toThrow(/fail-closed/);
+    expect(resolveChiefId("", undefined)).toBe("inbuilt");
+    expect(resolveChiefId("", "codex")).toBe("codex");
   });
 });
 

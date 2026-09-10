@@ -31,9 +31,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use everyaios_acp::{
-    AcpSession, AuthMethod, ClientInfo, Distribution, Installer, LaunchRegistry,
-    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, RegistryClient, RegistryPolicy,
-    ToolCall, ToolKind,
+    AcpSession, AuthMethod, AvailableCommand, ClientInfo, Distribution, Installer, LaunchRegistry,
+    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, PromptOutcome, RegistryClient,
+    RegistryPolicy, ToolCall, ToolKind,
 };
 use everyaios_core::config::Config;
 use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
@@ -48,23 +48,39 @@ static ACP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// P38 — read the `primary_chief` default (`inbuilt` | ACP agent id). The
 /// dispatcher resolves: explicit session value → this default → `inbuilt`.
+/// P53.3 — `known` is the live launch-registry id set (inbuilt + every
+/// registry agent), never a hardcoded trio.
 #[tauri::command]
 pub fn chief_default_get() -> Result<serde_json::Value, String> {
     let cfg = Config::load().map_err(|e| e.to_string())?;
+    let mut known = vec!["inbuilt".to_string()];
+    known.extend(
+        LaunchRegistry::builtin()
+            .agents
+            .iter()
+            .map(|m| m.id.clone()),
+    );
     Ok(serde_json::json!({
         "primaryChief": cfg.primary_chief,
-        "known": ["inbuilt", "claude-code", "codex"]
+        "known": known
     }))
 }
 
-/// P38 — set the `primary_chief` default. Unknown ids are refused (fail
-/// closed) so a typo never silently falls back to the inbuilt engine.
+/// P53.3 — set the `primary_chief` default. Occupancy is **any installed**
+/// agent: the id must be in the launch registry **and** installed (an
+/// EveryAIOS install record or a PATH-discovered binary — `inbuilt` is always
+/// installed). Unknown or not-installed ids are refused fail-closed so a typo
+/// or a missing binary never silently falls back to the inbuilt engine.
 #[tauri::command]
 pub fn chief_default_set(primary_chief: String) -> Result<String, String> {
-    let known = ["inbuilt", "claude-code", "codex"];
-    if !known.contains(&primary_chief.as_str()) {
+    if primary_chief != "inbuilt" && LaunchRegistry::builtin().get(&primary_chief).is_none() {
         return Err(format!(
-            "unknown primary_chief {primary_chief:?} — must be one of {known:?} (fail-closed, no silent fallback)"
+            "unknown primary_chief {primary_chief:?} — no registered launch path (fail-closed, no silent fallback)"
+        ));
+    }
+    if !agent_installed(&primary_chief) {
+        return Err(format!(
+            "primary_chief {primary_chief:?} is not installed — install it (F8) or put it on PATH first (fail-closed)"
         ));
     }
     let path = Config::config_path().map_err(|e| e.to_string())?;
@@ -72,6 +88,30 @@ pub fn chief_default_set(primary_chief: String) -> Result<String, String> {
     cfg.primary_chief = primary_chief.clone();
     cfg.save(&path).map_err(|e| e.to_string())?;
     Ok(primary_chief)
+}
+
+/// P53.3 — installed-ness for Chief occupancy: `inbuilt` always; otherwise an
+/// EveryAIOS install record **or** a PATH-discovered binary (the same two legs
+/// `acp_install_status` reports — one predicate, no second definition).
+fn agent_installed(agent_id: &str) -> bool {
+    if agent_id == "inbuilt" || agent_id == "everyaios" {
+        return true;
+    }
+    let registry = LaunchRegistry::builtin();
+    if installer().installed(agent_id).is_some() {
+        return true;
+    }
+    match registry.get(agent_id).map(|m| &m.distribution) {
+        Some(Distribution::Binary { command, .. }) => {
+            !command.is_empty() && resolve_on_path(command).is_some()
+        }
+        // npx/uvx agents fetch on demand — "installed" means the package
+        // manager itself resolves on PATH (launch would otherwise fail
+        // closed at spawn with no npx/uvx at all).
+        Some(Distribution::Npx { .. }) => resolve_on_path("npx").is_some(),
+        Some(Distribution::Uvx { .. }) => resolve_on_path("uvx").is_some(),
+        None => false,
+    }
 }
 
 /// A live ACP agent session + the id it was launched under.
@@ -85,6 +125,10 @@ pub(crate) struct AcpHandle {
     pub auth_required: bool,
     /// The methods the agent advertised in `initialize` (`authMethods`).
     pub auth_methods: Vec<AuthMethod>,
+    /// P53.1 — the agent's last advertised slash vocabulary (from the most
+    /// recent `available_commands_update` on this handle; empty until the
+    /// agent sends one). Served to the composer via `acp_session_commands`.
+    pub available_commands: Vec<AvailableCommand>,
     pub session: AcpSession<ProcessTransport>,
 }
 
@@ -547,12 +591,26 @@ pub fn acp_launch(
         .ok_or_else(|| format!("no launch plan for {agent_id}"))?;
 
     // F8: if a binary agent is installed, launch the extracted binary path
-    // (not the seed's PATH command), merging the installed env.
+    // (not the seed's PATH command), merging the installed env. P53.7: with
+    // no install record, resolve the seed command on PATH so a user-installed
+    // CLI launches by its discovered absolute path — never a bare-name guess
+    // that depends on the child's inherited PATH.
     let installed = installer().installed(&agent_id);
+    let path_resolved = match &plan {
+        p if matches!(
+            registry.get(&agent_id).map(|m| &m.distribution),
+            Some(Distribution::Binary { .. })
+        ) =>
+        {
+            resolve_on_path(&p.command).map(|p| p.to_string_lossy().into_owned())
+        }
+        _ => None,
+    };
     let command = installed
         .as_ref()
         .and_then(|o| o.binary_path.as_ref())
         .map(|p| p.to_string_lossy().into_owned())
+        .or(path_resolved)
         .unwrap_or_else(|| plan.command.clone());
 
     let mut env: Vec<(&str, &str)> = plan
@@ -601,6 +659,7 @@ pub fn acp_launch(
                 cwd,
                 auth_required,
                 auth_methods: auth_methods.clone(),
+                available_commands: Vec::new(),
                 session,
             },
         );
@@ -692,6 +751,175 @@ fn build_acp_prompt_with_passport(
     everyaios_acp::build_chief_prompt(text, &core_facts, &governance)
 }
 
+/// P53.5 — per-session tool observability file. Each ACP turn appends one
+/// JSON line with the visible prompt prefix + the turn's tool-call rows +
+/// stop reason to `<data_dir>/acp_sessions/<session>/tool_log.jsonl`. This is
+/// metrics the user can open ("what did it run?") — it is never imported into
+/// chat context (the return path folds only visible assistant text). Best
+/// effort: a logging failure never fails the turn.
+fn append_acp_tool_log(
+    session_id: &str,
+    handle: &str,
+    agent_id: &str,
+    text: &str,
+    outcome: &PromptOutcome,
+) {
+    let safe: String = session_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let dir = everyaios_core::default_data_dir()
+        .join("acp_sessions")
+        .join(if safe.is_empty() { "unknown" } else { &safe });
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let tools: Vec<serde_json::Value> = outcome
+        .updates
+        .iter()
+        .filter(|u| u.session_update.starts_with("tool_call"))
+        .map(|u| {
+            serde_json::json!({
+                "toolCallId": u.tool_call_id,
+                "title": u.title,
+                "kind": u.kind,
+                "status": u.status,
+            })
+        })
+        .collect();
+    let mut prompt_prefix = text.chars().take(240).collect::<String>();
+    if text.chars().count() > 240 {
+        prompt_prefix.push('…');
+    }
+    let line = serde_json::json!({
+        "tsMs": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0),
+        "handle": handle,
+        "agentId": agent_id,
+        "promptPrefix": prompt_prefix,
+        "stopReason": outcome.stop_reason.as_str(),
+        "toolCalls": tools,
+    });
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("tool_log.jsonl"))
+    {
+        use std::io::Write;
+        let _ = writeln!(f, "{}", line);
+    }
+}
+
+/// P53.6 — Settings → Subagents rows: **installed CLIs only** (an
+/// EveryAIOS install record or a PATH-discovered binary — the same
+/// `agent_installed` predicate Chief occupancy uses). Each row carries the
+/// shipped default when-to-use text (the registry manifest description) plus
+/// the user's override from `everyaios.toml` (`subagent_notes`; empty =
+/// default). The Chief reads these at delegate time (ACP prompt injection +
+/// handoff bundle).
+#[tauri::command]
+pub fn chief_subagents() -> Result<Vec<serde_json::Value>, String> {
+    let cfg = Config::load().map_err(|e| e.to_string())?;
+    let registry = LaunchRegistry::builtin();
+    let mut rows = Vec::new();
+    for m in &registry.agents {
+        if m.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
+            continue;
+        }
+        if !agent_installed(&m.id) {
+            continue;
+        }
+        let note = cfg.subagent_notes.get(&m.id).cloned().unwrap_or_default();
+        rows.push(serde_json::json!({
+            "agentId": m.id,
+            "name": m.name,
+            "defaultWhenToUse": m.description,
+            "whenToUse": if note.is_empty() { m.description.clone() } else { note.clone() },
+            "customized": !note.is_empty(),
+        }));
+    }
+    Ok(rows)
+}
+
+/// P53.6 — set (or clear, with an empty note) the user's when-to-use override
+/// for one installed subagent CLI. Refuses unknown/uninstalled ids — notes
+/// attach only to real occupancy candidates.
+#[tauri::command]
+pub fn chief_subagent_set_note(agent_id: String, note: String) -> Result<String, String> {
+    if LaunchRegistry::builtin().get(&agent_id).is_none() {
+        return Err(format!("unknown agent id: {agent_id}"));
+    }
+    if !agent_installed(&agent_id) {
+        return Err(format!("agent {agent_id} is not installed"));
+    }
+    let path = Config::config_path().map_err(|e| e.to_string())?;
+    let mut cfg = Config::load().map_err(|e| e.to_string())?;
+    let trimmed = note.trim().to_string();
+    if trimmed.is_empty() {
+        cfg.subagent_notes.remove(&agent_id);
+    } else {
+        cfg.subagent_notes.insert(agent_id.clone(), trimmed);
+    }
+    cfg.save(&path).map_err(|e| e.to_string())?;
+    Ok(agent_id)
+}
+#[tauri::command]
+pub fn acp_session_commands(
+    state: State<'_, AppState>,
+    handle: String,
+) -> Result<Vec<AvailableCommand>, String> {
+    let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+    let entry = sessions
+        .get(&handle)
+        .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+    Ok(entry.available_commands.clone())
+}
+
+/// P53.5 — read the per-session tool observability file (newest last).
+/// Empty until the first ACP turn lands for that session. A missing file is
+/// honest emptiness, not an error. The session id is sanitized exactly like
+/// the writer (`append_acp_tool_log`) so reads cannot escape the dir.
+#[tauri::command]
+pub fn acp_tool_log(session_id: String) -> Result<Vec<serde_json::Value>, String> {
+    let safe: String = session_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let path = everyaios_core::default_data_dir()
+        .join("acp_sessions")
+        .join(if safe.is_empty() { "unknown" } else { &safe })
+        .join("tool_log.jsonl");
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(r) => r,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e.to_string()),
+    };
+    let mut out = Vec::new();
+    for line in raw.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+            out.push(v);
+        }
+    }
+    Ok(out)
+}
 /// Drive one ACP prompt turn. The agent's `session/request_permission`
 /// requests route through the shared Guard-2 service: `Allow` auto-allows,
 /// `Block` denies, and `Ask` denies the current turn while minting a ticket
@@ -701,6 +929,7 @@ pub fn acp_prompt(
     state: State<'_, AppState>,
     handle: String,
     text: String,
+    handoff: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
     let entry = sessions
@@ -743,7 +972,17 @@ pub fn acp_prompt(
     // P38 (spec §4.2.5a §2) — the external Chief gets the same memory
     // passport + governance context as the inbuilt path: prepend the warm set
     // (C10) and the honest governance block before the turn text.
-    let prompt_text = build_acp_prompt_with_passport(&state, &text, &agent_id);
+    // P53.4 — compact-before-swap handoff bundle: the UI injects the live
+    // compacted view (post-/compact transcript + goal/plan/tickets + file
+    // refs, tool blobs stripped) on the first ACP turn after inbuilt work.
+    // It rides ahead of the memory passport (newest context first) and is
+    // bounded (the builder caps it) so a huge transcript never floods the
+    // agent's context. Absent = a same-Chief follow-up turn.
+    let mut prompt_text = build_acp_prompt_with_passport(&state, &text, &agent_id);
+    if let Some(bundle) = handoff.as_ref().map(|h| h.trim()).filter(|h| !h.is_empty()) {
+        let capped: String = bundle.chars().take(6000).collect();
+        prompt_text = format!("<chief_handoff>\n{capped}\n</chief_handoff>\n\n{prompt_text}");
+    }
 
     let mut pending_tickets: Vec<String> = Vec::new();
     let outcome = entry
@@ -806,6 +1045,23 @@ pub fn acp_prompt(
         })
         .map_err(|e| e.to_string())?;
     drop(sessions);
+
+    // P53.1 — harvest the agent's live slash vocabulary: the most recent
+    // `available_commands_update` on this turn replaces the handle's stored
+    // list (agents re-advertise on every turn; stale lists never persist).
+    // P53.5 — append the turn's tool history to the per-session observability
+    // file (metrics the user can open; never imported into chat context).
+    {
+        let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+        if let Some(entry) = sessions.get_mut(&handle) {
+            for u in &outcome.updates {
+                if u.is_available_commands_update() && !u.available_commands.is_empty() {
+                    entry.available_commands = u.available_commands.clone();
+                }
+            }
+        }
+        append_acp_tool_log(&session_id, &handle, &agent_id, &text, &outcome);
+    }
 
     if let Some(ref eid) = exec_id {
         if let Ok(relay) = state.chat_relay.lock() {

@@ -72,6 +72,14 @@ export interface AcpHandleInfo {
   authMethods: AuthMethod[];
 }
 
+/** One live slash command advertised by the agent (P53.1). */
+export interface AvailableCommand {
+  name: string
+  description: string
+  /** Optional JSON-schema-ish input hint (opaque — rendered as help text). */
+  input?: unknown
+}
+
 export interface AcpPromptUpdate {
   sessionId?: string;
   sessionUpdate?: string;
@@ -79,6 +87,8 @@ export interface AcpPromptUpdate {
   toolCallId?: string;
   title?: string;
   status?: string;
+  /** P53.1 — live slash vocabulary (only on `available_commands_update`). */
+  availableCommands?: AvailableCommand[];
 }
 
 export interface AcpPromptResult {
@@ -190,8 +200,54 @@ export async function acpAuthenticate(
 export async function acpPrompt(
   handle: string,
   text: string,
+  handoff?: string,
 ): Promise<AcpPromptResult> {
-  return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", { handle, text }));
+  return nativeCall('ACP prompt', () => invoke<AcpPromptResult>("acp_prompt", handoff ? { handle, text, handoff } : { handle, text }));
+}
+
+/** P53.1 — the agent's live slash vocabulary for one ACP handle (from the
+ * most recent `available_commands_update`; empty until the agent sends one).
+ * Never a hardcoded per-harness table. */
+export async function acpSessionCommands(handle: string): Promise<AvailableCommand[]> {
+  return nativeCall('ACP session commands', () => invoke<AvailableCommand[]>("acp_session_commands", { handle }));
+}
+
+/** P53.5 — per-session tool observability (one row per ACP turn). Metrics
+ * the user can open — never imported into chat context. */
+export interface AcpToolLogEntry {
+  tsMs: number
+  handle: string
+  agentId: string
+  promptPrefix: string
+  stopReason: string
+  toolCalls: { toolCallId: string; title: string; kind?: string; status?: string }[]
+}
+
+/** P53.5 — read the session's tool log (newest last). Empty until the first
+ * ACP turn lands for that session. */
+export async function acpToolLog(sessionId: string): Promise<AcpToolLogEntry[]> {
+  return nativeCall('ACP tool log', () => invoke<AcpToolLogEntry[]>("acp_tool_log", { sessionId }));
+}
+
+/** P53.6 — one installed subagent CLI + its shipped vs user when-to-use. */
+export interface SubagentRow {
+  agentId: string
+  name: string
+  defaultWhenToUse: string
+  whenToUse: string
+  customized: boolean
+}
+
+/** P53.6 — installed CLIs only (same `agent_installed` predicate Chief
+ * occupancy uses). Empty = none installed on this machine yet. */
+export async function chiefSubagents(): Promise<SubagentRow[]> {
+  return nativeCall('chief subagents', () => invoke<SubagentRow[]>("chief_subagents"));
+}
+
+/** P53.6 — set (or clear, with an empty note) one installed subagent's
+ * when-to-use override. Refuses unknown/uninstalled ids fail-closed. */
+export async function chiefSubagentSetNote(agentId: string, note: string): Promise<string> {
+  return nativeCall('chief subagent note', () => invoke<string>("chief_subagent_set_note", { agentId, note }));
 }
 
 /** F8 — refresh the official ACP registry cache from the CDN (network).

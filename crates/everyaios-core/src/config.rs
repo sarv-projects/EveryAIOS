@@ -31,12 +31,18 @@ pub struct Config {
     /// these before the router so users type short names everywhere.
     #[serde(default)]
     pub model_aliases: std::collections::HashMap<String, String>,
-    /// P38 (v3.45) — the session's top brain: `inbuilt` | an ACP-registered
-    /// agent id (`claude-code`, `codex`, …). Read at session start; resolution
-    /// = explicit session value → this default → `inbuilt`. Unknown ids fail
-    /// closed (never a silent fallback to inbuilt).
+    /// P38 (v3.45) — the session's top brain: `inbuilt` | any installed
+    /// registry agent id (P53.3 — occupancy is the installed set, never a
+    /// hardcoded trio). Read at session start; resolution = explicit session
+    /// value → this default → `inbuilt`. Unknown/uninstalled ids fail closed
+    /// (never a silent fallback to inbuilt).
     #[serde(default = "default_primary_chief")]
     pub primary_chief: String,
+    /// P53.6 — user-edited when-to-use notes per installed subagent CLI
+    /// (agent id → note). Shown in Settings → Subagents next to the shipped
+    /// default; exposed to the Chief at delegate time. Empty = use default.
+    #[serde(default)]
+    pub subagent_notes: std::collections::HashMap<String, String>,
 }
 
 fn default_primary_chief() -> String {
@@ -55,6 +61,7 @@ impl Default for Config {
             local: LocalConfig::default(),
             model_aliases: std::collections::HashMap::new(),
             primary_chief: default_primary_chief(),
+            subagent_notes: std::collections::HashMap::new(),
         }
     }
 }

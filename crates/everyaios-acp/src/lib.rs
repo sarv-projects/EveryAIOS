@@ -42,12 +42,12 @@ pub use harness_config::{
 pub use installer::{InstallError, InstallOutcome, Installer, OwnershipMarker};
 pub use messages::{
     AgentCapabilities, AgentInfo, AuthMethod, AuthMethodType, AuthenticateParams,
-    AuthenticateResult, ClientCapabilities, ClientInfo, ContentBlock, FsCapabilities,
-    InitializeParams, InitializeResult, Location, McpServer, PermissionDecision, PermissionOption,
-    PermissionOptionKind, PermissionOutcome, PermissionRequestParams, PermissionResult, Position,
-    PromptCapabilities, PromptContent, SessionNewParams, SessionNewResult, SessionPromptParams,
-    SessionPromptResult, SessionUpdate, StopReason, TextRange, ToolCall, ToolKind, ToolStatus,
-    PROTOCOL_VERSION,
+    AuthenticateResult, AvailableCommand, ClientCapabilities, ClientInfo, ContentBlock,
+    FsCapabilities, InitializeParams, InitializeResult, Location, McpServer, PermissionDecision,
+    PermissionOption, PermissionOptionKind, PermissionOutcome, PermissionRequestParams,
+    PermissionResult, Position, PromptCapabilities, PromptContent, SessionNewParams,
+    SessionNewResult, SessionPromptParams, SessionPromptResult, SessionUpdate, StopReason,
+    TextRange, ToolCall, ToolKind, ToolStatus, PROTOCOL_VERSION,
 };
 pub use registry::{
     AuthMode, Distribution, HarnessManifest, HarnessProtocol, LaunchPlan, LaunchRegistry,

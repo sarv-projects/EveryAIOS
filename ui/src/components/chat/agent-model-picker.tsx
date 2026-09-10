@@ -98,11 +98,15 @@ export default function AgentModelPicker({ compact }: Props) {
       .catch(() => {})
   }, [])
   // Map the picker's runtime id onto a chief id (only chief-eligible agents).
+  // P53.3 — installed-any Chief: every registry row is chief-eligible; only
+  // the inbuilt runtime maps to `inbuilt`. Installed-ness is enforced by the
+  // shell (`chief_default_set` refuses unknown/uninstalled ids fail-closed),
+  // so the picker never gates on a hardcoded trio.
   const chiefIdFor = (runtimeId: string): string | null =>
-    runtimeId === 'everyaios-native'
+    runtimeId === 'everyaios-native' || runtimeId === 'everyaios'
       ? 'inbuilt'
-      : runtimeId === 'claude-code' || runtimeId === 'codex'
-        ? runtimeId
+      : runtimeId
+        ? acpIdFor(runtimeId)
         : null
   const chiefEligibleId = chiefIdFor(agent.id)
   const defaultChiefLabel =
@@ -135,13 +139,13 @@ export default function AgentModelPicker({ compact }: Props) {
   const setSessionChiefPin = useAppStore((s) => s.setSessionChiefPin)
   const clearSessionChiefPin = useAppStore((s) => s.clearSessionChiefPin)
   const handlePinChief = () => {
-    if (!chiefEligibleId) {
-      notify(`${agent.name} is not Chief-eligible`)
-      return
-    }
     const sessionId = useAppStore.getState().activeSessionId
     if (!sessionId) {
       notify('No active session to pin to')
+      return
+    }
+    if (!chiefEligibleId) {
+      notify(`${agent.name} has no chief id to pin`)
       return
     }
     // P38 — clicking the already-pinned Chief unpins (surfaces the durable

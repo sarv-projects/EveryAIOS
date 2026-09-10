@@ -339,6 +339,25 @@ pub struct SessionUpdate {
     pub locations: Vec<Location>,
     pub raw_input: Option<serde_json::Value>,
     pub raw_output: Option<serde_json::Value>,
+    /// P53.1 — the agent's live slash vocabulary. Present only on
+    /// `available_commands_update`; empty otherwise. Stored per ACP handle and
+    /// served to the composer — never a hardcoded per-harness table.
+    #[serde(default)]
+    pub available_commands: Vec<AvailableCommand>,
+}
+
+/// One live slash command advertised by the agent
+/// (`available_commands_update.availableCommands[]` — ACP slash-commands
+/// surface: `{name, description, input?}`, no leading `/`; the client
+/// displays `/name` and submits `/name args` as `session/prompt` text).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AvailableCommand {
+    pub name: String,
+    pub description: String,
+    /// Optional JSON-schema-ish input hint. Opaque to us (rendered as help
+    /// text); never executed.
+    pub input: Option<serde_json::Value>,
 }
 
 impl SessionUpdate {
@@ -348,6 +367,11 @@ impl SessionUpdate {
 
     pub fn is_tool_call_update(&self) -> bool {
         self.session_update == "tool_call_update"
+    }
+
+    /// P53.1 — this update carries the agent's live slash vocabulary.
+    pub fn is_available_commands_update(&self) -> bool {
+        self.session_update == "available_commands_update"
     }
 }
 
@@ -561,5 +585,40 @@ mod tests {
         let v = serde_json::to_value(c).unwrap();
         assert_eq!(v["type"], "text");
         assert_eq!(v["text"], "hello");
+    }
+
+    #[test]
+    fn available_commands_update_parses_live_slash_vocab() {
+        // P53.1 — the exact ACP wire shape: `sessionUpdate:
+        // "available_commands_update"` + `availableCommands[]`. `input` is
+        // optional; a missing list degrades to empty, never an error.
+        let v = serde_json::json!({
+            "sessionId": "s1",
+            "sessionUpdate": "available_commands_update",
+            "availableCommands": [
+                {"name": "compact", "description": "Compact the conversation"},
+                {"name": "review", "description": "Review the diff",
+                 "input": {"type": "object"}}
+            ]
+        });
+        let u: SessionUpdate = serde_json::from_value(v).unwrap();
+        assert!(u.is_available_commands_update());
+        assert_eq!(u.available_commands.len(), 2);
+        assert_eq!(u.available_commands[0].name, "compact");
+        assert_eq!(
+            u.available_commands[0].description,
+            "Compact the conversation"
+        );
+        assert!(u.available_commands[0].input.is_none());
+        assert!(u.available_commands[1].input.is_some());
+
+        // A tool_call update carries no commands (empty, not absent-error).
+        let t: SessionUpdate = serde_json::from_value(serde_json::json!({
+            "sessionId": "s1",
+            "sessionUpdate": "agent_message_chunk",
+        }))
+        .unwrap();
+        assert!(!t.is_available_commands_update());
+        assert!(t.available_commands.is_empty());
     }
 }

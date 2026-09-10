@@ -634,9 +634,93 @@ export function ExpertsSection() {
     'experts.on',
     Object.fromEntries(EXPERTS.map((e) => [e.id, e.id !== 'ui'])),
   )
+  // P53.6 — Settings → Subagents: installed CLIs only (same `agent_installed`
+  // predicate Chief occupancy uses) + user-editable when-to-use per row.
+  const [subs, setSubs] = useState<{ agentId: string; name: string; defaultWhenToUse: string; whenToUse: string; customized: boolean }[] | null>(null)
+  const [subsErr, setSubsErr] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      if (!inTauri()) return
+      try {
+        const { chiefSubagents } = await import('@/lib/acp')
+        const rows = await chiefSubagents()
+        if (alive) {
+          setSubs(rows)
+          setSubsErr(null)
+        }
+      } catch (e) {
+        if (alive) {
+          setSubs([])
+          setSubsErr(e instanceof Error ? e.message : String(e))
+        }
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+  const saveNote = (agentId: string) =>
+    void (async () => {
+      try {
+        const { chiefSubagentSetNote, chiefSubagents } = await import('@/lib/acp')
+        await chiefSubagentSetNote(agentId, draft)
+        const rows = await chiefSubagents()
+        setSubs(rows)
+        setEditing(null)
+        notify(draft.trim() ? `When-to-use saved for ${agentId}` : `When-to-use reset to default for ${agentId}`)
+      } catch (e) {
+        notify(e instanceof Error ? e.message : 'Save failed', 'error')
+      }
+    })()
   return (
-    <SectionShell title="Experts / subagents" desc="Built-in roles. Switching models in chat only affects the lead agent.">
-      <Honest>B3 subagents are specified (depth ≤2, concurrency ≤6). This list is the UI for those roles — spawn is not a live fan-out from this screen.</Honest>
+    <SectionShell title="Experts / subagents" desc="Built-in roles plus installed agent CLIs the Chief may delegate to.">
+      <Honest>B3 subagents are specified (depth ≤2, concurrency ≤6). Built-in roles toggle below; installed CLIs list with their shipped when-to-use (editable — the Chief reads it at delegate time).</Honest>
+      {inTauri() && (
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium">Installed subagent CLIs {subs === null ? '…' : `(${subs.length})`}</div>
+          {subsErr && <p className="text-[10px] text-muted-foreground">Could not load installed CLIs: {subsErr}</p>}
+          {subs !== null && subs.length === 0 && !subsErr && (
+            <p className="text-[10px] text-muted-foreground">No agent CLIs installed on this machine yet — install one (Agents & Models) to delegate.</p>
+          )}
+          <ul className="space-y-1.5">
+            {(subs ?? []).map((r) => (
+              <li key={r.agentId} className="rounded-md border border-border/50 bg-background/30 px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium">{r.name} <span className="font-mono text-[9px] text-muted-foreground">{r.agentId}</span></div>
+                    {editing === r.agentId ? (
+                      <Textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        placeholder={r.defaultWhenToUse}
+                        className="mt-1 min-h-[56px] font-mono text-[11px]"
+                      />
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">{r.whenToUse}{r.customized ? ' (customized)' : ''}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-1.5 flex gap-2">
+                  {editing === r.agentId ? (
+                    <>
+                      <Button size="sm" className="h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400" onClick={() => saveNote(r.agentId)}>Save</Button>
+                      <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setEditing(null)}>Cancel</Button>
+                      {r.customized && (
+                        <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => { setDraft(''); setEditing(r.agentId); }} title="Clear the override back to the shipped default">Reset</Button>
+                      )}
+                    </>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => { setEditing(r.agentId); setDraft(r.customized ? r.whenToUse : '') }}>Edit when-to-use</Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <ul className="space-y-1.5">
         {EXPERTS.map((e) => (
           <li key={e.id} className="flex items-start justify-between gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2">

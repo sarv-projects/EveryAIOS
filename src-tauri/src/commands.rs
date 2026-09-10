@@ -163,6 +163,11 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         acp_cmds::acp_agents,
         acp_cmds::acp_launch,
         acp_cmds::acp_prompt,
+        acp_cmds::acp_session_commands,
+        acp_cmds::acp_tool_log,
+        // P53.6 — Settings → Subagents rows + when-to-use note edits.
+        acp_cmds::chief_subagents,
+        acp_cmds::chief_subagent_set_note,
         acp_cmds::acp_cancel,
         acp_cmds::acp_shutdown,
         acp_cmds::acp_sessions,
