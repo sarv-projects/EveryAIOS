@@ -14,7 +14,32 @@ function lastMessage(sessionId: string) {
   return session?.messages[session.messages.length - 1]
 }
 
-afterAll(() => resetStreamingTestState())
+// P58.9 — the Settings → Notifications switches must actually gate the live
+// stream. `readPref` reads `window.localStorage`, so the tests stub `window`
+// with a single-key store and restore it afterwards.
+const originalWindow = (globalThis as { window?: unknown }).window
+
+function stubNotifyPref(key: string, value: boolean) {
+  ;(globalThis as { window?: unknown }).window = {
+    localStorage: {
+      getItem: (k: string) =>
+        k === `everyaios.settings.${key}` ? JSON.stringify(value) : null,
+    },
+  }
+}
+
+function restoreWindow() {
+  if (originalWindow === undefined) {
+    delete (globalThis as { window?: unknown }).window
+  } else {
+    ;(globalThis as { window?: unknown }).window = originalWindow
+  }
+}
+
+afterAll(() => {
+  resetStreamingTestState()
+  restoreWindow()
+})
 
 describe('chat event routing', () => {
   test('routes events to their session even after the active tab changes', () => {
@@ -71,5 +96,36 @@ describe('chat event routing', () => {
 
     expect(lastMessage(sid)?.content).toBe('')
     expect(useAppStore.getState().sessions.find((s) => s.id === sid)?.messages.map((m) => m.content)).toContain('old')
+  })
+})
+
+describe('notification preferences (P58.9)', () => {
+  test('chat notifications are on by default', () => {
+    restoreWindow()
+    const sid = freshSession()
+    const before = useAppStore.getState().liveNotifications.length
+    handleChatEvent({ type: 'cancelled', sessionId: sid, streamId: 'stream-pref-default' })
+    expect(useAppStore.getState().liveNotifications.length).toBe(before + 1)
+  })
+
+  test('turning chat notifications off suppresses the chat-category push', () => {
+    stubNotifyPref('notify.chat', false)
+    const sid = freshSession()
+    const before = useAppStore.getState().liveNotifications.length
+    handleChatEvent({ type: 'cancelled', sessionId: sid, streamId: 'stream-pref-off' })
+    expect(useAppStore.getState().liveNotifications.length).toBe(before)
+    // The turn itself still settles — the preference gates the notification,
+    // never the transcript state.
+    expect(useAppStore.getState().sessions.find((s) => s.id === sid)?.status).toBe('cancelled')
+    restoreWindow()
+  })
+
+  test('the task preference does not silence chat-category notifications', () => {
+    stubNotifyPref('notify.quest', false)
+    const sid = freshSession()
+    const before = useAppStore.getState().liveNotifications.length
+    handleChatEvent({ type: 'cancelled', sessionId: sid, streamId: 'stream-pref-task' })
+    expect(useAppStore.getState().liveNotifications.length).toBe(before + 1)
+    restoreWindow()
   })
 })

@@ -446,6 +446,16 @@ export default function BrowseView() {
             </button>
           </div>
         )}
+        {/* P58.8 — the pane is text: name it honestly so nobody reads this as a
+            rendered page. A pixel/see-pane is the E1 overlay; this view never
+            fakes a browser bitmap. */}
+        {status.attached && snapshot && (
+          <div className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">
+            {tab === 'snapshot'
+              ? 'accessibility tree (text, not a screenshot)'
+              : 'page text as markdown'}
+          </div>
+        )}
         {status.attached && snapshot && (
           <motion.pre
             key={`${tab}-${snapshot.length}`}

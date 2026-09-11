@@ -79,34 +79,46 @@ function RadioCard({
 }
 
 export function NotificationsSection() {
+  // P58.9 — chat/task are read by the live bridge (`pushLive` in lib/bridge.ts)
+  // and gate which wire events reach this list; Guard approvals are `always`
+  // and are never suppressed by a preference. Banner/Sound/Volume have no
+  // engine in this build, so they are disabled with a truthful status instead
+  // of storing a preference nobody reads.
   const [chat, setChat] = usePref('notify.chat', true)
   const [quest, setQuest] = usePref('notify.quest', true)
-  const [wiki, setWiki] = usePref('notify.wiki', true)
-  const [banner, setBanner] = usePref('notify.banner', true)
-  const [sound, setSound] = usePref('notify.sound', true)
-  const [volume, setVolume] = usePref('notify.volume', 80)
   const notify = useAppStore((s) => s.notify)
   return (
     <SectionShell title="Notifications" desc="System toasts when a chat, task, or wiki job needs you">
-      <Row label="Chat notifications" desc="When a turn completes or needs attention">
+      <Honest>
+        These switches gate the live activity stream. Chat covers turn failures, cancellations, budgets, and tool
+        errors; Task covers automation/monitor jobs. Guard approval requests are always shown — a notification
+        preference never hides a pending approval.
+      </Honest>
+      <Row label="Chat notifications" desc="Turn failures, cancellations, budgets, and tool errors">
         <Switch checked={chat} onCheckedChange={setChat} />
       </Row>
-      <Row label="Task notifications" desc="When a long-running job finishes or waits">
+      <Row label="Task notifications" desc="When a long-running automation or monitor job finishes or waits">
         <Switch checked={quest} onCheckedChange={setQuest} />
       </Row>
       <Row label="Repo wiki notifications" desc="When generated project docs finish">
-        <Switch checked={wiki} onCheckedChange={setWiki} />
+        <span title="No repo-wiki generator in this build — the switch has nothing to gate yet">
+          <Switch checked={false} disabled />
+        </span>
       </Row>
       <Row label="Banner" desc="Windows / OS notification banner">
-        <Switch checked={banner} onCheckedChange={setBanner} />
+        <span title="No native OS banner bridge in this build — the in-app activity list is the live surface">
+          <Switch checked={false} disabled />
+        </span>
       </Row>
-      <Row label="Sound">
-        <Switch checked={sound} onCheckedChange={setSound} />
+      <Row label="Sound" desc="Play a chime when a job needs you">
+        <span title="No audio engine in this build — notification sounds are a staged surface">
+          <Switch checked={false} disabled />
+        </span>
       </Row>
-      <Row label="Volume">
-        <div className="flex w-56 items-center gap-3">
-          <Slider value={[volume]} min={0} max={100} step={1} onValueChange={(v) => setVolume(v[0])} />
-          <span className="w-10 font-mono text-xs text-orange-300">{volume}%</span>
+      <Row label="Volume" desc="Chime volume">
+        <div className="flex w-56 items-center gap-3" title="No audio engine in this build — volume is a staged surface">
+          <Slider value={[0]} min={0} max={100} step={1} disabled />
+          <span className="w-10 font-mono text-xs text-muted-foreground/50">—</span>
         </div>
       </Row>
       <div className="space-y-1.5">
@@ -286,7 +298,7 @@ export function ChatAutoRunSection() {
   return (
     <SectionShell title="Chat & Auto-run" desc="How much the agent may do without asking — and local context">
       <Honest>
-        Autonomy radios call `guard_set_autonomy` (H34). Local context, cloud-net, and queue on this page are localStorage only — they do not change the next turn. Settings → Permissions is the same panel; the Guard rule matrix lives on the Guard surface (`guard_permissions_matrix`), not here.
+        Autonomy radios call `guard_set_autonomy` (H34). Local context, cloud-net, and queue on this page are localStorage only — they do not change the next turn. The Guard capability matrix and tool allow-list live in Settings → Permissions (`guard_permissions_matrix` / `guard_set_policy_rules`), not here.
       </Honest>
       <div className="space-y-1.5">
         <div className="text-xs font-medium">Auto-run</div>

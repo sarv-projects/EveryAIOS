@@ -20,6 +20,18 @@ function writeRaw(key: string, value: string) {
   }
 }
 
+/** Non-hook read for producers outside React (wire handlers, bridge).
+ * Mirrors `usePref` exactly: absent/unparseable ⇒ the caller's default. */
+export function readPref<T>(key: string, initial: T): T {
+  const raw = readRaw(key)
+  if (raw == null) return initial
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return initial
+  }
+}
+
 export function usePref<T>(key: string, initial: T): [T, (next: T) => void] {
   const [value, setValue] = useState<T>(() => {
     const raw = readRaw(key)

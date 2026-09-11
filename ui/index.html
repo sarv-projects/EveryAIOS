@@ -17,6 +17,17 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- P55.12 — apply the stored theme before the bundle paints, so a saved
+         choice never flashes the default. Same key + owner as ThemeProvider. -->
+    <script>
+      try {
+        var t = localStorage.getItem('everyaios.theme')
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.classList.remove('light', 'dark')
+          document.documentElement.classList.add(t)
+        }
+      } catch (e) { /* storage unavailable — keep the markup default */ }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

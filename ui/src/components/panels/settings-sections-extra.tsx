@@ -79,10 +79,22 @@ export function KeyboardSection() {
 }
 
 // === Advanced ===
+/** P58.10 — which queue owns each staged experimental flag. The switch stays
+ * disabled until its owner lands a flag the runtime actually reads. */
+const EXPERIMENTAL_OWNERS: Record<string, string> = {
+  'Multi-agent sessions': 'Not wired — the five-way agent split is P60 (Agent Runtime).',
+  'Local Whisper transcription': 'Not wired — voice capture/STT is P50.4.3.',
+  'Vision grounding (VLM)': 'Not wired — the CUA vision gate is P59.',
+  'Pre-emptive memory compaction': 'Not wired — compaction runs on the coordinator budget formula, not this pref.',
+  'Headless CI mode': 'Not wired — headless execution is H33.',
+}
+
 export function AdvancedSection() {
   const [dataPath, setDataPath] = usePref('advanced.dataPath', '~/.everyaios/data')
   const [logLevel, setLogLevel] = usePref('advanced.logLevel', 'info')
-  const [experimental, setExperimental] = usePref<Record<string, boolean>>('advanced.experimental', {
+  // Staged-only record of the experimental surface (never written while the
+  // rows are disabled — see EXPERIMENTAL_OWNERS).
+  const [experimental] = usePref<Record<string, boolean>>('advanced.experimental', {
     'Multi-agent sessions': false,
     'Local Whisper transcription': true,
     'Vision grounding (VLM)': false,
@@ -108,17 +120,24 @@ export function AdvancedSection() {
       </Row>
       <div className="pt-2">
         <div className="mb-2 text-xs font-medium text-foreground">Experimental features</div>
+        {/* P58.10 — none of these flags is read by the runtime yet, so they are
+            disabled with the owning queue named rather than pretending to flip
+            behaviour. Re-enable each row when its flag becomes real. */}
         <ul className="space-y-1.5">
           {Object.keys(experimental).map((name) => (
             <li
               key={name}
-              className="flex items-center justify-between rounded-md border border-border/50 bg-background/30 px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/30 px-3 py-2"
             >
-              <span className="text-xs text-foreground">{name}</span>
-              <Switch
-                checked={!!experimental[name]}
-                onCheckedChange={(v) => setExperimental({ ...experimental, [name]: v })}
-              />
+              <span className="min-w-0">
+                <span className="block text-xs text-foreground">{name}</span>
+                <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                  {EXPERIMENTAL_OWNERS[name] ?? 'No runtime flag reads this yet.'}
+                </span>
+              </span>
+              <span title={EXPERIMENTAL_OWNERS[name] ?? 'No runtime flag reads this yet.'}>
+                <Switch checked={false} disabled />
+              </span>
             </li>
           ))}
         </ul>

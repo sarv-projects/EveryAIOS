@@ -40,7 +40,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useAppStore, type ViewId, type SettingsSectionId } from '@/lib/store'
-import { AGENTS, getModelsForAgent, MODEL_MAP, type AgentRuntime } from '@/lib/agents'
+import { getModelsForAgentLive, isRuntimeUsable } from '@/lib/agents'
 import { useTheme } from '@/components/theme-provider'
 import { cn } from '@/lib/utils'
 
@@ -76,6 +76,10 @@ export function CommandPalette() {
   const setCockpitOpen = useAppStore((s) => s.setCockpitOpen)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const officePaths = useAppStore((s) => s.officePaths)
+  // P58.11 — agent/model rows come from the live catalog, never the static seed
+  // (same rule as P58.6); an empty live list contributes no rows instead of
+  // offering runtimes that may not be installed.
+  const liveAgents = useAppStore((s) => s.liveAgents)
   const { theme, toggle } = useTheme()
 
   const [query, setQuery] = React.useState('')
@@ -87,10 +91,12 @@ export function CommandPalette() {
       { id: 'shell', label: 'Shell', icon: Terminal, shortcut: 'Ctrl+`' },
       { id: 'browse', label: 'Browse', icon: Globe, shortcut: '⌘⇧B' },
       { id: 'code', label: 'Code', icon: Code2, shortcut: '⌘⇧C' },
+      // P58.11 — only the xlsx row carries ⌘⇧O: that chord opens the default
+      // office view, so stamping it on all four rows overstated the map.
       { id: 'office-xlsx', label: officePaths['office-xlsx'] ? `Excel · ${officePaths['office-xlsx']!.split(/[\\/]/).pop()}` : 'Excel · no file open', icon: FileSpreadsheet, shortcut: '⌘⇧O' },
-      { id: 'office-docx', label: officePaths['office-docx'] ? `Word · ${officePaths['office-docx']!.split(/[\\/]/).pop()}` : 'Word · no file open', icon: FileText, shortcut: '⌘⇧O' },
-      { id: 'office-pptx', label: officePaths['office-pptx'] ? `Slides · ${officePaths['office-pptx']!.split(/[\\/]/).pop()}` : 'Slides · no file open', icon: Presentation, shortcut: '⌘⇧O' },
-      { id: 'office-pdf', label: officePaths['office-pdf'] ? `PDF · ${officePaths['office-pdf']!.split(/[\\/]/).pop()}` : 'PDF · no file open', icon: FileText, shortcut: '⌘⇧O' },
+      { id: 'office-docx', label: officePaths['office-docx'] ? `Word · ${officePaths['office-docx']!.split(/[\\/]/).pop()}` : 'Word · no file open', icon: FileText, shortcut: '' },
+      { id: 'office-pptx', label: officePaths['office-pptx'] ? `Slides · ${officePaths['office-pptx']!.split(/[\\/]/).pop()}` : 'Slides · no file open', icon: Presentation, shortcut: '' },
+      { id: 'office-pdf', label: officePaths['office-pdf'] ? `PDF · ${officePaths['office-pdf']!.split(/[\\/]/).pop()}` : 'PDF · no file open', icon: FileText, shortcut: '' },
       { id: 'progress', label: 'Progress timeline', icon: Activity, shortcut: '⌘⇧P' },
       { id: 'diff', label: 'Diff (pending patches)', icon: GitCompare, shortcut: '⌘⇧D' },
       { id: 'timeline', label: 'Session timeline', icon: Activity, shortcut: '' },
@@ -180,6 +186,7 @@ export function CommandPalette() {
         label: 'Open Automations',
         icon: Clock,
         group: 'navigate',
+        shortcut: '⌘⇧A',
         onSelect: () => {
           setCenterScreen('automations')
           setOpen(false)
@@ -230,6 +237,7 @@ export function CommandPalette() {
         label: 'Guard (control center)',
         icon: ShieldCheck,
         group: 'settings',
+        shortcut: '⌘⇧G',
         onSelect: () => {
           setCenterScreen('guard')
           setOpen(false)
@@ -250,6 +258,7 @@ export function CommandPalette() {
         label: 'Memory',
         icon: Brain,
         group: 'settings',
+        shortcut: '⌘⇧M',
         onSelect: () => {
           setSettingsSection('memory')
           setCenterScreen('settings')
@@ -306,22 +315,23 @@ export function CommandPalette() {
         },
       })),
       // === Agent runtime switching ===
-      ...AGENTS.filter((a) => a.status === 'installed' || a.status === 'updating').map((a) => ({
+      // P58.11 — no invented chords: switching agent has no keyboard binding
+      // (the old ⌘⇧1/2/3 labels were never implemented in the key handler).
+      ...liveAgents.filter((a) => isRuntimeUsable(a)).map((a) => ({
         id: `agent-${a.id}`,
         label: `Switch to ${a.name}`,
-        hint: `${a.vendor} · ${a.models.length} models`,
+        hint: `${a.vendor} · installed`,
         icon: Cpu,
         group: 'actions' as const,
         keywords: `agent runtime ${a.vendor} ${a.name}`,
-        shortcut: a.id === 'claude-code' ? '⌘⇧1' : a.id === 'codex-cli' ? '⌘⇧2' : a.id === 'grok-build' ? '⌘⇧3' : undefined,
         onSelect: () => {
           setSelectedAgent(a.id)
           notify(`Switched to ${a.name}`)
           setOpen(false)
         },
       })),
-      // === Model switching (for current agent) ===
-      ...getModelsForAgent(selectedAgentId).filter((m) => m.available).map((m) => ({
+      // === Model switching (for current agent, live-gated) ===
+      ...getModelsForAgentLive(selectedAgentId, liveAgents).filter((m) => m.available).map((m) => ({
         id: `model-${m.id}`,
         label: `Use ${m.label}`,
         hint: `${m.strengths.slice(0, 2).join(', ')} · ${m.recommendedFor ?? ''}`,
@@ -376,7 +386,7 @@ export function CommandPalette() {
         },
       },
     ]
-  }, [sessions, theme, toggle, powerMode, togglePowerMode, setActiveSession, setActiveView, setCenterScreen, setSettingsSection, newSession, setOpen, notify, setSelectedAgent, setSelectedModel, cycleModelVariant, setAutoRoute, autoRoute, selectedAgentId])
+  }, [sessions, theme, toggle, powerMode, togglePowerMode, setActiveSession, setActiveView, setCenterScreen, setSettingsSection, newSession, setOpen, notify, setSelectedAgent, setSelectedModel, cycleModelVariant, setAutoRoute, autoRoute, selectedAgentId, liveAgents, officePaths, cockpitOpen, setCockpitOpen])
 
   const filtered = React.useMemo(() => {
     if (!query) return items

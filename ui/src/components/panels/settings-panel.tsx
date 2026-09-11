@@ -85,6 +85,7 @@ import {
   VoiceSection,
   WorktreeSection,
 } from './settings-sections-studio'
+import { PermissionsSection, UsageSection } from './settings-sections-security'
 import SkillsPanel from './skills-panel'
 import ConnectorsPanel from './connectors-panel'
 
@@ -202,7 +203,9 @@ function SectionBody({ section }: { section: SectionId }) {
     case 'chat':
       return <ChatAutoRunSection />
     case 'permissions':
-      return <ChatAutoRunSection />
+      // P55.2 — the live Guard policy (matrix + allow-list + bundles), not the
+      // composer behaviour panel that used to render under this label.
+      return <PermissionsSection />
     case 'browser':
       return <BrowserNetworkSection />
     case 'indexing':
@@ -226,7 +229,9 @@ function SectionBody({ section }: { section: SectionId }) {
     case 'cloud':
       return <CloudEnvSection />
     case 'usage':
-      return <UxMetricsSection />
+      // P55.3 — live spend/tokens from usage_snapshot + session_totals, not
+      // interaction telemetry.
+      return <UsageSection />
     case 'ux':
       return <UxMetricsSection />
     case 'feedback':

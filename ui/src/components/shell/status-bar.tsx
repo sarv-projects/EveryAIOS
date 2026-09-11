@@ -28,7 +28,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useAppStore } from '@/lib/store'
 import * as perfLib from '@/lib/perf'
-import { AGENT_MAP, MODEL_MAP, AGENTS } from '@/lib/agents'
+import { MODEL_MAP, isRuntimeUsable } from '@/lib/agents'
 import { CompanionChip } from './companion-chip'
 import { cn } from '@/lib/utils'
 import { useRuntimeState } from '@/lib/runtime'
@@ -197,8 +197,14 @@ export function StatusBar() {
   const setCockpitOpen = useAppStore((s) => s.setCockpitOpen)
   const { usePerfSnapshot } = perfLib
   const runtime = useRuntimeState()
-
-  const agent = AGENT_MAP[selectedAgentId]
+  // P58.6 — occupancy comes from the live install/discovery catalog, never the
+  // static seed: before hydration (or when discovery fails) the live list is
+  // empty and the agent block simply does not render. A curated row for an
+  // uninstalled CLI must never be painted as the active runtime.
+  const liveAgents = useAppStore((s) => s.liveAgents)
+  const agent = liveAgents.find((a) => a.id === selectedAgentId && isRuntimeUsable(a))
+  // P58.7 — curated model rows still back this label until the provider model
+  // table (P56.7) is the picker source; do not claim catalog coverage here.
   const model = MODEL_MAP[selectedModelId]
   // Agent health, latency, uptime, and task counts are not available from the
   // runtime contract yet. Never invent them; show unknown until a live probe

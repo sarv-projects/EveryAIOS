@@ -37,6 +37,22 @@ import {
   setRuntimeState,
 } from "./runtime";
 import { runtimeStatus as readRuntimeStatus, type RuntimeStatus } from "./tauri";
+import { readPref } from "./ui-prefs";
+import type { LiveNotification } from "./store";
+
+/** P58.9 — the Settings → Notifications switches gate the live activity stream
+ * for real. Guard approvals are category `always`: they are a safety surface and
+ * are never suppressed by a chat/task preference. */
+type NotifyCategory = "chat" | "task" | "wiki" | "always";
+const NOTIFY_PREF: Record<Exclude<NotifyCategory, "always">, string> = {
+  chat: "notify.chat",
+  task: "notify.quest",
+  wiki: "notify.wiki",
+};
+function pushLive(n: LiveNotification, category: NotifyCategory = "chat"): void {
+  if (category !== "always" && !readPref(NOTIFY_PREF[category], true)) return;
+  useAppStore.getState().pushLiveNotification(n);
+}
 
 /** ACP registry id → the v2 catalog's agent id (same brain, curated skin). */
 const ACP_TO_CATALOG: Record<string, string> = {
@@ -198,7 +214,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
   // defect, not permission to mutate whichever tab is active now.
   const sid = e.sessionId;
   if (!sid || !e.streamId) {
-    st.pushLiveNotification({
+    pushLive({
       id: `live:protocol:${e.eventId ?? `${e.type}:${Date.now()}`}`,
       kind: 'error',
       title: 'Agent event was ignored',
@@ -237,7 +253,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
       const detail = budgetEventText(e);
       updateLiveBudget(e, st);
       st.streamBudgetKill(detail, sid, e.streamId);
-      st.pushLiveNotification({
+      pushLive({
         id: `live:cost:${e.streamId ?? sid}:${e.eventId ?? Date.now()}`,
         kind: 'cost',
         title: 'Budget limit reached',
@@ -250,7 +266,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
     }
     case "cancelled":
       st.streamCancelled(sid, e.streamId);
-      st.pushLiveNotification({
+      pushLive({
         id: `live:cancelled:${e.streamId}:${e.eventId ?? Date.now()}`,
         kind: 'info',
         title: 'Turn cancelled',
@@ -265,7 +281,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
         const detail = budgetKillText(e.message ?? "");
         updateLiveBudget(e, st);
         st.streamBudgetKill(detail, sid, e.streamId);
-        st.pushLiveNotification({
+        pushLive({
           id: `live:cost:${e.streamId ?? sid}:${Date.now()}`,
           kind: 'cost',
           title: 'Budget limit reached',
@@ -283,7 +299,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
           detail: e.message ?? "tool failed",
           retryable: true,
         }, e.streamId);
-        st.pushLiveNotification({
+        pushLive({
           id: `live:tool:${e.toolId ?? 'tool'}:${Date.now()}`,
           kind: 'warning',
           title: `Tool failed: ${e.toolId ?? 'tool'}`,
@@ -297,7 +313,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
         // offer the nearest alternative (Wharton: no technical framing).
         const lim = limitationFor(e.message ?? "Agent error");
         st.streamFail(`${lim.plain} — ${lim.alternative}`, sid, undefined, e.streamId);
-        st.pushLiveNotification({
+        pushLive({
           id: `live:error:${e.streamId ?? sid}:${Date.now()}`,
           kind: 'error',
           title: 'Turn failed',
@@ -338,7 +354,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
           current: e.current ?? "",
           jobId: e.jobId,
         });
-        st.pushLiveNotification({
+        pushLive({
           id: `live:monitor:${e.jobId ?? e.streamId ?? 'job'}:${Date.now()}`,
           kind: 'info',
           title: e.stopped ? 'Monitor stopped' : 'Monitor updated',
@@ -346,7 +362,7 @@ export function handleChatEvent(e: ChatWireEvent): void {
           ts: Date.now(),
           unread: true,
           source: 'Automation',
-        });
+        }, 'task');
       }
       break;
     case "toolCall":
@@ -606,7 +622,9 @@ async function startBridge(): Promise<BridgeDisposer> {
               if (!alive || seenTickets.has(t.ticketId)) continue;
               seenTickets.add(t.ticketId);
               const st = useAppStore.getState();
-              st.pushLiveNotification({
+              // P58.9 — Guard approvals are a safety surface: category
+              // `always`, never suppressed by a notification preference.
+              pushLive({
                 id: `live:guard:${t.ticketId}`,
                 kind: 'guard',
                 title: `Approval needed: ${t.operation}`,
@@ -614,7 +632,7 @@ async function startBridge(): Promise<BridgeDisposer> {
                 ts: Date.now(),
                 unread: true,
                 source: 'Guard',
-              });
+              }, 'always');
               const snap = st.taskSnapshot;
               const frozenLow = !!snap && snap.sessionId === t.sessionId &&
                 (snap.autonomyLevel === 'sandbox' || snap.autonomyLevel === 'ask');
