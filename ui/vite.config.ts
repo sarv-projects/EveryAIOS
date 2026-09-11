@@ -5,8 +5,17 @@ import { fileURLToPath, URL } from "node:url";
 // Tauri expects a fixed frontend port for `devUrl` (see src-tauri/tauri.conf.json).
 const host = process.env.TAURI_DEV_HOST;
 
+// P58.2 — inject the package version at build time so the About stamp can
+// never rot. A plain literal in settings-sections-extra.tsx drifted (claimed
+// v0.7.2 · build 2026.01.15 while package.json says 2.0.0).
+import pkg from "./package.json" with { type: "json" };
+
 export default defineConfig({
   plugins: [react()],
+  // P58.2 — __APP_VERSION__ is compile-time only (see the About section).
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

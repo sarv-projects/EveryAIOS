@@ -9,8 +9,14 @@ import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 
-// Full shortcuts catalog
-const SHORTCUTS = [
+// P58.1 — the ONE shortcuts catalog. The key handler below is the runtime
+// truth; this map mirrors it and Settings → Keyboard renders it (no second
+// hand-typed list that can rot). If a binding changes here AND in the
+// handler, the overlay and Settings stay in sync by construction.
+export interface ShortcutRow { keys: string; action: string }
+export interface ShortcutGroup { group: string; items: ShortcutRow[] }
+
+export const SHORTCUTS: ShortcutGroup[] = [
   { group: 'Navigation', items: [
     { keys: '⌘ K', action: 'Command palette' },
     { keys: '⌘ B', action: 'Toggle sidebar' },

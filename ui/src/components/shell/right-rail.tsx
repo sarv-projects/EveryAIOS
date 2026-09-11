@@ -100,11 +100,15 @@ const sessionItems: RailItem[] = [
   { id: 'trajectory', icon: ScanSearch, label: 'Trajectory', shortcut: '⌘⇧T' },
 ]
 
+// P58.5 — `live` was a constant `false` for all four (a lie: the xlsx/docx/
+// pdf engines are real; pptx is engine-read). The flyout now derives liveness
+// from the real attach state (`officePaths[id]` — a real file is open in that
+// view), so the dot means what the tab strip's dot means. No constant.
 const officeFlyoutItems = [
-  { id: 'office-xlsx' as ViewId, label: 'Spreadsheet', live: false, type: 'Sheets' },
-  { id: 'office-docx' as ViewId, label: 'Document', live: false, type: 'Word' },
-  { id: 'office-pptx' as ViewId, label: 'Slides', live: false, type: 'Slides' },
-  { id: 'office-pdf' as ViewId, label: 'PDF', live: false, type: 'PDF' },
+  { id: 'office-xlsx' as ViewId, label: 'Spreadsheet', type: 'Sheets' },
+  { id: 'office-docx' as ViewId, label: 'Document', type: 'Word' },
+  { id: 'office-pptx' as ViewId, label: 'Slides', type: 'Slides' },
+  { id: 'office-pdf' as ViewId, label: 'PDF', type: 'PDF' },
 ]
 
 // View metadata for the multi-view tab strip (ARCH/12 v3.0 — VS Code-style).

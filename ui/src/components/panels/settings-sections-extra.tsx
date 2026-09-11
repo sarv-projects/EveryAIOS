@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { LinkChip, Row, SectionShell } from './settings-shared'
 import { inTauri } from '@/lib/tauri'
 import { usePref } from '@/lib/ui-prefs'
+import { SHORTCUTS } from '@/components/shell/keyboard-shortcuts'
 
 // === Privacy ===
 export function PrivacySection() {
@@ -44,27 +45,25 @@ export function PrivacySection() {
 }
 
 // === Keyboard ===
-const SHORTCUTS = [
-  { action: 'Open command palette', keys: ['Cmd', 'K'] },
-  { action: 'New work', keys: ['Cmd', 'N'] },
-  { action: 'Toggle pause', keys: ['Cmd', '.'] },
-  { action: 'Switch to chat', keys: ['Cmd', '1'] },
-  { action: 'Switch to automations', keys: ['Cmd', '2'] },
-  { action: 'Open audit', keys: ['Cmd', 'Shift', 'A'] },
-]
-
+// P58.1 — render the LIVE map from keyboard-shortcuts.tsx (the same catalog
+// the ⌘/ overlay shows and the key handler implements). No second hand-typed
+// list: when a binding changes, this section cannot rot away from it.
 export function KeyboardSection() {
   return (
     <SectionShell title="Keyboard" desc="Shortcut bindings (fixed set — custom bindings are not editable in this build)">
+      <p className="mb-2 text-[10px] text-muted-foreground">
+        Same map as the ⌘/ overlay — one source of truth. Cmd = ⌘ (or Ctrl on
+        Windows/Linux).
+      </p>
       <ul className="divide-y divide-border/40 rounded-md border border-border/50 bg-background/30">
-        {SHORTCUTS.map((s, i) => (
-          <li key={i} className="flex items-center justify-between px-3 py-2">
+        {SHORTCUTS.flatMap((g) => g.items).map((s) => (
+          <li key={`${s.keys}-${s.action}`} className="flex items-center justify-between px-3 py-2">
             <span className="text-xs text-foreground">{s.action}</span>
             <div className="flex items-center gap-1.5">
               <div className="flex gap-1">
-                {s.keys.map((k) => (
+                {s.keys.split(' ').filter(Boolean).map((k, i) => (
                   <kbd
-                    key={k}
+                    key={`${k}-${i}`}
                     className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
                   >
                     {k}
@@ -129,6 +128,17 @@ export function AdvancedSection() {
 }
 
 // === About ===
+// P58.2 — the version stamp comes from the build, never a literal that can
+// rot. `define` in vite.config.ts injects the package.json version at build
+// time (declared in src/globals.d.ts); outside a Vite build it is 'dev'.
+function appVersion(): string {
+  try {
+    return typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
+  } catch {
+    return 'dev'
+  }
+}
+
 type UpdaterState =
   | { phase: 'idle' }
   | { phase: 'checking' }
@@ -178,7 +188,7 @@ export function AboutSection() {
       <div className="rounded-lg border border-border bg-background/30 p-4">
         <div className="font-mono text-base font-semibold text-orange-300">EveryAIOS</div>
         <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-          v0.7.2 · build 2026.01.15
+          v{appVersion()}
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
           Agentic OS desktop runtime. Self-hosted, local-first.
