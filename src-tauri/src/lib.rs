@@ -44,6 +44,7 @@ mod state;
 mod storage_cmds;
 mod sync_cmds;
 mod tasks_cmds;
+mod terminal_cmds;
 mod trajectory_cmds;
 mod updater_cmds;
 mod vault_cmds;
@@ -722,6 +723,9 @@ pub fn run() {
             desktop: Mutex::new(desktop_cmds::DesktopSlot::default()),
             artifacts: Mutex::new(std::collections::HashMap::new()),
             openai_server: Mutex::new(Default::default()),
+            // H36 (P54) — the PTY host owns live terminal sessions; they
+            // persist independently of any Shell-view mount.
+            terminal: everyaios_core::terminal::PtyHost::new(),
         })
         .invoke_handler(commands::handler())
         // P8.8: auto-updater (checks + downloads against the configured

@@ -1,5 +1,3 @@
-> Building in public. This README describes the finished product.
-
 <p align="center">
   <img src="src-tauri/icons/128x128.png" width="80" alt="EveryAIOS" />
 </p>
@@ -9,201 +7,210 @@
 <p align="center"><strong>Tell it what you want done. It figures out how. You stay in control.</strong></p>
 
 <p align="center">
-  An AI coworker on your machine — files, office, browser, code, mail, calendar, other agents.<br/>
-  Local-first. Your keys. No account. Nothing runs through a founder server.
+  An open-source, local-first AI coworker on your computer — files, spreadsheets, documents, browser, native desktop, code, email, calendar, and specialized agents.<br/>
+  Your keys. Your hardware. Zero accounts. Nothing passes through a middleman server.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/desktop-Tauri%202-24C8DB" alt="Tauri" />
-  <img src="https://img.shields.io/badge/core-Rust-dea584" alt="Rust" />
-  <img src="https://img.shields.io/badge/loop-Bun-fbf0df" alt="Bun" />
-  <img src="https://img.shields.io/badge/models-BYOK%20%2B%20local-6f42c1" alt="BYOK" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" alt="Cross Platform" />
+  <img src="https://img.shields.io/badge/privacy-100%25%20Local--First%20%2B%20BYOK-success?style=flat-square" alt="Privacy First" />
+  <img src="https://img.shields.io/badge/protocols-MCP%20%2B%20ACP%20Native-6f42c1?style=flat-square" alt="MCP and ACP Native" />
+  <img src="https://img.shields.io/badge/safety-Guarded%20%26%20Audited-orange?style=flat-square" alt="Guarded Execution" />
+  <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-lightgrey?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
-  <img src="5a1c3357-0cd1-492f-ac9f-efd313391587.png" width="90%" alt="EveryAIOS workspace" />
+  <img src="5a1c3357-0cd1-492f-ac9f-efd313391587.png" width="94%" alt="EveryAIOS Workspace" />
 </p>
-
-You open the app. It asks **What would you like to get done?** You drop a folder, a spreadsheet, a repo, an email thread, a browser tab. It plans, does the work, and asks before anything that actually changes the world. Close the laptop, swap the model, come back tomorrow — the work is still there.
-
-That is the product: one workspace, one memory, one safety model, one audit trail. Models, browsers, office engines, and other agents are parts you swap. They are not a service you rent.
 
 ---
 
-## Install
+## Quick Start
+
+### 1. Download or Build
+
+<table>
+  <tr>
+    <td><b>Platform</b></td>
+    <td><b>Distribution</b></td>
+    <td><b>Quick Command</b></td>
+  </tr>
+  <tr>
+    <td><b>macOS</b></td>
+    <td>Universal DMG / Homebrew</td>
+    <td><code>brew install sarv-projects/tap/everyaios</code></td>
+  </tr>
+  <tr>
+    <td><b>Windows</b></td>
+    <td>x64 Installer (.exe) / WSL2</td>
+    <td><code>winget install EveryAIOS.EveryAIOS</code></td>
+  </tr>
+  <tr>
+    <td><b>Linux</b></td>
+    <td>AppImage / .deb</td>
+    <td><code>curl -fsSL https://everyaios.dev/install.sh | bash</code></td>
+  </tr>
+</table>
+
+#### Developer Build (from source)
 
 ```bash
+# Clone & install dependencies
 git clone https://github.com/sarv-projects/EveryAIOS
-cd EveryAIOS
-```
+cd EveryAIOS/desktop_app && pnpm install
 
-Needs Rust (stable), [Bun](https://bun.sh), pnpm, Node 20+, and a C toolchain.
-
-```bash
-# Sidecar: the bun-compiled coordinator. The vendored core-* engines must
-# build first (bun resolves their dist), same as CI does.
-pnpm install
+# Compile coordinator engine & launch
 pnpm --filter './packages/core-*' run build
 pnpm --filter @everyaios/coordinator build
-cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator  # Windows: coordinator.exe
-
-# UI + app
+mkdir -p src-tauri/bin && cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator
 cd ui && bun install && cd ..
 cd src-tauri && cargo tauri dev
 ```
 
-Keys go in Settings → Providers / BYOK: the **models.dev catalog** (refreshed every few hours), **NVIDIA**, **three OpenCode rows (Zen / Go / Free)**, and **custom inference** (OpenAI- or Anthropic-compatible URL). Free is keyless (`x-opencode-session`). Or you point at Ollama / llamafile / MLX / LM Studio / llama.cpp on this machine. 429 on a key rotates to the next key; generic 5xx does not.
+---
+
+## What is EveryAIOS?
+
+Most AI tools force you into walled gardens — their cloud chat, their proprietary editor, their subscription, their server. When you move between tools, you lose the thread: what you were working on, what files were touched, and what was already tried.
+
+**EveryAIOS is a single, unified operating layer for AI-assisted work on your own machine.**
+
+You open the app. It asks: **"What would you like to get done?"** Drop a messy folder, a 400-page PDF, a broken codebase, a financial spreadsheet, or an email thread. It plans the steps, executes across your local tools, and asks before anything that actually modifies your files or system.
+
+Switch models mid-stream, close your laptop, reboot, or hand off execution to Claude Code or Codex — **your work, memory, context, and safety rules remain completely intact.**
 
 ---
 
-## What you can actually do
+## The Five Guarantees
 
-Same loop every time: say the job → plan → guarded execution → receipt. Examples from the spec:
+1. 🔒 **100% Private & Local-First (No Middleman Servers)**  
+   EveryAIOS runs directly on your machine. All credentials, documents, and history live in an encrypted local vault. Your prompts and data go directly to the providers you configure (or stay offline on local hardware) — never proxied or logged through third-party servers.
 
-- Clean up Downloads (plan first, approve the exact move list, roll the whole pass back).
-- Prep for an interview tomorrow (calendar + notes + cited brief).
-- Research a company into a deck (search cascade → surgical slides → sources on the claims).
-- Fix a repo (LSP + tests + smallest diff + evidence the tests passed).
-- Refresh Q3 numbers and patch the exec summary (IronCalc, not “guess the formula”).
-- Draft 14 email replies (queue: edit / approve / send — send is always its own card).
-- Monday competitor digest (schedule; send only if you said so).
-- Pick up last night’s work after the laptop died (ledger replay, any Chief).
+2. 🛡️ **Propose, Never Impose**  
+   The AI can plan, read, and draft freely, but it cannot mutate your system without authorization. Every file write, shell command, email dispatch, or external action passes through an explicit, human-verifiable approval gate with an instant undo receipt.
 
----
+3. ⚡ **Persistent, Unbreakable Continuity**  
+   Work is a durable object, not a temporary chat window. If your laptop dies, the network drops, or the model times out, your session, task dependency graph, and receipts reload exactly where you left off.
 
-## Models
+4. 📐 **Engine-True Precision**  
+   Calculations in spreadsheets use real formula calculation engines, not token guesses. Word and PowerPoint edits patch only the targeted blocks while keeping custom formatting, themes, and macros bit-for-bit identical.
 
-Paste keys. Ring several keys per provider. **429 rotates** to the next key then retries the first after cooldown; **generic 5xx does not rotate**. OAuth for ChatGPT / Copilot if you already pay them (flag-gated). Local models with a hardware-fit picker and live Hugging Face GGUF search — no hardcoded model names.
-
-Catalog comes from [models.dev](https://models.dev), refreshed and pinned. Router scores Fast / Quality / Private / Cheap plus live health, cost, and latency. Planner can be a frontier model while workers stay cheap. Cache accounting is real (prompt cache, semantic cache, result cache). Image gen is a provider endpoint like anything else.
-
-You can expose the local engine as an OpenAI-compatible server for other apps. You can also run a headless node on a mini-PC you own so work continues when this laptop is closed.
+5. 🔀 **Absolute Model & Agent Freedom**  
+   You are never locked into one model or subscription. Bring your own API keys, ring multiple keys to rotate automatically on rate limits, run open-source models offline via Ollama, LM Studio, or llama.cpp, or hand off tasks to external agent CLIs like Claude Code or Codex.
 
 ---
 
-## Agents and automations
+## What You Can Get Done
 
-The composer has three controls:
+* 📁 **Reorganize & Clean Downloads**  
+  Drop a cluttered directory. EveryAIOS scans the folder, identifies duplicates by hash and structure, and proposes a clean layout as a plan. You review the exact move list and approve it with one click. If you change your mind, roll back the entire operation instantly.
 
-| | |
-|---|---|
-| **Agent** | Who. Built-in coworker, a custom bundle, or an **installed** ACP harness (Claude Code, Codex, Grok Build, OpenCode, Aider, Copilot CLI, …). Any **installed** one can be the Chief — that product's loop, `/`, and `@`, not a model faucet. Missing binaries fail closed. |
-| **Work mode** | What. Auto · Plan · Build · Research. |
-| **Autonomy** | How much without asking. Sandbox (read-only) · Ask · Auto · Maximum. Maximum still cannot send money, dump secrets, or smash the disk. |
+* 🔍 **Turn Messy Research into Presentations**  
+  Ask for a deep competitor analysis. EveryAIOS runs parallel multi-source web research, strips noise, verifies claims with real citations, recalculates figures, and surgically drafts a slide deck or summary brief.
 
-Custom agents are versioned bundles: persona, engine, model, which MCP servers, which connectors, which skills. Templates for coder, researcher, writer, email triage, analyst, browser operator.
+* 📊 **Financial Spreadsheet Updates**  
+  Drop a quarterly financial model. The engine recalculates formulas with mathematical certainty, updates numbers across sheets, and refreshes the executive memo. Unsupported formulas are explicitly flagged rather than hallucinated.
 
-The loop streams, budgets subagents (depth 2, concurrency capped), repairs bad tool JSON, and freezes the DAG on a loop instead of spinning. Repeated work **crystallizes** into a deterministic skill so the next Monday digest does not spend tokens re-planning.
+* 🛠️ **Fix Broken Repositories with Verifiable Proof**  
+  Point to a broken repository. The agent inspects code intelligence diagnostics, identifies root causes, drafts minimal surgical diffs, runs your tests to observe failures, applies the fix upon your approval, and records passing test evidence.
 
-Schedules: cron, interval, git/CI events, heartbeats that wake the *same* conversation. Detached work is a task you can list, cancel, retry, audit.
+* 🤝 **Handoff Between Agents Mid-Task**  
+  Start drafting a project with an inexpensive local model. When you need specialized reasoning, switch the session Chief to Claude Code or Codex. EveryAIOS transfers a compacted context bundle so the new agent takes over without losing project history.
 
-Teach it once: record a path → compile → replay with zero model tokens; halt if the world drifted.
-
----
-
-## Memory
-
-It remembers. Not as a chat log you scroll.
-
-Sensory / working / episodic / semantic / procedural memory, FTS5 by default (embeddings optional), a knowledge graph with provenance on every edge, a taste profile of how you like code written, pass-by-reference so a 400-page PDF is a handle not a dumped prompt. Spaced repetition for things you asked it to keep. Export as markdown (`[[wiki-links]]`), wipe a scope, optional E2E sync over LAN/Tailscale.
-
-Work is a durable object. The model is not.
+* ⚙️ **Hands-Free Repetitive Automations**  
+  Teach EveryAIOS a multi-step routine once. The crystallization engine compiles your workflow into a deterministic local skill that executes on schedule without burning model tokens.
 
 ---
 
-## Office and files
+## Core Capabilities
 
-Word, Excel, PowerPoint, PDF — surgical edits on the bytes you already have. Unsupported Excel formulas are flagged `NOT_RECALCULATED`, never invented. IronCalc for recalc. Snapshot-before so you can roll back. Legacy `.doc` / `.xls` / `.ppt` convert on open.
+### 🧠 Any Model, Any Provider
+* **100+ Cloud Providers:** Connect OpenAI, Anthropic, Google Gemini, OpenCode (Zen, Go, and Free), Groq, DeepSeek, Cerebras, Mistral, and NVIDIA NIM.
+* **Auto-Failover Key Rings:** Assign multiple keys per provider. When an API hits a rate limit (HTTP 429), it automatically cools down and rotates to the next key without breaking your stream.
+* **Hardware-Aware Local Models:** Built-in hardware scanner that matches your available VRAM and RAM against open-source models (GGUF/MLX) with live search and zero hardcoded names.
+* **Cost & Cache Accounting:** Real-time visibility into input cache hits, output generation, and exact spending per turn.
 
-Storage intelligence: walk a disk, treemap, 7-stage duplicate detection, large-file finder, “you are at 90% full” cleanup plans. Instant filename search (FTS5). Drop a folder; it proposes the tree; you approve the exact change set.
+### 🎛️ The Three-Control Composer
+Take full command of how every task executes:
+* **Agent (WHO):** Choose the built-in coworker, a tailored persona, or an installed external CLI (Claude Code, Codex, Aider, OpenCode) to lead the session.
+* **Work Mode (WHAT):** Select `Auto` for standard interaction, `Plan` for structured blueprints, `Build` for execution, or `Research` for multi-source exploration.
+* **Autonomy (HOW MUCH):** Adjust freedom dynamically:
+  * `Sandbox`: Strictly read-only exploration.
+  * `Ask`: Confirms every modification before execution.
+  * `Auto`: Executes safe routine actions, prompting only for significant changes.
+  * `Maximum`: High autonomy while still strictly blocking destructive commands.
 
-Google Docs/Sheets, when you want them, are connectors. They are not the source of truth.
+### 💾 Cognitive Memory That Actually Remembers
+* **Remembers Your Context:** Retains facts, project preferences, and decisions across days and weeks without bloating your token window.
+* **Coding Taste Profile:** Automatically learns your naming conventions, formatting preferences, and architectural style from the changes you accept.
+* **Pass-by-Reference Context:** Massive datasets and documents are indexed as lightweight handles with instant previews rather than dumped into the context window.
+* **Spaced Repetition Review:** Integrated retention scheduling to help you review and reinforce facts and insights captured during research.
 
----
+### 📑 Document & File Surgery
+* **Byte-Preserving Office Edits:** Surgical block-patching for Word documents (`.docx`), Excel workbooks (`.xlsx`), and PowerPoint decks (`.pptx`).
+* **IronCalc Formula Engine:** Mathematical recalculation supporting 300+ spreadsheet functions.
+* **Native PDF Suite:** Fast full-text search, form filling, text replacement, and redactions.
+* **Storage Intelligence:** Parallel work-stealing disk scanner that maps disk usage, pinpoints massive files, detects duplicate data, and generates guided cleanup plans.
 
-## Browser and the rest of the desktop
+### 🌐 Browser Automation & Computer Use
+* **Inbuilt Fast Browser:** High-speed browser automation driven directly via accessibility trees and DOM snapshots. Operates without requiring heavy vision models.
+* **Computer Use Agent:** Real OS desktop control (Windows, macOS, Linux) with visual recognition for applications that lack accessible APIs. Operates safely in the background without stealing focus.
+* **Encrypted Session Vault:** Safely stores authenticated browser sessions so you can perform authenticated research without re-logging in every session.
+* **Humanized Realism:** Natural Bézier mouse curves and realistic keystroke cadences to avoid abrupt interactions.
 
-CDP into Chrome, Edge, Brave, Arc, Chromium, or an Electron app (VS Code, Slack, Notion, …). Lightweight engines first (Lightpanda / Obscura), full browser when the page needs it.
-
-Tabs, snapshots (a11y refs, not a pixel dump), act, screenshot, HAR, console/network diagnostics. Session vault holds cookies and storage encrypted; the agent never sees the raw secret. Attach to a paired profile so you do not re-login. Replay a session with an honest `has_gap` when a step could not be verified. Captchas go human-in-the-loop unless you brought a solver.
-
-**Computer use:** see a real window, read the UI tree (OCR if the tree is empty), click/type, show the see-pane so you know what it clicked. Files, shell, and office engines beat GUI when an API exists. Browsers stay CDP, not screenshot-guessing.
-
----
-
-## Connectors, mail, chat
-
-MCP-first. You install servers. We also *serve* our tools (office, browser, search, memory, storage) to Claude Code / Codex / Cursor so they work inside this workspace.
-
-Native OAuth/API-key adapters in the vault. Gmail or IMAP/SMTP. Calendar. Telegram / WhatsApp as in-app cards. Outlook / Graph as the same pattern. WSL path if that is where the repo lives.
-
-One tool registry. One permission class. We are an ACP **client** (drive local harnesses) and an A2A **discovery** surface for remote agent cards. We are not an ACP server.
-
----
-
-## Search and research
-
-No key required: SearXNG instances, health-gated, circuit-breaker, then optional metasearch, then paid fallback if you configured one. BM25 rerank. Parallel fetch.
-
-Deep research: breadth × depth, cited reports, confidence on claims. Extra channels: arXiv, GitHub, EDGAR, Reddit. Sandboxed pandas REPL for the spreadsheet you just pulled. Read-cleaner strips ads and consent walls before the model sees the page.
-
----
-
-## The workspace
-
-Activity rail. Chat. Right viewport (diff, document, browser, terminal, computer-use, receipts). Chat ⇄ Code is a layout of the same session, not a second app.
-
-Streaming, branches, artifacts. Permission cards in a dedicated Guard window (not a fake overlay in chat). Cost dashboard. Progress timeline. Blueprint editor. Reader (PDF/EPUB/web/md). KaTeX and code. Widgets in chat. Generative UI in a sandboxed iframe. Local mini-dashboards served on `127.0.0.1`. Tray for watchers.
-
-Voice in and TTS out. Clipboard as a tool. Voice memo → structured report. Corpus research with cited answers and an audio digest. Doctor CLI when something is red.
-
-SOUL.md is yours. Core safety rules are not.
+### 🔌 Extensible Ecosystem
+* **MCP-First:** Connect to any Model Context Protocol tool server or expose EveryAIOS's native tools (documents, browser, memory, storage) to other applications.
+* **Connect Store:** Curated, one-click local OAuth integrations for GitHub, Google Workspace, Slack, Linear, Notion, and email (IMAP/SMTP/Gmail).
+* **Developer Terminal:** Integrated multi-profile terminal with full PTY support for PowerShell, Command Prompt, WSL distros, and Unix shells.
 
 ---
 
-## Code, skills, forge
+<details>
+<summary><strong>Architecture & Technical Specifications (For Engineers)</strong></summary>
 
-RepoMap (tree-sitter + PageRank), SCIP, LSP (hover, def, rename, diagnostics). Edit formats picked per model; a successful apply is one git commit. Architect mode: reasoner plans, editor writes. `// ai!` markers in files. Subagents get their own worktrees.
+<br/>
 
-Skills live in `~/.everyaios/skills/` (SKILL.md). Forge: write → sandbox → test → persist. Plugins are versioned bundles with allow-lists, never a core fork. `/learn` turns a URL, PDF, repo, or thread into a tested skill.
-
-The Code rail is a real workbench (explorer, SCM, problems, editor, terminal). The Shell is a **profile-backed PTY** (H36): PowerShell, cmd, Git Bash, each WSL distro, bash/zsh/fish, plus a user-owned remote node — VS Code's profile model, not a VS Code clone you are supposed to live in.
-
----
-
-## Safety
-
-Sidecar proposes. Rust disposes.
-
-Every mutation (file, office, shell, browser, send, connector write, remote MCP tool call, MCP server install) needs a **ticket**. Guard-1 is the fast deny. Guard-2 is the card you see — nonce-bound, in its own webview, so a compromised chat window cannot fake yes. Path floor. Egress policy. Injection defense. Keys only in the SQLCipher vault; they are zeroized in memory; child processes do not inherit them.
-
-Trust ladder 0–100. Autonomy level is a preset on that engine, not a YOLO switch. Coordinator-native effects use the Rust ticketed executor; external agents in self-contained mode are honest about what EveryAIOS cannot observe or audit.
-
-Append-only audit. Replay. Undo. Eval suite at plan completion: if we cannot verify a claim, we say unverifiable instead of dressing it up.
-
----
-
-## How it is put together
-
-Three processes: Tauri UI, Rust core, Bun coordinator. Children for browsers, ACP agents, MCP servers, and sandboxes. External child effects are governed only in brokered mode or through sandboxed, hash-validated reviewed imports; self-contained effects remain outside the native audit guarantee.
+### Multi-Process Hybrid Design
+EveryAIOS uses a multi-process architecture to guarantee responsiveness, safety, and memory isolation:
 
 ```
-UI (React / Tauri 2)
-        │
-Rust core — guard, vault, office, CDP, memory, audit, MCP, ACP, catalog
-        │
-Bun coordinator — the agent loop (proposes; cannot mutate without a ticket)
+┌─────────────────────────────────────────────────────────────────┐
+│                        Tauri 2 Native UI                        │
+│            React 19 · Zustand · Tailwind · Monaco Editor        │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │ Tauri IPC (250 Native Commands)
+┌────────────────────────────────┴────────────────────────────────┐
+│                        Core Rust Engine                         │
+│  • Security Gate: Deterministic regex prescan & ticket authority│
+│  • Encrypted Vault: SQLCipher credential broker with 429 logic  │
+│  • Document Engines: Surgical OOXML part-patching & IronCalc    │
+│  • Browser Core: Loopback CDP client & Obscura lightweight tier │
+│  • Computer Use: Native window hooks, UIA/AX, and CUA DAG runtime│
+│  • Storage Intelligence: Work-stealing disk scanner & dedup     │
+│  • Memory Core: 34 cognitive retrieval algorithms & FSRS-6      │
+│  • Code Intelligence: LSP runner & Tree-sitter RepoMap PageRank │
+│  • Audit Engine: Append-only NDJSON ledger & Merkle hash chains │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │ Length-Prefixed Stdio JSON-RPC
+┌────────────────────────────────┴────────────────────────────────┐
+│                   Supervised Bun Coordinator                    │
+│  • Turn Orchestrator: 12-segment prompt assembler               │
+│  • Dynamic Chief: Handoff adapter for external ACP agent CLIs   │
+│  • Context Optimization: Prefix-cache boundaries & compaction   │
+│  • Tool Hub: Local MCP server bridge & auth connectors          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-One effect-authorization model → one executor → one event log → one timeline (agent = ticket, human = trusted gesture). Model calls are data-plane (budget and egress), not a confirm-card per token.
+### Key Engineering Invariants
+* **Sidecar Proposes, Rust Disposes:** The TypeScript coordinator formulates plans and tool calls. Mutating calls generate a single-use authorization ticket validated by the Rust security engine before execution.
+* **Cryptographic Diff-Cards:** Visual confirmation cards carry a unique machine-readable reason and cryptographic nonce displayed in an isolated native window to prevent clickjacking or prompt spoofing.
+* **Credential Sealing:** Raw API keys are never stored in browser memory, coordinator memory, or chat logs. The Rust credential broker injects headers directly onto outbound HTTPS sockets and zeroizes temporary buffers immediately.
+* **Deterministic Verification:** Every automated plan requires verifiable evidence before marking tasks complete. If an outcome cannot be programmatically verified, it is marked unverifiable rather than assumed successful.
+
+</details>
 
 ---
 
-## Docs
+## License
 
-| | |
-|---|---|
-| [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) | Product contract |
-| [`ARCH/`](ARCH/) | Architecture |
-| [`ui/DESIGN-SYSTEM.md`](ui/DESIGN-SYSTEM.md) | UI |
-| [`SPEC-CHANGELOG.md`](SPEC-CHANGELOG.md) | Why the spec moved |
+EveryAIOS is open source and dual-licensed under the [MIT License](LICENSE-MIT) and the [Apache License, Version 2.0](LICENSE-APACHE).

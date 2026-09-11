@@ -74,6 +74,7 @@ pub mod sync;
 pub mod sync_transport;
 pub mod task_ledger;
 pub mod telemetry;
+pub mod terminal;
 pub mod tools;
 pub mod tracing;
 pub mod vault_key;

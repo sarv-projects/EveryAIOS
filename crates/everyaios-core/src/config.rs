@@ -47,6 +47,11 @@ pub struct Config {
     /// Missing entries default to enabled for backwards-compatible config.
     #[serde(default)]
     pub subagent_enabled: std::collections::HashMap<String, bool>,
+    /// H36 (P54) — integrated terminal profile registry (`terminal.*`):
+    /// profiles / defaultProfile / automationProfile / useWslProfiles /
+    /// unsafeConfirmed. One owner for detection + PTY backends.
+    #[serde(default)]
+    pub terminal: crate::terminal::TerminalConfig,
 }
 
 fn default_primary_chief() -> String {
@@ -67,6 +72,7 @@ impl Default for Config {
             primary_chief: default_primary_chief(),
             subagent_notes: std::collections::HashMap::new(),
             subagent_enabled: std::collections::HashMap::new(),
+            terminal: crate::terminal::TerminalConfig::default(),
         }
     }
 }
@@ -177,6 +183,54 @@ mod tests {
             cfg.data_dir.join("coordinator.sock")
         );
         assert!(cfg.socket_path.is_none());
+    }
+
+    #[test]
+    fn terminal_section_parses_from_full_config_document() {
+        // P54.1 — the terminal profile registry is a real `[terminal.*]`
+        // section of everyaios.toml, not a separate file.
+        let toml_text = r#"
+data_dir = "/tmp/everyaios"
+vault_path = "/tmp/everyaios/vault.db"
+retention_days = 7
+
+[terminal.profiles.linux]
+"bash (custom)" = { path = "/opt/bash", args = ["--login"] }
+
+[terminal.defaultProfile]
+linux = "bash (custom)"
+
+[terminal.automationProfile]
+linux = "sh"
+"#;
+        let cfg: Config = toml::from_str(toml_text).unwrap();
+        let profiles = cfg
+            .terminal
+            .profiles_for(crate::terminal::Platform::Linux)
+            .expect("linux profiles present");
+        assert_eq!(profiles["bash (custom)"].path[0].path, "/opt/bash");
+        assert_eq!(
+            cfg.terminal
+                .default_profile_name_for(crate::terminal::Platform::Linux),
+            Some("bash (custom)")
+        );
+        assert_eq!(
+            cfg.terminal
+                .automation_profile_name_for(crate::terminal::Platform::Linux),
+            Some("sh")
+        );
+        // WSL profiles default on (VS Code `useWslProfiles`).
+        assert!(cfg.terminal.use_wsl_profiles);
+        // Absent terminal section on old configs → defaults, not a parse error.
+        let bare: Config = toml::from_str(
+            r#"
+data_dir = "/tmp/everyaios"
+vault_path = "/tmp/everyaios/vault.db"
+retention_days = 7
+"#,
+        )
+        .unwrap();
+        assert_eq!(bare.terminal, Config::default().terminal);
     }
 
     #[test]

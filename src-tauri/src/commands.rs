@@ -41,6 +41,7 @@ use crate::skills_cmds;
 use crate::storage_cmds;
 use crate::sync_cmds;
 use crate::tasks_cmds;
+use crate::terminal_cmds;
 use crate::trajectory_cmds;
 use crate::updater_cmds;
 use crate::vault_cmds;
@@ -247,6 +248,16 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         shell_cmds::shell_write,
         shell_cmds::shell_kill,
         shell_cmds::shell_status,
+        // H36 (P54) — profile-backed terminal + real PTY host.
+        terminal_cmds::terminal_profiles,
+        terminal_cmds::terminal_set_default,
+        terminal_cmds::terminal_set_automation,
+        terminal_cmds::terminal_confirm_unsafe,
+        terminal_cmds::terminal_spawn,
+        terminal_cmds::terminal_write,
+        terminal_cmds::terminal_resize,
+        terminal_cmds::terminal_kill,
+        terminal_cmds::terminal_status,
         browser_cmds::browser_start,
         browser_cmds::browser_navigate,
         browser_cmds::browser_snapshot,

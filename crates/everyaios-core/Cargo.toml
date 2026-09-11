@@ -34,6 +34,7 @@ argon2 = { workspace = true }
 rand = { workspace = true }
 opentelemetry = { workspace = true }
 ureq = { workspace = true }
+portable-pty = "0.9"
 sysinfo = "0.30"
 
 [dev-dependencies]
