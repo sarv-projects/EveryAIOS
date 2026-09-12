@@ -1,12 +1,14 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-> **Version:** 3.4 (2026-08-21)
+> **Version:** 3.8 (2026-09-12)
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
 > **Principle:** ONE project, ONE durable Work, ONE session, ONE effect-authorization model, ONE timeline. Chat + live progress stay in the center; the **right activity rail** selects the active lens while the viewport supports multiple open, reorderable tabs. Only one view is rendered at a time inside that viewport; the product is not split into separate Chat/Cowork/Code applications.
 > **Cross-refs:** ARCH/01 (system architecture), ARCH/09 (feature matrix H1-H25 — H20 redefined doc 67), ARCH/DIAGRAMS #7 (MCQ interrupt), doc 67 §6 (finalization record)
 > **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, full screen/panel/tab/overlay inventory, motion + mock-data tables) that supersedes this doc's visual details. The cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
 >
 > **v3.8 (2026-09-10):** Two surfaces — Browse + Office inbuilt (no vision); Computer use = real OS see-pane + primary rail icon. Vision-gate modal. Progress renders CUA DAG.
+> **v3.8 (2026-09-12 reconciliation):** Status bar and agent/model picker consume reachable live catalog rows, preserve provider-qualified model identity through routing, and label curated seed rows as fallback. Provider/profile rows with no supported transport are unavailable rather than guessed.
+> **v3.8 (2026-09-12 model ownership — P60.12/P60.13):** the picker is ownership-split. **EveryAIOS Native** shows the EveryAIOS provider/model surface (models.dev + BYOK + local). Any **external ACP agent** shows only its own ACP `configOptions` (`Model · <agent>`) or an explicit “managed by &lt;agent&gt;” — never EveryAIOS's provider list. Runtime rows are **installed-only selectable**; a registry entry renders `not installed` with an install affordance instead of becoming a selection the send path cannot launch. Never render a curated fallback row as live. Settings keeps **one** agent surface: the Native model catalog is a collapsed disclosure on the EveryAIOS Native card, never a peer tab.
 >
 > **v3.7 (2026-09-10):** Cockpit live-vs-stale table in spec §4.1 (P58). Keyboard cheat sheet, About stamp, Office `live: false`, status-bar `AGENTS`, picker curated models, composer slash, missing Computer use / Subagents nav.
 >
@@ -786,4 +788,6 @@ Not primary target (desktop app), but for future:
 - High contrast mode support
 - Screen reader announces progress steps and status changes
 - Reduced motion mode (disables live typing animation)
-- Minimum 4.5:1 contrast ratio on all text
+- WCAG 2.2 AA is the accessibility target; verify contrast and other success criteria with automated and manual evidence before claiming conformance.
+- Focus must remain visible and not be obscured; dialog focus is trapped and restored; status/progress changes are announced without relying on color alone.
+- Respect `prefers-reduced-motion`, text scaling, RTL, and keyboard operation; use native controls and APG focus patterns before adding ARIA.

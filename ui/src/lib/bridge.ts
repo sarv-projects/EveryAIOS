@@ -872,6 +872,10 @@ export async function sendUserMessage(
         const info = await acpLaunch(acpId, folder);
         handle = info.handle;
         st.setAcpHandle(handleKey, handle);
+        // P60 — the session-new response carries the agent's own config
+        // vocabulary (model/mode/reasoning). Keep it keyed by the agent so the
+        // composer can show what that agent actually exposes.
+        if (info.configOptions) st.setAcpConfigOptions(handleKey, info.configOptions);
         firstTurn = true;
       }
       let handoff: string | undefined;
@@ -895,6 +899,17 @@ export async function sendUserMessage(
         void import("./acp").then(({ acpSessionCommands }) =>
           acpSessionCommands(handle).catch(() => []),
         );
+      }
+      // P60 — an agent-initiated `config_option_update` (e.g. it fell back to
+      // another model) replaces the stored list; reflect it instead of
+      // rendering a stale selection.
+      const configUpdate = (result.updates ?? []).find(
+        (u) =>
+          u.sessionUpdate === "config_option_update" &&
+          (u.configOptions?.length ?? 0) > 0,
+      );
+      if (configUpdate?.configOptions) {
+        st.setAcpConfigOptions(handleKey, configUpdate.configOptions);
       }
       const pending = result.pendingTickets?.length
         ? ` · ${result.pendingTickets.length} approval(s)`

@@ -6,7 +6,7 @@
   "description": "EveryAIOS desktop UI v2 — warm-cream cockpit (UI-DESIGN-PROMPT) served by the Tauri shell (P0.7)",
   "scripts": {
     "dev": "vite",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc --noEmit && cross-env NODE_OPTIONS=--max-old-space-size=4096 vite build",
+    "build": "node scripts/build.mjs",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
   },
@@ -72,11 +72,13 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.5",
     "@tailwindcss/postcss": "^4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4.3.4",
     "cross-env": "^10.1.0",
+    "happy-dom": "^20.14.5",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
     "typescript": "^5",

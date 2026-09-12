@@ -13,7 +13,8 @@ import {
   AGENT_MAP,
   DEFAULT_ROUTING,
   getDefaultModelForAgent,
-  getModelsForAgent,
+  getModelsForAgentLive,
+  isNativeRuntime,
   type AgentRuntime,
   type TaskKind,
 } from './agents'
@@ -1274,6 +1275,10 @@ interface AppState {
   /** Live ACP handles keyed by catalog agent id. */
   acpHandles: Record<string, string>
   setAcpHandle: (agentId: string, handle: string) => void
+  /** Agent-owned ACP config options keyed by catalog agent id. Native provider
+   * model state never enters this map. */
+  acpConfigOptions: Record<string, import('./acp').AcpConfigOption[]>
+  setAcpConfigOptions: (agentId: string, options: import('./acp').AcpConfigOption[]) => void
 
   pendingPlan?: {
     planId: string
@@ -1838,10 +1843,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Default = inbuilt EveryAIOS (not an ACP harness).
   selectedAgentId: 'everyaios-native',
   setSelectedAgent: (id) => {
-    const next = AGENT_MAP[id]
-    if (!next) return
-    // Switching agent snaps model to its default unless current model is also supported
-    const supported = next.models
+    // Occupancy is live: a row published by the ACP registry refresh is
+    // selectable even though it has no entry in the static seed. The static
+    // map stays the fallback for the pre-hydration UI.
+    const row = AGENT_MAP[id] ?? get().liveAgents.find((a) => a.id === id)
+    if (!row) return
+    // P60 — model ownership. An external ACP agent owns its model, auth, and
+    // routing; selecting one must not snap EveryAIOS's Native pin onto a
+    // curated model that agent never receives. The Native pin is preserved
+    // untouched so switching back to Native restores the exact same choice.
+    if (!isNativeRuntime(id)) {
+      set({ selectedAgentId: id })
+      return
+    }
+    // Switching to Native snaps the model to its default unless the current
+    // pin is also in Native's curated set.
+    const supported = row.models
     set((s) => {
       const keepModel = supported.includes(s.selectedModelId)
       return {
@@ -1861,8 +1878,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // order is the picker's row order; auto-route is switched off so the
   // pinned variant actually reaches the send path (see resolveProviderModel).
   cycleModelVariant: (dir) => {
-    const { selectedAgentId, selectedModelId } = get()
-    const models = getModelsForAgent(selectedAgentId).filter((m) => m.available)
+    const { selectedAgentId, selectedModelId, liveAgents } = get()
+    // P60 — an external ACP agent owns its own model list, so there is no
+    // Native variant to cycle; the live gate returns `[]` for it.
+    const models = getModelsForAgentLive(selectedAgentId, liveAgents).filter((m) => m.available)
     if (models.length === 0) return undefined
     const idx = models.findIndex((m) => m.id === selectedModelId)
     const next = models[(idx + dir + models.length) % models.length]!
@@ -2677,6 +2696,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   acpHandles: {},
   setAcpHandle: (agentId, handle) =>
     set((s) => ({ acpHandles: { ...s.acpHandles, [agentId]: handle } })),
+  acpConfigOptions: {},
+  setAcpConfigOptions: (agentId, options) =>
+    set((s) => ({ acpConfigOptions: { ...s.acpConfigOptions, [agentId]: options } })),
 
   closedSessions: [],
 

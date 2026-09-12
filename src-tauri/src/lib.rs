@@ -817,6 +817,14 @@ pub fn run() {
                 let catalog = std::sync::Arc::clone(&app.state::<AppState>().catalog);
                 catalog_cmds::spawn_refresh_job(catalog);
             }
+            // P60.14 — the ACP registry job: the external-agent catalog is
+            // consumed dynamically (Zed/ACP model), so discovery refreshes the
+            // official `registry.json` when the local cache is missing or
+            // stale, then re-checks hourly. Offline keeps the cached catalog;
+            // with no cache the resolver degrades to the curated seed. The
+            // merge into `launch_registry()` is memoised on the cache file's
+            // mtime, so a refresh lands without a restart.
+            acp_cmds::spawn_registry_refresh_job();
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -696,8 +696,8 @@ export function SubagentsSection() {
   }
   useEffect(load, [])
   return (
-    <SectionShell title="Subagents" desc="Installed agent CLIs the Chief may delegate to; built-in Experts are configured separately.">
-      <Honest>B3 delegation is bounded at depth ≤2 and concurrency ≤6. Only discovered or installed CLIs appear here. Enable a row to include it in the delegation mix; the shipped when-to-use text is editable.</Honest>
+    <SectionShell title="Subagents" desc="Installed agent CLIs the Chief may delegate to, plus EveryAIOS Native (always available); built-in Experts are configured separately.">
+      <Honest>B3 delegation is bounded at depth ≤2 and concurrency ≤6. Only installed/discovered CLIs appear here — EveryAIOS Native is always present as the default candidate, and a registry entry with no binary on this machine is never selectable. Enable a row to include it in the delegation mix; the shipped when-to-use text is editable.</Honest>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium">Installed delegation candidates {rows === null ? '…' : `(${rows.length})`}</span>
         <div className="flex gap-2">

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import {
   Boxes,
   Check,
+  ChevronDown,
+  ChevronRight,
   CircleDot,
   Cpu,
   Download,
@@ -40,6 +42,7 @@ import {
   formatContext,
   formatPrice,
   getModelsForAgentLive,
+  isNativeRuntime,
   isRuntimeUsable,
   modelsForUsableRuntimes,
   type AgentRuntime,
@@ -47,6 +50,7 @@ import {
 } from '@/lib/agents'
 import { acpIdFor, acpInstallCommit, acpInstallRequest } from '@/lib/acp'
 import { refreshAgentCatalog } from '@/lib/bridge'
+import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
 import { Row, SectionShell } from './settings-shared'
 
@@ -65,13 +69,18 @@ function StatusBadge({ status }: { status: AgentRuntime['status'] }) {
       ? 'bg-emerald-500/15 text-emerald-300'
       : status === 'updating'
         ? 'bg-orange-500/15 text-orange-300'
-        : status === 'available'
-          ? 'bg-zinc-500/15 text-zinc-400'
-          : 'bg-rose-500/15 text-rose-300'
+        : status === 'disabled'
+          ? 'bg-rose-500/15 text-rose-300'
+          : 'bg-zinc-500/15 text-zinc-400'
+  // P55.4 — never label a runtime "available". A registry/catalog entry is not
+  // an install: the honest label for a binary this machine does not have is
+  // `not installed`.
+  const label =
+    status === 'available' ? 'not installed' : status
   return (
     <Badge className={cn('text-[9px] capitalize', tone)}>
       <CircleDot className="h-2.5 w-2.5" />
-      {status}
+      {label}
     </Badge>
   )
 }
@@ -89,7 +98,16 @@ function AgentLogo({ agent }: { agent: AgentRuntime }) {
   )
 }
 
-function AgentCard({ agent }: { agent: AgentRuntime }) {
+function AgentCard({
+  agent,
+  catalogExpanded,
+  onToggleCatalog,
+}: {
+  agent: AgentRuntime
+  /** Native only — the model catalog is a disclosure on the Native card. */
+  catalogExpanded?: boolean
+  onToggleCatalog?: () => void
+}) {
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
   const notify = useAppStore((s) => s.notify)
@@ -102,6 +120,10 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
   const usable = isRuntimeUsable(
     liveSource?.find((a) => a.id === agent.id) ?? agent,
   )
+  // P60 — ownership. Native owns EveryAIOS's model catalog; an external CLI
+  // owns its own and exposes it (if at all) over ACP config options.
+  const native = isNativeRuntime(agent.id)
+  const acpOptions = useAppStore((s) => s.acpConfigOptions[agent.id])
   const [busyInstall, setBusyInstall] = useState(false)
   const [busyScan, setBusyScan] = useState(false)
 
@@ -190,7 +212,15 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
 
       <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
         <Layers className="h-3 w-3" />
-        <span>{usable ? `${models.length} models` : 'models on install'}</span>
+        <span>
+          {native
+            ? `${models.length} models`
+            : usable
+              ? acpOptions?.length
+                ? `agent-owned · ${acpOptions.length} options`
+                : 'own model config'
+              : 'models on install'}
+        </span>
         <span className="text-muted-foreground/30">|</span>
         <Terminal className="h-3 w-3" />
         <span className={cn(agent.headless ? 'text-emerald-300' : 'text-yellow-300')}>
@@ -250,6 +280,23 @@ function AgentCard({ agent }: { agent: AgentRuntime }) {
             {busyInstall ? 'installing…' : 'Install'}
           </Button>
         )}
+        {onToggleCatalog && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[10px]"
+            aria-expanded={!!catalogExpanded}
+            data-testid="native-catalog-toggle"
+            onClick={onToggleCatalog}
+          >
+            {catalogExpanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+            Model catalog ({models.length})
+          </Button>
+        )}
         <Button
           size="sm"
           variant="ghost"
@@ -287,8 +334,19 @@ function AgentsTab() {
   const liveAgents = useAppStore((s) => s.liveAgents)
   const [busyDiscover, setBusyDiscover] = useState(false)
   // Live discovery (ACP registry + PATH probe) when the shell reported rows;
-  // the honest static catalog otherwise. Settings never invents installs.
+  // the shipped catalog otherwise. P55.4 — that fallback is a *candidate
+  // list*, not occupancy: an empty live list in the desktop shell means
+  // discovery has not reported yet, so the banner below says so instead of
+  // letting the seed read as "these are on this machine".
   const catalog = liveAgents.length > 0 ? liveAgents : AGENTS
+  const occupancyUnknown = inTauri() && liveAgents.length === 0
+  // P60 — the Native model catalog is a disclosure on the EveryAIOS Native
+  // card, not a peer Settings tab: Native is the only runtime that table
+  // governs, so it lives with the runtime that owns it. Collapsed by default
+  // so the runtimes surface stays the primary one.
+  const [nativeOpen, setNativeOpen] = useState(false)
+  const nativeRow = catalog.find((a) => isNativeRuntime(a.id))
+  const otherRows = catalog.filter((a) => !isNativeRuntime(a.id))
 
   const discoverMore = async () => {
     setBusyDiscover(true)
@@ -327,8 +385,33 @@ function AgentsTab() {
         </Button>
       }
     >
+      {occupancyUnknown && (
+        <div className="mb-3 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
+          Runtime inventory unavailable — the shell has not reported which agent CLIs are installed.
+          The list below is the shipped catalog of installable runtimes, not occupancy; every
+          external row reads <span className="font-mono">not installed</span> until discovery
+          confirms it. Use <span className="text-amber-100">Discover more</span>.
+        </div>
+      )}
+      {/* EveryAIOS Native first, full width, with its own disclosure: the
+          built-in agent is the only runtime whose model surface EveryAIOS owns. */}
+      {nativeRow && (
+        <div>
+          <AgentCard
+            agent={nativeRow}
+            catalogExpanded={nativeOpen}
+            onToggleCatalog={() => setNativeOpen((o) => !o)}
+          />
+          {nativeOpen && (
+            <div className="mt-2.5 rounded-lg border border-border/60 bg-background/25 p-3">
+              <NativeModelCatalog />
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-        {catalog.map((a) => (
+        {otherRows.map((a) => (
           <AgentCard key={a.id} agent={a} />
         ))}
       </div>
@@ -336,9 +419,9 @@ function AgentsTab() {
   )
 }
 
-// === Models tab ==============================================================
+// === EveryAIOS Native model catalog =========================================
 
-function ModelsTab() {
+function NativeModelCatalog() {
   const selectedModelId = useAppStore((s) => s.selectedModelId)
   const setSelectedModel = useAppStore((s) => s.setSelectedModel)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
@@ -360,10 +443,22 @@ function ModelsTab() {
 
   return (
     <>
-      <SectionShell
-        title="Model catalog"
-        desc="Models reachable from installed runtimes only — install a runtime to unlock its models. Pricing is per 1M tokens. Click to make it the active model."
-        action={
+      {/* No SectionShell here: this renders inside the Native card's
+          disclosure, whose trigger already names it. */}
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h4 className="text-[12px] font-semibold text-foreground">
+            EveryAIOS Native model catalog
+          </h4>
+          <p className="mt-0.5 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
+            The model surface of the built-in EveryAIOS Native agent — the only runtime this
+            table governs. External agents (Claude Code, OpenCode, Codex, …) own their own model,
+            key, and routing configuration and expose theirs over ACP; the live models.dev catalog
+            lives in Providers / BYOK and Local models. Pricing is per 1M tokens. Click to make it
+            the active Native model.
+          </p>
+        </div>
+        <div className="shrink-0 sm:ml-3">
           <Button
             size="sm"
             variant="outline"
@@ -374,8 +469,8 @@ function ModelsTab() {
             <GitCompare className="h-3 w-3" />
             Compare {compareIds.length > 0 ? `(${compareIds.length})` : ''}
           </Button>
-        }
-      >
+        </div>
+      </div>
       <div className="overflow-x-auto rounded-lg border border-border/60 scroll-thin">
         <table className="w-full min-w-[640px] text-[11px]">
           <thead className="bg-zinc-900/60 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80">
@@ -504,7 +599,6 @@ function ModelsTab() {
       >
         <KeyRound className="h-4 w-4 text-orange-400" />
       </Row>
-    </SectionShell>
 
     {/* Model Comparison Dialog */}
     <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
@@ -574,6 +668,7 @@ function ModelsTab() {
     </>
   )
 }
+
 
 // === Routing tab =============================================================
 
@@ -710,18 +805,14 @@ export default function AgentsModelsSection() {
   const [tab, setTab] = useState('agents')
   return (
     <SectionShell
-      title="Agents & Models"
-      desc="Pick the underlying agent runtime (Claude Code, Codex, Grok Build, etc.) and the LLM it drives. Toggle auto-route to let EveryAIOS pick per task."
+      title="Agent CLIs & Runtimes"
+      desc="EveryAIOS Native is the built-in agent that owns EveryAIOS's providers, keys, and models. Everything else is an external agent CLI discovered from the ACP registry or PATH — it owns its own authentication and model configuration. Toggle auto-route to let EveryAIOS pick per task."
     >
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="h-8 bg-background/40">
           <TabsTrigger value="agents" className="text-[11px] data-[state=active]:bg-orange-500/15 data-[state=active]:text-orange-300">
             <Boxes className="mr-1 h-3 w-3" />
             Runtimes
-          </TabsTrigger>
-          <TabsTrigger value="models" className="text-[11px] data-[state=active]:bg-orange-500/15 data-[state=active]:text-orange-300">
-            <Cpu className="mr-1 h-3 w-3" />
-            Models
           </TabsTrigger>
           <TabsTrigger value="routing" className="text-[11px] data-[state=active]:bg-orange-500/15 data-[state=active]:text-orange-300">
             <Route className="mr-1 h-3 w-3" />
@@ -730,9 +821,6 @@ export default function AgentsModelsSection() {
         </TabsList>
         <TabsContent value="agents" className="mt-3">
           <AgentsTab />
-        </TabsContent>
-        <TabsContent value="models" className="mt-3">
-          <ModelsTab />
         </TabsContent>
         <TabsContent value="routing" className="mt-3">
           <RoutingTab />

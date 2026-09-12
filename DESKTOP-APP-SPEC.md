@@ -1,5 +1,7 @@
 # DESKTOP-APP-SPEC.md — Complete Product Specification
 
+> **Current provider/catalog contract (2026-09-12):** The shell resolves endpoints from user profiles, the live models.dev snapshot, and the vendored registry, including supported wire transport. Provider-qualified picker selections carry both provider and model id into the broker. User-config profiles persist `base_url`, format, optional key, headers/body, temperature, and model metadata. Zen/Go/Free session/request/client headers are applied by the broker and Free is keyless. Unsupported transports fail closed; curated picker rows are visibly fallback-only. This current note supersedes older inline “Live HTTP” annotations retained for historical traceability.
+
 ## Real-World Use Cases
 
 Every case below is the same loop: the user states the job, the system plans, every real-world effect passes the guarded gate, and the user gets the work — plus the ability to see what happened, undo it, and resume it later. The point is that the *same* mechanisms serve all of them — **one durable Work, one memory model, one governance model, one audit trail, one workspace**. Work outlives every session, run, agent, node, and client.
@@ -644,17 +646,17 @@ The runtime is exactly **three primary runtimes** (physical process location is 
 | id | What you see | What actually runs | Verdict |
 |---|---|---|---|
 | general | Simple/Pro, tray, proxy, telemetry | Pro/Simple store only. Telemetry switch is disabled. Tray/proxy never invoke. | PARTIAL / chrome |
-| appearance | theme, font, contrast, locale | Font/contrast/locale persist. Theme is React state — reload resets it. | PARTIAL. P55.12 |
+| appearance | theme, font, contrast, locale | Font/contrast/locale persist. Theme is owned by `ThemeProvider` and restored before first paint. | LIVE. P55.12 |
 | notifications | chat/task/sound toggles | Prefs unread by liveNotifications. Sound buttons disabled. | CHROME |
 | privacy | retention sliders | No retention job. Switches disabled. | CHROME |
-| keyboard | 6-row cheat sheet | Wrong vs keyboard-shortcuts.tsx (Cmd+1 is not chat). | CHROME + stale |
+| keyboard | 6-row cheat sheet | Renders the live shortcut map from `keyboard-shortcuts.tsx`. | LIVE. P58.1 |
 | voice | mic/TTS/PTT | Prefs + disabled buttons. Composer mic separately disabled. | CHROME |
 | mobile | QR / pair | All disabled. H18 post-v1. | DEAD (honest) |
-| agents | Install / Use / routing table | acp_install_* LIVE. Routing table in-memory. Bug: empty live list in Tauri paints static AGENTS (native marked installed). | PARTIAL. P55.4 |
+| agents | Agent runtimes (install / use) + the EveryAIOS Native model catalog + routing | acp_install_* LIVE; install state is discovery (install record or PATH) and an empty live list shows the shipped catalog as candidates, never as occupancy. The Native model catalog renders inside this surface (no separate Models tab); external agents' models show only via their ACP `configOptions`. Routing table in-memory. | LIVE. P55.4 / P60.12–.14 |
 | discover | inventory cards | discovery_inventory LIVE in shell | LIVE |
 | local | HF, download, serve, fit | model_download_*, model_serve, model_estimate_fit, local_models LIVE. Guardrail/login prefs chrome. local_ensure not called here. | PARTIAL |
 | capabilities | status matrix | Read-only from runtime facts | LIVE readout |
-| apikeys | vault add/remove | vault_key_add / vault_keys_list LIVE. Custom base URL discarded. List is a dropdown, not +/verify/tick. | PARTIAL. P55.6 / P56 |
+| apikeys | vault add/remove | vault_key_add / vault_keys_list remain the secret boundary. Provider activation persists profile URL/format/headers/model metadata, supports verify/tick and additional keys, and exposes the live model table. | LIVE. P55.6 / P56 |
 | experts | 8 personas | localStorage toggles. Import toml LIVE. Not B3 Subagents. | CHROME vs P53.6 |
 | chat | H34 radios + ctx/queue | Radios → guard_set_autonomy LIVE. ctx/cloud/queue unread. | PARTIAL |
 | permissions | same as chat | Guard matrix is guard_permissions_matrix on Guard, unused here | WRONG SECTION. P55.2 |
@@ -982,6 +984,8 @@ Vision is **first-class ground truth**, not a leftover after CDP. Owned engines 
 - **ACP (Agent Client Protocol, v1 stable) = the local harness-drive interface.** We are the Client; **any installed** external agent is a supervised stdio JSON-RPC subprocess (J17). Slash commands: `available_commands_update` + `/name` in `session/prompt`. Capability negotiation is bidirectional (`initialize`); omitted capabilities mean the agent uses its own backends — it does **not** force MCP. Self-contained writes stay outside our audit unless brokered. **ACP v2 draft removes the client fs/terminal surface** — monitored (J17); Channel B remains the durable mediated tool path.
 - **MCP = the tool surface (agent-to-tool).** We are both client (F6, consume external servers) and server (F7, Channel B — our Office/browser/search/memory as MCP tools). **Channel B is the only path where our ticket → executor → audit fully applies to an external agent's tool use.**
 - **A2A (v1.0.0, Apache-2.0, Linux Foundation) = the remote-agent discovery surface (secondary).** Verified against the official spec: Agent Card (JSON metadata — identity, capabilities, skills, endpoint, auth), `Get Agent Card` + Send/Stream Message + Get/List/Cancel Task operations, JSON-RPC/gRPC/HTTP bindings, push notifications for long-running tasks. **MCP and A2A are complementary, not competitors** (official stance). **A2A is explicitly NOT a sub-agent or tool-call protocol** — our B3 subagents are internal primitives, never A2A. Our `everyaios-acp::a2a` (`AgentCard`/`SignedAgentCard`/`CardTrust` + host-owned verifier seam) matches the official card model; remote task execution stays post-v1 (J17 note).
+
+**Model ownership (§4.2.5a + §4.2.5b — P60.12/P60.13):** EveryAIOS **Native** is the only runtime that owns EveryAIOS's model surface (the models.dev catalog, BYOK keys, custom providers, OpenCode Zen/Go/Free, NVIDIA/NIM, and local runtimes). Every other runtime is an **external ACP agent** that owns its own authentication, model, and routing: the composer/status bar show that agent's own `configOptions` (category `model`) when the agent exposes them, and otherwise state “managed by &lt;agent&gt;” — EveryAIOS never renders its Native provider list as a control over an external agent, and never passes Native keys or local-model credentials to one. Agent selection is **installed-only** (a registry entry is a catalog fact, not occupancy). Removing/refreshing the registry never deletes a user's stored credential; keys are removed only by explicit user action.
 
 **The Chief model (§4.2.5a + §4.2.5b):** `primary_chief` = inbuilt | **any installed** ACP agent (that product's loop). Chief is the **executive**, not the workhorse. Orchestrator is code. Subagents are Scout/Worker/Verifier (or specialized), not mini-Chiefs. Harness and model swap independently. **Occupancy is session-wide:** the **currently picked** Chief (composer picker / session pin / `userDefaultChief`) is the brain for chat **and** inbuilt **Browse**, **Computer use**, Office agent turns, and the **right rail**. A static `DEFAULT_ROUTING` map (browse→native, shell→codex, folder→claude-code, …) is **not** the product — those surfaces do not silently switch to a random catalog agent. Explicit DAG subagents (P60) are the only other occupancy. Current gap → TODO P53 + P60.11.
 

@@ -72,10 +72,10 @@
 - Core UX flows (onboarding, empty/error/loading states, Guard-2 permission card, multi-agent view, blueprint editor, office edit UX, cockpit quiet↔expanded, MCQ interrupt card).
 - **Generative UI (H25, AG-UI — doc 50):** agent-emitted live components over one JSON channel, sandboxed iframe renderer (strict CSP + process isolation, Anthropic Artifacts pattern); artifact cards upgrade from static previews to live components on demand.
 - **Resumable streams (H27, doc 50):** coordinator holds in-flight stream state (last token/id); reconnect UI ("🔄 Reconnecting…" chip) + auto-resume from last token (LibreChat pattern); idempotent retry wiring per ARCH/03.
-- Accessibility & i18n (WCAG 2.1 AA, keyboard nav, high-contrast, reduced-motion, locale files, RTL, font scaling).
+- Accessibility & i18n (WCAG 2.2 AA target, keyboard nav, high-contrast, reduced-motion, locale files, RTL, font scaling).
 - Performance UX (skeleton loaders, optimistic UI, virtual scrolling, progressive loading, debounced search, LCP <1s, TTI <2s).
 - User research & feedback (beta feedback mechanism, NPS after 7d, 5 testers × 3 rounds, UX metrics, opt-in session recording).
-- **Exit:** design system adopted across UI; WCAG AA pass; LCP/TTI targets met; feedback loop live.
+- **Exit:** design system adopted across UI; tested WCAG 2.2 AA criteria pass for the supported surface; LCP/TTI targets met; feedback loop live.
 
 ## P12 — Market research & go-to-market (≈4 wks, parallel)
 - Competitive analysis (AnythingLLM/Jan/Cherry/OpenWorker/Chatbox/Claude Code/Open WebUI hands-on; gap matrix vs top 5; positioning hooks: crystallization, office engine, memory algos).

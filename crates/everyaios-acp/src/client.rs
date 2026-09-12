@@ -216,6 +216,7 @@ pub struct AcpSession<T: AcpTransport> {
     agent_info: Option<AgentInfo>,
     auth_methods: Vec<AuthMethod>,
     agent_capabilities: Option<AgentCapabilities>,
+    config_options: Vec<ConfigOption>,
     authenticated: bool,
 }
 
@@ -229,6 +230,7 @@ impl<T: AcpTransport> AcpSession<T> {
             agent_info: None,
             auth_methods: Vec::new(),
             agent_capabilities: None,
+            config_options: Vec::new(),
             authenticated: false,
         }
     }
@@ -255,6 +257,11 @@ impl<T: AcpTransport> AcpSession<T> {
     /// Whether `authenticate` has succeeded on this connection.
     pub fn is_authenticated(&self) -> bool {
         self.authenticated
+    }
+
+    /// The latest complete agent-owned session configuration.
+    pub fn config_options(&self) -> &[ConfigOption] {
+        &self.config_options
     }
 
     /// ACP handshake: `initialize` → version/capability negotiation, with the
@@ -377,7 +384,39 @@ impl<T: AcpTransport> AcpSession<T> {
         let result: SessionNewResult =
             serde_json::from_value(resp).map_err(|e| AcpError::Malformed(e.to_string()))?;
         self.session_id = Some(result.session_id.clone());
+        self.config_options = result.config_options.clone();
         Ok(result.session_id)
+    }
+
+    /// Change one agent-owned session configuration value. The agent returns
+    /// the complete configuration list so dependent model/mode options remain
+    /// coherent.
+    pub fn set_config_option(
+        &mut self,
+        config_id: &str,
+        value: serde_json::Value,
+    ) -> Result<Vec<ConfigOption>, AcpError> {
+        self.ensure_ready()?;
+        let session_id = self.session_id.clone().ok_or(AcpError::NotReady)?;
+        let id = self.next_id;
+        self.next_id += 1;
+        let params = SetConfigOptionParams {
+            session_id,
+            config_id: config_id.to_string(),
+            value,
+        };
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "session/set_config_option",
+            "params": params,
+        });
+        self.transport.send(&req.to_string())?;
+        let resp = self.read_response(id)?;
+        let result: SetConfigOptionResult =
+            serde_json::from_value(resp).map_err(|e| AcpError::Malformed(e.to_string()))?;
+        self.config_options = result.config_options.clone();
+        Ok(result.config_options)
     }
 
     /// Drive one prompt turn. Sends `session/prompt`, then reads inbound
@@ -470,9 +509,11 @@ impl<T: AcpTransport> AcpSession<T> {
             } else {
                 // Notification.
                 if method == "session/update" {
-                    let u: SessionUpdate =
-                        serde_json::from_value(v.get("params").cloned().unwrap_or_default())
-                            .map_err(|e| AcpError::Malformed(e.to_string()))?;
+                    let u: SessionUpdate = serde_json::from_value(update_params(v.get("params")))
+                        .map_err(|e| AcpError::Malformed(e.to_string()))?;
+                    if u.is_config_option_update() && !u.config_options.is_empty() {
+                        self.config_options = u.config_options.clone();
+                    }
                     outcome.updates.push(u);
                 }
             }
@@ -539,6 +580,29 @@ impl<T: AcpTransport> AcpSession<T> {
 /// Map a JSON-RPC error object to an [`AcpError`]. The ACP schema's
 /// protocol-specific codes: `-32000` auth_required, `-32002`
 /// resource_not_found. Unknown codes surface as [`AcpError::ServerError`].
+/// Normalize a `session/update` notification's `params` into the flat shape
+/// [`SessionUpdate`] deserializes.
+///
+/// ACP nests the payload: `params.sessionId` + `params.update.{…}`. Older
+/// harnesses (and this crate's fixtures) put the update fields directly on
+/// `params`. Accept **both**, promoting `sessionId` into the update object, so
+/// a spec-shaped agent can never silently produce an empty update — which is
+/// exactly how a nested payload used to look: every field defaulted and the
+/// update was dropped without an error.
+fn update_params(params: Option<&Value>) -> Value {
+    let Some(params) = params else {
+        return Value::Null;
+    };
+    let Some(update) = params.get("update").filter(|u| u.is_object()) else {
+        return params.clone();
+    };
+    let mut merged = update.clone();
+    if let (Some(map), Some(session_id)) = (merged.as_object_mut(), params.get("sessionId")) {
+        map.entry("sessionId").or_insert_with(|| session_id.clone());
+    }
+    merged
+}
+
 fn map_error(err: &Value) -> AcpError {
     let code = err.get("code").and_then(Value::as_i64);
     if code == Some(ERROR_AUTH_REQUIRED) {
@@ -715,6 +779,7 @@ mod tests {
                 write_text_file: true,
             },
             terminal: true,
+            session: Some(SessionCapabilities::config_options_with_boolean()),
         };
         s.initialize_with_caps(client_info(), caps).unwrap();
         let first: Value = serde_json::from_str(&t.sent[0]).unwrap();
@@ -735,6 +800,149 @@ mod tests {
         let sid = s.session_new("/workspace", vec![]).unwrap();
         assert_eq!(sid, "sess-1");
         assert_eq!(s.session_id(), Some("sess-1"));
+    }
+
+    #[test]
+    fn session_new_captures_the_agents_own_config_options() {
+        // P60 — the agent owns this vocabulary (model/mode/reasoning). We keep
+        // the complete list verbatim; the native provider catalog never enters
+        // here. An agent that omits `configOptions` is still a valid session
+        // (covered by `session_new_sets_session_id`).
+        let mut t = MockTransport::new(vec![
+            &result_response(1, init_result()),
+            &result_response(
+                2,
+                json!({
+                    "sessionId": "sess-1",
+                    "configOptions": [{
+                        "id": "model",
+                        "name": "Model",
+                        "category": "model",
+                        "type": "select",
+                        "currentValue": "model-1",
+                        "options": [
+                            { "value": "model-1", "name": "Model 1" },
+                            { "value": "model-2", "name": "Model 2" },
+                        ]
+                    }]
+                }),
+            ),
+        ]);
+        let mut s = AcpSession::new(&mut t);
+        s.initialize(client_info()).unwrap();
+        s.session_new("/workspace", vec![]).unwrap();
+
+        let options = s.config_options();
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].id, "model");
+        assert_eq!(options[0].category.as_deref(), Some("model"));
+        assert_eq!(options[0].current_value, json!("model-1"));
+        assert_eq!(options[0].options.len(), 2);
+    }
+
+    #[test]
+    fn set_config_option_sends_the_documented_shape_and_stores_the_return() {
+        let updated = json!([{
+            "id": "model",
+            "name": "Model",
+            "type": "select",
+            "currentValue": "model-2",
+            "options": [
+                { "value": "model-1", "name": "Model 1" },
+                { "value": "model-2", "name": "Model 2" },
+            ]
+        }]);
+        let mut t = MockTransport::new(vec![
+            &result_response(1, init_result()),
+            &result_response(2, json!({ "sessionId": "sess-1" })),
+            &result_response(3, json!({ "configOptions": updated })),
+        ]);
+        let mut s = AcpSession::new(&mut t);
+        s.initialize(client_info()).unwrap();
+        s.session_new("/w", vec![]).unwrap();
+
+        let options = s.set_config_option("model", json!("model-2")).unwrap();
+        assert_eq!(options[0].current_value, json!("model-2"));
+        // The response is the complete configuration state, so the session's
+        // view must be replaced rather than patched.
+        assert_eq!(s.config_options(), options.as_slice());
+
+        let sent: Value = serde_json::from_str(&t.sent[2]).unwrap();
+        assert_eq!(sent["method"], "session/set_config_option");
+        assert_eq!(sent["params"]["sessionId"], "sess-1");
+        assert_eq!(sent["params"]["configId"], "model");
+        assert_eq!(sent["params"]["value"], "model-2");
+    }
+
+    #[test]
+    fn config_option_update_notification_replaces_the_stored_list() {
+        // The agent may re-select on its own (e.g. a model fallback mid-turn).
+        let mut t = MockTransport::new(vec![
+            &result_response(1, init_result()),
+            &result_response(2, json!({ "sessionId": "s1" })),
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "session/update",
+                "params": {
+                    "sessionId": "s1",
+                    "update": {
+                        "sessionUpdate": "config_option_update",
+                        "configOptions": [{
+                            "id": "model", "name": "Model", "type": "select",
+                            "currentValue": "fallback-model", "options": []
+                        }]
+                    }
+                }
+            })
+            .to_string(),
+            &result_response(3, json!({ "stopReason": "end_turn" })),
+        ]);
+        let mut s = AcpSession::new(&mut t);
+        s.initialize(client_info()).unwrap();
+        s.session_new("/w", vec![]).unwrap();
+        s.prompt("hi", |_p| PermissionDecision::allow()).unwrap();
+
+        let options = s.config_options();
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].current_value, json!("fallback-model"));
+    }
+
+    #[test]
+    fn spec_nested_session_update_is_parsed_not_dropped() {
+        // The protocol nests the payload under `params.update`. Before the
+        // normalization fix this deserialized into an all-defaults
+        // SessionUpdate, so a real agent's tool calls/commands vanished.
+        let mut t = MockTransport::new(vec![
+            &result_response(1, init_result()),
+            &result_response(2, json!({ "sessionId": "s1" })),
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "session/update",
+                "params": {
+                    "sessionId": "s1",
+                    "update": {
+                        "sessionUpdate": "available_commands_update",
+                        "availableCommands": [
+                            { "name": "review", "description": "Review the diff" }
+                        ]
+                    }
+                }
+            })
+            .to_string(),
+            &result_response(3, json!({ "stopReason": "end_turn" })),
+        ]);
+        let mut s = AcpSession::new(&mut t);
+        s.initialize(client_info()).unwrap();
+        s.session_new("/w", vec![]).unwrap();
+        let outcome = s.prompt("hi", |_p| PermissionDecision::allow()).unwrap();
+
+        assert_eq!(outcome.updates.len(), 1);
+        let u = &outcome.updates[0];
+        assert!(u.is_available_commands_update());
+        // `sessionId` is promoted from the envelope so the update is keyed.
+        assert_eq!(u.session_id, "s1");
+        assert_eq!(u.available_commands.len(), 1);
+        assert_eq!(u.available_commands[0].name, "review");
     }
 
     #[test]

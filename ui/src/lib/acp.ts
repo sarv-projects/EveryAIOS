@@ -61,6 +61,22 @@ export function governanceLabel(g: GovernanceInfo | undefined): string {
   }
 }
 
+export interface AcpConfigOptionValue {
+  value: string | boolean
+  name: string
+  description?: string
+}
+
+export interface AcpConfigOption {
+  id: string
+  name: string
+  description?: string
+  category?: string
+  type: 'select' | 'boolean' | string
+  currentValue: string | boolean
+  options?: AcpConfigOptionValue[]
+}
+
 export interface AcpHandleInfo {
   handle: string;
   agentId: string;
@@ -72,6 +88,8 @@ export interface AcpHandleInfo {
   authMethods: AuthMethod[];
   /** P53.8 — the agent advertised `promptCapabilities.embeddedContext`. */
   embeddedContext: boolean;
+  /** Complete agent-owned session options, including model when exposed. */
+  configOptions?: AcpConfigOption[]
 }
 
 /** One live slash command advertised by the agent (P53.1). */
@@ -91,6 +109,8 @@ export interface AcpPromptUpdate {
   status?: string;
   /** P53.1 — live slash vocabulary (only on `available_commands_update`). */
   availableCommands?: AvailableCommand[];
+  /** Complete agent-owned config state (only on `config_option_update`). */
+  configOptions?: AcpConfigOption[];
 }
 
 export interface AcpPromptResult {
@@ -218,6 +238,28 @@ export async function acpPrompt(
  * Never a hardcoded per-harness table. */
 export async function acpSessionCommands(handle: string): Promise<AvailableCommand[]> {
   return nativeCall('ACP session commands', () => invoke<AvailableCommand[]>("acp_session_commands", { handle }));
+}
+
+/** The selected external agent's own session configuration vocabulary. */
+export async function acpSessionConfigOptions(handle: string): Promise<AcpConfigOption[]> {
+  return nativeCall('ACP session config options', () =>
+    invoke<AcpConfigOption[]>("acp_session_config_options", { handle }),
+  )
+}
+
+/** Set one external agent-owned session option; returns the complete updated list. */
+export async function acpSessionSetConfigOption(
+  handle: string,
+  configId: string,
+  value: string | boolean,
+): Promise<AcpConfigOption[]> {
+  return nativeCall('ACP session config option', () =>
+    invoke<AcpConfigOption[]>("acp_session_set_config_option", {
+      handle,
+      configId,
+      value,
+    }),
+  )
 }
 
 /** P53.5 — per-session tool observability (one row per ACP turn). Metrics

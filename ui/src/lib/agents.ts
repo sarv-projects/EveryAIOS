@@ -499,35 +499,55 @@ export function getModelsForAgent(agentId: string): AgentModel[] {
   return a.models.map((id) => MODEL_MAP[id]).filter(Boolean) as AgentModel[]
 }
 
+/** The built-in Native runtime id. Native is the **only** runtime that owns
+ * EveryAIOS's own provider/model surface (models.dev catalog, BYOK keys,
+ * custom providers, OpenCode Zen/Go/Free, NVIDIA/NIM, local runtimes). */
+export const NATIVE_AGENT_ID = 'everyaios-native'
+
+/** Model ownership boundary (P60): Native owns EveryAIOS's provider catalog;
+ * every other runtime is an external ACP agent that owns its own model,
+ * authentication, and routing. The UI must never present Native's
+ * provider/model list as a control over an external agent. */
+export function isNativeRuntime(agentId: string | undefined): boolean {
+  return agentId === NATIVE_AGENT_ID
+}
+
 /** A runtime is usable when it is the inbuilt orchestrator (always live) or
  * its install was verified on this machine. Anything else must not present
  * models — the model list loads live only after install. */
 export function isRuntimeUsable(a: AgentRuntime | undefined): boolean {
   if (!a) return false
-  return (
-    a.id === 'everyaios-native' || a.status === 'installed' || a.status === 'updating'
-  )
+  return a.id === NATIVE_AGENT_ID || a.status === 'installed' || a.status === 'updating'
 }
 
-/** Live-gated model list: curated rows for installed runtimes, `[]` for
- * anything not yet installed (plus `[]` for registry rows with no curated
- * mapping). The picker/settings must render the honest empty state instead. */
+/** Model rows this runtime is allowed to display.
+ *
+ * * **Native** — the curated seed (an installed, usable runtime with a known
+ *   mapping). The live models.dev rows are added separately by the picker.
+ * * **External ACP agent** — `[]`. Its models are whatever the agent itself
+ *   exposes over ACP `configOptions` (`category: "model"`); the curated seed
+ *   describes a provider catalog that agent never receives, so rendering it
+ *   would claim control EveryAIOS does not have.
+ * * **Not installed** — `[]` with an honest empty state. */
 export function getModelsForAgentLive(
   agentId: string,
   live?: AgentRuntime[],
 ): AgentModel[] {
+  if (!isNativeRuntime(agentId)) return []
   const row = live?.find((a) => a.id === agentId) ?? AGENT_MAP[agentId]
   if (!isRuntimeUsable(row)) return []
   return getModelsForAgent(agentId)
 }
 
-/** Union of models reachable from installed runtimes (deduped, stable
- * order). Drives the Models tab — uninstalled runtimes contribute nothing. */
+/** Union of models owned by the usable **Native** runtime (deduped, stable
+ * order). Drives the Native model catalog surface — external runtimes own
+ * their own model lists, so their curated seed is never aggregated here, and
+ * an uninstalled runtime contributes nothing. */
 export function modelsForUsableRuntimes(runtimes: AgentRuntime[]): AgentModel[] {
   const seen = new Set<string>()
   const out: AgentModel[] = []
   for (const r of runtimes) {
-    if (!isRuntimeUsable(r)) continue
+    if (!isNativeRuntime(r.id) || !isRuntimeUsable(r)) continue
     for (const m of getModelsForAgent(r.id)) {
       if (!seen.has(m.id)) {
         seen.add(m.id)

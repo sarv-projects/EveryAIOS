@@ -21,6 +21,34 @@ pub const PROTOCOL_VERSION: u64 = 1;
 pub struct ClientCapabilities {
     pub fs: FsCapabilities,
     pub terminal: bool,
+    /// ACP session configuration support. Select options need no capability
+    /// marker; the optional boolean marker advertises that this client can
+    /// render and set boolean options too.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session: Option<SessionCapabilities>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SessionCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_options: Option<ConfigOptionCapabilities>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ConfigOptionCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boolean: Option<serde_json::Value>,
+}
+
+impl SessionCapabilities {
+    pub fn config_options_with_boolean() -> Self {
+        Self {
+            config_options: Some(ConfigOptionCapabilities {
+                boolean: Some(serde_json::json!({})),
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -165,6 +193,50 @@ pub struct SessionNewParams {
 #[serde(rename_all = "camelCase")]
 pub struct SessionNewResult {
     pub session_id: String,
+    /// Agent-owned session configuration, including model selectors when the
+    /// agent exposes them. Empty means the agent manages its own model state.
+    ///
+    /// Optional on the wire: the protocol says the Agent **MAY** return
+    /// `configOptions`, so an agent that does not must not fail `session/new`.
+    #[serde(default)]
+    pub config_options: Vec<ConfigOption>,
+}
+
+/// One ACP session-level configuration selector. The agent owns this
+/// vocabulary and the current value; EveryAIOS must not substitute its native
+/// provider/model catalog for it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ConfigOption {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub category: Option<String>,
+    pub r#type: String,
+    pub current_value: serde_json::Value,
+    pub options: Vec<ConfigOptionValue>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ConfigOptionValue {
+    pub value: serde_json::Value,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetConfigOptionParams {
+    pub session_id: String,
+    pub config_id: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SetConfigOptionResult {
+    pub config_options: Vec<ConfigOption>,
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +443,9 @@ pub struct SessionUpdate {
     /// served to the composer — never a hardcoded per-harness table.
     #[serde(default)]
     pub available_commands: Vec<AvailableCommand>,
+    /// Complete agent-owned configuration after a config-option update.
+    #[serde(default)]
+    pub config_options: Vec<ConfigOption>,
 }
 
 /// One live slash command advertised by the agent
@@ -399,6 +474,10 @@ impl SessionUpdate {
     /// P53.1 — this update carries the agent's live slash vocabulary.
     pub fn is_available_commands_update(&self) -> bool {
         self.session_update == "available_commands_update"
+    }
+
+    pub fn is_config_option_update(&self) -> bool {
+        self.session_update == "config_option_update"
     }
 }
 

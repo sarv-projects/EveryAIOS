@@ -8,6 +8,8 @@
 >
 > **Status:** Current UI design reference. The three-control composer and honest office-viewer behavior are defined by the normative product spec; historical changes belong in `../SPEC-CHANGELOG.md`.
 
+> **Current provider/model behavior (2026-09-12):** the inbuilt picker and status bar use reachable live catalog rows, preserve provider-qualified selections through routing, and label curated seed rows as fallback. **Ownership is per-agent (P60.12/.13):** EveryAIOS Native owns the provider/model surface, so only it shows catalog/BYOK/local rows; an external ACP agent shows its own ACP `configOptions` (`Model · <agent>`) or an explicit “managed by &lt;agent&gt;”. Runtime rows are installed-only selectable, and Settings keeps a single agent surface — the Native model catalog is a collapsed disclosure on the EveryAIOS Native card rather than a peer Models tab.
+
 ## 1. Tokens (code: `src/globals.css` `:root` / `.dark`)
 
 | Token | Light | Dark | Notes |
@@ -31,7 +33,7 @@ JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
 - **LeftSidebar**: workspace selector, nav (Home/Activity/Projects/Files/Automations), Recent sessions (P11.5.1 child forks indent), Settings. Collapsible to 48px.
 - **CenterColumn**: chat (timeline + composer + approve cards) or one panel screen.
 - **ActivityRail + RightViewport** (`right-rail.tsx`): 48px rail (Folder/Shell/Browse/Code + Office flyout + Progress/Trajectory), one open surface, drag-resize 28–70%, per-session persistence (P11.5.3).
-- **StatusBar**: state pill (● Live / ⏸ Paused / Processing) + privacy reassurance; dev-mode telemetry strip incl. LCP/TTI (P11.4).
+- **StatusBar**: live runtime state (● Live / ⏸ Paused / Processing) + privacy reassurance + the current provider/model label when available; dev-mode telemetry strip incl. LCP/TTI (P11.4). Never present a curated seed row as live catalog data.
 
 ## 3. Components (code: `src/components/ui/*` + `src/components/panels|chat|views/*`)
 
@@ -50,7 +52,7 @@ JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms
 
 ## 4. Accessibility (P11.3)
 
-WCAG 2.1 AA: focus-visible ring on every interactive element; high-contrast
+WCAG 2.2 AA target: focus-visible ring on every interactive element; high-contrast
 mode (`html.high-contrast`); reduced motion; font scaling
 (`html.font-scale-*`); RTL (`html[dir=rtl]` + logical-property pass);
 aria-labels on icon-only buttons; keyboard nav via `KeyboardShortcuts` +

@@ -553,6 +553,7 @@ fn build_client_capabilities(advertise: bool) -> ClientCapabilities {
             write_text_file: advertise,
         },
         terminal: advertise,
+        session: Some(crate::messages::SessionCapabilities::config_options_with_boolean()),
     }
 }
 

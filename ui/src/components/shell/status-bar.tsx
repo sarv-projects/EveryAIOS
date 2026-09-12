@@ -28,7 +28,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useAppStore } from '@/lib/store'
 import * as perfLib from '@/lib/perf'
-import { MODEL_MAP, isRuntimeUsable } from '@/lib/agents'
+import { MODEL_MAP, isNativeRuntime, isRuntimeUsable } from '@/lib/agents'
 import { catalogPickLabel } from '@/lib/catalog-models'
 import { CompanionChip } from './companion-chip'
 import { cn } from '@/lib/utils'
@@ -206,16 +206,32 @@ export function StatusBar() {
   // uninstalled CLI must never be painted as the active runtime.
   const liveAgents = useAppStore((s) => s.liveAgents)
   const agent = liveAgents.find((a) => a.id === selectedAgentId && isRuntimeUsable(a))
+  // P60 — model ownership. An external ACP agent owns its own model; the
+  // bar must not paint EveryAIOS's Native pin as if it governed that agent.
+  const nativeSelected = isNativeRuntime(selectedAgentId)
+  const acpModelOption = useAppStore((s) => {
+    const opts = s.acpConfigOptions[selectedAgentId]
+    if (!opts?.length) return undefined
+    return (
+      opts.find((o) => o.category === 'model') ??
+      opts.find((o) => o.id.toLowerCase().includes('model'))
+    )
+  })
   // P58.7 — curated model rows still back this label until the provider model
   // table (P56.7) is the picker source; do not claim catalog coverage here.
   const model = MODEL_MAP[selectedModelId]
   // P58.7 — a catalog pick is `provider · model-id` because that is the exact
   // pair the broker receives; a curated row keeps its curated label. The
   // fallback is the raw id, never '—' for a selection we can name.
-  const modelLabel =
-    catalogPickLabel(selectedModelProvider, selectedModelId) ??
-    model?.label ??
-    selectedModelId
+  // P60 — for an external agent the label is the agent's own ACP value, or
+  // an explicit "managed by <agent>", never a Native model name.
+  const modelLabel = nativeSelected
+    ? catalogPickLabel(selectedModelProvider, selectedModelId) ??
+      model?.label ??
+      selectedModelId
+    : acpModelOption
+      ? String(acpModelOption.currentValue)
+      : `managed by ${agent?.name ?? selectedAgentId}`
   // Agent health, latency, uptime, and task counts are not available from the
   // runtime contract yet. Never invent them; show unknown until a live probe
   // supplies evidence.

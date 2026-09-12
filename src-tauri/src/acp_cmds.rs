@@ -31,9 +31,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use everyaios_acp::{
-    AcpSession, AuthMethod, AvailableCommand, ClientInfo, Distribution, Installer, LaunchRegistry,
-    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, PromptContent, PromptOutcome,
-    RegistryClient, RegistryPolicy, ToolCall, ToolKind,
+    AcpSession, AuthMethod, AvailableCommand, ClientInfo, ConfigOption, Distribution, Installer,
+    LaunchRegistry, PermissionDecision, Platform, PolicyVerdict, ProcessTransport, PromptContent,
+    PromptOutcome, RegistryClient, RegistryPolicy, ToolCall, ToolKind,
 };
 use everyaios_core::config::Config;
 use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
@@ -54,12 +54,7 @@ static ACP_COUNTER: AtomicU64 = AtomicU64::new(1);
 pub fn chief_default_get() -> Result<serde_json::Value, String> {
     let cfg = Config::load().map_err(|e| e.to_string())?;
     let mut known = vec!["inbuilt".to_string()];
-    known.extend(
-        LaunchRegistry::builtin()
-            .agents
-            .iter()
-            .map(|m| m.id.clone()),
-    );
+    known.extend(launch_registry().agents.iter().map(|m| m.id.clone()));
     Ok(serde_json::json!({
         "primaryChief": cfg.primary_chief,
         "known": known
@@ -73,7 +68,7 @@ pub fn chief_default_get() -> Result<serde_json::Value, String> {
 /// or a missing binary never silently falls back to the inbuilt engine.
 #[tauri::command]
 pub fn chief_default_set(primary_chief: String) -> Result<String, String> {
-    if primary_chief != "inbuilt" && LaunchRegistry::builtin().get(&primary_chief).is_none() {
+    if primary_chief != "inbuilt" && launch_registry().get(&primary_chief).is_none() {
         return Err(format!(
             "unknown primary_chief {primary_chief:?} — no registered launch path (fail-closed, no silent fallback)"
         ));
@@ -97,7 +92,7 @@ fn agent_installed(agent_id: &str) -> bool {
     if agent_id == "inbuilt" || agent_id == "everyaios" {
         return true;
     }
-    let registry = LaunchRegistry::builtin();
+    let registry = launch_registry();
     if installer().installed(agent_id).is_some() {
         return true;
     }
@@ -113,6 +108,51 @@ fn agent_installed(agent_id: &str) -> bool {
         None => false,
     }
 }
+
+/// The launch registry the runtime actually resolves against: the curated
+/// builtin seed **merged with the cached official ACP registry**
+/// (`registry.json`, cached under `<data_dir>/agents` by [`registry_client`]).
+///
+/// This is the one place the dynamic catalog enters the runtime. The two
+/// facts stay separate: the merged registry is the *catalog* (which agents
+/// exist, and how to spawn them), while occupancy is [`agent_installed`]
+/// (an EveryAIOS install record or a PATH-discovered binary). A registry
+/// entry therefore never becomes a selectable/usable agent by itself.
+///
+/// No cache (never fetched, or offline before the first fetch) ⇒ the curated
+/// seed, so the shell degrades to the builtin list instead of failing.
+///
+/// The merge is memoised on the cache file's mtime: this helper is called in
+/// loops (once per agent row in `acp_install_status` / `chief_subagents`), and
+/// re-parsing the registry JSON per row would be a real cost. A refresh that
+/// rewrites `registry.json` changes the mtime and invalidates the memo, so a
+/// newly fetched catalog is picked up on the next read without a restart.
+fn launch_registry() -> LaunchRegistry {
+    let client = registry_client();
+    let stamp = std::fs::metadata(client.cache_dir().join("registry.json"))
+        .and_then(|m| m.modified())
+        .ok();
+    if let Ok(memo) = LAUNCH_REGISTRY_MEMO.lock() {
+        if let Some((cached_stamp, reg)) = memo.as_ref() {
+            if *cached_stamp == stamp {
+                return reg.clone();
+            }
+        }
+    }
+    let mut reg = LaunchRegistry::builtin();
+    if let Some(snap) = client.load_cached() {
+        snap.index.merge_into(&mut reg, Platform::current());
+    }
+    if let Ok(mut memo) = LAUNCH_REGISTRY_MEMO.lock() {
+        *memo = Some((stamp, reg.clone()));
+    }
+    reg
+}
+
+/// Memo for [`launch_registry`]: `(cache-file mtime, merged registry)`.
+static LAUNCH_REGISTRY_MEMO: std::sync::Mutex<
+    Option<(Option<std::time::SystemTime>, LaunchRegistry)>,
+> = std::sync::Mutex::new(None);
 
 /// A live ACP agent session + the id it was launched under.
 pub(crate) struct AcpHandle {
@@ -131,6 +171,9 @@ pub(crate) struct AcpHandle {
     /// recent `available_commands_update` on this handle; empty until the
     /// agent sends one). Served to the composer via `acp_session_commands`.
     pub available_commands: Vec<AvailableCommand>,
+    /// Complete agent-owned config option state. This is intentionally
+    /// separate from EveryAIOS Native provider/model state.
+    pub config_options: Vec<ConfigOption>,
     pub session: AcpSession<ProcessTransport>,
 }
 
@@ -151,6 +194,8 @@ pub struct AcpHandleInfo {
     auth_methods: Vec<AuthMethod>,
     #[serde(default)]
     embedded_context: bool,
+    #[serde(default)]
+    config_options: Vec<ConfigOption>,
 }
 
 impl From<(&AcpHandle, &str)> for AcpHandleInfo {
@@ -164,6 +209,7 @@ impl From<(&AcpHandle, &str)> for AcpHandleInfo {
             auth_required: h.auth_required,
             auth_methods: h.auth_methods.clone(),
             embedded_context: h.embedded_context,
+            config_options: h.config_options.clone(),
         }
     }
 }
@@ -186,7 +232,7 @@ impl From<(&AcpHandle, &str)> for AcpHandleInfo {
 ///   must render the row as un-audited.)
 #[tauri::command]
 pub fn acp_agents() -> Vec<serde_json::Value> {
-    LaunchRegistry::builtin()
+    launch_registry()
         .agents
         .iter()
         .map(|m| {
@@ -270,6 +316,51 @@ fn registry_client() -> RegistryClient {
     RegistryClient::new(everyaios_core::default_data_dir().join("agents"))
 }
 
+/// How old a cached registry must be before the boot job refetches it. The
+/// upstream job publishes hourly; 6h keeps us current for a desktop app
+/// without polling someone else's CDN every hour.
+const REGISTRY_STALE_SECS: u64 = 6 * 60 * 60;
+/// How often the job re-checks staleness (no network unless stale).
+const REGISTRY_RECHECK_SECS: u64 = 60 * 60;
+
+/// P60.14 — the ACP registry boot job.
+///
+/// The contract is a **dynamically consumed** catalog with a local
+/// last-known-good cache: discovery must not depend on the user remembering to
+/// press “Discover more”. So the shell refreshes the official registry when the
+/// cache is missing or stale (mirroring the P56.1 models.dev job, whose cadence
+/// is configurable in Settings), then re-checks hourly so an app left running
+/// picks up new agents without a restart.
+///
+/// Failure is silent and non-fatal: a failed fetch keeps the cached catalog,
+/// and with no cache at all the resolver degrades to the curated seed. Never
+/// blocks the UI thread; writes only the registry cache (`registry.json` +
+/// `registry.meta.json`) and never touches the vault.
+pub fn spawn_registry_refresh_job() {
+    std::thread::spawn(|| loop {
+        let client = registry_client();
+        let stale = client
+            .load_cached()
+            .map(|s| {
+                let age_ms = now_ms().saturating_sub(s.fetched_at_ms);
+                age_ms > REGISTRY_STALE_SECS * 1000
+            })
+            .unwrap_or(true);
+        if stale {
+            // Best-effort: an offline boot keeps whatever is cached.
+            let _ = client.refresh();
+        }
+        std::thread::sleep(std::time::Duration::from_secs(REGISTRY_RECHECK_SECS));
+    });
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// The F8 install root: `<data_dir>/agents` (registry cache + installed
 /// binaries + install-state pointers share the directory).
 fn installer() -> Installer {
@@ -335,7 +426,7 @@ fn resolve_on_path(name: &str) -> Option<std::path::PathBuf> {
 /// honest "already on this machine", no download implied.
 #[tauri::command]
 pub fn acp_install_status() -> Result<serde_json::Value, String> {
-    let registry = LaunchRegistry::builtin();
+    let registry = launch_registry();
     let inst = installer();
     let mut out = serde_json::Map::new();
     for m in &registry.agents {
@@ -575,7 +666,7 @@ pub fn acp_launch(
     agent_id: String,
     cwd: String,
 ) -> Result<AcpHandleInfo, String> {
-    let registry = LaunchRegistry::builtin();
+    let registry = launch_registry();
     let manifest = registry
         .get(&agent_id)
         .cloned()
@@ -593,6 +684,7 @@ pub fn acp_launch(
             auth_required: false,
             auth_methods: vec![],
             embedded_context: false,
+            config_options: vec![],
         });
     }
 
@@ -680,6 +772,10 @@ pub fn acp_launch(
 
     let handle = format!("acp-{}", ACP_COUNTER.fetch_add(1, Ordering::Relaxed));
     let agent_name = manifest.name.clone();
+    // Snapshot the negotiated session config options *before* the session is
+    // moved into the handle map, so both the handle and the launch response
+    // report the same list.
+    let config_options = session.config_options().to_vec();
     state
         .acp_sessions
         .lock()
@@ -693,6 +789,7 @@ pub fn acp_launch(
                 auth_methods: auth_methods.clone(),
                 embedded_context,
                 available_commands: Vec::new(),
+                config_options: config_options.clone(),
                 session,
             },
         );
@@ -706,6 +803,7 @@ pub fn acp_launch(
         auth_required,
         auth_methods,
         embedded_context,
+        config_options,
     })
 }
 
@@ -787,7 +885,7 @@ fn build_acp_prompt_with_passport(
     // moment the Chief receives a turn. This is advisory context only; every
     // child launch remains subject to the B3 limits and Guard-2 policy.
     if let Ok(cfg) = Config::load() {
-        let mix: Vec<String> = LaunchRegistry::builtin()
+        let mix: Vec<String> = launch_registry()
             .agents
             .iter()
             .filter(|m| m.protocol != everyaios_acp::HarnessProtocol::Inbuilt)
@@ -882,9 +980,10 @@ fn append_acp_tool_log(
     }
 }
 
-/// P53.6 — Settings → Subagents rows: **installed CLIs only** (an
+/// P53.6 + P60 — Settings → Subagents rows: **installed CLIs only** (an
 /// EveryAIOS install record or a PATH-discovered binary — the same
-/// `agent_installed` predicate Chief occupancy uses). Each row carries the
+/// `agent_installed` predicate Chief occupancy uses), plus EveryAIOS Native,
+/// which is always present as the default candidate. Each row carries the
 /// shipped default when-to-use text (the registry manifest description) plus
 /// the user's override from `everyaios.toml` (`subagent_notes`; empty =
 /// default). The Chief reads these at delegate time (ACP prompt injection +
@@ -892,20 +991,22 @@ fn append_acp_tool_log(
 #[tauri::command]
 pub fn chief_subagents() -> Result<Vec<serde_json::Value>, String> {
     let cfg = Config::load().map_err(|e| e.to_string())?;
-    let registry = LaunchRegistry::builtin();
+    let registry = launch_registry();
     let mut rows = Vec::new();
     for m in &registry.agents {
-        if m.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
-            continue;
-        }
-        if !agent_installed(&m.id) {
+        // P60 — EveryAIOS Native is always a delegation candidate (it ships
+        // inside the app and needs no install record). External CLIs appear
+        // only when `agent_installed` verifies them, so the Subagents surface
+        // is occupancy, never the raw catalog.
+        let inbuilt = m.protocol == everyaios_acp::HarnessProtocol::Inbuilt;
+        if !inbuilt && !agent_installed(&m.id) {
             continue;
         }
         let note = cfg.subagent_notes.get(&m.id).cloned().unwrap_or_default();
         let enabled = cfg.subagent_enabled.get(&m.id).copied().unwrap_or(true);
         rows.push(serde_json::json!({
             "agentId": m.id,
-            "name": m.name,
+            "name": if inbuilt { "EveryAIOS Native" } else { m.name.as_str() },
             "defaultWhenToUse": m.description,
             "whenToUse": if note.is_empty() { m.description.clone() } else { note.clone() },
             "customized": !note.is_empty(),
@@ -920,7 +1021,7 @@ pub fn chief_subagents() -> Result<Vec<serde_json::Value>, String> {
 /// attach only to real occupancy candidates.
 #[tauri::command]
 pub fn chief_subagent_set_note(agent_id: String, note: String) -> Result<String, String> {
-    if LaunchRegistry::builtin().get(&agent_id).is_none() {
+    if launch_registry().get(&agent_id).is_none() {
         return Err(format!("unknown agent id: {agent_id}"));
     }
     if !agent_installed(&agent_id) {
@@ -941,7 +1042,7 @@ pub fn chief_subagent_set_note(agent_id: String, note: String) -> Result<String,
 /// P53.6 — enable or disable an installed CLI in the Chief's delegation mix.
 #[tauri::command]
 pub fn chief_subagent_set_enabled(agent_id: String, enabled: bool) -> Result<bool, String> {
-    if LaunchRegistry::builtin().get(&agent_id).is_none() {
+    if launch_registry().get(&agent_id).is_none() {
         return Err(format!("unknown agent id: {agent_id}"));
     }
     if !agent_installed(&agent_id) {
@@ -977,6 +1078,41 @@ pub fn acp_session_commands(
         .get(&handle)
         .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
     Ok(entry.available_commands.clone())
+}
+
+/// Return the complete model/config vocabulary owned by one external ACP
+/// session. No native provider keys or models are returned here.
+#[tauri::command]
+pub fn acp_session_config_options(
+    state: State<'_, AppState>,
+    handle: String,
+) -> Result<Vec<ConfigOption>, String> {
+    let sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+    let entry = sessions
+        .get(&handle)
+        .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+    Ok(entry.config_options.clone())
+}
+
+/// Set one agent-owned session configuration value. The ACP response replaces
+/// the complete option list so dependent model/reasoning options stay honest.
+#[tauri::command]
+pub fn acp_session_set_config_option(
+    state: State<'_, AppState>,
+    handle: String,
+    config_id: String,
+    value: serde_json::Value,
+) -> Result<Vec<ConfigOption>, String> {
+    let mut sessions = state.acp_sessions.lock().map_err(|e| e.to_string())?;
+    let entry = sessions
+        .get_mut(&handle)
+        .ok_or_else(|| format!("unknown ACP handle: {handle}"))?;
+    let options = entry
+        .session
+        .set_config_option(&config_id, value)
+        .map_err(|e| e.to_string())?;
+    entry.config_options = options.clone();
+    Ok(options)
 }
 
 /// P53.5 — read the per-session tool observability file (newest last).
@@ -1169,6 +1305,9 @@ pub fn acp_prompt(
             for u in &outcome.updates {
                 if u.is_available_commands_update() && !u.available_commands.is_empty() {
                     entry.available_commands = u.available_commands.clone();
+                }
+                if u.is_config_option_update() && !u.config_options.is_empty() {
+                    entry.config_options = u.config_options.clone();
                 }
             }
         }
@@ -1459,5 +1598,89 @@ mod tests {
         if let Some(p) = &found {
             assert!(p.is_file(), "resolved path must exist: {}", p.display());
         }
+    }
+
+    /// P60.14 — the desktop shell's live registry leg, end to end.
+    ///
+    /// `#[ignore]` (network). Run explicitly, single-threaded because it
+    /// repoints `EVERYAIOS_HOME` for the duration:
+    ///
+    /// ```text
+    /// cargo test -p everyaios-desktop acp_registry_refresh -- --ignored --nocapture --test-threads=1
+    /// ```
+    ///
+    /// It exercises the *shell's own* composition rather than a copy of it:
+    /// `acp_registry_refresh()` — the command the Settings “Discover more”
+    /// button invokes — fetches the real CDN with the production `ureq`
+    /// transport and writes the cache, and then `launch_registry()`, the
+    /// resolver behind `acp_agents` / `acp_install_status` / `chief_subagents`
+    /// (memoised on the cache file's mtime), must serve the merged catalog
+    /// without a restart. Occupancy is untouched by this: a merged row is a
+    /// catalog fact, and `agent_installed` still decides what is usable.
+    #[test]
+    #[ignore = "network: fetches the live ACP registry CDN"]
+    fn live_acp_registry_refresh_drives_the_shell_launch_registry() {
+        let home =
+            std::env::temp_dir().join(format!("everyaios-shell-registry-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let previous_home = std::env::var("EVERYAIOS_HOME").ok();
+        std::env::set_var("EVERYAIOS_HOME", &home);
+
+        // No cache yet ⇒ the resolver degrades to the curated seed.
+        let seed = LaunchRegistry::builtin();
+        assert_eq!(
+            launch_registry().agents.len(),
+            seed.agents.len(),
+            "an empty cache must resolve to the curated seed alone"
+        );
+        assert!(
+            registry_client().load_cached().is_none(),
+            "a fresh data dir must not report a cached catalog"
+        );
+
+        // The command the Settings button calls: live fetch + cache write.
+        let snap = acp_registry_refresh().expect("live registry refresh");
+        let count = snap["agentCount"].as_u64().unwrap_or(0);
+        assert!(count > 0, "the live registry reported no agents: {snap}");
+        assert_eq!(snap["fromCache"], serde_json::json!(false));
+        eprintln!("shell registry refresh: {snap}");
+        assert_eq!(
+            registry_client()
+                .load_cached()
+                .map(|s| s.index.agents.len()),
+            Some(count as usize),
+            "the cache must hold exactly what the refresh fetched"
+        );
+
+        // The memoised resolver (cache mtime key) now serves the merged catalog.
+        let merged = launch_registry();
+        let added: Vec<String> = merged
+            .agents
+            .iter()
+            .map(|m| m.id.clone())
+            .filter(|id| seed.get(id).is_none())
+            .collect();
+        eprintln!(
+            "merged rows: {} (seed {}), added {added:?}",
+            merged.agents.len(),
+            seed.agents.len()
+        );
+        assert!(
+            merged.get("everyaios").is_some(),
+            "the inbuilt row must survive the registry merge"
+        );
+        assert!(
+            !added.is_empty(),
+            "a live refresh must add at least one catalog row the seed lacks"
+        );
+
+        // A second read hits the memo (unchanged file stamp) with the same rows.
+        assert_eq!(launch_registry().agents.len(), merged.agents.len());
+
+        match previous_home {
+            Some(prev) => std::env::set_var("EVERYAIOS_HOME", prev),
+            None => std::env::remove_var("EVERYAIOS_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&home);
     }
 }

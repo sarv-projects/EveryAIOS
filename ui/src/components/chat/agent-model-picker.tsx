@@ -12,6 +12,7 @@ import {
   formatContext,
   formatPrice,
   getModelsForAgentLive,
+  isNativeRuntime,
   isRuntimeUsable,
   CAPABILITY_LABELS,
   type AgentRuntime,
@@ -23,8 +24,10 @@ import {
   chiefDefaultGet,
   chiefDefaultSet,
   governanceLabel,
+  type AcpConfigOption,
 } from '@/lib/acp'
 import { refreshAgentCatalog } from '@/lib/bridge'
+import { inTauri } from '@/lib/tauri'
 import { catalogProviderModels, catalogProviders, formatPerM } from '@/lib/providers'
 import {
   catalogPickLabel,
@@ -32,6 +35,15 @@ import {
   usableCatalogProviders,
   type CatalogPickerModel,
 } from '@/lib/catalog-models'
+
+// A stable empty list: a selector that returns a fresh `[]` on every render
+// makes `useSyncExternalStore` re-render forever under zustand v5.
+const NO_CONFIG_OPTIONS: AcpConfigOption[] = []
+
+// The one runtime EveryAIOS ships with, used as the honest fallback when the
+// shell has not reported an agent inventory. EveryAIOS Native is the only
+// runtime that can never be "not installed".
+const NATIVE_ONLY = AGENTS.filter((a) => isNativeRuntime(a.id))
 
 function StatusDot({ status }: { status: AgentRuntime['status'] }) {
   const tone =
@@ -76,8 +88,17 @@ export default function AgentModelPicker({ compact }: Props) {
   const notify = useAppStore((s) => s.notify)
 
   const liveAgents = useAppStore((s) => s.liveAgents)
-  const catalog = liveAgents.length > 0 ? liveAgents : AGENTS
-  // Fall back to the static catalog if a live row is missing name/mark.
+  // P55.4 / P60.14 — occupancy is never painted from the static seed.
+  // `liveAgents` is the shell's *merged* catalog (seed + ACP registry + install
+  // records), so a non-empty list is the only evidence of what this machine
+  // actually has. An empty list **in the desktop shell** means discovery has
+  // not produced a result — not "nothing is installed" — so the curated seed
+  // is not shown as if it had been discovered; only EveryAIOS Native (which
+  // ships inside the app) is offered, with an honest inventory note. The
+  // plain-browser preview keeps the fixture because it has no shell to ask.
+  const inShell = inTauri()
+  const occupancyUnknown = inShell && liveAgents.length === 0
+  const catalog = liveAgents.length > 0 ? liveAgents : inShell ? NATIVE_ONLY : AGENTS
   const [installing, setInstalling] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [connected, setConnected] = useState<string | null>(null)
@@ -93,14 +114,22 @@ export default function AgentModelPicker({ compact }: Props) {
   const [catalogNote, setCatalogNote] = useState<string | null>(null)
   const [catalogBusy, setCatalogBusy] = useState(false)
   const selectedModelProvider = useAppStore((s) => s.selectedModelProvider)
+  const acpConfigOptions = useAppStore(
+    (s) => s.acpConfigOptions[selectedAgentId] ?? NO_CONFIG_OPTIONS,
+  )
+  const setAcpConfigOptions = useAppStore((s) => s.setAcpConfigOptions)
   const [auth, setAuth] = useState<{
     handle: string
     methods: { id: string; name: string; type?: string; description?: string }[]
     waitingUrl?: string
   } | null>(null)
 
+  // The trigger must name the *selection*, even when the inventory is
+  // unknown — so fall back to the seed row by id (label only, never
+  // occupancy) before the first catalogue row.
   const agent =
     catalog.find((a) => a.id === selectedAgentId && a.name) ??
+    AGENTS.find((a) => a.id === selectedAgentId && a.name) ??
     catalog.find((a) => a.name) ??
     AGENTS[0]
   if (!agent) return null
@@ -222,6 +251,9 @@ export default function AgentModelPicker({ compact }: Props) {
       const { acpLaunch } = await import('@/lib/acp')
       // Registry id, not the picker's catalog id (claude-code → claude).
       const info = await acpLaunch(acpIdFor(agentId), activeFolder ?? '~')
+      // P60 — record the agent-owned config vocabulary this session negotiated
+      // (model/mode/reasoning) instead of falling back to Native's models.
+      if (info.configOptions) setAcpConfigOptions(agentId, info.configOptions)
       if (!info.authRequired || info.authMethods.length === 0) {
         setConnected(info.handle)
         notify(`${agent?.name} connected (${info.handle.slice(0, 8)}…)`)
@@ -268,8 +300,16 @@ export default function AgentModelPicker({ compact }: Props) {
       .then(async (cat) => {
         if (!alive) return
         if (!cat.live) {
+          // Two different facts hide behind `live: false`, and saying the wrong
+          // one is a lie the user cannot act on: no shell at all (a browser
+          // preview) versus a shell whose catalog read failed. `catalogProviders`
+          // collapses both, so ask the shell directly which one this is.
           setCatalogRows([])
-          setCatalogNote('Preview mode — the live models.dev catalog needs the desktop shell.')
+          setCatalogNote(
+            inTauri()
+              ? 'Live provider catalog unavailable — the shell could not read it. Showing curated rows only.'
+              : 'Preview mode — the live models.dev catalog needs the desktop shell.',
+          )
           return
         }
         const usable = usableCatalogProviders(cat.providers)
@@ -297,9 +337,15 @@ export default function AgentModelPicker({ compact }: Props) {
         )
       })
       .catch(() => {
+        // `catalogProviders` already absorbs invoke failures into `live: false`,
+        // so this only guards a genuinely unexpected rejection.
         if (!alive) return
         setCatalogRows([])
-        setCatalogNote('Catalog unavailable — showing curated rows only.')
+        setCatalogNote(
+          inTauri()
+            ? 'Live provider catalog unavailable — the shell could not read it. Showing curated rows only.'
+            : 'Preview mode — the live models.dev catalog needs the desktop shell.',
+        )
       })
       .finally(() => {
         if (alive) setCatalogBusy(false)
@@ -357,6 +403,35 @@ export default function AgentModelPicker({ compact }: Props) {
     liveAgents.find((a) => a.id === selectedAgentId) ??
       catalog.find((a) => a.id === selectedAgentId),
   )
+  // P60 — model ownership. Native owns EveryAIOS's provider/model surface;
+  // every other runtime is an external ACP agent that owns its own model.
+  const external = !isNativeRuntime(agent.id)
+  const externalModelOption =
+    acpConfigOptions.find((o) => o.category === 'model') ??
+    acpConfigOptions.find((o) => o.id.toLowerCase().includes('model'))
+  const externalModelLabel = externalModelOption
+    ? String(externalModelOption.currentValue)
+    : null
+
+  useEffect(() => {
+    if (!open || !external || !agentUsable) return
+    let alive = true
+    void (async () => {
+      try {
+        const st = useAppStore.getState()
+        const handle = st.acpHandles[selectedAgentId]
+        if (!handle) return
+        const { acpSessionConfigOptions } = await import('@/lib/acp')
+        const options = await acpSessionConfigOptions(handle)
+        if (alive) setAcpConfigOptions(selectedAgentId, options)
+      } catch {
+        if (alive) setAcpConfigOptions(selectedAgentId, [])
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [open, external, agentUsable, selectedAgentId, setAcpConfigOptions])
 
   // P51.1 — is any session mid-turn right now? A model switch during a live
   // stream applies to the *next* turn, never the in-flight one; surface that
@@ -403,7 +478,13 @@ export default function AgentModelPicker({ compact }: Props) {
     }
   }
 
-  const agentList = catalog
+  // P60 — selection is installed-only. `catalog` also carries registry rows
+  // that exist as *catalog entries* but have no binary on this machine; those
+  // render with an explicit not-installed state and an install affordance
+  // instead of becoming a selectable agent the send path cannot launch.
+  const usableRows = catalog.filter((a) => isRuntimeUsable(a))
+  const unavailableRows = catalog.filter((a) => !isRuntimeUsable(a))
+  const agentList = [...usableRows, ...unavailableRows]
 
   return (
     <div className="relative">
@@ -540,18 +621,38 @@ export default function AgentModelPicker({ compact }: Props) {
                 <div className="px-1 pb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
                   Runtimes
                 </div>
+                {occupancyUnknown && (
+                  <div className="mb-1.5 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-[10px] leading-relaxed text-amber-200/90">
+                    Runtime inventory unavailable — the shell has not reported which agent CLIs are
+                    on this machine, so no external runtime is listed. EveryAIOS Native is always
+                    available. Re-run discovery from{' '}
+                    <span className="text-amber-100">Settings → Agent runtimes</span>.
+                  </div>
+                )}
                 {agentList.map((a) => {
                   const isActive = a.id === selectedAgentId
+                  const usable = isRuntimeUsable(a)
                   return (
                     <button
                       key={a.id}
                       type="button"
-                      onClick={() => setSelectedAgent(a.id)}
+                      data-agent-id={a.id}
+                      onClick={() =>
+                        usable
+                          ? setSelectedAgent(a.id)
+                          : (setOpen(false), setCenterScreen('settings'))
+                      }
+                      title={
+                        usable
+                          ? undefined
+                          : `${a.name} is not installed on this machine — open Settings → Agent runtimes to install or connect it`
+                      }
                       className={cn(
                         'flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
                         isActive
                           ? 'border-orange-500/60 bg-orange-500/10'
                           : 'border-transparent hover:border-border hover:bg-accent/40',
+                        !usable && 'opacity-70',
                       )}
                     >
                       <AgentLogo agent={a} />
@@ -563,6 +664,11 @@ export default function AgentModelPicker({ compact }: Props) {
                           <StatusDot status={a.status} />
                           {a.id === 'everyaios-native' && (
                             <Badge className="bg-orange-500/20 px-1 text-[8px] text-orange-300">orchestrator</Badge>
+                          )}
+                          {!usable && (
+                            <Badge className="bg-background/70 px-1 text-[8px] text-muted-foreground">
+                              not installed
+                            </Badge>
                           )}
                         </div>
                         <div className="truncate font-mono text-[9px] text-muted-foreground">
@@ -597,9 +703,9 @@ export default function AgentModelPicker({ compact }: Props) {
               <div className="scroll-thin max-h-[360px] overflow-y-auto p-1.5">
                 <div className="mb-1 flex items-center justify-between px-1">
                   <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-                    Models for {agent.name}
+                    {external ? `Model · ${agent.name}` : `Models for ${agent.name}`}
                   </div>
-                  {models.length > 0 && (
+                  {!external && models.length > 0 && (
                     <div className="font-mono text-[9px] text-muted-foreground/60">
                       {models.length} available
                     </div>
@@ -623,7 +729,40 @@ export default function AgentModelPicker({ compact }: Props) {
                     can reach. Selection carries the provider (the broker
                     resolves the endpoint from the catalog), and the row shows
                     the real context/price from the catalog. */}
-                <div className="mb-1 flex items-center justify-between px-1">
+                {external ? (
+                  <div className="mb-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-2 text-[10px] leading-relaxed text-emerald-100/80">
+                    <div className="mb-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-emerald-300/90">
+                      <KeyRound className="h-2.5 w-2.5" />
+                      {externalModelOption ? `Model managed by ${agent.name}` : `${agent.name} owns its model configuration`}
+                    </div>
+                    {externalModelOption ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-foreground">{externalModelOption.name}: {externalModelLabel}</span>
+                        {externalModelOption.type === 'select' && (externalModelOption.options?.length ?? 0) > 0 && (
+                          <select
+                            aria-label={`${agent.name} model`}
+                            value={String(externalModelOption.currentValue)}
+                            onChange={(e) => {
+                              const handle = useAppStore.getState().acpHandles[selectedAgentId]
+                              if (!handle) return
+                              void import('@/lib/acp').then(({ acpSessionSetConfigOption }) =>
+                                acpSessionSetConfigOption(handle, externalModelOption.id, e.target.value),
+                              ).then((next) => setAcpConfigOptions(selectedAgentId, next))
+                                .catch((e) => notify(e instanceof Error ? e.message : 'Could not change the agent-owned model', 'error'))
+                            }}
+                            className="h-6 max-w-[12rem] rounded border border-border bg-background px-1 font-mono text-[9px] text-foreground"
+                          >
+                            {externalModelOption.options?.map((o) => (
+                              <option key={String(o.value)} value={String(o.value)}>{o.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    ) : (
+                      <span>No ACP model option is exposed. EveryAIOS will not show or inject its Native BYOK/local models here.</span>
+                    )}
+                  </div>
+                ) : <div className="mb-1 flex items-center justify-between px-1">
                   <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
                     Your providers · models.dev
                   </div>
@@ -632,19 +771,19 @@ export default function AgentModelPicker({ compact }: Props) {
                       {catalogRows.length} live
                     </div>
                   )}
-                </div>
-                {catalogBusy && (
+                </div>}
+                {!external && catalogBusy && (
                   <div className="mb-1.5 flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     reading the provider catalog…
                   </div>
                 )}
-                {!catalogBusy && catalogNote && (
+                {!external && !catalogBusy && catalogNote && (
                   <div className="mb-1.5 rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
                     {catalogNote}
                   </div>
                 )}
-                <div className="space-y-1">
+                {!external && <div className="space-y-1">
                   {catalogRows.map((m) => {
                     const isActive =
                       !autoRoute &&
@@ -729,7 +868,7 @@ export default function AgentModelPicker({ compact }: Props) {
                       </button>
                     )
                   })}
-                </div>
+                </div>}
 
                 {/* Curated seed rows — this runtime's own mapping, labelled as
                     such so it is never mistaken for catalog coverage. */}
@@ -746,7 +885,7 @@ export default function AgentModelPicker({ compact }: Props) {
                   </div>
                 )}
 
-                {catalogRows.length === 0 && models.length === 0 && agentUsable && (
+                {!external && catalogRows.length === 0 && models.length === 0 && agentUsable && (
                   <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
                     No catalog rows and no curated list for this runtime — {agent.name} drives its
                     own models internally. Turn on <span className="text-orange-300">Auto-route by task</span>{' '}
@@ -754,7 +893,7 @@ export default function AgentModelPicker({ compact }: Props) {
                   </div>
                 )}
 
-                {catalogRows.length === 0 && models.length === 0 && !agentUsable && (
+                {!external && catalogRows.length === 0 && models.length === 0 && !agentUsable && (
                   <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
                     {agent.name} is not installed — its model list loads live after
                     install. Use <span className="text-orange-300">Install</span> below,
@@ -762,7 +901,7 @@ export default function AgentModelPicker({ compact }: Props) {
                   </div>
                 )}
 
-                {autoRoute && (models.length > 0 || catalogRows.length > 0) && (
+                {!external && autoRoute && (models.length > 0 || catalogRows.length > 0) && (
                   <div className="mb-1.5 rounded-md border border-orange-500/20 bg-orange-500/5 px-2 py-1 font-mono text-[9px] leading-relaxed text-orange-200/80">
                     Auto-route is on — the router picks the best model per turn.
                     Click any model to pin it (auto-route turns off for this chat).
@@ -981,7 +1120,7 @@ export default function AgentModelPicker({ compact }: Props) {
                     into the per-turn router. No feed ⇒ no ranked claim. When
                     the ranked list is empty the excluded reasons ARE the
                     message (unkeyed providers explain where to add a key). */}
-                {autoRoute && routeFeed && (
+                {!external && autoRoute && routeFeed && (
                   <div className="mt-1.5 space-y-1 rounded-md border border-orange-500/20 bg-orange-500/5 px-2 py-1.5">
                     <div className="font-mono text-[8px] uppercase tracking-wider text-orange-300/80">
                       Live route feed
@@ -1017,6 +1156,10 @@ export default function AgentModelPicker({ compact }: Props) {
                   Selected: {agent.name} ·{' '}
                   {!agentUsable
                     ? 'not installed'
+                    : external
+                      ? externalModelOption
+                        ? `agent-owned · ${externalModelLabel}`
+                        : `managed by ${agent.name}`
                     : pinnedLabel !== '—'
                       ? pinnedLabel
                       : models.length === 0

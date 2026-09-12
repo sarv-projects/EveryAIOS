@@ -113,7 +113,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Intelligence',
     items: [
-      { id: 'agents', label: 'Agents & Models', icon: Boxes, keywords: ['agent', 'runtime', 'llm', 'model', 'claude', 'codex', 'grok', 'gemini'] },
+      { id: 'agents', label: 'Agent runtimes', icon: Boxes, keywords: ['agent', 'cli', 'runtime', 'llm', 'model', 'claude', 'codex', 'grok', 'gemini', 'opencode', 'acp', 'install'] },
       { id: 'discover', label: 'Discover', icon: Compass, keywords: ['model', 'install', 'registry'] },
       { id: 'local', label: 'Local models', icon: Cpu, keywords: ['ollama', 'llamafile', 'gguf', 'vram', 'gpu', 'quant'] },
       { id: 'capabilities', label: 'Capabilities', icon: ShieldQuestion, keywords: ['matrix', 'tools', 'computer use'] },

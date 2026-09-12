@@ -1,7 +1,7 @@
 # EveryAIOS — Production UI Design Specification
 
-> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). `ui/src` is the **production frontend** used by the Tauri desktop application. A plain-browser Vite run (`npm run dev`) is a clearly labelled development preview with isolated fixtures; it is not the production runtime and must never imply real files, accounts, providers, tasks, or side effects. This file describes the shipped product contract (spec v3.67 — H36 terminal profiles + §4.5 backends), not a wishlist of unbuilt chrome.
-> **v3.57 (2026-08-26):** composer is **three independent controls** — **Agent ▾ (WHO)** · **Work Mode ▾ (WHAT: 🤖 Auto · 📐 Plan · 🔨 Build · 🔎 Research)** · **Autonomy ▾ (HOW MUCH: 🛡 Sandbox · 👀 Ask · ⚡ Auto · 🚀 Maximum)**. Default chips `[🤖 Auto] [🛡 Ask]`. Code/browser/Office/terminal are capabilities *inside Build*, never extra modes (OpenCode Plan/Build + Cowork Chat/Cowork + Hermes sandbox/ask — we did not copy their chrome). Office views are **honest engines** (block list / formula bar / slides+notes / pdf.js+ops), not Microsoft ribbon clones. Guard-2 v1 = webview + nonce. P42 Graph/Workspace rows stay **not attached**. Version badge in the title/status bars is `v3.57`.
+> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). `ui/src` is the **production frontend** used by the Tauri desktop application. A plain-browser Vite run (`npm run dev`) is a clearly labelled development preview with isolated fixtures; it is not the production runtime and must never imply real files, accounts, providers, tasks, or side effects. This file describes the shipped product contract (spec v3.67 — H36 terminal profiles + §4.5 backends), reconciled 2026-09-12 for the live catalog picker, not a wishlist of unbuilt chrome.
+> **v3.67 / 2026-09-12 reconciliation:** composer remains **three independent controls** — **Agent ▾ (WHO)** · **Work Mode ▾ (WHAT: 🤖 Auto · 📐 Plan · 🔨 Build · 🔎 Research)** · **Autonomy ▾ (HOW MUCH: 🛡 Sandbox · 👀 Ask · ⚡ Auto · 🚀 Maximum)**. The **Agent ▾** list is installed-only selectable (a registry row with no binary renders `not installed` and routes to Settings rather than becoming a selection that cannot launch). Model ownership follows the agent: **EveryAIOS Native** shows the EveryAIOS provider/model surface (live catalog rows carried provider-qualified into routing, curated seed labelled fallback); an **external ACP agent** shows only its own ACP `configOptions` (`Model · <agent>`) or “managed by &lt;agent&gt;”. Settings has **one** agent surface — Agent runtimes — where the Native model catalog is a collapsed disclosure on the EveryAIOS Native card rather than a peer Models tab. Version badges are build-injected; do not hardcode a historical version string.
 
 ---
 
@@ -321,7 +321,7 @@ The production UI must always be able to answer: **who** is running (Agent), **w
 
 ## 11. Accessibility
 
-Tab-focusable everywhere · ARIA labels on icon-only buttons · 4.5:1 contrast floor · `prefers-reduced-motion` collapses all animation · focus-visible orange ring (30%) · status conveyed by icon + label (never color alone).
+WCAG 2.2 AA target: keyboard-operable and focus-visible controls, focus not obscured, dialog focus trap/restore, adequate target size, status conveyed by icon + label (never color alone), and `prefers-reduced-motion` support. Use native semantics before ARIA; conformance requires tested evidence.
 
 ---
 
