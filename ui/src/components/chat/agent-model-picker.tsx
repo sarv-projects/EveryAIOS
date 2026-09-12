@@ -27,6 +27,7 @@ import {
 import { refreshAgentCatalog } from '@/lib/bridge'
 import { catalogProviderModels, catalogProviders, formatPerM } from '@/lib/providers'
 import {
+  catalogPickLabel,
   catalogPickerModels,
   usableCatalogProviders,
   type CatalogPickerModel,
@@ -346,6 +347,12 @@ export default function AgentModelPicker({ compact }: Props) {
     (m) => m.id === selectedModelId,
   )
   const models = getModelsForAgentLive(selectedAgentId, liveAgents)
+  // P58.7 — the pinned label: a catalog pick is named by the exact
+  // `provider · model-id` pair the broker will receive, a curated pick by its
+  // curated label. Without this a catalog pin rendered as `—` even though the
+  // selection was real and pinned.
+  const pinnedLabel =
+    catalogPickLabel(selectedModelProvider, selectedModelId) ?? model?.label ?? '—'
   const agentUsable = isRuntimeUsable(
     liveAgents.find((a) => a.id === selectedAgentId) ??
       catalog.find((a) => a.id === selectedAgentId),
@@ -419,7 +426,7 @@ export default function AgentModelPicker({ compact }: Props) {
           {!compact && (
             <>
               <span className="text-muted-foreground/40">·</span>
-              <span className="text-orange-300">{model?.label ?? '—'}</span>
+              <span className="max-w-[9rem] truncate text-orange-300">{pinnedLabel}</span>
             </>
           )}
         </span>
@@ -1008,13 +1015,13 @@ export default function AgentModelPicker({ compact }: Props) {
                 <div className="mt-1.5 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
                   <Sparkles className="h-2.5 w-2.5" />
                   Selected: {agent.name} ·{' '}
-                  {selectedModelProvider
-                    ? `${selectedModelProvider} · ${selectedModelId}`
-                    : !agentUsable
-                      ? 'not installed'
+                  {!agentUsable
+                    ? 'not installed'
+                    : pinnedLabel !== '—'
+                      ? pinnedLabel
                       : models.length === 0
                         ? 'auto (runtime-driven)'
-                        : (model?.label ?? '—')}
+                        : '—'}
                 </div>
 
                 {/* Install + connect (F8/J17) — one click, then use */}
