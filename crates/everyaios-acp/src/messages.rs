@@ -200,7 +200,11 @@ impl PromptContent {
         PromptContent::Text { text: s.into() }
     }
 
-    pub fn resource(uri: impl Into<String>, mime_type: impl Into<String>, text: impl Into<String>) -> Self {
+    pub fn resource(
+        uri: impl Into<String>,
+        mime_type: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Self {
         PromptContent::Resource {
             resource: EmbeddedResource {
                 uri: uri.into(),

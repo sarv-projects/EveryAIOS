@@ -138,11 +138,14 @@ impl Installer {
             binary_path: Some(path.to_path_buf()),
             env: vec![],
         };
-        self.record(&outcome, &Ownership::new(
-            "PATH discovery",
-            String::new(),
-            vec![path.to_string_lossy().into_owned()],
-        ))
+        self.record(
+            &outcome,
+            &Ownership::new(
+                "PATH discovery",
+                String::new(),
+                vec![path.to_string_lossy().into_owned()],
+            ),
+        )
     }
 
     pub fn installed(&self, agent_id: &str) -> Option<InstallOutcome> {
@@ -533,7 +536,10 @@ mod tests {
         let loaded = installer.installed("agent").unwrap();
         assert_eq!(loaded.kind, "path");
         assert_eq!(loaded.binary_path, Some(path));
-        assert_eq!(installer.ownership("agent").unwrap().source, "PATH discovery");
+        assert_eq!(
+            installer.ownership("agent").unwrap().source,
+            "PATH discovery"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

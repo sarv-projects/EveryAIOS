@@ -32,8 +32,8 @@ use std::sync::Arc;
 
 use everyaios_acp::{
     AcpSession, AuthMethod, AvailableCommand, ClientInfo, Distribution, Installer, LaunchRegistry,
-    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, PromptContent, PromptOutcome, RegistryClient,
-    RegistryPolicy, ToolCall, ToolKind,
+    PermissionDecision, Platform, PolicyVerdict, ProcessTransport, PromptContent, PromptOutcome,
+    RegistryClient, RegistryPolicy, ToolCall, ToolKind,
 };
 use everyaios_core::config::Config;
 use everyaios_core::{ExecutionPhase, ExecutionTrigger, GuardDecision};
@@ -665,10 +665,7 @@ pub fn acp_launch(
             version: "0.1.0".to_string(),
         })
         .map_err(|e| format!("acp initialize failed: {e}"))?;
-    let init = session
-        .agent_capabilities()
-        .cloned()
-        .unwrap_or_default();
+    let init = session.agent_capabilities().cloned().unwrap_or_default();
     let embedded_context = init.prompt_capabilities.embedded_context;
     let auth_methods = session.auth_methods().to_vec();
 
@@ -798,7 +795,15 @@ fn build_acp_prompt_with_passport(
             .filter(|m| cfg.subagent_enabled.get(&m.id).copied().unwrap_or(true))
             .map(|m| {
                 let note = cfg.subagent_notes.get(&m.id).cloned().unwrap_or_default();
-                format!("- {}: {}", m.name, if note.is_empty() { m.description.clone() } else { note })
+                format!(
+                    "- {}: {}",
+                    m.name,
+                    if note.is_empty() {
+                        m.description.clone()
+                    } else {
+                        note
+                    }
+                )
             })
             .collect();
         if !mix.is_empty() {
@@ -954,7 +959,11 @@ pub fn chief_subagent_set_enabled(agent_id: String, enabled: bool) -> Result<boo
 pub fn chief_subagent_mix() -> Result<Vec<serde_json::Value>, String> {
     Ok(chief_subagents()?
         .into_iter()
-        .filter(|row| row.get("enabled").and_then(serde_json::Value::as_bool).unwrap_or(true))
+        .filter(|row| {
+            row.get("enabled")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true)
+        })
         .collect())
 }
 
@@ -1011,7 +1020,8 @@ pub fn acp_tool_log(session_id: String) -> Result<Vec<serde_json::Value>, String
 /// requests route through the shared Guard-2 service: `Allow` auto-allows,
 /// `Block` denies, and `Ask` denies the current turn while minting a ticket
 /// the user can approve (then re-prompt). Never auto-allows an `Ask`.
-#[tauri::command]    pub fn acp_prompt(
+#[tauri::command]
+pub fn acp_prompt(
     state: State<'_, AppState>,
     handle: String,
     text: String,
@@ -1078,11 +1088,7 @@ pub fn acp_tool_log(session_id: String) -> Result<Vec<serde_json::Value>, String
         let mut blocks = vec![PromptContent::text(prompt_text.clone())];
         for reference in refs.as_deref().unwrap_or_default() {
             if let Some(resource) = read_workspace_resource(&entry.cwd, reference) {
-                blocks.push(PromptContent::resource(
-                    resource.0,
-                    resource.1,
-                    resource.2,
-                ));
+                blocks.push(PromptContent::resource(resource.0, resource.1, resource.2));
             }
         }
         blocks
@@ -1269,7 +1275,11 @@ fn read_workspace_resource(cwd: &str, reference: &str) -> Option<(String, String
         "rs" | "ts" | "tsx" | "js" | "jsx" | "py" => "text/plain",
         _ => "text/plain",
     };
-    Some((format!("file://{}", canonical.to_string_lossy()), mime.to_string(), text))
+    Some((
+        format!("file://{}", canonical.to_string_lossy()),
+        mime.to_string(),
+        text,
+    ))
 }
 
 /// Map an ACP tool call onto a Guard-2 operation + risk tier so it routes

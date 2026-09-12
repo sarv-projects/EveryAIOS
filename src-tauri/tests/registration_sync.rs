@@ -131,11 +131,7 @@ fn registered_terminal_names(texts: &[(PathBuf, String)]) -> BTreeSet<String> {
             // must not be parsed as registrations — strip `//` line comments first.
             let body: String = body
                 .lines()
-                .map(|l| {
-                    l.find("//")
-                        .map(|p| &l[..p])
-                        .unwrap_or(l)
-                })
+                .map(|l| l.find("//").map(|p| &l[..p]).unwrap_or(l))
                 .collect::<Vec<_>>()
                 .join(" ");
             // Split on top-level commas (naive but lists are identifier-only).
