@@ -24,7 +24,7 @@ pub mod tier;
 
 pub use broker::{
     assemble_tool_calls, extract_json_tool_calls, usage_tokens, Broker, BrokerError,
-    ChatStreamEvent, ToolCallDelta,
+    ChatStreamEvent, ProviderEndpoint, ToolCallDelta, WireTransport,
 };
 pub use credential_broker::{
     AllowlistApprover, CredentialBroker, CredentialFillError, CredentialHandle, DenyAllApprover,

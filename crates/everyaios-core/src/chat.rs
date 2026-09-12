@@ -368,6 +368,15 @@ pub struct ChatRelay<W, R> {
     sessions: Arc<Mutex<HashMap<String, String>>>,
     /// Provider base-url overrides (from config; also used by tests).
     base_urls: Arc<Mutex<HashMap<String, String>>>,
+    /// P55.5 — resolved per-provider endpoints (base URL + wire dialect +
+    /// headers, incl. the OpenCode per-conversation session headers) built by
+    /// the shell from the live models.dev catalog + user-config profiles.
+    /// This is what makes "every models.dev provider" work on a chat turn
+    /// instead of only the handful of hardcoded defaults.
+    endpoints: Arc<Mutex<HashMap<String, everyaios_vault::ProviderEndpoint>>>,
+    /// P55.6 — the durable user-config profile store (`providers.json`), the
+    /// non-secret half of a custom provider (the key stays in the vault).
+    profiles: Arc<Mutex<Option<everyaios_catalog::ProfileStore>>>,
     /// P1.8 (A5): keyless local endpoints (ollama / llamafile). When the
     /// sidecar requests one of these providers the broker routes to the
     /// local runtime — no key ring, GBNF grammar passthrough (B5).
@@ -446,6 +455,8 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             vault,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             base_urls: Arc::new(Mutex::new(HashMap::new())),
+            endpoints: Arc::new(Mutex::new(HashMap::new())),
+            profiles: Arc::new(Mutex::new(None)),
             local_endpoints: Arc::new(Mutex::new(HashMap::new())),
             memory: Arc::new(Mutex::new(load_persistent_memory())),
             guard,
@@ -572,6 +583,38 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         self
     }
 
+    /// **P55.5** — register a resolved provider endpoint (base URL + wire
+    /// dialect + headers). The shell builds these from the live models.dev
+    /// catalog and the user-config profiles at boot; every chat turn then
+    /// routes to the provider's real endpoint instead of a hardcoded subset.
+    pub fn with_endpoint(
+        &self,
+        provider: &str,
+        endpoint: everyaios_vault::ProviderEndpoint,
+    ) -> &Self {
+        self.endpoints
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(provider.to_string(), endpoint);
+        self
+    }
+
+    /// **P55.6** — attach the durable provider-profile store. The relay reads
+    /// it when resolving endpoints, so a base URL entered in Settings is
+    /// actually used by the next turn (it used to be discarded).
+    pub fn with_profiles(&self, store: everyaios_catalog::ProfileStore) -> &Self {
+        *self.profiles.lock().unwrap_or_else(|e| e.into_inner()) = Some(store);
+        self
+    }
+
+    /// The attached profile store, if any.
+    pub fn profiles(&self) -> Option<everyaios_catalog::ProfileStore> {
+        self.profiles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
     /// The sidecar link (cancel path + tests).
     pub fn link(&self) -> &SidecarLink<W, R> {
         &self.link
@@ -609,6 +652,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let sessions = Arc::clone(&self.sessions);
         let on_event = Arc::clone(&self.on_event);
         let base_urls = Arc::clone(&self.base_urls);
+        let endpoints = Arc::clone(&self.endpoints);
         let local_endpoints = Arc::clone(&self.local_endpoints);
         let memory = Arc::clone(&self.memory);
         let guard = Arc::clone(&self.guard);
@@ -637,11 +681,19 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         let w2 = writer.clone();
                         let vault2 = Arc::clone(&vault);
                         let base2 = Arc::clone(&base_urls);
+                        let ep2 = Arc::clone(&endpoints);
                         let local2 = Arc::clone(&local_endpoints);
                         let capabilities2 = Arc::clone(&capabilities);
                         std::thread::spawn(move || {
-                            let _ =
-                                stream_provider(vault2, base2, local2, capabilities2, params, w2);
+                            let _ = stream_provider(
+                                vault2,
+                                base2,
+                                ep2,
+                                local2,
+                                capabilities2,
+                                params,
+                                w2,
+                            );
                         });
                     }
                     // ARCH/05 durable-observation seam: the coordinator
@@ -1946,6 +1998,7 @@ fn emit(on_event: &Arc<Mutex<EventSink>>, ev: ChatWireEvent) {
 fn stream_provider(
     vault: Arc<Mutex<Vault>>,
     base_urls: Arc<Mutex<HashMap<String, String>>>,
+    endpoints: Arc<Mutex<HashMap<String, everyaios_vault::ProviderEndpoint>>>,
     local_endpoints: Arc<Mutex<LocalEndpointMap>>,
     capabilities: Arc<Mutex<everyaios_guard::LocalCapabilityBroker>>,
     params: serde_json::Value,
@@ -2018,6 +2071,11 @@ fn stream_provider(
     let mut broker = Broker::new(&v);
     for (p, url) in base_urls.lock().unwrap_or_else(|e| e.into_inner()).iter() {
         broker = broker.with_base_url(p, url.clone());
+    }
+    // P55.5: resolved endpoints win over the plain base-url map — they carry
+    // the wire dialect (Anthropic `/messages`) and per-provider headers.
+    for (p, ep) in endpoints.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        broker = broker.with_endpoint(p, ep.clone());
     }
     // P1.8 (A5): keyless local endpoints route inside the broker.
     for (p, ep) in local_endpoints

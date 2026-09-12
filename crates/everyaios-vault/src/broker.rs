@@ -15,7 +15,9 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 
-use crate::keyring::{KeyRing, KeyRingError, RoutingPolicy, SelectedKey, MAX_429_SWITCHES};
+use crate::keyring::{
+    KeyRing, KeyRingError, KeyStatus, RoutingPolicy, SelectedKey, MAX_429_SWITCHES,
+};
 use crate::ledger::{default_pricing, Pricing, Usage, UsageRow};
 use crate::local::{self, LocalEndpoint};
 use crate::oauth::{is_oauth_provider, OAuthManager};
@@ -37,6 +39,68 @@ pub const DEFAULT_BASE_URLS: &[(&str, &str)] = &[
     ("copilot", "https://api.githubcopilot.com"),
     ("qwen", "https://portal.qwen.ai/v1"),
 ];
+
+/// The HTTP dialects the broker can actually speak (P55.5).
+///
+/// A provider whose resolved transport is **not** listed here is simply never
+/// registered as an endpoint, which is the honest failure: the broker then
+/// behaves exactly as it did before this existed instead of POSTing an
+/// OpenAI-shaped request at an Anthropic/Bedrock path and returning a
+/// meaningless 404.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WireTransport {
+    /// `POST {base}/chat/completions` (OpenAI-compatible family).
+    #[default]
+    OpenaiChat,
+    /// `POST {base}/messages` (Anthropic Messages, incl. cache_control).
+    AnthropicMessages,
+}
+
+/// A resolved provider endpoint: where to send, which dialect, which headers
+/// (P55.5). Never a secret — the key still comes from the vault ring at send
+/// time.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ProviderEndpoint {
+    /// Base URL **to the version root** (`…/v1`); the path is appended.
+    pub base_url: String,
+    pub transport: WireTransport,
+    /// Static per-provider headers (e.g. `anthropic-version`).
+    pub headers: Vec<(String, String)>,
+    /// Inject the per-conversation OpenCode headers (P56.6).
+    pub session_headers: bool,
+    /// Keyless provider (P56.6 OpenCode Free, local proxies): never send an
+    /// `Authorization` header, and do not require a key to exist.
+    pub keyless: bool,
+}
+
+impl ProviderEndpoint {
+    pub fn openai(base_url: impl Into<String>) -> Self {
+        Self {
+            base_url: base_url.into(),
+            transport: WireTransport::OpenaiChat,
+            ..Default::default()
+        }
+    }
+
+    pub fn anthropic(base_url: impl Into<String>) -> Self {
+        Self {
+            base_url: base_url.into(),
+            transport: WireTransport::AnthropicMessages,
+            headers: vec![("anthropic-version".to_string(), "2023-06-01".to_string())],
+            ..Default::default()
+        }
+    }
+
+    /// The request URL for this dialect (P55.5 — the path is the transport's,
+    /// never a hardcoded `/chat/completions`).
+    pub fn request_url(&self) -> String {
+        let base = self.base_url.trim_end_matches('/');
+        match self.transport {
+            WireTransport::OpenaiChat => format!("{base}/chat/completions"),
+            WireTransport::AnthropicMessages => format!("{base}/messages"),
+        }
+    }
+}
 
 /// Incremental native function-call fragment (`choices[0].delta.tool_calls`).
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -89,6 +153,10 @@ pub struct Broker<'a> {
     /// Used for distributed-trace linkage (`traceparent`) and any future
     /// cross-boundary propagation.
     extra_headers: HashMap<String, String>,
+    /// P55.5: resolved per-provider endpoints (base URL + dialect + headers),
+    /// built from the live models.dev catalog + user-config profiles by the
+    /// shell. Providers absent here keep the legacy `DEFAULT_BASE_URLS` path.
+    endpoints: HashMap<String, ProviderEndpoint>,
 }
 
 impl<'a> Broker<'a> {
@@ -113,7 +181,46 @@ impl<'a> Broker<'a> {
             oauth: None,
             local_endpoints: HashMap::new(),
             extra_headers: HashMap::new(),
+            endpoints: HashMap::new(),
         }
+    }
+
+    /// P55.5 — register a resolved endpoint for a provider (base URL +
+    /// dialect + headers). Chainable; the shell builds these from the live
+    /// catalog + user-config profiles at boot.
+    pub fn with_endpoint(mut self, provider: &str, endpoint: ProviderEndpoint) -> Self {
+        self.endpoints.insert(provider.to_string(), endpoint);
+        self
+    }
+
+    /// The endpoint registered for a provider, if any.
+    pub fn endpoint(&self, provider: &str) -> Option<&ProviderEndpoint> {
+        self.endpoints.get(provider)
+    }
+
+    /// The URL a request for this provider goes to: the resolved endpoint's
+    /// dialect path when one is registered, else the legacy default
+    /// (`{base}/chat/completions`).
+    fn request_url(&self, provider: &str) -> Result<String, BrokerError> {
+        if let Some(ep) = self.endpoints.get(provider) {
+            if !ep.base_url.trim().is_empty() {
+                return Ok(ep.request_url());
+            }
+        }
+        let base = self
+            .base_urls
+            .get(provider)
+            .cloned()
+            .ok_or_else(|| BrokerError::UnknownProvider(provider.to_string()))?;
+        Ok(format!("{base}/chat/completions"))
+    }
+
+    /// The dialect for a provider (`OpenaiChat` when nothing is registered).
+    fn transport(&self, provider: &str) -> WireTransport {
+        self.endpoints
+            .get(provider)
+            .map(|e| e.transport)
+            .unwrap_or(WireTransport::OpenaiChat)
     }
 
     /// Register a keyless local endpoint (P1.8/A5). Local providers bypass
@@ -205,25 +312,37 @@ impl<'a> Broker<'a> {
         if let Some(ep) = self.local_endpoints.get(provider) {
             return self.local_chat_completion(ep, provider, model, session_id, body);
         }
+        // P55.5 — the resolved endpoint (base URL + dialect) decides the URL
+        // and the request/response shape; nothing here hardcodes a path.
+        let endpoint = self.endpoints.get(provider).cloned();
+        let transport = self.transport(provider);
         // P1.3 (A9): prompt-cache prefixing — Anthropic gets explicit
         // `cache_control:ephemeral` markers on the stable prefix; OpenAI-
         // compatible providers cache the ≥1024-token prefix automatically.
         annotate_prompt_cache(provider, &mut body);
+        if transport == WireTransport::AnthropicMessages {
+            body = openai_body_to_anthropic(&body);
+        }
+        let extra = self.extra_headers.clone();
         self.run_with_failover(
             provider,
             model,
             session_id,
             body,
             |url, key, body| {
-                let (name, value) = authorization(&key.provider, &key.value);
-                let mut req = ureq::post(url)
-                    .set("Content-Type", "application/json")
-                    .set(name, &value);
-                // P3.3 (J14): propagate extra headers (traceparent, etc.).
-                for (hname, hval) in &self.extra_headers {
-                    req = req.set(hname, hval);
+                let mut req = ureq::post(url).set("Content-Type", "application/json");
+                if let Some(k) = key {
+                    let (name, value) = authorization(&k.provider, &k.value);
+                    req = req.set(name, &value);
                 }
-                map_ureq_result(req.send_json(body))
+                // P3.3 (J14) + P55.5 + P56.6: trace, endpoint and
+                // per-conversation session headers.
+                let req = decorate(req, &extra, endpoint.as_ref(), session_id);
+                let resp = map_ureq_result(req.send_json(body))?;
+                Ok(match transport {
+                    WireTransport::OpenaiChat => resp,
+                    WireTransport::AnthropicMessages => anthropic_response_to_openai(resp),
+                })
             },
             // Cache-aware usage from the response's `usage` object (A9).
             |resp: &serde_json::Value| {
@@ -249,27 +368,45 @@ impl<'a> Broker<'a> {
         if let Some(ep) = self.local_endpoints.get(provider) {
             return self.local_chat_completion_stream(ep, provider, model, session_id, body);
         }
+        let endpoint = self.endpoints.get(provider).cloned();
+        let transport = self.transport(provider);
         body["stream"] = serde_json::json!(true);
         body["stream_options"] = serde_json::json!({"include_usage": true});
         // P1.3 (A9): same prefixing as the non-streaming path.
         annotate_prompt_cache(provider, &mut body);
+        if transport == WireTransport::AnthropicMessages {
+            body = openai_body_to_anthropic(&body);
+            // Anthropic has no `stream_options`; usage rides message_start /
+            // message_delta instead (already parsed below).
+            if let Some(obj) = body.as_object_mut() {
+                obj.remove("stream_options");
+            }
+        }
+        let extra = self.extra_headers.clone();
         self.run_with_failover(
             provider,
             model,
             session_id,
             body,
             |url, key, body| {
-                let (name, value) = authorization(&key.provider, &key.value);
-                let mut req = ureq::post(url)
-                    .set("Content-Type", "application/json")
-                    .set(name, &value);
-                // P3.3 (J14): propagate extra headers (traceparent, etc.).
-                for (hname, hval) in &self.extra_headers {
-                    req = req.set(hname, hval);
+                let mut req = ureq::post(url).set("Content-Type", "application/json");
+                if let Some(k) = key {
+                    let (name, value) = authorization(&k.provider, &k.value);
+                    req = req.set(name, &value);
                 }
+                // P3.3 (J14) + P55.5 + P56.6.
+                let req = decorate(req, &extra, endpoint.as_ref(), session_id);
                 match req.send_json(body) {
-                    Ok(resp) => Ok(parse_sse(BufReader::new(resp.into_reader()))),
-                    Err(ureq::Error::Status(429, _)) => Err(BrokerError::RateLimited),
+                    // The dialect decides the SSE grammar.
+                    Ok(resp) => Ok(match transport {
+                        WireTransport::OpenaiChat => parse_sse(BufReader::new(resp.into_reader())),
+                        WireTransport::AnthropicMessages => {
+                            parse_sse_anthropic(BufReader::new(resp.into_reader()))
+                        }
+                    }),
+                    Err(ureq::Error::Status(429, resp)) => Err(BrokerError::RateLimited {
+                        retry_after_secs: parse_retry_after(&resp),
+                    }),
                     Err(ureq::Error::Status(code, resp)) => {
                         Err(BrokerError::Http(code, read_snippet(resp)))
                     }
@@ -281,10 +418,19 @@ impl<'a> Broker<'a> {
         )
     }
 
-    /// Shared failover loop: select a key → run → on success record
-    /// health + cache-aware cost + ledger + session budget; on 429 put the
-    /// key into cooldown and switch to the next (up to [`MAX_429_SWITCHES`]);
-    /// on any other error surface immediately.
+    /// Shared failover loop: resolve the endpoint → select a key (unless the
+    /// endpoint is keyless) → run → on success record health + cache-aware
+    /// cost + ledger + session budget.
+    ///
+    /// P56.8 failover semantics:
+    /// * **429** → cool that key down for the provider's own `Retry-After`
+    ///   when it sent one (else the ring's exponential backoff), then fail
+    ///   over to the next key, bounded by [`MAX_429_SWITCHES`].
+    /// * **401/403** → the credential itself is refused: suspend that key so
+    ///   it stops being selected and try the next one. **No 5xx rotation** —
+    ///   a provider hiccup is not a credential problem and must surface.
+    /// * **keyless** → no ring interaction at all (P56.6 OpenCode Free); a 429
+    ///   surfaces honestly instead of pretending another key exists.
     ///
     /// J11 choke point: the session budget is checked at the TOP of every
     /// attempt — a session at/over its $ limit is refused before any key is
@@ -295,15 +441,15 @@ impl<'a> Broker<'a> {
         model: &str,
         session_id: &str,
         body: serde_json::Value,
-        runner: impl Fn(&str, &SelectedKey, serde_json::Value) -> Result<T, BrokerError>,
+        runner: impl Fn(&str, Option<&SelectedKey>, serde_json::Value) -> Result<T, BrokerError>,
         usage_of: impl Fn(&T) -> Usage,
     ) -> Result<T, BrokerError> {
-        let base = self
-            .base_urls
+        let url = self.request_url(provider)?;
+        let keyless = self
+            .endpoints
             .get(provider)
-            .cloned()
-            .ok_or_else(|| BrokerError::UnknownProvider(provider.to_string()))?;
-        let url = format!("{base}/chat/completions");
+            .map(|e| e.keyless)
+            .unwrap_or(false);
 
         if !self.budget.can_issue(session_id) {
             return Err(BrokerError::SessionBudgetExceeded {
@@ -318,32 +464,49 @@ impl<'a> Broker<'a> {
         // per call before failover/exhaustion logic takes over.
         let mut refreshed = false;
         loop {
-            let key = match self.ring.select(provider, model, session_id, self.policy) {
-                Ok(k) => k,
-                Err(KeyRingError::AllKeysExhausted(p)) => {
-                    return Err(BrokerError::AllKeysExhausted(p));
+            let key: Option<SelectedKey> = if keyless {
+                None
+            } else {
+                match self.ring.select(provider, model, session_id, self.policy) {
+                    Ok(k) => Some(k),
+                    Err(KeyRingError::AllKeysExhausted(p)) => {
+                        return Err(BrokerError::AllKeysExhausted(p));
+                    }
+                    Err(e) => return Err(BrokerError::KeyRing(e)),
                 }
-                Err(e) => return Err(BrokerError::KeyRing(e)),
             };
 
-            match runner(&url, &key, body.clone()) {
+            match runner(&url, key.as_ref(), body.clone()) {
                 Ok(result) => {
-                    // Success: health + cache-aware cost + ledger + budget.
-                    self.ring
-                        .report_success(&key.opaque_handle)
-                        .map_err(BrokerError::KeyRing)?;
                     let usage = usage_of(&result);
-                    let cost = self.cost_of(provider, usage);
-                    self.ring
-                        .report_usage(&key.opaque_handle, usage.total(), cost)
-                        .map_err(BrokerError::KeyRing)?;
+                    // A keyless turn is genuinely $0 — never priced against a
+                    // provider table, never ring-recorded (there is no ring
+                    // row), but it still lands in the durable ledger.
+                    let cost = if keyless {
+                        0.0
+                    } else {
+                        self.cost_of(provider, usage)
+                    };
+                    let key_id = match &key {
+                        Some(k) => {
+                            // Success: health + cost on the ring row.
+                            self.ring
+                                .report_success(&k.opaque_handle)
+                                .map_err(BrokerError::KeyRing)?;
+                            self.ring
+                                .report_usage(&k.opaque_handle, usage.total(), cost)
+                                .map_err(BrokerError::KeyRing)?;
+                            k.key_id.clone()
+                        }
+                        None => String::new(),
+                    };
                     // One append-only ledger row per call (ARCH/05 §5.6).
                     self.vault
                         .record_usage(&UsageRow {
                             session: session_id.to_string(),
                             provider: provider.to_string(),
                             model: model.to_string(),
-                            key_id: key.key_id.clone(),
+                            key_id,
                             usage,
                             cost,
                             tool: None,
@@ -359,42 +522,74 @@ impl<'a> Broker<'a> {
                     self.budget.settle(session_id, cost);
                     return Ok(result);
                 }
-                Err(BrokerError::RateLimited) => {
-                    // 429: cooldown this key, fail over to the next.
-                    self.ring
-                        .report_failure(&key.opaque_handle, true)
-                        .map_err(BrokerError::KeyRing)?;
+                Err(BrokerError::RateLimited { retry_after_secs }) => {
+                    let Some(k) = key else {
+                        // Keyless: there is no second credential to fail over
+                        // to, so surface the 429 with whatever hint came back.
+                        return Err(BrokerError::RateLimited { retry_after_secs });
+                    };
+                    // P56.8: honour the provider's own Retry-After when it sent
+                    // one; otherwise the ring's exponential backoff stands.
+                    match retry_after_secs {
+                        Some(secs) => self
+                            .ring
+                            .report_failure_retry_after(&k.opaque_handle, secs)
+                            .map_err(BrokerError::KeyRing)?,
+                        None => self
+                            .ring
+                            .report_failure(&k.opaque_handle, true)
+                            .map_err(BrokerError::KeyRing)?,
+                    }
                     switches += 1;
                     if switches > MAX_429_SWITCHES {
                         return Err(BrokerError::AllKeysExhausted(provider.to_string()));
                     }
                 }
                 Err(e) => {
-                    // P1.7: on 401 for an oauth-backed provider, refresh the
-                    // account's token (ring value updated by the manager) and
-                    // retry once — then fall through to the normal surface.
-                    let refreshable = !refreshed
-                        && is_oauth_provider(provider)
-                        && self.oauth.as_ref().map(|o| o.enabled()).unwrap_or(false);
-                    if refreshable && matches!(e, BrokerError::Http(401, _)) {
-                        self.ring
-                            .report_failure(&key.opaque_handle, false)
-                            .map_err(BrokerError::KeyRing)?;
-                        let ok = self
-                            .oauth
-                            .as_ref()
-                            .unwrap()
-                            .refresh(provider, &key.key_id)
-                            .is_ok();
-                        if ok {
-                            refreshed = true;
+                    let status = match &e {
+                        BrokerError::Http(code, _) => Some(*code),
+                        _ => None,
+                    };
+                    if let Some(k) = &key {
+                        // P1.7: on 401 for an oauth-backed provider, refresh
+                        // the account's token and retry once — checked BEFORE
+                        // the suspend path so a refreshable token is never
+                        // thrown away.
+                        let refreshable = !refreshed
+                            && is_oauth_provider(provider)
+                            && self.oauth.as_ref().map(|o| o.enabled()).unwrap_or(false);
+                        if refreshable && status == Some(401) {
+                            self.ring
+                                .report_failure(&k.opaque_handle, false)
+                                .map_err(BrokerError::KeyRing)?;
+                            let ok = self
+                                .oauth
+                                .as_ref()
+                                .unwrap()
+                                .refresh(provider, &k.key_id)
+                                .is_ok();
+                            if ok {
+                                refreshed = true;
+                                continue;
+                            }
+                        }
+                        // P56.8: a 401/403 means this credential is refused —
+                        // suspend it and try the next key. 5xx never rotates.
+                        if matches!(status, Some(401) | Some(403)) {
+                            self.ring
+                                .set_status(&k.provider, &k.key_id, KeyStatus::Suspended)
+                                .map_err(BrokerError::KeyRing)?;
+                            switches += 1;
+                            if switches > MAX_429_SWITCHES {
+                                return Err(e);
+                            }
                             continue;
                         }
+                        // Everything else: record health, surface honestly.
+                        self.ring
+                            .report_failure(&k.opaque_handle, false)
+                            .map_err(BrokerError::KeyRing)?;
                     }
-                    // Non-429 (or refresh failed): record health, surface.
-                    self.ring
-                        .report_failure(&key.opaque_handle, false)
-                        .map_err(BrokerError::KeyRing)?;
                     return Err(e);
                 }
             }
@@ -576,10 +771,309 @@ fn map_ureq_result(
         Ok(resp) => resp
             .into_json()
             .map_err(|e| BrokerError::Transport(e.to_string())),
-        Err(ureq::Error::Status(429, _)) => Err(BrokerError::RateLimited),
+        Err(ureq::Error::Status(429, resp)) => Err(BrokerError::RateLimited {
+            retry_after_secs: parse_retry_after(&resp),
+        }),
         Err(ureq::Error::Status(code, resp)) => Err(BrokerError::Http(code, read_snippet(resp))),
         Err(ureq::Error::Transport(t)) => Err(BrokerError::Transport(t.to_string())),
     }
+}
+
+/// P56.8 — parse a 429's `Retry-After` (delta-seconds form only).
+///
+/// The live OpenCode Zen 429 carries **no** `Retry-After` at all (verified
+/// 2026-09-11), so `None` is the common case and the ring's exponential
+/// cooldown is what actually paces the retry. HTTP-date values are not
+/// interpreted — guessing a client clock skew is worse than no hint.
+fn parse_retry_after(resp: &ureq::Response) -> Option<u64> {
+    let raw = resp.header("retry-after")?.trim().to_string();
+    let secs: u64 = raw.parse().ok()?;
+    Some(secs.min(24 * 60 * 60))
+}
+
+/// Per-conversation OpenCode headers (P56.6).
+///
+/// Real OpenCode sends its conversation id on both `X-Session-Id` and
+/// `x-opencode-session` (the deployed gateway reads the former, `handler.ts`
+/// reads the latter) plus request/client identity; a missing session is a
+/// 400 `MissingSessionID`. The keyless free pool is 429-prone, which is why
+/// the session id is the broker's own `session_id` — a new conversation is a
+/// new session, exactly like the upstream client.
+fn session_headers(session_id: &str) -> Vec<(&'static str, String)> {
+    let sid = {
+        let t = session_id.trim();
+        if t.is_empty() {
+            "everyaios-anon"
+        } else {
+            t
+        }
+    };
+    vec![
+        ("X-Session-Id", sid.to_string()),
+        ("x-opencode-session", sid.to_string()),
+        (
+            "x-opencode-request",
+            format!("req-{:016x}", rand::random::<u64>()),
+        ),
+        ("x-opencode-client", "cli".to_string()),
+        (
+            "User-Agent",
+            format!("EveryAIOS/{}", env!("CARGO_PKG_VERSION")),
+        ),
+    ]
+}
+
+/// Apply trace + endpoint + session headers to a request builder.
+fn decorate(
+    mut req: ureq::Request,
+    extra: &HashMap<String, String>,
+    endpoint: Option<&ProviderEndpoint>,
+    session_id: &str,
+) -> ureq::Request {
+    for (k, v) in extra {
+        req = req.set(k, v);
+    }
+    if let Some(ep) = endpoint {
+        for (k, v) in &ep.headers {
+            req = req.set(k, v);
+        }
+        if ep.session_headers {
+            for (k, v) in session_headers(session_id) {
+                req = req.set(k, &v);
+            }
+        }
+    }
+    req
+}
+
+/// Anthropic's API requires `max_tokens`; our relay body does not carry one.
+/// 4096 matches the upstream client's default rather than inventing a value.
+const ANTHROPIC_DEFAULT_MAX_TOKENS: u64 = 4096;
+
+/// Anthropic message content: keep the block form (which is what
+/// `annotate_prompt_cache` produces for the cached prefix) and otherwise pass
+/// the plain text through.
+fn anthropic_content(content: Option<&serde_json::Value>) -> serde_json::Value {
+    match content {
+        Some(serde_json::Value::String(s)) => serde_json::json!(s),
+        Some(serde_json::Value::Array(blocks)) => {
+            let mapped: Vec<serde_json::Value> = blocks
+                .iter()
+                .filter_map(|b| {
+                    let text = b.get("text").and_then(|t| t.as_str())?;
+                    let mut out = serde_json::json!({ "type": "text", "text": text });
+                    if let Some(cc) = b.get("cache_control") {
+                        out["cache_control"] = cc.clone();
+                    }
+                    Some(out)
+                })
+                .collect();
+            if mapped.is_empty() {
+                serde_json::json!("")
+            } else {
+                serde_json::Value::Array(mapped)
+            }
+        }
+        _ => serde_json::json!(""),
+    }
+}
+
+/// Translate the relay's OpenAI-shaped request body into Anthropic Messages
+/// (P55.5). Deliberately text/tool only — no fabricated image or tool-result
+/// mapping, so an unsupported shape degrades to plain text rather than a
+/// silently wrong request.
+fn openai_body_to_anthropic(body: &serde_json::Value) -> serde_json::Value {
+    let mut system = String::new();
+    let mut messages: Vec<serde_json::Value> = Vec::new();
+    if let Some(arr) = body.get("messages").and_then(|m| m.as_array()) {
+        for m in arr {
+            let role = m.get("role").and_then(|r| r.as_str()).unwrap_or("user");
+            let content = anthropic_content(m.get("content"));
+            if role == "system" {
+                if let Some(s) = content.as_str() {
+                    if !system.is_empty() {
+                        system.push_str("\n\n");
+                    }
+                    system.push_str(s);
+                }
+                continue;
+            }
+            let role = if role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
+            messages.push(serde_json::json!({ "role": role, "content": content }));
+        }
+    }
+    let mut out = serde_json::json!({
+        "model": body.get("model").cloned().unwrap_or(serde_json::json!("")),
+        "messages": messages,
+        "max_tokens": body
+            .get("max_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(ANTHROPIC_DEFAULT_MAX_TOKENS),
+    });
+    if !system.is_empty() {
+        out["system"] = serde_json::json!(system);
+    }
+    if let Some(tools) = body.get("tools").and_then(|t| t.as_array()) {
+        let mapped: Vec<serde_json::Value> = tools
+            .iter()
+            .filter_map(|t| {
+                let f = t.get("function")?;
+                let name = f.get("name")?.as_str()?;
+                Some(serde_json::json!({
+                    "name": name,
+                    "description": f.get("description").and_then(|d| d.as_str()).unwrap_or(""),
+                    "input_schema": f
+                        .get("parameters")
+                        .cloned()
+                        .unwrap_or(serde_json::json!({ "type": "object" })),
+                }))
+            })
+            .collect();
+        if !mapped.is_empty() {
+            out["tools"] = serde_json::Value::Array(mapped);
+        }
+    }
+    if let Some(stream) = body.get("stream") {
+        out["stream"] = stream.clone();
+    }
+    if let Some(temp) = body.get("temperature") {
+        out["temperature"] = temp.clone();
+    }
+    out
+}
+
+/// Translate an Anthropic Messages response back into the OpenAI shape the
+/// relay consumes, including the cache-aware usage fields `Usage::from_any`
+/// already understands (`cache_read_input_tokens` / `cache_creation_input_tokens`).
+fn anthropic_response_to_openai(resp: serde_json::Value) -> serde_json::Value {
+    let blocks = resp.get("content").and_then(|c| c.as_array());
+    let text: String = blocks
+        .map(|a| {
+            a.iter()
+                .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
+                .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join("")
+        })
+        .unwrap_or_default();
+    let tool_calls: Vec<serde_json::Value> = blocks
+        .map(|a| {
+            a.iter()
+                .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
+                .map(|b| {
+                    serde_json::json!({
+                        "id": b.get("id").cloned().unwrap_or(serde_json::json!("")),
+                        "type": "function",
+                        "function": {
+                            "name": b.get("name").cloned().unwrap_or(serde_json::json!("")),
+                            "arguments": b
+                                .get("input")
+                                .map(|i| i.to_string())
+                                .unwrap_or_else(|| "{}".to_string()),
+                        },
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let finish = match resp.get("stop_reason").and_then(|s| s.as_str()) {
+        Some("max_tokens") => "length",
+        Some("tool_use") => "tool_calls",
+        _ => "stop",
+    };
+    let usage = resp.get("usage").cloned().unwrap_or(serde_json::json!({}));
+    let u64_of = |key: &str| usage.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
+    serde_json::json!({
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": if text.is_empty() { serde_json::Value::Null } else { serde_json::json!(text) },
+                "tool_calls": tool_calls,
+            },
+            "finish_reason": finish,
+        }],
+        "usage": {
+            "prompt_tokens": u64_of("input_tokens"),
+            "completion_tokens": u64_of("output_tokens"),
+            "cache_read_input_tokens": u64_of("cache_read_input_tokens"),
+            "cache_creation_input_tokens": u64_of("cache_creation_input_tokens"),
+        }
+    })
+}
+
+/// Anthropic SSE → the same [`ChatStreamEvent`] stream the OpenAI parser
+/// yields (P55.5). Events are keyed off the JSON `type` field, not the
+/// `event:` line, because the payload is the contract.
+pub(crate) fn parse_sse_anthropic<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
+    let mut events = Vec::new();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let trimmed = line.trim();
+        let Some(payload) = trimmed.strip_prefix("data:") else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(payload.trim()) else {
+            continue;
+        };
+        match value.get("type").and_then(|t| t.as_str()).unwrap_or("") {
+            "content_block_delta" => {
+                if let Some(text) = value
+                    .get("delta")
+                    .and_then(|d| d.get("text"))
+                    .and_then(|t| t.as_str())
+                {
+                    events.push(ChatStreamEvent {
+                        delta: Some(text.to_string()),
+                        ..Default::default()
+                    });
+                }
+            }
+            "message_delta" => {
+                let finish = value
+                    .get("delta")
+                    .and_then(|d| d.get("stop_reason"))
+                    .and_then(|s| s.as_str())
+                    .map(|s| {
+                        match s {
+                            "max_tokens" => "length",
+                            "tool_use" => "tool_calls",
+                            _ => "stop",
+                        }
+                        .to_string()
+                    });
+                let usage = value.get("usage").and_then(Usage::from_any);
+                events.push(ChatStreamEvent {
+                    finish,
+                    usage,
+                    ..Default::default()
+                });
+            }
+            "message_start" => {
+                if let Some(usage) = value
+                    .get("message")
+                    .and_then(|m| m.get("usage"))
+                    .and_then(Usage::from_any)
+                {
+                    events.push(ChatStreamEvent {
+                        usage: Some(usage),
+                        ..Default::default()
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    events
 }
 
 fn read_snippet(resp: ureq::Response) -> String {
@@ -850,8 +1344,10 @@ pub enum BrokerError {
     KeyRing(#[from] KeyRingError),
     #[error("HTTP {0}: {1}")]
     Http(u16, String),
-    #[error("rate limited (429)")]
-    RateLimited,
+    /// P56.8 — 429. `retry_after_secs` is the provider's own `Retry-After`
+    /// hint when it sent one (`None` is honest, not a fabricated number).
+    #[error("rate limited (429){}", match .retry_after_secs { Some(s) => format!(" — retry after {s}s"), None => String::new() })]
+    RateLimited { retry_after_secs: Option<u64> },
     #[error("transport error: {0}")]
     Transport(String),
     #[error("all keys for provider '{0}' exhausted after 429 failover")]
@@ -1089,6 +1585,227 @@ mod tests {
         broker
             .chat_completion("anthropic", "claude-3-5", "s1", serde_json::json!({}))
             .unwrap();
+    }
+
+    // ---- P55.5 / P56.6 / P56.8 -------------------------------------------------
+
+    /// P56.6 — a keyless endpoint (OpenCode Free, local proxies) sends no
+    /// credential at all, needs no ring row, and still lands in the ledger at
+    /// $0. Before this, the broker required a key before any HTTP attempt.
+    #[test]
+    fn keyless_endpoint_sends_no_auth_and_still_records_usage() {
+        let base = mock_server(|req| {
+            assert!(
+                !req.to_ascii_lowercase().contains("authorization"),
+                "keyless request must not carry auth: {req}"
+            );
+            assert!(req.contains("POST /chat/completions"), "{req}");
+            (
+                200,
+                r#"{"choices":[{"message":{"content":"ok"}}],"usage":{"prompt_tokens":5,"completion_tokens":2}}"#
+                    .into(),
+            )
+        });
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v).with_endpoint(
+            "opencode-free",
+            ProviderEndpoint {
+                base_url: base,
+                keyless: true,
+                session_headers: true,
+                ..Default::default()
+            },
+        );
+        // Deliberately no `add_key` anywhere.
+        let resp = broker
+            .chat_completion(
+                "opencode-free",
+                "big-pickle",
+                "sess-free",
+                serde_json::json!({"messages": [{"role": "user", "content": "hi"}]}),
+            )
+            .unwrap();
+        let u = Usage::from_any(&resp["usage"]).unwrap();
+        assert_eq!(u.total(), 7);
+        assert!(broker.ring().list("opencode-free").unwrap().is_empty());
+        assert_eq!(broker.session_spent("sess-free"), 0.0);
+        // The turn is still auditable: one ledger row, $0, real token counts.
+        let rows = v.recent_usage(10).unwrap();
+        let row = rows
+            .iter()
+            .find(|r| r.provider == "opencode-free")
+            .expect("keyless turn must land in the durable ledger");
+        assert_eq!(row.in_tokens, 5);
+        assert_eq!(row.out_tokens, 2);
+        assert_eq!(row.cost, 0.0);
+    }
+
+    /// P56.6 — the per-conversation OpenCode headers. A missing session is a
+    /// 400 upstream, so this is a correctness requirement, not a nicety.
+    #[test]
+    fn opencode_session_headers_are_injected_per_conversation() {
+        let base = mock_server(|req| {
+            assert!(req.contains("x-opencode-session: sess-42"), "{req}");
+            assert!(req.contains("X-Session-Id: sess-42"), "{req}");
+            assert!(req.contains("x-opencode-client: cli"), "{req}");
+            assert!(req.contains("x-opencode-request: req-"), "{req}");
+            assert!(req.contains("User-Agent: EveryAIOS/"), "{req}");
+            (200, r#"{"usage":{"total_tokens":1}}"#.into())
+        });
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v)
+            .with_endpoint(
+                "opencode",
+                ProviderEndpoint {
+                    base_url: base,
+                    session_headers: true,
+                    ..Default::default()
+                },
+            )
+            .with_policy(RoutingPolicy::Priority);
+        broker
+            .ring()
+            .add_key(spec("opencode", "zen", "sk-zen"))
+            .unwrap();
+        broker
+            .chat_completion(
+                "opencode",
+                "claude-opus-5",
+                "sess-42",
+                serde_json::json!({"messages": [{"role": "user", "content": "hi"}]}),
+            )
+            .unwrap();
+    }
+
+    /// P55.5 — an Anthropic endpoint posts to `/messages` (never
+    /// `/chat/completions`), carries `x-api-key` + `anthropic-version`, and
+    /// the OpenAI-shaped body is translated with a required `max_tokens`.
+    #[test]
+    fn anthropic_transport_posts_to_messages_and_translates_the_body() {
+        let base = mock_server(|req| {
+            assert!(req.contains("POST /messages"), "wrong path: {req}");
+            assert!(!req.contains("/chat/completions"), "{req}");
+            assert!(req.contains("x-api-key: sk-ant-secret"), "{req}");
+            assert!(req.contains("anthropic-version: 2023-06-01"), "{req}");
+            assert!(req.contains("\"max_tokens\":4096"), "{req}");
+            assert!(req.contains("\"system\":\"be brief\""), "{req}");
+            (
+                200,
+                r#"{"content":[{"type":"text","text":"hello"}],"stop_reason":"end_turn","usage":{"input_tokens":9,"output_tokens":4,"cache_read_input_tokens":3}}"#
+                    .into(),
+            )
+        });
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v).with_endpoint("anthropic", ProviderEndpoint::anthropic(base));
+        broker
+            .ring()
+            .add_key(spec("anthropic", "a1", "sk-ant-secret"))
+            .unwrap();
+        let resp = broker
+            .chat_completion(
+                "anthropic",
+                "claude-fable-5",
+                "s1",
+                serde_json::json!({
+                    "messages": [
+                        {"role": "system", "content": "be brief"},
+                        {"role": "user", "content": "hi"}
+                    ]
+                }),
+            )
+            .unwrap();
+        // Translated back to the OpenAI shape the relay consumes, with the
+        // cache-aware usage fields `Usage::from_any` understands.
+        assert_eq!(
+            resp["choices"][0]["message"]["content"].as_str(),
+            Some("hello")
+        );
+        let u = Usage::from_any(&resp["usage"]).unwrap();
+        assert_eq!(u.total(), 13);
+        assert_eq!(u.cache_read, 3);
+    }
+
+    /// P55.5 — the same endpoint streams with the Anthropic SSE grammar
+    /// (`content_block_delta` / `message_delta`), not the OpenAI one.
+    #[test]
+    fn anthropic_transport_parses_anthropic_sse() {
+        let sse = concat!(
+            "event: message_start\n",
+            "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":11,\"cache_creation_input_tokens\":2}}}\n\n",
+            "event: content_block_delta\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"He\"}}\n\n",
+            "event: content_block_delta\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"llo\"}}\n\n",
+            "event: message_delta\n",
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":3}}\n\n",
+            "event: message_stop\n",
+            "data: {\"type\":\"message_stop\"}\n\n",
+        )
+        .to_string();
+        let base = mock_server(move |_req| (200, sse.clone()));
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v).with_endpoint("anthropic", ProviderEndpoint::anthropic(base));
+        broker
+            .ring()
+            .add_key(spec("anthropic", "a1", "sk-ant"))
+            .unwrap();
+        let events = broker
+            .chat_completion_stream(
+                "anthropic",
+                "claude-fable-5",
+                "s1",
+                serde_json::json!({"messages": [{"role": "user", "content": "hi"}]}),
+            )
+            .unwrap();
+        let text: String = events.iter().filter_map(|e| e.delta.clone()).collect();
+        assert_eq!(text, "Hello");
+        assert_eq!(
+            events.iter().find_map(|e| e.finish.clone()).as_deref(),
+            Some("stop")
+        );
+        let usage = usage_from_stream(&events);
+        assert_eq!(usage.prompt, 11);
+        assert_eq!(usage.output, 3);
+        assert_eq!(usage.cache_write, 2);
+    }
+
+    /// P56.8 — a 401/403 is a credential problem, not a provider hiccup: the
+    /// key is suspended (so it stops being selected) and the next key is tried.
+    #[test]
+    fn auth_failure_suspends_the_key_and_fails_over() {
+        let calls = std::sync::Arc::new(AtomicU32::new(0));
+        let c = std::sync::Arc::clone(&calls);
+        let base = mock_server(move |_req| {
+            let n = c.fetch_add(1, Ordering::SeqCst);
+            if n == 0 {
+                (401, r#"{"error":"bad key"}"#.into())
+            } else {
+                (200, r#"{"usage":{"total_tokens":3}}"#.into())
+            }
+        });
+        let v = Vault::open_in_memory("test-key").unwrap();
+        let broker = Broker::new(&v)
+            .with_base_url("nvidia", base)
+            .with_policy(RoutingPolicy::Priority);
+        broker
+            .ring()
+            .add_key(spec("nvidia", "bad", "sk-bad"))
+            .unwrap();
+        broker
+            .ring()
+            .add_key(spec("nvidia", "good", "sk-good"))
+            .unwrap();
+
+        let resp = broker
+            .chat_completion("nvidia", "m", "s1", serde_json::json!({}))
+            .unwrap();
+        assert_eq!(usage_tokens(&resp), 3);
+        let rows = broker.ring().list("nvidia").unwrap();
+        assert_eq!(
+            rows.iter().filter(|r| r.status == "suspended").count(),
+            1,
+            "exactly the refused key must be suspended: {rows:?}"
+        );
     }
 
     #[test]

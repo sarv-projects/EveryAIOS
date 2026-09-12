@@ -1168,66 +1168,6 @@ export function BetaSection() {
   )
 }
 
-export function CustomProvidersBlock() {
-  const [name, setName] = useState('')
-  const [url, setUrl] = useState('')
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState(false)
-  const notify = useAppStore((s) => s.notify)
-  return (
-    <div className="mt-4 space-y-2 rounded-md border border-border/50 bg-background/20 p-3">
-      <div className="flex items-center gap-1.5 text-xs font-medium">
-        <Sparkles className="h-3.5 w-3.5 text-orange-400" />
-        Add custom provider
-      </div>
-      <p className="text-[10px] text-muted-foreground">
-        Stores the key in the vault under a slugged provider id (OpenAI-compatible transports).
-        A custom base-URL override applies once user-config provider IPC lands — until then the
-        known endpoint for that provider is used.
-      </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. DeepSeek)" className="h-8 text-xs" />
-        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://api.example.com/v1" className="h-8 font-mono text-xs" />
-        <Input value={key} onChange={(e) => setKey(e.target.value)} type="password" placeholder="API key" className="h-8 font-mono text-xs" />
-      </div>
-      <Button
-        size="sm"
-        className="h-7 bg-orange-500 text-black hover:bg-orange-400"
-        disabled={busy}
-        onClick={() =>
-          void (async () => {
-            if (!name.trim() || !url.trim() || !key) {
-              notify('Name, base URL, and key are all required', 'error')
-              return
-            }
-            if (!inTauri()) {
-              notify('Custom providers need the Tauri shell (vault write)', 'error')
-              return
-            }
-            setBusy(true)
-            try {
-              const { invoke } = await import('@/lib/tauri')
-              const provider = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
-              await invoke('vault_key_add', { provider, keyId: 'default', value: key })
-              useAppStore.getState().setProviderKeysConfigured(true)
-              setName('')
-              setUrl('')
-              setKey('')
-              notify(`Stored key for custom provider “${provider}” in the vault`)
-            } catch (e) {
-              notify(e instanceof Error ? e.message : 'Custom provider save failed', 'error')
-            } finally {
-              setBusy(false)
-            }
-          })()
-        }
-      >
-        {busy ? 'Saving…' : 'Add provider'}
-      </Button>
-    </div>
-  )
-}
-
 export function GeneralExtras() {
   const [proxy, setProxy] = usePref('general.proxy', '')
   const [tray, setTray] = usePref('general.tray', true)

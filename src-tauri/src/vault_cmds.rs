@@ -30,6 +30,15 @@ pub fn vault_keys_list(
     Ok(serde_json::json!({ "keys": all }))
 }
 
+/// **P55.6/P56.3** — add (or re-add) a provider key.
+///
+/// The key itself goes to the vault ring; the *endpoint* half (`baseUrl`,
+/// `format`) goes to the durable provider-profile store. Both are needed for
+/// a custom provider to actually work: before this, `vault_key_add` stored the
+/// key and **dropped the URL**, so a self-hosted/proxy endpoint could be
+/// entered in Settings and never be used. `verifiedAt` is the activate
+/// screen's probe stamp (P56.3) — set only after a real `GET {api}/models`
+/// answered, so a green tick always has evidence behind it.
 #[tauri::command]
 pub fn vault_key_add(
     state: State<'_, AppState>,
@@ -37,6 +46,11 @@ pub fn vault_key_add(
     key_id: String,
     value: String,
     priority: Option<u32>,
+    base_url: Option<String>,
+    format: Option<String>,
+    verified_at: Option<String>,
+    verified_models: Option<u32>,
+    session_headers: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     if value.trim().is_empty() {
         return Err("key value required".into());
@@ -55,11 +69,50 @@ pub fn vault_key_add(
             daily_cost_cap: None,
         })
         .map_err(|e| e.to_string())?;
+    drop(vault);
+
+    // Persist the endpoint half when the caller supplied one. An existing
+    // profile is merged field-by-field so a re-key does not wipe the models
+    // list or headers the user already configured.
+    let mut profile_saved = false;
+    let has_base = base_url
+        .as_ref()
+        .map(|u| !u.trim().is_empty())
+        .unwrap_or(false);
+    if has_base || format.is_some() {
+        let store = everyaios_catalog::ProfileStore::in_dir(everyaios_core::default_data_dir());
+        let mut profile = store.get(&provider).unwrap_or_default();
+        profile.id.clone_from(&provider);
+        if profile.name.trim().is_empty() {
+            profile.name = provider.clone();
+        }
+        if let Some(url) = base_url.filter(|u| !u.trim().is_empty()) {
+            profile.base_url = url;
+        }
+        if let Some(f) = format.as_deref() {
+            profile.format = everyaios_catalog::ProfileFormat::parse(f)?;
+        }
+        profile.api_key_required = true;
+        profile.source = everyaios_catalog::ProfileSource::UserConfig;
+        if let Some(stamp) = verified_at {
+            profile.verified_at = Some(stamp);
+        }
+        if let Some(n) = verified_models {
+            profile.verified_models = n as usize;
+        }
+        if let Some(s) = session_headers {
+            profile.session_headers = s;
+        }
+        store.upsert(profile)?;
+        profile_saved = true;
+    }
+
     Ok(serde_json::json!({
         "ok": true,
         "provider": provider,
         "keyId": key_id,
         "opaqueHandle": handle,
+        "profileSaved": profile_saved,
     }))
 }
 

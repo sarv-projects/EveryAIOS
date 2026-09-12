@@ -1966,7 +1966,6 @@ zsh = { path = "" }
         host.write(&pty_id, b"echo everyaios-pty-ok\r")
             .expect("write to pty master");
 
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
         let mut all: Vec<u8> = Vec::new();
         let collected = std::sync::Arc::new(Mutex::new(all.clone()));
         let collected2 = collected.clone();
@@ -1975,7 +1974,6 @@ zsh = { path = "" }
                 move |chunk| {
                     let mut c = collected2.lock().unwrap();
                     c.extend_from_slice(&chunk);
-                    let _ = tx.send(chunk);
                 },
                 move |_code| {},
             )

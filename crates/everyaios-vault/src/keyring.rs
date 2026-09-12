@@ -34,6 +34,10 @@ use crate::Vault;
 pub const COOLDOWN_BASE_SECS: u64 = 5;
 /// Hard cap for 429 backoff (5 minutes).
 pub const COOLDOWN_CAP_SECS: u64 = 300;
+/// P56.8 — hard cap for a provider-supplied `Retry-After` (24h). A server may
+/// ask for a very long window; we honour it but never park a key forever on a
+/// single header value.
+pub const RETRY_AFTER_CAP_SECS: u64 = 24 * 60 * 60;
 
 /// Default maximum 429 failover switches per call (P1.1).
 pub const MAX_429_SWITCHES: u32 = 3;
@@ -571,6 +575,37 @@ impl<'a> KeyRing<'a> {
         Ok(())
     }
 
+    /// **P56.8 — record a 429 that carried an explicit `Retry-After`.**
+    ///
+    /// The provider's own hint wins over the exponential curve (that curve is
+    /// what [`Self::report_failure`] applies when no hint came back), capped at
+    /// [`RETRY_AFTER_CAP_SECS`]. `fail_count` still increments so a key that
+    /// keeps getting rate-limited escalates on the no-hint path.
+    pub fn report_failure_retry_after(
+        &self,
+        handle: &str,
+        retry_after_secs: u64,
+    ) -> Result<(), KeyRingError> {
+        let failures: u64 = self
+            .conn
+            .query_row(
+                "SELECT fail_count FROM key_ring WHERE opaque_handle = ?1",
+                [handle],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(0);
+        let new_failures = failures.saturating_add(1);
+        let cooldown = retry_after_secs.clamp(1, RETRY_AFTER_CAP_SECS);
+        let cooldown_until = now_ms() + (cooldown * 1000) as i64;
+        self.conn.execute(
+            "UPDATE key_ring SET fail_count = ?2, cooldown_until = ?3, last_used_at = ?4
+             WHERE opaque_handle = ?1",
+            rusqlite::params![handle, new_failures as i64, cooldown_until, now_ms()],
+        )?;
+        Ok(())
+    }
+
     /// Record token/cost usage. Daily counters roll over lazily on first use
     /// of a new day.
     pub fn report_usage(&self, handle: &str, tokens: u64, cost: f64) -> Result<(), KeyRingError> {
@@ -977,6 +1012,74 @@ mod tests {
         }
         let capped = ring.get("p", "k").unwrap().cooldown_until;
         assert!((capped - now_ms() - 300_000).abs() <= 10);
+    }
+
+    /// P56.8 — a provider-supplied `Retry-After` wins over the exponential
+    /// curve, and is clamped so a hostile/absurd hint can neither zero the
+    /// window nor park the key forever.
+    #[test]
+    fn retry_after_hint_is_honoured_and_capped() {
+        let ring = ring();
+        ring.add_key(spec("p", "k", "a")).unwrap();
+        let handle = ring.list("p").unwrap()[0].opaque_handle.clone();
+
+        ring.report_failure_retry_after(&handle, 120).unwrap();
+        let info = ring.get("p", "k").unwrap();
+        let delta = info.cooldown_until - now_ms();
+        assert!((delta - 120_000).abs() <= 20, "hint honoured: {delta}");
+        assert_eq!(info.fail_count, 1);
+        assert!(ring.list("p").unwrap()[0].in_cooldown);
+
+        // 0 → clamped up to 1s; a "0-second cooldown" would be a no-op.
+        ring.report_failure_retry_after(&handle, 0).unwrap();
+        let delta = ring.get("p", "k").unwrap().cooldown_until - now_ms();
+        assert!((delta - 1_000).abs() <= 20, "clamped up: {delta}");
+
+        // An absurd hint is capped at 24h, never "forever".
+        ring.report_failure_retry_after(&handle, 10_000_000)
+            .unwrap();
+        let delta = ring.get("p", "k").unwrap().cooldown_until - now_ms();
+        assert!(
+            (delta - (RETRY_AFTER_CAP_SECS as i64 * 1000)).abs() <= 20,
+            "capped at 24h: {delta}"
+        );
+        assert_eq!(ring.get("p", "k").unwrap().fail_count, 3);
+    }
+
+    /// P56.8 — a cooldown is a pause, not a demotion: once the window passes
+    /// the **priority** key is selected again (the ring must not permanently
+    /// downgrade a good key because it was rate-limited once).
+    #[test]
+    fn priority_key_is_reselected_once_its_cooldown_expires() {
+        let ring = ring();
+        ring.add_key(spec("p", "hot", "a")).unwrap();
+        ring.add_key(spec("p", "cold", "b")).unwrap();
+        let hot = ring
+            .list("p")
+            .unwrap()
+            .into_iter()
+            .find(|i| i.key_id == "hot")
+            .unwrap();
+
+        // Priority order picks `hot` first…
+        let k = ring.select("p", "m", "", RoutingPolicy::Priority).unwrap();
+        assert_eq!(k.key_id, "hot");
+
+        // …it gets rate-limited for 60s, so `cold` carries the traffic…
+        ring.report_failure_retry_after(&hot.opaque_handle, 60)
+            .unwrap();
+        let k = ring.select("p", "m", "", RoutingPolicy::Priority).unwrap();
+        assert_eq!(k.key_id, "cold");
+
+        // …and once the window elapses, `hot` is the priority pick again.
+        ring.conn
+            .execute(
+                "UPDATE key_ring SET cooldown_until = 0 WHERE key_id = 'hot'",
+                [],
+            )
+            .unwrap();
+        let k = ring.select("p", "m", "", RoutingPolicy::Priority).unwrap();
+        assert_eq!(k.key_id, "hot");
     }
 
     #[test]

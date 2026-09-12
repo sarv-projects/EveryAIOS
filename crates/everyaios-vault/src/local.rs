@@ -151,7 +151,9 @@ fn agent() -> ureq::Agent {
 
 fn map_err(err: ureq::Error) -> BrokerError {
     match err {
-        ureq::Error::Status(429, _) => BrokerError::RateLimited,
+        ureq::Error::Status(429, _) => BrokerError::RateLimited {
+            retry_after_secs: None,
+        },
         ureq::Error::Status(code, resp) => BrokerError::Http(code, read_snippet(resp)),
         ureq::Error::Transport(t) => BrokerError::Transport(t.to_string()),
     }

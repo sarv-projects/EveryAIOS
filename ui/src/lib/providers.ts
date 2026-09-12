@@ -10,6 +10,7 @@
 
 import { discoveryInventory, type ResourceCard } from './discovery'
 import { inTauri, invoke } from './tauri'
+import { nativeCall } from './runtime'
 import { MODELS, type AgentModel, type ModelProvider } from './agents'
 
 export interface VaultKeyRow {
@@ -157,12 +158,447 @@ function fallbackEntries(): ProviderEntry[] {
   return out
 }
 
+/** P56.2 — the models.dev logo asset for a provider id. */
+export function logoUrl(providerId: string): string {
+  return `https://models.dev/logos/${providerId}.svg`
+}
+
 export interface ProviderDirectory {
   providers: ProviderEntry[]
   /** False in preview/offline fallback — rows are common-provider hints. */
   live: boolean
   /** Providers holding ≥1 vault key (drives the setup gate + route feed). */
   keyedIds: string[]
+}
+
+// ---------------------------------------------------------------------------
+// P56 — the live models.dev catalog bridge
+// ---------------------------------------------------------------------------
+
+/** P56.1 — cheap refresh status (never ships the 4.6 MB snapshot). */
+export interface CatalogStatus {
+  source: string
+  hasSnapshot: boolean
+  fetchedAt: number
+  stale: boolean
+  intervalHours: number
+  providers: number
+  models: number
+  lastDecision: string | null
+  lastFailed: boolean
+  snapshotBytes?: number | null
+}
+
+/** One row of the P56.2 Settings → Providers list. */
+export interface CatalogProviderRow {
+  id: string
+  name: string
+  aliases?: string[]
+  env?: string[]
+  auth?: string
+  transport?: string | null
+  baseUrl: string
+  docUrl?: string | null
+  npm?: string | null
+  api?: string | null
+  logoUrl: string
+  source: string
+  modelIds?: string[]
+  modelCount?: number
+  keyConfigured: boolean
+  profileSource?: string | null
+  format?: string | null
+  keyless?: boolean
+  sessionHeaders?: boolean
+  verifiedAt?: string | null
+}
+
+/** One row of the P56.7 model table. */
+export interface CatalogModel {
+  id: string
+  name: string
+  description?: string
+  family?: string
+  context?: number
+  output?: number
+  priceInput?: number
+  priceOutput?: number
+  cacheRead?: number | null
+  cacheWrite?: number | null
+  reasoning?: boolean
+  toolCall?: boolean
+  structuredOutput?: boolean
+  attachment?: boolean
+  temperature?: boolean
+  images?: boolean
+  pdf?: boolean
+  openWeights?: boolean
+  knowledge?: string | null
+  releaseDate?: string | null
+  lastUpdated?: string | null
+  status?: string | null
+  free?: boolean
+  fromProfile?: boolean
+}
+
+export interface CatalogProviderPayload {
+  providers: CatalogProviderRow[]
+  status: CatalogStatus
+  profiles: unknown[]
+}
+
+/** True when a row is a real catalog row (not the preview fallback). */
+export function isLiveRow(row: { source?: string }): boolean {
+  return row.source !== 'preview'
+}
+
+/** P56.2 — the merged list. Preview/offline falls back to the common-provider
+ * hints with `source: 'preview'` (never a claim about this machine). */
+export async function catalogProviders(): Promise<{
+  providers: CatalogProviderRow[]
+  status: CatalogStatus | null
+  live: boolean
+}> {
+  if (!inTauri()) return { providers: [], status: null, live: false }
+  try {
+    const payload = await nativeCall('catalog providers', () =>
+      invoke<CatalogProviderPayload>('catalog_providers', {}),
+    )
+    return { providers: payload.providers ?? [], status: payload.status ?? null, live: true }
+  } catch {
+    return { providers: [], status: null, live: false }
+  }
+}
+
+/** P56.7 — the full model table for one provider (opencode-free = the keyless
+ * free subset). `live: false` means "no snapshot stored yet — refresh". */
+export async function catalogProviderModels(provider: string): Promise<{
+  models: CatalogModel[]
+  profileModels: CatalogModel[]
+  count: number
+  live: boolean
+  freeSubset: string[] | null
+}> {
+  if (!inTauri()) {
+    return { models: [], profileModels: [], count: 0, live: false, freeSubset: null }
+  }
+  const r = await invoke<{
+    models?: CatalogModel[]
+    profileModels?: CatalogModel[]
+    count?: number
+    live?: boolean
+    freeSubset?: string[] | null
+  }>('catalog_provider_models', { provider })
+  return {
+    models: r.models ?? [],
+    profileModels: r.profileModels ?? [],
+    count: r.count ?? 0,
+    live: r.live ?? false,
+    freeSubset: r.freeSubset ?? null,
+  }
+}
+
+/** P56.1 — run the refresh job now (`force` skips the staleness check). */
+export async function catalogRefresh(force = true): Promise<{
+  accepted: boolean
+  persisted: boolean
+  summary: string
+  status: CatalogStatus
+}> {
+  return nativeCall('catalog refresh', () =>
+    invoke('catalog_refresh', { force }),
+  )
+}
+
+/** P56.1 — the 1–24h cadence (the shell clamps and reports the clamp). */
+export async function catalogSetInterval(hours: number): Promise<{
+  ok: boolean
+  intervalHours: number
+  clamped: boolean
+}> {
+  return nativeCall('catalog interval', () => invoke('catalog_set_interval', { hours }))
+}
+
+/** P56.3 — the activate screen's `MetadataOnly` probe. Read-only: a failed
+ * probe never leaves a half-configured provider behind. */
+export async function providerProbe(
+  provider: string,
+  key?: string,
+): Promise<{ ok: boolean; status: number; message: string; models: number; url?: string }> {
+  return nativeCall('provider probe', () =>
+    invoke('provider_probe', { provider, key: key ?? '' }),
+  )
+}
+
+/** P55.6/P56.4 — persist the endpoint half of a provider (never the secret).,
+ * plus the P56.3 verification stamp on a successful probe tick. */
+export async function providerProfileUpsert(profile: {
+  id: string
+  name?: string
+  format?: string
+  baseUrl?: string
+  keyRequired?: boolean
+  headers?: Record<string, string>
+  body?: unknown
+  temperature?: number | null
+  models?: Array<{ id: string; name?: string; context?: number; output?: number }>
+  verifiedAt?: string | null
+  verifiedModels?: number
+  sessionHeaders?: boolean
+}): Promise<unknown> {
+  return nativeCall('provider profile save', () =>
+    invoke('provider_profile_upsert', { profile }),
+  )
+}
+
+export async function providerProfileRemove(id: string): Promise<unknown> {
+  return nativeCall('provider profile remove', () =>
+    invoke('provider_profile_remove', { id }),
+  )
+}
+
+/** P56.5 — the shipped NVIDIA NIM overlay (`http://localhost:8000/v1`). */
+export async function providerNimProfile(baseUrl?: string): Promise<unknown> {
+  return nativeCall('nvidia nim profile', () =>
+    invoke('provider_nim_profile', { baseUrl: baseUrl ?? null }),
+  )
+}
+
+/** Format a per-1M price for the model table (`—` when the catalog omitted it). */
+export function formatPerM(value: number | null | undefined, free?: boolean): string {
+  if (free) return 'free'
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  if (value === 0) return '$0'
+  return `$${value < 1 ? value.toFixed(3) : value.toFixed(2)}`
+}
+
+/** P56.2 — the preview/no-shell rows: the same common providers the fallback
+ * directory carries, mapped to the catalog row shape with `source: 'preview'`.
+ * Honest by construction — no key fact, no claim about this machine. */
+export function previewCatalogRows(): CatalogProviderRow[] {
+  return fallbackEntries().map((e) => ({
+    id: e.id,
+    name: e.name,
+    aliases: [],
+    env: e.envVar ? [e.envVar] : [],
+    auth: e.auth,
+    transport: null,
+    baseUrl: e.baseUrl,
+    docUrl: e.docUrl,
+    npm: null,
+    api: null,
+    logoUrl: logoUrl(e.id),
+    source: 'preview',
+    modelIds: e.models.map((m) => m.id),
+    modelCount: e.models.length,
+    keyConfigured: false,
+    profileSource: null,
+    format: null,
+    keyless: e.auth === 'keyless',
+    sessionHeaders: false,
+    verifiedAt: null,
+  }))
+}
+
+/** The fields one row searches over, kept separate so a query never matches
+ * by stitching characters across two unrelated fields (the reason `nim` must
+ * not hit `openai` + `gpt-5-mini`). */
+export function providerFields(row: CatalogProviderRow): string[] {
+  return [
+    row.id,
+    row.name,
+    ...(row.aliases ?? []),
+    ...(row.env ?? []),
+    row.auth ?? '',
+    row.npm ?? '',
+    row.profileSource ?? '',
+    ...(row.modelIds ?? []),
+  ].map((s) => s.toLowerCase())
+}
+
+/** P56.2 — subsequence ("all characters") match: every char of `q` appears in
+ * `haystack` in order, so `ocg` finds `OpenCode Go` and `gpt5` finds `gpt-5`.
+ * An empty query matches everything. */
+export function subsequenceMatch(haystack: string, q: string): boolean {
+  const needle = q.trim().toLowerCase()
+  if (!needle) return true
+  let i = 0
+  for (const ch of haystack) {
+    if (ch === needle[i]) i += 1
+    if (i === needle.length) return true
+  }
+  return false
+}
+
+export function providerMatches(row: CatalogProviderRow, q: string): boolean {
+  const needle = q.trim().toLowerCase()
+  if (!needle) return true
+  // A plain substring is the strongest signal; the ordered-characters pass is
+  // the fallback that makes `ocf` find `opencode-free`.
+  return providerFields(row).some(
+    (f) => f.includes(needle) || subsequenceMatch(f, needle),
+  )
+}
+
+/** P56.2 — filter the catalog rows, keyed providers first, then name order. */
+export function searchProviders(
+  rows: CatalogProviderRow[],
+  q: string,
+): CatalogProviderRow[] {
+  const hit = rows.filter((r) => providerMatches(r, q))
+  return hit.sort((a, b) => {
+    if (a.keyConfigured !== b.keyConfigured) return a.keyConfigured ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
+/** P56.2 — split the catalog into "yours" (a key/profile exists) and the
+ * rest, so the Settings list reads top-down like the user's own setup. */
+export function configuredProviders(rows: CatalogProviderRow[]): CatalogProviderRow[] {
+  return rows.filter((r) => r.keyConfigured || r.profileSource)
+}
+
+// ---------------------------------------------------------------------------
+// P56.4 — the custom inference form's pure parsers
+// ---------------------------------------------------------------------------
+
+/** Parse a `Header-Name: value` block (one per line, `#` comments). Blank
+ * lines are skipped; a line without `:` is reported rather than silently
+ * dropped, so a typo never becomes a hidden request header. */
+export function parseHeaderLines(
+  text: string,
+): { headers: Record<string, string>; errors: string[] } {
+  const headers: Record<string, string> = {}
+  const errors: string[] = []
+  text.split('\n').forEach((raw, i) => {
+    const line = raw.trim()
+    if (!line || line.startsWith('#')) return
+    const idx = line.indexOf(':')
+    if (idx <= 0) {
+      errors.push(`line ${i + 1}: expected \`Name: value\``)
+      return
+    }
+    const name = line.slice(0, idx).trim()
+    const value = line.slice(idx + 1).trim()
+    if (!name || !value) {
+      errors.push(`line ${i + 1}: empty name or value`)
+      return
+    }
+    headers[name] = value
+  })
+  return { headers, errors }
+}
+
+/** Parse the models table lines: `id | name | context | output`. Only the id
+ * is required; name defaults to the id, and `free` is honoured as a 5th
+ * column. Duplicate ids keep the last row (a table, not a list). */
+export function parseProfileModels(
+  text: string,
+): { models: Array<{ id: string; name: string; context: number; output: number; free: boolean }>; errors: string[] } {
+  const byId = new Map<string, { id: string; name: string; context: number; output: number; free: boolean }>()
+  const errors: string[] = []
+  text.split('\n').forEach((raw, i) => {
+    const line = raw.trim()
+    if (!line || line.startsWith('#')) return
+    const [idRaw, nameRaw, ctxRaw, outRaw, freeRaw] = line.split('|').map((s) => s.trim())
+    const id = idRaw ?? ''
+    if (!id) {
+      errors.push(`line ${i + 1}: model id required`)
+      return
+    }
+    const int = (v: string | undefined) => {
+      const n = Number.parseInt(v ?? '', 10)
+      return Number.isFinite(n) && n > 0 ? n : 0
+    }
+    byId.set(id, {
+      id,
+      name: nameRaw || id,
+      context: int(ctxRaw),
+      output: int(outRaw),
+      free: (freeRaw ?? '').toLowerCase() === 'free' || (freeRaw ?? '').toLowerCase() === 'true',
+    })
+  })
+  return { models: [...byId.values()], errors }
+}
+
+/** Parse the optional JSON body-merge box. Empty text is `{}` (no merge). */
+export function parseJsonObject(
+  text: string,
+): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+  const t = text.trim()
+  if (!t) return { ok: true, value: {} }
+  try {
+    const v = JSON.parse(t)
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) {
+      return { ok: false, error: 'body merge must be a JSON object' }
+    }
+    return { ok: true, value: v as Record<string, unknown> }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'invalid JSON' }
+  }
+}
+
+/** P56.4 — the profile the custom inference form edits (never a secret). */
+export interface CustomProfilePayload {
+  id: string
+  name: string
+  format: string
+  baseUrl: string
+  keyRequired: boolean
+  headers: Record<string, string>
+  body: Record<string, unknown>
+  temperature: number | null
+  models: Array<{ id: string; name: string; context: number; output: number; free: boolean }>
+}
+
+/** P56.4 — the OpenCode-shaped form → the profile payload (no secrets). */
+export function toProfilePayload(form: {
+  id: string
+  name: string
+  format: string
+  baseUrl: string
+  keyRequired: boolean
+  headers: string
+  body: string
+  temperature: string
+  models: string
+}): { profile: CustomProfilePayload; errors: string[] } {
+  const errors: string[] = []
+  const name = form.name.trim()
+  const id = (form.id.trim() || name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')).replace(/^-+|-+$/g, '')
+  if (!name) errors.push('name required')
+  if (!id) errors.push('id required')
+  const baseUrl = form.baseUrl.trim()
+  if (!baseUrl) errors.push('base URL required')
+  else if (!/^https?:\/\//.test(baseUrl)) errors.push('base URL must start with http:// or https://')
+  else if (/(chat\/completions|\/completions|\/messages|\/responses)$/.test(baseUrl.replace(/\/+$/, '')))
+    errors.push('base URL must stop at the version root (remove the request path)')
+
+  const parsedHeaders = parseHeaderLines(form.headers)
+  errors.push(...parsedHeaders.errors)
+  const parsedModels = parseProfileModels(form.models)
+  errors.push(...parsedModels.errors)
+  const parsedBody = parseJsonObject(form.body)
+  if (!parsedBody.ok) errors.push(parsedBody.error)
+  const tempRaw = form.temperature.trim()
+  const temperature = tempRaw === '' ? null : Number(tempRaw)
+  if (temperature !== null && (!Number.isFinite(temperature) || temperature < 0 || temperature > 2))
+    errors.push('temperature must be between 0 and 2')
+
+  return {
+    profile: {
+      id,
+      name,
+      format: form.format,
+      baseUrl,
+      keyRequired: form.keyRequired,
+      headers: parsedHeaders.headers,
+      body: parsedBody.ok ? parsedBody.value : {},
+      temperature,
+      models: parsedModels.models,
+    },
+    errors,
+  }
 }
 
 export async function loadProviderDirectory(): Promise<ProviderDirectory> {

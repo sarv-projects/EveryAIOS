@@ -149,6 +149,18 @@ fn connect_chat_relay(
     }
     let policy_path = everyaios_core::default_data_dir().join("permissions.toml");
     relay.with_policy(&policy_path);
+    // P55.6 — the durable provider-profile store (custom endpoints + the
+    // OpenCode/NIM overlays). A base URL entered in Settings now reaches the
+    // broker instead of being discarded.
+    relay.with_profiles(everyaios_catalog::ProfileStore::in_dir(
+        everyaios_core::default_data_dir(),
+    ));
+    // P55.5 — resolve every provider endpoint from the live catalog +
+    // profiles so a chat turn can reach any models.dev provider, not just the
+    // hardcoded defaults (`base_urls` was never populated at runtime before).
+    for (provider, endpoint) in catalog_cmds::resolve_endpoints(&state) {
+        relay.with_endpoint(&provider, endpoint);
+    }
     // P1.8 (A5): register keyless local endpoints so a sidecar
     // `provider/stream` for ollama/llamafile routes to the local runtime
     // (GBNF grammar constraint included — B5). Ollama always registers;
@@ -726,6 +738,10 @@ pub fn run() {
             // H36 (P54) — the PTY host owns live terminal sessions; they
             // persist independently of any Shell-view mount.
             terminal: everyaios_core::terminal::PtyHost::new(),
+            // P56.1 — the live models.dev catalog (snapshot + cadence).
+            catalog: std::sync::Arc::new(catalog_cmds::CatalogState::new(
+                everyaios_core::default_data_dir().join("catalog"),
+            )),
         })
         .invoke_handler(commands::handler())
         // P8.8: auto-updater (checks + downloads against the configured
@@ -791,6 +807,15 @@ pub fn run() {
             // only touch records that match their predicates.)
             if let Err(e) = tasks_cmds::tasks_sweep(app.state::<AppState>()) {
                 eprintln!("everyaios-desktop: task sweep failed (continuing): {e}");
+            }
+            // P56.1 — the live catalog job: fetch models.dev/api.json when the
+            // stored snapshot is stale (4h default, 1–24h configurable), then
+            // re-check every minute so a Settings change applies without a
+            // restart. A failed fetch keeps the last good snapshot and only
+            // records the honest verdict (offline = cached).
+            {
+                let catalog = std::sync::Arc::clone(&app.state::<AppState>().catalog);
+                catalog_cmds::spawn_refresh_job(catalog);
             }
             Ok(())
         })

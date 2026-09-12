@@ -46,11 +46,8 @@ import { useAppStore, type SettingsSectionId } from '@/lib/store'
 import { FeedbackSection } from './feedback-panel'
 import { UxMetricsSection } from './usage-metrics-section'
 import { Input } from '@/components/ui/input'
-import {
-  AppearanceSection,
-  GeneralSection,
-  ModelsSection,
-} from './settings-sections'
+import { AppearanceSection, GeneralSection } from './settings-sections'
+import ProvidersSection from './settings-providers'
 import {
   AboutSection,
   AdvancedSection,
@@ -191,7 +188,9 @@ function SectionBody({ section }: { section: SectionId }) {
     case 'capabilities':
       return <CapabilityMatrixPanel />
     case 'apikeys':
-      return <ModelsSection />
+      // P56 — the live models.dev catalog surface (list + activate screen +
+      // model table + custom form), not the P51 discovery-inventory list.
+      return <ProvidersSection />
     case 'experts':
       return <ExpertsSection />
     case 'subagents':

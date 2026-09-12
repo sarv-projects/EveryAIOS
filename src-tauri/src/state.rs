@@ -18,6 +18,7 @@ use everyaios_vault::Vault;
 
 use crate::acp_cmds::AcpHandle;
 use crate::browser_cmds::LiveBrowser;
+use crate::catalog_cmds::CatalogState;
 use crate::control::FileUndo;
 use crate::desktop_cmds::DesktopSlot;
 use crate::mcp_cmds::McpServerRow;
@@ -110,4 +111,9 @@ pub struct AppState {
     /// `.part` staging file in place so a later start resumes via `Range`.
     pub model_downloads:
         Mutex<std::collections::HashMap<String, crate::model_cmds::ModelDownloadSlot>>,
+    /// P56.1 — the live models.dev catalog: the durable snapshot store, its
+    /// refresh cadence, and the serialized refresh gate. The background job,
+    /// Settings → Providers, the model table and the chat relay's endpoint
+    /// resolution all read this one owner.
+    pub catalog: Arc<CatalogState>,
 }
