@@ -29,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useAppStore } from '@/lib/store'
 import * as perfLib from '@/lib/perf'
 import { MODEL_MAP, isRuntimeUsable } from '@/lib/agents'
+import { catalogPickLabel } from '@/lib/catalog-models'
 import { CompanionChip } from './companion-chip'
 import { cn } from '@/lib/utils'
 import { useRuntimeState } from '@/lib/runtime'
@@ -182,6 +183,8 @@ export function StatusBar() {
   const activeId = useAppStore((s) => s.activeSessionId)
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
   const selectedModelId = useAppStore((s) => s.selectedModelId)
+  // P58.7 — set only when the composer pinned a live models.dev row.
+  const selectedModelProvider = useAppStore((s) => s.selectedModelProvider)
   const autoRoute = useAppStore((s) => s.autoRoute)
   const liveBudget = useAppStore((s) => s.liveBudget)
   const browserAttached = useAppStore((s) => s.browserAttached)
@@ -206,6 +209,13 @@ export function StatusBar() {
   // P58.7 — curated model rows still back this label until the provider model
   // table (P56.7) is the picker source; do not claim catalog coverage here.
   const model = MODEL_MAP[selectedModelId]
+  // P58.7 — a catalog pick is `provider · model-id` because that is the exact
+  // pair the broker receives; a curated row keeps its curated label. The
+  // fallback is the raw id, never '—' for a selection we can name.
+  const modelLabel =
+    catalogPickLabel(selectedModelProvider, selectedModelId) ??
+    model?.label ??
+    selectedModelId
   // Agent health, latency, uptime, and task counts are not available from the
   // runtime contract yet. Never invent them; show unknown until a live probe
   // supplies evidence.
@@ -400,9 +410,9 @@ export function StatusBar() {
                 <span className={cn('text-[9.5px]', healthCol)}>
                   {healthLatency ?? '—'}ms
                 </span>
-                {model && (
-                  <span className="text-muted-foreground/50">{model.label}</span>
-                )}
+                <span className="max-w-[16rem] truncate text-muted-foreground/50">
+                  {modelLabel}
+                </span>
                 {autoRoute && (
                   <span className="text-orange-400/60">auto</span>
                 )}
@@ -410,7 +420,7 @@ export function StatusBar() {
             </TooltipTrigger>
             <TooltipContent side="top" className="font-mono text-[11px] max-w-xs">
               <div className="space-y-1">
-                <div className="font-semibold">{agent.name} · {model?.label ?? '—'}</div>
+                <div className="font-semibold">{agent.name} · {modelLabel}</div>
                 <div>Status: unavailable until the selected runtime is probed</div>
                 <div>Tasks: — · Error rate: —</div>
                 <div>Uptime: —</div>

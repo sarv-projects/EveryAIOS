@@ -38,4 +38,49 @@ describe("P50.3.6 — resolveProviderModel", () => {
     expect(sel.provider).toBe("nvidia");
     expect(sel.model).toBe("does-not-exist");
   });
+
+  // P58.7 — a live models.dev pick carries its provider, so the resolver must
+  // never re-derive one from the model id (ids collide across aggregators).
+  test("a catalog pick passes its provider straight through with the real model id", () => {
+    const sel = resolveProviderModel({
+      modelId: "claude-sonnet-4-5",
+      modelProvider: "anthropic",
+      autoRoute: false,
+    });
+    expect(sel.provider).toBe("anthropic");
+    expect(sel.model).toBe("claude-sonnet-4-5");
+  });
+
+  test("a catalog pick beats the curated mapping for a colliding id", () => {
+    // `gpt-5` is a curated id *and* a real catalog id on openrouter.
+    const curated = resolveProviderModel({ modelId: "gpt-5", autoRoute: false });
+    const catalog = resolveProviderModel({
+      modelId: "gpt-5",
+      modelProvider: "openrouter",
+      autoRoute: false,
+    });
+    expect(curated.provider).toBe("openai");
+    expect(catalog.provider).toBe("openrouter");
+  });
+
+  test("auto-route still wins over a stale catalog provider", () => {
+    const sel = resolveProviderModel({
+      modelId: "claude-sonnet-4-5",
+      modelProvider: "anthropic",
+      autoRoute: true,
+    });
+    expect(sel.provider).toBeUndefined();
+    expect(sel.model).toBeUndefined();
+  });
+
+  test("an explicit local runtime still wins over a catalog provider", () => {
+    const sel = resolveProviderModel({
+      modelId: "llama3",
+      modelProvider: "anthropic",
+      localRuntime: "ollama",
+      autoRoute: false,
+    });
+    expect(sel.provider).toBe("ollama");
+    expect(sel.model).toBe("llama3");
+  });
 });

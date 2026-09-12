@@ -732,6 +732,9 @@ function selectedProviderModel(modelId: string): { provider?: string; model?: st
   const st = useAppStore.getState();
   return resolveProviderModel({
     modelId,
+    // P58.7 — a live models.dev pick carries its own provider, so the send path
+    // hands the broker the real catalog id instead of a curated guess.
+    modelProvider: st.selectedModelProvider,
     localRuntime: st.localRuntime,
     autoRoute: st.autoRoute,
   });

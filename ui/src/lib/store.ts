@@ -1089,7 +1089,12 @@ interface AppState {
   selectedAgentId: string
   setSelectedAgent: (id: string) => void
   selectedModelId: string
-  setSelectedModel: (id: string) => void
+  /** P58.7 — the catalog provider a live models.dev pick came from. Set only
+   * by the picker's catalog rows; `undefined` means the selection is a curated
+   * `MODELS` row and the send path resolves it via `MODEL_MAP`. */
+  selectedModelProvider?: string
+  /** P58.7 — `provider` is set only for a catalog pick (see above). */
+  setSelectedModel: (id: string, provider?: string) => void
   /** P51.3 (UI slice) — cycle the current agent's model variants (next /
    * previous). Pinning a variant turns auto-route off so the pick is real,
    * same semantics as clicking a row in the picker. Returns the chosen id. */
@@ -1842,11 +1847,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         selectedAgentId: id,
         selectedModelId: keepModel ? s.selectedModelId : getDefaultModelForAgent(id),
+        // P58.7 — a kept curated model has no provider; a reset one is the
+        // agent's curated default, so the catalog provider must not survive.
+        selectedModelProvider: keepModel ? s.selectedModelProvider : undefined,
       }
     })
   },
   selectedModelId: getDefaultModelForAgent('everyaios-native'),
-  setSelectedModel: (id) => set({ selectedModelId: id }),
+  selectedModelProvider: undefined,
+  setSelectedModel: (id, provider) =>
+    set({ selectedModelId: id, selectedModelProvider: provider }),
   // P51.3 — variant cycle over the current agent's available models. The
   // order is the picker's row order; auto-route is switched off so the
   // pinned variant actually reaches the send path (see resolveProviderModel).
@@ -1859,6 +1869,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       selectedModelId: next.id,
       autoRoute: false,
+      // P58.7 — a cycled variant is a curated row; drop any catalog provider
+      // so the send path resolves through `MODEL_MAP`, not a stale provider.
+      selectedModelProvider: undefined,
     })
     return next.id
   },

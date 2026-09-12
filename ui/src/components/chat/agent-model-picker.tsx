@@ -25,6 +25,12 @@ import {
   governanceLabel,
 } from '@/lib/acp'
 import { refreshAgentCatalog } from '@/lib/bridge'
+import { catalogProviderModels, catalogProviders, formatPerM } from '@/lib/providers'
+import {
+  catalogPickerModels,
+  usableCatalogProviders,
+  type CatalogPickerModel,
+} from '@/lib/catalog-models'
 
 function StatusDot({ status }: { status: AgentRuntime['status'] }) {
   const tone =
@@ -77,6 +83,15 @@ export default function AgentModelPicker({ compact }: Props) {
   const [localRows, setLocalRows] = useState<LocalModelRow[]>([])
   const [localErr, setLocalErr] = useState<string | null>(null)
   const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
+  // P58.7 — the model rows come from the live models.dev catalog for the
+  // providers this machine can actually reach (keyed / profiled / keyless),
+  // not from the curated `MODELS` seed. `catalogNote` carries the honest
+  // reason when that list is empty — never a silent fallback that reads like
+  // coverage.
+  const [catalogRows, setCatalogRows] = useState<CatalogPickerModel[]>([])
+  const [catalogNote, setCatalogNote] = useState<string | null>(null)
+  const [catalogBusy, setCatalogBusy] = useState(false)
+  const selectedModelProvider = useAppStore((s) => s.selectedModelProvider)
   const [auth, setAuth] = useState<{
     handle: string
     methods: { id: string; name: string; type?: string; description?: string }[]
@@ -240,6 +255,59 @@ export default function AgentModelPicker({ compact }: Props) {
       notify(err instanceof Error ? err.message : 'Sign-in failed')
     }
   }
+  // P58.7 — load the live catalog rows when the picker opens: the usable
+  // providers (a key, a profile, or keyless) and their real models.dev tables.
+  // Every failure mode is stated in the UI instead of being hidden.
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    setCatalogBusy(true)
+    setCatalogNote(null)
+    void catalogProviders()
+      .then(async (cat) => {
+        if (!alive) return
+        if (!cat.live) {
+          setCatalogRows([])
+          setCatalogNote('Preview mode — the live models.dev catalog needs the desktop shell.')
+          return
+        }
+        const usable = usableCatalogProviders(cat.providers)
+        if (usable.length === 0) {
+          setCatalogRows([])
+          setCatalogNote(
+            'No provider is reachable yet — add a key or a custom profile in Settings → Providers.',
+          )
+          return
+        }
+        const groups = await Promise.all(
+          usable.map((p) =>
+            catalogProviderModels(p.id)
+              .then((r) => catalogPickerModels(p.id, r.models, r.profileModels))
+              .catch(() => [] as CatalogPickerModel[]),
+          ),
+        )
+        if (!alive) return
+        const rows = groups.flat()
+        setCatalogRows(rows)
+        setCatalogNote(
+          rows.length === 0
+            ? 'Your providers are reachable but carry no model rows yet — refresh the catalog in Settings → Providers.'
+            : null,
+        )
+      })
+      .catch(() => {
+        if (!alive) return
+        setCatalogRows([])
+        setCatalogNote('Catalog unavailable — showing curated rows only.')
+      })
+      .finally(() => {
+        if (alive) setCatalogBusy(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     setLocalErr(null)
@@ -309,6 +377,22 @@ export default function AgentModelPicker({ compact }: Props) {
     setLocalRuntime(undefined)
     if (anyBusy) {
       notify(`Running turn keeps its model — ${pickedLabel} applies to the next message`)
+    }
+  }
+
+  // P58.7 — pin a live models.dev row. The provider travels with the model id
+  // so the broker resolves the endpoint from the catalog (P55.5) instead of
+  // guessing one from the id.
+  const pickCatalogModel = (m: CatalogPickerModel) => {
+    const wasAuto = autoRoute
+    if (wasAuto) setAutoRoute(false)
+    setSelectedModel(m.id, m.provider)
+    setLocalRuntime(undefined)
+    notify(
+      `Pinned to ${m.provider} · ${m.label}${wasAuto ? ' — auto-route off, this model now serves the chat' : ''}`,
+    )
+    if (!wasAuto && anyBusy) {
+      notify(`Running turn keeps its model — ${m.label} applies to the next message`)
     }
   }
 
@@ -528,15 +612,142 @@ export default function AgentModelPicker({ compact }: Props) {
                   ))}
                 </div>
 
-                {models.length === 0 && agentUsable && (
+                {/* P58.7 — live models.dev rows for the providers this machine
+                    can reach. Selection carries the provider (the broker
+                    resolves the endpoint from the catalog), and the row shows
+                    the real context/price from the catalog. */}
+                <div className="mb-1 flex items-center justify-between px-1">
+                  <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                    Your providers · models.dev
+                  </div>
+                  {catalogRows.length > 0 && (
+                    <div className="font-mono text-[9px] text-muted-foreground/60">
+                      {catalogRows.length} live
+                    </div>
+                  )}
+                </div>
+                {catalogBusy && (
+                  <div className="mb-1.5 flex items-center gap-1.5 px-1 font-mono text-[10px] text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    reading the provider catalog…
+                  </div>
+                )}
+                {!catalogBusy && catalogNote && (
+                  <div className="mb-1.5 rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
+                    {catalogNote}
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {catalogRows.map((m) => {
+                    const isActive =
+                      !autoRoute &&
+                      selectedModelProvider === m.provider &&
+                      selectedModelId === m.id
+                    return (
+                      <button
+                        key={`${m.provider}:${m.id}`}
+                        type="button"
+                        title={`Use ${m.provider} · ${m.id} for this chat`}
+                        onClick={() => pickCatalogModel(m)}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
+                          isActive
+                            ? 'border-orange-500/60 bg-orange-500/10'
+                            : 'border-transparent hover:border-border hover:bg-accent/40',
+                        )}
+                      >
+                        <span className="flex h-6 w-6 items-center justify-center rounded bg-orange-500/15 text-[9px] font-bold text-orange-300">
+                          {m.label.charAt(0).toUpperCase()}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={cn(
+                                'truncate text-[11px] font-medium',
+                                isActive ? 'text-orange-200' : 'text-foreground',
+                              )}
+                            >
+                              {m.label}
+                            </span>
+                            {isActive && (
+                              <Badge className="bg-orange-500/15 px-1 text-[8px] text-orange-300">
+                                sticky
+                              </Badge>
+                            )}
+                            {m.free && (
+                              <Badge className="bg-emerald-500/15 px-1 text-[8px] text-emerald-300">
+                                free
+                              </Badge>
+                            )}
+                            {m.profile && (
+                              <Badge className="bg-zinc-500/15 px-1 text-[8px] text-zinc-300">
+                                profile
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
+                            <span className="text-orange-300/80">{m.provider}</span>
+                            <span className="text-muted-foreground/30">|</span>
+                            <span className="truncate text-muted-foreground/70">{m.id}</span>
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
+                            <span className="flex items-center gap-0.5">
+                              <Gauge className="h-2.5 w-2.5" />
+                              {m.context > 0 ? formatContext(m.context) : 'ctx —'}
+                            </span>
+                            <span className="text-muted-foreground/30">|</span>
+                            <span className="flex items-center gap-0.5">
+                              <Zap className="h-2.5 w-2.5 text-orange-400" />
+                              {formatPerM(m.inputPrice, m.free)}/in ·{' '}
+                              {formatPerM(m.outputPrice, m.free)}/out
+                            </span>
+                            {m.reasoning && (
+                              <Badge variant="secondary" className="bg-violet-500/15 px-1 text-[7px] font-normal text-violet-300">
+                                reasoning
+                              </Badge>
+                            )}
+                            {m.toolCall && (
+                              <Badge variant="secondary" className="bg-sky-500/15 px-1 text-[7px] font-normal text-sky-300">
+                                tools
+                              </Badge>
+                            )}
+                            {m.images && (
+                              <Badge variant="secondary" className="bg-emerald-500/15 px-1 text-[7px] font-normal text-emerald-300">
+                                vision
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-orange-400" />}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Curated seed rows — this runtime's own mapping, labelled as
+                    such so it is never mistaken for catalog coverage. */}
+                {models.length > 0 && (
+                  <div className="mt-2 border-t border-border/60 pt-2">
+                    <div className="mb-1 flex items-center justify-between px-1">
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                        Curated seed · {agent.name}
+                      </div>
+                      <div className="font-mono text-[9px] text-muted-foreground/50">
+                        not the live catalog
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {catalogRows.length === 0 && models.length === 0 && agentUsable && (
                   <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
-                    No curated model list for this runtime yet — {agent.name} drives its own
-                    models internally. Turn on <span className="text-orange-300">Auto-route by task</span>{' '}
+                    No catalog rows and no curated list for this runtime — {agent.name} drives its
+                    own models internally. Turn on <span className="text-orange-300">Auto-route by task</span>{' '}
                     (below) and EveryAIOS picks the best provider per turn.
                   </div>
                 )}
 
-                {models.length === 0 && !agentUsable && (
+                {catalogRows.length === 0 && models.length === 0 && !agentUsable && (
                   <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
                     {agent.name} is not installed — its model list loads live after
                     install. Use <span className="text-orange-300">Install</span> below,
@@ -544,7 +755,7 @@ export default function AgentModelPicker({ compact }: Props) {
                   </div>
                 )}
 
-                {autoRoute && models.length > 0 && (
+                {autoRoute && (models.length > 0 || catalogRows.length > 0) && (
                   <div className="mb-1.5 rounded-md border border-orange-500/20 bg-orange-500/5 px-2 py-1 font-mono text-[9px] leading-relaxed text-orange-200/80">
                     Auto-route is on — the router picks the best model per turn.
                     Click any model to pin it (auto-route turns off for this chat).
@@ -797,11 +1008,13 @@ export default function AgentModelPicker({ compact }: Props) {
                 <div className="mt-1.5 flex items-center gap-1 px-1 font-mono text-[9px] text-muted-foreground/60">
                   <Sparkles className="h-2.5 w-2.5" />
                   Selected: {agent.name} ·{' '}
-                  {!agentUsable
-                    ? 'not installed'
-                    : models.length === 0
-                      ? 'auto (runtime-driven)'
-                      : (model?.label ?? '—')}
+                  {selectedModelProvider
+                    ? `${selectedModelProvider} · ${selectedModelId}`
+                    : !agentUsable
+                      ? 'not installed'
+                      : models.length === 0
+                        ? 'auto (runtime-driven)'
+                        : (model?.label ?? '—')}
                 </div>
 
                 {/* Install + connect (F8/J17) — one click, then use */}
