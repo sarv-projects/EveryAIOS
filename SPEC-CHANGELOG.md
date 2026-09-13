@@ -16,6 +16,34 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## 2026-09-13 — README rewritten as a capability guide (non-technical)
+
+**Category:** Documentation (public-facing README). No capability rows added, no checkbox flips; census unchanged (**1355 = 1171 done + 184 open**, 157 capabilities).
+**Decision:** `README.md` is the product's front door, so it now describes **what EveryAIOS does** in plain language rather than how it is built. Two defects fixed and one structure change:
+- **Full capability coverage.** The README previously advertised a subset. It now presents all **157 capabilities** grouped into ten plain-language areas (Models & Providers · Agents & Automation · Memory & Context · Documents, Files & Storage · Browser & Desktop Control · Connectors & Integrations · Search & Research · The App & Its Interface · Code & Developer Tools · Safety, Privacy & Trust), each as a collapsed `<details>` section so the page stays scannable. Every row in `capabilities.yaml` is represented; the 14 `post_v1: true` rows (A8, A10, F5, H16, H18, H26, H27, H30, H33, H35, I3, I12, I13, J24) are listed under **Coming Soon** instead of being claimed as shipping.
+- **Nothing reads as "missing".** The page leads with an *active development* status badge and a short welcome note, the Quick Start honesty line now explains the early-build state without sounding apologetic, and the roadmap section is titled **Coming Soon** with the framing "not missing, just next". The intent: a first-time visitor sees an unfinished-but-moving project, not a list of gaps.
+- **Stale marketing claims removed.** The old text asserted "34 cognitive retrieval algorithms" and "250 Native Commands"; the former contradicts the spec's own reclassification (Alg #2 is the *Evidence Grounding Score*, constants are tuned defaults — not 34 retrieval algorithms) and the latter is stale (the shell registers **283** commands per `ipc-parity`). Neither number is in the README now.
+- **Install instructions corrected.** The README advertised `brew install sarv-projects/tap/everyaios`, `winget install EveryAIOS.EveryAIOS` and a `https://everyaios.dev/install.sh` one-liner; **none of those channels exist in this repository** — `.github/workflows/release.yml` publishes Tauri installers as GitHub Releases on a `v*` tag. Quick Start now points at the Releases page and keeps build-from-source as the verified path. The clone sequence was also wrong (`cd EveryAIOS/desktop_app` — the git root **is** the `desktop_app` directory), now `cd EveryAIOS`.
+- **Engineering deep-dive replaced by a pointer.** The ASCII multi-process architecture diagram and "Key Engineering Invariants" block (crate names, "sidecar proposes, Rust disposes", IPC framing) were removed from the README. The invariants themselves are unchanged and still owned by the spec — the README keeps a one-paragraph, plain-language summary and links to `DESKTOP-APP-SPEC.md`, `ARCH/09-FEATURE-MATRIX.md`, `ARCH/` and `TODO.md`.
+- **Honesty note added** where a reader expects one: the README states the project is under active development and points to the capability matrix and TODO for exact per-feature status, rather than implying every listed capability is complete.
+**Verification:** every relative link in the README resolves on disk (`ARCH/09-FEATURE-MATRIX.md`, `DESKTOP-APP-SPEC.md`, `TODO.md`, `ARCH/`, `LICENSE-MIT`, `LICENSE-APACHE`, both images); the ten `<details>`/`<summary>` blocks are balanced; the deprecated-claim scan (`34 cognitive`, `34-algorithm`, `250 Native`, `sidecar proposes`, `brew install`, `winget install`, `install.sh`) returns **0**. `node scripts/check-doc-sync.mjs` still green (157 capabilities; census 1355 = 1171 + 184 matches header; kernel gate clear). No code or capability-contract change.
+
+---
+
+## 2026-09-13 — Documentation reconciliation: stale `APP/` sibling references swept
+
+**Category:** Documentation reconciliation + verification. No capability rows added, no checkbox flips; census unchanged (**1355 = 1171 done + 184 open**, 157 capabilities).
+**Decision:** the live docs must describe the **in-repo vendored** `@personal-ai/core-*` reality, not the removed `../APP` sibling workspace. Four non-historical references still asserted the old layout and are corrected:
+- `ARCH/00-INDEX.md` decision line read "≈100 test files in `APP/packages/`"; it now names `packages/core-*` and records the 2026-08-29 vendoring (no `../APP`, no `APP_CLONE_TOKEN` gate).
+- `TODO.md` header **Source reuse** rule (line 9) said "`APP/packages/core-*` imported as workspace deps"; it now states the in-repo vendoring rule. This is a live governance line, not history — hence its correction.
+- `ARCH/11-AI-CHAT-FEATURES.md` labelled its copy-source column "(APP/packages)" and grounded on `APP/architecture.md`; both now point at `packages/core-*`, keeping the original path only as provenance.
+- `ARCH/10-BUILD-PLAN.md` P0 said "pnpm linking to `@personal-ai/core-*`"; it now names the in-repo vendored workspace.
+- `ARCH/00-INDEX.md` also carried a stale corpus range (docs 01–**85** → 01–**87**, matching `RESEARCH/desktop_app/`), omitted `ARCH/16` from its "Docs: 00–15" line, and had a broken reading-order list (duplicate/misordered 15/16 entries) — all corrected in one pass.
+**Not changed (deliberately):** `SPEC-CHANGELOG.md` and the TODO historical entries that reference `APP/packages` / `../APP` — they are dated records of what was true then, and most already carry the vendoring note inline.
+**Verification:** `node scripts/check-doc-sync.mjs` green (157 capabilities; census 1355 = 1171 + 184 matches header; kernel gate clear); `node scripts/ipc-parity.mjs` 0 broken. Code audit confirmed the claims the docs rest on: the Rust workspace is **22 crates** (`crates/Cargo.toml`; `everyaios-desktop` carries package name `everyaios-computeruse` to avoid collision with the `src-tauri` shell package `everyaios-desktop`) plus that shell, and the coordinator sidecar is still the live chat loop (`chat_stream` → "sidecar not connected — coordinator link not established"), so `ARCH/16`'s **SCOPE, not implemented** status remains accurate.
+
+---
+
 ## 2026-09-13 — P57.8/P58.3: background-input capability wired through the human UI
 
 **Category:** Implementation + documentation reconciliation + verification. No capability rows added. P57.8 and P58.3 remain complete; P59.9 remains open for the autonomous agent path.

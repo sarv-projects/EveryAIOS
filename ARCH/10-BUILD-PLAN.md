@@ -9,7 +9,7 @@
 > **v3.67 H36 terminal profiles (TODO P54) + §4.5 backends.** Shell is a profile registry + PTY host (PowerShell/cmd/Git Bash/WSL/$SHELL), not piped `sh`/`cmd`. Cloud = user-owned ExecutionNode attach (H33 v1 slot). Does not pause Stage-0 or P53.
 
 ## P0 — Workspace & skeleton (≈2 wks)
-- Rust workspace (`crates/*`), TS workspace (`packages/coordinator` + `ui`), pnpm linking to `@personal-ai/core-*`, CI (cargo test, vitest, tauri build matrix).
+- Rust workspace (`crates/*`), TS workspace (`packages/coordinator` + `ui`), pnpm workspace over the **in-repo vendored** `@personal-ai/core-*` packages (`packages/core-*`; the original `../APP` sibling link is gone), CI (cargo test, vitest, tauri build matrix).
 - `everyaios-core` binary boots headless (config, dirs, vault init, SQLite schema v1), `everyaios-ipc` stdio JSON-RPC framing, ProcessSupervisor spawning a hello-world sidecar.
 - **Exit:** `cargo test` green; sidecar E2E "echo" over IPC green; `everyaios-core --version` prints; config from `everyaios.toml` loaded; vault opens/creates SQLCipher db; Tauri window shows React shell; sidecar heap safety (J13) + watchdog (J10) + UNIX-socket/pre-spawn (J16) tasks land in P0.
 

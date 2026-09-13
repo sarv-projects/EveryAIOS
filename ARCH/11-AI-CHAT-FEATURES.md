@@ -2,11 +2,11 @@
 
 > **User directive (verbatim):** *"for the ai chat features, copy from hermes, etc., and the rest from under ~business_Dev/APP/architecture.md — check the AI chat section. You need to understand what to copy, or convert, and not."*
 > This doc is that analysis. It takes the **two source corpora** and produces one clear list:
-> 1. **COPY** — reuse as-is (already built & tested in `APP/packages/`, or a research pattern to implement directly).
+> 1. **COPY** — reuse as-is (already built & tested in the `@personal-ai/core-*` engine — **now vendored in-repo at `packages/core-*`**, originally `APP/packages/`; or a research pattern to implement directly).
 > 2. **CONVERT** — adapt (mobile → desktop, or research concept → our stack; keep the idea, change the plumbing).
 > 3. **REJECT** — do NOT copy (locked out, wrong stack, server-dependent, or explicitly out of scope).
 >
-> Grounding: `APP/architecture.md` §§ Conversation Engine / Retrieval / Agent / Provider & Routing (verified against `core-engine/`, `core-ai/`, `core-providers/`, `core-tools/` source) + research docs 01 (AnythingLLM), 02 (Hermes blueprint), 05 (pi/Claude Code/Reasonix), 16 (tier-1 agent implementations), 23 (LibreChat/deep-dive leftovers), 33 (BrowserOS) + ARCH 03 (key-rings), 05 (token economy), 07 (memory), 08 (browser).
+> Grounding: the original `APP/architecture.md` §§ Conversation Engine / Retrieval / Agent / Provider & Routing (verified against `core-engine/`, `core-ai/`, `core-providers/`, `core-tools/` source — **those packages now live in-repo at `packages/core-*`**) + research docs 01 (AnythingLLM), 02 (Hermes blueprint), 05 (pi/Claude Code/Reasonix), 16 (tier-1 agent implementations), 23 (LibreChat/deep-dive leftovers), 33 (BrowserOS) + ARCH 03 (key-rings), 05 (token economy), 07 (memory), 08 (browser).
 
 ---
 
@@ -29,9 +29,9 @@ Why this split: A is **already production-wired in the sidecar language (TS)** a
 
 ## 1. COPY — reuse from `APP/architecture.md` as-is (source A)
 
-These are the shipped chat atoms. The desktop sidecar imports them unchanged (they are pure TS; the mobile-only UI hooks live in `app-mobile`, which we do NOT import).
+These are the shipped chat atoms. The desktop sidecar imports them unchanged from the in-repo `packages/core-*` vendoring (they are pure TS; the mobile-only UI hooks lived in `app-mobile`, which we do NOT import).
 
-| # | Chat atom | Source file (APP/packages) | What it gives | Status in matrix |
+| # | Chat atom | Source file (`packages/core-*`, formerly APP/packages) | What it gives | Status in matrix |
 |---|---|---|---|---|
 | A-1 | **ConversationEngine** | `core-engine/src/engine.ts` | 3-stage turn loop (RetrievalPlanner → ToolPlanner → PermissionGate) + tool loop (≤5 rounds, extra-final-round guard) + abort-safe streaming + trajectory + risk compass + artifact hook | B1 (`🟡 (loop)` → actually 🟢 core exists; loop hardening 🟡) |
 | A-2 | **Stage: RetrievalPlanner** | `core-engine/src/stages/retrieval-planner.ts` | scope resolution (project / sources / source_hard / none) + web/memory enable flags | 🟢 |

@@ -7,11 +7,12 @@
 <p align="center"><strong>Tell it what you want done. It figures out how. You stay in control.</strong></p>
 
 <p align="center">
-  An open-source, local-first AI coworker on your computer — files, spreadsheets, documents, browser, native desktop, code, email, calendar, and specialized agents.<br/>
-  Your keys. Your hardware. Zero accounts. Nothing passes through a middleman server.
+  An open-source, local-first AI coworker that lives on your computer — working with your files, spreadsheets, documents, browser, desktop apps, code, email and calendar.<br/>
+  Your keys. Your hardware. No middleman server. Nothing you do passes through us.
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/status-active%20development-yellow?style=flat-square" alt="Active Development" />
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" alt="Cross Platform" />
   <img src="https://img.shields.io/badge/privacy-100%25%20Local--First%20%2B%20BYOK-success?style=flat-square" alt="Privacy First" />
   <img src="https://img.shields.io/badge/protocols-MCP%20%2B%20ACP%20Native-6f42c1?style=flat-square" alt="MCP and ACP Native" />
@@ -23,191 +24,352 @@
   <img src="5a1c3357-0cd1-492f-ac9f-efd313391587.png" width="94%" alt="EveryAIOS Workspace" />
 </p>
 
----
+<p align="center">
+  🚧 <strong>EveryAIOS is in active development</strong> — early, open, and shipping fast.<br/>
+  The core is built and the app runs end to end. New capabilities land regularly:<br/>
+  <a href="#coming-soon">See what's coming soon ↓</a> &nbsp;·&nbsp; <a href="ARCH/09-FEATURE-MATRIX.md">Live capability status</a>
+</p>
 
-## Quick Start
-
-### 1. Download or Build
-
-<table>
-  <tr>
-    <td><b>Platform</b></td>
-    <td><b>Distribution</b></td>
-    <td><b>Quick Command</b></td>
-  </tr>
-  <tr>
-    <td><b>macOS</b></td>
-    <td>Universal DMG / Homebrew</td>
-    <td><code>brew install sarv-projects/tap/everyaios</code></td>
-  </tr>
-  <tr>
-    <td><b>Windows</b></td>
-    <td>x64 Installer (.exe) / WSL2</td>
-    <td><code>winget install EveryAIOS.EveryAIOS</code></td>
-  </tr>
-  <tr>
-    <td><b>Linux</b></td>
-    <td>AppImage / .deb</td>
-    <td><code>curl -fsSL https://everyaios.dev/install.sh | bash</code></td>
-  </tr>
-</table>
-
-#### Developer Build (from source)
-
-```bash
-# Clone & install dependencies
-git clone https://github.com/sarv-projects/EveryAIOS
-cd EveryAIOS/desktop_app && pnpm install
-
-# Compile coordinator engine & launch
-pnpm --filter './packages/core-*' run build
-pnpm --filter @everyaios/coordinator build
-mkdir -p src-tauri/bin && cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator
-cd ui && bun install && cd ..
-cd src-tauri && cargo tauri dev
-```
+> **Welcome — and thank you for looking.** EveryAIOS is being built in the open, one capability at a time. If something you need isn't here yet, it's likely already designed and on the roadmap below. Star the repo to follow along, open an issue to ask for what you want, or jump into the [development docs](#contributing--architecture) and help build it.
 
 ---
 
 ## What is EveryAIOS?
 
-Most AI tools force you into walled gardens — their cloud chat, their proprietary editor, their subscription, their server. When you move between tools, you lose the thread: what you were working on, what files were touched, and what was already tried.
+Most AI tools keep your work locked inside their own chat window, their own cloud, their own subscription. When you move between tools, you lose the thread — what you were working on, which files were touched, what had already been tried.
 
-**EveryAIOS is a single, unified operating layer for AI-assisted work on your own machine.**
+**EveryAIOS is one place to get real computer work done with AI, on your own machine.**
 
-You open the app. It asks: **"What would you like to get done?"** Drop a messy folder, a 400-page PDF, a broken codebase, a financial spreadsheet, or an email thread. It plans the steps, executes across your local tools, and asks before anything that actually modifies your files or system.
+You open the app and it asks: **"What would you like to get done?"** Drop in a messy folder, a 400-page PDF, a broken codebase, a financial spreadsheet or an email thread. It works out a plan, does the work across your own tools, and asks you before anything that changes your files or system.
 
-Switch models mid-stream, close your laptop, reboot, or hand off execution to Claude Code or Codex — **your work, memory, context, and safety rules remain completely intact.**
+Close your laptop, reboot, swap models, or hand the task to Claude Code or Codex — **your work, your memory and your safety rules stay exactly where they were.**
 
 ---
 
-## The Five Guarantees
+## Quick Start
 
-1. 🔒 **100% Private & Local-First (No Middleman Servers)**  
-   EveryAIOS runs directly on your machine. All credentials, documents, and history live in an encrypted local vault. Your prompts and data go directly to the providers you configure (or stay offline on local hardware) — never proxied or logged through third-party servers.
+### Install a build
 
-2. 🛡️ **Propose, Never Impose**  
-   The AI can plan, read, and draft freely, but it cannot mutate your system without authorization. Every file write, shell command, email dispatch, or external action passes through an explicit, human-verifiable approval gate with an instant undo receipt.
+Download the latest installer for macOS, Windows or Linux from the [**Releases page**](https://github.com/sarv-projects/EveryAIOS/releases). Builds are produced by the release workflow on version tags.
 
-3. ⚡ **Persistent, Unbreakable Continuity**  
-   Work is a durable object, not a temporary chat window. If your laptop dies, the network drops, or the model times out, your session, task dependency graph, and receipts reload exactly where you left off.
+> **Early build, active development.** EveryAIOS is usable today and getting better every week. A few capabilities are still foundations, and the [Coming soon](#coming-soon) list shows what's next — the [capability matrix](ARCH/09-FEATURE-MATRIX.md) and [TODO](TODO.md) track exact status per feature.
 
-4. 📐 **Engine-True Precision**  
-   Calculations in spreadsheets use real formula calculation engines, not token guesses. Word and PowerPoint edits patch only the targeted blocks while keeping custom formatting, themes, and macros bit-for-bit identical.
+### Build from source
 
-5. 🔀 **Absolute Model & Agent Freedom**  
-   You are never locked into one model or subscription. Bring your own API keys, ring multiple keys to rotate automatically on rate limits, run open-source models offline via Ollama, LM Studio, or llama.cpp, or hand off tasks to external agent CLIs like Claude Code or Codex.
+```bash
+git clone https://github.com/sarv-projects/EveryAIOS
+cd EveryAIOS
+
+# Install workspace dependencies (coordinator + UI + engine packages)
+pnpm install
+
+# Build the coordinator sidecar and place it where the app expects it
+pnpm --filter @everyaios/coordinator build
+mkdir -p src-tauri/bin && cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator
+
+# Install and build the UI, then launch the desktop app
+cd ui && bun install && cd ..
+cd src-tauri && cargo tauri dev
+```
+
+**Requirements:** Rust (stable), Node + pnpm, Bun, and the usual [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform.
 
 ---
 
 ## What You Can Get Done
 
-* 📁 **Reorganize & Clean Downloads**  
-  Drop a cluttered directory. EveryAIOS scans the folder, identifies duplicates by hash and structure, and proposes a clean layout as a plan. You review the exact move list and approve it with one click. If you change your mind, roll back the entire operation instantly.
+* 📁 **Reorganize & clean up your Downloads**
+  Point it at a cluttered folder. It scans everything, finds duplicates by content and structure, and proposes a tidy layout as a plan. You review the exact move list, approve it with one click, and can undo the whole operation afterwards.
 
-* 🔍 **Turn Messy Research into Presentations**  
-  Ask for a deep competitor analysis. EveryAIOS runs parallel multi-source web research, strips noise, verifies claims with real citations, recalculates figures, and surgically drafts a slide deck or summary brief.
+* 🔍 **Turn messy research into a real document**
+  Ask for a competitor analysis or a briefing. It runs multi-source web research, strips out the noise, keeps citations attached to every claim, and drafts a slide deck or written brief you can edit.
 
-* 📊 **Financial Spreadsheet Updates**  
-  Drop a quarterly financial model. The engine recalculates formulas with mathematical certainty, updates numbers across sheets, and refreshes the executive memo. Unsupported formulas are explicitly flagged rather than hallucinated.
+* 📊 **Update a financial model**
+  Drop in a quarterly spreadsheet. Numbers are recalculated with a real formula engine — not guessed — across sheets, and the summary memo is refreshed. Anything it can't calculate is flagged instead of invented.
 
-* 🛠️ **Fix Broken Repositories with Verifiable Proof**  
-  Point to a broken repository. The agent inspects code intelligence diagnostics, identifies root causes, drafts minimal surgical diffs, runs your tests to observe failures, applies the fix upon your approval, and records passing test evidence.
+* 🛠️ **Fix a broken repository**
+  It reads the project structure and diagnostics, finds the likely cause, drafts a small diff, runs your tests to see what actually happens, applies the fix once you approve, and records the passing test run as evidence.
 
-* 🤝 **Handoff Between Agents Mid-Task**  
-  Start drafting a project with an inexpensive local model. When you need specialized reasoning, switch the session Chief to Claude Code or Codex. EveryAIOS transfers a compacted context bundle so the new agent takes over without losing project history.
+* 🤝 **Hand a task off between agents**
+  Start with a cheap local model, then switch the session's lead agent to Claude Code or Codex when you need heavier reasoning. The context comes with it, so the new agent picks up without starting over.
 
-* ⚙️ **Hands-Free Repetitive Automations**  
-  Teach EveryAIOS a multi-step routine once. The crystallization engine compiles your workflow into a deterministic local skill that executes on schedule without burning model tokens.
-
----
-
-## Core Capabilities
-
-### 🧠 Any Model, Any Provider
-* **100+ Cloud Providers:** Connect OpenAI, Anthropic, Google Gemini, OpenCode (Zen, Go, and Free), Groq, DeepSeek, Cerebras, Mistral, and NVIDIA NIM.
-* **Auto-Failover Key Rings:** Assign multiple keys per provider. When an API hits a rate limit (HTTP 429), it automatically cools down and rotates to the next key without breaking your stream.
-* **Hardware-Aware Local Models:** Built-in hardware scanner that matches your available VRAM and RAM against open-source models (GGUF/MLX) with live search and zero hardcoded names.
-* **Cost & Cache Accounting:** Real-time visibility into input cache hits, output generation, and exact spending per turn.
-
-### 🎛️ The Three-Control Composer
-Take full command of how every task executes:
-* **Agent (WHO):** Choose the built-in coworker, a tailored persona, or an installed external CLI (Claude Code, Codex, Aider, OpenCode) to lead the session.
-* **Work Mode (WHAT):** Select `Auto` for standard interaction, `Plan` for structured blueprints, `Build` for execution, or `Research` for multi-source exploration.
-* **Autonomy (HOW MUCH):** Adjust freedom dynamically:
-  * `Sandbox`: Strictly read-only exploration.
-  * `Ask`: Confirms every modification before execution.
-  * `Auto`: Executes safe routine actions, prompting only for significant changes.
-  * `Maximum`: High autonomy while still strictly blocking destructive commands.
-
-### 💾 Cognitive Memory That Actually Remembers
-* **Remembers Your Context:** Retains facts, project preferences, and decisions across days and weeks without bloating your token window.
-* **Coding Taste Profile:** Automatically learns your naming conventions, formatting preferences, and architectural style from the changes you accept.
-* **Pass-by-Reference Context:** Massive datasets and documents are indexed as lightweight handles with instant previews rather than dumped into the context window.
-* **Spaced Repetition Review:** Integrated retention scheduling to help you review and reinforce facts and insights captured during research.
-
-### 📑 Document & File Surgery
-* **Byte-Preserving Office Edits:** Surgical block-patching for Word documents (`.docx`), Excel workbooks (`.xlsx`), and PowerPoint decks (`.pptx`).
-* **IronCalc Formula Engine:** Mathematical recalculation supporting 300+ spreadsheet functions.
-* **Native PDF Suite:** Fast full-text search, form filling, text replacement, and redactions.
-* **Storage Intelligence:** Parallel work-stealing disk scanner that maps disk usage, pinpoints massive files, detects duplicate data, and generates guided cleanup plans.
-
-### 🌐 Browser Automation & Computer Use
-* **Inbuilt Fast Browser:** High-speed browser automation driven directly via accessibility trees and DOM snapshots. Operates without requiring heavy vision models.
-* **Computer Use Agent:** Real OS desktop control (Windows, macOS, Linux) with visual recognition for applications that lack accessible APIs. Operates safely in the background without stealing focus.
-* **Encrypted Session Vault:** Safely stores authenticated browser sessions so you can perform authenticated research without re-logging in every session.
-* **Humanized Realism:** Natural Bézier mouse curves and realistic keystroke cadences to avoid abrupt interactions.
-
-### 🔌 Extensible Ecosystem
-* **MCP-First:** Connect to any Model Context Protocol tool server or expose EveryAIOS's native tools (documents, browser, memory, storage) to other applications.
-* **Connect Store:** Curated, one-click local OAuth integrations for GitHub, Google Workspace, Slack, Linear, Notion, and email (IMAP/SMTP/Gmail).
-* **Developer Terminal:** Integrated multi-profile terminal with full PTY support for PowerShell, Command Prompt, WSL distros, and Unix shells.
+* ⚙️ **Automate the boring routine**
+  Show it a repeated multi-step job once. EveryAIOS can turn that into a saved routine that runs on a schedule without spending model tokens each time.
 
 ---
+
+## Everything It Can Do
+
+EveryAIOS is built around **157 capabilities**. Here they are, grouped into ten plain-language areas.
 
 <details>
-<summary><strong>Architecture & Technical Specifications (For Engineers)</strong></summary>
+<summary><strong>🧠 Models &amp; Providers</strong> — use any AI, your keys</summary>
 
 <br/>
 
-### Multi-Process Hybrid Design
-EveryAIOS uses a multi-process architecture to guarantee responsiveness, safety, and memory isolation:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Tauri 2 Native UI                        │
-│            React 19 · Zustand · Tailwind · Monaco Editor        │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │ Tauri IPC (250 Native Commands)
-┌────────────────────────────────┴────────────────────────────────┐
-│                        Core Rust Engine                         │
-│  • Security Gate: Deterministic regex prescan & ticket authority│
-│  • Encrypted Vault: SQLCipher credential broker with 429 logic  │
-│  • Document Engines: Surgical OOXML part-patching & IronCalc    │
-│  • Browser Core: Loopback CDP client & Obscura lightweight tier │
-│  • Computer Use: Native window hooks, UIA/AX, and CUA DAG runtime│
-│  • Storage Intelligence: Work-stealing disk scanner & dedup     │
-│  • Memory Core: 34 cognitive retrieval algorithms & FSRS-6      │
-│  • Code Intelligence: LSP runner & Tree-sitter RepoMap PageRank │
-│  • Audit Engine: Append-only NDJSON ledger & Merkle hash chains │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │ Length-Prefixed Stdio JSON-RPC
-┌────────────────────────────────┴────────────────────────────────┐
-│                   Supervised Bun Coordinator                    │
-│  • Turn Orchestrator: 12-segment prompt assembler               │
-│  • Dynamic Chief: Handoff adapter for external ACP agent CLIs   │
-│  • Context Optimization: Prefix-cache boundaries & compaction   │
-│  • Tool Hub: Local MCP server bridge & auth connectors          │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Key Engineering Invariants
-* **Sidecar Proposes, Rust Disposes:** The TypeScript coordinator formulates plans and tool calls. Mutating calls generate a single-use authorization ticket validated by the Rust security engine before execution.
-* **Cryptographic Diff-Cards:** Visual confirmation cards carry a unique machine-readable reason and cryptographic nonce displayed in an isolated native window to prevent clickjacking or prompt spoofing.
-* **Credential Sealing:** Raw API keys are never stored in browser memory, coordinator memory, or chat logs. The Rust credential broker injects headers directly onto outbound HTTPS sockets and zeroizes temporary buffers immediately.
-* **Deterministic Verification:** Every automated plan requires verifiable evidence before marking tasks complete. If an outcome cannot be programmatically verified, it is marked unverifiable rather than assumed successful.
+- **Any provider, bring your own key** — OpenAI, Anthropic, Google, Groq, DeepSeek, Mistral, Cerebras, NVIDIA NIM, OpenCode (Zen / Go / Free), any OpenAI-compatible endpoint, and more.
+- **Multiple keys per provider** — keep several keys and spread work across them.
+- **Automatic key rotation on rate limits** — when a provider returns "too many requests", it cools that key down and moves to the next one without interrupting the stream.
+- **Sign in with subscriptions you already pay for** — connect supported accounts with a normal sign-in instead of copying keys.
+- **Run models locally** — Ollama, LM Studio, llama.cpp, GGUF and MLX models, chosen to fit your actual hardware.
+- **Live model catalog** — the model list is fetched and refreshed from a public catalog, with notes on what each model can do (tools, vision, context size). It is never a frozen, hardcoded list.
+- **Right-sized model per task** — simple steps can use small, cheap models while hard reasoning gets a stronger one, automatically.
+- **Cost and cache accounting** — see prompt-cache hits, tokens generated, and what each turn actually cost.
+- **One identity per provider** — providers and their nicknames (e.g. "claude" → Anthropic) are resolved consistently, so one provider definition works everywhere.
 
 </details>
+
+<details>
+<summary><strong>🤖 Agents &amp; Automation</strong> — the thing that actually does the work</summary>
+
+<br/>
+
+- **Built-in agent** — a full plan → act → check loop that can use tools, recover from mistakes, and keep going across steps.
+- **Written plans you can edit** — plans are saved as readable documents, and the agent keeps them up to date as the work progresses so you can always see and change the route.
+- **Sub-agents** — spin up focused helpers with their own context for research, review or a specific sub-job.
+- **Agent-to-agent messaging** — helpers can ask each other questions and request cross-checks.
+- **Structured extraction** — when it needs data out of a document, it extracts it into a strict shape instead of a loose paragraph.
+- **Iteration limits** — hard caps on retries and loops so a confused agent can't burn forever.
+- **Scheduled tasks** — run work later or on a recurring schedule.
+- **Teach-once routines** — a repeated workflow can be compiled into a saved routine that replays deterministically, with no model tokens on the healthy path.
+- **Build your own agent** — create named agents with their own instructions, tools and model, then pick them per task.
+
+</details>
+
+<details>
+<summary><strong>💾 Memory &amp; Context</strong> — it remembers, without filling up</summary>
+
+<br/>
+
+- **Layered memory** — short-term working memory, things that happened, learned facts, and learned procedures are kept separately and used in the right situation.
+- **Search that combines signals** — keyword matching, optional semantic search, relationship lookups and recency are blended and re-ranked rather than trusting one method.
+- **Works without embeddings** — the default retrieval path needs no vector model at all, so it works offline and instantly.
+- **Optional embeddings** — turn on semantic search when you want it.
+- **Knowledge graph** — entities and relationships are stored with where they came from and how confident the system is.
+- **Memory that knows when a fact was true** — facts carry validity windows, so old information is superseded rather than silently overwritten.
+- **Memory injection** — relevant memories are folded into the conversation at the right moment.
+- **You own your memory** — export, sync or wipe it at any time.
+- **Learns your taste** — it picks up your naming, formatting and style preferences from the changes you accept.
+- **Big files by reference** — massive documents are indexed as lightweight handles with previews instead of being pasted into the prompt.
+- **Spaced-repetition review** — facts and findings can be surfaced again on a review schedule so they stick.
+- **Runs on SQLite or Postgres** — the store works locally by default and can scale up.
+
+</details>
+
+<details>
+<summary><strong>📑 Documents, Files &amp; Storage</strong> — real edits to real files</summary>
+
+<br/>
+
+- **Word documents** — open and edit `.docx`.
+- **Excel workbooks** — open and edit `.xlsx` with a real formula engine.
+- **PowerPoint decks** — open and edit `.pptx`.
+- **PDFs** — open and edit: search, fill forms, replace text and redact.
+- **Reads almost anything** — a universal reader for documents and files you drag in.
+- **Keeps formatting intact** — edits patch only the parts that need to change, so themes, custom styles, macros and layout survive round-trip.
+- **Undo any change** — every edit can be rolled back.
+- **Legacy formats** — older document formats are handled rather than rejected.
+- **Disk map** — scan and visualise what is using your disk.
+- **Duplicate finder** — locate duplicate files by content hash.
+- **Big-file finder** — surface the giant files worth deleting.
+- **Storage health** — analytics and guided cleanup suggestions.
+
+</details>
+
+<details>
+<summary><strong>🌐 Browser &amp; Desktop Control</strong> — it can use your computer</summary>
+
+<br/>
+
+- **Built-in browser** — drives a real browser directly through the page's own structure, so it works fast without needing a heavy vision model.
+- **Large browser toolkit** — dozens of built-in browser actions (navigate, click, type, read, extract, download, and more).
+- **Sees pages the way a screen reader does** — accessibility snapshots of page structure, with changes highlighted.
+- **Run page scripts** — evaluate scripts when a page needs it.
+- **Replay sessions** — review what the browser did, step by step.
+- **Tab ownership** — the agent knows which tabs are "yours" and which are its own, and won't fight you for them.
+- **Imports your logins** — reuse existing browser sessions so authenticated sites just work.
+- **Authenticated scraping** — read data from sites you're signed in to.
+- **Desktop computer-use** — controls native apps directly on Windows, macOS and Linux, with visual recognition for apps that have no accessible interface.
+- **Lightweight browser option** — a fast, low-resource mode for simple pages.
+- **Encrypted session vault** — authenticated sessions are stored encrypted.
+- **Gets past challenges** — handles common bot/verification hurdles with the right tier of browser.
+- **Session inheritance** — carry a signed-in session from one step to the next.
+- **Human-like input** — natural mouse curves and keystroke timing instead of robotic, instant clicks.
+- **Automates desktop apps built with web tech** — apps like VS Code and Slack that are secretly web pages under the hood.
+- **Lean page snapshots + WebMCP** — compact page representations and support for pages that expose their own tools.
+- **Understands several action formats** — different agent action styles are accepted and normalised.
+
+</details>
+
+<details>
+<summary><strong>🔌 Connectors &amp; Integrations</strong> — connects to your tools</summary>
+
+<br/>
+
+- **One connector hub** — all external services are reached through a single, consistent layer with routing.
+- **Native connectors** — first-class integrations built directly into the app.
+- **Browser-session connectors** — for services with no API, it can drive the website as you.
+- **Local sign-in bridge** — complete an OAuth sign-in in your own browser, never exposing the token to the AI.
+- **MCP client** — connect to any Model Context Protocol server to gain its tools.
+- **MCP server** — expose EveryAIOS's own tools (documents, browser, memory, storage) to other apps.
+- **Agent harness installer** — install and manage external agent CLIs.
+- **One tool registry** — every built-in and connected tool appears in a single, governed catalog.
+- **WSL / POSIX bridge** — reach Linux tools from Windows.
+- **Port &amp; network hooks** — work with local servers and network services.
+- **Drive external agents** — hand steps to external agent CLIs.
+- **Messaging bridges** — connect messaging channels.
+- **Email connector** — Gmail or IMAP/SMTP, read-first: nothing is sent without approval.
+- **Calendar connector** — read and manage calendar events.
+
+</details>
+
+<details>
+<summary><strong>🔍 Search &amp; Research</strong> — finds things and checks them</summary>
+
+<br/>
+
+- **Free web search, no API key** — search works out of the box via open, self-hostable search.
+- **Deep research** — multi-pass research across many sources for a real answer.
+- **Multiple search channels** — several engines/sources combined, with fallbacks.
+- **Data-analysis mode** — a live analysis environment for crunching numbers and data.
+- **Repo-wide search** — search an entire codebase, not just open files.
+- **Site-scoped search** — restrict research to a specific domain or site.
+- **Instant file &amp; content search** — a local index of your own files by name and contents.
+- **Tiered cascade with caching** — cheapest search first, caching results, and moving up only when needed.
+- **Content cleaner** — strips ads, boilerplate and junk out of fetched pages before the model reads them.
+
+</details>
+
+<details>
+<summary><strong>🖥️ The App &amp; Its Interface</strong> — what it feels like to use</summary>
+
+<br/>
+
+- **Chat** — a natural conversation surface that can do work, not just talk.
+- **Work cockpit** — a dashboard showing the plan, progress and current activity.
+- **Audit &amp; replay** — look back at exactly what happened and why.
+- **Plan editor** — read and edit the blueprint for a task.
+- **Office viewers** — view and edit documents in place.
+- **Reader** — a clean, comfortable reading view.
+- **Math &amp; code rendering** — formatted equations and syntax-highlighted code.
+- **Permission cards** — clear, plain-language approval prompts for anything risky.
+- **Spend analytics** — see token and cost usage over time.
+- **Personality** — choose how the assistant talks to you.
+- **Menu-bar / tray mode** — it can live in your tray and stay out of the way.
+- **Optional telemetry** — off by default, opt-in only.
+- **Scheduled tasks view** — see and manage what runs on a schedule.
+- **Voice input** — speak your request, with automatic silence detection.
+- **Widget cards** — rich inline results instead of walls of text.
+- **Progress timeline** — a single, clickable, timestamped list of every step.
+- **Activity rail with multiple views** — a workspace with chat, files, browser, code and more side by side.
+- **Take-over and resume** — step in by hand, then let the agent continue.
+- **Automation builder** — build routines from plain language or templates.
+- **Knowledge browser** — explore what it has learned.
+- **MCP marketplace** — browse and add MCP tools.
+- **Generative UI** — the assistant can render small interactive interfaces for a task.
+- **Voice replies** — spoken answers.
+- **Local dashboard artifacts** — genuinely local, private "Sites" and dashboards it builds for you.
+- **Corpus research surface** — point it at a pile of sources and get grounded, cited answers.
+- **Agent picker** — choose who leads the session, right from the composer.
+- **Autonomy control** — a simple dial for how much freedom the agent has, with the setting frozen per task and any increase explicitly escalated to you.
+- **Integrated terminal** — a real multi-profile terminal (PowerShell, Command Prompt, WSL distros, Unix shells).
+
+</details>
+
+<details>
+<summary><strong>👨‍💻 Code &amp; Developer Tools</strong> — for people who write software</summary>
+
+<br/>
+
+- **Code-writing loop** — investigate, patch, run tests, iterate.
+- **Skill library** — installable, signed capability packs.
+- **Test-driven loop** — write the failing test first, then the fix.
+- **Guardrails** — policy checks around automatic code changes.
+- **Plugin system** — extensions declare exactly what they're allowed to contribute and touch.
+- **Semantic code map** — a structural map of a repository (via tree-sitter and link analysis) so the agent can find its way around large projects.
+- **Per-model edit strategy** — how edits are shaped to suit the strengths of each model.
+- **Architect mode** — a two-pass design-then-build mode.
+- **File watcher with AI comments** — react to file changes, and act on `TODO`-style comments you leave in code.
+- **Language-server intelligence** — real diagnostics, symbols and navigation via LSP.
+- **Project-scoped coding rail** — a focused coding workspace inside the app, not a separate IDE.
+
+</details>
+
+<details>
+<summary><strong>🛡️ Safety, Privacy &amp; Trust</strong> — the part that makes it usable</summary>
+
+<br/>
+
+- **Trust ladder** — reading and exploring never prompts. Small, in-folder changes can be automatic. Anything that leaves your machine, or is destructive, always asks.
+- **Deterministic safety checks** — obvious bad patterns (path escapes, dangerous commands, credential leaks, bad URLs) are blocked before they run, without a prompt.
+- **Approval cards you can actually read** — risky actions show a clear, plain-language summary of exactly what will change, in a separate protected window.
+- **Hard boundaries** — file paths, workspace scope and allowed operations have non-negotiable floors.
+- **The agent acts on a ticket, you act by clicking** — the AI can never execute a change on its own authority. Everything agent-initiated is authorized by a single-use ticket; everything *you* do by hand is authorized by your own action.
+- **Every effect is recorded** — both paths land on the same append-only, tamper-evident audit chain, so a machine can never manufacture "the user approved this".
+- **Prompt-injection defence** — content the agent reads is treated as untrusted, so a malicious document can't hijack it.
+- **Process supervision** — helper processes are watched and restarted; nothing is left orphaned if the app dies.
+- **Encrypted key vault** — API keys live in an encrypted local store and are injected at the moment of use, never kept in the chat or the model's context.
+- **Configuration as files** — settings are plain files you can read, diff and version.
+- **Watchdog &amp; health checks** — the app watches its own components and recovers.
+- **Hard spend limits** — set a dollar ceiling per session so nothing runs away.
+- **Clean shutdown** — no leftover processes, no half-written state.
+- **Memory safety under load** — the orchestrator is monitored so heavy work can't silently exhaust its memory.
+- **Bridge to external agent harnesses** — talk to external agent CLIs through a standard local protocol.
+- **Full tracing** — detailed internal tracing for diagnosing what happened.
+- **Sturdy internal messaging** — well-defined, framed communication between the app's parts.
+- **Security profiles** — different safety postures for different situations.
+- **Config scanning** — installed tools and connectors are scanned for unsafe configuration before use.
+- **Escalation rules** — when to interrupt you, and what happens if you don't respond.
+
+</details>
+
+---
+
+## Why You Can Trust It
+
+1. 🔒 **100% private and local-first.** Everything runs on your machine. Credentials, documents and history live in an encrypted local vault. Your prompts go straight to the provider you configured — or stay offline on your own hardware. No middleman server, no logging.
+
+2. 🛡️ **It proposes; you decide.** The AI can plan, read and draft freely, but it cannot change your system without authorization. Every write, command, email and external action either runs under a ticket you approved or is something you explicitly did yourself — and either way it's recorded and undoable.
+
+3. ⚡ **Your work survives.** Work is a durable object, not a chat window. If your laptop dies, the network drops or a model times out, the session, its plan and its records come back exactly where you left off.
+
+4. 📐 **Real results, not guesses.** Spreadsheet maths uses a real calculation engine. Document edits touch only the parts that changed, and the rest of the file is preserved bit-for-bit.
+
+5. 🔀 **No lock-in.** Bring your own keys, rotate multiple keys automatically, run open models locally, or hand work off to external agents like Claude Code or Codex. Switch whenever you like — the work stays put.
+
+---
+
+## Coming Soon
+
+EveryAIOS grows in the open. These are designed and on the roadmap — **not missing, just next**:
+
+- Local OpenAI-compatible server (reuse EveryAIOS as a model endpoint for other tools)
+- Image generation
+- Composio / Zapier / Nango connector bridges
+- Inline "magic completion" suggestions
+- Remote session handoff and a mobile companion app
+- Clipboard tool
+- Resumable streams across restarts
+- Voice memo → structured report
+- Always-on executor node (your own remote worker)
+- CLI / doctor / admin surface
+- Fuel-metered WASM sandbox for untrusted extensions
+- Full IDE mode (editor-grade Rust IDE behind the Code rail)
+- Knowledge → Skill compiler
+- Credential-provider fill (user-controlled secrets without exposure)
+
+---
+
+## Contributing & Architecture
+
+EveryAIOS is a Tauri 2 desktop app with a React interface, a Rust core that owns execution, security and state, and a TypeScript coordinator that does the AI orchestration. Everything effectful funnels through one execution kernel: **proposal → policy → guard → ticket → executor → verification → audit → recovery**.
+
+If you're an engineer, the place to start is:
+
+- [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) — the full product and capability contract
+- [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) — every capability with its status and home
+- [`ARCH/`](ARCH/) — module layout, build plan and diagrams
+- [`TODO.md`](TODO.md) — what's open, and what's next
 
 ---
 
