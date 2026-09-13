@@ -54,4 +54,3 @@ export function usePref<T>(key: string, initial: T): [T, (next: T) => void] {
 
 export type PermissionMode = 'sandbox' | 'ask' | 'auto' | 'full'
 export type ComposerRole = 'agent' | 'experts' | 'spec'
-export type TaskIntent = 'work' | 'code' | 'design'

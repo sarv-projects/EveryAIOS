@@ -22,6 +22,7 @@ import PendingQueueChips from './pending-queue-chips'
 import { sendUserMessage } from '@/lib/bridge'
 import { getModelsForAgent } from '@/lib/agents'
 import { readPref } from '@/lib/ui-prefs'
+import { PLAIN_AUTONOMY_ORDER, toPlainAutonomy } from '@/lib/plain-language'
 import {
   INBUILT_SLASH_COMMANDS,
   SLASH_DISABLED_KEY,
@@ -145,6 +146,53 @@ function AutonomyChip({ compact }: { compact?: boolean }) {
   )
 }
 
+/**
+ * P32.9 / WP1 — the casual composer asks one question, in plain words.
+ *
+ * Casual mode had three controls stacked before the user typed anything
+ * (Agent ▾ + Work Mode ▾ + Autonomy ▾) with labels like "Sandbox" and
+ * "Maximum". This is the single dial the research calls for. It is a display
+ * layer over the existing four-value `PermissionMode` — no store, wire or
+ * guard change — so the per-task permission freeze and the Rust preset sync
+ * are unaffected.
+ */
+function SimpleAutonomyDial() {
+  const mode = useAppStore((s) => s.permissionMode)
+  const setMode = useAppStore((s) => s.setPermissionMode)
+  const notify = useAppStore((s) => s.notify)
+  const plain = toPlainAutonomy(mode)
+  return (
+    <>
+      <select
+        aria-label="How much can I do on my own?"
+        value={mode}
+        onChange={(e) => {
+          const next = e.target.value as PermissionMode
+          setMode(next)
+          if (next === 'full') {
+            notify('“Just do it” still stops for deletes, payments, secrets and Guard-2 — those always ask')
+          }
+        }}
+        title={plain.hint || 'How much can I do on my own?'}
+        className="h-6 shrink-0 rounded-md border border-border bg-background/40 px-1.5 font-mono text-[10px] text-foreground"
+      >
+        {PLAIN_AUTONOMY_ORDER.map((id) => {
+          const p = toPlainAutonomy(id)
+          return (
+            <option key={id} value={id} title={p.hint}>
+              {p.emoji} {p.label}
+            </option>
+          )
+        })}
+      </select>
+      {/* The dial's meaning, in one sentence — never a bare label. */}
+      <span className="min-w-0 flex-1 truncate pl-1 text-[10px] text-muted-foreground">
+        {plain.hint}
+      </span>
+    </>
+  )
+}
+
 function IconBtn({ icon: Icon, label, onClick, hidden, active, disabled, title }: {
   icon: LucideIcon
   label: string
@@ -195,6 +243,9 @@ export default function ChatComposer({ budget, centered }: Props) {
   const queuedCount = useAppStore(
     (s) => (s.pendingQueue[s.activeSessionId] ?? []).length,
   )
+  // WP1 — casual mode collapses the three-control contract to one plain dial.
+  // Power mode keeps Agent · Work Mode · Autonomy exactly as they were.
+  const powerMode = useAppStore((s) => s.powerMode)
 
   const spent = budget?.spent ?? activeSession?.spent ?? 0
   const cap = budget?.cap ?? 5
@@ -571,9 +622,14 @@ export default function ChatComposer({ budget, centered }: Props) {
           }}
         />
         <IconBtn icon={Plus} label="Attach file" onClick={pickFile} />
-        <div className="shrink-0">
-          <AgentModelPicker />
-        </div>
+        {/* WP1 — the agent/model picker is a power-mode control. Casual keeps
+            the identity visible in the status bar, which always names the
+            runtime and model currently answering. */}
+        {powerMode && (
+          <div className="shrink-0">
+            <AgentModelPicker />
+          </div>
+        )}
         <Textarea
           value={composerValue}
           onChange={(e) => setComposerValue(e.target.value)}
@@ -649,8 +705,14 @@ export default function ChatComposer({ budget, centered }: Props) {
       </div>
 
       <div className="flex h-8 items-center gap-1 border-t border-border/70 px-2">
-        <WorkModeChip compact />
-        <AutonomyChip compact />
+        {powerMode ? (
+          <>
+            <WorkModeChip compact />
+            <AutonomyChip compact />
+          </>
+        ) : (
+          <SimpleAutonomyDial />
+        )}
         <span
           className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground"
           title={`$${spent.toFixed(2)} of $${cap.toFixed(2)} · ${ctxPct}% context`}

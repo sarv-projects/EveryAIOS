@@ -1,12 +1,18 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, Circle, Folder, Search, Sparkles } from 'lucide-react'
 import ChatComposer from '@/components/chat/chat-composer'
 import { fuzzyRank } from '@/lib/fuzzy'
 import { useAppStore, type Session } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useChatColumnClass } from '@/lib/layout'
+import {
+  FIRST_TASKS,
+  localStorageFirstRunStorage,
+  markFirstSeen,
+  shouldNudgeFirstTask,
+} from '@/lib/first-run'
 
 function greeting() {
   const h = new Date().getHours()
@@ -34,12 +40,23 @@ export default function HomeLaunchpad() {
   const continueWork = sessions.slice(0, 4)
   const col = useChatColumnClass()
 
-  const examples = [
-    'Clean up my Downloads folder',
-    'Get me ready for tomorrow’s meeting',
-    'Research this company and make a presentation',
-    'Organize these files — I don’t know where they belong',
-  ]
+  // P32.10 / WP2 — kill the blank canvas. With no work yet, the starters are
+  // shown as scoped task cards (what will happen, in plain words); once the
+  // user has work, they collapse back to compact pills.
+  const noWorkYet = continueWork.length === 0
+  const [nudge, setNudge] = useState(false)
+
+  // The 24-hour nudge fires at most once, and only for someone who has never
+  // started a task. Evaluated once on mount (the delay dwarfs any load time).
+  useEffect(() => {
+    const store = localStorageFirstRunStorage
+    markFirstSeen(store)
+    if (shouldNudgeFirstTask(store, Date.now(), useAppStore.getState().sessions.length > 0)) {
+      setNudge(true)
+    }
+  }, [])
+
+  const startTask = (prompt: string) => setComposerValue(prompt)
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -49,18 +66,79 @@ export default function HomeLaunchpad() {
         <div className={col}>
           <ChatComposer centered />
         </div>
-        <div className={cn(col, 'mt-3 flex flex-wrap justify-center gap-1.5')}>
-          {examples.map((label) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setComposerValue(label)}
-              className="rounded-full border border-border bg-card/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:border-orange-500/40 hover:text-foreground"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {noWorkYet ? (
+          <div className={cn(col, 'mt-4')}>
+            <div className="mb-2 text-center text-[11px] text-muted-foreground">
+              Start here — pick one and I&apos;ll take it from there.
+            </div>
+            <div className="grid gap-2 text-left sm:grid-cols-2">
+              {FIRST_TASKS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => startTask(t.prompt)}
+                  className="rounded-lg border border-border bg-card/40 p-3 transition-colors hover:border-orange-500/40 hover:bg-accent/40"
+                >
+                  <span className="text-base leading-none">{t.emoji}</span>
+                  <span className="mt-1.5 block text-[12px] font-medium text-foreground">
+                    {t.label}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
+                    {t.detail}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className={cn(col, 'mt-3 flex flex-wrap justify-center gap-1.5')}>
+            {FIRST_TASKS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => startTask(t.prompt)}
+                className="rounded-full border border-border bg-card/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:border-orange-500/40 hover:text-foreground"
+              >
+                {t.emoji} {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* P32.10 — one-shot nudge after a day with nothing started. */}
+        {nudge && (
+          <div className={cn(col, 'mt-4')}>
+            <div className="flex items-start gap-2 rounded-lg border border-orange-500/40 bg-orange-500/5 px-3 py-2">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-400" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] text-foreground">
+                  Nothing has run yet — want me to start with this?
+                </p>
+                <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                  {FIRST_TASKS[0]!.detail}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  startTask(FIRST_TASKS[0]!.prompt)
+                  setNudge(false)
+                }}
+                className="shrink-0 rounded-md bg-orange-500 px-2 py-1 text-[10px] font-medium text-black hover:bg-orange-400"
+              >
+                Start
+              </button>
+              <button
+                type="button"
+                onClick={() => setNudge(false)}
+                title="Not now"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
         {continueWork.length > 0 && (
           <div className={cn(col, 'mt-6')}>

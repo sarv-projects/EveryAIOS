@@ -92,7 +92,14 @@ export default function NowDoingStrip({
   // stays behind the hover/expand layer (never the other way around).
   const plainTitle = toPlainStage(title)
   const subParts = [detail, elapsedLabel, tokensLabel].filter(Boolean) as string[]
-  const sub = subParts.join(' · ')
+  // WP8 — a wait always carries a sentence, even before a detail or clock
+  // arrives. The audit's rule: never block without one.
+  const sub =
+    subParts.length > 0
+      ? subParts.join(' · ')
+      : running
+        ? 'Working — you can keep typing.'
+        : ''
   const technical = title !== plainTitle ? title : undefined
 
   return (

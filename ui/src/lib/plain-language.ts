@@ -3,8 +3,8 @@
  *
  * - P32.1 `toPlainStage` — consumer phrasing for the now-doing strip, with
  *   the technical stage kept for the hover/expand layer.
- * - P32.3 `preciseFigures` — exact numbers in artifact cards (competence via
- *   precision).
+ * - P32.3 `preciseFigures` — numbers in artifact cards, but **only the ones the
+ *   run actually reported** (competence via precision, never via invention).
  * - P32.4 `limitationFor` — honest-limitation surfacing: say plainly what
  *   can't be done + offer the nearest alternative.
  * - P32.2 `SUGGESTED_AGENT_NAMES` — the name-your-agent ownership moment.
@@ -32,14 +32,42 @@ export const PLAIN_STAGE_LABELS: Record<string, string> = {
   'context:logged': 'Keeping a record of what I used…',
 }
 
-/** Map a stage label to its consumer phrase (falls back to the raw label). */
+/**
+ * Map a stage label to its consumer phrase.
+ *
+ * WP8 — "never block without a sentence": the coordinator emits prefixed
+ * stages (`routed:<provider>/<model> · <reason>`, `cache:hit:semantic`,
+ * `context:logged:5`, `chief:refused:<reason>`) and both running *and* settled
+ * tool stages. Every one of those now reads as a sentence instead of machine
+ * text. A stage nobody has taught this map is passed through unchanged rather
+ * than guessed at.
+ */
 export function toPlainStage(stage: string): string {
   const exact = PLAIN_STAGE_LABELS[stage]
   if (exact) return exact
-  // tool:<id>:running → "Working on <id>…" (plain, not "executing tool <id>").
-  const tool = stage.match(/^tool:([a-z0-9_-]+):running$/)
-  if (tool) return `Working with ${tool[1].replace(/-/g, ' ')}…`
-  return stage
+  // tool:<id>:running|done|failed
+  const tool = stage.match(/^tool:([a-z0-9_-]+):(running|done|failed)$/)
+  if (tool) {
+    const what = tool[1]!.replace(/-/g, ' ')
+    if (tool[2] === 'done') return `Finished with ${what}.`
+    if (tool[2] === 'failed') return `That did not work with ${what} — trying another way.`
+    return `Working with ${what}…`
+  }
+  // Prefixed stages carry their detail after the first colon; only the head
+  // decides the sentence (the detail stays in the technical hover layer).
+  const head = stage.split(':', 1)[0]
+  switch (head) {
+    case 'routed':
+      return 'Choosing the best model…'
+    case 'cache':
+      return 'Reusing what I already worked out…'
+    case 'context':
+      return 'Keeping a record of what I used…'
+    case 'chief':
+      return 'Handing this to another agent…'
+    default:
+      return stage
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -50,37 +78,31 @@ export interface ArtifactFigures {
   type: ArtifactType
   name: string
   preview: string
+  /**
+   * Figures the run actually reported for this artifact (from its K1 receipt).
+   * Absent means the run reported none — which renders as **no badge**, not as
+   * a plausible-looking guess.
+   */
+  figures?: string[]
 }
 
 type ArtifactType = 'docx' | 'xlsx' | 'pptx' | 'pdf' | 'code' | 'markdown' | 'image' | 'webapp'
 
 /**
- * Exact figures for an artifact card. The K1 receipt (Rust) carries the
- * counts; this derives display figures from what the card already knows and
- * never invents numbers — unknown counts render as "—".
+ * Figures for an artifact card.
+ *
+ * P32.3 (corrected 2026-09-13) — this function **counts nothing and invents
+ * nothing**. It returns exactly what the run reported, and an empty list when
+ * the run reported nothing. The card then renders no badge at all.
+ *
+ * The earlier revision returned hardcoded sample counts (`'42 cells updated'`,
+ * `'8 slides'`, `'0 tests broken'`) while the card rendered them under a
+ * tooltip reading "Exact figures from this run's receipt". That put invented
+ * numbers behind a provenance claim — the exact failure mode the honesty rule
+ * exists to prevent, and worse than showing nothing.
  */
 export function preciseFigures(a: ArtifactFigures): string[] {
-  const figures: string[] = []
-  switch (a.type) {
-    case 'xlsx':
-      figures.push('1 sheet', '42 cells updated')
-      break
-    case 'docx':
-      figures.push('3 sections', '2 charts embedded')
-      break
-    case 'pptx':
-      figures.push('8 slides', '1 speaker note')
-      break
-    case 'pdf':
-      figures.push('4 pages')
-      break
-    case 'code':
-      figures.push('1 file', '0 tests broken')
-      break
-    default:
-      figures.push('1 deliverable')
-  }
-  return figures
+  return a.figures ?? []
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +147,97 @@ export function limitationFor(message: string): Limitation {
     plain: "I couldn't finish that the way I tried.",
     alternative: 'Tell me what happened and I can try a different approach.',
   }
+}
+
+// ---------------------------------------------------------------------------
+// P32.12 — noun vocabulary map (casual mode)
+// ---------------------------------------------------------------------------
+
+/**
+ * The words the system uses, and the words a non-technical person would use.
+ *
+ * `toPlainStage` covers *what is happening*; this covers *the things*: the
+ * names that leak developer vocabulary into the casual surface. Applied at
+ * casual render points (title bar, now-doing, the casual safety summary), not
+ * by string-replacing prose — a term absent here keeps its own name rather
+ * than being described as something it is not.
+ */
+export const PLAIN_NOUNS: Record<string, string> = {
+  guard: 'safety check',
+  'guard-1': 'automatic safety check',
+  'guard-2': 'your approval',
+  'trust ladder': 'safety levels',
+  autonomy: 'how much I can do on my own',
+  'work mode': 'what I do',
+  mcp: 'connected tools',
+  acp: 'external agent',
+  chief: 'the agent in charge',
+  sidecar: 'my helper engine',
+  vault: 'secure key store',
+  trajectory: 'what happened',
+  sandbox: 'look only',
+  ticket: 'permission',
+  receipt: 'record of what changed',
+  audit: 'activity record',
+  'policy rule': 'rule',
+  'capability scope': 'what I am allowed to touch',
+  egress: 'what leaves your computer',
+  'tool call': 'step',
+  subagent: 'helper',
+  'diff card': 'change preview',
+  nonce: 'one-time code',
+}
+
+/** Plain wording for a system noun (falls back to the term itself). */
+export function toPlainNoun(term: string): string {
+  return PLAIN_NOUNS[term.trim().toLowerCase()] ?? term
+}
+
+// ---------------------------------------------------------------------------
+// P32.9 — one plain autonomy dial (casual mode)
+// ---------------------------------------------------------------------------
+
+/**
+ * The autonomy ladder in words a non-technical user would actually use.
+ *
+ * This is a **display layer only**: the underlying four-value
+ * `PermissionMode` ('sandbox' | 'ask' | 'auto' | 'full') is untouched, so the
+ * per-task permission snapshot (`taskScopeHash`), the live Rust preset sync
+ * (`syncAutonomyFromRust`) and every guard decision keep working unchanged.
+ * Casual mode shows these labels; power mode keeps the technical controls.
+ */
+export const PLAIN_AUTONOMY_LABELS: Record<string, { emoji: string; label: string; hint: string }> = {
+  sandbox: {
+    emoji: '👀',
+    label: 'Look only',
+    hint: "I can read and plan, but I won't change anything.",
+  },
+  ask: {
+    emoji: '🙋',
+    label: 'Ask me first',
+    hint: 'I check with you before anything changes.',
+  },
+  auto: {
+    emoji: '⚖️',
+    label: 'Balanced',
+    hint: 'I handle routine changes and ask before big ones.',
+  },
+  full: {
+    emoji: '🚀',
+    label: 'Just do it',
+    hint: 'I keep going on my own — deletes, payments and secrets still ask.',
+  },
+}
+
+/** Ascending freedom — the order the casual dial and the keyboard cycle use. */
+export const PLAIN_AUTONOMY_ORDER = ['sandbox', 'ask', 'auto', 'full'] as const
+
+/**
+ * Plain wording for an autonomy level. An unknown value returns itself with no
+ * emoji rather than being silently described as something it is not.
+ */
+export function toPlainAutonomy(mode: string): { emoji: string; label: string; hint: string } {
+  return PLAIN_AUTONOMY_LABELS[mode] ?? { emoji: '', label: mode, hint: '' }
 }
 
 // ---------------------------------------------------------------------------

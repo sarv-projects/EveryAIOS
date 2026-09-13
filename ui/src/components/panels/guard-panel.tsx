@@ -17,10 +17,12 @@ import {
   guardEstop,
   guardPermissionsMatrix,
   guardPolicy,
+  guardReceipts,
   guardSetPolicyRules,
   guardTickets,
   type GuardCombo,
   type GuardPolicy,
+  type GuardReceipt,
   type GuardTicket,
   type MatrixCell,
   type PolicyRule,
@@ -110,6 +112,11 @@ export default function GuardPanel() {
   const [combos, setCombos] = useState<GuardCombo[]>([])
   const [applying, setApplying] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
+  // P32.13 / WP6 — casual mode shows one honest sentence instead of the Trust
+  // Ladder meter and the 5×5 matrix (power chrome). Pending approvals always
+  // render, in both modes: that is the part the user must not miss.
+  const powerMode = useAppStore((s) => s.powerMode)
+  const [receipts, setReceipts] = useState<GuardReceipt[]>([])
 
   // Live bridge (P7.5/J21 + P11.5.7): push-first via `guard-event`, with the
   // 3s poll kept only as a missed-emit fallback.
@@ -117,12 +124,13 @@ export default function GuardPanel() {
     let alive = true
     const refresh = async () => {
       try {
-        const [t, p, a, m, c] = await Promise.all([
+        const [t, p, a, m, c, r] = await Promise.all([
           guardTickets(),
           guardPolicy(),
           guardActivity(12),
           guardPermissionsMatrix(),
           guardCombos(),
+          guardReceipts(),
         ])
         if (!alive) return
         setTickets(t)
@@ -133,6 +141,7 @@ export default function GuardPanel() {
         setActivity(a)
         setMatrix(m)
         setCombos(c)
+        setReceipts(r)
         setLoadError(null)
       } catch (error) {
         if (!alive) return
@@ -142,6 +151,7 @@ export default function GuardPanel() {
         setPolicy(null)
         setActivity([])
         setMatrix([])
+        setReceipts([])
         setLoadError(error instanceof Error ? error.message : 'Guard is unavailable')
       }
     }
@@ -189,25 +199,48 @@ export default function GuardPanel() {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-orange-400" />
-            <h2 className="text-sm font-semibold text-foreground">Guard</h2>
-            <Badge className="bg-orange-500/15 text-[9px] text-orange-300">
-              Trust Ladder
-            </Badge>
+            <h2 className="text-sm font-semibold text-foreground">
+              {powerMode ? 'Guard' : 'Safety'}
+            </h2>
+            {powerMode && (
+              <Badge className="bg-orange-500/15 text-[9px] text-orange-300">
+                Trust Ladder
+              </Badge>
+            )}
           </div>
-          <span className="font-mono text-[10px] text-muted-foreground">
-            Guard-1 regex · Guard-2 cleanup
-          </span>
+          {powerMode && (
+            <span className="font-mono text-[10px] text-muted-foreground">
+              Guard-1 regex · Guard-2 cleanup
+            </span>
+          )}
           {/* P5.24 — honest ceiling: approvals render as an in-app webview
               card bound to a one-time nonce; there is no OS-native dialog
               in v1 (that is a follow-up, not a silent claim). */}
-          <Badge variant="outline" className="text-[9px] text-muted-foreground" title="v1 approvals are in-app webview cards bound to a one-time nonce — no OS-native dialog yet">
-            v1: webview + nonce
-          </Badge>
+          {powerMode && (
+            <Badge variant="outline" className="text-[9px] text-muted-foreground" title="v1 approvals are in-app webview cards bound to a one-time nonce — no OS-native dialog yet">
+              v1: webview + nonce
+            </Badge>
+          )}
         </div>
       </header>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-4 p-4">
+          {/* P32.13 / WP6 — one plain sentence, on a real source (live
+              receipts + pending tickets). No trust score, no matrix. */}
+          {!powerMode && (
+            <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
+              <p className="text-[12px] leading-relaxed text-foreground">
+                {tickets.length > 0
+                  ? `${tickets.length} thing${tickets.length === 1 ? '' : 's'} ${tickets.length === 1 ? 'is' : 'are'} waiting for your say-so.`
+                  : 'Nothing is waiting on you.'}{' '}
+                {receipts.length > 0
+                  ? `I have kept ${receipts.length} undo point${receipts.length === 1 ? '' : 's'} — anything I changed can be rolled back.`
+                  : 'I have not changed anything yet.'}
+              </p>
+            </section>
+          )}
+
           {/* Live pending approvals (Guard-2) */}
           {tickets.length > 0 && (
             <section className="rounded-lg border border-orange-500/40 bg-orange-500/5 p-4">
@@ -538,7 +571,7 @@ export default function GuardPanel() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-dashed border-border bg-card p-4">
+            <section className={cn('rounded-lg border border-dashed border-border bg-card p-4', !powerMode && 'hidden')}>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-medium text-foreground">Trust Level</span>
                 <span className="font-mono text-sm font-semibold text-orange-300">{trustMeter(policy).score}/100</span>
@@ -590,7 +623,7 @@ export default function GuardPanel() {
             </section>
             </>
           ) : (
-          <section className="rounded-lg border border-border bg-card p-4">
+          <section className={cn('rounded-lg border border-border bg-card p-4', !powerMode && 'hidden')}>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">Trust Level</span>
               <span className="font-mono text-sm font-semibold text-orange-300">{trustMeter(null).score}/100</span>
@@ -697,8 +730,8 @@ export default function GuardPanel() {
             )}
           </section>
 
-          {/* Permissions matrix */}
-          <section className="rounded-lg border border-border bg-card p-4">
+          {/* Permissions matrix — power chrome (hidden in casual). */}
+          <section className={cn('rounded-lg border border-border bg-card p-4', !powerMode && 'hidden')}>
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">
                 Permissions Matrix
