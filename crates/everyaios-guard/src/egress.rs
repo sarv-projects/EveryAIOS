@@ -2,7 +2,8 @@
 //! plan (what / where / why / which model / authorization → ALLOW / REDACT /
 //! DENY). Unifies URL floors + connectivity modes.
 
-use crate::urlfloor::{check_url, UrlVerdict};
+use crate::netfloor::{self, NetPolicy};
+use crate::urlfloor::{check_url_with_policy, UrlVerdict};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -40,6 +41,14 @@ pub struct EgressPlan {
 #[derive(Debug, Clone, Default)]
 pub struct EgressEngine {
     pub mode: ConnectivityMode,
+    /// Destination policy for agent-chosen `http(s)` URLs (P62.1). Loopback is
+    /// allowed by default on a local desktop; LAN/private needs the explicit
+    /// opt-in. Metadata/link-local is refused under every policy.
+    pub policy: NetPolicy,
+    /// Destinations the *user* configured (provider base URLs, a local model
+    /// runtime, a paired node). These bypass the private/LAN gate because the
+    /// user typed them — the gate exists for destinations the agent chose.
+    granted_hosts: Vec<String>,
     inventory: Vec<EgressPlan>,
 }
 
@@ -47,8 +56,50 @@ impl EgressEngine {
     pub fn new(mode: ConnectivityMode) -> Self {
         Self {
             mode,
+            policy: NetPolicy::default(),
+            granted_hosts: Vec::new(),
             inventory: Vec::new(),
         }
+    }
+
+    /// Grant a user-configured host (`localhost`, `192.168.1.50`, `nas.local`).
+    /// Comparison is exact and ASCII-insensitive on the host, port stripped.
+    pub fn grant_host(&mut self, host: &str) {
+        let h = host.trim().to_ascii_lowercase();
+        if !h.is_empty() && !self.granted_hosts.iter().any(|g| *g == h) {
+            self.granted_hosts.push(h);
+        }
+    }
+
+    /// Builder form of [`Self::grant_host`].
+    pub fn with_granted_hosts<I, S>(mut self, hosts: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for h in hosts {
+            self.grant_host(h.as_ref());
+        }
+        self
+    }
+
+    /// Set the destination policy (e.g. [`NetPolicy::strict`] for a managed or
+    /// paranoid profile, [`NetPolicy::local`] to permit a LAN node).
+    pub fn with_policy(mut self, policy: NetPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    pub fn granted_hosts(&self) -> &[String] {
+        &self.granted_hosts
+    }
+
+    fn is_granted(&self, destination: &str) -> bool {
+        let Some(host) = host_of(destination) else {
+            return false;
+        };
+        let h = host.to_ascii_lowercase();
+        self.granted_hosts.iter().any(|g| *g == h)
     }
 
     pub fn plan(
@@ -59,7 +110,24 @@ impl EgressEngine {
         reason: &str,
         roots: &[&str],
     ) -> EgressPlan {
-        let verdict = self.verdict_for(destination, kind, roots);
+        self.plan_with_policy(destination, kind, model, reason, roots, self.policy)
+    }
+
+    /// Plan a destination under an explicit policy — used by the agent tool
+    /// path, where the URL was chosen from untrusted content and therefore gets
+    /// [`NetPolicy::strict`] (no loopback, no LAN) regardless of the engine's
+    /// own policy.
+    #[allow(clippy::too_many_arguments)]
+    pub fn plan_with_policy(
+        &mut self,
+        destination: &str,
+        kind: &str,
+        model: Option<&str>,
+        reason: &str,
+        roots: &[&str],
+        policy: NetPolicy,
+    ) -> EgressPlan {
+        let verdict = self.verdict_for_with_policy(destination, kind, roots, policy);
         let plan = EgressPlan {
             destination: destination.to_string(),
             kind: kind.to_string(),
@@ -71,7 +139,29 @@ impl EgressEngine {
         plan
     }
 
-    fn verdict_for(&self, destination: &str, kind: &str, roots: &[&str]) -> EgressVerdict {
+    fn verdict_for_with_policy(
+        &self,
+        destination: &str,
+        kind: &str,
+        roots: &[&str],
+        policy: NetPolicy,
+    ) -> EgressVerdict {
+        // 1) The hard floor comes first and outranks everything, including a
+        //    user grant: link-local (cloud metadata), unspecified, multicast
+        //    and reserved space have no legitimate desktop use and cannot be
+        //    opted into. `NetPolicy::local()` allows loopback + private, so
+        //    anything it still refuses is by definition always-refused.
+        if let Some(class) = destination_class(destination) {
+            if !NetPolicy::local().allows(class) {
+                return EgressVerdict::Deny;
+            }
+        }
+        // 2) The user's own configured endpoints (provider base URL, local
+        //    runtime, paired node) pass without the private/LAN gate — the
+        //    gate exists for destinations the agent chose itself.
+        if self.is_granted(destination) {
+            return EgressVerdict::Allow;
+        }
         match self.mode {
             ConnectivityMode::Offline => {
                 if kind == "network" || destination.starts_with("http") {
@@ -94,7 +184,7 @@ impl EgressEngine {
             }
             ConnectivityMode::Byok => {
                 if destination.starts_with("http") {
-                    match check_url(destination, roots) {
+                    match check_url_with_policy(destination, roots, policy) {
                         UrlVerdict::Allowed => EgressVerdict::Allow,
                         _ => EgressVerdict::Deny,
                     }
@@ -102,11 +192,17 @@ impl EgressEngine {
                     EgressVerdict::Allow
                 }
             }
-            ConnectivityMode::ThirdParty => match check_url(destination, roots) {
-                UrlVerdict::Allowed => EgressVerdict::Allow,
-                UrlVerdict::SchemeBlocked | UrlVerdict::Malformed => EgressVerdict::Deny,
-                UrlVerdict::OutsideRoots => EgressVerdict::Deny,
-            },
+            ConnectivityMode::ThirdParty => {
+                match check_url_with_policy(destination, roots, policy) {
+                    UrlVerdict::Allowed => EgressVerdict::Allow,
+                    // Every refusal is a deny: the plan carries the destination
+                    // and the card explains it via `urlfloor::block_reason`.
+                    UrlVerdict::SchemeBlocked
+                    | UrlVerdict::Malformed
+                    | UrlVerdict::OutsideRoots
+                    | UrlVerdict::PrivateDestination => EgressVerdict::Deny,
+                }
+            }
         }
     }
 
@@ -117,6 +213,33 @@ impl EgressEngine {
     pub fn set_mode(&mut self, mode: ConnectivityMode) {
         self.mode = mode;
     }
+}
+
+/// The host of an `http(s)` destination, port stripped.
+fn host_of(destination: &str) -> Option<&str> {
+    let rest = destination
+        .strip_prefix("http://")
+        .or_else(|| destination.strip_prefix("https://"))?;
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..end];
+    // Drop `userinfo@` and the port (handle a bracketed IPv6 literal).
+    let authority = authority.rsplit('@').next().unwrap_or(authority);
+    if let Some(stripped) = authority.strip_prefix('[') {
+        return stripped
+            .split(']')
+            .next()
+            .map(|h| h.trim_start_matches('['));
+    }
+    Some(authority.split(':').next().unwrap_or(authority))
+}
+
+/// Classify an `http(s)` destination's host, when it has one.
+fn destination_class(destination: &str) -> Option<netfloor::NetClass> {
+    let host = host_of(destination)?;
+    if host.is_empty() {
+        return None;
+    }
+    Some(netfloor::classify_host(host))
 }
 
 #[cfg(test)]
@@ -170,5 +293,83 @@ mod tests {
                 .verdict,
             EgressVerdict::Allow
         );
+    }
+
+    #[test]
+    fn cloud_metadata_denied_in_every_mode() {
+        for mode in [
+            ConnectivityMode::ThirdParty,
+            ConnectivityMode::Byok,
+            ConnectivityMode::Local,
+        ] {
+            let mut e = EgressEngine::new(mode).with_policy(NetPolicy::local());
+            assert_eq!(
+                e.plan(
+                    "http://169.254.169.254/latest/meta-data/",
+                    "network",
+                    None,
+                    "ssrf",
+                    &[]
+                )
+                .verdict,
+                EgressVerdict::Deny,
+                "{mode:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn lan_denied_by_default_allowed_with_local_policy() {
+        let mut e = EgressEngine::new(ConnectivityMode::ThirdParty);
+        assert_eq!(
+            e.plan("http://192.168.1.50:8080/x", "network", None, "node", &[])
+                .verdict,
+            EgressVerdict::Deny
+        );
+        let mut local =
+            EgressEngine::new(ConnectivityMode::ThirdParty).with_policy(NetPolicy::local());
+        assert_eq!(
+            local
+                .plan("http://192.168.1.50:8080/x", "network", None, "node", &[])
+                .verdict,
+            EgressVerdict::Allow
+        );
+    }
+
+    #[test]
+    fn user_granted_hosts_bypass_the_private_gate() {
+        let mut e = EgressEngine::new(ConnectivityMode::ThirdParty).with_granted_hosts([
+            "192.168.1.50",
+            "localhost",
+            "ollama.lan",
+        ]);
+        assert_eq!(e.granted_hosts().len(), 3);
+        assert_eq!(
+            e.plan("http://192.168.1.50:11434/v1", "network", None, "user", &[])
+                .verdict,
+            EgressVerdict::Allow
+        );
+        assert_eq!(
+            e.plan("http://127.0.0.1:1234/v1", "network", None, "user", &[])
+                .verdict,
+            EgressVerdict::Allow
+        );
+        // A granted host never extends to the hard floor: the metadata
+        // endpoint is refused even when someone tries to grant it.
+        let mut g = EgressEngine::new(ConnectivityMode::ThirdParty);
+        g.grant_host("169.254.169.254");
+        assert_eq!(
+            g.plan("http://169.254.169.254/", "network", None, "ssrf", &[])
+                .verdict,
+            EgressVerdict::Deny
+        );
+    }
+
+    #[test]
+    fn host_of_strips_userinfo_port_and_ipv6_brackets() {
+        assert_eq!(host_of("https://example.com/a?b=c"), Some("example.com"));
+        assert_eq!(host_of("http://user:pw@host.tld:8080/x"), Some("host.tld"));
+        assert_eq!(host_of("http://[::1]:9200/_cat"), Some("::1"));
+        assert_eq!(host_of("not-a-url"), None);
     }
 }

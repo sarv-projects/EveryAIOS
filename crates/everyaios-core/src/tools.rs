@@ -22,7 +22,8 @@ use everyaios_guard::{
     bind_exec_bytes, bind_path, bind_url, open_parent_dir,
     pathfloor::{enforce_floor, FloorVerdict},
     reverify_exec, reverify_path, reverify_url, scan_all, urlfloor, ConnectivityMode,
-    DecisionPackage, EgressEngine, EgressVerdict, Operation, ResourceBinding, RiskLevel, RiskTier,
+    DecisionPackage, EgressEngine, EgressVerdict, NetPolicy, Operation, ResourceBinding, RiskLevel,
+    RiskTier,
 };
 use everyaios_mcp::{all_tools, ArgDef, ArgKind, ExternalTool, ToolDef, ToolKind};
 use everyaios_script::ScriptSandbox;
@@ -1026,13 +1027,27 @@ impl ToolService {
                 }
             }
             for u in urls {
-                if !urlfloor::is_allowed(&u, &[&root]) {
+                // P62.1 — these URLs come from the model's own context (page
+                // text, search results, tool metadata), i.e. untrusted content.
+                // The strict policy therefore applies: loopback and the LAN are
+                // refused. A URL the *user* supplied (the download path) keeps
+                // the loopback allowance, so local dev servers still work.
+                if !urlfloor::check_url_strict(&u, &[&root]).is_allowed() {
+                    let reason =
+                        urlfloor::block_reason(&u, NetPolicy::strict()).unwrap_or("gr blocked");
                     return Ok(json!({
                         "action": "block",
-                        "reason": format!("url floor refused: {u}"),
+                        "reason": format!("url floor refused ({reason}): {u}"),
                     }));
                 }
-                let plan = eg.plan(&u, "network", None, spec.id.as_str(), &[&root]);
+                let plan = eg.plan_with_policy(
+                    &u,
+                    "network",
+                    None,
+                    spec.id.as_str(),
+                    &[&root],
+                    NetPolicy::strict(),
+                );
                 if plan.verdict == EgressVerdict::Deny {
                     return Ok(json!({
                         "action": "block",

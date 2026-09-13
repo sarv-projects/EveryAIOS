@@ -17,4 +17,6 @@ url = { workspace = true }
 html2md = "0.2"
 everyaios-cdp = { path = "../everyaios-cdp" }
 everyaios-audit = { path = "../everyaios-audit" }
+# P62.1 — the one canonical network-destination classifier (SSRF floor).
+everyaios-guard = { path = "../everyaios-guard" }
 everyaios-vault = { path = "../everyaios-vault" }

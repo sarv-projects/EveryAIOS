@@ -13,6 +13,24 @@ pub static PROTECTED_PREFIXES: &[&str] = &[
     "workspace_trust.json",
     "permissions.toml",
     ".everyaios/",
+    // P62.3 — other agents' *configuration* surfaces. CVE-2025-53773 was a
+    // prompt injection that made an agent rewrite its own config to enable
+    // auto-approve and then execute; the equivalent for us is an agent
+    // editing another harness's settings (or the ones our ClientCompatibility
+    // ring will project into). Only the settings are protected — a project's
+    // instruction files (`CLAUDE.md`, `AGENTS.md`) stay normal workspace files
+    // the user and agent may legitimately edit.
+    ".claude/",
+    ".codex/",
+    ".gemini/",
+    ".cursor/",
+    ".windsurf/",
+    ".cline/",
+    ".roo/",
+    ".continue/",
+    ".openclaw/",
+    ".aider/",
+    ".mcp.json",
 ];
 
 /// Is this canonical path one of our own settings files/dirs?
@@ -137,5 +155,37 @@ mod tests {
         assert!(is_protected("workspace_trust.json"));
         assert!(!is_protected("/tmp/foo.txt"));
         assert!(!is_protected("/workspace/src/main.rs"));
+    }
+
+    /// P62.3 — an agent may not silently rewrite another harness's settings
+    /// (the CVE-2025-53773 class), nor our own projected config.
+    #[test]
+    fn other_harness_settings_are_protected() {
+        for p in [
+            "/home/u/.claude/settings.local.json",
+            "/home/u/.claude/settings.json",
+            "/proj/.codex/config.toml",
+            "/proj/.gemini/settings.json",
+            "/proj/.cursor/mcp.json",
+            "/proj/.openclaw/config.json",
+            "/proj/.mcp.json",
+        ] {
+            assert!(is_protected(p), "{p} must be protected");
+            assert!(rm_critical("rm -rf", &[p]), "{p} must be rm-critical");
+        }
+    }
+
+    /// Instruction files stay ordinary workspace files: the agent and the user
+    /// legitimately edit them, so protecting them would break normal work.
+    #[test]
+    fn instruction_files_are_not_over_protected() {
+        for p in [
+            "/proj/CLAUDE.md",
+            "/proj/AGENTS.md",
+            "/proj/.github/workflows/ci.yml",
+            "/proj/claude.md",
+        ] {
+            assert!(!is_protected(p), "{p} should stay editable");
+        }
     }
 }
