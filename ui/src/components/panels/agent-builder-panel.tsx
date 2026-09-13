@@ -18,6 +18,7 @@ import {
   exportBundle,
   slug,
 } from '@/lib/agent-builder'
+import { suggestAgentNames } from '@/lib/plain-language'
 import {
   Bot,
   Brain,
@@ -257,6 +258,26 @@ export default function AgentBuilderPanel() {
               placeholder="e.g. Budget Analyst"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-orange-500/50"
             />
+            {/* P32.2 — the name-your-agent ownership moment (Wharton: naming
+                drives ownership). Suggested names are one tap away so the
+                step never stalls on a blank field. */}
+            <div className="mt-2">
+              <div className="mb-1 text-[10px] text-muted-foreground">
+                Or pick one — naming it makes it yours:
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {suggestAgentNames(4).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setName(n)}
+                    className="rounded-full border border-border bg-background/50 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-orange-500/40 hover:text-foreground"
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-1 text-[11px] text-muted-foreground">
               id: <code className="text-orange-400">{slug(name || 'agent')}</code>
             </div>

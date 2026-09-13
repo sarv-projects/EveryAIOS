@@ -225,13 +225,19 @@ export function TitleBar() {
               )}
             >
               <ShieldCheck className={cn('h-3 w-3', live ? 'text-emerald-400' : 'text-muted-foreground')} />
+              {/* P32.12 — casual mode says what this is, not what it is called
+                  internally. Power mode keeps the system vocabulary. */}
               <span className={live ? 'text-emerald-300' : 'text-muted-foreground'}>
-                Guard · {live ? 'Standard' : 'unknown'}
+                {powerMode
+                  ? `Guard · ${live ? 'Standard' : 'unknown'}`
+                  : `Safety · ${live ? 'on' : 'unknown'}`}
               </span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            Guard control center — approvals, tickets, policies. Not a sidebar destination.
+            {powerMode
+              ? 'Guard control center — approvals, tickets, policies. Not a sidebar destination.'
+              : 'Your safety settings — what I am allowed to do, and what I have done.'}
           </TooltipContent>
         </Tooltip>
 

@@ -246,6 +246,7 @@ EveryAIOS is built around **157 capabilities**. Here they are, grouped into ten 
 <br/>
 
 - **Chat** — a natural conversation surface that can do work, not just talk.
+- **Starts simple** — no blank page on first run: ready-made starter tasks show what will happen and where the boundary is, and the safety control reads in plain words (*Look only · Ask me first · Balanced · Just do it*). A power toggle reveals the full control surface.
 - **Work cockpit** — a dashboard showing the plan, progress and current activity.
 - **Audit &amp; replay** — look back at exactly what happened and why.
 - **Plan editor** — read and edit the blueprint for a task.

@@ -18,7 +18,7 @@ import {
   type AgentRuntime,
   type TaskKind,
 } from './agents'
-import type { ComposerRole, PermissionMode, TaskIntent } from './ui-prefs'
+import type { ComposerRole, PermissionMode } from './ui-prefs'
 import type { WorkAddress, WorkEventEnvelope, WorkPresence } from './work'
 
 // === Types ============================================================
@@ -155,6 +155,10 @@ export interface Artifact {
   actions?: ArtifactActionUi[]
   /** P15-H29 — live loopback preview server for webapp artifacts. */
   server?: ArtifactServerState
+  /** P32.3 — figures this run actually reported for the artifact (cells
+   * changed, slides, files touched). Absent ⇒ the card renders no figures at
+   * all rather than a plausible-looking guess. */
+  figures?: string[]
 }
 
 export interface ProgressStep {
@@ -1172,8 +1176,6 @@ interface AppState {
   effectiveAutonomyLevel: () => PermissionMode
   composerRole: ComposerRole
   setComposerRole: (r: ComposerRole) => void
-  taskIntent: TaskIntent
-  setTaskIntent: (t: TaskIntent) => void
   taskFolder?: string
   setTaskFolder: (folder?: string) => void
 
@@ -2119,8 +2121,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   composerRole: 'agent',
   setComposerRole: (r) => set({ composerRole: r }),
-  taskIntent: 'work',
-  setTaskIntent: (t) => set({ taskIntent: t }),
   taskFolder: undefined,
   setTaskFolder: (folder) => set({ taskFolder: folder }),
 

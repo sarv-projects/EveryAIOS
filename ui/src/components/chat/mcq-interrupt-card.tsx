@@ -16,6 +16,7 @@ import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { useAppStore, type MCQInterrupt } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { tierFor, TIER_LABEL, isHighBlast, confirmWord, confirmSatisfied } from '@/lib/interrupts'
 
 function DiffView({ diff }: { diff: NonNullable<MCQInterrupt['diff']> }) {
   return (
@@ -148,6 +149,14 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
   const [selected, setSelected] = useState<string | null>(
     mcq.options?.[0]?.value ?? null
   )
+  // WP4 — "danger looks different". An irreversible effect cannot be approved
+  // with the same reflex click as a routine one: the user retypes the name of
+  // the thing being changed. Routine effects are unaffected.
+  const tier = tierFor(mcq)
+  const highBlast = isHighBlast(`${mcq.title} ${mcq.description ?? ''}`)
+  const word = highBlast ? confirmWord(mcq) : ''
+  const [typed, setTyped] = useState('')
+  const gateOpen = confirmSatisfied(mcq, typed)
 
   const autonomyLevelLabel =
     (() => {
@@ -172,13 +181,14 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
             </h4>
             <Badge
               variant="outline"
-              className="border-orange-500/40 bg-orange-500/10 text-[9px] text-orange-300"
+              className={cn(
+                'text-[9px]',
+                tier === 'needs-you'
+                  ? 'border-orange-500/40 bg-orange-500/10 text-orange-300'
+                  : 'border-border bg-background/40 text-muted-foreground',
+              )}
             >
-              {mcq.kind === 'mcq'
-                ? 'Spec Q&A'
-                : mcq.kind === 'autonomy'
-                  ? 'Autonomy limit'
-                  : 'Action required'}
+              {TIER_LABEL[tier]}
             </Badge>
             {/* P11.2 — urgency level: drives badge tint; high = orange pulse. */}
             {mcq.urgency && mcq.urgency !== 'low' && (
@@ -213,6 +223,24 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
           <div className="flex items-center gap-2 rounded-md border border-border bg-background/40 px-2.5 py-1.5">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
             <span className="text-[11px] text-muted-foreground">{mcq.description}</span>
+          </div>
+        )}
+
+        {/* WP4 — the deliberate-approval gate for work that cannot be undone. */}
+        {highBlast && (
+          <div className="rounded-md border border-rose-500/40 bg-rose-500/5 p-2.5">
+            <p className="text-[11px] leading-relaxed text-rose-200">
+              This one is hard to undo. Type{' '}
+              <code className="rounded bg-rose-500/15 px-1 font-mono text-rose-100">{word}</code>{' '}
+              to confirm.
+            </p>
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              aria-label={`Type ${word} to confirm`}
+              placeholder={word}
+              className="mt-1.5 h-7 w-full rounded border border-rose-500/40 bg-background px-2 font-mono text-[11px] text-foreground outline-none focus:border-rose-400"
+            />
           </div>
         )}
 
@@ -281,7 +309,9 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
           <>
             <Button
               size="sm"
-              className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600"
+              disabled={!gateOpen}
+              title={gateOpen ? 'Approve and run' : `Type “${word}” to enable this`}
+              className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600 disabled:opacity-40"
               onClick={() => respondMcq(mcq.id, 'approve')}
             >
               <Check className="h-3 w-3" />

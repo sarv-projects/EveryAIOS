@@ -47,6 +47,7 @@ export type AgentTemplateId =
   | 'writer'
   | 'meeting-notes'
   | 'browser-operator'
+  | 'study'
 
 export interface AgentTemplate {
   id: AgentTemplateId
@@ -189,6 +190,27 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       connectors: [],
       skills: [],
       tools: { allow: ['browser.navigate', 'browser.act', 'browser.snapshot'], deny: [] },
+      blueprints: [],
+      automations: [],
+    },
+  },
+  // WP7 — the student posture. Read-only on purpose: a learner should be able
+  // to hand this to an agent without wondering what it will change. Works with
+  // a local model or a free provider row, which is the audience most likely to
+  // have neither a key nor a GPU.
+  {
+    id: 'study',
+    label: 'Study Buddy',
+    emoji: '🎓',
+    description: 'Explains topics in plain words and quizzes you — read-only, nothing on your machine changes.',
+    preset: {
+      description: 'Explains topics in plain words and quizzes you — read-only, nothing on your machine changes.',
+      engine: { kind: 'inbuilt' },
+      model: {},
+      mcpServers: [],
+      connectors: [],
+      skills: [],
+      tools: { allow: ['search', 'memory.read', 'office.read'], deny: ['fs.write', 'shell'] },
       blueprints: [],
       automations: [],
     },

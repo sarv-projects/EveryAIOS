@@ -17,6 +17,7 @@ import {
   Pencil,
   Quote,
   RotateCw,
+  ShieldAlert,
   Sparkles,
   User,
   Volume2,
@@ -34,6 +35,7 @@ import type { ChatError, ChatMessage } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { explainError } from '@/lib/errors'
+import { saferMode, saferPrompt, differentlyPrompt, hasUndoableWork } from '@/lib/recovery'
 import ArtifactCard from './artifact-card'
 import { staggerStyle } from '@/lib/stagger'
 import McqInterruptCard from './mcq-interrupt-card'
@@ -254,15 +256,23 @@ const baseBtn =
 
 /** P51.21/P52.22 — shared same-history retry: truncate below `messageId` and
  * re-ask the exact user prompt that produced it (reads in place, never
- * appends a duplicate ask). False when no user turn precedes the message. */
-async function regenerateTurn(messageId: string): Promise<boolean> {
+ * appends a duplicate ask). False when no user turn precedes the message.
+ *
+ * WP3 — `transform` lets the recovery exits re-ask the same prompt with an
+ * explicit instruction (work more cautiously / try a different approach)
+ * without inventing a new user turn. */
+async function regenerateTurn(
+  messageId: string,
+  transform?: (prompt: string) => string,
+): Promise<boolean> {
   const st = useAppStore.getState()
   const sess = st.sessions.find((s) => s.messages.some((m) => m.id === messageId))
   if (!sess) return false
   const { sendUserMessage } = await import('@/lib/bridge')
+  const shape = (p: string) => (transform ? transform(p) : p)
   const prompt = st.rewindBeforeAssistant(sess.id, messageId)
   if (prompt) {
-    await sendUserMessage(prompt, undefined, { bypassQueue: true })
+    await sendUserMessage(shape(prompt), undefined, { bypassQueue: true })
     return true
   }
   const priorUser = [...sess.messages]
@@ -270,7 +280,7 @@ async function regenerateTurn(messageId: string): Promise<boolean> {
     .reverse()
     .find((m) => m.role === 'user')
   if (!priorUser) return false
-  await sendUserMessage(priorUser.content)
+  await sendUserMessage(shape(priorUser.content))
   return true
 }
 
@@ -288,25 +298,53 @@ const ERROR_LAYER_LABEL: Record<ChatError['layer'], string> = {
  * offers the matched actions (Retry when the failure is retryable, Copy). */
 function TurnErrorCard({ message }: { message: ChatMessage }) {
   const notify = useAppStore((s) => s.notify)
+  const permissionMode = useAppStore((s) => s.permissionMode)
+  const setPermissionMode = useAppStore((s) => s.setPermissionMode)
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
   const err = message.error
   if (!err) return null
+  // WP3 — the dial-back affordances. "Safer" is hidden at the safest setting
+  // (it would be a no-op), and "Undo" only appears when a tool actually ran. */
+  const safer = saferMode(permissionMode)
+  const canUndo = hasUndoableWork(message.toolCalls)
   const copy = () => {
     navigator.clipboard?.writeText(err.detail)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
-  const retry = () => {
+  const retryWith = (transform?: (p: string) => string, label = 'Retry') => {
     void (async () => {
       setBusy(true)
       try {
-        const ok = await regenerateTurn(message.id)
-        if (!ok) notify('Nothing to retry — no user turn before this message', 'error')
+        const ok = await regenerateTurn(message.id, transform)
+        if (!ok) notify(`Nothing to ${label.toLowerCase()} — no user turn before this message`, 'error')
       } catch (e) {
-        notify(e instanceof Error ? e.message : 'Retry failed', 'error')
+        notify(e instanceof Error ? e.message : `${label} failed`, 'error')
       } finally {
         setBusy(false)
+      }
+    })()
+  }
+  const retry = () => retryWith(undefined, 'Retry')
+  const retrySafer = () => {
+    if (!safer) return
+    setPermissionMode(safer)
+    notify(`Working more cautiously now — the ask is repeated under “${safer}”`)
+    retryWith(saferPrompt, 'Retry')
+  }
+  const retryDifferently = () => retryWith(differentlyPrompt, 'Retry')
+  const undo = () => {
+    void (async () => {
+      try {
+        const st = useAppStore.getState()
+        const sess = st.sessions.find((s) => s.messages.some((m) => m.id === message.id))
+        if (!sess) return
+        const { agentUndo } = await import('@/lib/tauri')
+        await agentUndo(sess.id)
+        notify('Undo requested — the run rolls back whatever it applied')
+      } catch (e) {
+        notify(e instanceof Error ? e.message : 'Undo failed', 'error')
       }
     })()
   }
@@ -353,6 +391,39 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
           >
             <RotateCw className={cn('h-2.5 w-2.5', busy && 'animate-spin')} />
             Retry
+          </button>
+        )}
+        {/* WP3 — the exits that make a failure recoverable rather than final. */}
+        {err.retryable && safer && (
+          <button
+            onClick={retrySafer}
+            disabled={busy}
+            title={`Repeat this ask with tighter limits (autonomy → ${safer})`}
+            className="inline-flex h-5 items-center gap-1 rounded bg-amber-500/20 px-1.5 text-[10px] text-amber-200 transition-colors hover:bg-amber-500/30 disabled:opacity-50"
+          >
+            <ShieldAlert className="h-2.5 w-2.5" />
+            Try again safer
+          </button>
+        )}
+        {err.retryable && (
+          <button
+            onClick={retryDifferently}
+            disabled={busy}
+            title="Repeat this ask and tell the agent not to repeat the same steps"
+            className="inline-flex h-5 items-center gap-1 rounded bg-sky-500/20 px-1.5 text-[10px] text-sky-200 transition-colors hover:bg-sky-500/30 disabled:opacity-50"
+          >
+            <GitFork className="h-2.5 w-2.5" />
+            Try differently
+          </button>
+        )}
+        {canUndo && (
+          <button
+            onClick={undo}
+            title="Roll back whatever this turn applied"
+            className="inline-flex h-5 items-center gap-1 rounded bg-orange-500/20 px-1.5 text-[10px] text-orange-200 transition-colors hover:bg-orange-500/30"
+          >
+            <RotateCw className="h-2.5 w-2.5 scale-x-[-1]" />
+            Undo
           </button>
         )}
         <button

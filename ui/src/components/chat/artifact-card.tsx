@@ -169,6 +169,8 @@ export default function ArtifactCard({ artifact }: Props) {
   const setActiveView = useAppStore((s) => s.setActiveView)
   const notify = useAppStore((s) => s.notify)
   const isLive = artifact.view && artifact.view === activeView
+  // P32.3 (corrected) — figures the run actually reported. Empty ⇒ no badge.
+  const figures = preciseFigures(artifact)
 
   const openArtifact = () => {
     const p = artifact.path ?? artifact.preview ?? artifact.name
@@ -203,14 +205,18 @@ export default function ArtifactCard({ artifact }: Props) {
             Live
           </Badge>
         )}
-        {/* P32.3 — precise numbers in outputs (competence via precision). */}
-        <Badge
-          variant="outline"
-          className="ml-auto shrink-0 border-emerald-500/30 bg-emerald-500/5 font-mono text-[9px] text-emerald-300"
-          title="Exact figures from this run's receipt"
-        >
-          {preciseFigures(artifact).join(' · ')}
-        </Badge>
+        {/* P32.3 (corrected) — only figures this run actually reported. No
+            receipt figures means no badge at all; earlier revisions invented
+            sample counts under a tooltip that claimed receipt provenance. */}
+        {figures.length > 0 && (
+          <Badge
+            variant="outline"
+            className="ml-auto shrink-0 border-emerald-500/30 bg-emerald-500/5 font-mono text-[9px] text-emerald-300"
+            title="Figures reported by this run"
+          >
+            {figures.join(' · ')}
+          </Badge>
+        )}
       </div>
 
       <div className="px-3 pt-2.5 pb-3">
