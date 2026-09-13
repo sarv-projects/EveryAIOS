@@ -842,7 +842,7 @@
   layer: J
   name: Path/scope hard-floors
   post_v1: false
-  source: **✅ P7.7 landed: `pathfloor` — `normalize_lexical` + `canonicalize_no_follow`, `enforce_floor` (Allowed/ParentEscape/SymlinkEscape/OutsideRoot), adversarial fuzz gate (Allowed ⟹ inside) + P7.8 6-axis `PathGrant`/`GrantAxis` (read_only_recursive/read_write_create/… feeding permissions.toml, 0-escape invariant)**
+  source: **✅ P7.7 landed: `pathfloor` — `normalize_lexical` + `canonicalize_no_follow`, `enforce_floor` (Allowed/ParentEscape/SymlinkEscape/OutsideRoot), adversarial fuzz gate (Allowed ⟹ inside) + P7.8 6-axis `PathGrant`/`GrantAxis` (read_only_recursive/read_write_create/… feeding permissions.toml, 0-escape invariant) + ✅ P62.1/P62.3 (2026-09-13) the network-destination floor is now ONE classifier, `everyaios-guard::netfloor` (`NetClass`/`NetPolicy`): cloud-metadata/link-local/multicast/unspecified/reserved space is refused under every policy and cannot be opted into, private/LAN/CGNAT/ULA/discovery names need the explicit opt-in, loopback is the local-desktop default but strict for agent-chosen URLs; `urlfloor` (check_url_strict/block_reason), `egress` (plan_with_policy), `toctou::is_blocked_ip` and the browser tier engine all call it, replacing three partial copies. Other harnesses' settings surfaces (`.claude/`, `.codex/`, `.cursor/`, `.mcp.json`, …) are protected floors while `AGENTS.md`/`CLAUDE.md` stay editable — RESEARCH doc 89**
 
 - id: J5
   layer: J
@@ -938,7 +938,7 @@
   layer: J
   name: AgentShield config scanning
   post_v1: false
-  source: **✅ P7.7 landed: `everyaios-guard::configscan` — guard-disable keys, destructive config, callbacks, injection markers, malformed-TOML finding**
+  source: **✅ P7.7 landed: `everyaios-guard::configscan` — guard-disable keys, destructive config, callbacks, injection markers, malformed-TOML finding + ✅ P62.3 (2026-09-13) the write side is floored too: an agent may not silently rewrite another harness's settings (the prompt-injection → auto-approve class), enforced in `everyaios-guard::protected_paths`/`rm_critical`, with instruction files deliberately left editable — RESEARCH doc 89**
 
 - id: J21
   layer: J

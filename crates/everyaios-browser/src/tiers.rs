@@ -22,6 +22,7 @@ use everyaios_cdp::discovery::connect_to_browser;
 use everyaios_cdp::{
     spawn_browser, BrowserEndpoint, CdpClient, CdpError, LaunchOptions, TargetType,
 };
+use everyaios_guard::netfloor::{self, NetPolicy};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::net::{IpAddr, TcpListener, ToSocketAddrs};
@@ -296,36 +297,36 @@ impl TieredEngine {
                 parsed.scheme()
             )));
         }
+        // P62.1 — one canonical classifier (`everyaios_guard::netfloor`), the
+        // same one the URL floor, the egress engine and the TOCTOU binder use.
+        // Before this, the browser had its own partial copy — exactly the
+        // "N rules drift" problem the 2026 agent-security survey describes.
+        // The strict policy is right here: page content is untrusted, so
+        // loopback/LAN must not be reachable from a navigation it chose.
+        let strict = NetPolicy::strict();
         match parsed.host() {
             Some(url::Host::Ipv4(ip)) => {
-                if ip.is_loopback() || ip.is_private() || ip.is_link_local() {
+                if !strict.allows(netfloor::classify_ip(IpAddr::V4(ip))) {
                     return Err(EngineError::SsrfBlocked);
                 }
             }
             Some(url::Host::Ipv6(ip)) => {
-                if is_private_ipv6(ip) {
+                if !strict.allows(netfloor::classify_ip(IpAddr::V6(ip))) {
                     return Err(EngineError::SsrfBlocked);
                 }
             }
             Some(url::Host::Domain(domain)) => {
-                if domain.eq_ignore_ascii_case("localhost") {
+                // Classify the name itself first (loopback names, `.local`,
+                // `.internal`) — no DNS needed for those.
+                if !strict.allows(netfloor::classify_host(domain)) {
                     return Err(EngineError::SsrfBlocked);
                 }
-                // Hostname → resolve and re-check (a name pointing at a
-                // private IP is still an SSRF vector).
+                // Then resolve once and re-check, so a public name pointing at
+                // a private address is still refused.
                 if let Ok(addrs) = (domain, 443).to_socket_addrs() {
                     for addr in addrs {
-                        match addr.ip() {
-                            IpAddr::V4(v4) => {
-                                if v4.is_loopback() || v4.is_private() || v4.is_link_local() {
-                                    return Err(EngineError::SsrfBlocked);
-                                }
-                            }
-                            IpAddr::V6(v6) => {
-                                if is_private_ipv6(v6) {
-                                    return Err(EngineError::SsrfBlocked);
-                                }
-                            }
+                        if !strict.allows(netfloor::classify_ip(addr.ip())) {
+                            return Err(EngineError::SsrfBlocked);
                         }
                     }
                 }
@@ -647,18 +648,6 @@ fn wait_for_cdp_endpoint(port: u16, timeout: Duration) -> Result<String, EngineE
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-}
-
-/// IPv6 SSRF test: `::1` loopback, `::` unspecified, `fe80::/10` link-local,
-/// `fc00::/7` unique-local, and IPv4-mapped `::ffff:a.b.c.d` (the embedded
-/// IPv4 is re-checked — `Ipv6Addr::is_loopback()` alone misses it).
-fn is_private_ipv6(ip: std::net::Ipv6Addr) -> bool {
-    let mapped = ip.to_ipv4_mapped();
-    ip.is_loopback()
-        || ip.is_unspecified()
-        || (ip.segments()[0] & 0xffc0) == 0xfe80
-        || (ip.segments()[0] & 0xfe00) == 0xfc00
-        || mapped.is_some_and(|v4| v4.is_loopback() || v4.is_private() || v4.is_link_local())
 }
 
 /// Enforce the `--max-output` byte cap (doc 55): truncate at a char

@@ -199,16 +199,15 @@ pub fn reverify_exec(binding: &ExecBinding, bytes: &[u8]) -> Result<(), ToctouEr
 
 /// Cloud-metadata, unspecified, and broadcast destinations are never a
 /// legitimate tool target.
+/// P62.1 — one classifier for every guard:
+/// [`crate::netfloor::is_always_blocked`]. This catches the whole link-local
+/// range (not only the exact `169.254.169.254` metadata IP), multicast,
+/// broadcast, documentation, benchmark and reserved space. Loopback and
+/// RFC1918 are deliberately *not* here: they are the resolve-time rebinding
+/// check's business and are policy-gated at the literal level by
+/// [`crate::urlfloor`].
 pub fn is_blocked_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(v) => {
-            v.octets() == [169, 254, 169, 254]
-                || v.is_unspecified()
-                || v.is_broadcast()
-                || v.is_documentation()
-        }
-        IpAddr::V6(v) => v.is_unspecified(),
-    }
+    crate::netfloor::is_always_blocked(ip)
 }
 
 /// Open the parent directory so the executor can hold an fd across the

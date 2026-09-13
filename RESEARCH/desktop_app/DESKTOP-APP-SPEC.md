@@ -1,7 +1,7 @@
 # ⛔ SUPERSEDED — DO NOT USE AS THE BUILD SPEC
 
 > **This file is an ARCHIVED draft** (final synthesis of docs 01–34, 2026-08-06, 142 repos, all-Rust-leaning).
-> **The live master spec is `desktop_app/DESKTOP-APP-SPEC.md` — v3.42** (2026-08-21, docs 01–84, **282 repos**, 149-row matrix, frozen hybrid architecture).
+> **The live master spec is `desktop_app/DESKTOP-APP-SPEC.md`** — read that file for the current version, capability count and corpus range; they change with every wave, so this banner deliberately does not restate them. As of 2026-08-21 it was **v3.42** (docs 01–84, **282 repos**, 149-row matrix, frozen hybrid architecture) — a dated record, not a current claim.
 > Everything in this archived copy is superseded: repo counts (142 vs 247), the all-Rust stack framing (now hybrid), and every v3.x feature/algorithm row. Keep it only as history; never build from it.
 
 ---

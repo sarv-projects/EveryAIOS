@@ -44,6 +44,7 @@ pub mod granter;
 pub mod injection;
 pub mod loopguard;
 pub mod manifest;
+pub mod netfloor;
 pub mod path_seal;
 pub mod pathfloor;
 pub mod permissions;
@@ -82,6 +83,9 @@ pub use granter::{
     TrustFlags,
 };
 pub use injection::Estop;
+pub use netfloor::{
+    classify_host, classify_ip, host_allowed, is_always_blocked, NetClass, NetPolicy,
+};
 pub use path_seal::{PathSeal, SealError, SealState};
 pub use pathfloor::{
     canonicalize_no_follow, enforce_floor, is_inside_root, normalize_lexical, FloorVerdict, FsOp,
