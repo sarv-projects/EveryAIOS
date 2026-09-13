@@ -37,12 +37,50 @@ export interface McpServerRow {
   transport: "stdio" | "http" | "native";
   tools: number;
   desc: string;
+  /** P55.11 — the tool names the server actually advertised in `tools/list`.
+   * Empty = no handshake on record (never a fabricated list). */
+  toolNames: string[];
 }
 
 /** P11.5.8 — the installed/user MCP servers list (replaces hardcoded rows). */
 export async function mcpServers(): Promise<McpServerRow[]> {
   if (!inTauri()) return demoServers();
   return nativeCall('MCP server list', () => invoke<McpServerRow[]>("mcp_servers"));
+}
+
+/** P55.11 — one tool discovered from an attached external MCP server. */
+export interface McpExternalTool {
+  name: string;
+  description: string;
+  readOnly: boolean;
+  openWorld: boolean;
+  source: string;
+}
+
+/** P55.11 — the live external tools: read from the agent's own tool catalog
+ * (the one `tool/list` serves) so a surfaced tool is always callable.
+ * `agentVisible=false` means the runtime has not reconciled yet — an honest
+ * "not wired here", not an empty success. */
+export interface McpExternalCatalog {
+  native: number;
+  external: number;
+  total: number;
+  agentVisible: boolean;
+  tools: McpExternalTool[];
+}
+
+export const EMPTY_EXTERNAL_CATALOG: McpExternalCatalog = {
+  native: 0,
+  external: 0,
+  total: 0,
+  agentVisible: false,
+  tools: [],
+};
+
+export async function mcpExternalTools(): Promise<McpExternalCatalog> {
+  if (!inTauri()) return EMPTY_EXTERNAL_CATALOG;
+  return nativeCall('MCP external catalog', () =>
+    invoke<McpExternalCatalog>("mcp_external_tools"));
 }
 
 /** P11.5.8 + P50.3.5 — attach a user-supplied stdio MCP server, **request**
@@ -68,8 +106,25 @@ export async function mcpAttachCommit(
   command: string,
   args: string[],
   ticketId: string,
-): Promise<{ name: string; tools: string[]; desc: string }> {
-  if (!inTauri()) return { name, tools: ["mcp_tool_1"], desc: "demo attach" };
+): Promise<{
+  name: string;
+  tools: string[];
+  desc: string;
+  /** Ids the agent loop registered (native collisions skipped). */
+  registered: string[];
+  /** False when no agent runtime was attached to register into. */
+  agentVisible: boolean;
+}> {
+  // P55.11 — a failed handshake rejects here (no row, no child): the catch in
+  // the panel surfaces the real reason instead of a fake "0 tools attached".
+  if (!inTauri())
+    return {
+      name,
+      tools: ["mcp_tool_1"],
+      desc: "demo attach",
+      registered: ["mcp_tool_1"],
+      agentVisible: true,
+    };
   return nativeCall('MCP attach commit', () =>
     invoke("mcp_attach_commit", { name, command, args, ticketId }));
 }
@@ -201,9 +256,9 @@ function demoStore(): StoreEntry[] {
 
 function demoServers(): McpServerRow[] {
   return [
-    { name: "EveryAIOS native (built-in)", status: "connected", transport: "native", tools: 42, desc: "37 browser + 5 storage tools" },
-    { name: "GitHub MCP", status: "connected", transport: "stdio", tools: 18, desc: "Repo, issues, PRs" },
-    { name: "Filesystem MCP", status: "connected", transport: "stdio", tools: 7, desc: "Read/write local files" },
+    { name: "EveryAIOS native (built-in)", status: "connected", transport: "native", tools: 42, desc: "37 browser + 5 storage tools", toolNames: [] },
+    { name: "GitHub MCP", status: "connected", transport: "stdio", tools: 18, desc: "Repo, issues, PRs", toolNames: ["list_issues", "create_pr", "get_file"] },
+    { name: "Filesystem MCP", status: "connected", transport: "stdio", tools: 7, desc: "Read/write local files", toolNames: ["read_file", "write_file", "list_dir"] },
   ];
 }
 

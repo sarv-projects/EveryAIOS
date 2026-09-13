@@ -8,11 +8,18 @@
 
 #[cfg(target_os = "linux")]
 pub mod linux;
-#[cfg(target_os = "macos")]
+// The macOS backend is dependency-free `std::process` plus this crate's own
+// types, so it also compiles in test builds on every host. That is deliberate:
+// a darwin-only `cfg` means a typo there is invisible until someone builds on a
+// Mac (this module shipped two real compile errors exactly that way — a missing
+// `GenericImageView` import and a `&str` handed to a `String` variant). `cargo
+// test` now proves all three backends still compile.
+#[cfg(any(target_os = "macos", test))]
 pub mod macos;
 #[cfg(windows)]
 pub mod win;
 
+use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
 use crate::{Capabilities, DesktopError};
 
@@ -97,14 +104,24 @@ impl PlatformBackend {
         }
     }
 
-    pub fn act(&self, window: &WindowInfo, act: &ActKind) -> Result<(), DesktopError> {
+    /// P57.3 — `mode` is the policy's interaction default. Every backend must
+    /// honour it: under `Background` nothing may be raised, focused or activated
+    /// (`SetForegroundWindow`, EWMH stacking + `set_input_focus`, or macOS
+    /// `activate`), and a launch must not steal focus
+    /// (`SW_SHOWNOACTIVATE` / `open -g`).
+    pub fn act(
+        &self,
+        window: &WindowInfo,
+        act: &ActKind,
+        mode: InteractionMode,
+    ) -> Result<(), DesktopError> {
         match self {
             #[cfg(target_os = "linux")]
-            PlatformBackend::X11(b) => b.act(window, act),
+            PlatformBackend::X11(b) => b.act(window, act, mode),
             #[cfg(windows)]
-            PlatformBackend::Win => crate::platform::win::act(window, act, None),
+            PlatformBackend::Win => crate::platform::win::act(window, act, None, mode),
             #[cfg(target_os = "macos")]
-            PlatformBackend::Mac => crate::platform::macos::MacBackend::act(window, act),
+            PlatformBackend::Mac => crate::platform::macos::MacBackend::act(window, act, mode),
             PlatformBackend::Unsupported => Err(DesktopError::Unsupported("no backend".into())),
         }
     }
@@ -120,6 +137,9 @@ impl PlatformBackend {
                 uia_tree: false,
                 invoke_set_value: false,
                 send_input: true,
+                // Synthetic ButtonPress/ButtonRelease to the deepest child
+                // under the point: the server moves nothing.
+                background_input: true,
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
@@ -132,6 +152,9 @@ impl PlatformBackend {
                 uia_tree: true,
                 invoke_set_value: true,
                 send_input: true,
+                // UIA InvokePattern at the hit-test point, else PostMessage to
+                // the target HWND.
+                background_input: true,
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
@@ -143,6 +166,9 @@ impl PlatformBackend {
                 uia_tree: false,
                 invoke_set_value: false,
                 send_input: true,
+                // System Events `click at` is a real pointer event, so a
+                // background coordinate click cannot be delivered here.
+                background_input: false,
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,

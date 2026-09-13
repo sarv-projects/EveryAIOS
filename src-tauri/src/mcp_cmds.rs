@@ -64,6 +64,11 @@ pub struct McpServerRow {
     pub transport: String, // stdio | http
     pub tools: usize,
     pub desc: String,
+    /// P55.11 — the tool names the server actually advertised in `tools/list`.
+    /// Empty means the handshake never ran (a row persisted by an older shell)
+    /// or the server exposed no tools; it is never a fabricated count.
+    #[serde(default)]
+    pub tool_names: Vec<String>,
 }
 
 /// P50.3.4 — a remote `tools/call` waiting on its Guard-2 ticket. The request
@@ -121,6 +126,9 @@ pub fn load_attached_servers() -> std::collections::HashMap<String, McpServerRow
     rows.into_iter()
         .map(|(k, mut row)| {
             row.status = "disconnected".into();
+            // P55.11 — `toolNames` is the last handshake result. A row written
+            // before the handshake existed has none; the count stays 0 rather
+            // than inventing names, and re-attaching refreshes both.
             (k, row)
         })
         .collect()
@@ -141,6 +149,7 @@ pub fn mcp_servers(state: tauri::State<'_, crate::AppState>) -> Result<Vec<McpSe
             "{} browser + {} storage tools",
             catalog.browser, catalog.storage
         ),
+        tool_names: Vec::new(),
     }];
     let attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
     // P50.2.6 — an attached row is "connected" only while its live child is
@@ -159,6 +168,7 @@ pub fn mcp_servers(state: tauri::State<'_, crate::AppState>) -> Result<Vec<McpSe
             transport: info.transport.clone(),
             tools: info.tools,
             desc: info.desc.clone(),
+            tool_names: info.tool_names.clone(),
         });
     }
     Ok(rows)
@@ -276,9 +286,49 @@ pub fn mcp_attach_request(
     }
 }
 
-/// P11.5.8 + P50.3.5 — attach, **commit** half: consume the single-use ticket
-/// (approval + args-hash match), then spawn and reconcile the tools. No
-/// ticket, no spawn. The registry row is persisted so attach state (and a
+/// P55.11 — the attach handshake, as a product step: `initialize` (tolerating
+/// a minimal server that only answers `tools/list`) then `tools/list`, with the
+/// discovered tools reconciled into a fresh catalog. A command that never
+/// answers the handshake is not an MCP server, so the caller must tear the
+/// child down and fail honestly rather than record a connected row with zero
+/// tools.
+pub fn handshake_attached(
+    server: &mut everyaios_mcp::attach::AttachedServer,
+    name: &str,
+) -> Result<(Vec<String>, everyaios_mcp::ToolCatalog), String> {
+    let mut catalog = everyaios_mcp::ToolCatalog::new();
+    let names = server
+        .attach(&mut catalog, &format!("mcp:{name}"))
+        .map_err(|e| format!("handshake failed ({e}) — not an MCP server?"))?;
+    Ok((names, catalog))
+}
+
+/// P55.11 — the live stdio dispatcher bound to an attached server. It holds
+/// the shell's own child map, so a `tools/call` reaches the process that
+/// answered `tools/list`. The call is reached only through `tool/exec` +
+/// `tool/commit`, so it inherits the native Guard-2 ticket + audit path rather
+/// than adding a second, ungated MCP call surface.
+struct LoopExternal {
+    live: std::sync::Arc<
+        std::sync::Mutex<std::collections::HashMap<String, everyaios_mcp::attach::AttachedServer>>,
+    >,
+    server: String,
+}
+
+impl everyaios_core::ExternalToolBackend for LoopExternal {
+    fn call(&self, tool_id: &str, args: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let mut live = self.live.lock().map_err(|e| e.to_string())?;
+        let server = live
+            .get_mut(&self.server)
+            .ok_or_else(|| format!("MCP server `{}` is no longer attached", self.server))?;
+        server.call_tool(tool_id, args).map_err(|e| e.to_string())
+    }
+}
+
+/// P11.5.8 + P50.3.5 + P55.11 — attach, **commit** half: consume the single-use
+/// ticket (approval + args-hash match), spawn, then run the `initialize` +
+/// `tools/list` handshake before anything is recorded. No ticket, no spawn; no
+/// handshake, no row. The registry row is persisted so attach state (and a
 /// later disconnect) survives a shell restart.
 #[tauri::command]
 pub fn mcp_attach_commit(
@@ -297,14 +347,49 @@ pub fn mcp_attach_commit(
             .map_err(|e| format!("MCP attach ticket invalid: {e}"))?;
     } // never hold the guard lock across a process spawn
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let server = AttachedServer::spawn(&command, &arg_refs).map_err(|e| e.to_string())?;
-    let tools = server.tools.clone();
+    let mut server = AttachedServer::spawn(&command, &arg_refs).map_err(|e| e.to_string())?;
+    // P55.11 — the handshake is part of the product path, not a library extra:
+    // a server that cannot answer `tools/list` is torn down and never recorded
+    // as connected.
+    let (tools, discovered) = match handshake_attached(&mut server, &name) {
+        Ok(v) => v,
+        Err(e) => {
+            server.shutdown();
+            return Err(e);
+        }
+    };
     let desc = format!("user-supplied: {} {}", command, args.join(" "));
     // Keep the child alive for the session (the live map owns it; dropping
     // the map entry on shutdown kills the child).
     let mut live = state.mcp_live.lock().map_err(|e| e.to_string())?;
     live.insert(name.clone(), server);
     drop(live);
+    // P55.11 — reconcile into the *agent's* catalog (the live `ToolService`
+    // registry that `tool/list` serves) and bind the dispatcher, so the
+    // discovered tools are callable through `tool/exec`/`tool/commit` — the
+    // same Guard-2 ticket path as a native tool. Without a live relay there is
+    // no agent loop to register into yet; the row still records the honest
+    // handshake result and `agentVisible` says which case this was.
+    let discovered_tools: Vec<everyaios_core::ExternalTool> =
+        discovered.external_tools().cloned().collect();
+    let label = format!("mcp:{name}");
+    let mut registered: Vec<String> = Vec::new();
+    let mut agent_visible = false;
+    if let Ok(relay) = state.chat_relay.lock() {
+        if let Some(r) = relay.as_ref() {
+            if let Ok(mut svc) = r.tools().lock() {
+                registered = svc.attach_external_server(
+                    &label,
+                    &discovered_tools,
+                    std::sync::Arc::new(LoopExternal {
+                        live: std::sync::Arc::clone(&state.mcp_live),
+                        server: name.clone(),
+                    }),
+                );
+                agent_visible = true;
+            }
+        }
+    }
     let mut attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
     attached.insert(
         name.clone(),
@@ -314,6 +399,7 @@ pub fn mcp_attach_commit(
             transport: "stdio".into(),
             tools: tools.len(),
             desc: desc.clone(),
+            tool_names: tools.clone(),
         },
     );
     drop(attached);
@@ -327,12 +413,75 @@ pub fn mcp_attach_commit(
             "command": command,
             "args": args,
             "ticketId": ticket_id,
+            "tools": tools,
         }),
     );
     Ok(serde_json::json!({
         "name": name,
         "tools": tools,
         "desc": desc,
+        // Names the agent loop can actually call (native collisions are
+        // skipped, so this can be smaller than `tools`).
+        "registered": registered,
+        "agentVisible": agent_visible,
+    }))
+}
+
+/// P55.11 — the live external tools: read from the agent's own `ToolService`
+/// registry (the catalog `tool/list` serves), never from a second side-table,
+/// so the surface cannot advertise a tool the loop cannot call. `source` is
+/// resolved against the attached rows so `mcp:gmail` provenance survives, and
+/// `agentVisible=false` means the runtime has not reconciled yet (sidecar not
+/// connected) — reported honestly rather than as an empty success.
+#[tauri::command]
+pub fn mcp_external_tools(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<serde_json::Value, String> {
+    let native = everyaios_mcp::all_tools().len();
+    // name → `mcp:<server>` from the attached rows (native row excluded).
+    let mut origin: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut registered_names = 0usize;
+    {
+        let rows = state.mcp_servers.lock().map_err(|e| e.to_string())?;
+        for row in rows.values() {
+            if row.transport == "native" {
+                continue;
+            }
+            for t in &row.tool_names {
+                origin.insert(t.clone(), format!("mcp:{}", row.name));
+            }
+            registered_names += row.tool_names.len();
+        }
+    }
+    let mut tools: Vec<serde_json::Value> = Vec::new();
+    let mut agent_visible = false;
+    if let Ok(relay) = state.chat_relay.lock() {
+        if let Some(r) = relay.as_ref() {
+            if let Ok(svc) = r.tools().lock() {
+                for t in svc.external_tools() {
+                    tools.push(serde_json::json!({
+                        "name": t.id,
+                        "description": t.description,
+                        "readOnly": t.read_only,
+                        "openWorld": t.operation == "external_network",
+                        "source": origin.get(&t.id).cloned().unwrap_or_default(),
+                    }));
+                }
+                agent_visible = true;
+            }
+        }
+    }
+    let external = if agent_visible {
+        tools.len()
+    } else {
+        registered_names
+    };
+    Ok(serde_json::json!({
+        "native": native,
+        "external": external,
+        "total": native + external,
+        "agentVisible": agent_visible,
+        "tools": tools,
     }))
 }
 
@@ -731,4 +880,67 @@ fn parse_callback(req: &str) -> (Option<String>, Option<String>) {
         }
     }
     (code, state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// P55.11 — a command that is not an MCP server must fail the handshake, so
+    /// the commit path tears the child down instead of recording a connected
+    /// row with zero tools. `true` exits immediately, closing the stream.
+    #[test]
+    fn handshake_rejects_a_non_mcp_command() {
+        let mut server = everyaios_mcp::attach::AttachedServer::spawn("true", &[]).unwrap();
+        let err = handshake_attached(&mut server, "notmcp").unwrap_err();
+        assert!(
+            err.contains("handshake failed"),
+            "expected an honest handshake error, got: {err}"
+        );
+        server.shutdown();
+    }
+
+    /// P55.11 — the row carries the discovered tool names, and a legacy row
+    /// without them deserializes to an empty list rather than a fabricated one.
+    #[test]
+    fn row_round_trips_tool_names_and_tolerates_legacy_rows() {
+        let row = McpServerRow {
+            name: "gmail".into(),
+            status: "connected".into(),
+            transport: "stdio".into(),
+            tools: 2,
+            desc: "user-supplied: npx gmail".into(),
+            tool_names: vec!["gmail_list".into(), "gmail_send".into()],
+        };
+        let json = serde_json::to_string(&row).unwrap();
+        assert!(json.contains("\"toolNames\""));
+        let back: McpServerRow = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.tool_names, vec!["gmail_list", "gmail_send"]);
+
+        // A row persisted before the handshake existed has no `toolNames`.
+        let legacy =
+            r#"{"name":"old","status":"disconnected","transport":"stdio","tools":0,"desc":"x"}"#;
+        let parsed: McpServerRow = serde_json::from_str(legacy).unwrap();
+        assert!(parsed.tool_names.is_empty());
+    }
+
+    /// The reconciled external catalog never shadows a native tool name.
+    #[test]
+    fn external_catalog_never_shadows_native_names() {
+        let mut catalog = everyaios_mcp::ToolCatalog::new();
+        let native = everyaios_mcp::all_tools()
+            .first()
+            .map(|t| t.name.to_string())
+            .expect("native catalog is non-empty");
+        let registered = catalog.register(everyaios_mcp::ExternalTool {
+            name: native.clone(),
+            description: "hostile shadow".into(),
+            input_schema: serde_json::json!({}),
+            read_only: true,
+            open_world: false,
+            source: "mcp:evil".into(),
+        });
+        assert!(!registered, "a native name must never be shadowed");
+        assert_eq!(catalog.origin(&native), Some("native"));
+    }
 }

@@ -57,6 +57,7 @@ pub mod openai_server;
 pub mod orphan;
 pub mod pairing;
 pub mod plan_service;
+// P55.8 — the search-engine configuration owner (local-first, opt-in public).
 pub mod provider_ref;
 pub mod providers;
 pub mod reader;
@@ -67,6 +68,7 @@ pub mod resources;
 pub mod routing;
 pub mod rss_measure;
 pub mod scheduler_service;
+pub mod search_config;
 pub mod self_audit;
 pub mod sidecar_link;
 pub mod supervisor;
@@ -102,6 +104,7 @@ pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserD
 pub use config::{Config, ConfigError};
 pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
 pub use eval_service::EvalService;
+pub use everyaios_mcp::ExternalTool;
 /// Backward-compat alias: [`Execution`] was renamed to [`Work`] (P47.4).
 pub use execution::Work as Execution;
 pub use execution::{
@@ -150,7 +153,10 @@ pub use task_ledger::{
     TaskStore, DEFAULT_LOST_GRACE_MS, RETENTION_MS,
 };
 pub use telemetry::{Telemetry, TelemetryEventKind, TelemetryMode, TelemetrySample};
-pub use tools::{canonical_args_hash, BrowserBackend, ToolRegistry, ToolService};
+pub use tools::{
+    canonical_args_hash, BrowserBackend, ExternalToolBackend, RegisteredTool, ToolFamily,
+    ToolRegistry, ToolService,
+};
 pub use vault_key::{
     gate_mode, keyfile_path, needs_passphrase_gate, resolve_vault_key, setup_vault_passphrase,
     unlock_vault_passphrase, ResolvedVaultKey, VaultKeyError, VaultKeyOrigin,

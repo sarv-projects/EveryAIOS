@@ -18,11 +18,14 @@ import {
   mcpDetach,
   mcpCatalog,
   mcpServers,
+  mcpExternalTools,
   mcpConnectStart,
   mcpRemoteStatus,
   storeCatalog,
   waitForTicketResolution,
+  EMPTY_EXTERNAL_CATALOG,
   type McpCatalog,
+  type McpExternalCatalog,
   type McpServerRow,
   type StoreEntry,
 } from '@/lib/mcp'
@@ -145,6 +148,9 @@ export default function ConnectorsPanel() {
   // P11.5.8 — the MCP servers list is live from Rust (`mcp_servers`: the
   // built-in catalog + user-attached stdio servers); demo fallback in preview.
   const [mcpList, setMcpList] = useState<McpServerRow[]>([])
+  // P55.11 — the tools the attach handshake actually discovered, so the count
+  // and the names come from the same live source (never a hopeful estimate).
+  const [external, setExternal] = useState<McpExternalCatalog>(EMPTY_EXTERNAL_CATALOG)
   const [attachOpen, setAttachOpen] = useState(false)
   const [attachName, setAttachName] = useState('')
   const [attachCmd, setAttachCmd] = useState('')
@@ -156,6 +162,9 @@ export default function ConnectorsPanel() {
     mcpServers()
       .then((rows) => alive && setMcpList(rows))
       .catch(() => {})
+    mcpExternalTools()
+      .then((cat) => alive && setExternal(cat))
+      .catch(() => {})
     return () => {
       alive = false
     }
@@ -164,6 +173,7 @@ export default function ConnectorsPanel() {
   const refreshMcp = async () => {
     try {
       setMcpList(await mcpServers())
+      setExternal(await mcpExternalTools())
     } catch {
       /* shell not ready */
     }
@@ -190,7 +200,14 @@ export default function ConnectorsPanel() {
         }
       }
       const res = await mcpAttachCommit(attachName.trim(), attachCmd.trim(), args, req.ticketId)
-      notify(`MCP: attached “${res.name}” (${res.tools.length} tools reconciled)`)
+      // P55.11 — say which of the two things happened: tools are callable by
+      // the agent, or the handshake succeeded but no runtime was up to
+      // register them (they become callable when the agent runtime attaches).
+      notify(
+        res.agentVisible
+          ? `MCP: attached “${res.name}” (${res.registered.length} tools callable)`
+          : `MCP: attached “${res.name}” (${res.tools.length} tools discovered; agent runtime not attached yet)`,
+      )
       setAttachOpen(false)
       setAttachName('')
       setAttachCmd('')
@@ -309,7 +326,7 @@ export default function ConnectorsPanel() {
           ? [
               { label: 'Connected', value: String(oauthAccts.length + mcpList.filter((s) => s.status === 'connected').length), tone: oauthAccts.length + mcpList.filter((s) => s.status === 'connected').length > 0 ? 'text-emerald-300' : 'text-zinc-500' },
               { label: 'Available', value: String(store.length), tone: 'text-foreground' },
-              { label: 'Tools', value: catalog ? String(catalog.total) : '—', tone: 'text-orange-300' },
+              { label: 'Tools', value: external.total > 0 ? String(external.total) : catalog ? String(catalog.total) : '—', tone: 'text-orange-300' },
               { label: 'MCP servers', value: String(mcpList.length), tone: 'text-sky-300' },
             ].map((s) => (
               <div key={s.label} className="rounded-lg border border-border bg-card p-3">
@@ -539,6 +556,13 @@ export default function ConnectorsPanel() {
                 </div>
               )}
 
+              {external.external > 0 && !external.agentVisible && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[10px] text-amber-300/90">
+                  {external.external} external tools are discovered but the agent runtime is not
+                  attached, so nothing can call them yet — they register on the next runtime attach.
+                </div>
+              )}
+
               <ul className="space-y-1.5">
                 {mcpList.map((s, i) => {
                   const connected = s.status === 'connected'
@@ -577,6 +601,31 @@ export default function ConnectorsPanel() {
                         <div className="truncate font-mono text-[10px] text-muted-foreground">
                           {s.desc} · {s.tools} tools
                         </div>
+                        {s.transport === 'native' ? (
+                          <div className="mt-0.5 font-mono text-[9px] text-muted-foreground">
+                            the inbuilt catalog — no external server involved
+                          </div>
+                        ) : s.toolNames.length > 0 ? (
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {s.toolNames.slice(0, 6).map((t) => (
+                              <span
+                                key={t}
+                                className="rounded border border-border/60 bg-background/40 px-1 py-px font-mono text-[9px] text-muted-foreground"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                            {s.toolNames.length > 6 && (
+                              <span className="font-mono text-[9px] text-muted-foreground">
+                                +{s.toolNames.length - 6} more
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-0.5 font-mono text-[9px] text-amber-300/80">
+                            no handshake on record — re-attach to discover tools
+                          </div>
+                        )}
                       </div>
                       {connected ? (
                         <div className="flex items-center gap-1.5">

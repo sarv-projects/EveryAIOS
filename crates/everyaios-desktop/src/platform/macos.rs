@@ -6,12 +6,28 @@
 //!   tree traversal is a follow-on (this build reads windows + OCR).
 //! - **Act:** System Events `click at`, `keystroke`, `key code`, scroll via
 //!   `scroll` action (Accessibility permission).
+//!   **P57.3:** `activate` (System Events / `tell application … to activate`)
+//!   happens only on the foreground path; under the Background default the
+//!   script targets the process by name without activating it, and a launch
+//!   uses `open -g` so the app does not come to the front.
+//!   **P57.4:** System Events has no message-level or `AXPress`-by-point
+//!   primitive, so a coordinate click / scroll / drag *is* real pointer motion
+//!   here. Under the Background default those refuse with an actionable
+//!   sentence (the named-element click is the background path that works),
+//!   instead of moving the user's cursor behind their back.
+//!   **P57.1:** launch opens the canonical path (`.app` bundle or binary).
 //!
 //! Compiles on every target; live use requires macOS + the two TCC
 //! permissions, surfaced honestly through `capabilities()`.
 
 use std::process::Command;
 
+// `DynamicImage::dimensions()` is a `GenericImageView` method, not inherent to
+// the enum — without this import `see()` does not compile on macOS.
+use image::GenericImageView;
+
+use crate::launch;
+use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
 use crate::DesktopError;
 
@@ -126,10 +142,70 @@ impl MacBackend {
         })
     }
 
-    pub fn act(window: &WindowInfo, act: &ActKind) -> Result<(), DesktopError> {
+    pub fn act(
+        window: &WindowInfo,
+        act: &ActKind,
+        mode: InteractionMode,
+    ) -> Result<(), DesktopError> {
+        // P57.1 — a launch is `open [-g] <path>`: `-g` is macOS's documented
+        // "do not bring the application to the foreground", i.e. exactly the
+        // background contract's no-activate rule. A `.app` bundle and a plain
+        // binary are both accepted by `open`; a bare name stays a name-only
+        // fallback (`open -a`), which is what the spec allows after path
+        // resolution fails.
+        if let ActKind::LaunchApp { path, app } = act {
+            let mut cmd = Command::new("open");
+            if mode == InteractionMode::Background {
+                cmd.arg("-g");
+            }
+            match path.as_deref() {
+                Some(p) if !p.is_empty() => {
+                    let target = launch::resolve_target(Some(p), "", &[])?;
+                    cmd.arg(target);
+                }
+                _ => {
+                    if app.trim().is_empty() {
+                        return Err(DesktopError::Platform(
+                            "launch needs a path or an app name".into(),
+                        ));
+                    }
+                    cmd.arg("-a").arg(app);
+                }
+            }
+            let status = cmd
+                .status()
+                .map_err(|e| DesktopError::Platform(format!("open: {e}")))?;
+            if !status.success() {
+                return Err(DesktopError::Platform(
+                    "open failed — is the bundle path correct?".into(),
+                ));
+            }
+            return Ok(());
+        }
         // Coordinate space: System Events uses screen points; the window id we
         // carry is our own — activate by app name + click by point.
         let app = &window.app;
+        // P57.4 — a point-addressed System Events action is a genuine pointer
+        // event: it moves the cursor and clicks wherever the cursor lands. There
+        // is no macOS equivalent of a UIA invoke-by-point or a message click, so
+        // the Background contract refuses these rather than breaking its promise.
+        // (`click "name" of window 1` below is AXPress — that one is fine, and
+        // is the background path for a named element.)
+        if mode == InteractionMode::Background {
+            let pointer_moving = matches!(
+                act,
+                ActKind::Click { .. } | ActKind::Scroll { .. } | ActKind::Drag { .. }
+            );
+            if pointer_moving {
+                return Err(DesktopError::Unsupported(
+                    "background contract: System Events clicks/scrolls/drags move the real \
+                     pointer and macOS exposes no non-moving equivalent — use a named-element \
+                     click, or switch the interaction default to Foreground (Settings → \
+                     Computer use)"
+                        .into(),
+                ));
+            }
+        }
         let script = match act {
             ActKind::Click { x, y } => format!(
                 "tell application \"System Events\" to click at {{{x}, {y}}}"
@@ -178,10 +254,23 @@ impl MacBackend {
                 from.0, from.1, to.0, to.1
             ),
             ActKind::ActivateWindow { .. } => {
+                // P57.3 — `activate` brings the app to the front, i.e. the
+                // foreground escalation. Under Background the act refuses
+                // rather than pretending (the engine refuses earlier too).
+                if mode == InteractionMode::Background {
+                    return Err(DesktopError::Unsupported(
+                        "background contract: macOS `activate` is a foreground escalation — \
+                         switch the interaction default to Foreground"
+                            .into(),
+                    ));
+                }
                 format!("tell application \"{app}\" to activate")
             }
-            ActKind::LaunchApp { app: name } => {
-                format!("tell application \"{name}\" to activate")
+            // Handled above (before the System Events script paths).
+            ActKind::LaunchApp { .. } => {
+                return Err(DesktopError::Platform(
+                    "launch was not handled on the pre-script path".into(),
+                ))
             }
         };
         let status = Command::new("osascript")
@@ -191,7 +280,9 @@ impl MacBackend {
             .map_err(|e| DesktopError::Platform(format!("osascript: {e}")))?;
         if !status.success() {
             return Err(DesktopError::Platform(
-                "osascript failed — Accessibility permission? (System Settings → Privacy & Security → Accessibility)",
+                "osascript failed — Accessibility permission? (System Settings → Privacy & Security \
+                 → Accessibility)"
+                    .into(),
             ));
         }
         Ok(())

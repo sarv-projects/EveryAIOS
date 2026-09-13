@@ -10,6 +10,13 @@
 //! user's default Chrome profile — no session inheritance here, that's the
 //! E13 seam); `browser_snapshot` returns the a11y tree text, not a rendered
 //! page bitmap (screenshots are a catalog tool, wired separately).
+//!
+//! P55.7 — the interactive session is tier 2 by definition (scripting a page
+//! needs a full engine), and `browser_start` now says so instead of leaving the
+//! tier implicit. Read-only fetches do not need it: [`browser_read_url`] runs
+//! the E10 tiered stack (static → Lightpanda/Obscura → Chrome) and reports the
+//! tier that actually served the read, so the app never implies a light engine
+//! is doing work it is not doing — and uses one for real when it is present.
 
 use tauri::State;
 
@@ -353,6 +360,44 @@ pub fn browser_type(
     Ok(serde_json::json!({ "ok": true, "added": added }))
 }
 
+/// P55.7 — read a URL through the E10 tiered engine stack, without a live CDP
+/// session: tier 0 static extraction, then the configured light engine
+/// (Lightpanda / Obscura) when the page needs JS, then Chrome. The response
+/// names the tier and read source that actually produced the text, so the
+/// surface can label it honestly instead of assuming a light engine ran.
+///
+/// The stack's own containments apply on every tier (SSRF/private-network and
+/// `file://` blocked by default, optional `allowed_domains`), and a policy
+/// rejection is **not** escalated — a heavier engine would hit the same wall.
+#[tauri::command]
+pub async fn browser_read_url(
+    url: String,
+    needs_js: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let intent = if needs_js.unwrap_or(false) {
+        everyaios_browser::FetchIntent::NeedsJs
+    } else {
+        everyaios_browser::FetchIntent::Static
+    };
+    let engine = everyaios_browser::TieredEngine::new(everyaios_browser::EngineConfig::default());
+    let url_for_log = url.clone();
+    // Blocking HTTP/CDP work off the async runtime (this is a plain command
+    // thread, but the tiered stack spawns a child browser on escalation).
+    let result = tauri::async_runtime::spawn_blocking(move || engine.fetch(&url, intent))
+        .await
+        .map_err(|e| format!("tiered read join: {e}"))?;
+    match result {
+        Ok(out) => Ok(serde_json::json!({
+            "url": url_for_log,
+            "tier": out.tier,
+            "source": out.source,
+            "truncated": out.truncated,
+            "text": out.markdown,
+        })),
+        Err(e) => Err(format!("tiered read failed: {e}")),
+    }
+}
+
 /// Tear down the browser session (kills the Chrome child).
 #[tauri::command]
 pub fn browser_stop(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
@@ -362,12 +407,46 @@ pub fn browser_stop(state: State<'_, AppState>) -> Result<serde_json::Value, Str
     Ok(serde_json::json!({ "stopped": was_attached }))
 }
 
+#[cfg(test)]
+mod tiered_read_tests {
+    //! P55.7 — the tiered read's policy floors, asserted on the product path.
+    //! Both refusals happen **before** any engine starts, so these run offline
+    //! and with no display: a private-network target must never be escalated to
+    //! a heavier engine, and `file://` is refused outright.
+
+    fn read(url: &str) -> Result<serde_json::Value, String> {
+        tauri::async_runtime::block_on(super::browser_read_url(url.to_string(), None))
+    }
+
+    #[test]
+    fn private_network_targets_are_refused_not_escalated() {
+        let err = read("http://127.0.0.1:8080/").expect_err("loopback must be refused");
+        assert!(err.contains("SSRF"), "expected the SSRF floor, got: {err}");
+    }
+
+    #[test]
+    fn file_urls_are_refused() {
+        let err = read("file:///etc/passwd").expect_err("file:// must be refused");
+        assert!(
+            err.contains("file://") || err.contains("file:"),
+            "expected the file:// floor, got: {err}"
+        );
+    }
+}
+
 /// Status probe for the rail live-dot.
 #[tauri::command]
 pub fn browser_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let guard = lock_browser(&state)?;
     match guard.as_ref() {
-        Some(b) => Ok(serde_json::json!({ "attached": true, "url": b.url })),
+        // P55.7 — `engine` is a fact, not a default: the attached session is
+        // always the full engine, and saying so stops any surface implying the
+        // tier-1 light engine is serving interaction.
+        Some(b) => Ok(serde_json::json!({
+            "attached": true,
+            "url": b.url,
+            "engine": "chrome",
+        })),
         None => Ok(serde_json::json!({ "attached": false })),
     }
 }

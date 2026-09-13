@@ -21,9 +21,12 @@
 //! `everyaios-audit::AuditWriter` (Merkle chain), exactly like every other
 //! effect in the product.
 
+pub mod apps;
+pub mod launch;
 pub mod ocr;
 pub mod platform;
 pub mod policy;
+pub mod readiness;
 pub mod router;
 pub mod types;
 pub mod verify;
@@ -32,8 +35,13 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
+pub use apps::{annotate_inventory, installed_apps, search_apps, AppSource, InstalledApp};
+pub use launch::{is_secret_env_name, prepare_child, resolve_target};
 pub use ocr::{locate_phrase, OcrEngine, VisionHit};
-pub use policy::{AppPolicy, ConfirmClass, DesktopGuard, GateDecision, PermissionGate};
+pub use policy::{
+    AppPolicy, ConfirmClass, DesktopGuard, GateDecision, InteractionMode, PermissionGate,
+};
+pub use readiness::{derive as derive_readiness, Readiness, ReadinessState};
 pub use router::{route, Layer, RouteDecision};
 pub use types::{
     ActKind, ActOutcome, Capabilities, ReadNode, ReadResult, Region, SeeMethod, SeeResult,
@@ -104,6 +112,18 @@ impl DesktopEngine {
         &self.guard
     }
 
+    /// P57.8 — the policy the Guard-2 preflight is currently enforcing.
+    pub fn policy(&self) -> AppPolicy {
+        self.guard.policy()
+    }
+
+    /// P57.8 — apply a policy change to the **live** engine (Settings →
+    /// Computer use writes an allow-list row or the interaction default and the
+    /// next action is gated on it; no restart, no re-attach).
+    pub fn set_policy(&self, policy: AppPolicy) {
+        self.guard.set_policy(policy);
+    }
+
     /// Honest capability surface for this platform (UI shows this).
     pub fn capabilities(&self) -> Capabilities {
         self.backend.capabilities()
@@ -165,9 +185,43 @@ impl DesktopEngine {
     /// Run one action through the full Guard-2 gate; on `Allow` it executes.
     /// Returns the gate decision + the execution outcome.
     pub fn act(&self, window: &WindowInfo, act: &ActKind, key: Option<&str>) -> Result<ActOutcome> {
+        let mode = self.guard.policy().interaction_mode;
+        // P57.1 — a launch must name one exact, absolute program before any
+        // policy or platform work: a relative path would resolve against this
+        // process's cwd, so the executed file could differ from the allow-list
+        // entry the gate matched.
+        if let Some(reason) = crate::launch::validate(act) {
+            return Ok(ActOutcome {
+                kind: act.clone(),
+                ok: false,
+                verification: None,
+                error: Some(format!("launch refused: {reason}")),
+            });
+        }
+        // P57.3 — the background contract is enforced before the platform call:
+        // under the Background default the driver never raises another window,
+        // because that is a foreground escalation (P57.4), not a default.
+        if matches!(act, ActKind::ActivateWindow { .. })
+            && !self.guard.policy().allows_raising_windows()
+        {
+            return Ok(ActOutcome {
+                kind: act.clone(),
+                ok: false,
+                verification: None,
+                error: Some(
+                    "background contract: raising another window needs the Foreground \
+                     interaction default (Settings → Computer use)"
+                        .into(),
+                ),
+            });
+        }
+        // P57.2 — the Guard-2 subject is the program being launched, never the
+        // window that happens to be focused: allow-listing an app has to gate
+        // that app.
+        let subject = act.launch_target().unwrap_or(window.app.as_str());
         let decision = self
             .guard
-            .preflight(&window.app, act, key)
+            .preflight(subject, act, key)
             .map_err(DesktopError::Guard)?;
         if decision != GateDecision::Allow {
             return Ok(ActOutcome {
@@ -177,7 +231,7 @@ impl DesktopEngine {
                 error: Some(format!("gate decision: {}", decision.as_str())),
             });
         }
-        self.backend.act(window, act)?;
+        self.backend.act(window, act, mode)?;
         Ok(ActOutcome {
             kind: act.clone(),
             ok: true,

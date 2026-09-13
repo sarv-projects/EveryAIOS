@@ -2818,9 +2818,17 @@ mod tests {
             }
             acks
         });
-        let (_dir, vault) = temp_vault("scheduler");
+        let (dir, vault) = temp_vault("scheduler");
         let vault = Arc::new(Mutex::new(vault));
-        let relay = ChatRelay::new(link_from(a), vault, |_| {});
+        let mut relay = ChatRelay::new(link_from(a), vault, |_| {});
+        // Test isolation: `ChatRelay::new` loads the *developer's* real
+        // `<data_dir>/scheduler.json`, so a job left there by an earlier run
+        // (or by the app itself) decided the `due` result and made this test
+        // depend on machine state. Re-seat the service on an empty temp file so
+        // the assertion is about the dispatched job, not the disk.
+        relay.scheduler = Arc::new(Mutex::new(SchedulerService::load_or_new(
+            dir.join("scheduler.json"),
+        )));
         relay.spawn();
 
         // The sidecar thread drives the protocol — the relay just needs to

@@ -28,6 +28,10 @@ pub struct AttachedServer {
     sandboxed: bool,
     /// Optional reviewed-import root for sandboxed change sets.
     import_root: Option<PathBuf>,
+    /// P55.11 — monotonic JSON-RPC id for post-handshake calls
+    /// (`tools/call`). The handshake owns 1/2; a call that reused them could
+    /// be mistaken for a handshake reply by a server that keys on id.
+    next_id: i64,
 }
 
 /// Errors from the attach handshake.
@@ -82,6 +86,7 @@ impl AttachedServer {
             tools: Vec::new(),
             sandboxed: false,
             import_root: None,
+            next_id: 3,
         })
     }
 
@@ -178,6 +183,37 @@ impl AttachedServer {
         }
         self.tools = names.clone();
         Ok(names)
+    }
+
+    /// P55.11 — call one tool on the attached server (`tools/call`). This is
+    /// the *product loop* half of the attach handshake: the same child that
+    /// answered `tools/list` executes the call, so the advertised tool set and
+    /// the callable tool set can never drift into two different servers.
+    ///
+    /// A server error reply surfaces as [`AttachError::Server`] (never an
+    /// empty success), and a reply without a `result` is a protocol error.
+    pub fn call_tool(
+        &mut self,
+        name: &str,
+        arguments: &serde_json::Value,
+    ) -> Result<serde_json::Value, AttachError> {
+        let id = self.next_id;
+        self.next_id += 1;
+        let call = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": { "name": name, "arguments": arguments }
+        });
+        self.send(&call.to_string())?;
+        let reply = self.recv()?;
+        if let Some(err) = reply.get("error") {
+            return Err(AttachError::Server(err.to_string()));
+        }
+        reply
+            .get("result")
+            .cloned()
+            .ok_or_else(|| AttachError::Protocol("tools/call reply without result".into()))
     }
 
     /// Attach the concrete monitored process returned by a sandbox backend.

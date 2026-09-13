@@ -249,8 +249,13 @@ pub enum ActKind {
         from: (i32, i32),
         to: (i32, i32),
     },
-    /// Open an app / bring a window forward.
+    /// Launch a program (P57.1). `path` is the **canonical filesystem path** to
+    /// the executable — Windows `.exe`, macOS `.app` bundle, Linux binary — and
+    /// is what the allow-list matched and what the platforms execute. `app` is
+    /// the name-only fallback the spec allows *after* path resolution (resolved
+    /// through `PATH`), used only when no path is known.
     LaunchApp {
+        path: Option<String>,
         app: String,
     },
     ActivateWindow {
@@ -259,6 +264,39 @@ pub enum ActKind {
 }
 
 impl ActKind {
+    /// P57.1 — launch by canonical path (the preferred form).
+    pub fn launch_path(path: impl Into<String>) -> Self {
+        ActKind::LaunchApp {
+            path: Some(path.into()),
+            app: String::new(),
+        }
+    }
+
+    /// P57.1 — launch by name; only valid when no path is known (the platform
+    /// resolves it through `PATH`, and the policy treats the name as the
+    /// subject).
+    pub fn launch_by_name(app: impl Into<String>) -> Self {
+        ActKind::LaunchApp {
+            path: None,
+            app: app.into(),
+        }
+    }
+
+    /// P57.1/P57.2 — the program this act launches (the path when known, else
+    /// the name). This is the Guard-2 **subject** for a launch: allow-listing an
+    /// app has to gate the thing being launched, not whichever window happens
+    /// to be focused.
+    pub fn launch_target(&self) -> Option<&str> {
+        match self {
+            ActKind::LaunchApp { path, app } => Some(
+                path.as_deref()
+                    .filter(|p| !p.is_empty())
+                    .unwrap_or(app.as_str()),
+            ),
+            _ => None,
+        }
+    }
+
     /// A human-readable one-liner for the Guard-2 card / audit line.
     pub fn describe(&self) -> String {
         match self {
@@ -269,7 +307,9 @@ impl ActKind {
             ActKind::Press { key } => format!("press {key}"),
             ActKind::Scroll { x, y, delta } => format!("scroll at ({x},{y}) by {delta}"),
             ActKind::Drag { from, to } => format!("drag {from:?} → {to:?}"),
-            ActKind::LaunchApp { app } => format!("launch {app}"),
+            ActKind::LaunchApp { .. } => {
+                format!("launch {}", self.launch_target().unwrap_or("<nothing>"))
+            }
             ActKind::ActivateWindow { window_id } => format!("activate window {window_id}"),
         }
     }
@@ -303,7 +343,19 @@ pub struct Capabilities {
     pub see_occluded: bool,
     pub uia_tree: bool,
     pub invoke_set_value: bool,
+    /// Global input synthesis (SendInput / XTEST / CGEvent). These **move the
+    /// real pointer or keyboard focus**, which is why `background_input` is a
+    /// separate fact rather than an implication of this one.
     pub send_input: bool,
+    /// P57.3 — can a coordinate click be delivered to the target **without**
+    /// moving the user's pointer? Windows: UIA `InvokePattern` at the hit-test
+    /// point, else `PostMessage` to the target HWND. Linux/X11: a synthetic
+    /// `ButtonPress`/`ButtonRelease` sent to the deepest child under the point
+    /// (the server moves nothing; whether the app honours a synthetic event is
+    /// the app's business — Tk/Gtk walk their own event queues). macOS: no —
+    /// System Events clicks are real pointer events, so background coordinate
+    /// clicks refuse and the caller escalates or uses a named AX click.
+    pub background_input: bool,
     pub ocr: bool,
     pub window_list: bool,
     pub launch_app: bool,

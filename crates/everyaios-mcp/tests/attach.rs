@@ -33,6 +33,32 @@ fn native_collision_is_not_registered() {
     server.shutdown();
 }
 
+/// P55.11 — the call half of the loop: a tool the handshake advertised is
+/// callable on the *same* child, and a server error is surfaced (never read as
+/// an empty success).
+#[test]
+fn call_tool_runs_on_the_attached_child() {
+    let mut catalog = ToolCatalog::new();
+    let mut server = AttachedServer::spawn(mock_server(), &[]).unwrap();
+    let names = server.attach(&mut catalog, "mcp:mock").unwrap();
+    assert!(names.contains(&"gmail_list".to_string()));
+
+    let result = server
+        .call_tool("gmail_list", &serde_json::json!({}))
+        .expect("tools/call should succeed");
+    assert_eq!(result["content"][0]["text"], "call:gmail_list");
+    assert_eq!(result["isError"], false);
+
+    let err = server
+        .call_tool("gmail_list", &serde_json::json!({ "fail": true }))
+        .expect_err("a server error reply must not decode as a result");
+    assert!(
+        err.to_string().contains("tool exploded"),
+        "error should carry the server message, got: {err}"
+    );
+    server.shutdown();
+}
+
 #[test]
 fn dead_server_fails_cleanly() {
     let mut catalog = ToolCatalog::new();

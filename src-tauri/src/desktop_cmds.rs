@@ -5,12 +5,13 @@
 //! host wires `policy::PermissionGate` to the ticket store and `AuditSink` to
 //! the Merkle audit chain, exactly like every other effect in the product."
 //!
-//! Honest closure: this module attaches the engine to the effect funnel on the
 //! **human-gesture path** (`desktop_act` / see / read). The agent catalog
 //! already lists `desktop.windows` / `desktop.read` / `desktop.act` in
-//! `ToolService` (P48.3), but the host **never calls `attach_desktop`** — a
-//! live agent turn gets `desktop session not attached`. Wiring the engine into
-//! the loop (plus P57 path-launch / background) is the remaining seam.
+//! `ToolService` (P48.3), but the autonomous agent tool `attach_desktop` is
+//! not wired into the agent loop — a live agent turn gets `desktop session not
+//! attached`. The human Settings/Computer-use surfaces use the explicit
+//! `desktop_attach` Tauri probe instead; wiring the agent tool into the loop
+//! (plus the remaining P57/P59 seams) is still open.
 //!
 //! Gating model (fail-closed, per the spec's dual-guard + honesty invariant):
 //! each human `act` is routed through the engine's own Guard-2 preflight. The
@@ -37,6 +38,68 @@ pub struct DesktopSlot {
     last_error: Option<String>,
     /// The audit sink bridge (holds the `AppHandle` to feed the Merkle chain).
     sink: Option<Arc<AuditSinkToChain>>,
+    /// P57.8 — the installed-app inventory. The disk scan happens once per
+    /// session (installed apps do not appear mid-session); Settings filtering
+    /// reads this cache, so typing in the picker costs no filesystem work.
+    apps: Option<Vec<everyaios_computeruse::InstalledApp>>,
+}
+
+/// P57.8 — the persisted desktop policy (`<data_dir>/desktop.json`).
+///
+/// One file is the source of truth for the allow-list paths, the legacy name
+/// allow-list, strict mode, safe zones and the interaction default, read at
+/// attach time and written by every Settings change, so the live Guard-2
+/// preflight and the surface can never disagree about what is in use. A
+/// malformed file degrades to the local default (no allow-list), never to a
+/// partially trusted one.
+pub fn policy_path() -> std::path::PathBuf {
+    everyaios_core::default_data_dir().join("desktop.json")
+}
+
+pub fn load_policy() -> everyaios_computeruse::AppPolicy {
+    std::fs::read(policy_path())
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default()
+}
+
+fn save_policy(policy: &everyaios_computeruse::AppPolicy) -> Result<(), String> {
+    let path = policy_path();
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("create data dir: {e}"))?;
+    }
+    let json = serde_json::to_vec_pretty(policy).map_err(|e| format!("encode: {e}"))?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &json).map_err(|e| format!("write: {e}"))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("rename: {e}"))
+}
+
+fn policy_json(policy: &everyaios_computeruse::AppPolicy) -> serde_json::Value {
+    serde_json::json!({
+        "allowList": policy.allow_list,
+        "allowPaths": policy.allow_paths,
+        "strict": policy.strict,
+        "interactionDefault": policy.interaction_mode.as_str(),
+        "allowsRaisingWindows": policy.allows_raising_windows(),
+    })
+}
+
+/// P57.8 — write the policy through: persist, then apply to the live engine
+/// when one is attached. `appliedLive=false` means the file is what the next
+/// attach will read (the response says which, so the UI never implies a live
+/// change it did not make).
+fn commit_policy(
+    state: &State<'_, AppState>,
+    policy: &everyaios_computeruse::AppPolicy,
+) -> Result<bool, String> {
+    save_policy(policy)?;
+    let mut applied = false;
+    let slot = state.desktop.lock().map_err(|e| e.to_string())?;
+    if let Some(engine) = slot.engine.as_ref() {
+        engine.set_policy(policy.clone());
+        applied = true;
+    }
+    Ok(applied)
 }
 
 /// Fail-closed human gate: the engine's preflight already lets routine acts
@@ -103,8 +166,10 @@ fn get_or_attach(
         }
         let sink = AuditSinkToChain::default();
         let slot_sink = Arc::new(sink.clone());
+        // P57.8 — the attach reads the persisted policy, so an allow-list row
+        // added in a previous session is in force before the first action.
         match everyaios_computeruse::DesktopEngine::new(
-            everyaios_computeruse::AppPolicy::default(),
+            load_policy(),
             Box::new(FailClosedGate),
             Box::new(sink),
         ) {
@@ -157,30 +222,71 @@ fn render_tree(root: &everyaios_computeruse::ReadNode) -> String {
         .join("\n")
 }
 
-/// Capability surface + attach state (the honest "what can this machine do and
-/// is the engine live" probe the UI rail dot reads).
+/// Capability surface + attach state + the derived H4 readiness (the honest
+/// "what can this machine do, is it allowed to, and is the engine live" probe
+/// the UI rail dot and the Settings chip read).
 #[tauri::command]
 pub fn desktop_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let slot = state.desktop.lock().map_err(|e| e.to_string())?;
     match slot.engine.as_ref() {
         Some(engine) => {
             let c = engine.capabilities();
+            let policy = engine.policy();
+            let read = everyaios_computeruse::derive_readiness(
+                Some(&c),
+                &policy,
+                engine.guard().kill.is_stopped(),
+                None,
+            );
             Ok(serde_json::json!({
                 "attached": true,
+                "interactionDefault": policy.interaction_mode.as_str(),
+                "readiness": { "state": read.state.as_str(), "detail": read.detail, "usable": read.usable },
                 "capabilities": {
                     "see": format!("{:?}", c.see),
                     "see_occluded": c.see_occluded,
                     "uia_tree": c.uia_tree,
                     "invoke_set_value": c.invoke_set_value,
                     "send_input": c.send_input,
+                    "background_input": c.background_input,
                     "ocr": c.ocr,
                     "window_list": c.window_list,
                     "launch_app": c.launch_app,
                 },
             }))
         }
-        None => Ok(serde_json::json!({ "attached": false, "reason": slot.last_error })),
+        None => {
+            // H4 — an unattached driver is `driver_missing` with the attach
+            // error verbatim, never a green dot over a dead engine.
+            let policy = load_policy();
+            let read = everyaios_computeruse::derive_readiness(
+                None,
+                &policy,
+                false,
+                slot.last_error.as_deref(),
+            );
+            Ok(serde_json::json!({
+                "attached": false,
+                "reason": slot.last_error,
+                "interactionDefault": policy.interaction_mode.as_str(),
+                "readiness": { "state": read.state.as_str(), "detail": read.detail, "usable": read.usable },
+            }))
+        }
     }
+}
+
+/// Explicit user-triggered attach/probe. Passive `desktop_status` intentionally
+/// does not open a platform handle or request desktop permissions; Settings and
+/// the Computer-use view call this command when the user asks to measure the
+/// live capability surface. Attach failure is returned as an honest status so
+/// the UI can render the derived H4 state instead of a generic IPC error.
+#[tauri::command]
+pub fn desktop_attach(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
+    let _ = get_or_attach(&state, &app);
+    desktop_status(state)
 }
 
 /// List native windows (read-only; estop-guarded, not a mutation).
@@ -272,6 +378,17 @@ pub fn desktop_act(
             name: name.ok_or("name required for setValue")?,
             value: text.ok_or("value required for setValue")?,
         },
+        // P57.1 — launch the allow-listed program by its canonical path. A
+        // launch with no path falls back to the name form, which resolves
+        // through PATH in the backend. Guard-2 evaluates the **launch target**
+        // as the subject, so an app has to be allow-listed in Settings →
+        // Computer use before this can proceed.
+        "launch" => match text.filter(|t| !t.trim().is_empty()) {
+            Some(path) => everyaios_computeruse::ActKind::launch_path(path),
+            None => everyaios_computeruse::ActKind::launch_by_name(
+                name.ok_or("launch requires a path (text) or an app name")?,
+            ),
+        },
         other => return Err(format!("unsupported desktop act kind: {other}")),
     };
     let outcome = engine
@@ -306,4 +423,194 @@ pub fn desktop_stop(state: State<'_, AppState>) -> Result<serde_json::Value, Str
         engine.emergency_stop();
     }
     Ok(serde_json::json!({ "stopped": true }))
+}
+
+// ==== P57.8 — Settings → Computer use ========================================
+
+/// The current policy + derived readiness (the section's first read).
+#[tauri::command]
+pub fn desktop_policy_get(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let slot = state.desktop.lock().map_err(|e| e.to_string())?;
+    let (policy, caps, killed) = match slot.engine.as_ref() {
+        Some(engine) => (
+            engine.policy(),
+            Some(engine.capabilities()),
+            engine.guard().kill.is_stopped(),
+        ),
+        None => (load_policy(), None, false),
+    };
+    let read = everyaios_computeruse::derive_readiness(
+        caps.as_ref(),
+        &policy,
+        killed,
+        slot.last_error.as_deref(),
+    );
+    Ok(serde_json::json!({
+        "policy": policy_json(&policy),
+        "attached": slot.engine.is_some(),
+        "readiness": { "state": read.state.as_str(), "detail": read.detail, "usable": read.usable },
+    }))
+}
+
+/// The installed-app inventory, filtered by `query` (all-character match over
+/// name + path). Cached per session; `refresh: true` re-scans the disk.
+#[tauri::command]
+pub fn desktop_apps(
+    state: State<'_, AppState>,
+    query: Option<String>,
+    refresh: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let policy = load_policy();
+    let mut slot = state.desktop.lock().map_err(|e| e.to_string())?;
+    let rescan = refresh.unwrap_or(false) || slot.apps.is_none();
+    if rescan {
+        // The filesystem scan is session-cached; policy annotations are
+        // refreshed below on every read so an Add/Remove write is visible
+        // immediately without rescanning application directories.
+        slot.apps = Some(everyaios_computeruse::installed_apps(&policy));
+    }
+    let mut cached = slot.apps.clone().unwrap_or_default();
+    // Keep the disk scan cached, but never keep policy annotations cached: an
+    // Add/Remove operation may have changed the persisted policy since the
+    // inventory was collected.
+    everyaios_computeruse::annotate_inventory(&mut cached, &policy);
+    drop(slot);
+    let rows: Vec<serde_json::Value> =
+        everyaios_computeruse::search_apps(&cached, query.as_deref().unwrap_or(""))
+            .into_iter()
+            .map(|a| {
+                serde_json::json!({
+                    "name": a.name,
+                    "path": a.path,
+                    "source": a.source.as_str(),
+                    "hardDenied": a.hard_denied,
+                    "allowListed": a.allow_listed,
+                })
+            })
+            .collect();
+    Ok(serde_json::json!({
+        "apps": rows,
+        "total": cached.len(),
+        "scanned": rescan,
+        "platformRoots": everyaios_computeruse::apps::platform_app_roots()
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect::<Vec<_>>(),
+    }))
+}
+
+/// Allow-list one path (the picker's Add, or **Add by path** after a file
+/// picker). The path is canonicalized in Rust and a hard-denied program is
+/// refused here too — the UI hiding the button is not the enforcement.
+#[tauri::command]
+pub fn desktop_policy_allow_path(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<serde_json::Value, String> {
+    let mut policy = load_policy();
+    let added = policy.add_path(&path)?;
+    let applied = commit_policy(&state, &policy)?;
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "desktop.policy.allow_path",
+        serde_json::json!({
+            "path": added,
+            "requested": path,
+            "appliedLive": applied,
+            "allowPaths": policy.allow_paths.len(),
+        }),
+    );
+    Ok(serde_json::json!({
+        "added": added,
+        "appliedLive": applied,
+        "policy": policy_json(&policy),
+    }))
+}
+
+/// Remove an allow-listed path (the Settings Remove action).
+#[tauri::command]
+pub fn desktop_policy_remove_path(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<serde_json::Value, String> {
+    let mut policy = load_policy();
+    let removed = policy.remove_path(&path);
+    let applied = commit_policy(&state, &policy)?;
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "desktop.policy.remove_path",
+        serde_json::json!({
+            "path": path,
+            "removed": removed,
+            "appliedLive": applied,
+        }),
+    );
+    Ok(serde_json::json!({
+        "removed": removed,
+        "appliedLive": applied,
+        "policy": policy_json(&policy),
+    }))
+}
+
+/// Set the interaction default (`background` | `foreground`). Background is the
+/// contract; foreground is the escalation the engine enforces for window
+/// raising (P57.4).
+#[tauri::command]
+pub fn desktop_policy_set_interaction(
+    state: State<'_, AppState>,
+    mode: String,
+) -> Result<serde_json::Value, String> {
+    let parsed = everyaios_computeruse::InteractionMode::parse(&mode)
+        .ok_or_else(|| format!("unknown interaction mode: {mode}"))?;
+    let mut policy = load_policy();
+    policy.interaction_mode = parsed;
+    let applied = commit_policy(&state, &policy)?;
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "desktop.policy.set_interaction",
+        serde_json::json!({ "mode": parsed.as_str(), "appliedLive": applied }),
+    );
+    Ok(serde_json::json!({
+        "appliedLive": applied,
+        "policy": policy_json(&policy),
+    }))
+}
+
+#[cfg(test)]
+mod policy_tests {
+    use super::*;
+
+    /// The persisted shape is the contract the UI reads; a field rename here
+    /// would silently blank the Settings section.
+    #[test]
+    fn policy_json_exposes_the_contract_fields() {
+        let mut p = everyaios_computeruse::AppPolicy::default();
+        p.allow_paths.push("/usr/bin/gedit".into());
+        p.interaction_mode = everyaios_computeruse::InteractionMode::Foreground;
+        let j = policy_json(&p);
+        assert_eq!(j["interactionDefault"], "foreground");
+        assert_eq!(j["allowsRaisingWindows"], true);
+        assert_eq!(j["allowPaths"][0], "/usr/bin/gedit");
+        assert_eq!(j["strict"], false);
+        let mut bg = everyaios_computeruse::AppPolicy::default();
+        bg.strict = true;
+        assert_eq!(policy_json(&bg)["allowsRaisingWindows"], false);
+    }
+
+    #[test]
+    fn a_malformed_policy_file_is_never_a_partial_allow_list() {
+        // `load_policy` reads the real data dir, so assert the decode rule the
+        // same way it is applied: a bad document yields the default.
+        let bad: Result<everyaios_computeruse::AppPolicy, _> = serde_json::from_slice(b"{oops");
+        assert!(bad.is_err());
+        let fallback = bad.unwrap_or_default();
+        assert!(fallback.allow_paths.is_empty());
+        assert_eq!(
+            fallback.interaction_mode,
+            everyaios_computeruse::InteractionMode::Background
+        );
+    }
 }

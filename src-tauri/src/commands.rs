@@ -36,6 +36,7 @@ use crate::office_cmds;
 use crate::openai_cmds;
 use crate::replay_cmds;
 use crate::scheduler_cmds;
+use crate::search_cmds;
 use crate::shell_cmds;
 use crate::skills_cmds;
 use crate::storage_cmds;
@@ -96,6 +97,10 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::plan_respond,
         crate::usage_snapshot,
         crate::session_totals,
+        // P55.8 — the SearXNG endpoint config + searx.space instance feed.
+        search_cmds::search_config,
+        search_cmds::search_instances,
+        search_cmds::search_instances_apply,
         replay_cmds::replay_sessions,
         replay_cmds::replay_timeline,
         replay_cmds::replay_screenshot,
@@ -137,6 +142,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         mcp_cmds::mcp_servers,
         mcp_cmds::mcp_attach_request,
         mcp_cmds::mcp_attach_commit,
+        mcp_cmds::mcp_external_tools,
         mcp_cmds::mcp_detach,
         // P51.18: no-restart refresh (prune dead children + relist).
         mcp_cmds::mcp_refresh,
@@ -275,6 +281,9 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         browser_cmds::browser_navigate,
         browser_cmds::browser_snapshot,
         browser_cmds::browser_read,
+        // P55.7 — tiered read (static → light engine → Chrome) with the tier
+        // that actually served it reported back.
+        browser_cmds::browser_read_url,
         browser_cmds::browser_click,
         browser_cmds::browser_type,
         browser_cmds::browser_stop,
@@ -300,6 +309,13 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         codeintel_cmds::ai_markers_scan,
         // P48.3 (E9): desktop computer-use through the effect funnel.
         desktop_cmds::desktop_status,
+        desktop_cmds::desktop_attach,
+        // P57.8 — Settings → Computer use: policy + allow-list + inventory.
+        desktop_cmds::desktop_policy_get,
+        desktop_cmds::desktop_apps,
+        desktop_cmds::desktop_policy_allow_path,
+        desktop_cmds::desktop_policy_remove_path,
+        desktop_cmds::desktop_policy_set_interaction,
         desktop_cmds::desktop_windows,
         desktop_cmds::desktop_read,
         desktop_cmds::desktop_see,

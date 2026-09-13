@@ -55,7 +55,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-ai:
     dependencies:
@@ -74,7 +74,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-connectors:
     dependencies:
@@ -87,7 +87,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-domain:
     devDependencies:
@@ -96,7 +96,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-engine:
     dependencies:
@@ -124,7 +124,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-memory:
     dependencies:
@@ -137,7 +137,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-providers:
     dependencies:
@@ -153,7 +153,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-search:
     dependencies:
@@ -172,7 +172,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-security:
     dependencies:
@@ -191,7 +191,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   packages/core-tools:
     dependencies:
@@ -207,7 +207,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.0.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2)
 
   ui:
     dependencies:
@@ -301,6 +301,12 @@ importers:
       '@tauri-apps/plugin-dialog':
         specifier: ^2.7.3
         version: 2.7.3
+      '@xterm/addon-fit':
+        specifier: '0.10'
+        version: 0.10.0(@xterm/xterm@5.5.0)
+      '@xterm/xterm':
+        specifier: '5'
+        version: 5.5.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -383,6 +389,9 @@ importers:
         specifier: ^5.0.6
         version: 5.0.14(@types/react@19.2.18)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
     devDependencies:
+      '@happy-dom/global-registrator':
+        specifier: ^20.14.5
+        version: 20.14.5
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.3
@@ -398,6 +407,9 @@ importers:
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
+      happy-dom:
+        specifier: ^20.14.5
+        version: 20.14.5
       tailwindcss:
         specifier: ^4
         version: 4.3.3
@@ -689,6 +701,10 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@happy-dom/global-registrator@20.14.5':
+    resolution: {integrity: sha512-B05ID9DhSwLs6mlm1fzlkAtTIvB3duCvjJjfr19LBrlTK7VZtRjDqoTRIVv13GuYuNdhByu8LSZgThwV3Rkj7g==}
+    engines: {node: '>=20.0.0'}
 
   '@hono/node-server@2.1.0':
     resolution: {integrity: sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg==}
@@ -1952,6 +1968,12 @@ packages:
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
 
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+
   '@ungap/structured-clone@1.3.3':
     resolution: {integrity: sha512-60YRaenCQcVjYEKOcG824+DRGGIQ3VKErcBoAEDJZz5bKIs2ZG+X/H9Nk+Q6EVkwJk5QNApxbrc5QtBSwtrXAg==}
 
@@ -1992,6 +2014,14 @@ packages:
 
   '@vitest/utils@3.2.7':
     resolution: {integrity: sha512-x6BDOd7dyo3PFLY3I9/HJ25X/6OurhGXk2/B9gOZNPF7XDVjeBK4k01lQE5uvDpbuheErh91qYuE1E2OEjK3Rw==}
+
+  '@xterm/addon-fit@0.10.0':
+    resolution: {integrity: sha512-UFYkDm4HUahf2lnEyHvio51TNGiLK66mqP2JoATy7hRZeXaGMRDr00JiSF7m63vR5WKATF605yEggJKsw0JpMQ==}
+    peerDependencies:
+      '@xterm/xterm': ^5.0.0
+
+  '@xterm/xterm@5.5.0':
+    resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -2043,6 +2073,10 @@ packages:
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
+
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
 
   bun-types@1.3.14:
     resolution: {integrity: sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ==}
@@ -2594,6 +2628,10 @@ packages:
 
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
+
+  happy-dom@20.14.5:
+    resolution: {integrity: sha512-x/RzkpWO40bTjIoT30iQtt64FLLmH/iRcUCN2X//bLx7H3ifkdfPXyqsro/OYtqzIAhiLMMA7mmiOR9C3NOKjQ==}
+    engines: {node: '>=20.0.0'}
 
   has-symbols@1.1.0:
     resolution: {integrity: sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==}
@@ -3599,6 +3637,10 @@ packages:
     engines: {node: '>=18'}
     deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   whatwg-mimetype@4.0.0:
     resolution: {integrity: sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==}
     engines: {node: '>=18'}
@@ -3615,6 +3657,18 @@ packages:
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
+
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
 
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
@@ -3873,6 +3927,14 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@happy-dom/global-registrator@20.14.5':
+    dependencies:
+      '@types/node': 22.20.1
+      happy-dom: 20.14.5
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@hono/node-server@2.1.0(hono@4.13.1)':
     dependencies:
@@ -5100,6 +5162,12 @@ snapshots:
 
   '@types/unist@3.0.3': {}
 
+  '@types/whatwg-mimetype@3.0.2': {}
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 22.20.1
+
   '@ungap/structured-clone@1.3.3': {}
 
   '@upsetjs/venn.js@2.0.0':
@@ -5161,6 +5229,12 @@ snapshots:
       loupe: 3.2.1
       tinyrainbow: 2.0.0
 
+  '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0)':
+    dependencies:
+      '@xterm/xterm': 5.5.0
+
+  '@xterm/xterm@5.5.0': {}
+
   accepts@2.0.0:
     dependencies:
       mime-types: 3.0.2
@@ -5216,6 +5290,10 @@ snapshots:
 
   buffer-from@1.1.2:
     optional: true
+
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 22.20.1
 
   bun-types@1.3.14:
     dependencies:
@@ -5816,6 +5894,19 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   hachure-fill@0.5.2: {}
+
+  happy-dom@20.14.5:
+    dependencies:
+      '@types/node': 22.20.1
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.1
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   has-symbols@1.1.0: {}
 
@@ -7021,7 +7112,7 @@ snapshots:
       lightningcss: 1.32.0
       terser: 5.49.2
 
-  vitest@3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2):
+  vitest@3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(happy-dom@20.14.5)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.2):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7
@@ -7049,6 +7140,7 @@ snapshots:
     optionalDependencies:
       '@types/debug': 4.1.13
       '@types/node': 22.20.1
+      happy-dom: 20.14.5
     transitivePeerDependencies:
       - jiti
       - less
@@ -7069,6 +7161,8 @@ snapshots:
     dependencies:
       iconv-lite: 0.6.3
 
+  whatwg-mimetype@3.0.0: {}
+
   whatwg-mimetype@4.0.0: {}
 
   which@2.0.2:
@@ -7081,6 +7175,8 @@ snapshots:
       stackback: 0.0.2
 
   wrappy@1.0.2: {}
+
+  ws@8.21.3: {}
 
   yallist@3.1.1: {}
 

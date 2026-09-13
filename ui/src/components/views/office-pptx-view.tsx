@@ -76,12 +76,16 @@ export default function OfficePptxView() {
             </Badge>
           )}
         </div>
+        {/* P55.10 — never a fabricated slide position in the shell: an unopened
+            deck reads as unopened (the 3 / 12 fixture is the preview only). */}
         <span className="font-mono text-[10px] text-muted-foreground">
           {payload
             ? payload.slides.length > 0
               ? `Slide ${Math.min(current + 1, payload.slides.length)} / ${payload.slides.length}`
               : 'Empty deck'
-            : 'Slide 3 / 12'}
+            : inTauri()
+              ? 'No presentation open'
+              : 'Slide 3 / 12'}
         </span>
       </header>
 
@@ -176,6 +180,34 @@ export default function OfficePptxView() {
             </div>
             )}
           </div>
+
+          {/* P55.10 — slide text edits are agent-mediated: this hands the exact
+              slide part + current text to the composer, where the agent applies
+              `office.pptx_patch` under a Guard-2 ticket. The viewer itself stays
+              read-only, so it never implies a local slide editor. */}
+          {payload && payload.slides[current] && (
+            <div className="mt-2">
+              <button
+                disabled={locked}
+                title={
+                  locked
+                    ? 'Read-only while the agent is running'
+                    : 'Ask the agent to edit this slide (office.pptx_patch, Guard-2 ticketed)'
+                }
+                onClick={() => {
+                  const st = useAppStore.getState()
+                  const slide = payload.slides[current]
+                  st.setComposerValue(
+                    `Edit the open presentation ${payload.path} — slide part ${slide.part}: `,
+                  )
+                  st.setCenterScreen('chat')
+                }}
+                className="rounded border border-dashed border-border px-2 py-1 font-mono text-[10px] text-orange-300 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Ask agent to edit this slide
+              </button>
+            </div>
+          )}
 
           {(() => {
             // P50.3.7 — resolve notes by slide number like the sidebar does;

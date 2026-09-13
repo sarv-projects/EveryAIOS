@@ -21,6 +21,13 @@ import AgentModelPicker from './agent-model-picker'
 import PendingQueueChips from './pending-queue-chips'
 import { sendUserMessage } from '@/lib/bridge'
 import { getModelsForAgent } from '@/lib/agents'
+import { readPref } from '@/lib/ui-prefs'
+import {
+  INBUILT_SLASH_COMMANDS,
+  SLASH_DISABLED_KEY,
+  disabledSlashSet,
+  enabledSlashCommands,
+} from '@/lib/slash-commands'
 
 /** v3.57 Work Mode — WHAT. Code/browser/Office/terminal are capabilities inside Build. */
 const WORK_MODES: { id: ChatMode; emoji: string; label: string; hint: string }[] = [
@@ -30,15 +37,11 @@ const WORK_MODES: { id: ChatMode; emoji: string; label: string; hint: string }[]
   { id: 'research', emoji: '🔎', label: 'Research', hint: 'Investigate and cite — read-only, then you can switch to Build' },
 ]
 
-const SLASH_COMMANDS = [
-  { cmd: '/help', desc: 'Show all commands' },
-  { cmd: '/mode', desc: 'Cycle work mode (Auto · Plan · Build · Research)' },
-  { cmd: '/model', desc: 'Switch underlying model' },
-  { cmd: '/undo', desc: 'Roll back last turn' },
-  { cmd: '/compact', desc: 'Compact older turns (keeps recent tail + marker)' },
-  { cmd: '/clear', desc: 'Clear session messages' },
-  { cmd: '/export', desc: 'Export session transcript' },
-]
+// P58.4 — the inbuilt slash table has one owner (`@/lib/slash-commands`);
+// Settings → Commands renders the same table, so the advertised list can never
+// drift from the dispatcher below. Commands the user switched off are not
+// intercepted (the text falls through to the model like any unknown `/word`).
+const SLASH_COMMANDS = INBUILT_SLASH_COMMANDS
 
 const MACROS: { cmd: string; desc: string; expand: string }[] = [
   { cmd: '!deploy', desc: 'Append the prod deploy checklist instruction', expand: '(follow the production deploy checklist: verify, stage, confirm before each irreversible step)' },
@@ -274,9 +277,11 @@ export default function ChatComposer({ budget, centered }: Props) {
           items: fuzzyRank(q, live, (c) => c.cmd).map((c) => ({ ...c, color: 'text-emerald-300' })),
         }
       }
+      const enabled = enabledSlashCommands(readPref<string[]>(SLASH_DISABLED_KEY, []))
+      if (enabled.length === 0) return null
       return {
         title: 'Slash commands',
-        items: fuzzyRank(q, SLASH_COMMANDS, (c) => c.cmd)
+        items: fuzzyRank(q, enabled, (c) => c.cmd)
           .map((c) => ({ ...c, color: 'text-orange-300' })),
       }
     }
@@ -350,6 +355,11 @@ export default function ChatComposer({ budget, centered }: Props) {
     if (externalPinned) return false
     const [head, ...rest] = text.trim().split(/\s+/)
     const arg = rest.join(' ')
+    // P58.4 — Settings → Commands drives the inbuilt intercept: a command the
+    // user switched off is no longer claimed here, so it flows to the model as
+    // ordinary text instead of silently doing something the UI no longer lists.
+    const off = disabledSlashSet(readPref<string[]>(SLASH_DISABLED_KEY, []))
+    if (off.has(head)) return false
     switch (head) {
       case '/help':
         setComposerValue('/')

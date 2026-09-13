@@ -37,7 +37,9 @@ mod oauth_cmds;
 mod office_cmds;
 mod openai_cmds;
 mod replay_cmds;
+// P55.8 — the SearXNG endpoint config + searx.space instance feed surface.
 mod scheduler_cmds;
+mod search_cmds;
 mod shell_cmds;
 mod skills_cmds;
 mod state;
@@ -727,7 +729,7 @@ pub fn run() {
             browser: Mutex::new(None),
             shells: Mutex::new(std::collections::HashMap::new()),
             mcp_servers: Mutex::new(mcp_cmds::load_attached_servers()),
-            mcp_live: Mutex::new(std::collections::HashMap::new()),
+            mcp_live: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_remote_flows: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_remote_tokens: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_pending_calls: Mutex::new(std::collections::HashMap::new()),

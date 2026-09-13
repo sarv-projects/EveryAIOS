@@ -16,13 +16,22 @@ export interface DesktopCapabilities {
   uia_tree: boolean
   invoke_set_value: boolean
   send_input: boolean
+  /** True when coordinate clicks can be delivered without moving the user's pointer. */
+  background_input: boolean
   ocr: boolean
   window_list: boolean
   launch_app: boolean
 }
+export interface DesktopReadiness {
+  state: string
+  detail: string
+  usable: boolean
+}
 export interface DesktopStatus {
   attached: boolean
   reason?: string | null
+  interactionDefault?: 'background' | 'foreground'
+  readiness?: DesktopReadiness
   capabilities?: DesktopCapabilities
 }
 export interface DesktopWindow {
@@ -34,11 +43,16 @@ export interface DesktopWindow {
   width: number
   height: number
 }
-export type DesktopActKind = 'click' | 'clickByName' | 'type' | 'setValue'
+export type DesktopActKind = 'click' | 'clickByName' | 'type' | 'setValue' | 'launch'
 
 export async function desktopStatus(): Promise<DesktopStatus> {
   if (!inTauri()) return { attached: false, reason: 'requires desktop shell' }
   return nativeCall('desktop status', () => invoke<DesktopStatus>('desktop_status'))
+}
+
+export async function desktopAttach(): Promise<DesktopStatus> {
+  if (!inTauri()) return { attached: false, reason: 'requires desktop shell' }
+  return nativeCall('desktop attach', () => invoke<DesktopStatus>('desktop_attach'))
 }
 
 export async function desktopWindows(): Promise<DesktopWindow[]> {

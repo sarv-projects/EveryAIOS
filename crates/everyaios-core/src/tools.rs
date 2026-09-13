@@ -809,7 +809,15 @@ impl ToolService {
             connector: None,
             capabilities: None,
             external: Vec::new(),
-            search: everyaios_search::G8Cascade::default(),
+            // P55.8 — local-first (your own SearXNG, then the DDG fallback),
+            // plus any public instances the user explicitly opted into in
+            // Settings → Search.
+            search: everyaios_search::G8Cascade::new(
+                std::time::Duration::from_secs(300),
+                crate::search_config::search_endpoints_from_config(),
+                3,
+                std::time::Duration::from_secs(60),
+            ),
             search_transport: Arc::new(UreqSearchTransport),
         }
     }
@@ -865,10 +873,49 @@ impl ToolService {
         });
     }
 
+    /// P55.11 — the whole attach reconcile in one step: register the
+    /// discovered tools as `External`-family entries (native precedence), then
+    /// bind their dispatcher so `tool/exec` can actually call them. Returns the
+    /// ids that were registered (an id already owned by a native tool is
+    /// skipped and deliberately not reported as callable).
+    pub fn attach_external_server(
+        &mut self,
+        label: &str,
+        tools: &[ExternalTool],
+        backend: Arc<dyn ExternalToolBackend>,
+    ) -> Vec<String> {
+        let names = self.registry.register_external(label, tools);
+        self.attach_external(label, names.clone(), backend);
+        names
+    }
+
+    /// P55.11 — the external tools currently callable through this service.
+    /// This is the live registry (the same catalog `tool/list` serves), not a
+    /// separate side-table, so what the UI reports is what the agent can call.
+    pub fn external_tools(&self) -> Vec<&RegisteredTool> {
+        self.registry
+            .list()
+            .iter()
+            .filter(|t| t.family == ToolFamily::External)
+            .collect()
+    }
+
     /// Inject a search transport (tests; production uses [`UreqSearchTransport`]).
     pub fn with_search_transport(mut self, t: Arc<dyn everyaios_search::SearchTransport>) -> Self {
         self.search_transport = t;
         self
+    }
+
+    /// P55.8 — the SearXNG endpoints the G8 cascade will try, in order.
+    pub fn search_endpoints(&self) -> Vec<String> {
+        self.search.endpoints().to_vec()
+    }
+
+    /// P55.8 — replace the cascade endpoint list. Called with the resolved
+    /// config (local-first, plus any public instances the user opted into); the
+    /// cascade keeps its TTL/threshold/cooldown and re-routes without a restart.
+    pub fn set_search_endpoints(&mut self, endpoints: Vec<String>) {
+        self.search.set_endpoints(endpoints);
     }
 
     fn snapshot_file(&mut self, session_id: &str, path: &Path) {

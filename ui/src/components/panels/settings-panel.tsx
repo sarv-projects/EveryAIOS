@@ -27,6 +27,7 @@ import {
   Palette,
   Plug,
   ScanSearch,
+  Search,
   Settings as SettingsIcon,
   RefreshCw,
   Shield,
@@ -39,6 +40,7 @@ import {
   Store,
   Terminal,
   Users,
+  Monitor,
   Wrench,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -66,8 +68,9 @@ import {
   BetaSection,
   BrowserNetworkSection,
   ChatAutoRunSection,
-  CloudEnvSection,
   CommandsSection,
+  ComputerUseSection,
+  SearchEnginesSection,
   ExpertsSection,
   SubagentsSection,
   ToolLogSection,
@@ -117,8 +120,14 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'discover', label: 'Discover', icon: Compass, keywords: ['model', 'install', 'registry'] },
       { id: 'local', label: 'Local models', icon: Cpu, keywords: ['ollama', 'llamafile', 'gguf', 'vram', 'gpu', 'quant'] },
       { id: 'capabilities', label: 'Capabilities', icon: ShieldQuestion, keywords: ['matrix', 'tools', 'computer use'] },
+      // P55.8 — the G8 search endpoint surface (local SearXNG first, the
+      // searx.space public opt-in second).
+      { id: 'search', label: 'Search', icon: Search, keywords: ['searx', 'searxng', 'ddg', 'duckduckgo', 'web search', 'instances', 'public'] },
       { id: 'apikeys', label: 'Providers / BYOK', icon: KeyRound, keywords: ['key', 'api', 'provider', 'openai', 'anthropic', 'nvidia', 'token', 'billing', 'credential'] },
-      { id: 'experts', label: 'Experts', icon: Users, keywords: ['persona', 'role', 'built-in'] },
+      // P58.3 — the two rows are now named for what they are: inbuilt persona
+      // roles vs installed agent CLIs. They were both "Experts"-flavoured, which
+      // duplicated the B3 delegation story.
+      { id: 'experts', label: 'Built-in roles', icon: Users, keywords: ['persona', 'role', 'built-in', 'researcher', 'reviewer'] },
       { id: 'subagents', label: 'Subagents', icon: Users, keywords: ['delegate', 'installed', 'discover', 'cli'] },
       { id: 'tool-log', label: 'Tool log', icon: Activity, keywords: ['acp', 'observability', 'metrics', 'tools'] },
       { id: 'chat', label: 'Chat & Auto-run', icon: MessageSquare, keywords: ['composer', 'autoreply', 'auto run', 'behaviors'] },
@@ -142,7 +151,10 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'runtime', label: 'Session runtime', icon: Layers, keywords: ['session', 'process', 'sidecar', 'logs'] },
       { id: 'worktree', label: 'Worktree', icon: FolderTree, keywords: ['workspace', 'folder', 'project', 'repo'] },
       { id: 'resources', label: 'Resources', icon: HardDrive, keywords: ['storage', 'disk', 'index', 'scan'] },
-      { id: 'cloud', label: 'Cloud env', icon: Cloud, keywords: ['environment', 'container', 'vm'] },
+      // P55.9 — the dead "Cloud env" docker dropdown is gone; user-owned node
+      // attach lives with Sync. P58.3 — Computer use gets the nav row its
+      // specification already had.
+      { id: 'computer', label: 'Computer use', icon: Monitor, keywords: ['desktop', 'screen', 'click', 'see', 'driver', 'accessibility', 'at-spi', 'uia'] },
     ],
   },
   {
@@ -193,6 +205,10 @@ function SectionBody({ section }: { section: SectionId }) {
       return <ProvidersSection />
     case 'experts':
       return <ExpertsSection />
+    case 'computer':
+      return <ComputerUseSection />
+    case 'search':
+      return <SearchEnginesSection />
     case 'subagents':
       return <SubagentsSection />
     case 'tool-log':
@@ -226,7 +242,10 @@ function SectionBody({ section }: { section: SectionId }) {
     case 'memory':
       return <MemoryPanel />
     case 'cloud':
-      return <CloudEnvSection />
+      // P55.9 — the docker-package mock is gone. A stale deep link (or an
+      // older pref) lands on the real H33 attach surface instead of a dead
+      // dropdown, and the nav row no longer advertises a fake environment.
+      return <SyncSection />
     case 'usage':
       // P55.3 — live spend/tokens from usage_snapshot + session_totals, not
       // interaction telemetry.

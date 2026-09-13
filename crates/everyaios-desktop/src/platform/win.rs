@@ -4,6 +4,17 @@
 //!   window/app list via EnumWindows.
 //! - **Act:** UIA Invoke/SetValue **first**; SendInput fallback for
 //!   click/type/scroll/drag (winappCli / deploymenttheory order).
+//!   **P57.3:** activation (`SetForegroundWindow` + `ShowWindow`) and
+//!   focus-stealing launches (`SW_SHOWNOACTIVATE` vs `SW_SHOWNORMAL`) are
+//!   decided by the policy's interaction default — the Background path never
+//!   calls `SetForegroundWindow`.
+//!   **P57.4:** a *coordinate* click under the Background default also refuses
+//!   SendInput. It is delivered either as a UIA `InvokePattern` on the element
+//!   at the hit-test point or as a `WM_LBUTTONDOWN`/`WM_LBUTTONUP` message to
+//!   the deepest child under the point — neither warps the cursor nor takes
+//!   focus. If no element is invokable and the app ignores the message, the
+//!   action fails honestly instead of silently moving the user's pointer.
+//!   **P57.1:** launch goes through `ShellExecuteExW` on the canonical path.
 //! - **See:** PrintWindow (PW_RENDERFULLCONTENT) → screen-DC BitBlt fallback.
 //!   Windows.Graphics.Capture (WGC, captures occluded windows) is the
 //!   documented follow-on: WinRT interop is a seam here (see `capabilities()`).
@@ -12,12 +23,13 @@
 //! never linked on non-Windows targets.
 
 use windows::core::Interface;
-use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetCurrentObject,
     GetDC, GetDIBits, GetObjectW, GetWindowDC, ReleaseDC, SelectObject, BITMAP, BITMAPINFO,
     BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, OBJ_BITMAP, SRCCOPY,
 };
+// `ScreenToClient` is declared in the Gdi module by the windows-rs bindings.
 use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
@@ -35,11 +47,23 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, MAPVK_VK_TO_VSC,
     MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_WHEEL, VIRTUAL_KEY,
 };
+use windows::Win32::UI::Shell::{
+    ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId,
-    IsWindowVisible, SetCursorPos, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    ChildWindowFromPointEx, EnumWindows, GetClassNameW, GetWindowRect, GetWindowTextW,
+    GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SetCursorPos, SetForegroundWindow,
+    ShowWindow, CWP_SKIPINVISIBLE, SW_RESTORE, SW_SHOWNOACTIVATE, SW_SHOWNORMAL, WM_LBUTTONDOWN,
+    WM_LBUTTONUP,
 };
 
+/// `MK_LBUTTON` — the modifier key state a mouse-down message carries. The
+/// constant lives behind the `Win32_System_SystemServices` feature; the value is
+/// fixed by the Win32 API (1), so it is spelled once here with its name.
+const MK_LBUTTON: usize = 0x0001;
+
+use crate::launch;
+use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadNode, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
 use crate::DesktopError;
 
@@ -47,6 +71,13 @@ pub struct WinBackend;
 
 fn hwnd_of(window: &WindowInfo) -> HWND {
     HWND(window.id as usize as *mut core::ffi::c_void)
+}
+
+/// `ActKind::Click` is **window-relative** on every platform (the X11 backend
+/// adds the window origin; the live E2E test asserts it). UIA hit-testing and
+/// `SetCursorPos` both want screen coordinates, so translate once, here.
+fn screen_point(window: &WindowInfo, x: i32, y: i32) -> (i32, i32) {
+    (window.x + x, window.y + y)
 }
 
 fn control_type_name(id: i32) -> String {
@@ -212,8 +243,109 @@ impl WinUia {
             }
         }
         let (x, y) = node.center();
+        // `node.center()` is already in screen coordinates (UIA bounding rects
+        // are screen-space), so this is the raw pointer painter — not the
+        // window-relative entry point.
         self.send_click(x, y)
     }
+
+    /// P57.4 — activate the control **at the point** via UIA, without moving the
+    /// cursor. Returns `Ok(false)` when there is no invokable element there (a
+    /// canvas, a game surface, an occluding window) — a normal answer that lets
+    /// the caller fall back to a message click.
+    pub fn invoke_at(&self, window: &WindowInfo, x: i32, y: i32) -> Result<bool, DesktopError> {
+        let (sx, sy) = screen_point(window, x, y);
+        let point = POINT { x: sx, y: sy };
+        let target = hwnd_of(window);
+        let mut target_pid = 0u32;
+        unsafe {
+            GetWindowThreadProcessId(target, Some(&mut target_pid));
+        }
+        let element = match unsafe { self.automation.ElementFromPoint(point) } {
+            Ok(e) if !e.as_raw().is_null() => e,
+            _ => return Ok(false),
+        };
+        // The hit-test is a screen-space lookup, so an overlapping window can
+        // answer for a point inside our target. Only invoke when the element
+        // really belongs to the window we were asked to act on.
+        let same_process = unsafe { element.CurrentProcessId() }
+            .map(|pid| pid as u32 == target_pid && target_pid != 0)
+            .unwrap_or(false);
+        if !same_process {
+            return Ok(false);
+        }
+        let pattern = match unsafe { element.GetCurrentPattern(UIA_InvokePatternId) } {
+            Ok(p) => p,
+            Err(_) => return Ok(false),
+        };
+        let invoke = match pattern.cast::<IUIAutomationInvokePattern>() {
+            Ok(i) if !i.as_raw().is_null() => i,
+            _ => return Ok(false),
+        };
+        unsafe {
+            invoke
+                .Invoke()
+                .map_err(|e| DesktopError::Platform(format!("UIA Invoke at ({sx},{sy}): {e}")))?;
+        }
+        Ok(true)
+    }
+}
+
+/// P57.4 — a click delivered as a window message, which no component of Win32
+/// turns into pointer motion: no `SetCursorPos`, no `SendInput`, no focus.
+///
+/// The target is the deepest child of the requested window under the point
+/// (children are separate HWNDs and route their own input), and the search never
+/// leaves that window, so an overlapping app cannot receive the click.
+fn post_click(window: &WindowInfo, x: i32, y: i32) -> Result<(), DesktopError> {
+    let (sx, sy) = screen_point(window, x, y);
+    let mut target = hwnd_of(window);
+    let mut client = POINT { x: sx, y: sy };
+    for _ in 0..8 {
+        let mut rect: RECT = RECT::default();
+        unsafe {
+            GetWindowRect(target, &mut rect)
+                .map_err(|e| DesktopError::Platform(format!("GetWindowRect: {e}")))?;
+        }
+        client = POINT {
+            x: sx - rect.left,
+            y: sy - rect.top,
+        };
+        let child = unsafe { ChildWindowFromPointEx(target, client, CWP_SKIPINVISIBLE) };
+        if child.is_invalid() || child == target {
+            break;
+        }
+        target = child;
+    }
+    let lparam = LPARAM(((client.y as isize) << 16) | (client.x as isize & 0xffff));
+    unsafe {
+        PostMessageW(target, WM_LBUTTONDOWN, WPARAM(MK_LBUTTON), lparam)
+            .map_err(|e| DesktopError::Platform(format!("PostMessage WM_LBUTTONDOWN: {e}")))?;
+        PostMessageW(target, WM_LBUTTONUP, WPARAM(0), lparam)
+            .map_err(|e| DesktopError::Platform(format!("PostMessage WM_LBUTTONUP: {e}")))?;
+    }
+    Ok(())
+}
+
+/// P57.4 — the Background coordinate-click path: UIA invoke first (a real
+/// activation of the control under the point), message click as the fallback.
+/// Both leave the cursor and the keyboard focus alone; when neither can be
+/// delivered the action refuses with the escalation the user needs, rather than
+/// quietly warping the pointer.
+fn background_click(
+    window: &WindowInfo,
+    uia: Option<&WinUia>,
+    x: i32,
+    y: i32,
+) -> Result<(), DesktopError> {
+    let invoked = match uia {
+        Some(u) => u.invoke_at(window, x, y)?,
+        None => WinUia::init()?.invoke_at(window, x, y)?,
+    };
+    if invoked {
+        return Ok(());
+    }
+    post_click(window, x, y)
 }
 
 impl WinBackend {
@@ -461,8 +593,47 @@ fn press_vk(vk: u16) -> Result<(), DesktopError> {
     Ok(())
 }
 
+/// P57.1 — launch through the shell, with the show-state the interaction
+/// default requires: `SW_SHOWNOACTIVATE` on the Background path so the program
+/// appears without becoming the foreground window (the Cua contract),
+/// `SW_SHOWNORMAL` only when the user switched to Foreground. `lpFile` is the
+/// canonical path (a bare name stays a Shell fallback, which is what the spec
+/// allows for a name with no resolved path).
+fn shell_launch(target: &str, mode: InteractionMode) -> Result<(), DesktopError> {
+    let file: Vec<u16> = target.encode_utf16().chain(std::iter::once(0)).collect();
+    let verb: Vec<u16> = "open".encode_utf16().chain(std::iter::once(0)).collect();
+    let mut info = SHELLEXECUTEINFOW {
+        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+        fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI,
+        lpVerb: windows::core::PCWSTR(verb.as_ptr()),
+        lpFile: windows::core::PCWSTR(file.as_ptr()),
+        nShow: if mode == InteractionMode::Background {
+            SW_SHOWNOACTIVATE.0 as i32
+        } else {
+            SW_SHOWNORMAL.0 as i32
+        },
+        ..Default::default()
+    };
+    unsafe {
+        ShellExecuteExW(&mut info)
+            .map_err(|e| DesktopError::Platform(format!("ShellExecuteEx {target}: {e}")))?;
+    }
+    Ok(())
+}
+
 /// Act dispatch: UIA first (invoke/set-value), SendInput for the rest.
-pub fn act(window: &WindowInfo, act: &ActKind, uia: Option<&WinUia>) -> Result<(), DesktopError> {
+pub fn act(
+    window: &WindowInfo,
+    act: &ActKind,
+    uia: Option<&WinUia>,
+    mode: InteractionMode,
+) -> Result<(), DesktopError> {
+    // P57.1 — resolve the launch target before anything else so a bad path is
+    // refused without touching the shell.
+    if let ActKind::LaunchApp { path, app } = act {
+        let target = launch::resolve_target(path.as_deref(), app, &launch::path_dirs())?;
+        return shell_launch(&target.to_string_lossy(), mode);
+    }
     match act {
         ActKind::ClickByName { name } => {
             let u = match uia {
@@ -503,7 +674,18 @@ pub fn act(window: &WindowInfo, act: &ActKind, uia: Option<&WinUia>) -> Result<(
             u.send_click(x, y)?;
             send_input_type(value)
         }
-        ActKind::Click { x, y } => WinUia::init()?.send_click(*x, *y),
+        ActKind::Click { x, y } => {
+            // P57.4 — Background never synthesizes global input. The click is a
+            // UIA invoke at the hit-test point, or a window message.
+            if mode == InteractionMode::Background {
+                return background_click(window, uia, *x, *y);
+            }
+            let (sx, sy) = screen_point(window, *x, *y);
+            match uia {
+                Some(u) => u.send_click(sx, sy),
+                None => WinUia::init()?.send_click(sx, sy),
+            }
+        }
         ActKind::Type { text } => send_input_type(text),
         ActKind::Press { key } => {
             let vk = match key.to_ascii_lowercase().as_str() {
@@ -533,20 +715,40 @@ pub fn act(window: &WindowInfo, act: &ActKind, uia: Option<&WinUia>) -> Result<(
             press_vk(vk)
         }
         ActKind::Scroll { x, y, delta } => unsafe {
-            SetCursorPos(*x, *y)
+            // P57.4 — scrolling is pointer motion + a wheel event, so it is a
+            // foreground escalation under the background contract.
+            if mode == InteractionMode::Background {
+                return Err(DesktopError::Unsupported(
+                    "background contract: scrolling moves the real pointer — switch the \
+                     interaction default to Foreground"
+                        .into(),
+                ));
+            }
+            let (sx, sy) = screen_point(window, *x, *y);
+            SetCursorPos(sx, sy)
                 .map_err(|e| DesktopError::Platform(format!("SetCursorPos: {e}")))?;
             let amount = (*delta).clamp(-120, 120);
             mouse_event(MOUSEEVENTF_WHEEL, 0, 0, amount, 0);
             Ok(())
         },
         ActKind::Drag { from, to } => unsafe {
-            SetCursorPos(from.0, from.1)
+            // P57.4 — a drag is pointer motion by definition.
+            if mode == InteractionMode::Background {
+                return Err(DesktopError::Unsupported(
+                    "background contract: dragging moves the real pointer — switch the \
+                     interaction default to Foreground"
+                        .into(),
+                ));
+            }
+            let (fx, fy) = screen_point(window, from.0, from.1);
+            let (tx, ty) = screen_point(window, to.0, to.1);
+            SetCursorPos(fx, fy)
                 .map_err(|e| DesktopError::Platform(format!("SetCursorPos: {e}")))?;
             mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
             for i in 1..=8 {
                 let t = i as f64 / 8.0;
-                let x = (from.0 as f64 + (to.0 - from.0) as f64 * t) as i32;
-                let y = (from.1 as f64 + (to.1 - from.1) as f64 * t) as i32;
+                let x = (fx as f64 + (tx - fx) as f64 * t) as i32;
+                let y = (fy as f64 + (ty - fy) as f64 * t) as i32;
                 if SetCursorPos(x, y).is_err() {
                     break;
                 }
@@ -554,20 +756,29 @@ pub fn act(window: &WindowInfo, act: &ActKind, uia: Option<&WinUia>) -> Result<(
             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
             Ok(())
         },
-        ActKind::ActivateWindow { window_id } => unsafe {
-            let _ = SetForegroundWindow(HWND(*window_id as usize as *mut core::ffi::c_void));
-            let _ = ShowWindow(
-                HWND(*window_id as usize as *mut core::ffi::c_void),
-                SW_RESTORE,
-            );
-            Ok(())
-        },
-        ActKind::LaunchApp { app } => {
-            let _ = std::process::Command::new(app)
-                .spawn()
-                .map_err(|e| DesktopError::Platform(format!("launch {app}: {e}")))?;
+        ActKind::ActivateWindow { window_id } => {
+            // P57.3 — `SetForegroundWindow` + `SW_RESTORE` is exactly the raise
+            // the Background contract forbids. It happens only on the
+            // Foreground path (the engine refuses earlier for the policy path;
+            // this is the backend's own floor).
+            if mode == InteractionMode::Background {
+                return Err(DesktopError::Unsupported(
+                    "background contract: SetForegroundWindow/ShowWindow is a foreground \
+                     escalation — switch the interaction default to Foreground"
+                        .into(),
+                ));
+            }
+            unsafe {
+                let hwnd = HWND(*window_id as usize as *mut core::ffi::c_void);
+                let _ = SetForegroundWindow(hwnd);
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+            }
             Ok(())
         }
+        // Handled above (before the UIA/SendInput paths).
+        ActKind::LaunchApp { .. } => Err(DesktopError::Platform(
+            "launch was not handled on the pre-input path".into(),
+        )),
     }
 }
 

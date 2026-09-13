@@ -849,6 +849,8 @@ export const SETTINGS_SECTION_IDS = [
   'chat',
   'permissions',
   'browser',
+  // P55.8 — Settings → Search (SearXNG endpoints + the searx.space feed).
+  'search',
   'indexing',
   'mcp',
   'marketplace',
@@ -858,6 +860,10 @@ export const SETTINGS_SECTION_IDS = [
   'worktree',
   'rules',
   'memory',
+  // P58.3 — Settings → Computer use got its specified nav row.
+  'computer',
+  // P55.9 — `cloud` is kept as an accepted deep-link id; it now routes to the
+  // real H33 node attach on the Sync surface (the docker-package mock is gone).
   'cloud',
   'import',
   'usage',

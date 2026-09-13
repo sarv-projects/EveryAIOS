@@ -10,11 +10,14 @@ import {
   browserNavigate,
   browserSnapshot,
   browserRead,
+  browserReadUrl,
   browserClick,
   browserType,
   browserStop,
   browserStatus,
+  tierLabel,
   type BrowserStatus,
+  type TieredRead,
 } from '@/lib/browser'
 import { SkeletonBlock } from '@/components/ui/loading-state'
 import { useAppStore } from '@/lib/store'
@@ -42,6 +45,9 @@ export default function BrowseView() {
   const [typeText, setTypeText] = useState('')
   const [history, setHistory] = useState<string[]>([])
   const [actBusy, setActBusy] = useState(false)
+  // P55.7 — which tier served the last text read (null while attached, because
+  // the attached CDP session is the engine in that case).
+  const [tiered, setTiered] = useState<TieredRead | null>(null)
   const browserUrl = useAppStore((s) => s.browserUrl)
 
   // P33.6 — Google Docs/Sheets read path: a URL routed from an office surface
@@ -86,10 +92,23 @@ export default function BrowseView() {
       setStatus(st)
       setBrowserAttached(!!st.attached)
       if (!st.attached) {
+        // P55.7 — a text read does not need the interactive Chrome session:
+        // run the tiered stack (static → light engine → Chrome) and label the
+        // tier that actually served it. The Snapshot tab still needs the CDP
+        // session, because refs only exist against a live page.
+        if (activeTab === 'read') {
+          const out = await browserReadUrl(url, false)
+          setTiered(out)
+          setSnapshot(out.text)
+          setLiveUrl(out.url)
+          return
+        }
+        setTiered(null)
         setSnapshot('')
         setLiveUrl(null)
         return
       }
+      setTiered(null)
       if (activeTab === 'snapshot') {
         const snap = await browserSnapshot()
         setSnapshot(snap.text)
@@ -216,6 +235,7 @@ export default function BrowseView() {
     setBrowserAttached(false)
     setSnapshot('')
     setLiveUrl(null)
+    setTiered(null)
     setHistory([])
     setInputRef('')
     setTypeText('')
@@ -322,7 +342,9 @@ export default function BrowseView() {
             <button
               key={t}
               onClick={() => switchTab(t)}
-              disabled={!status.attached || loading}
+              // P55.7 — the Markdown tab works detached (tiered read); only
+              // the ref-bearing Snapshot tab needs the live CDP session.
+              disabled={loading || (t === 'snapshot' && !status.attached)}
               className={cn(
                 'rounded px-2 py-0.5 text-[10px] font-medium disabled:opacity-40',
                 tab === t ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
@@ -335,10 +357,21 @@ export default function BrowseView() {
         {status.attached ? (
           <Badge variant="outline" className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300">
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" /> CDP attached
+            {status.engine ? ` · ${status.engine}` : ''}
           </Badge>
         ) : (
           <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
             detached
+          </Badge>
+        )}
+        {tiered && (
+          <Badge
+            variant="outline"
+            className="gap-1 border-sky-500/40 bg-sky-500/10 text-[10px] text-sky-300"
+            title={`read source: ${tiered.source}${tiered.truncated ? ' · truncated' : ''}`}
+          >
+            read via {tierLabel(tiered.tier)}
+            {tiered.truncated ? ' · truncated' : ''}
           </Badge>
         )}
         {liveUrl && (
@@ -423,12 +456,13 @@ export default function BrowseView() {
         {loading && (
           <div className="p-2"><SkeletonBlock lines={8} /></div>
         )}
-        {!status.attached && !loading && (
+        {!status.attached && !loading && !snapshot && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
             <RotateCcw className="h-5 w-5 text-muted-foreground/50" />
-            <p className="text-xs text-muted-foreground">
-              Start the browser to browse the live web — snapshots are the real
-              accessibility tree with stable refs.
+            <p className="max-w-sm text-xs text-muted-foreground">
+              Start the browser for interactive snapshots (real accessibility
+              tree with stable refs), or use the Markdown tab to read the page
+              through the tiered engine stack — no browser required.
             </p>
           </div>
         )}
@@ -449,14 +483,16 @@ export default function BrowseView() {
         {/* P58.8 — the pane is text: name it honestly so nobody reads this as a
             rendered page. A pixel/see-pane is the E1 overlay; this view never
             fakes a browser bitmap. */}
-        {status.attached && snapshot && (
+        {snapshot && (!loading || status.attached) && (
           <div className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/50">
-            {tab === 'snapshot'
+            {tab === 'snapshot' && status.attached
               ? 'accessibility tree (text, not a screenshot)'
-              : 'page text as markdown'}
+              : tiered
+                ? `page text as markdown — ${tierLabel(tiered.tier)}`
+                : 'page text as markdown'}
           </div>
         )}
-        {status.attached && snapshot && (
+        {snapshot && (
           <motion.pre
             key={`${tab}-${snapshot.length}`}
             initial={{ opacity: 0 }}

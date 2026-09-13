@@ -17,6 +17,15 @@
 //! - [`CitedReport`] — G cited report generation with confidence metrics.
 //! - [`ParallelFetchCascade`] — the searxng-mcp 4-tier fetch cascade
 //!   (Firecrawl → Crawl4AI → raw → Wayback) with per-page fallback.
+//! - [`searx_space`] — the `searx.space` public-instance feed (P55.8): parse,
+//!   eligibility filter, latency order, cache, and an honest offline fallback.
+
+pub mod searx_space;
+
+pub use searx_space::{
+    parse_instances, FeedError, FeedSource, InstanceFeedTransport, SearxInstance, SearxSpaceFeed,
+    FEED_TTL, INSTANCES_FEED_URL,
+};
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -80,14 +89,20 @@ pub struct G8Cascade {
     cooldown: Duration,
 }
 
+/// The local-first SearXNG endpoint list (P55.8 — one owner: the default
+/// cascade *and* the shell's config resolver both read this, so the local-first
+/// posture cannot drift between them). Public instances are never added here;
+/// they are an explicit opt-in.
+pub const DEFAULT_SEARX_ENDPOINTS: &[&str] = &["http://localhost:8080", "http://localhost:8081"];
+
 impl Default for G8Cascade {
     fn default() -> Self {
         Self::new(
             Duration::from_secs(300),
-            vec![
-                "http://localhost:8080".to_string(),
-                "http://localhost:8081".to_string(),
-            ],
+            DEFAULT_SEARX_ENDPOINTS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             3,
             Duration::from_secs(60),
         )
@@ -108,6 +123,28 @@ impl G8Cascade {
             health: std::sync::Mutex::new(HashMap::new()),
             failure_threshold,
             cooldown,
+        }
+    }
+
+    /// P55.8 — the endpoint list the cascade will try, in order.
+    pub fn endpoints(&self) -> &[String] {
+        &self.endpoints
+    }
+
+    /// P55.8 — replace the endpoint list (P55.8: local SearXNG first, then any
+    /// public instances the user explicitly opted into). Health state for
+    /// endpoints that survived is kept; the result cache is dropped because the
+    /// routing decision it recorded may no longer hold.
+    pub fn set_endpoints(&mut self, endpoints: Vec<String>) {
+        if self.endpoints == endpoints {
+            return;
+        }
+        self.endpoints = endpoints;
+        if let Ok(mut health) = self.health.lock() {
+            health.retain(|endpoint, _| self.endpoints.contains(endpoint));
+        }
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.clear();
         }
     }
 

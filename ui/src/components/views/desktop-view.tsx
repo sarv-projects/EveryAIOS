@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
 import {
-  desktopStatus,
+  desktopAttach,
   desktopWindows,
   desktopRead,
   desktopSee,
@@ -48,7 +48,7 @@ export default function DesktopView() {
     setLoading(true)
     setError(null)
     try {
-      const st = await desktopStatus()
+      const st = await desktopAttach()
       setStatus(st)
       setDesktopAttached(st.attached, st.attached ? null : (st.reason ?? null))
       if (!st.attached) {
@@ -251,8 +251,8 @@ export default function DesktopView() {
               Desktop engine not attached{status.reason ? ` — ${status.reason}` : ''}. It attaches
               lazily on first use and honest-fails on headless / no-display.
               <div className="mt-2">
-                <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={loading} onClick={() => void refresh()}>
-                  {loading ? 'Probing…' : 'Retry attach'}
+              <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={loading} onClick={() => void refresh()}>
+                  {loading ? 'Probing…' : 'Attach and measure'}
                 </Button>
               </div>
             </div>
@@ -263,6 +263,7 @@ export default function DesktopView() {
               {Object.entries({
                 see: caps.see, occluded: caps.see_occluded, tree: caps.uia_tree,
                 invoke: caps.invoke_set_value, input: caps.send_input,
+                backgroundClick: caps.background_input,
                 ocr: caps.ocr, windows: caps.window_list, launch: caps.launch_app,
               }).map(([k, v]) => (
                 <Badge key={k} variant="outline" className={cn('text-[9px]', v ? 'text-emerald-300' : 'text-muted-foreground/50')}>

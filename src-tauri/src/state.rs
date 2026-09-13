@@ -78,7 +78,11 @@ pub struct AppState {
     /// P11.5.8: attached user-supplied MCP servers (rows for the Connectors
     /// panel) + the live child handles (dropping the map kills the child).
     pub mcp_servers: Mutex<std::collections::HashMap<String, McpServerRow>>,
-    pub mcp_live: Mutex<std::collections::HashMap<String, everyaios_mcp::attach::AttachedServer>>,
+    /// Arc-shared so the agent loop's `ExternalToolBackend` (P55.11) can reach
+    /// the same child that answered `tools/list` — one server per row, never a
+    /// second spawn. Dropping the last reference kills the children.
+    pub mcp_live:
+        Arc<Mutex<std::collections::HashMap<String, everyaios_mcp::attach::AttachedServer>>>,
     /// Remote-MCP OAuth 2.1: in-flight PKCE flows (store id → flow) and
     /// connected tokens (store id → bearer). Live in the shell, not the
     /// renderer — the coordinator never sees them.

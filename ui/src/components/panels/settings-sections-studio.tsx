@@ -30,6 +30,23 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
 import { type PermissionMode, usePref } from '@/lib/ui-prefs'
+import {
+  INBUILT_SLASH_COMMANDS,
+  SLASH_DISABLED_KEY,
+  disabledSlashSet,
+} from '@/lib/slash-commands'
+import {
+  addBlockReason,
+  backgroundInputView,
+  interactionCopy,
+  pathTail,
+  pickerOptions,
+  readinessView,
+  sourceLabel,
+  type DesktopInstalledApp,
+  type DesktopPolicy,
+  type DesktopReadiness,
+} from '@/lib/desktop-apps'
 import { Row, SectionShell } from './settings-shared'
 
 function Honest({ children }: { children: React.ReactNode }) {
@@ -696,7 +713,7 @@ export function SubagentsSection() {
   }
   useEffect(load, [])
   return (
-    <SectionShell title="Subagents" desc="Installed agent CLIs the Chief may delegate to, plus EveryAIOS Native (always available); built-in Experts are configured separately.">
+    <SectionShell title="Subagents" desc="Installed agent CLIs the Chief may delegate to, plus EveryAIOS Native (always available). Inbuilt prompt profiles live under Built-in roles.">
       <Honest>B3 delegation is bounded at depth ≤2 and concurrency ≤6. Only installed/discovered CLIs appear here — EveryAIOS Native is always present as the default candidate, and a registry entry with no binary on this machine is never selectable. Enable a row to include it in the delegation mix; the shipped when-to-use text is editable.</Honest>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium">Installed delegation candidates {rows === null ? '…' : `(${rows.length})`}</span>
@@ -785,8 +802,8 @@ export function ExpertsSection() {
       }
     })()
   return (
-    <SectionShell title="Experts / subagents" desc="Built-in roles plus installed agent CLIs the Chief may delegate to.">
-      <Honest>B3 subagents are specified (depth ≤2, concurrency ≤6). Built-in roles toggle below; installed CLIs list with their shipped when-to-use (editable — the Chief reads it at delegate time).</Honest>
+    <SectionShell title="Built-in roles" desc="Inbuilt persona roles the Chief may delegate to. These ship with EveryAIOS and need no install — installed agent CLIs are configured under Subagents.">
+      <Honest>B3 subagents are specified (depth ≤2, concurrency ≤6). A built-in role is a prompt profile inside the native engine, not a separate CLI; installed agent CLIs are listed under Subagents, where each row carries its shipped when-to-use (editable — the Chief reads it at delegate time).</Honest>
       {inTauri() && (
         <div className="space-y-1.5">
           <div className="text-xs font-medium">Installed subagent CLIs {subs === null ? '…' : `(${subs.length})`}</div>
@@ -948,31 +965,43 @@ export function LaunchCliSection() {
 }
 
 export function CommandsSection() {
-  const [draft, setDraft] = useState('')
-  const [cmds, setCmds] = usePref<string[]>('commands.user', ['/help', '/undo', '/export'])
-  const notify = useAppStore((s) => s.notify)
+  // P58.4 — Settings renders the same table the composer executes (one owner,
+  // `@/lib/slash-commands`). The list is a switch per real command, not a free
+  // text field that could advertise a `/name` with no handler.
+  const [disabled, setDisabled] = usePref<string[]>(SLASH_DISABLED_KEY, [])
+  const off = disabledSlashSet(disabled)
+  const toggle = (cmd: string, on: boolean) => {
+    setDisabled(on ? disabled.filter((d) => d !== cmd) : [...disabled, cmd])
+  }
   return (
-    <SectionShell title="Commands" desc="Slash commands in the composer. Tray shortcuts live here too.">
+    <SectionShell
+      title="Commands"
+      desc="The inbuilt slash commands the composer intercepts. While an external agent is Chief, that agent's own advertised commands are used instead."
+    >
       <ul className="divide-y divide-border/40 rounded-md border border-border/50">
-        {cmds.map((c) => (
-          <li key={c} className="flex items-center justify-between px-3 py-1.5 font-mono text-[11px]">
-            {c}
-            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => setCmds(cmds.filter((x) => x !== c))}>
-              <Trash2 className="h-3 w-3" />
-            </Button>
+        {INBUILT_SLASH_COMMANDS.map((c) => (
+          <li key={c.cmd} className="flex items-center justify-between gap-3 px-3 py-2">
+            <div className="min-w-0">
+              <div className={cn('font-mono text-[11px]', off.has(c.cmd) ? 'text-muted-foreground line-through' : 'text-foreground')}>
+                {c.cmd}
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                {c.desc}
+                {c.mutating ? ' · refuses mid-turn' : ''}
+              </div>
+            </div>
+            <Switch
+              checked={!off.has(c.cmd)}
+              onCheckedChange={(v) => toggle(c.cmd, v)}
+              aria-label={`${off.has(c.cmd) ? 'Enable' : 'Disable'} ${c.cmd}`}
+            />
           </li>
         ))}
       </ul>
-      <div className="flex gap-2">
-        <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="/name" className="h-8 font-mono text-xs" />
-        <Button size="sm" className="h-8" onClick={() => {
-          if (!draft.trim()) return
-          setCmds([...cmds, draft.trim()])
-          setDraft('')
-        }}>
-          Add
-        </Button>
-      </div>
+      <Honest>
+        Switching a command off stops the composer intercepting it — the text is then sent to the model like any other message. Neither switch affects an
+        external agent: Claude Code, Codex and friends always use the commands they advertise over ACP.
+      </Honest>
       <Row label="CUE / tray shortcuts" desc="Tab to accept, import, rename">
         <Button
           size="sm"
@@ -1069,30 +1098,554 @@ export function RulesSection() {
   )
 }
 
-export function CloudEnvSection() {
-  const [pkg, setPkg] = usePref('cloud.pkg', 'none')
+// P55.9 — `CloudEnvSection` (a disabled docker-package dropdown) is deleted.
+// The H33 story is a user-owned ExecutionNode attach, which is what Sync
+// already does (`node_attach`): a control-plane address, a confirmed X25519
+// handshake, a ledger reconciliation, and an honest `guardParked` flag. There
+// is no founder image pull to configure, so there is no Cloud env surface.
+
+/** P57.8 — Settings → Computer use. The whole surface: the derived H4 readiness
+ * chip, the interaction default, the allow-list of exact paths, the searchable
+ * installed-app inventory, and **Add by path**. Every control writes the policy
+ * the live Guard-2 preflight enforces (`desktop_policy_*`), so nothing here is
+ * chrome: a row added in this panel changes whether the driver may touch that
+ * app. */
+export function ComputerUseSection() {
+  const [status, setStatus] = useState<{
+    attached: boolean
+    reason?: string | null
+    readiness?: DesktopReadiness
+    interactionDefault?: string
+    capabilities?: {
+      background_input?: boolean
+    }
+  } | null>(null)
+  const [policy, setPolicy] = useState<DesktopPolicy | null>(null)
+  const [apps, setApps] = useState<DesktopInstalledApp[] | null>(null)
+  const [appTotal, setAppTotal] = useState(0)
+  const [query, setQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const notify = useAppStore((s) => s.notify)
+
+  const loadStatus = async () => {
+    const { invoke } = await import('@/lib/tauri')
+    const s = await invoke<{
+      attached: boolean
+      reason?: string | null
+      readiness?: DesktopReadiness
+      interactionDefault?: string
+      capabilities?: {
+        background_input?: boolean
+      }
+    }>('desktop_status')
+    const p = await invoke<{ policy: DesktopPolicy; readiness: DesktopReadiness }>('desktop_policy_get')
+    setStatus(s)
+    setPolicy(p.policy)
+  }
+
+  const attach = async () => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const next = await invoke<{
+        attached: boolean
+        reason?: string | null
+        readiness?: DesktopReadiness
+        interactionDefault?: string
+        capabilities?: { background_input?: boolean }
+      }>('desktop_attach')
+      setStatus(next)
+      await loadStatus()
+      notify(next.attached ? 'Desktop driver attached — capability surface measured' : (next.reason ?? 'Desktop driver did not attach'))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const loadApps = async (q: string) => {
+    const { invoke } = await import('@/lib/tauri')
+    const out = await invoke<{ apps: DesktopInstalledApp[]; total: number }>('desktop_apps', {
+      query: q,
+    })
+    setApps(out.apps)
+    setAppTotal(out.total)
+  }
+
+  useEffect(() => {
+    let alive = true
+    if (!inTauri()) return
+    void (async () => {
+      try {
+        await loadStatus()
+        if (alive) await loadApps('')
+      } catch (e) {
+        if (alive) setError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // The picker search runs in Rust against the session-cached inventory, so a
+  // keystroke never re-scans the disk (and the match rule has one owner).
+  useEffect(() => {
+    if (!inTauri()) return
+    let alive = true
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const { invoke } = await import('@/lib/tauri')
+          const out = await invoke<{ apps: DesktopInstalledApp[]; total: number }>('desktop_apps', {
+            query,
+          })
+          if (alive) {
+            setApps(out.apps)
+            setAppTotal(out.total)
+          }
+        } catch (e) {
+          if (alive) setError(e instanceof Error ? e.message : String(e))
+        }
+      })()
+    }, 120)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
+
+  const setInteraction = async (mode: 'background' | 'foreground') => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const out = await invoke<{ appliedLive: boolean; policy: DesktopPolicy }>(
+        'desktop_policy_set_interaction',
+        { mode },
+      )
+      setPolicy(out.policy)
+      await loadStatus()
+      notify(
+        mode === 'background'
+          ? `Background contract on — the driver will not raise windows${out.appliedLive ? ' (applied live)' : ' (applies to the next attach)'}`
+          : `Foreground escalation enabled — the driver may raise windows${out.appliedLive ? ' (applied live)' : ' (applies to the next attach)'}`,
+      )
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const allowPath = async (path: string) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const out = await invoke<{ added: string; appliedLive: boolean; policy: DesktopPolicy }>(
+        'desktop_policy_allow_path',
+        { path },
+      )
+      setPolicy(out.policy)
+      await loadApps(query)
+      notify(`Allow-listed ${out.added}${out.appliedLive ? ' — live' : ' — applies to the next attach'}`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removePath = async (path: string) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const out = await invoke<{ removed: boolean; appliedLive: boolean; policy: DesktopPolicy }>(
+        'desktop_policy_remove_path',
+        { path },
+      )
+      setPolicy(out.policy)
+      await loadApps(query)
+      notify(out.removed ? `Removed ${path}` : 'That path was not on the allow-list')
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pickPath = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const opts = pickerOptions(
+        typeof navigator === 'undefined' ? '' : `${navigator.platform ?? ''} ${navigator.userAgent ?? ''}`,
+      )
+      const picked = await open({
+        multiple: false,
+        directory: opts.directory,
+        title: opts.title,
+        filters: opts.filters,
+      })
+      if (typeof picked !== 'string') return
+      await allowPath(picked)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'File picker unavailable', 'error')
+    }
+  }
+
+  const chip = readinessView(status?.readiness ?? null)
+  const backgroundClick = backgroundInputView(
+    status?.attached ?? false,
+    status?.capabilities?.background_input,
+  )
+  const allowPaths = policy?.allowPaths ?? []
+  const interaction = (policy?.interactionDefault ?? 'background') as 'background' | 'foreground'
+
   return (
-    <SectionShell title="Cloud environments" desc="User-owned ExecutionNode attach (H33), not a founder image pull. This dropdown is chrome until P54.7 / P55.">
-      <Row label="Environment package">
-        <Select value={pkg} onValueChange={setPkg}>
-          <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">None (this machine)</SelectItem>
-            <SelectItem value="node">Node LTS image</SelectItem>
-            <SelectItem value="python">Python 3.12 image</SelectItem>
-          </SelectContent>
-        </Select>
+    <SectionShell
+      title="Computer use"
+      desc="The native desktop driver (E9): see/read/act on real windows through the Guard-ticketed executor."
+    >
+      {!inTauri() ? (
+        <p className="text-xs text-muted-foreground">The desktop driver status is available in the desktop shell.</p>
+      ) : error ? (
+        <p className="text-[10px] text-red-300">Could not read the desktop driver: {error}</p>
+      ) : (
+        <>
+          {/* H4 — derived readiness, never a binary "works". */}
+          <Row label="Readiness" desc="Derived from the backend's capability surface and the policy — H4">
+            {chip ? (
+              <Badge variant="outline" className={cn('text-[10px]', chip.tone)}>
+                {chip.glyph} {chip.label}
+              </Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">Checking…</span>
+            )}
+          </Row>
+          {chip && <p className="font-mono text-[10px] text-muted-foreground">{chip.detail}</p>}
+          <Row
+            label="Background coordinate click"
+            desc="Whether this host can click at a coordinate without moving your real pointer"
+          >
+            <Badge variant="outline" className={cn('text-[10px]', backgroundClick.tone)}>
+              {backgroundClick.glyph} {backgroundClick.label}
+            </Badge>
+          </Row>
+          <p className="font-mono text-[10px] text-muted-foreground">{backgroundClick.detail}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={busy} onClick={() => void attach()}>
+              {status?.attached ? 'Re-measure driver' : 'Attach and measure'}
+            </Button>
+            {status?.attached && <span className="text-[10px] text-muted-foreground">Live native capability report</span>}
+          </div>
+          {status && !status.attached && status.reason && (
+            <p className="font-mono text-[10px] text-amber-300/80">{status.reason}</p>
+          )}
+
+          {/* P57.3/.4 — the interaction default the engine enforces. */}
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium">Default interaction</div>
+            <div className="flex items-center gap-2">
+              {(['background', 'foreground'] as const).map((m) => (
+                <Button
+                  key={m}
+                  size="sm"
+                  variant={interaction === m ? 'default' : 'outline'}
+                  className="h-7 text-[10px]"
+                  disabled={busy || !policy}
+                  onClick={() => void setInteraction(m)}
+                  aria-pressed={interaction === m}
+                >
+                  {m === 'background' ? 'Background' : 'Foreground'}
+                </Button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground">{interactionCopy(interaction)}</p>
+          </div>
+
+          {/* P57.2 — the allow-list of exact paths. */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium">
+                Allow-listed apps {policy ? `(${allowPaths.length})` : '…'}
+              </span>
+              <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={busy} onClick={() => void pickPath()}>
+                <Plus className="mr-1 h-3 w-3" /> Add by path
+              </Button>
+            </div>
+            {allowPaths.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border/60 px-3 py-2 text-[10px] text-muted-foreground">
+                Nothing allow-listed. Until a path is here, an unlisted app needs a per-session confirmation (and risky classes are always Guard-2).
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/40 rounded-md border border-border/50">
+                {allowPaths.map((p) => (
+                  <li key={p} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[11px]">{p.split('/').pop() || p}</div>
+                      <div className="truncate font-mono text-[10px] text-muted-foreground" title={p}>
+                        {pathTail(p)}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-[10px]"
+                      disabled={busy}
+                      onClick={() => void removePath(p)}
+                      aria-label={`Remove ${p} from the allow-list`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* P57.8 — the searchable installed-app inventory. */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium">
+                Installed apps {apps === null ? '…' : `(${apps.length}/${appTotal})`}
+              </span>
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search apps…"
+                className="h-7 w-48 text-xs"
+                aria-label="Search installed apps"
+              />
+            </div>
+            {apps === null ? (
+              <p className="text-[10px] text-muted-foreground">Reading the installed-app inventory…</p>
+            ) : apps.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground">
+                No installed app matches “{query}”. Use <strong>Add by path</strong> if it lives somewhere this platform does not index.
+              </p>
+            ) : (
+              <ScrollArea className="max-h-64 rounded-md border border-border/50">
+                <ul className="divide-y divide-border/40">
+                  {apps.map((a) => {
+                    const block = addBlockReason(a)
+                    return (
+                      <li key={a.path} className="flex items-center justify-between gap-3 px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-[11px]">{a.name}</div>
+                          <div className="truncate font-mono text-[10px] text-muted-foreground" title={a.path}>
+                            {pathTail(a.path)} · {sourceLabel(a.source)}
+                          </div>
+                          {a.hardDenied && (
+                            <div className="truncate text-[10px] text-amber-300/80">{a.hardDenied}</div>
+                          )}
+                        </div>
+                        {block ? (
+                          <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
+                            {a.hardDenied ? 'never automatable' : 'listed'}
+                          </Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 shrink-0 px-2 text-[10px]"
+                            disabled={busy}
+                            onClick={() => void allowPath(a.path)}
+                          >
+                            <Plus className="mr-1 h-3 w-3" /> Add
+                          </Button>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </ScrollArea>
+            )}
+          </div>
+        </>
+      )}
+      <Honest>
+        These writes go to the Guard-2 policy the driver enforces (<span className="font-mono">&lt;data_dir&gt;/desktop.json</span>): a listed path is launchable without toggling
+        computer use per session, and the Background default refuses to raise a window at all. Risky classes (delete · money · install · CAPTCHA · transmit) still reach the
+        human gate, and the hard-deny list (terminal, password managers, UAC, EveryAIOS itself) can never be allow-listed — hidden here and refused by the backend.
+      </Honest>
+    </SectionShell>
+  )
+}
+
+/** The shape `search_config` returns (camelCase over the persisted file). */
+interface SearchConfigRow {
+  usePublic: boolean
+  endpoints: string[]
+  localEndpoints: string[]
+  publicEndpoints: string[]
+}
+
+interface SearchInstanceRow {
+  url: string
+  version: string
+  median_seconds?: number | null
+  search_success_percentage?: number | null
+}
+
+interface SearchFeedRow {
+  source: 'live' | 'fresh_cache' | 'stale_cache'
+  count: number
+  instances: SearchInstanceRow[]
+}
+
+/**
+ * P55.8 — Settings → Search. The G8 cascade is local-first: your own SearXNG,
+ * then the DDG fallback. Public instances come from the `searx.space` feed and
+ * are only used when switched on here — routing a query through a stranger's
+ * server is the user's decision, not a default. The endpoint list shown is the
+ * one the live cascade reads (`<data_dir>/search.json`), so the two cannot
+ * disagree; a feed that cannot be fetched is an error, and a cached list says
+ * it is cached.
+ */
+export function SearchEnginesSection() {
+  const [config, setConfig] = useState<SearchConfigRow | null>(null)
+  const [feed, setFeed] = useState<SearchFeedRow | null>(null)
+  const [feedError, setFeedError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const notify = useAppStore((s) => s.notify)
+
+  const load = async () => {
+    if (!inTauri()) return
+    const { invoke } = await import('@/lib/tauri')
+    setConfig(await invoke<SearchConfigRow>('search_config'))
+  }
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        if (!inTauri()) return
+        const { invoke } = await import('@/lib/tauri')
+        const cfg = await invoke<SearchConfigRow>('search_config')
+        if (alive) setConfig(cfg)
+      } catch (e) {
+        if (alive) setFeedError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const discover = async (refresh: boolean) => {
+    if (busy) return
+    setBusy(true)
+    setFeedError(null)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const out = await invoke<SearchFeedRow>('search_instances', { refresh })
+      setFeed(out)
+    } catch (e) {
+      setFeed(null)
+      setFeedError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const apply = async (usePublic: boolean) => {
+    if (busy) return
+    setBusy(true)
+    setFeedError(null)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const out = await invoke<{
+        usePublic: boolean
+        endpoints: string[]
+        discovered: number
+        appliedLive: boolean
+      }>('search_instances_apply', { usePublic })
+      await load()
+      notify(
+        usePublic
+          ? `Public instances on — ${out.discovered} in the cascade; ${out.appliedLive ? 'applied to the live session' : 'applies on next boot'}`
+          : 'Public instances off — local SearXNG + DDG fallback only',
+      )
+    } catch (e) {
+      setFeedError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sourceLabel = (s: SearchFeedRow['source']) =>
+    s === 'live' ? 'fetched just now' : s === 'fresh_cache' ? 'cached (fresh)' : 'cached — last known good'
+
+  return (
+    <SectionShell
+      title="Search"
+      desc="Which endpoints the G8 search cascade uses. Local-first by default — no public instance is queried until you turn it on."
+    >
+      <Honest>
+        The cascade tries these in order and stops at the first that answers. Public instances come from the{' '}
+        <span className="font-mono">searx.space</span> feed (health-probed upstream); instances that are offline, Tor-only, or
+        failing are dropped rather than listed as healthy. A fetch that fails is an error, never an empty “success”.
+      </Honest>
+      <Row label="Endpoints in use" desc={`${config?.endpoints.length ?? 0} endpoint(s), local first`}>
+        <div className="flex flex-col items-end gap-0.5">
+          {(config?.endpoints ?? []).slice(0, 6).map((e) => (
+            <span key={e} className="font-mono text-[10px] text-muted-foreground">
+              {e}
+            </span>
+          ))}
+          {(config?.endpoints.length ?? 0) > 6 && (
+            <span className="font-mono text-[10px] text-muted-foreground">
+              +{(config?.endpoints.length ?? 0) - 6} more
+            </span>
+          )}
+          {config && config.endpoints.length === 0 && (
+            <span className="font-mono text-[10px] text-amber-300/80">none configured</span>
+          )}
+        </div>
       </Row>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 text-[10px]"
-        disabled
-        title="Remote package pull is not built — local-first default is this machine"
-      >
-        Pull package
-      </Button>
+      <Row label="Include public instances" desc="Off = local SearXNG, then the DuckDuckGo fallback">
+        <Switch
+          checked={!!config?.usePublic}
+          disabled={busy || !config}
+          onCheckedChange={(v) => void apply(v)}
+          aria-label="Include public SearXNG instances"
+        />
+      </Row>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled={busy} onClick={() => void discover(true)}>
+          {busy ? 'Working…' : 'Check the instance feed'}
+        </Button>
+        {feed && (
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {feed.count} eligible · {sourceLabel(feed.source)}
+          </span>
+        )}
+      </div>
+      {feed && feed.instances.length > 0 && (
+        <ul className="max-h-40 space-y-1 overflow-auto rounded-md border border-border/50 p-2">
+          {feed.instances.slice(0, 20).map((i) => (
+            <li key={i.url} className="flex items-center justify-between gap-2 font-mono text-[10px] text-muted-foreground">
+              <span className="truncate">{i.url}</span>
+              <span className="shrink-0">
+                {i.median_seconds != null ? `${i.median_seconds.toFixed(2)}s` : 'no timing'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {feedError && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[10px] text-amber-300/90">
+          instance feed: {feedError}
+        </div>
+      )}
     </SectionShell>
   )
 }

@@ -24,7 +24,10 @@ windows = { version = "0.58", features = [
     "Win32_UI_Accessibility",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+    # `ShellExecuteExW` / `SHELLEXECUTEINFOW` are gated behind this in windows 0.58.
+    "Win32_System_Registry",
     "Win32_System_Com",
     "Win32_Storage_Xps",
 ] }

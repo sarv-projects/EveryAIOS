@@ -5,8 +5,11 @@
 //!   equivalent on bare X11 (AT-SPI is a follow-on) — `read_tree` returns
 //!   `None` and the vision fallback (OCR) takes over.
 //! - **Act:** XTEST fake input (button / motion / key), keysym lookup via
-//!   `GetKeyboardMapping`, `set_input_focus` + raise for activation, PATH
-//!   resolve for launch.
+//!   `GetKeyboardMapping`. **P57.3:** `set_input_focus` + raise happen only on
+//!   the foreground path — under the Background default no window is focused or
+//!   restacked. **P57.1:** launch executes the canonical path directly (no
+//!   `sh -c`, no PATH string interpolation); a bare name is a documented
+//!   fallback resolved by looking in `PATH` ourselves.
 //! - **DPI:** `Xft.dpi` root property (default 96 → scale 1.0).
 
 use std::process::Command;
@@ -14,12 +17,15 @@ use std::process::Command;
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::protocol::xproto::{
-    AtomEnum, ConfigureWindowAux, ImageFormat, InputFocus, StackMode, Window, BUTTON_PRESS_EVENT,
-    BUTTON_RELEASE_EVENT, KEY_PRESS_EVENT, KEY_RELEASE_EVENT, MOTION_NOTIFY_EVENT,
+    AtomEnum, ButtonPressEvent, ConfigureWindowAux, EventMask, ImageFormat, InputFocus, KeyButMask,
+    StackMode, Window, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, KEY_PRESS_EVENT,
+    KEY_RELEASE_EVENT, MOTION_NOTIFY_EVENT,
 };
 use x11rb::protocol::xtest;
 use x11rb::rust_connection::RustConnection;
 
+use crate::launch;
+use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
 use crate::DesktopError;
 
@@ -111,6 +117,19 @@ impl X11Backend {
             }
         }
         String::new()
+    }
+
+    /// P57.4 — where the pointer actually is, in root coordinates, read without
+    /// moving it. The Background click path must never change this; the live E2E
+    /// test asserts that against a real X server.
+    pub fn pointer_position(&self) -> Result<(i32, i32), DesktopError> {
+        let reply = self
+            .conn
+            .query_pointer(self.root)
+            .map_err(|e| DesktopError::Platform(format!("query_pointer: {e}")))?
+            .reply()
+            .map_err(|e| DesktopError::Platform(format!("query_pointer reply: {e}")))?;
+        Ok((i32::from(reply.root_x), i32::from(reply.root_y)))
     }
 
     pub fn list_windows(&self) -> Result<Vec<WindowInfo>, DesktopError> {
@@ -446,7 +465,124 @@ impl X11Backend {
         self.fake_key(keysym)
     }
 
-    pub fn act(&self, window: &WindowInfo, act: &ActKind) -> Result<(), DesktopError> {
+    /// P57.3 — the deepest mapped descendant of `window` that contains the
+    /// window-relative point, honouring each level's own geometry. X11 has no
+    /// "window at point" that works without the pointer, so this walks the tree
+    /// by hand (bounded depth — degenerate window trees exist).
+    fn deepest_child_at(&self, window: Window, x: i32, y: i32) -> Window {
+        let mut current = window;
+        let (mut cx, mut cy) = (x, y);
+        for _ in 0..8 {
+            let Some(reply) = self
+                .conn
+                .query_tree(current)
+                .ok()
+                .and_then(|c| c.reply().ok())
+            else {
+                return current;
+            };
+            let mut next: Option<(Window, i32, i32)> = None;
+            // Children are in stacking order (bottom → top); the last match is
+            // the visible one.
+            for child in reply.children {
+                let Some((gx, gy, gw, gh)) = self.window_geometry(child) else {
+                    continue;
+                };
+                let tr = self
+                    .conn
+                    .translate_coordinates(current, child, cx as i16, cy as i16)
+                    .ok()
+                    .and_then(|c| c.reply().ok());
+                let (lx, ly) = tr
+                    .map(|t| (i32::from(t.dst_x), i32::from(t.dst_y)))
+                    .unwrap_or((cx, cy));
+                let (_, _, cw, ch) = self.window_geometry(current).unwrap_or((0, 0, 1, 1));
+                let inside = (gx, gy, gw, gh) != (0, 0, 0, 0);
+                if inside && lx >= 0 && ly >= 0 && lx < cw as i32 && ly < ch as i32 {
+                    next = Some((child, lx, ly));
+                }
+            }
+            match next {
+                Some((child, lx, ly)) => {
+                    current = child;
+                    cx = lx;
+                    cy = ly;
+                }
+                None => return current,
+            }
+        }
+        current
+    }
+
+    /// P57.3 — a click that does not move the user's pointer: a synthetic
+    /// `ButtonPress`/`ButtonRelease` pair addressed to the deepest child under
+    /// the point, with `propagate` so the event reaches whichever client
+    /// actually selected the button mask. XTEST is never used here.
+    ///
+    /// Whether an app honours a synthetic event is the app's decision (some
+    /// toolkits ignore `send_event: true`), so a refusal is reported honestly
+    /// rather than papered over — that is the signal to escalate to Foreground.
+    fn synthetic_click(&self, window: Window, x: i32, y: i32) -> Result<(), DesktopError> {
+        let target = self.deepest_child_at(window, x, y);
+        let (root_x, root_y) = self
+            .conn
+            .translate_coordinates(window, self.root, x as i16, y as i16)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .map(|t| (i32::from(t.dst_x), i32::from(t.dst_y)))
+            .unwrap_or((x, y));
+        let (ex, ey) = self
+            .conn
+            .translate_coordinates(window, target, x as i16, y as i16)
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .map(|t| (i32::from(t.dst_x), i32::from(t.dst_y)))
+            .unwrap_or((x, y));
+        let mask = EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE;
+        for response_type in [BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT] {
+            let event = ButtonPressEvent {
+                response_type,
+                detail: 1, // button 1
+                sequence: 0,
+                time: x11rb::CURRENT_TIME,
+                root: self.root,
+                event: target,
+                child: x11rb::NONE,
+                root_x: root_x as i16,
+                root_y: root_y as i16,
+                event_x: ex as i16,
+                event_y: ey as i16,
+                state: KeyButMask::BUTTON1,
+                same_screen: true,
+            };
+            self.conn
+                .send_event(true, target, mask, event)
+                .map_err(|e| DesktopError::Platform(format!("synthetic click: {e}")))?;
+        }
+        self.conn
+            .flush()
+            .map_err(|e| DesktopError::Platform(format!("flush: {e}")))
+    }
+
+    pub fn act(
+        &self,
+        window: &WindowInfo,
+        act: &ActKind,
+        mode: InteractionMode,
+    ) -> Result<(), DesktopError> {
+        // P57.1 — launch never needs XTEST (or the window geometry), so it is
+        // handled before the input paths: `sh` is never involved.
+        if let ActKind::LaunchApp { path, app } = act {
+            let target = launch::resolve_target(path.as_deref(), app, &launch::path_dirs())?;
+            let mut cmd = Command::new(&target);
+            // No inherited stdio and no inherited credentials (H5). The launch
+            // cannot raise or focus: on X11 a GUI app presents itself through
+            // its own WM hints, and this path only starts the process.
+            launch::prepare_child(&mut cmd);
+            cmd.spawn()
+                .map_err(|e| DesktopError::Platform(format!("launch {}: {e}", target.display())))?;
+            return Ok(());
+        }
         if !self.xtest_available() {
             return Err(DesktopError::Platform(
                 "XTEST extension not available on this X server".into(),
@@ -457,6 +593,13 @@ impl X11Backend {
             .ok_or_else(|| DesktopError::Platform(format!("window {} gone", window.id)))?;
         match act {
             ActKind::Click { x, y } => {
+                // P57.3 — the background path delivers a synthetic button pair
+                // to the target window itself, so the user's pointer and focus
+                // are untouched. XTEST (which warps the real pointer) is the
+                // foreground path only.
+                if mode == InteractionMode::Background {
+                    return self.synthetic_click(Window::from(window.id as u32), *x, *y);
+                }
                 let (sx, sy) = (wx + x, wy + y);
                 self.fake_motion(sx as i16, sy as i16)?;
                 self.fake_button(1, true, sx as i16, sy as i16)?;
@@ -503,6 +646,18 @@ impl X11Backend {
                 Ok(())
             }
             ActKind::ActivateWindow { window_id } => {
+                // P57.3 — the background contract: restacking a window above
+                // the others and stealing input focus IS raising it. Under the
+                // Background default this refuses instead (the engine already
+                // refuses before reaching here; this is the backend's own
+                // floor, so a direct `act` call cannot slip past it either).
+                if mode == InteractionMode::Background {
+                    return Err(DesktopError::Unsupported(
+                        "background contract: X11 raising (stack above + set_input_focus) is a \
+                         foreground escalation — switch the interaction default to Foreground"
+                            .into(),
+                    ));
+                }
                 let w = Window::from(*window_id as u32);
                 let _ = self
                     .conn
@@ -520,23 +675,12 @@ impl X11Backend {
             ActKind::SetValue { name, .. } => Err(DesktopError::Platform(format!(
                 "SetValue has no X11 surface (name \"{name}\")"
             ))),
-            ActKind::LaunchApp { app } => {
-                let resolved = Command::new("sh")
-                    .arg("-c")
-                    .arg(format!("command -v {app}"))
-                    .output()
-                    .map_err(|e| DesktopError::Platform(format!("resolve {app}: {e}")))?;
-                let path = String::from_utf8_lossy(&resolved.stdout).trim().to_string();
-                if path.is_empty() {
-                    return Err(DesktopError::Platform(format!("{app} not on PATH")));
-                }
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(format!("{path} >/dev/null 2>&1 &"))
-                    .spawn()
-                    .map_err(|e| DesktopError::Platform(format!("launch {app}: {e}")))?;
-                Ok(())
-            }
+            // Handled above (before the XTEST/geometry requirements). Kept as
+            // an explicit error rather than a panic so a future reorder fails
+            // the action honestly instead of taking the process down.
+            ActKind::LaunchApp { .. } => Err(DesktopError::Platform(
+                "launch was not handled on the pre-input path".into(),
+            )),
         }
     }
 }

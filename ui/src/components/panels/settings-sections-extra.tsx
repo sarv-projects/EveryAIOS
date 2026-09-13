@@ -270,6 +270,9 @@ export function SyncSection() {
   const [busy, setBusy] = useState(false)
   const [last, setLast] = useState<string | null>(null)
   const [bundlePath, setBundlePath] = useState('~/everyaios-sync.bundle')
+  // P55.9 — H33: attach a user-owned always-on node (the honest replacement
+  // for the old "Cloud env" docker-package dropdown).
+  const [controlPlane, setControlPlane] = useState('')
 
   async function refreshDevice() {
     if (!inTauri()) return
@@ -331,6 +334,27 @@ export function SyncSection() {
       await refreshServe()
     } catch (e) { notify(String(e)) } finally { setBusy(false) }
   }
+  async function handleNodeAttach() {
+    if (!controlPlane.trim()) { notify('enter the node control-plane ip:port'); return }
+    setBusy(true)
+    try {
+      const { invoke } = await import('@/lib/tauri')
+      const r = await invoke<{
+        handshake: string
+        peerDevice: string
+        peerFingerprint: string
+        ledgerApplied: number
+        ledgerPushed: number
+        ledgerConflicts: number
+        guardParked: boolean
+      }>('node_attach', { controlPlane: controlPlane.trim() })
+      setLast(
+        `node ${r.peerDevice} (${r.peerFingerprint}) — handshake ${r.handshake}, ledger +${r.ledgerApplied} / push ${r.ledgerPushed} / conflicts ${r.ledgerConflicts}`,
+      )
+      await refreshServe()
+    } catch (e) { notify(String(e)) } finally { setBusy(false) }
+  }
+
   async function handleRotate() {
     if (!inTauri()) return
     setBusy(true)
@@ -402,6 +426,25 @@ export function SyncSection() {
         <Row label="Keypair" desc="Rotate re-keys the mirror (old bundles become unreadable)">
           <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handleRotate}>Rotate</Button>
         </Row>
+        {/* P55.9 — H33 node attach. This is the whole "cloud environment"
+            story: a machine you own joins the mesh. There is no image to pull
+            and no founder-hosted runtime, so no such control is offered. */}
+        <Row
+          label="Attach an always-on node (H33)"
+          desc="Control-plane ip:port of a machine you own — the node mirrors your E2E-encrypted ledger; Guard-2 steps park there and surface here"
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              value={controlPlane}
+              onChange={(e) => setControlPlane(e.target.value)}
+              placeholder="100.64.0.5:47615"
+              className="h-7 w-56 font-mono text-xs"
+            />
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={handleNodeAttach}>
+              Attach node
+            </Button>
+          </div>
+        </Row>
         <Row label="Bundle file" desc="Encrypted export/import over the file seam — USB, LAN share, backup (no network)">
           <div className="flex items-center gap-2">
             <Input value={bundlePath} onChange={(e) => setBundlePath(e.target.value)} placeholder="~/everyaios-sync.bundle" className="h-7 w-56 font-mono text-xs" />
@@ -411,6 +454,7 @@ export function SyncSection() {
         </Row>
         {last && <p className="text-xs text-muted-foreground">{last}</p>}
         <p className="text-[10px] text-muted-foreground">Live transport is TCP-only, default 47615, no discovery. Bundles are E2E-encrypted with your device key — a rotated keypair makes old bundles unreadable.</p>
+        <p className="text-[10px] text-muted-foreground">Node attach runs the same handshake as a peer sync (X25519 + confirm-token MAC) and reconciles the ledger; approval-required work is never executed on the node, it parks and surfaces on this control plane.</p>
       </div>
     </SectionShell>
   )

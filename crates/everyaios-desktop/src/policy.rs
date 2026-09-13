@@ -190,6 +190,59 @@ impl AuditSink for NoopSink {
     fn write(&self, _kind: &str, _payload: serde_json::Value) {}
 }
 
+/// P57.3/P57.4 — how the driver is allowed to touch the desktop by default.
+///
+/// The spec's rule (Cua no-foreground contract) is **Background**: drive the
+/// target without stealing the user's cursor, keyboard, or frontmost window.
+/// Foreground is an escalation — a modal that ignores background input, the
+/// user asking, or a challenge needing HITL — and it restores the previous
+/// foreground afterwards (P57.4). It is a deliberate default change here, not
+/// something an agent may flip.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum InteractionMode {
+    #[default]
+    Background,
+    Foreground,
+}
+
+impl InteractionMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            InteractionMode::Background => "background",
+            InteractionMode::Foreground => "foreground",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "background" => Some(InteractionMode::Background),
+            "foreground" => Some(InteractionMode::Foreground),
+            _ => None,
+        }
+    }
+}
+
+/// Windows canonical paths arrive as `\\?\C:\…`; display and matching use the
+/// plain form so a persisted file copied between shells still matches.
+fn normalize_path(p: &str) -> String {
+    let p = p.trim();
+    let p = p.strip_prefix("\\\\?\\").unwrap_or(p);
+    p.replace('\\', "/").to_ascii_lowercase()
+}
+
+/// The last path segment, minus a `.exe` / `.app` suffix — i.e. the name a
+/// window list reports for that app (`/usr/bin/firefox` → `firefox`,
+/// `/Applications/Safari.app` → `safari`).
+fn stem_of(p: &str) -> String {
+    let norm = normalize_path(p);
+    let base = norm.rsplit('/').next().unwrap_or(norm.as_str());
+    base.strip_suffix(".exe")
+        .or_else(|| base.strip_suffix(".app"))
+        .unwrap_or(base)
+        .to_string()
+}
+
 /// App allow-list: default-deny for unlisted apps in strict mode; in standard
 /// mode unlisted apps are Confirm(Routine) — never silently allowed.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -200,6 +253,18 @@ pub struct AppPolicy {
     pub strict: bool,
     /// Custom safe zones (screen rects never acted on), e.g. the taskbar.
     pub safe_zones: Vec<Region>,
+    /// P57.2 — allow-listed **exact paths**: once a canonical path is here the
+    /// agent may launch it without the user turning computer use on per
+    /// session (risky classes still Guard-2). A window whose app name matches a
+    /// listed path's file stem is covered too, which is how one Settings row
+    /// covers both the launch and the window. `serde(default)` keeps a policy
+    /// file written before this field readable.
+    #[serde(default)]
+    pub allow_paths: Vec<String>,
+    /// P57.3 — the interaction default the engine enforces (see
+    /// [`InteractionMode`]).
+    #[serde(default)]
+    pub interaction_mode: InteractionMode,
 }
 
 impl AppPolicy {
@@ -213,11 +278,90 @@ impl AppPolicy {
         self
     }
 
+    /// P57.3 — may the driver raise/activate another window right now? False
+    /// under the Background default: raising is a foreground escalation.
+    pub fn allows_raising_windows(&self) -> bool {
+        self.interaction_mode == InteractionMode::Foreground
+    }
+
+    /// P57.2 — add a canonical allow-listed path. Refuses a path that does not
+    /// resolve, and refuses one whose program is on the hard-deny list
+    /// (terminal / password manager / …), so the allow-list can never be used
+    /// to make a never-automatable app automatable. Idempotent.
+    pub fn add_path(&mut self, path: &str) -> Result<String, String> {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            return Err("empty path".into());
+        }
+        let canonical =
+            std::fs::canonicalize(trimmed).map_err(|e| format!("resolve {trimmed}: {e}"))?;
+        let meta = std::fs::metadata(&canonical)
+            .map_err(|e| format!("stat {}: {e}", canonical.display()))?;
+        if !(meta.is_file() || meta.is_dir()) {
+            return Err(format!("{} is not a file or bundle", canonical.display()));
+        }
+        let canonical = canonical.to_string_lossy().into_owned();
+        let name = stem_of(&canonical);
+        if let Some(reason) = Self::hard_deny(&name, None) {
+            return Err(reason);
+        }
+        if self
+            .allow_paths
+            .iter()
+            .any(|p| normalize_path(p) == normalize_path(&canonical))
+        {
+            return Ok(canonical);
+        }
+        self.allow_paths.push(canonical.clone());
+        Ok(canonical)
+    }
+
+    /// P57.2 — drop an allow-listed path (the Settings Remove action). Matches
+    /// on the normalized form so a `\\?\`-prefixed or differently-separated
+    /// entry still removes.
+    pub fn remove_path(&mut self, path: &str) -> bool {
+        let needle = normalize_path(path);
+        let before = self.allow_paths.len();
+        self.allow_paths.retain(|p| normalize_path(p) != needle);
+        self.allow_paths.len() != before
+    }
+
+    /// P57.2 — allow-list membership: a name/env match (legacy) **or** an
+    /// allow-listed path that matches either the reported full path or the
+    /// bare app name a window list reports.
     fn is_allow_listed(&self, app: &str) -> bool {
-        let app = app.to_ascii_lowercase();
-        self.allow_list.iter().any(|a| {
+        if app.trim().is_empty() {
+            return false;
+        }
+        let app_lower = app.to_ascii_lowercase();
+        if self.allow_list.iter().any(|a| {
             let a = a.to_ascii_lowercase();
-            app.contains(&a) || a.contains(&app)
+            app_lower.contains(&a) || a.contains(&app_lower)
+        }) {
+            return true;
+        }
+        self.matches_allowed_path(app)
+    }
+
+    fn matches_allowed_path(&self, app: &str) -> bool {
+        let needle = normalize_path(app);
+        if needle.is_empty() {
+            return false;
+        }
+        let needle_stem = stem_of(&needle);
+        self.allow_paths.iter().any(|p| {
+            let p = normalize_path(p);
+            if needle == p {
+                return true;
+            }
+            // The caller reported a full path under a listed one (a helper
+            // inside the bundle).
+            if needle.starts_with('/') && p.ends_with(&needle) {
+                return true;
+            }
+            // The caller reported the bare app name (window list). ≥3 chars so
+            // a two-letter stem cannot match by accident.
+            needle_stem.len() >= 3 && needle_stem == stem_of(&p)
         })
     }
 
@@ -264,7 +408,12 @@ impl AppPolicy {
                 ConfirmClass::classify(name, key)
             }
             ActKind::Type { .. } | ActKind::Press { .. } => ConfirmClass::Routine,
-            ActKind::LaunchApp { app: target } => ConfirmClass::classify(target, None),
+            // P57.1 — classify the launched program itself: the canonical path
+            // when known (an `.exe` under an installer directory, a macOS
+            // bundle), else the name.
+            ActKind::LaunchApp { .. } => {
+                ConfirmClass::classify(act.launch_target().unwrap_or_default(), None)
+            }
             ActKind::ActivateWindow { .. } => ConfirmClass::Routine,
         };
         if ALWAYS_CONFIRM.contains(&class) {
@@ -353,8 +502,12 @@ impl RateLimiter {
 }
 
 /// The assembled Guard-2 desktop gate.
+///
+/// P57.8 — the policy is behind a lock so the host (Settings → Computer use)
+/// can apply an allow-list change to the **live** engine instead of only the
+/// next process start; every preflight reads one consistent snapshot.
 pub struct DesktopGuard {
-    pub policy: AppPolicy,
+    policy: Mutex<AppPolicy>,
     pub gate: Box<dyn PermissionGate>,
     pub kill: KillSwitch,
     pub limiter: RateLimiter,
@@ -364,12 +517,25 @@ pub struct DesktopGuard {
 impl DesktopGuard {
     pub fn new(policy: AppPolicy, gate: Box<dyn PermissionGate>, sink: Box<dyn AuditSink>) -> Self {
         Self {
-            policy,
+            policy: Mutex::new(policy),
             gate,
             kill: KillSwitch::new(),
             limiter: RateLimiter::new(20),
             sink,
         }
+    }
+
+    /// The current policy (a clone — callers cannot mutate policy in place).
+    pub fn policy(&self) -> AppPolicy {
+        self.policy
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Replace the policy. Takes effect on the next preflight.
+    pub fn set_policy(&self, policy: AppPolicy) {
+        *self.policy.lock().unwrap_or_else(|e| e.into_inner()) = policy;
     }
 
     /// Full pre-action gate: kill switch → rate limit → policy → human gate →
@@ -384,7 +550,7 @@ impl DesktopGuard {
         self.limiter
             .allow()
             .map_err(|retry_after| format!("rate limit: retry in {:?}", retry_after))?;
-        let decision = self.policy.evaluate(app, act, key)?;
+        let decision = self.policy().evaluate(app, act, key)?;
         let final_decision = match decision {
             GateDecision::Confirm(class) => self.gate.request(act, class),
             other => other,
@@ -398,6 +564,7 @@ impl DesktopGuard {
             "surface": "desktop",
             "app": app,
             "act": act.describe(),
+            "interaction": self.policy().interaction_mode.as_str(),
             "decision": decision.as_str(),
             "class": match decision {
                 GateDecision::Confirm(c) => format!("{c:?}"),
@@ -578,6 +745,211 @@ mod tests {
         }
         assert!(l.allow().is_err());
         assert_eq!(l.count(), 3);
+    }
+
+    #[test]
+    fn default_interaction_is_background_and_forbids_raising() {
+        // P57.3 — the Cua no-foreground contract is the default, not an opt-in.
+        let p = AppPolicy::default();
+        assert_eq!(p.interaction_mode, InteractionMode::Background);
+        assert!(!p.allows_raising_windows());
+        assert!(AppPolicy {
+            interaction_mode: InteractionMode::Foreground,
+            ..AppPolicy::default()
+        }
+        .allows_raising_windows());
+        assert_eq!(
+            InteractionMode::parse("foreground"),
+            Some(InteractionMode::Foreground)
+        );
+        assert_eq!(
+            InteractionMode::parse("Background"),
+            Some(InteractionMode::Background)
+        );
+        assert_eq!(InteractionMode::parse("sometimes"), None);
+    }
+
+    #[test]
+    fn allow_listed_path_covers_launch_and_window_name() {
+        // P57.2 — one Settings row covers both the launched exe and the window
+        // the window list reports for it.
+        let mut p = AppPolicy::default();
+        p.allow_paths.push("/usr/lib/firefox/firefox".into());
+        assert!(p.is_allow_listed("/usr/lib/firefox/firefox"));
+        assert!(p.is_allow_listed("firefox"));
+        assert!(p.is_allow_listed("Firefox"));
+        // A different app is still not allow-listed.
+        assert!(!p.is_allow_listed("notepad"));
+        assert!(!p.is_allow_listed("/usr/bin/gedit"));
+        // A macOS bundle covers the bare app name a window list reports.
+        let mut mac = AppPolicy::default();
+        mac.allow_paths.push("/Applications/Safari.app".into());
+        assert!(mac.is_allow_listed("Safari"));
+        assert!(mac.is_allow_listed("/Applications/Safari.app"));
+        assert!(!mac.is_allow_listed("Firefox"));
+        // An empty app name is never a wildcard.
+        assert!(!mac.is_allow_listed(""));
+        assert!(!mac.is_allow_listed("   "));
+    }
+
+    #[test]
+    fn allow_listed_path_gates_the_same_way_as_a_name() {
+        let mut p = AppPolicy::default();
+        p.allow_paths.push("/usr/bin/gedit".into());
+        let g = DesktopGuard::new(p, Box::new(AllowGate), Box::new(NoopSink));
+        let d = g
+            .preflight("gedit", &ActKind::Click { x: 4, y: 4 }, None)
+            .unwrap();
+        assert_eq!(d, GateDecision::Allow);
+        // A risky class still reaches the human gate, path-listed or not.
+        let g2 = DesktopGuard::new(
+            {
+                let mut p = AppPolicy::default();
+                p.allow_paths.push("/usr/bin/gedit".into());
+                p
+            },
+            Box::new(ConfirmAllGate),
+            Box::new(NoopSink),
+        );
+        let d2 = g2
+            .preflight(
+                "gedit",
+                &ActKind::ClickByName {
+                    name: "Delete file".into(),
+                },
+                None,
+            )
+            .unwrap();
+        assert_eq!(d2, GateDecision::Confirm(ConfirmClass::Delete));
+    }
+
+    #[test]
+    fn add_path_refuses_hard_denied_and_missing_paths() {
+        // A terminal is on the hard-deny list: the allow-list must never be a
+        // way to make it automatable (the UI cannot offer it either).
+        let dir = std::env::temp_dir().join(format!("ea-policy-deny-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let term = dir.join("gnome-terminal");
+        std::fs::write(&term, b"#!/bin/sh\n").unwrap();
+
+        let mut p = AppPolicy::default();
+        let err = p.add_path(term.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("hard-deny"), "got: {err}");
+        let missing = p.add_path("/nope/definitely-not-here").unwrap_err();
+        assert!(missing.contains("resolve"), "got: {missing}");
+        assert_eq!(p.add_path("   ").unwrap_err(), "empty path");
+        assert!(
+            p.allow_paths.is_empty(),
+            "nothing may be added by a failure"
+        );
+
+        // The persisted policy round-trips (Settings writes, next boot reads)
+        // and a file written before these fields existed still loads.
+        let editor = dir.join("my-editor");
+        std::fs::write(&editor, b"#!/bin/sh\n").unwrap();
+        let mut ok = AppPolicy {
+            interaction_mode: InteractionMode::Foreground,
+            ..AppPolicy::default()
+        };
+        ok.add_path(editor.to_str().unwrap()).unwrap();
+        let json = serde_json::to_string(&ok).unwrap();
+        let back: AppPolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.interaction_mode, InteractionMode::Foreground);
+        assert_eq!(back.allow_paths.len(), 1);
+        let legacy: AppPolicy =
+            serde_json::from_str(r#"{"allow_list":["notepad"],"strict":false,"safe_zones":[]}"#)
+                .unwrap();
+        assert_eq!(legacy.interaction_mode, InteractionMode::Background);
+        assert!(legacy.allow_paths.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_and_remove_path_are_canonical_and_idempotent() {
+        let dir = std::env::temp_dir().join(format!("ea-policy-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("my-editor");
+        std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
+
+        let mut p = AppPolicy::default();
+        let added = p.add_path(bin.to_str().unwrap()).unwrap();
+        assert_eq!(p.allow_paths.len(), 1);
+        // Adding the same file again is a no-op, not a duplicate row.
+        assert_eq!(p.add_path(bin.to_str().unwrap()).unwrap(), added);
+        assert_eq!(p.allow_paths.len(), 1);
+        assert!(p.remove_path(&added));
+        assert!(p.allow_paths.is_empty());
+        // Removing something that is not listed reports honestly.
+        assert!(!p.remove_path(&added));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P57.2 — the launch subject is the program: an allow-listed path launches
+    /// without a per-session toggle, and an unlisted one still needs the human
+    /// path (or is denied in strict mode).
+    #[test]
+    fn an_allow_listed_launch_target_is_allowed_and_an_unlisted_one_is_not() {
+        let listed = "/usr/bin/gedit";
+        let launch = ActKind::launch_path(listed);
+        let mut policy = AppPolicy::default();
+        policy.allow_paths.push(listed.into());
+        let g = DesktopGuard::new(policy, Box::new(AllowGate), Box::new(NoopSink));
+        let subject = launch.launch_target().unwrap();
+        assert_eq!(subject, listed);
+        assert_eq!(
+            g.preflight(subject, &launch, None).unwrap(),
+            GateDecision::Allow
+        );
+        // A different program is not covered by that row: the policy asks for a
+        // human (the allow gate here would approve it, which is why this is
+        // asserted on the policy decision itself).
+        let other = ActKind::launch_path("/usr/bin/gimp");
+        assert_eq!(
+            g.policy()
+                .evaluate(other.launch_target().unwrap(), &other, None)
+                .unwrap(),
+            GateDecision::Confirm(ConfirmClass::Routine)
+        );
+        // And a launch whose target is a risky class still needs the human,
+        // allow-listed or not.
+        // (Classification is keyword-based on the target, so an installer is
+        // recognised by its name/path — `/usr/bin/dnf` is not one.)
+        let installer = ActKind::launch_path("/opt/vendor/installer");
+        assert_eq!(
+            g.policy()
+                .evaluate(installer.launch_target().unwrap(), &installer, None)
+                .unwrap(),
+            GateDecision::Confirm(ConfirmClass::Install)
+        );
+        // A hard-denied program is refused outright, whatever the allow-list.
+        let term = AppPolicy::hard_deny("/usr/bin/gnome-terminal", None);
+        assert!(term.is_some());
+    }
+
+    #[test]
+    fn policy_updates_apply_to_the_live_guard() {
+        // P57.8 — a Settings change must reach an already-attached engine, not
+        // only the next process start.
+        let g = DesktopGuard::new(
+            AppPolicy {
+                strict: true,
+                ..AppPolicy::default()
+            },
+            Box::new(AllowGate),
+            Box::new(NoopSink),
+        );
+        let before = g
+            .preflight("gedit", &ActKind::Click { x: 1, y: 1 }, None)
+            .unwrap();
+        assert_eq!(before, GateDecision::Deny);
+        let mut p = g.policy();
+        p.allow_list.push("gedit".into());
+        g.set_policy(p);
+        let after = g
+            .preflight("gedit", &ActKind::Click { x: 1, y: 1 }, None)
+            .unwrap();
+        assert_eq!(after, GateDecision::Allow);
+        assert_eq!(g.policy().interaction_mode, InteractionMode::Background);
     }
 
     #[test]
