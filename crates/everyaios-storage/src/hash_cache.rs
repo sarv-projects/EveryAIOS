@@ -127,8 +127,14 @@ mod tests {
     use super::*;
     use std::fs;
 
-    fn tmp() -> PathBuf {
-        let d = std::env::temp_dir().join(format!("everyaios-hashcache-{}", std::process::id()));
+    /// A directory unique **per test**. Keying on the process id alone made
+    /// every test in this module share one path, so one test's
+    /// `remove_dir_all` deleted another's file and the suite only passed when
+    /// it happened to run single-threaded. The tag is that missing dimension
+    /// (the same shape the other storage test helpers already use).
+    fn tmp(tag: &str) -> PathBuf {
+        let d =
+            std::env::temp_dir().join(format!("everyaios-hashcache-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
@@ -136,7 +142,7 @@ mod tests {
 
     #[test]
     fn unchanged_file_is_cache_hit() {
-        let root = tmp();
+        let root = tmp("unchanged");
         let f = root.join("a.txt");
         fs::write(&f, "hello").unwrap();
         let meta = fs::metadata(&f).unwrap();
@@ -163,7 +169,7 @@ mod tests {
 
     #[test]
     fn changed_file_misses() {
-        let root = tmp();
+        let root = tmp("changed");
         let f = root.join("b.txt");
         fs::write(&f, "v1").unwrap();
         let mut cache = HashCache::open_in_memory().unwrap();
@@ -174,7 +180,7 @@ mod tests {
 
     #[test]
     fn removed_paths_cleaned() {
-        let root = tmp();
+        let root = tmp("removed");
         let f = root.join("gone.txt");
         let mut cache = HashCache::open_in_memory().unwrap();
         cache.put(&f, 1, 1, "h").unwrap();
