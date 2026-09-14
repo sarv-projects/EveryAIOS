@@ -434,6 +434,14 @@ pub struct SessionUpdate {
     pub title: String,
     pub kind: Option<ToolKind>,
     pub status: Option<ToolStatus>,
+    /// ACP is inconsistent about this field: the **chunk** updates
+    /// (`agent_message_chunk` / `agent_thought_chunk` / `user_message_chunk`)
+    /// carry a *single* `ContentBlock`, while `tool_call` /
+    /// `tool_call_update` carry an *array*. Accepting only the array shape
+    /// silently drops every streamed token from a spec-conformed agent
+    /// (opencode sends the object form), so both are normalised to a list
+    /// here rather than at each consumer.
+    #[serde(default, deserialize_with = "content_blocks")]
     pub content: Vec<ContentBlock>,
     pub locations: Vec<Location>,
     pub raw_input: Option<serde_json::Value>,
@@ -446,6 +454,26 @@ pub struct SessionUpdate {
     /// Complete agent-owned configuration after a config-option update.
     #[serde(default)]
     pub config_options: Vec<ConfigOption>,
+}
+
+/// Deserialize `SessionUpdate::content` from **either** a single
+/// `ContentBlock` or an array of them (see the field docs). `null`/absent
+/// yields an empty list, preserving the previous `default` behaviour.
+fn content_blocks<'de, D>(de: D) -> Result<Vec<ContentBlock>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        Many(Vec<ContentBlock>),
+        One(ContentBlock),
+    }
+    Ok(match Option::<OneOrMany>::deserialize(de)? {
+        Some(OneOrMany::Many(v)) => v,
+        Some(OneOrMany::One(b)) => vec![b],
+        None => Vec::new(),
+    })
 }
 
 /// One live slash command advertised by the agent
@@ -736,5 +764,46 @@ mod tests {
         .unwrap();
         assert!(!t.is_available_commands_update());
         assert!(t.available_commands.is_empty());
+    }
+
+    /// The exact shape opencode sends for a streamed token: a **single**
+    /// `content` object, not an array. A `Vec`-only field rejected this with
+    /// "invalid type: map, expected a sequence", which failed the whole prompt
+    /// turn — the streaming path of every spec-conformed agent.
+    #[test]
+    fn chunk_content_may_be_a_single_object() {
+        let u: SessionUpdate = serde_json::from_value(serde_json::json!({
+            "sessionId": "ses_1",
+            "sessionUpdate": "agent_thought_chunk",
+            "content": { "type": "text", "text": "thinking out loud" }
+        }))
+        .unwrap();
+        assert_eq!(u.content.len(), 1);
+        assert_eq!(u.content[0].r#type, "text");
+        assert_eq!(u.content[0].text, "thinking out loud");
+
+        // The array shape (tool_call / tool_call_update) still parses, and
+        // order is preserved.
+        let many: SessionUpdate = serde_json::from_value(serde_json::json!({
+            "sessionId": "ses_1",
+            "sessionUpdate": "tool_call",
+            "content": [
+                { "type": "text", "text": "first" },
+                { "type": "text", "text": "second" }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(many.content.len(), 2);
+        assert_eq!(many.content[0].text, "first");
+        assert_eq!(many.content[1].text, "second");
+
+        // Absent and explicit-null both stay empty (the previous default).
+        for body in [
+            serde_json::json!({ "sessionUpdate": "agent_message_chunk" }),
+            serde_json::json!({ "sessionUpdate": "agent_message_chunk", "content": null }),
+        ] {
+            let u: SessionUpdate = serde_json::from_value(body).unwrap();
+            assert!(u.content.is_empty());
+        }
     }
 }

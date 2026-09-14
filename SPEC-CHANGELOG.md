@@ -16,6 +16,29 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## v3.72 — 2026-09-14 — live capability pass: two real defects found and fixed
+
+**Category:** Defect fixes found by exercising the capability end-to-end rather than by reading it. No capability-row change (census stays 157); no checkbox flips (live count unchanged at **1382 = 1197 done + 185 open**).
+
+**Defect 1 — ACP streamed text was rejected by every spec-conformed agent (high impact).** Driving a real agent (`acpx run opencode "…"`) failed the whole prompt turn with `malformed agent message: invalid type: map, expected a sequence`. Capturing the raw wire frame showed why: opencode sends a streamed token as a **single** `ContentBlock` object —
+
+```json
+{"method":"session/update","params":{"sessionId":"ses_…","update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"…"}}}}
+```
+
+— while `everyaios_acp::SessionUpdate` declared `content: Vec<ContentBlock>`, the shape only `tool_call`/`tool_call_update` use. The ACP schema is genuinely inconsistent here: the *chunk* updates (`agent_message_chunk`, `agent_thought_chunk`, `user_message_chunk`) carry one block, the tool-call updates carry an array. Because the field was `#[serde(default)]`, a mocked agent that omitted `content` — as the in-repo mock does — parsed fine, so the offline suite could not see it; any real agent that streams text hit it on its first token. Fixed with a `content_blocks` deserializer on the field that accepts **either** a single block or an array and normalises to a list (`null`/absent still yields empty, preserving the old default), so no consumer changes. Regression test `chunk_content_may_be_a_single_object` covers the single form, the array form with order preserved, and the absent/null forms.
+
+**Defect 2 — a storage test raced itself (test isolation).** `everyaios-storage` `hash_cache::tests::unchanged_file_is_cache_hit` failed under the default parallel test runner: the module's `tmp()` keyed the scratch directory on `process::id()` **alone**, so all three tests in the module shared one path and one test's `remove_dir_all` deleted another's file (`fs::write(..).unwrap()` then panicked on the vanished directory). It passed single-threaded, which is how it survived. Fixed by giving `tmp()` a per-test `tag` (the shape the other storage test helpers in the crate already use); the suite now passes in parallel.
+
+**Verification — the fixes were proven end-to-end, not just by unit test:**
+
+- `acpx doctor` against the live ACP registry: 48 agents listed, `opencode` **OK** (`opencode` on PATH), `cline` **OK** (`cline` on PATH), missing binaries reported `MISS` rather than hidden.
+- `acpx run opencode "…"` → `available_commands_update`, `agent_thought_chunk` ×3, `usage_update`, then the expected reply. `acpx run cline "…"` → `session_info_update` then the expected reply. Both were failing or unattempted before this pass; both now complete a real prompt turn against the user's own installed CLIs.
+- `everyaios-acp` live registry refresh against the real CDN: registry version 1.0.0, **41** agents fetched, cached, and merged into the launch registry (47 curated seed → 50 rows, 49 ACP rows, 40 rows changed/added) — so a refreshed catalog really does drive discovery/launch data, and occupancy stays a separate fact.
+- Full suite re-run green: `everyaios-acp` 76 (+1), `everyaios-storage` 54, core 631 lib + 44 integration, computeruse 61, guard 188, mcp 59, memory 209, office 173, browser 171, blueprint 170, catalog 103, codeintel 59, cdp 46, eval 67, ipc 33, engine 26, script 24, search 26, agents 21, types 3; coordinator 329; UI 319; src-tauri 30 + 2. `cargo fmt --all --check` clean; no new clippy warnings on the changed crates.
+
+**Not verified this pass (stated, not implied):** the packaged Tauri UI itself — a visual/interaction pass needs a display and a built shell, so "how it renders" is covered here at the DOM-test level only. The P50.5.2 live SearXNG leg was skipped as designed (it is env-gated on `EVERYAIOS_E2E_SEARXNG_URL`; no local instance was running).
+
 ## v3.71 — 2026-09-14 — P57.4 escalation UI + P57.6 Windows.Graphics.Capture
 
 **Category:** Implementation (no capability-row change — census stays 157; both compose existing row E9). Checkbox flips: **+1 done** — P57.4 flips to `[x] DONE`; live count **1382 = 1197 done + 185 open**.
