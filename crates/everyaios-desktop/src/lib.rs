@@ -44,9 +44,17 @@ pub use policy::{
 pub use readiness::{derive as derive_readiness, Readiness, ReadinessState};
 pub use router::{route, Layer, RouteDecision};
 pub use types::{
-    ActKind, ActOutcome, Capabilities, ReadNode, ReadResult, Region, SeeMethod, SeeResult,
-    VerifyOutcome, WindowInfo,
+    ActKind, ActOutcome, Capabilities, EscalationRequest, ForegroundSnapshot, ReadNode, ReadResult,
+    Region, SeeMethod, SeeResult, VerifyOutcome, WindowInfo,
 };
+
+/// Milliseconds since the Unix epoch (ForegroundSnapshot timestamps).
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 pub use verify::{Locator, Observer, Verifier};
 
 /// Every failure mode of the desktop engine.
@@ -240,6 +248,108 @@ impl DesktopEngine {
         })
     }
 
+    // ---- P57.4 — foreground escalation (never silent) ----
+
+    /// Decide whether an act cannot be delivered under the current interaction
+    /// default. Pure: no policy change, no side effect — the UI renders this as
+    /// the Guard-2 escalation card.
+    pub fn escalation_for(&self, window: &WindowInfo, act: &ActKind) -> Option<EscalationRequest> {
+        if self.guard.policy().allows_raising_windows() {
+            return None; // already Foreground: no escalation needed
+        }
+        let caps = self.backend.capabilities();
+        let needs_foreground = match act {
+            // Raising another window IS the foreground change.
+            ActKind::ActivateWindow { .. } => true,
+            // A coordinate click is background-capable only where the platform
+            // has a non-moving path (Windows UIA/PostMessage, X11 synthetic).
+            ActKind::Click { .. } => !caps.background_input,
+            // Scroll and drag are pointer motion by definition.
+            ActKind::Scroll { .. } | ActKind::Drag { .. } => true,
+            _ => false,
+        };
+        if !needs_foreground {
+            return None;
+        }
+        Some(EscalationRequest {
+            reason: format!(
+                "background input refused; escalate to foreground to {}",
+                act.describe()
+            ),
+            blocked_act: act.clone(),
+            requires_gesture: true,
+            target: window.app.clone(),
+        })
+    }
+
+    /// Read the window that currently owns the foreground, so an approved
+    /// escalation can give it back. `window_id: None` is honest — the platform
+    /// could not tell, and restore is then a no-op rather than a guess.
+    pub fn foreground_snapshot(&self) -> ForegroundSnapshot {
+        ForegroundSnapshot {
+            window_id: self.backend.foreground_window(),
+            captured_at_ms: now_ms(),
+        }
+    }
+
+    /// Give the foreground back after an approved escalation.
+    pub fn restore_foreground(&self, snapshot: &ForegroundSnapshot) -> Result<()> {
+        match snapshot.window_id {
+            Some(id) => self.backend.restore_foreground(id),
+            None => Ok(()),
+        }
+    }
+
+    /// Run an act that needs a foreground escalation — **only** with an explicit
+    /// human gesture. Without one this returns a refused outcome carrying the
+    /// reason (the UI shows the card and nothing moves). With one, the previous
+    /// foreground and interaction default are snapshotted, the policy is switched
+    /// to Foreground for this single act, and both are restored afterwards — so a
+    /// foreground escalation is reversible and auditable, not a focus steal.
+    pub fn act_escalating(
+        &self,
+        window: &WindowInfo,
+        act: &ActKind,
+        key: Option<&str>,
+        gesture_approved: bool,
+    ) -> Result<ActOutcome> {
+        let Some(request) = self.escalation_for(window, act) else {
+            return self.act(window, act, key);
+        };
+        if !gesture_approved {
+            return Ok(ActOutcome {
+                kind: act.clone(),
+                ok: false,
+                verification: None,
+                error: Some(format!(
+                    "foreground escalation requires a human gesture: {}",
+                    request.reason
+                )),
+            });
+        }
+        let previous_policy = self.guard.policy();
+        let snapshot = self.foreground_snapshot();
+        let mut foreground_policy = previous_policy.clone();
+        foreground_policy.interaction_mode = InteractionMode::Foreground;
+        self.guard.set_policy(foreground_policy);
+        let outcome = self.act(window, act, key);
+        // Put the interaction default back no matter how the act ended, then
+        // hand the foreground back to whoever had it.
+        self.guard.set_policy(previous_policy);
+        let restore = self.restore_foreground(&snapshot);
+        let mut outcome = outcome?;
+        if let Err(e) = restore {
+            // The act may have succeeded; a failed restore is still a real
+            // failure the caller must not read as clean.
+            outcome.error = Some(match outcome.error {
+                Some(existing) => format!("{existing}; foreground restore failed: {e}"),
+                None => format!("foreground restore failed: {e}"),
+            });
+            outcome.ok = false;
+        }
+        Ok(outcome)
+    }
+
     /// Observe → one action → re-observe with a verify cascade. Halts
     /// (never guesses) when the locator is not satisfied.
     pub fn act_with_verify(
@@ -327,4 +437,107 @@ impl<'a> Observer for EngineObserver<'a> {
 pub mod prelude {
     pub use crate::ocr::{locate_phrase, OcrEngine, VisionHit};
     pub use crate::policy::GateDecision;
+}
+
+#[cfg(test)]
+mod p57_escalation_tests {
+    use super::*;
+    use crate::policy::{DenyAllGate, NoopSink};
+
+    fn engine(policy: AppPolicy) -> DesktopEngine {
+        DesktopEngine::with_guard(
+            platform::PlatformBackend::Unsupported,
+            DesktopGuard::new(policy, Box::new(DenyAllGate), Box::new(NoopSink)),
+            Arc::new(ocr::NoOcr),
+        )
+    }
+
+    fn window() -> WindowInfo {
+        WindowInfo {
+            id: 7,
+            title: "Editor".into(),
+            app: "editor".into(),
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            has_a11y_tree: false,
+        }
+    }
+
+    #[test]
+    fn background_act_escalates_and_never_moves_without_a_gesture() {
+        let engine = engine(AppPolicy::default()); // Background default
+        let request = engine
+            .escalation_for(&window(), &ActKind::ActivateWindow { window_id: 7 })
+            .expect("activate needs foreground");
+        assert!(request.requires_gesture);
+        assert!(request.reason.contains("escalate to foreground"));
+        assert_eq!(request.target, "editor");
+        // Without a gesture the act is refused with the reason, and the
+        // interaction default is untouched (nothing silently flipped).
+        let outcome = engine
+            .act_escalating(
+                &window(),
+                &ActKind::ActivateWindow { window_id: 7 },
+                None,
+                false,
+            )
+            .unwrap();
+        assert!(!outcome.ok);
+        assert!(outcome.error.unwrap().contains("requires a human gesture"));
+        assert_eq!(
+            engine.policy().interaction_mode,
+            InteractionMode::Background
+        );
+    }
+
+    #[test]
+    fn foreground_default_needs_no_escalation() {
+        let engine = engine(AppPolicy {
+            interaction_mode: InteractionMode::Foreground,
+            ..AppPolicy::default()
+        });
+        assert!(engine
+            .escalation_for(&window(), &ActKind::ActivateWindow { window_id: 7 })
+            .is_none());
+    }
+
+    #[test]
+    fn scroll_and_drag_are_pointer_motion_by_definition() {
+        let engine = engine(AppPolicy::default());
+        assert!(engine
+            .escalation_for(
+                &window(),
+                &ActKind::Scroll {
+                    x: 1,
+                    y: 2,
+                    delta: -1
+                }
+            )
+            .is_some());
+        assert!(engine
+            .escalation_for(
+                &window(),
+                &ActKind::Drag {
+                    from: (0, 0),
+                    to: (5, 5),
+                }
+            )
+            .is_some());
+        // Typing into a background window is not a foreground act.
+        assert!(engine
+            .escalation_for(&window(), &ActKind::Type { text: "hi".into() })
+            .is_none());
+    }
+
+    #[test]
+    fn snapshot_without_a_platform_id_restores_as_a_noop() {
+        let engine = engine(AppPolicy::default());
+        let snapshot = engine.foreground_snapshot();
+        // `PlatformBackend::Unsupported` cannot name a foreground window.
+        assert_eq!(snapshot.window_id, None);
+        // A no-op restore is a success, not a fabricated one.
+        assert!(engine.restore_foreground(&snapshot).is_ok());
+    }
 }

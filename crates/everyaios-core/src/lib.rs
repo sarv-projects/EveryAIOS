@@ -166,12 +166,13 @@ pub use widgets::{
     WidgetError,
 };
 pub use work_gateway::{
-    AgentLifetime, AgentSession, AttachmentRef, AuthSource, CapabilityCandidate,
-    CapabilityResolution, ClientCapabilities, ClientSession, ContextReleasePolicy, DomainEvent,
-    ExecutionNode, OperationalEvent, PresenceEvent, PtySession, ReviewItem, RunAuthority,
-    RuntimeEvent, RuntimeManifest as GatewayRuntimeManifest, SteeringInstruction,
-    TrustedGestureAttestation, WorkAddress, WorkEvent, WorkEventEnvelope, WorkGateway,
-    WorkGatewaySnapshot, WorkPresence, WorkPresenceState, WorktreeBinding,
+    AgentLifetime, AgentSession, AttachmentRef, AuthSource, AutonomyLevel, BrokerRequest,
+    CapabilityBroker, CapabilityCandidate, CapabilityGrant, CapabilityResolution,
+    ClientCapabilities, ClientSession, ContextReleasePolicy, DomainEvent, EphemeralCredential,
+    ExecutionNode, GatewayCapabilityBroker, OperationalEvent, PresenceEvent, PtySession,
+    ReviewItem, RunAuthority, RuntimeEvent, RuntimeManifest as GatewayRuntimeManifest,
+    SteeringInstruction, TrustedGestureAttestation, WorkAddress, WorkEvent, WorkEventEnvelope,
+    WorkGateway, WorkGatewaySnapshot, WorkPresence, WorkPresenceState, WorktreeBinding,
 };
 pub use wsl::{
     detect_environment, detect_environment_from_env, translate_linux_to_windows,

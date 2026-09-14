@@ -287,4 +287,50 @@ impl MacBackend {
         }
         Ok(())
     }
+
+    /// P57.4 — this backend lists windows with **synthetic** ids (it walks the
+    /// app list), so a real foreground window cannot be named back. Returning
+    /// `None` is the honest answer: the engine then skips restore rather than
+    /// restoring the wrong thing.
+    pub fn foreground_window() -> Option<u64> {
+        None
+    }
+
+    /// P57.4 — restore is unsupported here for the same reason; the engine
+    /// surfaces this honestly instead of pretending the foreground was handed
+    /// back.
+    pub fn restore_foreground(_window_id: u64) -> Result<(), DesktopError> {
+        Err(DesktopError::Unsupported(
+            "macOS window ids are synthetic — the previous foreground cannot be restored by id"
+                .into(),
+        ))
+    }
+
+    /// P57.5 — Screen Recording consent (TCC). macOS returns a desktop-picture
+    /// placeholder for an ungranted capture, so asking the OS is the only honest
+    /// answer. On non-macOS hosts this probe is not reachable.
+    #[cfg(target_os = "macos")]
+    pub fn screen_recording_granted() -> bool {
+        unsafe extern "C" {
+            fn CGPreflightScreenCaptureAccess() -> bool;
+        }
+        // SAFETY: a side-effect-free CoreGraphics query.
+        unsafe { CGPreflightScreenCaptureAccess() }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn screen_recording_granted() -> bool {
+        false
+    }
+
+    /// P57.5 — Accessibility consent (TCC). A System Events read is refused with
+    /// error -1743 when not granted, so the probe doubles as the check.
+    pub fn accessibility_granted() -> bool {
+        Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to get name of first process")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
 }

@@ -51,10 +51,10 @@ use windows::Win32::UI::Shell::{
     ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    ChildWindowFromPointEx, EnumWindows, GetClassNameW, GetWindowRect, GetWindowTextW,
-    GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SetCursorPos, SetForegroundWindow,
-    ShowWindow, CWP_SKIPINVISIBLE, SW_RESTORE, SW_SHOWNOACTIVATE, SW_SHOWNORMAL, WM_LBUTTONDOWN,
-    WM_LBUTTONUP,
+    ChildWindowFromPointEx, EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowRect,
+    GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, PostMessageW, SetCursorPos,
+    SetForegroundWindow, ShowWindow, CWP_SKIPINVISIBLE, SW_RESTORE, SW_SHOWNOACTIVATE,
+    SW_SHOWNORMAL, WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 
 /// `MK_LBUTTON` — the modifier key state a mouse-down message carries. The
@@ -387,6 +387,43 @@ impl WinBackend {
             region,
             scale: 1.0,
         })
+    }
+
+    /// P57.4 — the HWND that currently owns the foreground. Real HWNDs are
+    /// restorable, so an approved escalation can hand the foreground back.
+    pub fn foreground_window() -> Option<u64> {
+        let hwnd = unsafe { GetForegroundWindow() };
+        if hwnd.is_invalid() {
+            None
+        } else {
+            Some(hwnd.0 as u64)
+        }
+    }
+
+    /// P57.4 — give the foreground back after an approved escalation.
+    pub fn restore_foreground(window_id: u64) -> Result<(), DesktopError> {
+        let hwnd = HWND(window_id as *mut _);
+        let ok = unsafe { SetForegroundWindow(hwnd) };
+        if ok.as_bool() {
+            Ok(())
+        } else {
+            // Windows refuses foreground changes from a non-foreground process;
+            // say so instead of pretending the restore happened.
+            Err(DesktopError::Platform(
+                "SetForegroundWindow refused the restore (this process does not own the \
+                 foreground)"
+                    .into(),
+            ))
+        }
+    }
+
+    /// P57.5 — Session 0 (the services session) has no interactive desktop: a
+    /// process there can neither see nor drive a user's windows. Windows exposes
+    /// the session name it was started in, so this is a fact, not a guess.
+    pub fn interactive_desktop() -> bool {
+        !std::env::var("SESSIONNAME")
+            .map(|v| v.eq_ignore_ascii_case("Services"))
+            .unwrap_or(false)
     }
 }
 

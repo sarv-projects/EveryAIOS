@@ -356,9 +356,58 @@ pub struct Capabilities {
     /// System Events clicks are real pointer events, so background coordinate
     /// clicks refuse and the caller escalates or uses a named AX click.
     pub background_input: bool,
+    /// P57.4 — the platform can report and restore the foreground window, which
+    /// is what makes an approved foreground escalation reversible instead of a
+    /// focus steal.
+    pub foreground_restore: bool,
+    /// P57.7 — a real accessibility action (AT-SPI `Action.Invoke` on Linux /
+    /// AX `AXPress` by point on macOS) exists *without* synthesising a pointer
+    /// event. False means the named-element path is UI Automation (Windows) or
+    /// unavailable, and label it honestly rather than implying parity.
+    pub a11y_action: bool,
+    /// P57.6 — occluded-window capture (Windows Graphics Capture). False until a
+    /// backend actually implements it, so the UI never promises a screenshot the
+    /// platform would return black for.
+    pub see_occluded_wgc: bool,
+    /// P57.5 — Windows Session 0: the process is in the services session, so
+    /// there is no interactive desktop to see or drive. The engine refuses and
+    /// says so instead of reporting an empty window list as success.
+    pub interactive_desktop: bool,
+    /// P57.5 — macOS Screen Recording consent (TCC). False = capture will return
+    /// a desktop-picture placeholder, not the app.
+    pub screen_recording_granted: bool,
+    /// P57.5 — macOS Accessibility consent (TCC). False = System Events driving
+    /// (click/keystroke) is refused by the OS.
+    pub accessibility_granted: bool,
     pub ocr: bool,
     pub window_list: bool,
     pub launch_app: bool,
+}
+
+/// P57.4 — why a Background act cannot be delivered, and what escalating to
+/// Foreground would cost. The engine never escalates silently: it returns this,
+/// the UI renders the Guard-2 card, and only an explicit human gesture flips the
+/// interaction mode for that one act (then the previous foreground is restored).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EscalationRequest {
+    /// Plain-language reason shown on the card ("background input refused;\n    /// escalate to foreground?").
+    pub reason: String,
+    /// The act that could not be delivered under the current default.
+    pub blocked_act: ActKind,
+    /// Always true for P57.4: a foreground escalation is a real foreground
+    /// change, so it needs a human gesture and cannot be auto-approved.
+    pub requires_gesture: bool,
+    /// What would be foregrounded (the target window/app).
+    pub target: String,
+}
+
+/// P57.4 — the window that owned the foreground before an approved escalation,
+/// so it can be given back afterwards. A missing id is honest: the platform
+/// could not tell, and restore is then a no-op rather than a guess.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ForegroundSnapshot {
+    pub window_id: Option<u64>,
+    pub captured_at_ms: u64,
 }
 
 #[cfg(test)]

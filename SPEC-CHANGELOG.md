@@ -16,6 +16,35 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## v3.70 — 2026-09-14 — P49 V1-local Work Gateway wiring + P57.4/P57.5 computer-use honesty
+
+**Category:** Implementation (no capability-row change — census stays 157; these compose existing rows J5/EV1/C6/C10/F8/I6/B8/E5/P7.7/E9). TODO P49 20→16 done + 4 open; P57.4/P57.5 annotated PARTIAL with the Rust half landed.
+
+**Decision:** the P49 V1-local scope ("interfaces + local") is now *wired*, not just typed. Each row gained a live consumer (core method + JSON-RPC arm + Tauri command) plus a test, so the TODO's `[DONE]` rule ("implementation + test + a live consumer") is actually met:
+
+- **P49.1** canonical addressing: `WorkAddress::locator()` / `parse_locator()` (`work:<id>@<node>#<run>`; empty/malformed segments refused) + `work_create`/`work_get`/`work_archive`/`work_locator`.
+- **P49.2** the event stream now carries the new lifecycle events unchanged; `work/events` replay + `subscribe` remain the reconnect path (local in-process transport).
+- **P49.3** node registry: `pair_node` → `verify_node` → `bind_node` (unverified nodes cannot bind; `unbind_node` clears the address and emits `NodeDisconnected` but the Work survives) + `nodes`/`node` + Tauri.
+- **P49.4** `RunAuthority` with a **monotonic per-run fence counter** — a released or migrated lease can never re-issue a token it already used — plus `renew_lease` (stale token refused), `recover_run` (resume under the current holder, else a fresh higher fence) and `migrate_run` (verified target only; revokes the source lease).
+- **P49.7** `CapabilityBroker` trait + `GatewayCapabilityBroker`: `authorize` mints an opaque, run-scoped `EphemeralCredential` handle; `invoke` **refuses** without a live dispatcher (the broker never executes an effect). No secret ever reaches the caller.
+- **P49.8** `CapabilityResolution::choose_best`/`choose_fallback`/`explain_choice` (the router's read surface) + `work_capability_resolve`.
+- **P49.9** `connect_client` performs the handshake and derives `ClientCapabilities` **server-side** (desktop full vs mobile/web/CLI restricted; unknown client type refused) — a caller cannot assert its own capabilities. `AttachmentRef`-style ephemerality: `detach_client` drops the binding, never the Work.
+- **P49.13** review outcomes: `resolve_review_with`/`approve_review_item`/`reject_review_item`/`request_revision` emit `ApprovalResolved`, and terminal outcomes leave the Needs-Me inbox.
+- **P49.14** steering: `queue_steering` (requires an attached, authenticated, `can_steer` client), `interrupt_current_step` (recorded as a `pause`-scope instruction), `apply_steering_checkpoint`.
+- **P49.15** `create_runtime_manifest` freezes + hashes the per-run contract; `restore_runtime_manifest` implements the restore rule — a saved manifest is untrusted data, capabilities only narrow, network/filesystem fall to the stricter tier, and an **unknown label fails closed to the strictest tier**.
+- **P49.17** `AttachmentRef` create/resolve/list/expire with scope + allowed-consumer enforcement (a missing source is refused).
+- **P49.18** presence read stays `work_presence` (already landed).
+
+**Still open (annotated, not faked):** `P49.5` — the sandbox contract lives in `everyaios-guard::sandbox` (SandboxSpec/SandboxReceipt/SandboxRole/LinuxBwrapBackend/`resolve_sandbox_backend`/profiles, all tested); macOS Seatbelt + Windows restricted-token backends, container/MicroVM escalation and the five-layer policy-merge helper remain. `P49.6` — the runtime monitor, postflight Git/protected-file checks and `EffectReceipt.sandbox_receipt` remain.
+
+**P57.4 — foreground escalation (engine/Rust half).** `EscalationRequest` + `ForegroundSnapshot`; `DesktopEngine::escalation_for` is a pure decision (ActivateWindow always; Click where the host has no non-moving path; Scroll/Drag by definition); `act_escalating(.., gesture_approved)` **refuses with the reason and raises nothing** without an explicit gesture, and with one snapshots the previous foreground + interaction default, flips to Foreground for that single act, and restores both (a failed restore marks the outcome `ok = false` — never a clean success). Platform: X11 `_NET_ACTIVE_WINDOW` read + stack/focus restore; Windows `GetForegroundWindow`/`SetForegroundWindow` (a refusal is reported); macOS honestly reports `foreground_restore: false` (its window ids are synthetic). Tauri `desktop_escalation` + `desktop_act_escalating`. The in-UI Guard-2 card component remains open.
+
+**P57.5 — Session 0 / TCC honesty.** `Capabilities` gains `interactive_desktop` / `screen_recording_granted` / `accessibility_granted`; Windows reports Session 0 from `SESSIONNAME=Services`, macOS probes TCC (`CGPreflightScreenCaptureAccess` + a System Events read), Linux reports `true` (TCC is a macOS mechanism). `readiness::derive` returns **Driver missing** with a Session-0 sentence and **Permission required** naming the exact missing consent — an empty window list can no longer read as success.
+
+**Also reported honestly (not implemented):** `Capabilities::see_occluded_wgc` and `Capabilities::a11y_action` are now explicit facts — `false` on every backend that lacks them — so P57.6 (WGC) and P57.7 (AT-SPI `Action.Invoke` / macOS AX-by-point) are machine-readable gaps rather than implied parity.
+
+**Verification:** `cargo test -p everyaios-core` 631 lib + integration suites green (12 new work-gateway tests); `cargo test -p everyaios-computeruse` 61 green (4 new escalation tests; 3 live E2E ignored by design); `cargo test --manifest-path src-tauri/Cargo.toml` 30 + registration_sync 2 green; `cargo fmt --all --check` clean both workspaces; `scripts/ipc-parity.mjs` 0 broken (309 registered); `scripts/check-doc-sync.mjs` green (157 capabilities; 1382 = 1196 done + 186 open; kernel gate clear).
+
 ## v3.69 — 2026-09-13 — Guard network-destination floor + protected agent-config surfaces (P62)
 
 **Category:** Implementation + security (SSRF / private-network containment, config-as-authority-escalation) + verification. Capability rows added: **none** (no census change — the floors land on existing rows J4 and J20). Checkbox flips: **+2 done / +1 open / +1 partial** in the new **P62** queue. Census **157**; live count **1370 = 1184 done + 186 open**.

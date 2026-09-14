@@ -98,6 +98,17 @@ pub fn derive(
             usable: false,
         };
     };
+    // P57.5 — Session 0 (Windows services) has no interactive desktop to see or
+    // drive; saying "driver missing" is the truth, not an empty window list.
+    if !caps.interactive_desktop {
+        return Readiness {
+            state: ReadinessState::DriverMissing,
+            detail: "this process is in a non-interactive session (Session 0) — there is no \
+                     desktop to see or drive"
+                .into(),
+            usable: false,
+        };
+    }
     if kill_stopped {
         return Readiness {
             state: ReadinessState::PolicyBlocked,
@@ -119,6 +130,26 @@ pub fn derive(
             state: ReadinessState::PermissionRequired,
             detail: "the driver cannot act on this host — grant input/accessibility permission"
                 .into(),
+            usable: false,
+        };
+    }
+    // P57.5 — macOS TCC (Screen Recording / Accessibility). Naming the exact
+    // consent is the only way the sentence is actionable; the state is derived
+    // from the OS, never assumed.
+    let mut missing_consent: Vec<&str> = Vec::new();
+    if !caps.screen_recording_granted {
+        missing_consent.push("Screen Recording");
+    }
+    if !caps.accessibility_granted {
+        missing_consent.push("Accessibility");
+    }
+    if !missing_consent.is_empty() {
+        return Readiness {
+            state: ReadinessState::PermissionRequired,
+            detail: format!(
+                "macOS consent missing: {} — grant it in System Settings → Privacy & Security",
+                missing_consent.join(" + ")
+            ),
             usable: false,
         };
     }
@@ -182,6 +213,12 @@ mod tests {
             // Models the Linux host these tests describe: XTEST for the
             // Foreground path plus a synthetic-click path for the default.
             background_input: true,
+            foreground_restore: true,
+            a11y_action: false,
+            see_occluded_wgc: false,
+            interactive_desktop: true,
+            screen_recording_granted: true,
+            accessibility_granted: true,
             ocr,
             window_list: true,
             launch_app: true,
@@ -199,6 +236,13 @@ mod tests {
             invoke_set_value: false,
             send_input: true,
             background_input: false,
+            // macOS-shaped: no restorable foreground id, no AX-by-point action.
+            foreground_restore: false,
+            a11y_action: false,
+            see_occluded_wgc: false,
+            interactive_desktop: true,
+            screen_recording_granted: true,
+            accessibility_granted: true,
             ocr: true,
             window_list: true,
             launch_app: true,

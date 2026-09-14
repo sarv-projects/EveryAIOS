@@ -132,6 +132,42 @@ impl X11Backend {
         Ok((i32::from(reply.root_x), i32::from(reply.root_y)))
     }
 
+    /// P57.4 — the window that currently owns the input focus, per the EWMH
+    /// `_NET_ACTIVE_WINDOW` root property. `None` when the WM does not publish
+    /// one, so an approved escalation's restore becomes a no-op instead of a
+    /// guess (and the engine reports it honestly).
+    pub fn foreground_window(&self) -> Option<u64> {
+        let atom = self.atom(b"_NET_ACTIVE_WINDOW")?;
+        let reply = self
+            .conn
+            .get_property(false, self.root, atom, AtomEnum::WINDOW, 0, 1)
+            .ok()?
+            .reply()
+            .ok()?;
+        let id = reply.value32()?.next()?;
+        if id == 0 {
+            None
+        } else {
+            Some(u64::from(id))
+        }
+    }
+
+    /// P57.4 — hand the foreground back after an approved escalation. Raising +
+    /// focusing is intrinsically a foreground operation, so this is only reached
+    /// from the restore half of an approved escalation.
+    pub fn restore_foreground(&self, window_id: u64) -> Result<(), DesktopError> {
+        let w = Window::from(window_id as u32);
+        self.conn
+            .configure_window(w, &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE))
+            .map_err(|e| DesktopError::Platform(format!("restore stack: {e}")))?;
+        self.conn
+            .set_input_focus(InputFocus::PARENT, w, 0u32)
+            .map_err(|e| DesktopError::Platform(format!("restore focus: {e}")))?;
+        self.conn
+            .flush()
+            .map_err(|e| DesktopError::Platform(format!("flush: {e}")))
+    }
+
     pub fn list_windows(&self) -> Result<Vec<WindowInfo>, DesktopError> {
         // Prefer the EWMH client list (set by a WM); fall back to a raw
         // XQueryTree walk of mapped top-level windows when no WM is running
