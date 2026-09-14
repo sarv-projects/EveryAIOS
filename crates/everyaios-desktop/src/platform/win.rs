@@ -370,6 +370,28 @@ impl WinBackend {
         if width == 0 || height == 0 {
             return Err(DesktopError::Platform("window has zero size".into()));
         }
+        // P57.6 — prefer Windows.Graphics.Capture: it composites the window's
+        // own surface, so occlusion is irrelevant. Its capture size is the
+        // item's, not the rect's, so take the dimensions back from it.
+        if let Some((png, w, h)) = crate::platform::wgc::capture(hwnd) {
+            let region = if region.is_full(w, h) {
+                Region::full(w, h)
+            } else {
+                region.clamp_to(w, h)
+            };
+            return Ok(SeeResult {
+                window_id: window.id,
+                png,
+                width: w,
+                height: h,
+                method: SeeMethod::WindowsGraphicsCapture,
+                region,
+                scale: 1.0,
+            });
+        }
+
+        // Fallback: PrintWindow renders the window directly (independent of
+        // screen occlusion), then BitBlt from the screen DC for popups.
         let png = unsafe { capture_print_window(hwnd, width, height) }
             .or_else(|| unsafe { capture_screen_dc(hwnd, width, height) })
             .ok_or_else(|| DesktopError::Platform("all capture methods failed".into()))?;
@@ -440,7 +462,11 @@ unsafe fn capture_print_window(hwnd: HWND, width: u32, height: u32) -> Option<Ve
         return None;
     }
     let old = SelectObject(mem, bmp);
-    let ok = PrintWindow(hwnd, mem, PRINT_WINDOW_FLAGS(0)).as_bool();
+    // PW_RENDERFULLCONTENT (0x2) asks the window to render its full content —
+    // including DirectComposition / hardware-composited surfaces — which is what
+    // makes this the occluded-window path rather than a plain client redraw.
+    const PW_RENDERFULLCONTENT: u32 = 0x0000_0002;
+    let ok = PrintWindow(hwnd, mem, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT)).as_bool();
     let mut png = None;
     if ok {
         png = dib_to_png(mem, width, height);
@@ -819,9 +845,5 @@ pub fn act(
     }
 }
 
-/// The WGC seam — Windows.Graphics.Capture (WinRT) is the follow-on that
-/// captures occluded windows; see `capabilities()` in the engine.
-#[allow(dead_code)]
-fn _wgc_seam(_hwnd: HWND) -> SeeMethod {
-    SeeMethod::WindowsGraphicsCapture
-}
+// P57.6 — Windows.Graphics.Capture (occluded capture) lives in
+// [`crate::platform::wgc`]; `see()` above calls it first and falls back here.

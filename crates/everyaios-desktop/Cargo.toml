@@ -30,4 +30,18 @@ windows = { version = "0.58", features = [
     "Win32_System_Registry",
     "Win32_System_Com",
     "Win32_Storage_Xps",
+    # P57.6 — Windows.Graphics.Capture (occluded-window capture): the WinRT
+    # capture surface, a BGRA-capable D3D11 device, and the DXGI interop that
+    # maps the captured surface onto an ID3D11Texture2D.
+    "Foundation",
+    "UI",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Direct3D11",
 ] }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MonitorSmartphone, RefreshCw, Eye, FileText, MousePointerClick, OctagonX, ShieldAlert } from 'lucide-react'
+import { MonitorSmartphone, RefreshCw, Eye, FileText, MousePointerClick, Keyboard, OctagonX, ShieldAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,15 +17,25 @@ import {
   desktopRead,
   desktopSee,
   desktopAct,
+  desktopEscalation,
+  desktopActEscalating,
   desktopStop,
+  type DesktopActKind,
   type DesktopStatus,
   type DesktopWindow,
+  type EscalationRequest,
 } from '@/lib/desktop'
+
+type ActOpts = { x?: number; y?: number; name?: string; text?: string }
 
 /**
  * P48.3 (E9) — desktop computer-use view. See / read / act on native windows.
  * Human-gesture path only: the user drives it directly. Every `act` is
  * Guard-2 gated + Merkle-audited on the Rust side; risky classes fail closed.
+ *
+ * P57.4 — acts that need a foreground change do not run silently: the engine
+ * returns an `EscalationRequest`, this view renders the Guard-2 card, and only
+ * an explicit human gesture raises the window for that single act.
  */
 export default function DesktopView() {
   const notify = useAppStore((s) => s.notify)
@@ -42,6 +52,8 @@ export default function DesktopView() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [escalation, setEscalation] = useState<EscalationRequest | null>(null)
+  const [pendingAct, setPendingAct] = useState<{ kind: DesktopActKind; opts: ActOpts } | null>(null)
 
   async function refresh() {
     if (loading) return
@@ -128,14 +140,25 @@ export default function DesktopView() {
     }
   }
 
-  async function typeInto() {
-    if (selected === null || !typeText.trim()) return
+  /**
+   * P57.4 — every act goes through the escalation gate first. The engine's
+   * `escalation_for` is a pure read: if the act needs a foreground change we
+   * show the Guard-2 card and STOP (nothing moves) until a human gesture
+   * approves it. Anything else runs as a normal human-gesture act.
+   */
+  async function runAct(kind: DesktopActKind, opts: ActOpts = {}) {
+    if (selected === null) return
     setBusy(true)
     setError(null)
     try {
-      await desktopAct(selected, 'type', { text: typeText })
-      notify(`Typed into window ${selected}`)
-      setTypeText('')
+      const esc = await desktopEscalation(selected, kind, opts)
+      if (esc) {
+        setEscalation(esc)
+        setPendingAct({ kind, opts })
+        return
+      }
+      await desktopAct(selected, kind, opts)
+      notify(`Ran ${kind} on window ${selected}`)
     } catch (err) {
       // Fail-closed denials surface honestly.
       const msg = err instanceof Error ? err.message : 'Act declined'
@@ -144,6 +167,50 @@ export default function DesktopView() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function typeInto() {
+    if (selected === null || !typeText.trim()) return
+    const text = typeText
+    setTypeText('')
+    await runAct('type', { text })
+  }
+
+  /** Click the window centre — the human gesture that can trigger escalation. */
+  async function clickCentre() {
+    if (selected === null) return
+    const w = windows.find((x) => x.id === selected)
+    if (!w) return
+    await runAct('click', { x: Math.round(w.width / 2), y: Math.round(w.height / 2) })
+  }
+
+  /** Approve the pending foreground escalation and run exactly that one act. */
+  async function approveEscalation() {
+    if (selected === null || !pendingAct) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await desktopActEscalating(selected, pendingAct.kind, true, pendingAct.opts)
+      notify(
+        r.restored != null
+          ? `Escalated ${pendingAct.kind} — foreground restored to window ${r.restored}`
+          : `Escalated ${pendingAct.kind}`,  
+      )
+      setEscalation(null)
+      setPendingAct(null)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Escalation declined'
+      setError(msg)
+      notify(msg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function cancelEscalation() {
+    setEscalation(null)
+    setPendingAct(null)
+    notify('Escalation declined — nothing was raised')
   }
 
   async function selectWindow(id: number) {
@@ -155,6 +222,8 @@ export default function DesktopView() {
     setShotBroken(false)
     setTypeText('')
     setError(null)
+    setEscalation(null)
+    setPendingAct(null)
   }
 
   async function estop() {
@@ -179,6 +248,8 @@ export default function DesktopView() {
     setSelected(null)
     setTree('')
     setShot(null)
+    setEscalation(null)
+    setPendingAct(null)
   }
 
   const caps = status?.capabilities
@@ -328,7 +399,55 @@ export default function DesktopView() {
                 <Button size="sm" variant="outline" disabled={busy || loading} onClick={() => void readWindow()}>
                   <FileText className="h-3 w-3" /> Read tree
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || loading || !inTauri()}
+                  title={inTauri() ? 'Click the window centre' : 'Click needs the desktop shell'}
+                  onClick={() => void clickCentre()}
+                >
+                  <MousePointerClick className="h-3 w-3" /> Click centre
+                </Button>
               </div>
+
+              {/* P57.4 — Guard-2 escalation card. Nothing moves until the human
+                  gestures; approving runs exactly this one act under Foreground
+                  and restores the previous foreground afterwards. */}
+              <AnimatePresence>
+                {escalation && (
+                  <motion.div
+                    key="escalation-card"
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3"
+                  >
+                    <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-300">
+                      <ShieldAlert className="h-3.5 w-3.5" /> Foreground escalation required
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-amber-200/90">{escalation.reason}</p>
+                    <div className="mt-2 grid gap-1 font-mono text-[10px] text-muted-foreground">
+                      <span>target · {escalation.target}</span>
+                      <span>requires · explicit human gesture</span>
+                      <span>effect · foreground changes for this one act, then the previous window is restored</span>
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 bg-amber-500 text-black hover:bg-amber-400"
+                        disabled={busy}
+                        onClick={() => void approveEscalation()}
+                      >
+                        Approve &amp; escalate
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-[10px]" disabled={busy} onClick={cancelEscalation}>
+                        Decline
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <div className="flex gap-2">
                 <Input
@@ -340,7 +459,7 @@ export default function DesktopView() {
                   className="h-8 flex-1 text-xs"
                 />
                 <Button size="sm" variant="default" className="bg-orange-500 text-black hover:bg-orange-400" disabled={busy || loading || !inTauri() || !typeText.trim()} onClick={() => void typeInto()}>
-                  <MousePointerClick className="h-3 w-3" /> Type
+                  <Keyboard className="h-3 w-3" /> Type
                 </Button>
               </div>
               <p className="text-[10px] text-muted-foreground">
