@@ -255,3 +255,415 @@ pub fn work_agent_sessions(state: State<'_, AppState>, work_id: String) -> Resul
     let g = gateway.lock().map_err(|e| e.to_string())?;
     serde_json::to_value(g.agent_sessions_for(&work_id)).map_err(|e| e.to_string())
 }
+
+// =============================================================================
+// P49.1/.3/.4/.7/.8/.9/.13/.14/.15/.17 — the V1-local Work Gateway wiring.
+// Each command below is the live consumer for its queue row: the Gateway owns
+// the durable state, Tauri is only the transport. Remote clients / multi-node
+// failover stay post-v1 (P49.19/.20).
+// =============================================================================
+
+/// P49.1 — create a Work (canonical address, durable).
+#[tauri::command]
+pub fn work_create(
+    state: State<'_, AppState>,
+    work_id: String,
+    objective: String,
+    project_id: Option<String>,
+    session_id: Option<String>,
+) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let address = g.create_work(work_id, project_id, session_id, objective);
+    serde_json::to_value(address).map_err(|e| e.to_string())
+}
+
+/// P49.1 — read a single Work address.
+#[tauri::command]
+pub fn work_get(state: State<'_, AppState>, work_id: String) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    serde_json::to_value(g.get_work(&work_id)).map_err(|e| e.to_string())
+}
+
+/// P49.1 — archive a Work.
+#[tauri::command]
+pub fn work_archive(state: State<'_, AppState>, work_id: String) -> Result<bool, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    Ok(g.archive_work(&work_id))
+}
+
+/// P49.1 — the canonical externally-addressable locator for a Work.
+#[tauri::command]
+pub fn work_locator(state: State<'_, AppState>, work_id: String) -> Result<String, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    g.get_work(&work_id)
+        .map(|a| a.locator())
+        .ok_or_else(|| format!("unknown work: {work_id}"))
+}
+
+/// P49.3 — list registered execution nodes.
+#[tauri::command]
+pub fn work_nodes(state: State<'_, AppState>) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    serde_json::to_value(g.nodes()).map_err(|e| e.to_string())
+}
+
+/// P49.3 — pair + verify a node (V1: the desktop itself is node-1).
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub fn work_node_register(
+    state: State<'_, AppState>,
+    node_id: String,
+    owner: String,
+    platform: String,
+    node_kind: String,
+    always_on: bool,
+    capabilities: Vec<String>,
+    network_policy: String,
+    sandbox_class: String,
+) -> Result<Value, String> {
+    use everyaios_core::ExecutionNode;
+    let node = ExecutionNode {
+        node_id,
+        owner,
+        platform,
+        node_kind,
+        always_on,
+        capabilities,
+        sandbox_class,
+        network_policy,
+        credential_policy: "brokered".into(),
+        health: String::new(),
+        last_heartbeat_ms: 0,
+    };
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let paired = g.pair_node(node)?;
+    let verified = g.verify_node(&paired.node_id)?;
+    serde_json::to_value(verified).map_err(|e| e.to_string())
+}
+
+/// P49.3 — bind a verified node to a Work.
+#[tauri::command]
+pub fn work_node_bind(
+    state: State<'_, AppState>,
+    node_id: String,
+    work_id: String,
+) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    serde_json::to_value(g.bind_node(&node_id, &work_id)?).map_err(|e| e.to_string())
+}
+
+/// P49.3 — unbind a node; the Work survives.
+#[tauri::command]
+pub fn work_node_unbind(state: State<'_, AppState>, node_id: String) -> Result<bool, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    Ok(g.unbind_node(&node_id))
+}
+
+/// P49.4 — acquire the run authority (lease + fencing token).
+#[tauri::command]
+pub fn work_authority_acquire(
+    state: State<'_, AppState>,
+    run_id: String,
+    node_id: String,
+    ttl_ms: Option<u64>,
+) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let authority = g.acquire_run_authority(&run_id, &node_id, ttl_ms.unwrap_or(60_000))?;
+    serde_json::to_value(authority).map_err(|e| e.to_string())
+}
+
+/// P49.4 — renew a live lease (a stale fence is refused).
+#[tauri::command]
+pub fn work_authority_renew(
+    state: State<'_, AppState>,
+    run_id: String,
+    node_id: String,
+    token: u64,
+    ttl_ms: Option<u64>,
+) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let authority = g.renew_lease(&run_id, &node_id, token, ttl_ms.unwrap_or(60_000))?;
+    serde_json::to_value(authority).map_err(|e| e.to_string())
+}
+
+/// P49.4 — release the run authority.
+#[tauri::command]
+pub fn work_authority_release(
+    state: State<'_, AppState>,
+    run_id: String,
+    node_id: String,
+    token: u64,
+) -> Result<bool, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    Ok(g.release_authority(&run_id, &node_id, token))
+}
+
+/// P49.9 — list the clients bound to a Work.
+#[tauri::command]
+pub fn work_clients(state: State<'_, AppState>, work_id: String) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    serde_json::to_value(g.clients_for(&work_id)).map_err(|e| e.to_string())
+}
+
+/// P49.9 — the V1 client handshake (authenticate → negotiate → bind).
+#[tauri::command]
+pub fn work_client_connect(
+    state: State<'_, AppState>,
+    client_id: String,
+    client_type: String,
+    work_id: String,
+    authenticated: bool,
+) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let client = g.connect_client(&client_id, &client_type, &work_id, authenticated)?;
+    serde_json::to_value(client).map_err(|e| e.to_string())
+}
+
+/// P49.9 — detach a client binding (the binding dies; the Work does not).
+#[tauri::command]
+pub fn work_client_detach(state: State<'_, AppState>, client_id: String) -> Result<bool, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    Ok(g.detach_client(&client_id))
+}
+
+/// P49.7 — the brokered capability set.
+#[tauri::command]
+pub fn work_capabilities(state: State<'_, AppState>) -> Result<Value, String> {
+    use everyaios_core::CapabilityBroker;
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    serde_json::to_value(g.broker().list_capabilities()).map_err(|e| e.to_string())
+}
+
+/// P49.7 — mint an opaque, run-scoped credential handle (never a secret).
+#[tauri::command]
+pub fn work_capability_grant(
+    state: State<'_, AppState>,
+    capability_id: String,
+    work_id: String,
+    run_id: String,
+    consumer: String,
+) -> Result<Value, String> {
+    use everyaios_core::{BrokerRequest, CapabilityBroker};
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    let request = BrokerRequest {
+        capability_id,
+        work_id,
+        run_id,
+        consumer,
+    };
+    let grant = g.broker().authorize(&request)?;
+    serde_json::to_value(grant).map_err(|e| e.to_string())
+}
+
+/// P49.8 — resolve an intent to a ranked capability path.
+#[tauri::command]
+pub fn work_capability_resolve(
+    state: State<'_, AppState>,
+    intent: String,
+    candidates: Value,
+) -> Result<Value, String> {
+    use everyaios_core::CapabilityCandidate;
+    let candidates: Vec<CapabilityCandidate> =
+        serde_json::from_value(candidates).map_err(|e| e.to_string())?;
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    let resolution = g.resolve_capability(&intent, candidates);
+    let mut value = serde_json::to_value(&resolution).map_err(|e| e.to_string())?;
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "explanation".into(),
+            Value::String(resolution.explain_choice()),
+        );
+    }
+    Ok(value)
+}
+
+/// P49.13 — resolve a review item (approved | rejected | revision_requested).
+#[tauri::command]
+pub fn work_review_resolve(
+    state: State<'_, AppState>,
+    review_id: String,
+    state_name: String,
+) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let event = g.resolve_review_with(&review_id, &state_name)?;
+    serde_json::to_value(event).map_err(|e| e.to_string())
+}
+
+/// P49.14 — queue a steering instruction (durable policy delta).
+#[tauri::command]
+pub fn work_steer(
+    state: State<'_, AppState>,
+    work_id: String,
+    client_id: String,
+    instruction: String,
+    scope: String,
+    run_id: Option<String>,
+    priority: Option<u8>,
+) -> Result<Value, String> {
+    use everyaios_core::SteeringInstruction;
+    let steering = SteeringInstruction {
+        work_id: work_id.clone(),
+        run_id,
+        source_client: client_id,
+        instruction,
+        scope,
+        priority: priority.unwrap_or(50),
+        created_at_ms: 0,
+    };
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let event = g.queue_steering(steering)?;
+    serde_json::to_value(event).map_err(|e| e.to_string())
+}
+
+/// P49.14 — ask the run to stop at the current step boundary.
+#[tauri::command]
+pub fn work_steer_interrupt(
+    state: State<'_, AppState>,
+    work_id: String,
+    client_id: String,
+    reason: String,
+) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let event = g.interrupt_current_step(&work_id, &client_id, &reason)?;
+    serde_json::to_value(event).map_err(|e| e.to_string())
+}
+
+/// P49.15 — freeze the full per-run runtime contract.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub fn work_manifest_create(
+    state: State<'_, AppState>,
+    work_id: String,
+    chief: String,
+    model: String,
+    capabilities: Vec<String>,
+    network_policy: String,
+    filesystem_policy: String,
+    autonomy: String,
+    node_id: String,
+) -> Result<Value, String> {
+    use everyaios_core::{AutonomyLevel, GatewayRuntimeManifest};
+    let mut manifest = GatewayRuntimeManifest::new(work_id.clone(), chief, model);
+    manifest.capabilities = capabilities;
+    manifest.network_policy = network_policy;
+    manifest.filesystem_policy = filesystem_policy;
+    manifest.node_id = node_id;
+    manifest.autonomy = match autonomy.as_str() {
+        "sandbox" => AutonomyLevel::Sandbox,
+        "auto" => AutonomyLevel::Auto,
+        "maximum" => AutonomyLevel::Maximum,
+        _ => AutonomyLevel::Ask,
+    };
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    let frozen = g.create_runtime_manifest(&work_id, manifest)?;
+    serde_json::to_value(frozen).map_err(|e| e.to_string())
+}
+
+/// P49.15 — read the frozen manifest for a Work.
+#[tauri::command]
+pub fn work_manifest_get(state: State<'_, AppState>, work_id: String) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    serde_json::to_value(g.runtime_manifest(&work_id)).map_err(|e| e.to_string())
+}
+
+/// P49.15 — restore a saved manifest intersected with the current trusted
+/// policy (a saved manifest is untrusted data; nothing widens).
+#[tauri::command]
+pub fn work_manifest_restore(
+    state: State<'_, AppState>,
+    work_id: String,
+    trusted_capabilities: Vec<String>,
+    trusted_network: String,
+    trusted_filesystem: String,
+) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    let saved = g
+        .runtime_manifest(&work_id)
+        .cloned()
+        .ok_or_else(|| format!("no runtime manifest for work: {work_id}"))?;
+    let restored = g.restore_runtime_manifest(
+        &saved,
+        &trusted_capabilities,
+        &trusted_network,
+        &trusted_filesystem,
+    );
+    serde_json::to_value(restored).map_err(|e| e.to_string())
+}
+
+/// P49.17 — register a content-addressed attachment reference.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub fn work_attachment_add(
+    state: State<'_, AppState>,
+    attachment_id: String,
+    work_id: String,
+    path: String,
+    media_type: String,
+    source: String,
+    allowed_consumers: Vec<String>,
+    retention: String,
+) -> Result<Value, String> {
+    use everyaios_core::AttachmentRef;
+    let source_path = std::path::PathBuf::from(&path);
+    let attachment = AttachmentRef {
+        attachment_id,
+        content_hash: String::new(),
+        size: std::fs::metadata(&source_path)
+            .map(|m| m.len())
+            .unwrap_or(0),
+        media_type,
+        source,
+        work_scope: work_id.clone(),
+        session_scope: None,
+        allowed_consumers,
+        retention,
+    };
+    let gateway = gateway(&state)?;
+    let mut g = gateway.lock().map_err(|e| e.to_string())?;
+    g.create_attachment(attachment, source_path)?;
+    serde_json::to_value(g.attachments_for(&work_id)).map_err(|e| e.to_string())
+}
+
+/// P49.17 — list the attachments scoped to a Work.
+#[tauri::command]
+pub fn work_attachment_list(state: State<'_, AppState>, work_id: String) -> Result<Value, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    serde_json::to_value(g.attachments_for(&work_id)).map_err(|e| e.to_string())
+}
+
+/// P49.17 — resolve an attachment for an allowed consumer.
+#[tauri::command]
+pub fn work_attachment_resolve(
+    state: State<'_, AppState>,
+    attachment_id: String,
+    consumer: String,
+) -> Result<String, String> {
+    let gateway = gateway(&state)?;
+    let g = gateway.lock().map_err(|e| e.to_string())?;
+    g.resolve_attachment(&attachment_id, &consumer)
+        .map(|p| p.display().to_string())
+}

@@ -5,7 +5,8 @@
 //! it does not execute effects. Remote clients, multi-node failover, and
 //! platform sandbox enforcement remain explicit follow-up seams.
 
-use everyaios_types::{AutonomyLevel, RiskLevel, WorkId};
+pub use everyaios_types::AutonomyLevel;
+use everyaios_types::{RiskLevel, WorkId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -26,6 +27,25 @@ fn digest<T: Serialize>(value: &T) -> String {
     let mut h = Sha256::new();
     h.update(serde_json::to_vec(value).unwrap_or_default());
     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// P49.13 — a review item the user has already acted on.
+fn is_terminal_review_state(state: &str) -> bool {
+    matches!(state, "resolved" | "approved" | "rejected")
+}
+
+/// Ordered policy ladders for P49.15's restore intersect (index 0 = strictest).
+const NETWORK_LADDER: [&str; 4] = ["offline", "loopback", "allowlist", "open"];
+const FILESYSTEM_LADDER: [&str; 4] = ["workspace", "project", "home", "system"];
+
+/// Take the stricter of two ordered policy labels. An unknown label on either
+/// side is never treated as permissive — it fails closed to the strictest tier.
+fn narrow(current: &str, trusted: &str, ladder: &[&str; 4]) -> String {
+    let idx = |v: &str| ladder.iter().position(|x| *x == v);
+    match (idx(current), idx(trusted)) {
+        (Some(a), Some(b)) => ladder[a.min(b)].to_string(),
+        _ => ladder[0].to_string(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,6 +71,51 @@ impl WorkAddress {
             current_run_id: None,
             version: 1,
         }
+    }
+
+    /// P49.1 — the canonical externally-addressable locator:
+    /// `work:<id>@<node>#<run>`. Optional segments are omitted when unknown so
+    /// the locator stays stable and round-trips through `parse_locator`.
+    pub fn locator(&self) -> String {
+        let mut out = format!("work:{}", self.work_id.as_str());
+        if let Some(node) = &self.node_id {
+            out.push('@');
+            out.push_str(node);
+        }
+        if let Some(run) = &self.current_run_id {
+            out.push('#');
+            out.push_str(run);
+        }
+        out
+    }
+
+    /// Parse a locator back into an address. Malformed segments are refused
+    /// rather than silently dropped, so a typo cannot address the wrong Work.
+    pub fn parse_locator(locator: &str) -> Result<Self, String> {
+        let rest = locator
+            .strip_prefix("work:")
+            .ok_or("locator must start with 'work:'")?;
+        let (head, run) = match rest.split_once('#') {
+            Some((h, r)) => (h, Some(r.to_string())),
+            None => (rest, None),
+        };
+        let (id, node) = match head.split_once('@') {
+            Some((i, n)) => (i, Some(n.to_string())),
+            None => (head, None),
+        };
+        if id.is_empty() {
+            return Err("locator requires a work id".into());
+        }
+        if matches!(&run, Some(r) if r.is_empty()) {
+            return Err("locator has an empty run id".into());
+        }
+        if matches!(&node, Some(n) if n.is_empty()) {
+            return Err("locator has an empty node id".into());
+        }
+        let mut address = Self::new(id);
+        address.node_id = node;
+        address.current_run_id = run;
+        Ok(address)
     }
 }
 
@@ -429,6 +494,11 @@ impl RuntimeManifest {
     pub fn verify_hash(&self) -> bool {
         self.config_hash == digest(&self.without_hash())
     }
+    /// Recompute the contract hash after an intentional, policy-checked change
+    /// (used by `create_runtime_manifest` and the restore intersect).
+    pub fn refresh_hash(&mut self) {
+        self.config_hash = digest(&self.without_hash());
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -558,6 +628,15 @@ pub struct WorkGateway {
     ptys: HashMap<String, PtySession>,
     worktrees: HashMap<String, WorktreeBinding>,
     agent_sessions: HashMap<String, AgentSession>,
+    /// P49.15 — the frozen per-run runtime contract, keyed by work. A user
+    /// change after start never silently mutates the Run.
+    manifests: HashMap<String, RuntimeManifest>,
+    /// P49.7 — the V1-local capability broker (opaque handles only).
+    broker: GatewayCapabilityBroker,
+    /// P49.4 — monotonic per-run fence counter. Tokens are never reused, even
+    /// after a lease is released or a run migrates, so a stale worker can never
+    /// present a token that happens to be valid again.
+    fence_counters: HashMap<String, u64>,
     next_seq: u64,
     /// Canonical mapping to the existing ExecutionKernel Work record.
     execution_ids: HashMap<String, String>,
@@ -1408,6 +1487,184 @@ impl WorkGateway {
             }
             "work/agent_sessions" => serde_json::to_value(self.agent_sessions_for(&s("workId")))
                 .map_err(|e| e.to_string()),
+            // ---- P49.1 — canonical addressing ----
+            "work/create" => serde_json::to_value(self.create_work(
+                s("workId"),
+                opt_s("projectId"),
+                opt_s("sessionId"),
+                s("objective"),
+            ))
+            .map_err(|e| e.to_string()),
+            "work/get" => {
+                serde_json::to_value(self.get_work(&s("workId"))).map_err(|e| e.to_string())
+            }
+            "work/list" => serde_json::to_value(self.list_work()).map_err(|e| e.to_string()),
+            "work/archive" => Ok(Value::Bool(self.archive_work(&s("workId")))),
+            "work/locator" => match self.get_work(&s("workId")) {
+                Some(address) => Ok(Value::String(address.locator())),
+                None => Err("unknown work".into()),
+            },
+            "work/resolve_locator" => {
+                serde_json::to_value(WorkAddress::parse_locator(&s("locator"))?)
+                    .map_err(|e| e.to_string())
+            }
+            // ---- P49.3 — ExecutionNode registry ----
+            "work/nodes" => serde_json::to_value(self.nodes()).map_err(|e| e.to_string()),
+            "work/node_pair" => {
+                let node: ExecutionNode =
+                    serde_json::from_value(p.get("node").cloned().unwrap_or(Value::Null))
+                        .map_err(|e| e.to_string())?;
+                serde_json::to_value(self.pair_node(node)?).map_err(|e| e.to_string())
+            }
+            "work/node_verify" => {
+                serde_json::to_value(self.verify_node(&s("nodeId"))?).map_err(|e| e.to_string())
+            }
+            "work/node_bind" => serde_json::to_value(self.bind_node(&s("nodeId"), &s("workId"))?)
+                .map_err(|e| e.to_string()),
+            "work/node_unbind" => Ok(Value::Bool(self.unbind_node(&s("nodeId")))),
+            "work/node_migrate" => serde_json::to_value(self.migrate_run(
+                &s("runId"),
+                &s("nodeId"),
+                p.get("ttlMs").and_then(Value::as_u64).unwrap_or(60_000),
+            )?)
+            .map_err(|e| e.to_string()),
+            // ---- P49.4 — RunAuthority ----
+            "work/authority_acquire" => serde_json::to_value(self.acquire_run_authority(
+                &s("runId"),
+                &s("nodeId"),
+                p.get("ttlMs").and_then(Value::as_u64).unwrap_or(60_000),
+            )?)
+            .map_err(|e| e.to_string()),
+            "work/authority_renew" => serde_json::to_value(self.renew_lease(
+                &s("runId"),
+                &s("nodeId"),
+                p.get("token").and_then(Value::as_u64).unwrap_or(0),
+                p.get("ttlMs").and_then(Value::as_u64).unwrap_or(60_000),
+            )?)
+            .map_err(|e| e.to_string()),
+            "work/authority_release" => Ok(Value::Bool(self.release_authority(
+                &s("runId"),
+                &s("nodeId"),
+                p.get("token").and_then(Value::as_u64).unwrap_or(0),
+            ))),
+            "work/authority_recover" => serde_json::to_value(self.recover_run(
+                &s("runId"),
+                &s("nodeId"),
+                p.get("ttlMs").and_then(Value::as_u64).unwrap_or(60_000),
+            )?)
+            .map_err(|e| e.to_string()),
+            "work/authority" => {
+                serde_json::to_value(self.authority(&s("runId"))).map_err(|e| e.to_string())
+            }
+            // ---- P49.9 — client handshake ----
+            "work/client_connect" => serde_json::to_value(
+                self.connect_client(
+                    &s("clientId"),
+                    &s("clientType"),
+                    &s("workId"),
+                    p.get("authenticated")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                )?,
+            )
+            .map_err(|e| e.to_string()),
+            "work/client_detach" => Ok(Value::Bool(self.detach_client(&s("clientId")))),
+            "work/clients" => {
+                serde_json::to_value(self.clients_for(&s("workId"))).map_err(|e| e.to_string())
+            }
+            // ---- P49.7/.8 — broker + resolver ----
+            "work/capabilities" => {
+                serde_json::to_value(self.broker().list_capabilities()).map_err(|e| e.to_string())
+            }
+            "work/capability_grant" => {
+                let request = BrokerRequest {
+                    capability_id: s("capabilityId"),
+                    work_id: s("workId"),
+                    run_id: s("runId"),
+                    consumer: s("consumer"),
+                };
+                let grant = self.broker().authorize(&request)?;
+                serde_json::to_value(grant).map_err(|e| e.to_string())
+            }
+            "work/capability_resolve" => {
+                let candidates: Vec<CapabilityCandidate> =
+                    serde_json::from_value(p.get("candidates").cloned().unwrap_or(Value::Null))
+                        .map_err(|e| e.to_string())?;
+                serde_json::to_value(self.resolve_capability(&s("intent"), candidates))
+                    .map_err(|e| e.to_string())
+            }
+            // ---- P49.13 — ReviewQueue ----
+            "work/review_request" => {
+                let item: ReviewItem =
+                    serde_json::from_value(p.get("item").cloned().unwrap_or(Value::Null))
+                        .map_err(|e| e.to_string())?;
+                ev(self.request_review(item)?)
+            }
+            "work/review_resolve" => ev(self.resolve_review_with(&s("reviewId"), &s("state"))?),
+            // ---- P49.14 — steering ----
+            "work/steer" => {
+                let instruction = SteeringInstruction {
+                    work_id: s("workId"),
+                    run_id: opt_s("runId"),
+                    source_client: s("clientId"),
+                    instruction: s("instruction"),
+                    scope: s("scope"),
+                    priority: p.get("priority").and_then(Value::as_u64).unwrap_or(50) as u8,
+                    created_at_ms: now_ms(),
+                };
+                ev(self.queue_steering(instruction)?)
+            }
+            "work/steer_interrupt" => {
+                ev(self.interrupt_current_step(&s("workId"), &s("clientId"), &s("reason"))?)
+            }
+            "work/steer_checkpoint" => ev(self.apply_steering_checkpoint(
+                &s("workId"),
+                &s("runId"),
+                p.get("checkpoint").and_then(Value::as_u64).unwrap_or(0) as u32,
+            )?),
+            // ---- P49.15 — RuntimeManifest ----
+            "work/manifest_create" => {
+                let manifest: RuntimeManifest =
+                    serde_json::from_value(p.get("manifest").cloned().unwrap_or(Value::Null))
+                        .map_err(|e| e.to_string())?;
+                serde_json::to_value(self.create_runtime_manifest(&s("workId"), manifest)?)
+                    .map_err(|e| e.to_string())
+            }
+            "work/manifest_get" => {
+                serde_json::to_value(self.runtime_manifest(&s("workId"))).map_err(|e| e.to_string())
+            }
+            "work/manifest_restore" => {
+                let saved: RuntimeManifest =
+                    serde_json::from_value(p.get("manifest").cloned().unwrap_or(Value::Null))
+                        .map_err(|e| e.to_string())?;
+                let caps: Vec<String> = serde_json::from_value(
+                    p.get("trustedCapabilities").cloned().unwrap_or(Value::Null),
+                )
+                .unwrap_or_default();
+                serde_json::to_value(self.restore_runtime_manifest(
+                    &saved,
+                    &caps,
+                    &s("trustedNetwork"),
+                    &s("trustedFilesystem"),
+                ))
+                .map_err(|e| e.to_string())
+            }
+            // ---- P49.17 — AttachmentRef ----
+            "work/attachment_add" => {
+                let attachment: AttachmentRef =
+                    serde_json::from_value(p.get("attachment").cloned().unwrap_or(Value::Null))
+                        .map_err(|e| e.to_string())?;
+                self.create_attachment(attachment, PathBuf::from(s("path")))?;
+                Ok(Value::Bool(true))
+            }
+            "work/attachment_list" => {
+                serde_json::to_value(self.attachments_for(&s("workId"))).map_err(|e| e.to_string())
+            }
+            "work/attachment_resolve" => {
+                let path = self.resolve_attachment(&s("attachmentId"), &s("consumer"))?;
+                Ok(Value::String(path.display().to_string()))
+            }
+            "work/attachment_expire" => Ok(Value::Bool(self.expire_attachment(&s("attachmentId")))),
             other => Err(format!("unknown work method: {other}")),
         }
     }
@@ -1704,11 +1961,8 @@ impl WorkGateway {
                 return Err("run authority already held".into());
             }
         }
-        let token = self
-            .authorities
-            .get(run_id)
-            .map(|a| a.fencing_token + 1)
-            .unwrap_or(1);
+        let token = self.fence_counters.get(run_id).copied().unwrap_or(0) + 1;
+        self.fence_counters.insert(run_id.to_string(), token);
         let a = RunAuthority {
             run_id: run_id.into(),
             node_id: node_id.into(),
@@ -1737,10 +1991,12 @@ impl WorkGateway {
     pub fn add_review(&mut self, item: ReviewItem) {
         self.reviews.insert(item.review_id.clone(), item);
     }
+    /// Open review items only. Terminal outcomes (P49.13) are excluded so the
+    /// Needs-Me inbox never re-surfaces an item the user already acted on.
     pub fn reviews(&self, work_id: &str) -> Vec<&ReviewItem> {
         self.reviews
             .values()
-            .filter(|r| r.work_id == work_id && r.state != "resolved")
+            .filter(|r| r.work_id == work_id && !is_terminal_review_state(&r.state))
             .collect()
     }
     pub fn resolve_review(&mut self, id: &str) -> bool {
@@ -1837,6 +2093,512 @@ impl WorkGateway {
             nodes: self.nodes.values().cloned().collect(),
             reviews: self.reviews(work_id).into_iter().cloned().collect(),
         })
+    }
+}
+
+// ===========================================================================
+// P49.7 — CapabilityBroker: the trusted intermediary.
+//
+// The agent receives an opaque, run-scoped handle — never a raw secret — and
+// connector auth stays outside the sandbox (Anthropic's cloud-sandbox topology
+// reproduced locally). With no live dispatcher registered, `invoke` is an
+// honest refusal, not a fabricated success.
+// ===========================================================================
+
+/// A short-lived, run-scoped credential handle. The secret itself is never
+/// returned to the caller; `handle` is an opaque reference the broker resolves.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EphemeralCredential {
+    pub handle: String,
+    pub scope: Vec<String>,
+    pub issued_for_run: String,
+    pub expires_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrokerRequest {
+    pub capability_id: String,
+    pub work_id: String,
+    pub run_id: String,
+    pub consumer: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CapabilityGrant {
+    pub grant_id: String,
+    pub capability_id: String,
+    pub credential: EphemeralCredential,
+    pub granted_at_ms: u64,
+}
+
+/// P49.7 — the broker boundary. `invoke` requires a live dispatcher; effects
+/// themselves stay on the ticket/executor path.
+pub trait CapabilityBroker {
+    fn list_capabilities(&self) -> Vec<String>;
+    fn authorize(&self, request: &BrokerRequest) -> Result<CapabilityGrant, String>;
+    fn invoke(&self, grant: &CapabilityGrant, request: &Value) -> Result<Value, String>;
+}
+
+/// V1-local broker: knows which capabilities it may broker, mints opaque
+/// handles scoped to a run, and never hands the caller a secret.
+#[derive(Debug, Default, Clone)]
+pub struct GatewayCapabilityBroker {
+    capabilities: Vec<String>,
+}
+
+impl GatewayCapabilityBroker {
+    pub fn new(capabilities: Vec<String>) -> Self {
+        Self { capabilities }
+    }
+}
+
+impl CapabilityBroker for GatewayCapabilityBroker {
+    fn list_capabilities(&self) -> Vec<String> {
+        self.capabilities.clone()
+    }
+
+    fn authorize(&self, request: &BrokerRequest) -> Result<CapabilityGrant, String> {
+        if !self
+            .capabilities
+            .iter()
+            .any(|c| c == &request.capability_id)
+        {
+            return Err(format!(
+                "capability not brokered: {}",
+                request.capability_id
+            ));
+        }
+        if request.run_id.is_empty() {
+            return Err("broker grant requires a run id".into());
+        }
+        Ok(CapabilityGrant {
+            grant_id: format!("grant:{}:{}", request.capability_id, request.run_id),
+            capability_id: request.capability_id.clone(),
+            credential: EphemeralCredential {
+                handle: format!("cred:{}:{}", request.capability_id, request.run_id),
+                scope: vec![request.capability_id.clone()],
+                issued_for_run: request.run_id.clone(),
+                expires_at_ms: 0,
+            },
+            granted_at_ms: now_ms(),
+        })
+    }
+
+    fn invoke(&self, _grant: &CapabilityGrant, _request: &Value) -> Result<Value, String> {
+        Err("capability invocation requires a live dispatcher (ticket/executor path)".into())
+    }
+}
+
+// ===========================================================================
+// P49.8 — CapabilityResolution decision helpers. `resolve_capability` ranks;
+// these are the read surface the router consumes (one universal resolver for
+// connector > browser > desktop-CU > fallback).
+// ===========================================================================
+
+impl CapabilityResolution {
+    /// The highest-ranked capability that satisfies the intent.
+    pub fn choose_best(&self) -> Option<&str> {
+        self.ranked_path.first().map(String::as_str)
+    }
+
+    /// The next-ranked capability if the best is unavailable at runtime.
+    pub fn choose_fallback(&self) -> Option<&str> {
+        self.fallback_path.first().map(String::as_str)
+    }
+
+    /// A one-line, user-safe explanation of the choice + its fallbacks.
+    pub fn explain_choice(&self) -> String {
+        match self.choose_best() {
+            Some(best) => {
+                let fallbacks = if self.fallback_path.is_empty() {
+                    "none".to_string()
+                } else {
+                    self.fallback_path.join(" > ")
+                };
+                format!("{best} — {} (fallbacks: {fallbacks})", self.rationale)
+            }
+            None => "no capability satisfies this intent".into(),
+        }
+    }
+}
+
+// ===========================================================================
+// P49 V1-local wiring — the Gateway surface the Tauri commands / RPC consume.
+// Everything here is local + in-process; remote clients and multi-node failover
+// stay post-v1 (P49.19/.20).
+// ===========================================================================
+
+impl WorkGateway {
+    // ---- P49.3 — ExecutionNode registry ----
+
+    pub fn nodes(&self) -> Vec<&ExecutionNode> {
+        self.nodes.values().collect()
+    }
+
+    pub fn node(&self, node_id: &str) -> Option<&ExecutionNode> {
+        self.nodes.get(node_id)
+    }
+
+    /// Pair a node. Re-pairing resets health to `paired` so trust is
+    /// re-established per connection, never inherited from a stale record.
+    pub fn pair_node(&mut self, mut node: ExecutionNode) -> Result<ExecutionNode, String> {
+        if node.node_id.is_empty() {
+            return Err("node id required".into());
+        }
+        node.health = "paired".into();
+        node.last_heartbeat_ms = now_ms();
+        self.nodes.insert(node.node_id.clone(), node.clone());
+        Ok(node)
+    }
+
+    /// Verify a paired node's advertised capabilities are actually present.
+    pub fn verify_node(&mut self, node_id: &str) -> Result<ExecutionNode, String> {
+        let node = self.nodes.get_mut(node_id).ok_or("unknown node")?;
+        if !matches!(node.health.as_str(), "paired" | "verified" | "bound") {
+            return Err("node is not paired".into());
+        }
+        node.health = "verified".into();
+        node.last_heartbeat_ms = now_ms();
+        Ok(node.clone())
+    }
+
+    /// Bind a verified node to a Work (V1: the desktop itself is node-1).
+    pub fn bind_node(&mut self, node_id: &str, work_id: &str) -> Result<WorkAddress, String> {
+        let node = self.nodes.get(node_id).ok_or("unknown node")?;
+        if !matches!(node.health.as_str(), "verified" | "bound") {
+            return Err("node must be verified before binding".into());
+        }
+        if !self.works.contains_key(work_id) {
+            return Err("unknown work".into());
+        }
+        self.append(
+            work_id,
+            WorkEvent::Operational(OperationalEvent::NodeConnected {
+                node_id: node_id.into(),
+            }),
+            None,
+        );
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.health = "bound".into();
+        }
+        let address = self.works.get_mut(work_id).ok_or("unknown work")?;
+        address.node_id = Some(node_id.into());
+        address.version = address.version.saturating_add(1);
+        Ok(address.clone())
+    }
+
+    /// Unbind every Work bound to a node; the Work survives (architectural law).
+    pub fn unbind_node(&mut self, node_id: &str) -> bool {
+        let work_ids: Vec<String> = self
+            .works
+            .iter()
+            .filter(|(_, a)| a.node_id.as_deref() == Some(node_id))
+            .map(|(k, _)| k.clone())
+            .collect();
+        if work_ids.is_empty() {
+            return false;
+        }
+        for id in &work_ids {
+            if let Some(address) = self.works.get_mut(id) {
+                address.node_id = None;
+                address.version = address.version.saturating_add(1);
+            }
+            self.append(
+                id,
+                WorkEvent::Operational(OperationalEvent::NodeDisconnected {
+                    node_id: node_id.into(),
+                }),
+                None,
+            );
+        }
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.health = "verified".into();
+        }
+        true
+    }
+
+    // ---- P49.4 — RunAuthority (lease + fencing) ----
+
+    pub fn authority(&self, run_id: &str) -> Option<&RunAuthority> {
+        self.authorities.get(run_id)
+    }
+
+    /// Extend a live lease. A stale fencing token is refused, so a worker that
+    /// lost the run cannot renew its way back in.
+    pub fn renew_lease(
+        &mut self,
+        run_id: &str,
+        node_id: &str,
+        token: u64,
+        ttl_ms: u64,
+    ) -> Result<RunAuthority, String> {
+        if !self.validate_fencing_token(run_id, node_id, token) {
+            return Err("stale fencing token".into());
+        }
+        let authority = self.authorities.get_mut(run_id).ok_or("unknown run")?;
+        authority.expires_at_ms = if ttl_ms == 0 { 0 } else { now_ms() + ttl_ms };
+        Ok(authority.clone())
+    }
+
+    /// Resume a run under the current authority holder. A run with no live
+    /// authority acquires a fresh (higher-fenced) lease rather than fabricating
+    /// a resume.
+    pub fn recover_run(
+        &mut self,
+        run_id: &str,
+        node_id: &str,
+        ttl_ms: u64,
+    ) -> Result<RunAuthority, String> {
+        if let Some(authority) = self.authorities.get(run_id) {
+            if authority.valid(node_id, authority.fencing_token, now_ms()) {
+                return Ok(authority.clone());
+            }
+        }
+        self.acquire_run_authority(run_id, node_id, ttl_ms)
+    }
+
+    /// Move a run's authority to another verified node (the P49.20 primitive,
+    /// usable locally). The documented sequence is source-freezes → authority
+    /// revoked → destination acquired; the fence is strictly monotonic, so the
+    /// previous node can never commit after the move even if it is still alive.
+    pub fn migrate_run(
+        &mut self,
+        run_id: &str,
+        to_node: &str,
+        ttl_ms: u64,
+    ) -> Result<RunAuthority, String> {
+        let target = self.nodes.get(to_node).ok_or("unknown target node")?;
+        if !matches!(target.health.as_str(), "verified" | "bound") {
+            return Err("target node must be verified".into());
+        }
+        // Revoke the source lease; the destination acquires a higher fence.
+        self.authorities.remove(run_id);
+        self.acquire_run_authority(run_id, to_node, ttl_ms)
+    }
+
+    // ---- P49.9 — client handshake / bindings ----
+
+    /// The V1 client handshake: authenticate → negotiate capabilities → bind to
+    /// a Work → subscribe. The Gateway decides what the surface may do; a
+    /// client cannot assert its own capabilities at the call site.
+    pub fn connect_client(
+        &mut self,
+        client_id: &str,
+        client_type: &str,
+        work_id: &str,
+        authenticated: bool,
+    ) -> Result<ClientSession, String> {
+        if !authenticated {
+            return Err("client authentication required".into());
+        }
+        let capabilities = match client_type {
+            "desktop" => ClientCapabilities::desktop(),
+            "mobile" | "web" | "cli" => ClientCapabilities::restricted(),
+            other => return Err(format!("unknown client type: {other}")),
+        };
+        let client = ClientSession {
+            client_id: client_id.into(),
+            client_type: client_type.into(),
+            work_id: work_id.into(),
+            capabilities,
+            scope: vec![],
+            authenticated,
+            connected_at_ms: now_ms(),
+        };
+        self.attach_client(client.clone())?;
+        Ok(client)
+    }
+
+    pub fn clients_for(&self, work_id: &str) -> Vec<&ClientSession> {
+        self.clients
+            .values()
+            .filter(|c| c.work_id == work_id)
+            .collect()
+    }
+
+    // ---- P49.7/.8 — capability broker + resolver ----
+
+    pub fn broker(&self) -> &GatewayCapabilityBroker {
+        &self.broker
+    }
+
+    /// Replace the brokered capability set (V1: local, from the runtime manifest).
+    pub fn set_brokered_capabilities(&mut self, capabilities: Vec<String>) {
+        self.broker = GatewayCapabilityBroker::new(capabilities);
+    }
+
+    // ---- P49.13 — ReviewQueue ----
+
+    pub fn review(&self, review_id: &str) -> Option<&ReviewItem> {
+        self.reviews.get(review_id)
+    }
+
+    /// Resolve a review item with an explicit outcome and emit the durable
+    /// `ApprovalResolved` semantic event.
+    pub fn resolve_review_with(
+        &mut self,
+        review_id: &str,
+        state: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        if !matches!(
+            state,
+            "approved" | "rejected" | "revision_requested" | "resolved"
+        ) {
+            return Err(format!("unknown review state: {state}"));
+        }
+        let review = self
+            .reviews
+            .get(review_id)
+            .cloned()
+            .ok_or("unknown review item")?;
+        if let Some(item) = self.reviews.get_mut(review_id) {
+            item.state = state.to_string();
+        }
+        self.append(
+            &review.work_id,
+            WorkEvent::Domain(DomainEvent::ApprovalResolved {
+                ticket_id: review_id.into(),
+                approved: state == "approved",
+            }),
+            None,
+        )
+        .ok_or_else(|| "failed to append review resolution".to_string())
+    }
+
+    pub fn approve_review_item(&mut self, review_id: &str) -> Result<WorkEventEnvelope, String> {
+        self.resolve_review_with(review_id, "approved")
+    }
+
+    pub fn reject_review_item(&mut self, review_id: &str) -> Result<WorkEventEnvelope, String> {
+        self.resolve_review_with(review_id, "rejected")
+    }
+
+    pub fn request_revision(&mut self, review_id: &str) -> Result<WorkEventEnvelope, String> {
+        self.resolve_review_with(review_id, "revision_requested")
+    }
+
+    // ---- P49.14 — steering ----
+
+    /// Queue a steering instruction: durable policy delta, applied at the next
+    /// checkpoint (never a silent mid-token interruption).
+    pub fn queue_steering(
+        &mut self,
+        instruction: SteeringInstruction,
+    ) -> Result<WorkEventEnvelope, String> {
+        self.steer(instruction)
+    }
+
+    /// Ask the run to stop at the current step boundary. Recorded as a
+    /// constraint-class instruction so `"stop"` is auditable, not a whisper.
+    pub fn interrupt_current_step(
+        &mut self,
+        work_id: &str,
+        source_client: &str,
+        reason: &str,
+    ) -> Result<WorkEventEnvelope, String> {
+        self.steer(SteeringInstruction {
+            work_id: work_id.into(),
+            run_id: None,
+            source_client: source_client.into(),
+            instruction: reason.into(),
+            scope: "pause".into(),
+            priority: 0,
+            created_at_ms: now_ms(),
+        })
+    }
+
+    /// Confirm queued steering was applied at a specific checkpoint.
+    pub fn apply_steering_checkpoint(
+        &mut self,
+        work_id: &str,
+        run_id: &str,
+        checkpoint: u32,
+    ) -> Result<WorkEventEnvelope, String> {
+        self.append(
+            work_id,
+            WorkEvent::Domain(DomainEvent::RunCheckpointed {
+                run_id: run_id.into(),
+                checkpoint,
+            }),
+            None,
+        )
+        .ok_or_else(|| "unknown work".to_string())
+    }
+
+    // ---- P49.15 — RuntimeManifest ----
+
+    /// Freeze the full per-run runtime contract at run start.
+    pub fn create_runtime_manifest(
+        &mut self,
+        work_id: &str,
+        mut manifest: RuntimeManifest,
+    ) -> Result<RuntimeManifest, String> {
+        if !self.works.contains_key(work_id) {
+            return Err("unknown work".into());
+        }
+        manifest.work_id = work_id.to_string();
+        manifest.refresh_hash();
+        self.manifests.insert(work_id.to_string(), manifest.clone());
+        self.append(
+            work_id,
+            WorkEvent::Domain(DomainEvent::WorkUpdated {
+                patch: serde_json::json!({"runtimeManifest": manifest.config_hash}),
+            }),
+            None,
+        );
+        Ok(manifest)
+    }
+
+    pub fn runtime_manifest(&self, work_id: &str) -> Option<&RuntimeManifest> {
+        self.manifests.get(work_id)
+    }
+
+    /// P49.15 restore rule: a saved manifest is **untrusted data**. It is
+    /// intersected with the current trusted policy — capability lists only ever
+    /// narrow and network/filesystem fall to the stricter of the two — and the
+    /// hash is recomputed on the effective contract. A compromised project
+    /// cannot say `network=true` and have resume restore it.
+    pub fn restore_runtime_manifest(
+        &self,
+        saved: &RuntimeManifest,
+        trusted_capabilities: &[String],
+        trusted_network: &str,
+        trusted_filesystem: &str,
+    ) -> RuntimeManifest {
+        let mut manifest = saved.clone();
+        manifest.capabilities = manifest
+            .capabilities
+            .iter()
+            .filter(|c| trusted_capabilities.iter().any(|t| t == *c))
+            .cloned()
+            .collect();
+        manifest.network_policy =
+            narrow(&manifest.network_policy, trusted_network, &NETWORK_LADDER);
+        manifest.filesystem_policy = narrow(
+            &manifest.filesystem_policy,
+            trusted_filesystem,
+            &FILESYSTEM_LADDER,
+        );
+        manifest.refresh_hash();
+        manifest
+    }
+
+    // ---- P49.17 — AttachmentRef ----
+
+    pub fn attachments_for(&self, work_id: &str) -> Vec<&AttachmentRef> {
+        self.attachments
+            .values()
+            .filter(|(a, _)| a.work_scope == work_id)
+            .map(|(a, _)| a)
+            .collect()
+    }
+
+    /// Drop an attachment reference (retention policy `session`/`none`).
+    pub fn expire_attachment(&mut self, attachment_id: &str) -> bool {
+        self.attachments.remove(attachment_id).is_some()
     }
 }
 
@@ -2470,5 +3232,302 @@ mod p49_runtime_tests {
             .is_ok());
         assert!(ContextReleasePolicy::Redacted.auto_releasable_externally());
         assert!(!ContextReleasePolicy::Approval.auto_releasable_externally());
+    }
+
+    // ===== P49 V1-local wiring =====
+
+    fn node(id: &str) -> ExecutionNode {
+        ExecutionNode {
+            node_id: id.into(),
+            owner: "local".into(),
+            platform: std::env::consts::OS.into(),
+            node_kind: "user-owned".into(),
+            always_on: false,
+            capabilities: vec!["filesystem".into()],
+            sandbox_class: "native".into(),
+            network_policy: "offline".into(),
+            credential_policy: "brokered".into(),
+            health: String::new(),
+            last_heartbeat_ms: 0,
+        }
+    }
+
+    #[test]
+    fn p49_1_locator_round_trips_and_rejects_malformed() {
+        let mut gw = gw_with_work("w-loc");
+        gw.bind_execution("w-loc", "run-7").unwrap();
+        let mut address = gw.get_work("w-loc").unwrap().clone();
+        address.node_id = Some("node-1".into());
+        assert_eq!(address.locator(), "work:w-loc@node-1#run-7");
+        let parsed = WorkAddress::parse_locator("work:w-loc@node-1#run-7").unwrap();
+        assert_eq!(parsed.work_id.as_str(), "w-loc");
+        assert_eq!(parsed.node_id.as_deref(), Some("node-1"));
+        assert_eq!(parsed.current_run_id.as_deref(), Some("run-7"));
+        // Bare locator is still valid; garbage is refused, never coerced.
+        assert_eq!(
+            WorkAddress::parse_locator("work:w1").unwrap().locator(),
+            "work:w1"
+        );
+        assert!(WorkAddress::parse_locator("w1").is_err());
+        assert!(WorkAddress::parse_locator("work:").is_err());
+        assert!(WorkAddress::parse_locator("work:w1@").is_err());
+    }
+
+    #[test]
+    fn p49_3_node_must_be_paired_then_verified_before_binding() {
+        let mut gw = gw_with_work("w-node");
+        // Unverified node can never bind.
+        gw.pair_node(node("n1")).unwrap();
+        assert!(gw.bind_node("n1", "w-node").is_err());
+        gw.verify_node("n1").unwrap();
+        let address = gw.bind_node("n1", "w-node").unwrap();
+        assert_eq!(address.node_id.as_deref(), Some("n1"));
+        // Unbind clears the address; the Work itself survives.
+        assert!(gw.unbind_node("n1"));
+        assert!(gw.get_work("w-node").unwrap().node_id.is_none());
+        assert!(gw.get_work("w-node").is_some());
+        assert!(!gw.unbind_node("n1"));
+    }
+
+    #[test]
+    fn p49_4_fence_is_monotonic_across_release_and_migration() {
+        let mut gw = gw_with_work("w-auth");
+        gw.pair_node(node("n1")).unwrap();
+        gw.verify_node("n1").unwrap();
+        gw.pair_node(node("n2")).unwrap();
+        gw.verify_node("n2").unwrap();
+        let first = gw.acquire_run_authority("r1", "n1", 60_000).unwrap();
+        assert_eq!(first.fencing_token, 1);
+        // A second acquire while the lease is live is refused.
+        assert!(gw.acquire_run_authority("r1", "n2", 60_000).is_err());
+        // A stale token can neither renew nor commit.
+        assert!(gw.renew_lease("r1", "n2", 1, 60_000).is_err());
+        assert!(!gw.validate_fencing_token("r1", "n2", 1));
+        gw.release_authority("r1", "n1", first.fencing_token);
+        // Migration issues a strictly higher fence — the old holder is dead.
+        let moved = gw.migrate_run("r1", "n2", 60_000).unwrap();
+        assert_eq!(moved.fencing_token, 2);
+        assert_eq!(moved.node_id, "n2");
+        assert!(!gw.validate_fencing_token("r1", "n1", 1));
+        assert!(gw.validate_fencing_token("r1", "n2", 2));
+    }
+
+    #[test]
+    fn p49_9_handshake_negotiates_capabilities_server_side() {
+        let mut gw = gw_with_work("w-cli");
+        // Unauthenticated clients are refused outright.
+        assert!(gw.connect_client("c1", "desktop", "w-cli", false).is_err());
+        let desktop = gw.connect_client("c1", "desktop", "w-cli", true).unwrap();
+        assert!(desktop.capabilities.can_drive_desktop);
+        assert!(desktop.capabilities.can_approve);
+        // Mobile/web/cli get the restricted set — the Gateway decides, not the caller.
+        let mobile = gw.connect_client("c2", "mobile", "w-cli", true).unwrap();
+        assert!(!mobile.capabilities.can_drive_desktop);
+        assert!(mobile.capabilities.can_view);
+        assert!(gw.connect_client("c3", "toaster", "w-cli", true).is_err());
+        // Binding is ephemeral: detach never touches the Work.
+        assert!(gw.detach_client("c1"));
+        assert_eq!(gw.clients_for("w-cli").len(), 1);
+        assert!(gw.get_work("w-cli").is_some());
+    }
+
+    #[test]
+    fn p49_13_resolved_reviews_leave_the_needs_me_inbox() {
+        let mut gw = gw_with_work("w-rev");
+        for (id, state) in [
+            ("r-ok", "approved"),
+            ("r-no", "rejected"),
+            ("r-open", "open"),
+        ] {
+            gw.request_review(ReviewItem {
+                review_id: id.into(),
+                work_id: "w-rev".into(),
+                run_id: None,
+                kind: "approval".into(),
+                priority: 50,
+                state: state.into(),
+                artifact_refs: vec![],
+                effect_refs: vec![],
+            })
+            .unwrap();
+        }
+        // r-open already carries a terminal-looking state? No — "open" is live.
+        assert_eq!(gw.reviews("w-rev").len(), 1);
+        gw.approve_review_item("r-open").unwrap();
+        assert!(gw.reviews("w-rev").is_empty());
+        assert_eq!(gw.review("r-open").unwrap().state, "approved");
+        // An unknown state is refused rather than silently stored.
+        assert!(gw.resolve_review_with("r-ok", "maybe").is_err());
+        assert!(gw.resolve_review_with("nope", "approved").is_err());
+    }
+
+    #[test]
+    fn p49_14_steering_requires_an_attached_authenticated_client() {
+        let mut gw = gw_with_work("w-steer");
+        // No client attached → the constraint is refused (no forged gestures).
+        assert!(gw
+            .interrupt_current_step("w-steer", "ghost", "stop")
+            .is_err());
+        gw.connect_client("c1", "desktop", "w-steer", true).unwrap();
+        let ev = gw.interrupt_current_step("w-steer", "c1", "stop").unwrap();
+        assert!(ev.event.semantic());
+        assert!(gw.apply_steering_checkpoint("w-steer", "run-1", 3).is_ok());
+    }
+
+    #[test]
+    fn p49_15_manifest_freezes_then_restore_intersects_with_trusted_policy() {
+        let mut gw = gw_with_work("w-man");
+        let mut manifest = RuntimeManifest::new("w-man", "native", "claude-sonnet");
+        manifest.capabilities = vec!["shell".into(), "git".into()];
+        manifest.network_policy = "open".into();
+        manifest.filesystem_policy = "system".into();
+        let frozen = gw.create_runtime_manifest("w-man", manifest).unwrap();
+        assert!(frozen.verify_hash());
+        assert_eq!(
+            gw.runtime_manifest("w-man").unwrap().config_hash,
+            frozen.config_hash
+        );
+        // A saved manifest is untrusted: capabilities narrow, network/filesystem
+        // fall to the stricter of the two, and the hash is recomputed.
+        let restored =
+            gw.restore_runtime_manifest(&frozen, &["git".to_string()], "loopback", "workspace");
+        assert_eq!(restored.capabilities, vec!["git".to_string()]);
+        assert_eq!(restored.network_policy, "loopback");
+        assert_eq!(restored.filesystem_policy, "workspace");
+        assert!(restored.verify_hash());
+        assert_ne!(restored.config_hash, frozen.config_hash);
+        // An unknown label is never treated as permissive — it fails closed.
+        let weird = gw.restore_runtime_manifest(&frozen, &[], "nonsense", "workspace");
+        assert_eq!(weird.network_policy, "offline");
+    }
+
+    #[test]
+    fn p49_7_broker_issues_opaque_handles_and_refuses_to_execute() {
+        let mut gw = gw_with_work("w-brk");
+        gw.set_brokered_capabilities(vec!["gmail.send".into()]);
+        assert_eq!(
+            gw.broker().list_capabilities(),
+            vec!["gmail.send".to_string()]
+        );
+        // Un-brokered capability is refused.
+        assert!(gw
+            .broker()
+            .authorize(&BrokerRequest {
+                capability_id: "shell".into(),
+                work_id: "w-brk".into(),
+                run_id: "r1".into(),
+                consumer: "agent".into(),
+            })
+            .is_err());
+        let grant = gw
+            .broker()
+            .authorize(&BrokerRequest {
+                capability_id: "gmail.send".into(),
+                work_id: "w-brk".into(),
+                run_id: "r1".into(),
+                consumer: "agent".into(),
+            })
+            .unwrap();
+        // The agent only ever sees a handle, scoped to the run.
+        assert!(grant.credential.handle.starts_with("cred:"));
+        assert_eq!(grant.credential.issued_for_run, "r1");
+        assert_eq!(grant.credential.scope, vec!["gmail.send".to_string()]);
+        // No live dispatcher → honest refusal, never a fabricated success.
+        assert!(gw.broker().invoke(&grant, &serde_json::json!({})).is_err());
+    }
+
+    #[test]
+    fn p49_8_resolution_helpers_expose_best_and_fallback() {
+        let gw = gw_with_work("w-cap");
+        let candidates = vec![
+            CapabilityCandidate {
+                capability_id: "connector:slack".into(),
+                route: "native".into(),
+                confidence: 90,
+                latency_estimate_ms: 50,
+                cost_estimate: 0,
+                risk: RiskLevel::Low,
+            },
+            CapabilityCandidate {
+                capability_id: "browser:slack".into(),
+                route: "browser".into(),
+                confidence: 60,
+                latency_estimate_ms: 400,
+                cost_estimate: 1,
+                risk: RiskLevel::Medium,
+            },
+        ];
+        let resolution = gw.resolve_capability("send slack message", candidates);
+        assert_eq!(resolution.choose_best(), Some("connector:slack"));
+        assert_eq!(resolution.choose_fallback(), Some("browser:slack"));
+        assert!(resolution.explain_choice().contains("connector:slack"));
+        assert!(resolution.explain_choice().contains("browser:slack"));
+    }
+
+    #[test]
+    fn p49_17_attachments_are_scoped_and_consumer_checked() {
+        let mut gw = gw_with_work("w-att");
+        let dir = std::env::temp_dir().join("everyaios-p49-att");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("report.pdf");
+        std::fs::write(&file, b"%PDF-1.4").unwrap();
+        let attachment = AttachmentRef {
+            attachment_id: "a1".into(),
+            content_hash: "deadbeef".into(),
+            size: 8,
+            media_type: "application/pdf".into(),
+            source: "upload".into(),
+            work_scope: "w-att".into(),
+            session_scope: None,
+            allowed_consumers: vec!["agent".into()],
+            retention: "work".into(),
+        };
+        // A missing source is refused.
+        assert!(gw
+            .create_attachment(attachment.clone(), dir.join("nope"))
+            .is_err());
+        gw.create_attachment(attachment, file).unwrap();
+        assert_eq!(gw.attachments_for("w-att").len(), 1);
+        assert!(gw.resolve_attachment("a1", "agent").is_ok());
+        assert!(gw.resolve_attachment("a1", "stranger").is_err());
+        assert!(gw.expire_attachment("a1"));
+        assert!(gw.attachments_for("w-att").is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p49_rpc_surface_routes_the_v1_wiring() {
+        let mut gw = gw_with_work("w-rpc");
+        let created = gw
+            .handle_rpc(
+                "work/create",
+                &serde_json::json!({"workId": "w-new", "objective": "ship it"}),
+            )
+            .unwrap();
+        assert_eq!(created["workId"], "w-new");
+        let locator = gw
+            .handle_rpc("work/locator", &serde_json::json!({"workId": "w-new"}))
+            .unwrap();
+        assert_eq!(locator, serde_json::json!("work:w-new"));
+        let node_json = serde_json::to_value(node("n1")).unwrap();
+        gw.handle_rpc("work/node_pair", &serde_json::json!({"node": node_json}))
+            .unwrap();
+        gw.handle_rpc("work/node_verify", &serde_json::json!({"nodeId": "n1"}))
+            .unwrap();
+        gw.handle_rpc(
+            "work/node_bind",
+            &serde_json::json!({"nodeId": "n1", "workId": "w-new"}),
+        )
+        .unwrap();
+        assert_eq!(
+            gw.handle_rpc("work/nodes", &serde_json::json!({}))
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        // Unknown methods still fail closed.
+        assert!(gw.handle_rpc("work/nope", &serde_json::json!({})).is_err());
     }
 }

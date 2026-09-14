@@ -347,6 +347,52 @@ pub fn desktop_see(
     Ok(serde_json::json!({ "png": b64, "width": result.width, "height": result.height }))
 }
 
+/// Parse the wire act-kind vocabulary into an [`everyaios_computeruse::ActKind`].
+/// Shared by `desktop_act` and the P57.4 escalation pair so both see the exact
+/// same act.
+#[allow(clippy::too_many_arguments)]
+fn parse_act(
+    kind: &str,
+    x: Option<i32>,
+    y: Option<i32>,
+    name: Option<String>,
+    text: Option<String>,
+) -> Result<everyaios_computeruse::ActKind, String> {
+    Ok(match kind {
+        "click" => everyaios_computeruse::ActKind::Click {
+            x: x.unwrap_or(0),
+            y: y.unwrap_or(0),
+        },
+        "clickByName" => everyaios_computeruse::ActKind::ClickByName {
+            name: name.ok_or("name required for clickByName")?,
+        },
+        "type" => everyaios_computeruse::ActKind::Type {
+            text: text.ok_or("text required for type")?,
+        },
+        "setValue" => everyaios_computeruse::ActKind::SetValue {
+            name: name.ok_or("name required for setValue")?,
+            value: text.ok_or("value required for setValue")?,
+        },
+        "scroll" => everyaios_computeruse::ActKind::Scroll {
+            x: x.unwrap_or(0),
+            y: y.unwrap_or(0),
+            delta: y.unwrap_or(0),
+        },
+        // P57.1 — launch the allow-listed program by its canonical path. A
+        // launch with no path falls back to the name form, which resolves
+        // through PATH in the backend. Guard-2 evaluates the **launch target**
+        // as the subject, so an app has to be allow-listed in Settings →
+        // Computer use before this can proceed.
+        "launch" => match text.filter(|t| !t.trim().is_empty()) {
+            Some(path) => everyaios_computeruse::ActKind::launch_path(path),
+            None => everyaios_computeruse::ActKind::launch_by_name(
+                name.ok_or("launch requires a path (text) or an app name")?,
+            ),
+        },
+        other => return Err(format!("unsupported desktop act kind: {other}")),
+    })
+}
+
 /// Execute ONE human-initiated desktop act, through the engine's Guard-2 gate
 /// and audited on the same Merkle chain as every other effect. Fail-closed:
 /// risky classes are Denied by `FailClosedGate`; hard-denied apps never run.
@@ -363,34 +409,7 @@ pub fn desktop_act(
     text: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let engine = get_or_attach(&state, &app)?;
-    let act = match kind.as_str() {
-        "click" => everyaios_computeruse::ActKind::Click {
-            x: x.unwrap_or(0),
-            y: y.unwrap_or(0),
-        },
-        "clickByName" => everyaios_computeruse::ActKind::ClickByName {
-            name: name.ok_or("name required for clickByName")?,
-        },
-        "type" => everyaios_computeruse::ActKind::Type {
-            text: text.ok_or("text required for type")?,
-        },
-        "setValue" => everyaios_computeruse::ActKind::SetValue {
-            name: name.ok_or("name required for setValue")?,
-            value: text.ok_or("value required for setValue")?,
-        },
-        // P57.1 — launch the allow-listed program by its canonical path. A
-        // launch with no path falls back to the name form, which resolves
-        // through PATH in the backend. Guard-2 evaluates the **launch target**
-        // as the subject, so an app has to be allow-listed in Settings →
-        // Computer use before this can proceed.
-        "launch" => match text.filter(|t| !t.trim().is_empty()) {
-            Some(path) => everyaios_computeruse::ActKind::launch_path(path),
-            None => everyaios_computeruse::ActKind::launch_by_name(
-                name.ok_or("launch requires a path (text) or an app name")?,
-            ),
-        },
-        other => return Err(format!("unsupported desktop act kind: {other}")),
-    };
+    let act = parse_act(&kind, x, y, name, text)?;
     let outcome = engine
         .act(&window_of(window_id), &act, None)
         .map_err(|e| e.to_string())?;
@@ -412,6 +431,76 @@ pub fn desktop_act(
         return Err(format!("desktop.act declined: {err}"));
     }
     Ok(serde_json::json!({ "ok": true, "act": act.describe() }))
+}
+
+/// P57.4 — does this act need a foreground escalation under the current
+/// interaction default? Pure read: the UI renders the Guard-2 card from this
+/// and nothing moves.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn desktop_escalation(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    window_id: u64,
+    kind: String,
+    x: Option<i32>,
+    y: Option<i32>,
+    name: Option<String>,
+    text: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let engine = get_or_attach(&state, &app)?;
+    let act = parse_act(&kind, x, y, name, text)?;
+    serde_json::to_value(engine.escalation_for(&window_of(window_id), &act))
+        .map_err(|e| e.to_string())
+}
+
+/// P57.4 — run an act that needs a foreground escalation, **only** with an
+/// explicit human gesture. Without one the escalation is returned as a refusal
+/// (nothing is raised). With one, the previous foreground window is snapshotted,
+/// the default is switched to Foreground for this single act, and both are
+/// restored afterwards; the outcome (including an honest restore failure) is
+/// audited with human_gesture provenance.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn desktop_act_escalating(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    window_id: u64,
+    kind: String,
+    gesture_approved: bool,
+    x: Option<i32>,
+    y: Option<i32>,
+    name: Option<String>,
+    text: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let engine = get_or_attach(&state, &app)?;
+    let act = parse_act(&kind, x, y, name, text)?;
+    let snapshot = engine.foreground_snapshot();
+    let outcome = engine
+        .act_escalating(&window_of(window_id), &act, None, gesture_approved)
+        .map_err(|e| e.to_string())?;
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "desktop.act.escalated",
+        serde_json::json!({
+            "act": act.describe(),
+            "window_id": window_id,
+            "gestureApproved": gesture_approved,
+            "previousForeground": snapshot.window_id,
+            "executed": outcome.ok && outcome.error.is_none(),
+            "error": outcome.error,
+        }),
+    );
+    if let Some(err) = outcome.error {
+        return Err(format!("desktop.act.escalated declined: {err}"));
+    }
+    Ok(serde_json::json!({
+        "ok": true,
+        "act": act.describe(),
+        "escalated": gesture_approved,
+        "restored": snapshot.window_id,
+    }))
 }
 
 /// Emergency stop — trips the engine's kill switch so every further op fails

@@ -126,6 +126,36 @@ impl PlatformBackend {
         }
     }
 
+    /// P57.4 — the window that currently owns the foreground. `None` means the
+    /// platform cannot say (or its ids are not restorable); the caller then
+    /// skips restore rather than guessing.
+    pub fn foreground_window(&self) -> Option<u64> {
+        match self {
+            #[cfg(target_os = "linux")]
+            PlatformBackend::X11(b) => b.foreground_window(),
+            #[cfg(windows)]
+            PlatformBackend::Win => crate::platform::win::WinBackend::foreground_window(),
+            #[cfg(target_os = "macos")]
+            PlatformBackend::Mac => crate::platform::macos::MacBackend::foreground_window(),
+            PlatformBackend::Unsupported => None,
+        }
+    }
+
+    /// P57.4 — hand the foreground back after an approved escalation.
+    pub fn restore_foreground(&self, window_id: u64) -> Result<(), DesktopError> {
+        match self {
+            #[cfg(target_os = "linux")]
+            PlatformBackend::X11(b) => b.restore_foreground(window_id),
+            #[cfg(windows)]
+            PlatformBackend::Win => crate::platform::win::WinBackend::restore_foreground(window_id),
+            #[cfg(target_os = "macos")]
+            PlatformBackend::Mac => {
+                crate::platform::macos::MacBackend::restore_foreground(window_id)
+            }
+            PlatformBackend::Unsupported => Err(DesktopError::Unsupported("no backend".into())),
+        }
+    }
+
     /// Honest per-platform capability surface.
     pub fn capabilities(&self) -> Capabilities {
         let ocr_available = crate::ocr::TesseractCli::default().available();
@@ -140,6 +170,17 @@ impl PlatformBackend {
                 // Synthetic ButtonPress/ButtonRelease to the deepest child
                 // under the point: the server moves nothing.
                 background_input: true,
+                // P57.4 — `_NET_ACTIVE_WINDOW` is restorable (real X window ids).
+                foreground_restore: true,
+                // P57.7 — no AT-SPI client in the dependency set yet, so there is
+                // no accessibility action path here; X11 clicks are X-level.
+                a11y_action: false,
+                see_occluded_wgc: false,
+                // An X11 connection means an interactive session.
+                interactive_desktop: true,
+                // TCC is a macOS mechanism; nothing gates capture/driving here.
+                screen_recording_granted: true,
+                accessibility_granted: true,
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
@@ -155,6 +196,17 @@ impl PlatformBackend {
                 // UIA InvokePattern at the hit-test point, else PostMessage to
                 // the target HWND.
                 background_input: true,
+                // P57.4 — `GetForegroundWindow`/`SetForegroundWindow` on real HWNDs.
+                foreground_restore: true,
+                // P57.7 — UIA `InvokePattern` IS an accessibility action.
+                a11y_action: true,
+                // P57.6 — Windows.Graphics.Capture is not implemented yet, so an
+                // occluded window still captures through PrintWindow.
+                see_occluded_wgc: false,
+                // P57.5 — Session 0 (services) has no interactive desktop.
+                interactive_desktop: crate::platform::win::WinBackend::interactive_desktop(),
+                screen_recording_granted: true,
+                accessibility_granted: true,
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
@@ -169,6 +221,19 @@ impl PlatformBackend {
                 // System Events `click at` is a real pointer event, so a
                 // background coordinate click cannot be delivered here.
                 background_input: false,
+                // P57.4 — this backend assigns synthetic window ids for listing,
+                // so a real foreground window cannot be named back. Restore is
+                // therefore honestly unsupported here.
+                foreground_restore: false,
+                // P57.7 — `AXUIElementCopyElementAtPosition` + `kAXPressAction`
+                // needs an ApplicationServices FFI layer that is not in yet.
+                a11y_action: false,
+                see_occluded_wgc: false,
+                interactive_desktop: true,
+                // P57.5 — TCC state, probed rather than assumed.
+                screen_recording_granted:
+                    crate::platform::macos::MacBackend::screen_recording_granted(),
+                accessibility_granted: crate::platform::macos::MacBackend::accessibility_granted(),
                 ocr: ocr_available,
                 window_list: true,
                 launch_app: true,
