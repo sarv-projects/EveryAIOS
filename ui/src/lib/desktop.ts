@@ -45,6 +45,19 @@ export interface DesktopWindow {
 }
 export type DesktopActKind = 'click' | 'clickByName' | 'type' | 'setValue' | 'launch'
 
+/**
+ * P57.4 — why a Background act cannot be delivered, and what escalating to
+ * Foreground would cost. The engine never escalates silently: it returns this,
+ * the UI renders the Guard-2 card, and only an explicit human gesture flips the
+ * interaction mode for that one act.
+ */
+export interface EscalationRequest {
+  reason: string
+  blocked_act: unknown
+  requires_gesture: boolean
+  target: string
+}
+
 export async function desktopStatus(): Promise<DesktopStatus> {
   if (!inTauri()) return { attached: false, reason: 'requires desktop shell' }
   return nativeCall('desktop status', () => invoke<DesktopStatus>('desktop_status'))
@@ -81,6 +94,39 @@ export async function desktopAct(
   opts: { x?: number; y?: number; name?: string; text?: string } = {},
 ): Promise<{ ok: boolean; act: string }> {
   return nativeCall('desktop act', () => invoke('desktop_act', { windowId, kind, ...opts }))
+}
+
+/**
+ * P57.4 — does this act need a foreground escalation under the current default?
+ * Pure read: nothing moves. `null` means the act is deliverable as-is.
+ */
+export async function desktopEscalation(
+  windowId: number,
+  kind: DesktopActKind,
+  opts: { x?: number; y?: number; name?: string; text?: string } = {},
+): Promise<EscalationRequest | null> {
+  if (!inTauri()) return null
+  return nativeCall('desktop escalation', () =>
+    invoke<EscalationRequest | null>('desktop_escalation', { windowId, kind, ...opts }),
+  )
+}
+
+/**
+ * P57.4 — run an act that needs a foreground escalation, **only** with an
+ * explicit human gesture. Without one the Rust side returns a refusal carrying
+ * the reason and raises nothing. With one, the previous foreground window is
+ * snapshotted, the default flips to Foreground for this single act, and both are
+ * restored afterwards (an honest restore failure is reported).
+ */
+export async function desktopActEscalating(
+  windowId: number,
+  kind: DesktopActKind,
+  gestureApproved: boolean,
+  opts: { x?: number; y?: number; name?: string; text?: string } = {},
+): Promise<{ ok: boolean; act: string; escalated: boolean; restored: number | null }> {
+  return nativeCall('desktop act escalating', () =>
+    invoke('desktop_act_escalating', { windowId, kind, gestureApproved, ...opts }),
+  )
 }
 
 export async function desktopStop(): Promise<{ stopped: boolean }> {

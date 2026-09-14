@@ -18,6 +18,11 @@ pub mod linux;
 pub mod macos;
 #[cfg(windows)]
 pub mod win;
+// P57.6 — Windows.Graphics.Capture (occluded-window capture). Windows-only and
+// runtime-gated: it cannot be exercised on this host, so it is kept in its own
+// module with a real `available()` probe rather than a compile-time promise.
+#[cfg(windows)]
+pub mod wgc;
 
 use crate::policy::InteractionMode;
 use crate::types::{ActKind, ReadResult, Region, SeeMethod, SeeResult, WindowInfo};
@@ -187,9 +192,15 @@ impl PlatformBackend {
             },
             #[cfg(windows)]
             PlatformBackend::Win => Capabilities {
-                see: SeeMethod::PrintWindow,
-                // WGC (occluded capture) is the documented follow-on seam.
-                see_occluded: false,
+                see: if crate::platform::wgc::available() {
+                    SeeMethod::WindowsGraphicsCapture
+                } else {
+                    SeeMethod::PrintWindow
+                },
+                // `PW_RENDERFULLCONTENT` renders the window's own content, so
+                // occlusion does not decide the result — and WGC (where present)
+                // is compositor-native on top of that.
+                see_occluded: true,
                 uia_tree: true,
                 invoke_set_value: true,
                 send_input: true,
@@ -200,9 +211,10 @@ impl PlatformBackend {
                 foreground_restore: true,
                 // P57.7 — UIA `InvokePattern` IS an accessibility action.
                 a11y_action: true,
-                // P57.6 — Windows.Graphics.Capture is not implemented yet, so an
-                // occluded window still captures through PrintWindow.
-                see_occluded_wgc: false,
+                // P57.6 — a real probe: WinRT support + a live BGRA-capable
+                // D3D11 device, so this only reads true where WGC can actually
+                // return pixels (never a platform guess).
+                see_occluded_wgc: crate::platform::wgc::available(),
                 // P57.5 — Session 0 (services) has no interactive desktop.
                 interactive_desktop: crate::platform::win::WinBackend::interactive_desktop(),
                 screen_recording_granted: true,
