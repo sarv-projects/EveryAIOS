@@ -20,8 +20,10 @@
 | Hover `--surface-3` | `#F0EFEB` | `#353330` | |
 | Ink `--foreground` | `#26251E` | `#F0EFEB` | warm near-black |
 | Muted `--muted-foreground` | `#6B6860` | `#B9B6AD` | |
-| Brand (sole accent) | `#F54E00` | `#F54E00` | orange — never decorative |
+| Brand (sole accent) | `#F54E00` | `#F54E00` | **current `ui/src` value — orange; the v3.78 contract moves brand to a cool-blue semantic accent token and this row becomes the legacy value until P66.5 lands** |
 | Success / Warning / Danger / Info | green / amber / red / blue | same | semantic only |
+
+> **Target vs current (v3.78, P66.5):** the production contract in `../UI-DESIGN-PROMPT.md` §2.1 uses a cool-blue semantic accent (brand is a *semantic token*, so Settings can offer selectable accent themes) and is the target. This table and `../ui/src/globals.css` still carry the legacy orange `#F54E00` brand, which is the tracked migration gap. Status meanings (success/live/warning/error) keep their own semantic colors in both; orange is not the brand or selection state in the target.
 
 **Radius** `--radius: 0.5rem` (sm/md/lg/xl derived). **Fonts** Inter (sans) +
 JetBrains Mono (mono). **Spacing** 4px grid. **Motion** 150–300ms

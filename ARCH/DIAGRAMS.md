@@ -1,6 +1,6 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-09-15 · **Spec version:** v3.75 (version history: `SPEC-CHANGELOG.md`) · **Diagrams:** 27
+> **Generated:** 2026-09-15 · **Spec version:** v3.78 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 27
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
 > **Surgical hierarchy (doc 52 §1) + Dynamic Chief:** harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12). The **brain tier is a swappable `primary_chief` slot** (inbuilt or **any installed** ACP loop — Claude Code, Codex, Grok Build, OpenCode, …). An external Chief runs that product's loop; omitted `fs`/`terminal` means Self-contained (not “UNSUPPORTED → MCP”). Slash = `available_commands_update`. Handoff = compacted live view. Storage-intelligence (D9–D12) and G8 cascade: docs 49/52.
 
