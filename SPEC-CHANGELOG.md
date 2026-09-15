@@ -6,6 +6,8 @@ This file records historical decisions, research transfers, implementation updat
 
 Each entry records the date or release marker, change category, affected sections or capability IDs, decision, implementation impact, and verification. Historical entries below are preserved; new entries must use this structure.
 
+**Point-in-time rule — how to read every number below.** Every count in an entry — capability total, TODO census, test counts, version marker — is that entry's own verification evidence **at that date**. This file is an archive; entries are never rewritten to today's numbers, so a dated number is not a stale number. Read `census stays 157` in the v3.69–v3.75 entries as exact: the nine native-plane rows (**B10 · B11 · C14 · C15 · F16 · I14–I17**) landed later, in **v3.76**, which is why those entries and the current contract differ without either being wrong. The only *current* numbers live in `capabilities.yaml` / `ARCH/09-FEATURE-MATRIX.md` / `DESKTOP-APP-SPEC.md` §0 (capability identity) and in `TODO.md`'s live-count line (delivery); `scripts/check-doc-sync.mjs` machine-checks those two. If a number anywhere else disagrees with them, the number is historical and the three identity surfaces plus the live-count line win.
+
 ## Documentation ownership
 
 - `DESKTOP-APP-SPEC.md` contains only the current normative product contract: behavior, constraints, interfaces, supported/unsupported outcomes, security invariants, scope, and stable diagrams.
@@ -13,6 +15,74 @@ Each entry records the date or release marker, change category, affected section
 - `ARCH/` contains architecture, module ownership, data-flow, protocol, and deployment detail.
 - `TODO.md` contains delivery status, open work, blockers, and evidence links.
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
+
+---
+
+## 2026-09-15 — One current count per document, one archive (no contract change; census 166)
+
+**Category:** documentation consistency only — no capability row, no schema, no code. Census unchanged (**166**); live count unchanged (**1403 = 1208 done + 195 open**).
+
+**Why.** `TODO.md`'s header carried three paragraphs still labelled *"Prior census (superseded by the line above)"* beside the live line. Each was accurate at its date, but read together they presented three competing current totals — exactly the confusion the product-contract / archive split exists to prevent. The file now asserts **one** current delivery count (its live-count line, the single number `check-doc-sync.mjs` verifies) and the dated landings underneath carry an explicit **ARCHIVED — point-in-time evidence** banner plus the rule that the archive is not current state.
+
+**Also in this pass.** (1) The point-in-time rule is now stated at the top of this file (§ *Entry format*), so the `157 capabilities; census 1382 = …` verification lines in the v3.65–v3.75 entries are read as dated evidence rather than as stale claims. (2) `TODO.md`'s header `Architecture:` marker still said `spec v3.75` after v3.76 made the nine rows first-class → `v3.76`. (3) `ARCH/17-NATIVE-AGENT.md`, `ARCH/00-INDEX.md` and `RESEARCH/desktop_app/90-native-agent-peer-schemas-2026-09.md` now state both facts — the contract froze in **v3.75**, the nine rows landed in **v3.76** — so a reader can no longer take the two as a contradiction.
+
+**Verification.** `node scripts/check-doc-sync.mjs` → `166 capabilities in sync (yaml == ARCH/09 == spec §0); TODO.md 1403 = 1208 done + 195 open matches header; shell chrome v3.76 matches the changelog; kernel gate clear`.
+
+---
+
+## v3.76 — 2026-09-15 — Native-plane capabilities are first-class rows (B10/B11/C14/C15/F16/I14–I17; census 157 → 166)
+
+**Category:** capability-contract change + documentation. The nine native-plane capabilities the v3.75 freeze described are now first-class rows in all three identity surfaces. **Affected:** `capabilities.yaml` · `ARCH/09-FEATURE-MATRIX.md` (rows + note + Totals) · `DESKTOP-APP-SPEC.md` §0 · `ARCH/17-NATIVE-AGENT.md` · `ARCH/00-INDEX.md` · `README.md` · `TODO.md` · `ui/src/lib/version.ts`. **Checkbox flips:** none — the delivery queue **P64.1–P64.10 is unchanged**; this entry changes *capability identity*, not work status.
+
+**Why.** v3.75 froze the two-plane contract but deliberately added no rows, leaving the native plane composed invisibly onto existing ids. That let the capability contract and the architecture be read two ways: a reader of `capabilities.yaml` / `ARCH/09` / spec §0 could not see that the native plane owns nine capabilities of its own. The kernel gate (`scripts/check-doc-sync.mjs` §5) blocks *new* rows only while gate items are open — the gate is **clear**, so the rows are added legitimately rather than by opening a side door.
+
+**The nine rows** (each 🟡 — the contract is frozen and/or a tested primitive exists, not yet wired; each delivered by TODO **P64**):
+
+| Row | Capability | Owner |
+|---|---|---|
+| **B10** | Two-plane capability resolution (native-first, augmentation-second) | coordinator Chief + `everyaios-acp` capability view |
+| **B11** | Native first-class control tools (`ask` · `plan` · `todo` · `subagent` in-turn) | `packages/coordinator/first-class-tools.ts` + `chat.ts` |
+| **C14** | Context providers + mention resolution (`@Codebase`) | `packages/coordinator/context-providers.ts` |
+| **C15** | Repo-map context injection (tree-sitter + PageRank, budget-fit) | `everyaios-codeintel::repomap` |
+| **F16** | Shared-plane cowork façades (task-shaped surfaces) | `everyaios-mcp` + office/browser/desktop |
+| **I14** | Unified native edit ladder (exact → structured → fuzzy, fail closed) | `everyaios-core` file service |
+| **I15** | Risk-gated shadow preflight | `everyaios-core` + `everyaios-codeintel` |
+| **I16** | Per-step checkpoint & rollback | `everyaios-blueprint` + `everyaios-core` |
+| **I17** | Validated skill distillation | `everyaios-blueprint` |
+
+**Deliberately no row added for** P64.4 (sub-agent execution side — completes existing **B3**) and P64.10 (Windows/macOS sandbox backends — completes the existing J/E sandbox rows). Adding those would be duplicate identity, not clarification.
+
+**Surfaces kept in lockstep.** `capabilities.yaml` **157 → 166** rows == `ARCH/09` (166 ids + a rewritten native-plane note + Totals **166 rows / 🟢 26 · 🔵 66 · 🟡 79 · ⚪ 15**, sum 186 across the 20 multi-status rows) == spec §0 (166 rows, +9 in sections B/C/F/I). `ARCH/09`'s native-plane note no longer says "ARCH/17 adds no rows"; `ARCH/17` §17.0 and §17.11 and the `TODO.md` P64 header/scope name the nine ids; `README.md` gained the corresponding plain-language bullets (166 capabilities).
+
+**Follow-on consistency fixes in the same pass** — found by auditing the surfaces that *quote* the census, not only the three that define it:
+
+- `TODO.md`'s live census line and four phase-summary rows (P54/P61/P62/P63) still said `Census 157` → **166**.
+- `TODO.md`'s summary-table **TOTAL row** advertised a stale live count (`1392 = 1206 done + 186 open`) that **contradicted the file's own header** (`1403 = 1208 done + 195 open`) → corrected.
+- A **P64 row** was added to that table (10 items · 0 done · 10 open) so the native-plane queue is visible where every other phase is, and the 9 new row ids are named in its cell.
+- `capabilities.yaml`'s header told the reader to regenerate the surfaces with `scripts/gen-matrix.mjs` — **that script does not exist**. The comment now states the real procedure (hand-keep all three in lockstep; `check-doc-sync.mjs` fails until they agree) and lists the census-quoting files to bump.
+- `scripts/check-doc-sync.mjs` §5 carried a **dead `baseline = 156`**, an **unused `advancing` filter**, and a **hardcoded** gate-item list in its failure message. The baseline is now a maintained constant (`166` — the count at which the gate was last clear) that is actually used to flag post-gate rows, and the gate item ids are derived from the KERNEL GATE section itself.
+
+**Verification.** `node scripts/check-doc-sync.mjs` → `166 capabilities in sync (yaml == ARCH/09 == spec §0)`; TODO census `1403 = 1208 done + 195 open` matches header; shell chrome **v3.76** matches this entry; kernel gate clear.
+
+---
+
+## v3.75 — 2026-09-15 — Native agent plane frozen (ARCH/17): two-plane contract, tool/agent schema catalog, P64 queue
+
+**Category:** architecture freeze + documentation (no new subsystem, no new capability row — census stays 157 at this entry; **superseded the same day by v3.76**, which makes the nine native-plane capabilities first-class rows, census 166). **Affected:** spec §4.6 (new) · `ARCH/17-NATIVE-AGENT.md` (new) · `ARCH/00-INDEX.md` · `ARCH/01`–`ARCH/16` (plane-ownership notes + stale-count/version fixes) · `ARCH/DIAGRAMS.md` · `TODO.md` (P64 opened) · `SPEC-CHANGELOG.md` · `ui/src/lib/version.ts` · `README.md` · `UI-DESIGN-PROMPT.md` · `UX-TESTING-PLAN.md` · `RESEARCH/desktop_app/00-INDEX.md` + new doc 90 · `crates/everyaios-mcp/tests/external_client.rs` + `src/bin/mcp-standalone-server.rs` (catalog-count drift). **Checkbox flips:** +10 open (P64.1–P64.10); nothing marked done — this entry freezes a contract and opens the wiring queue.
+
+**Decision.** EveryAIOS ships two kinds of agent and one rule. **EveryAIOS Native** is a full harness that owns both its cognitive plane and the shared cowork plane; **external agents** (Codex CLI · Claude Code · OpenCode · Aider · Cline/Roo · Grok Build) keep their own loop, tools, model, permissions, and account and may borrow the shared plane. The invariant — *Native Agent Plane belongs to the agent; Shared Cowork Plane belongs to EveryAIOS* — is now normative, together with the **capability-resolution policy**: native-first, augmentation-second, with the Chief choosing when both exist.
+
+**What the freeze corrects.** Three earlier framings are now explicitly rejected in the contract: (1) that EveryAIOS should replace an external agent's native toolset — it must not; (2) that EveryAIOS can augment capabilities inside a separate GUI product — it can only augment what is reachable through the integrated CLI/ACP/MCP seam; (3) that "supersede every agent" is a testable invariant — it is a product thesis, not a spec guarantee, and is written as such.
+
+**Schema catalog (the substantive addition).** `ARCH/17-NATIVE-AGENT.md` records the **single source of truth** for tool schemas (`everyaios_core::tools::ToolRegistry`, served as `tool/list`, `RegisteredTool { id · family · description · readOnly · operation · risk · riskTier · argsSchema }`), the exact native catalog (`file_ops.*`, `script.run`, `search.query`, `office.*`, `desktop.*`, `connector.*`, plus MCP-derived browser/storage/memory/search ids and dynamic `external` tools), the four coordinator-side first-class tools (`ask`/`plan`/`subagent`/`todo`), the shared-plane façade surfaces, the shipped nine-agent roster, the `AgentBundle` registry, the specialist sub-agent roster, the `SubAgentSpec`/`SubAgentResult`/`SubAgentLimits` contract (`max_depth 2 · max_concurrent 3 · max_total 6`, `DELEGATE_BLOCKED_TOOLS`, `DEFAULT_DENY_TASK_TOOLS`), the 12-segment prompt schema, the routing roles, the memory composition order, and the 15 must-handle two-plane edge cases.
+
+**Module ownership (anti-mishmash).** §17.2 assigns exactly one plane, one owner, and one contract to all 26 modules, with the rule that a capability appearing in two modules is **one Rust implementation with two thin façades** — never two implementations.
+
+**Provenance.** Peer patterns are adopted as *schemas and invariants*, verified against public docs, never as product behavior we cannot observe at runtime: Claude Code's single-occurrence exact-edit invariant and permission modes; Codex CLI's app-server JSON-RPC seam and `apply_patch`; Cline/Roo's order-invariant fuzzy multi-hunk fallback and shadow checkpoints; Aider's edit-format ladder and tree-sitter + PageRank repo map; SWE-agent's bounded-window ACI; Hermes's pre-insertion persona scan and validated skill retention.
+
+**Repo-wide consistency pass (same freeze, so the model cannot be read two ways).** Because the two-plane model only holds if every module states its plane, the pass added a one-line **plane-ownership** note to each architecture doc — `ARCH/03` (vault/BYOK = shared kernel; no credential copying into an external agent) · `ARCH/04` (Office = shared plane) · `ARCH/05` (`token_usage` shared; context/cost strategy owned by Native) · `ARCH/06` (Guard/tickets/audit = kernel beneath both planes) · `ARCH/07` (memory store shared; memory reasoning Native-owned) · `ARCH/08` (browser = shared plane) · `ARCH/14` (CUA = shared plane) · `ARCH/15` (connectors = shared plane, tokens stay in the vault) — and to `UX-TESTING-PLAN.md` (the picker must show which layer a capability belongs to). It also fixed three stale-identity defects found while tracing: **the MCP catalog was documented as "42 tools" in nine places** when `everyaios_mcp::all_tools()` has returned **51** (browser 37 · office 4 · memory 3 · search 2 · storage 5) since the office/memory/search groups landed; `crates/everyaios-mcp/tests/external_client.rs` asserted `42` in two places — a latent failure that never ran because the test is `EVERYAIOS_MCP_EXT_CLIENT=1`-gated, now derived from `all_tools().len()` so it cannot drift again; and `ARCH/12`'s header `3.9` (a **UI-spec document revision**, not a shell version) is now labelled as such, while `ARCH/15`'s header was brought from v1.2 to the v1.6 its own notes reach. `ARCH/DIAGRAMS.md` header was stale (`v3.55`, "25" when 26 existed) → `v3.75` / **27** (new diagram #27, the two planes); `UI-DESIGN-PROMPT.md` named `spec v3.67` and hardcoded a `v3.57` badge in its own mock while the same file forbids hardcoding a version string.
+
+**Verification.** `node scripts/check-doc-sync.mjs` (capability identity unchanged, TODO census matches header, shell version matches this entry) · Rust workspace + `src-tauri` tests · coordinator + UI suites · `tsc` · `cargo check -p everyaios-mcp --tests --bins`.
 
 ---
 

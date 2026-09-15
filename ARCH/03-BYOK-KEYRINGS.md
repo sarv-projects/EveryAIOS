@@ -2,6 +2,7 @@
 
 > **The user requirement, verbatim:** *"for BYOK, under each provider, add an option that multiple keys under each provider can be added. Each acts as a fallback — as soon as one rate-limits, switch. Technically users can have multiple accounts without ever changing keys."*
 > This doc is the design. Patterns sourced from: LiteLLM key management (web, 2026), OpenRouter multi-BYOK (web), pi + `pi-keyrouter` (doc 19 §1), Reasonix cost discipline (doc 05 §6), BrowserOS OAuth token store (doc 33 §7.4), vault/CES (doc 19 §7, v2.0 §P8).
+> **Plane (ARCH/17 §17.1):** the vault/BYOK broker is **shared execution-kernel infrastructure**, not a plane of its own. Key pools, 429 failover and key affinity are consumed by the Native agent plane's routing; they are never pushed into an external agent. An external ACP agent keeps its own model/account, and EveryAIOS copies **no** subscription credential — a native agent receives only the spawn-env the user explicitly configured.
 
 ## 3.1 The model: provider → key pool → routing
 
@@ -60,7 +61,7 @@ everyaios-vault (SQLCipher)
 - **Cache discipline note (Reasonix):** rolling keys must not break prefix-cache economics. The **same model + same provider must reuse the same key for the same session** unless that key is unhealthy — otherwise provider-side prompt caching fragments across accounts. Rule: key affinity = `(provider, model, session_id)`; a key change mid-session is allowed only on hard failure, and the compaction layer treats a key change as a cache-break event (05 §5.5).
 - **Cost ledger:** every call records `provider, model, key_id, in_tok, out_tok, cache_read, cache_write, cost, ttl` → the token-economy dashboard (05 §6) and the per-key budgets above share this one table (Reasonix `cacheRead/cacheWrite/cost`, pi EMPTY_USAGE pattern, doc 05).
 - **Vault:** SQLCipher, single write owner (everyaios-vault), keys never logged, masked in UI, export/import encrypted (doc 19 §7, v2.0 §P8 env vault).
-- **OpenCode Zen free path (keyless):** on `opencode.ai/zen/v1` for `*-free` / `big-pickle`, send **no Authorization**. Gate is **`x-opencode-session`** (stable per conversation) plus `x-opencode-request` / `x-opencode-client` / `User-Agent: EveryAIOS/<version>`. Missing session → 400 `MissingSessionID`. Paid Zen still uses a vault key. Live broker today injects `traceparent` only.
+- **OpenCode Zen free path (keyless):** on `opencode.ai/zen/v1` for `*-free` / `big-pickle`, send **no Authorization**. Gate is **`x-opencode-session`** (stable per conversation) plus `x-opencode-request` / `x-opencode-client` / `User-Agent: EveryAIOS/<version>`. Missing session → 400 `MissingSessionID`. Paid Zen still uses a vault key. **Landed (v3.73/P56.6 — supersedes the earlier “broker injects `traceparent` only” note):** the broker emits `x-opencode-session` (stable per conversation), `x-opencode-request`, `x-opencode-client`, and `User-Agent: EveryAIOS/<version>` for the OpenCode Zen/Go/Free rows, and sends **no** `Authorization` on the keyless Free row (`traceparent` rides alongside, not instead).
 
 ## 3.5 Provider inventory (from doc 19 + ledger)
 

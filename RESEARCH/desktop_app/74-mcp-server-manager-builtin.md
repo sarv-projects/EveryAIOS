@@ -12,7 +12,7 @@
 
 | Surface | Direction | What we have today | The gap |
 |---|---|---|---|
-| **`everyaios-mcp` (42 tools)** | EveryAIOS **exposes its own** tools *as* an MCP server | ✅ done — 37 browser + 5 storage, ACP tool-kind taxonomy, profiles, readOnly/openWorld | none |
+| **`everyaios-mcp` (42 tools at research time — now 51: +office 4 · memory 3 · search 2)** | EveryAIOS **exposes its own** tools *as* an MCP server | ✅ done — 37 browser + 5 storage, ACP tool-kind taxonomy, profiles, readOnly/openWorld | none |
 | **Third-party MCP servers** (mcpservers.org's 9,800+) | EveryAIOS **consumes** other servers' tools | ⚠️ `mcp_catalog` command + Connectors "MCP Servers" tab = **config-surface placeholder only** | **this is the gap** |
 
 "Having MCP servers built in" conflates the two. We should **never** re-implement third-party servers (doc 70's conclusion still holds). The optimization is to make *consuming* them a native, one-click, managed, guarded operation — exactly the way we already consume ACP agents.

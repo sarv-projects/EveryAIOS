@@ -135,14 +135,22 @@ if (!gateMatch) {
   failures.push(`TODO.md has no ## KERNEL GATE section (Fix 3) — add it.`);
 }
 if (gateOpen > 0) {
-  const advancing = yaml.filter((r) => r.advances_kernel === "true");
   // The gate blocks *new* rows; rows that pre-date the gate are grandfathered.
-  const baseline = 156; // committed capability count when the gate landed (Fix 2).
-  const newRows = yaml.filter((r) => !arch.has(r.id) || !spec.has(r.id));
+  // The baseline is the capability count recorded when the gate landed, and it
+  // is maintained deliberately: ids are append-only, so every row at index
+  // >= baseline is a row added after the gate. Last revised 2026-09-15 to 166
+  // (the v3.76 native-plane rows B10/B11/C14/C15/F16/I14-I17 were added while
+  // the gate was CLEAR, which is the condition this check enforces).
+  const baseline = 166;
+  const newRows = yaml.slice(baseline).filter((r) => r.advances_kernel !== "true");
   if (newRows.length) {
+    const gateItems = [
+      ...new Set((gateMatch[0].match(/\*\*(P[\d.]+)/g) || []).map((s) => s.slice(2))),
+    ];
     failures.push(
-      `${gateOpen}/${gateTotal} kernel-gate items are OPEN (P48.2/P48.4/P47.5) — ` +
-        `new capability row(s) added without closing them: ` +
+      `${gateOpen}/${gateTotal} kernel-gate items are OPEN` +
+        (gateItems.length ? ` (${gateItems.join("/")})` : "") +
+        ` — new capability row(s) added without closing them: ` +
         `${newRows.map((r) => r.id).join(", ")}. Close the gate items first, or ` +
         `mark the row advances_kernel: true.`,
     );

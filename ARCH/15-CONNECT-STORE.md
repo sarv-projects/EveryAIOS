@@ -1,6 +1,6 @@
 # Connect Store — remote MCP + OAuth connectors (the "click → sign in → use" surface)
 
-> **Status:** v1.0 (2026-08-29). Companion to `manager.rs` (local stdio MCP installs)
+> **Status:** v1.6 (2026-09-03 — the notes below reach v1.6; the header previously read v1.2). Companion to `manager.rs` (local stdio MCP installs)
 > and `everyaios-vault::oauth` (PKCE + device-flow OAuth). **New file `everyaios-mcp/src/store.rs`.**
 > Live code: `store_catalog` Tauri command → `ui/src/lib/mcp.ts` `storeCatalog()`.
 > **v1.1 (2026-08-29):** vault `oauth.rs` now registers the five connector
@@ -10,6 +10,13 @@
 > (their integrations need a registered app) — set via `with_client_id`; the
 > others use community/known public client IDs (override anytime). 4 new vault
 > oauth tests (110 vault tests total).
+>
+> **Plane (ARCH/17 §17.1):** the connect store, its OAuth providers and the MCP
+> children it instals are **Shared Cowork Plane** — connector capabilities are
+> borrowed by every agent (Native included) through the shared façade, and raw
+> OAuth tokens never leave the vault for an agent. The monitored-transport note
+> below applies identically to a Native-mediated child and an external agent's
+> child.
 > **v1.2 (2026-08-29):** remote client landed — `everyaios-mcp::remote`
 > (OAuth 2.1 discovery + RFC 7591 dynamic client registration + PKCE + token
 > exchange + streamable-HTTP JSON-RPC over the `HttpTransport` seam; ureq
@@ -106,7 +113,7 @@ Skills and connectors converge on **MCP** (tools/resources) + **SKILL.md**
 (instructions). Distribution is a **signed registry index** (the ACP/MCP registry
 machinery already in `everyaios-mcp`/`everyaios-acp`, signed with the same minisign
 key the updater uses). Install = Guard-2 consent (tool list + permissions) →
-sandboxed (a tested concrete monitored backend primitive; currently Linux `bwrap` when installed), with host changes imported only through the validated `ReviewedImport` manifest and a reviewed change set. ACP/MCP launch commands are not yet wired to the shared monitored transport, so their current stdio path remains explicitly uncontrolled. macOS/Windows native enforcement and packaged verification remain release gates. A self-contained external process is not covered by the native EveryAIOS ticket/audit guarantee. The current attach API is explicitly uncontrolled unless a concrete sandbox process and reviewed-import root are bound. This is the post-v1
+sandboxed (a tested concrete monitored backend primitive; currently Linux `bwrap` when installed), with host changes imported only through the validated `ReviewedImport` manifest and a reviewed change set. **Launch transport (updated v3.75):** the ACP launch path was wired to the shared monitored transport on 2026-09-02 (`ProcessTransport::spawn_sandboxed` over `LinuxBwrapBackend::spawn_stdio`, with a real bwrap round-trip test), and the **MCP** attach path followed in v3.74 (P62.2 — `spawn_with_posture(SandboxPosture::preferred())`, `--clearenv` + `--unshare-net` + a credential-free `essential_env()` allow-list, fail-closed if confinement is requested but unavailable). So neither path is "uncontrolled" any more **on Linux**; on macOS/Windows both honestly degrade to `Ambient` because the native backends are still unbuilt (P49.5). macOS/Windows native enforcement and packaged verification remain release gates. A self-contained external process is not covered by the native EveryAIOS ticket/audit guarantee. The attach API still requires a concrete sandbox process and reviewed-import root to be considered controlled. This is the post-v1
 "community skills marketplace" (TODO **P9.7 / line 968**).
 
 ## Honest boundaries

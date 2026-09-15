@@ -1,6 +1,6 @@
 # EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
-> **Generated:** 2026-08-09 · **Spec version:** v3.55 (version history: `SPEC-CHANGELOG.md`) · **Diagrams:** 25
+> **Generated:** 2026-09-15 · **Spec version:** v3.75 (version history: `SPEC-CHANGELOG.md`) · **Diagrams:** 27
 > **Purpose:** Every major system flow visualized. Render with any Mermaid-compatible viewer.
 > **Surgical hierarchy (doc 52 §1) + Dynamic Chief:** harness-driving diagrams compose external agent CLIs as **brain → core → surgeon** workers via ACP (J17/F12). The **brain tier is a swappable `primary_chief` slot** (inbuilt or **any installed** ACP loop — Claude Code, Codex, Grok Build, OpenCode, …). An external Chief runs that product's loop; omitted `fs`/`terminal` means Self-contained (not “UNSUPPORTED → MCP”). Slash = `available_commands_update`. Handoff = compacted live view. Storage-intelligence (D9–D12) and G8 cascade: docs 49/52.
 
@@ -701,7 +701,7 @@ sequenceDiagram
     Note over Client,Audit: MCP 2026-07-28: STATELESS<br/>No initialize, no session-id<br/>Every request self-contained via _meta
 
     Client->>MCP: POST /mcp<br/>{method: "tools/list",<br/>_meta: {protocolVersion: "2026-07-28",<br/>capabilities: {...}}}
-    MCP-->>Client: {tools: [...37 tools...<br/>annotations: readOnlyHint/openWorldHint]}
+    MCP-->>Client: {tools: [...51 native tools...<br/>annotations: readOnlyHint/openWorldHint]}
 
     Client->>MCP: POST /mcp<br/>{method: "tools/call",<br/>name: "snapshot",<br/>arguments: {tabId: "..."},<br/>_meta: {...}}
     MCP->>Guard: Permission check (readOnly tool)
@@ -1002,6 +1002,48 @@ sequenceDiagram
     
     Agent->>U: ✓ Task complete<br/>(with screenshots as proof)
 ```
+
+---
+
+## 27. The two agent planes (frozen v3.75 — ARCH/17)
+
+> The orthogonal view to every diagram above: **who owns which capability**. Native owns both planes; an external agent keeps its own and borrows the shared one; resolution is native-first.
+
+```mermaid
+graph TB
+    subgraph NATIVE["EVERYAIOS NATIVE AGENT (Chief)"]
+        N1["NATIVE AGENT PLANE<br/>loop · planning · routing · context<br/>memory reasoning · sub-agents · skills<br/>native coding · shell · web search"]
+        N2["SHARED COWORK PLANE (borrows)"]
+    end
+
+    subgraph EXT["EXTERNAL AGENT RUNTIME (Codex CLI · Claude Code · OpenCode · Aider · Cline/Roo)"]
+        E1["its OWN native plane<br/>loop · tools · model · permissions · account — never removed"]
+        E2["SHARED COWORK PLANE (borrows)"]
+    end
+
+    subgraph SHARED["EVERYAIOS SHARED COWORK PLANE — owned by EveryAIOS"]
+        S1["office · browser · computer use · connectors"]
+        S2["workspace/codeintel · artifacts · shared memory retrieval"]
+        S3["durable Work · scheduler · background runs · recovery"]
+        S4["guard · vault · budget · leases · cross-agent delegation"]
+    end
+
+    subgraph KERNEL["EXECUTION KERNEL (Rust)"]
+        K1["Guard to Permit(AuthorizationTicket | trusted gesture)<br/>to Execute to Observe to Verify to Record"]
+        K2["Vault · Workspace · Memory · Audit (Merkle) · Work Gateway"]
+    end
+
+    N1 --> N2
+    E1 --> E2
+    N2 --> SHARED
+    E2 --> SHARED
+    SHARED --> KERNEL
+
+    POL["Resolution policy: native-first, augmentation-second.<br/>If the agent's native X is reachable through the integrated<br/>seam (CLI/ACP/MCP), use it; else use shared X; if both,<br/>the Chief chooses by quality/cost/permission/latency/context."]
+    N1 -.-> POL
+```
+
+**Native vs shared, at a glance:** conversation loop · planning · routing · memory *reasoning* · sub-agent orchestration · native coding/shell/edit · native web search · verification · skills · cost · recovery = **Native owns** (external agents keep their own equivalents). Office · browser · computer use · connectors · workspace map · artifacts · durable Work · scheduler · background runs · shared memory retrieval · Guard · vault · budget · leases · cross-agent delegation = **shared**. Cross-agent delegation (hiring an external agent as a specialist) is Native-exclusive.
 
 ---
 

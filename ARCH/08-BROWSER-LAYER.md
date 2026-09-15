@@ -1,6 +1,7 @@
 # 08 — Browser Layer (the agent's real browser)
 
 > **The user requirement, verbatim:** *"don't forget browser. agentic OS means to replace everything — from browser to file editor to coding to basically everything. Can we use something lightweight? It must hold all types of search engines, all types of accounts (stored tokens), allow the agent autonomous permission-gated access via stored accounts, and handle captchas of all types."* Design: **one CDP driver, a tiered engine stack (lightweight by default)** + injected recorder for replay + 37-tool catalog + rquickjs `run` sandbox + **Session Vault** (multi-account, permission-gated) + **challenge-handler tier**. Patterns from BrowserOS source deep-dive (doc 33), browser-automation research (doc 06), and fresh mid-2026 verification of Lightpanda / Obscura / Camoufox / CloakBrowser / Steel (see 8.8).
+> **Plane (ARCH/17 §17.1):** this crate is **Shared Cowork Plane**. The Native agent holds **no private browser** — it calls the same shared façade an external agent calls (ARCH/17 §17.5), so a navigation's destination floor, session vault, ownership and audit are identical regardless of who asked. An external agent's *own* browser capability (where its integrated CLI exposes one) stays native-first per the resolution policy; EveryAIOS browser is the fallback, not a replacement.
 
 ## 8.1 The browser subsystem (Rust: everyaios-cdp + everyaios-browser)
 

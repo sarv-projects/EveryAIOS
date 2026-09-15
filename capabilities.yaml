@@ -2,9 +2,12 @@
 #
 # Extracted from ARCH/09-FEATURE-MATRIX.md on 2026-08-30. This file is the
 # canonical row list for the doc-sync CI check (scripts/check-doc-sync.mjs).
-# When a capability row is added/removed/re-scoped, edit THIS file and
-# regenerate ARCH/09 + DESKTOP-APP-SPEC.md §0 with scripts/gen-matrix.mjs
-# (or accept the CI failure until the docs catch up).
+# When a capability row is added/removed/re-scoped, edit THIS file AND the
+# matching row in ARCH/09-FEATURE-MATRIX.md AND the matching row in
+# DESKTOP-APP-SPEC.md §0 (there is no generator — the three are hand-kept in
+# lockstep). scripts/check-doc-sync.mjs fails the build until all three agree,
+# so the CI failure IS the reminder. Bump the census wherever it is quoted
+# (TODO.md scope + table, ARCH/00-INDEX, README.md, spec §0 scope).
 #
 # Fields: id (stable, append-only), layer (A..K), name (short display),
 # post_v1 (bool — ⚪ in ARCH/09 status = later/optional, not v1 scope),
@@ -130,6 +133,18 @@
   post_v1: false
   source: ACP) — chief picker + Work-survives-Chief. UI wiring complete; live agent runs = coordinator seam.**
 
+- id: B10
+  layer: B
+  name: Two-plane capability resolution (native-first, augmentation-second)
+  post_v1: false
+  source: ARCH/17 §17.1 + RESEARCH doc 90 + TODO P64
+
+- id: B11
+  layer: B
+  name: Native first-class control tools (ask/plan/todo/subagent in-turn)
+  post_v1: false
+  source: ARCH/17 §17.4.3 + RESEARCH doc 90 + TODO P64.1
+
 - id: C1
   layer: C
   name: C-series memory/context plane + 34-algorithm index
@@ -207,6 +222,18 @@
   name: Spaced-repetition (FSRS)
   post_v1: false
   source: **✅ landed: `everyaios-memory::fsrs` (state prediction + next-interval scheduling) + simulator; `reinforce` (candidate extraction + due-review queue) + `bm25` signal + `planner` (C7) + `janus` structural passes + `cognee` graph API + `rtk` output compression + `usage` ledger; numbered **Algorithm #34** (v3.51); FSRS-7 upstream line (2025) tracked as adopt-when-shipped watch item (permissive fsrs-rs v6.x doesn't carry it yet)**
+
+- id: C14
+  layer: C
+  name: Context providers + mention resolution (@Codebase etc.)
+  post_v1: false
+  source: ARCH/17 §17.7 + RESEARCH doc 90 + TODO P64.2
+
+- id: C15
+  layer: C
+  name: Repo-map context injection (tree-sitter + PageRank, budget-fit)
+  post_v1: false
+  source: ARCH/17 §17.7 + doc 46/doc 90 + TODO P64.3
 
 - id: D1
   layer: D
@@ -471,6 +498,12 @@
   name: Calendar connector
   post_v1: false
   source: **✅ `connectors::calendar` (`CalendarConnector<T>`: list_events, get_event, create_event, update_event, delete_event, free_busy, export_ics — 4 tests) + deterministic `suggest_nudge` for B7. All over injectable `HttpTransport` seam; live Google account is the runtime seam.**
+
+- id: F16
+  layer: F
+  name: Shared-plane cowork façades (task-shaped surfaces for external agents)
+  post_v1: false
+  source: ARCH/17 §17.5 + RESEARCH doc 90 + TODO P64.9
 
 - id: G1
   layer: G
@@ -819,6 +852,30 @@
   name: Knowledge → Skill Compiler (`/learn`, post-v1)
   post_v1: true
   source: **v3.57 added — post-v1**
+
+- id: I14
+  layer: I
+  name: Unified native edit ladder (exact -> structured -> fuzzy, fail closed)
+  post_v1: false
+  source: ARCH/17 §17.10 + RESEARCH doc 90 + TODO P64.5
+
+- id: I15
+  layer: I
+  name: Risk-gated shadow preflight verification
+  post_v1: false
+  source: ARCH/17 §17.10 + RESEARCH doc 90 + TODO P64.6
+
+- id: I16
+  layer: I
+  name: Per-step checkpoint & rollback
+  post_v1: false
+  source: ARCH/17 §17.10 + RESEARCH doc 90 + TODO P64.7
+
+- id: I17
+  layer: I
+  name: Validated skill distillation loop
+  post_v1: false
+  source: ARCH/17 §17.10 + RESEARCH doc 90 + TODO P64.8
 
 - id: J1
   layer: J

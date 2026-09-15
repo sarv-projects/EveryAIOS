@@ -1,6 +1,7 @@
 # 05 — Token Economy: Minimize Inputs, Maximize Output Power
 
 > **The user's #1 goal:** *"tokens minimizing, yet greater, more powerful, capable outputs — so control the inputs basically."* This is the entire doc. Doctrine from doc 32 (tokenmining): **retrieve instead of preload · compress instead of repeat · structure instead of narrate · spend tokens where reasoning actually matters.** Knobs from Reasonix (doc 05 §6), BrowserOS (doc 33 §7.2), Janus (doc 31), context-mode (doc 32), rtk (doc 23), Hermes budgets (doc 16).
+> **Plane (ARCH/17 §17.1):** split by ownership. The `token_usage` ledger and per-key budgets are **shared execution-kernel telemetry**; context assembly (the 12-segment cache-affine prompt) and cost/routing *strategy* are owned by the **Native agent plane**. An external agent's own token spend is its own; EveryAIOS does not claim to account for it.
 
 ## 5.1 The four rules, made operational
 

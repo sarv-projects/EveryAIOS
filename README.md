@@ -100,7 +100,7 @@ cd src-tauri && cargo tauri dev
 
 ## Everything It Can Do
 
-EveryAIOS is built around **157 capabilities**. Here they are, grouped into ten plain-language areas.
+EveryAIOS is built around **166 capabilities**. Here they are, grouped into ten plain-language areas.
 
 <details>
 <summary><strong>🧠 Models &amp; Providers</strong> — use any AI, your keys</summary>
@@ -133,6 +133,8 @@ EveryAIOS is built around **157 capabilities**. Here they are, grouped into ten 
 - **Scheduled tasks** — run work later or on a recurring schedule.
 - **Teach-once routines** — a repeated workflow can be compiled into a saved routine that replays deterministically, with no model tokens on the healthy path.
 - **Build your own agent** — create named agents with their own instructions, tools and model, then pick them per task.
+- **Uses each agent's own strengths first** — when you pick an external coding agent, it keeps and uses its own tools; EveryAIOS adds what it lacks (Office, browser, desktop control) instead of replacing anything. The built-in agent owns both.
+- **Native planning, asking and delegating tools** — the built-in agent can ask you a question, keep a running to-do, and hand a focused sub-job to a helper, all as first-class steps.
 
 </details>
 
@@ -153,6 +155,8 @@ EveryAIOS is built around **157 capabilities**. Here they are, grouped into ten 
 - **Big files by reference** — massive documents are indexed as lightweight handles with previews instead of being pasted into the prompt.
 - **Spaced-repetition review** — facts and findings can be surfaced again on a review schedule so they stick.
 - **Runs on SQLite or Postgres** — the store works locally by default and can scale up.
+- **Point it at context** — mention a source (like the codebase) and it pulls in the right material automatically.
+- **Map of your repository** — it ranks the files that matter for the task and fits them into the context budget instead of dumping the whole tree.
 
 </details>
 
@@ -220,6 +224,7 @@ EveryAIOS is built around **157 capabilities**. Here they are, grouped into ten 
 - **Messaging bridges** — connect messaging channels.
 - **Email connector** — Gmail or IMAP/SMTP, read-first: nothing is sent without approval.
 - **Calendar connector** — read and manage calendar events.
+- **One shared toolset for every agent** — Office, browser, desktop control and search are offered as a few clear, task-shaped tools, so any agent you plug in can use them without being handed dozens of raw primitives.
 
 </details>
 
@@ -293,6 +298,10 @@ EveryAIOS is built around **157 capabilities**. Here they are, grouped into ten 
 - **File watcher with AI comments** — react to file changes, and act on `TODO`-style comments you leave in code.
 - **Language-server intelligence** — real diagnostics, symbols and navigation via LSP.
 - **Project-scoped coding rail** — a focused coding workspace inside the app, not a separate IDE.
+- **Edits that refuse to guess** — a change must match exactly one place; if it is ambiguous the agent is stopped rather than guessing, with a fuzzy fallback only when exact matching is genuinely impossible.
+- **Checks before it commits** — bigger or riskier edits are validated (types, diagnostics, tests) in a throwaway copy first, so broken changes do not land.
+- **Undo any step** — every change the agent makes is checkpointed, so you can jump back to any earlier point.
+- **Learns reusable routines** — a workflow that worked can be distilled into a saved skill, tested before it is ever used again.
 
 </details>
 
@@ -369,6 +378,7 @@ If you're an engineer, the place to start is:
 
 - [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) — the full product and capability contract
 - [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) — every capability with its status and home
+- [`ARCH/17-NATIVE-AGENT.md`](ARCH/17-NATIVE-AGENT.md) — the frozen **Native agent plane** vs the **shared cowork plane**, the capability-resolution policy, and the schema catalog for every native tool, agent type and sub-agent spec
 - [`ARCH/`](ARCH/) — module layout, build plan and diagrams
 - [`TODO.md`](TODO.md) — what's open, and what's next
 

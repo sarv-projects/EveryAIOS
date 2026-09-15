@@ -71,8 +71,14 @@ fn inspector_cli_lists_catalog_over_stdio() {
     let v: serde_json::Value = serde_json::from_str(stdout.trim())
         .unwrap_or_else(|e| panic!("tools/list output not JSON: {e}\n{stdout}"));
     let tools = v["result"]["tools"].as_array().expect("result.tools array");
-    // The real native catalog: 37 browser + 5 storage = 42.
-    assert_eq!(tools.len(), 42, "catalog size");
+    // The real native catalog — browser + office + memory + search + storage.
+    // Derive the expectation from the crate so a catalog change cannot leave
+    // this env-gated test asserting a stale magic number.
+    assert_eq!(
+        tools.len(),
+        everyaios_mcp::all_tools().len(),
+        "catalog size"
+    );
     let names: Vec<&str> = tools
         .iter()
         .map(|t| t["name"].as_str().unwrap_or_default())
@@ -196,7 +202,11 @@ fn inspector_cli_lists_catalog_over_loopback_http() {
     let v: serde_json::Value = serde_json::from_str(stdout.trim())
         .unwrap_or_else(|e| panic!("tools/list over HTTP not JSON: {e}\n{stdout}"));
     let tools = v["result"]["tools"].as_array().expect("result.tools array");
-    assert_eq!(tools.len(), 42, "catalog size over HTTP");
+    assert_eq!(
+        tools.len(),
+        everyaios_mcp::all_tools().len(),
+        "catalog size over HTTP"
+    );
     let names: Vec<&str> = tools
         .iter()
         .map(|t| t["name"].as_str().unwrap_or_default())

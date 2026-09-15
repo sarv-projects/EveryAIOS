@@ -2,6 +2,7 @@
 
 > **The user requirement, verbatim:** *"must have the capability to open excel, word, ppt, pdf, etc — all types of files, Microsoft files — edit."*
 > Design rules: **surgical, byte-preserving** edits (never full re-serialize), **deterministic math** (never LLM-computed), **render-anywhere** UI. Patterns: GenOffice block-patch + Rust xlsx sidecar (doc 28), LibreOffice as conformance oracle (doc 29), OOXML parts-direct editing (web research, 2026), core-files `ooxml-extractors` + renderers (built).
+> **Plane (ARCH/17 §17.1):** the Office engine is the **Shared Cowork Plane** — it belongs to EveryAIOS, not to any agent. The Native agent reaches it through the shared façades exactly as an external agent does (ARCH/17 §17.5); it does not hold a private copy. One Rust implementation behind both the native task-shaped façade and the MCP façade.
 
 ## 4.1 The core principle: OOXML = ZIP + XML parts
 

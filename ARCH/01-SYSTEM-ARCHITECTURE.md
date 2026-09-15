@@ -1,5 +1,7 @@
 # 01 — System Architecture (Hybrid)
 
+> **The two agent planes (frozen v3.75 — see `17-NATIVE-AGENT.md`).** The map below is the *runtime* topology. Orthogonally to it, the product has two **capability planes**: the **Native Agent Plane** (owned by the agent — loop, planning, routing, memory reasoning, sub-agents, native coding/shell/web tools) and the **EveryAIOS Shared Cowork Plane** (owned by EveryAIOS — office, browser, computer use, connectors, workspace/codeintel, artifacts, Work, scheduler, recovery, Guard, vault, budget). **EveryAIOS Native owns both planes; an external ACP agent keeps its own plane and borrows the shared one.** Capability resolution is native-first, augmentation-second. `17-NATIVE-AGENT.md` §17.2 assigns every module below to exactly one plane and one contract.
+
 ## 1.1 The map
 
 ```mermaid
