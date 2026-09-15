@@ -105,7 +105,7 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 ## 0. MASTER CAPABILITY & ALGORITHM INDEX (the contract — exhaustive, nothing cut)
 
 > **This index is the contract.** New capabilities are added *here first*, then to `ARCH/09`. Nothing is dropped from this list without a written decision in `ARCH/09`. This file carries the *contract* only: build/implementation status of every row lives in `TODO.md` (master queue) and the landing log lives in `SPEC-CHANGELOG.md`.
-> **Scope:** 157 capability rows and 34 algorithms. `ARCH/09` mirrors this index. Capability identity is stable; lifecycle status and delivery evidence are maintained in `TODO.md` and the changelog, not in this contract.
+> **Scope:** 166 capability rows and 34 algorithms. (**v3.76:** +9 native-agent-plane rows — B10/B11/C14/C15/F16/I14–I17, the capabilities the v3.75 ARCH/17 freeze made first-class; see `ARCH/17-NATIVE-AGENT.md`.) `ARCH/09` mirrors this index. Capability identity is stable; lifecycle status and delivery evidence are maintained in `TODO.md` and the changelog, not in this contract.
 > **Scope legend:** rows marked **post-v1** describe the final vision beyond launch. Other rows describe the v1 contract; launch priority and readiness are maintained outside this document.
 
 ### A. Model & BYOK layer
@@ -141,6 +141,8 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 | B7 | Scheduled tasks — cron/interval/event/webhook; nudge sentinels (suggest_schedule); **event-driven triggers:** CI-build-fail / test-regression / repo-change (push/PR/issue) / ticket-assign / telemetry-threshold, with scope+frequency policy controls; **heartbeat automations:** a scheduled run reawakens the **same conversation with its context intact**; worker heartbeat + missed-heartbeat → reassignment/resume from the last audit-event checkpoint; automation step binding rides a fail-closed Rust adapter (`everyaios-core::automation_runtime`); **BackgroundTaskRecord:** every detached run — automation job, subagent spawn, ACP spawn, CLI-initiated run — is a task record with lifecycle `queued → running → terminal {succeeded, failed, timed_out, cancelled, lost}`; **completion is push-driven** (wake the calling session/heartbeat — polling loops are the wrong shape); **execution ≠ delivery** (a run can be `succeeded` while a blocked completion is being retried over a capped, fenced retry generation, then `blocked` if the deadline passes); `lost` = no live authority and no durable run evidence after the grace window (5-min class, per runtime kind — conservative offline rules never claim a live ACP turn); terminal records retained 7 days then pruned; activity rail shows `tasks list/show/cancel/retry/audit`; complements the heartbeat lease + missed-heartbeat reassignment; rides H19 for visibility, H33 for the 24/7 node |
 | B8 | Crystallization — multi-step workflow detection/classification → deterministic skill source, skill registry, drift fallback, **0 model tokens**; crate contract is model-free and host execution remains adapter-owned |
 | B9 | **Custom Agent Builder (agent-authoring)** — create/publish a named agent as a **versioned bundle** (I6 + persona-manifest): persona/system-prompt + underlying engine (**inbuilt EveryAIOS · ACP-installed agent · model-only**) + model/provider (**optional = inherit from the chat-bar selection at run time**) + **per-agent MCP server subset** (tick exact servers — no global bloat) + **per-agent connector subset** + skills + blueprints/workflows (B2/B7) + tool allow/deny (Guard capability scoping); **templates** (General · Coder · Researcher · Email-Triager · Data-Analyst · Writer · Meeting-Notes · Browser-Operator); **Default agent = inbuilt EveryAIOS**; installed agents = ACP registry (F8/F12); custom agents = user bundles in `~/.everyaios/agents/`; any **installed** agent (inbuilt EveryAIOS · ACP-installed with a registered launch path · model-only bundle) can be the **`primary_chief`** — the session's top brain; an external Chief runs **that product's loop** (not a model faucet into `ConversationEngine`); subagents may be **other installed** agents than the Chief (B3); Default = inbuilt; missing/uninstalled ids fail closed, never a silent inbuilt fallback |
+| B10 | **Two-plane capability resolution (native-first, augmentation-second)** — a capability the Chief needs resolves to the selected agent's **own** implementation when it is reachable through the integration seam, otherwise to the EveryAIOS **shared** plane; when both exist the Chief chooses by quality/cost/permission/latency/context. An agent is never handed a duplicate of a tool it already owns; EveryAIOS Native owns both planes and may hire external agents as specialists (ARCH/17 §17.1). |
+| B11 | **Native first-class control tools** — `ask` · `plan` · `todo` · `subagent` merged into the inbuilt turn's active tool list and dispatched to coordinator handlers (human wait · progress ledger · delegation). Written in `first-class-tools.ts`; not yet merged into `runInbuiltTurn` (ARCH/17 §17.4.3, TODO P64.1). |
 
 ### C. Memory & context
 | ID | Capability |
@@ -158,6 +160,8 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 | C11 | Temporal knowledge-graph semantics — Bi-temporal entity/fact tracking with validity windows over the canonical Rust-native graph store |
 | C12 | Full-stack memory API — KG + vectors + sessions over the canonical Rust-owned SQLite/graph surfaces; **not a second database**. every memory asset also exports to `~/.everyaios/memory/**/*.md` (readable/git-versioned — OpenHuman validation; preserves doc-60 "one memory model"). note-object memory: agent-constructed atomic notes + typed link generation + evolution (link/merge/archive) on write — a third memory *shape* (facts/vectors + KG + evolving notes) over the same store with the same export; no second database |
 | C13 | **Spaced-repetition reinforcement (FSRS)** — use the permissive `open-spaced-repetition/fsrs-rs` (NOT Anki's AGPL-3.0 `rslib/src/scheduler/fsrs` — license boundary) into `everyaios-memory`: retention-target scheduling, reschedule-on-review, simulator; user-facing "reinforce what I learned" review prompts at optimal intervals; numbered **Algorithm #34** in the index; the implementation must preserve the license boundary and expose the supported FSRS version explicitly |
+| C14 | **Context providers + mention resolution** — `resolveMentions()` on the production chat path plus a default live `@Codebase` resolver feeding the prompt below `CACHE_BOUNDARY` (ARCH/17 §17.7, TODO P64.2). |
+| C15 | **Repo-map context injection** — tree-sitter tags + PageRank relevance ranked and fit to a token budget, injected below `CACHE_BOUNDARY` (Aider RepoMap pattern); library + `repomap_build` exist, the map is not injected yet (ARCH/17 §17.7, TODO P64.3). |
 
 ### D. Office & files (user-critical)
 > The office contract distinguishes supported document viewing and surgical mutation from optional full-fidelity editing. Unsupported formats or features must be surfaced honestly; they must not be represented as successfully edited.
@@ -272,6 +276,7 @@ Breaking a large job into simple subtasks **is viable and required**, but **not 
 | F13 | **Messaging bridges** — desktop-first: email/Telegram/WhatsApp adapters feed the same engine; messages arrive as in-app cards while the desktop app is open; Signal/iMessage and an always-on daemon are post-v1 |
 | F14 | **Email connector** — Gmail API via Auth Bridge OAuth (vault-stored tokens) or IMAP/SMTP (imapflow / async-imap + lettre); read/search/send/reply/triage tools; browser-session as cost reserve (openonion/email-agent reference, connector reference); **v2 (post-v1) Microsoft Graph connector** — Outlook mail + calendar + OneDrive/SharePoint + Teams messages as data *surfaces* via the official Graph API, user-owned OAuth in vault (F4), read-first, same F-tool contract — our app accesses *their* apps above them, in sync with the §8 in-app non-goal |
 | F15 | **Calendar connector** — Google Calendar API + ICS; event CRUD, availability, nudge integration with scheduled tasks (B7); **v2 (post-v1) Google Workspace connector** — Gmail + Drive + Docs/Sheets via the official APIs (same Auth Bridge / vault OAuth), parity with F14 v2, read-first |
+| F16 | **Shared-plane cowork façades** — task-shaped surfaces (`office.*` · `browser.research`/`operate`/`extract` · `computer_use.*` · `workspace.map`) exposing ~8 surfaces over the MCP catalog instead of 51 primitives; one implementation, two façades, same Guard + audit (ARCH/17 §17.5, TODO P64.9). |
 
 ### G. Search & research
 | ID | Capability |
@@ -342,6 +347,10 @@ Breaking a large job into simple subtasks **is viable and required**, but **not 
 | I11 | **LSP code-intel** — one LSP client (neovim `runtime/lua/vim/lsp/*` reference): hover/docs, go-to-def, references, rename-with-preview, diagnostics, code actions, inlay hints, watchfiles; guard-ticketed (read = read-only, rename/apply = mutation); makes TODO P7.1 concrete |
 | I12 | **Zed-class Rust IDE capability (post-v1 — one capability behind the Code rail, never the main product).** Base: tree-sitter parsing/highlight + folding, multi-buffer + splits + search, terminal + DiffView, git staging/blame — all over existing stacks, with LSP client = I11, indexing = I7 (RepoMap + optional Warp semantic) + I10 watchfiles, tasks.json-class runner. **Distinctives (why this is not “another editor”):** (1) **worktree-first parallelism** — each B3 sub-agent runs in its own `git worktree` derived from the workspace, so N agents never share a dirty working tree; review merges per-worktree through the plan, and K2 reverse = drop the worktree + revert that I8 commit. (2) **Everything governed** — agent/automation buffer writes flow through the I8 edit strategy + Guard-2 ticket; the user's own editor writes are human-UI path (the user's keystroke/save is the authorization; audited — §4.3); no silent *agent* autosaves into the workspace. (3) **Receipts-in-editor** — K1 verification (tests pass/fail, exact diff) inline in the Diff rail. (4) **Any-brain, model-agnostic** — the editor owns no model; AI surfaces compose it: inline completion (H16), agent panel, composer, and the F12/ACP harnesses. **Reuse boundary:** `gpui` is **Apache-2.0** and explicitly reusable (verified from Zed's own open-sourcing announcement: "use it to build high-performance desktop applications and distribute them under any license you choose") and `floem-editor-core` (Lapce's separately-packaged editor core) is **Apache-2.0** — both are the **documented future native-path reserves** (own editor core on gpui or floem; direct dep allowed, never a fork-in-name); the Zed *editor application* layer (languages/LSP integration) is **GPL-3.0 pattern-only** reference. **The v1 editor uses Monaco embed** (MIT — the actual editor component VS Code ships; the CodeMirror 6 lock  is superseded): `ide-workbench.tsx` (VS Code-style workbench — activity bar · Explorer over real FS · SCM over real git · Problems over real LSP diagnostics via I11 `LspRunner` · editor tabs · bottom panel · status bar), offline `?worker` bundling (all 5 workers, own cacheable chunk), `git_cmds.rs`/`lsp_cmds.rs` Tauri commands. A native core opens only if profiling demands it. Zero GPL code imported — the ledger stays honest |
 | I13 | **Knowledge → Skill Compiler (`/learn`, post-v1 — the one Hermes-operational surface worth a first-class row)** — turn evidence (URL · PDF · repo · conversation · folder) into a versioned, testable skill: ingestion → evidence extraction → skill blueprint (SKILL.md + references) → sandbox → test → provenance → versioned skill. **Rides landed machinery, adds the surface:** `skill_store::scan` (~/.everyaios/skills/ + ownership markers) + `grow_from_task` (solved task → versioned Skill) + Forge `iterate`/`tdd_loop` (write → sandbox → test → persist) + I6 plugin ABI (capability allow-list + agent binding) already exist — what's missing is the first-class user command that composes them (Hermes `/learn` pattern). Never runs unsandboxed; compiled output is a normal versioned skill, not a plugin with new powers. Queued as post-v1 (I-series extension; the existing skill registry + Forge are the v1 surface). |
+| I14 | **Unified native edit ladder** — exact single-occurrence match (fail closed on ambiguity) → structured/AST → order-tolerant fuzzy multi-hunk fallback, all through the Guard-2 ticket + verified-commit path (ARCH/17 §17.10, TODO P64.5). |
+| I15 | **Risk-gated shadow preflight** — LSP/tests/typecheck in a shadow tree before commit for multi-file/structural/destructive edits; small `local-write` verifies after (ARCH/17 §17.10, TODO P64.6). |
+| I16 | **Per-step checkpoint & rollback** — automatic checkpoint on every mutating tool call (git for code, resource snapshots elsewhere) with restore-to-any-step in the UI (ARCH/17 §17.10, TODO P64.7). |
+| I17 | **Validated skill distillation** — after a successful DAG run, distill a candidate skill through candidate → manifest + tests → stored → retrieved and inject learned skills as a warm set; nothing executable before validation (ARCH/17 §17.10, TODO P64.8). |
 
 ### J. Cross-cutting security
 | ID | Capability |
@@ -1019,7 +1028,7 @@ Vision is **first-class ground truth**, not a leftover after CDP. Owned engines 
 
 **The plane map:** FRONTEND (Tauri · React · Work cockpit · views as projections · ephemeral state · typed bridge) · **WORK GATEWAY / SESSION RUNTIME** (WorkRegistry · SessionRegistry · RunRegistry · ClientRegistry · NodeRegistry · EventBus · AttachmentRegistry · RunAuthority · ReviewQueue · CapabilityResolver — §4.4) · **CONTROL PLANE** (Work · ExecutionKernel · Policy · Guard-1/2 · Ticket · Authorization · Verification · Recovery · ResourceRegistry · CapabilityBroker · ContextReleasePolicy · SandboxManager) · AI PLANE (agent loop · Chief adapter · Planner · Subagents · ModelRouter · ProviderRegistry · ContextManager) · DATA PLANE (Memory · Search · Files · Office · Browser · Desktop · CodeIntel · Connectors) · EXTENSION (MCP client+server · ACP · A2A · Plugins · Skills · Forge) · TRUST PLANE (Vault · CredentialBroker · Egress · CapabilityScopes · Audit · Evidence) · DEPLOYMENT (Desktop · Headless node · User-owned remote · ExecutionNode registry). **Everything else is a capability or a projection of these planes.**
 
-**The capability contract:** every effectful capability — file, shell, git, browser, office, connector, mcp-tool — implements `identity / describe / risk / prepare / validate / execute / observe / verify / rollback / explain` and declares an **IdempotencyClass** (`SafeRetry | Idempotent | SameKeyOnly | Unsafe | UncertainRequiresReconciliation`). This is what collapses "34 algorithms / 157 capabilities" into one tool model with N instances — the framing that makes the product legible.
+**The capability contract:** every effectful capability — file, shell, git, browser, office, connector, mcp-tool — implements `identity / describe / risk / prepare / validate / execute / observe / verify / rollback / explain` and declares an **IdempotencyClass** (`SafeRetry | Idempotent | SameKeyOnly | Unsafe | UncertainRequiresReconciliation`). This is what collapses "34 algorithms / 166 capabilities" into one tool model with N instances — the framing that makes the product legible.
 
 ### 4.4 Work Gateway / Session Runtime
 
@@ -1215,6 +1224,39 @@ flowchart LR
     BE -->|"Remote"| NODE["H33 ExecutionNode PTY"]
     HOST --> AUDIT["audit: human_gesture or ticket"]
 ```
+
+---
+
+### 4.6 Native Agent Plane — the frozen two-plane contract (ARCH/17, v3.75)
+
+> **Frozen 2026-09-15.** Detailed schemas, module ownership, edge cases, and the full tool catalog live in `ARCH/17-NATIVE-AGENT.md`. This section is the product contract.
+
+EveryAIOS runs two kinds of agent. **EveryAIOS Native** is a full harness that owns its cognitive plane *and* the shared cowork plane. **External agents** (Codex CLI, Claude Code, OpenCode, Aider, Cline/Roo, Grok Build …) keep their own loop, tools, model, permissions, and account, and may borrow the shared cowork plane.
+
+**The contract statement:**
+
+> *EveryAIOS preserves each agent's native plane and adds a shared cowork plane. EveryAIOS Native owns a native plane and the shared plane, and may hire external agents as specialists. Capability resolution is native-first, augmentation-second.*
+
+**The two planes.**
+
+- **Native Agent Plane (belongs to the agent):** conversation loop, living plan/replan, model routing, context construction, memory *reasoning*, sub-agent orchestration, native coding/shell/edit tools, native web search, verification, skills, cost, recovery. External agents keep their own equivalents; EveryAIOS never removes them.
+- **Shared Cowork Plane (belongs to EveryAIOS):** office, browser, computer use, connectors, workspace map / codeintel, artifact store, durable Work, scheduler, background runs, recovery, shared memory retrieval, Guard, vault, budget, leases, cross-agent delegation. Both Native and external agents consume it.
+
+**Capability-resolution policy (per family, per turn):**
+
+1. If the selected agent's native capability is reachable through the integrated seam (CLI · ACP · MCP), use it.
+2. Otherwise use the EveryAIOS shared capability.
+3. If both exist, the Chief chooses by quality · cost · permission · latency · context budget.
+
+**Boundaries that follow from the policy:**
+
+- EveryAIOS augments only capabilities reachable through the integrated runtime seam. A capability that exists solely inside a separate desktop GUI is **not** reachable and is never claimed.
+- One Rust implementation, two façades: a capability exposed to external agents as a small task-shaped surface (`office.edit`, `browser.operate`, `computer_use.act`, `workspace.map`) dispatches to the same service, Guard, and audit path as the native tool. Never a duplicate implementation.
+- Tool schemas have exactly one source of truth (`everyaios-core::tools::ToolRegistry`, served as `tool/list`). No second TypeScript catalog.
+- Sub-agents inherit **denies**, never escalated grants; delegation is summary-only and non-recursive (depth ≤ 2).
+- The Chief's routing, context assembly, memory reasoning, verification, cost, recovery, and worker orchestration are native behavior, never model-callable tools.
+
+**Why Native can supersede narrow agents (product thesis, not a spec guarantee):** Native does not have to beat Codex at being Codex. It has to cover coding, research, computer use, documents, and long-running cowork in one durable Work, and to hire Codex/Claude/OpenCode as subordinate specialists. Everything else becomes a capability Native can *use* rather than *imitate*.
 
 ---
 

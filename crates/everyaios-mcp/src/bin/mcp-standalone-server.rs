@@ -1,6 +1,7 @@
 //! Standalone EveryAIOS MCP server binary (P6.7 external-client E2E fixture).
 //!
-//! Serves the REAL 42-tool native catalog (37 browser + 5 storage) over
+//! Serves the REAL native catalog — 51 tools: browser 37 + office 4 +
+//! memory 3 + search 2 + storage 5 (`everyaios_mcp::all_tools()`) — over
 //! newline-delimited stdio (default) or a one-shot loopback HTTP listener
 //! (`--http <port>`, optional `--bearer <token>` — the same origin/bearer/body
 //! gates the production host enforces).

@@ -66,7 +66,7 @@ trustworthy.
   - **Gmail/IMAP read-first connector** — the first real connector, copying the mailwarden
     no-send-by-default + Guard-2 approval posture.
 - Everything else stays a user-supplied MCP server (the "MCP Servers" tab already ships the
-  42-tool `everyaios-mcp` registry as the Tool Catalog).
+  42-tool `everyaios-mcp` registry as the Tool Catalog — **since grown to 51**: +office 4 · memory 3 · search 2).
 
 **Queue:** TODO P18 (MCP directory inbuilt analysis).
 

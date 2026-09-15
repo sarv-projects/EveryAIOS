@@ -4,6 +4,13 @@ Plan for the alpha → beta → RC user-testing rounds. Smallest viable group: 5
 testers per round, 3 rounds. Every round is **moderated** (task-based, not
 free-play) with the same skeleton so results are comparable.
 
+> **Plane (ARCH/17 §17.1):** rounds must exercise the two-plane picker surface
+> (ARCH/17 §17.5): when an external agent is selected, its **native**
+> capabilities are labeled as the agent's own and the EveryAIOS additions are
+> labeled shared; when EveryAIOS Native is selected, both planes are present.
+> A tester should be able to say which layer a capability comes from without
+> reading docs.
+
 ## Round structure
 
 | Round | Stage | Gate | Focus |

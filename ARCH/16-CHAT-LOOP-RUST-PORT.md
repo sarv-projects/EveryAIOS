@@ -9,6 +9,8 @@
 > the safest migration path, with the leaky bits called out (prompt assembly, context
 > audit invariant, AG-UI).
 
+> **Ordering (v3.75):** `17-NATIVE-AGENT.md` freezes the Native agent plane **before** this port. The four unwired seams (first-class-tool merge, context-provider mention resolution, repo-map injection, sub-agent execution side) plus the edit ladder, checkpoint/rollback, and validated skill distillation are TODO **P64** and must be correct in the sidecar first — porting a loop whose seams are wrong would move the defect into Rust and cost the A9/`P30.8` parity checks twice. This document remains the plan of record for the port itself.
+
 ## 1. Why this is the last meaningful port slice
 
 Every correctness/safety primitive the loop touches already lives in Rust:

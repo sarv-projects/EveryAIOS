@@ -18,7 +18,7 @@
 | Native office/file engines | `everyaios-office`: docx block-patch (genoffice), IronCalc recalc + calamine + deterministic planner, pptx part-editor, pdf suite (lopdf), LibreOffice conformance oracle, `Snapshot` rollback (D1–D8) |
 | Browser/session vault | `everyaios-cdp` + Session Vault cookie seal→inject, agent never sees raw cookies (E11/E13), challenge handler (E12), behavioral realism (E14), replay (E5) |
 | Local memory/research | `everyaios-memory`: RRF fusion, ACT-R, taste (C9), compaction, graph (C6), Letta paging, FSRS, ghost-index, BM25 |
-| MCP/ACP interoperability | `everyaios-mcp` registry (42 tools: 37 browser + 5 storage) + `everyaios-acp` (wire types, `AcpSession` lifecycle, LaunchRegistry — 46 agents, installer, Guard-2-ticketed download) |
+| MCP/ACP interoperability | `everyaios-mcp` registry (51 tools: 37 browser + 4 office + 3 memory + 2 search + 5 storage) + `everyaios-acp` (wire types, `AcpSession` lifecycle, LaunchRegistry — 46 agents, installer, Guard-2-ticketed download) |
 | Extension ABI (I6) | spec'd (versioned manifest + granter + host facades); **not yet built** — post-v1 queue |
 
 ### 1.2 Competitor facts: all live-verified primary sources

@@ -10,6 +10,8 @@
 
 ---
 
+> **Cross-reference (v3.75):** the *shipped* chat surface this doc derives is the **Native Agent Plane** defined in `17-NATIVE-AGENT.md` — the Chief loop (§17.3), the schema contract for the tool set the model actually calls (§17.4), the coordinator-side first-class tools `ask`/`plan`/`subagent`/`todo` (§17.4.3), and the two-plane boundary with external agents (§17.1). Where this doc says COPY/CONVERT/REJECT, ARCH/17 fixes *where the result runs* (native plane vs shared plane) and *what it may not do* (never remove an external agent's native tools; never claim a GUI-only capability).
+
 ## 0. The two corpora, one rule
 
 ```

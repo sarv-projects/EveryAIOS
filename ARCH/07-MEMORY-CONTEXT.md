@@ -1,6 +1,7 @@
 # 07 — Memory & Context System
 
 > **The user requirement, verbatim:** *"memory and context systems"* are a top priority, with token minimization. This doc merges the **built** engine (`core-memory`/`core-files`: spreading-activation 11 tests, phantom-thread 9, forgetting-to-remember 17, temporal-anticipation, knowledge-graph, conflict, correction-detector, decay — v2.0 §3) with the **2026 SOTA** (mem0 multi-signal fusion, Letta agent-managed paging, graphiti temporal KG, doc 34 §2) and the tokenmining retrieve rule (05 §5.1).
+> **Plane (ARCH/17 §17.1):** the memory **store** (ACT-R base, FTS5/BM25, graph, vectors) is **shared infrastructure**. Memory **reasoning** — what to remember, retrieve, forget, promote to durable project knowledge, and what stays scoped to one Work — is owned by the **Native agent plane** and is not delegatable to a tool or an external agent. External agents get memory APIs (ARCH/17 §17.5), not ownership of the cognitive system; their own memory, if any, stays theirs.
 
 ## 7.1 Five-tier model (with identity scopes)
 
