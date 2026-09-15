@@ -28,12 +28,6 @@
 
 ---
 
-<p align="center">
-  <img src="5a1c3357-0cd1-492f-ac9f-efd313391587.png" width="94%" alt="EveryAIOS Workspace" />
-</p>
-
----
-
 ## Why EveryAIOS? See the Difference
 
 Most people today juggle **3 to 5 separate AI tools**: a chat app for questions, an IDE for code, an online spreadsheet tool, and separate browser plugins. You pay multiple \$20/month subscriptions, constantly hit message rate limits, and re-copy context all day.
