@@ -59,17 +59,23 @@
 }
 
 /* ============================================================================
-   EveryAIOS design system — warm cream light-first (UI-DESIGN-PROMPT.md)
+   EveryAIOS design system — legacy warm-cream light-first tokens.
    Palette: canvas #F7F7F4 · surface #FFFFFF/#F0EFEB · ink #26251E
    Brand: #F54E00 orange (sole accent) · semantic green/blue/amber/red
    Dark mode: secondary (user toggle), same orange accent.
+
+   TARGET (v3.78, UI-DESIGN-PROMPT.md §2.1): cool-blue semantic accent token
+   with light/dark and selectable accents; brand is not a fixed hue. This file
+   still carries the legacy orange brand — that migration is the tracked P66.5
+   gap, so do not add new orange brand/selection styling here.
    ==========================================================================*/
 :root {
   --font-geist-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-geist-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
   --radius: 0.5rem;
 
-  /* Brand accent — orange #F54E00 (UI-DESIGN-PROMPT: primary CTA color) */
+  /* Brand accent — legacy orange #F54E00; target is a cool-blue semantic
+     accent token (P66.5). Kept until the theme migration lands. */
   --brand: 19 100% 48%;
   --brand-foreground: 0 0% 100%;
   --brand-hover: 17 100% 42%;

@@ -1200,7 +1200,7 @@ export default function AgentModelPicker({ compact }: Props) {
                       <Button
                         size="sm"
                         disabled={installing}
-                        className="h-6 gap-1 bg-sky-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
+                        className="h-6 gap-1 bg-sky-500 px-2.5 text-[10px] text-white hover:bg-sky-600"
                         onClick={() => installAgent(agent.id)}
                       >
                         {installing ? (
