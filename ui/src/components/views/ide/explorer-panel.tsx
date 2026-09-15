@@ -1,10 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, File, FileText, Folder, FolderOpen, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, File, FileText, Folder, FolderOpen, RefreshCw, TerminalSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { fsHome, fsListDir, fsReadFile, type FsEntry, type FsList } from '@/lib/fs'
 import { SkeletonBlock } from '@/components/ui/loading-state'
+import { inTauri } from '@/lib/tauri'
+import { terminalProfiles, terminalSpawn } from '@/lib/terminal'
+import { useAppStore } from '@/lib/store'
 
 /**
  * Explorer panel (VS Code left sidebar) over the real disk: lazy-loads
@@ -22,6 +25,7 @@ export function ExplorerPanel({
   const [listing, setListing] = useState<FsList | null>(null)
   const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(false)
+  const notify = useAppStore((s) => s.notify)
 
   const load = useCallback(async (path: string) => {
     setLoading(true)
@@ -49,6 +53,31 @@ export function ExplorerPanel({
     window.dispatchEvent(
       new CustomEvent('everyaios:open-file', { detail: { path: full, content: f.content } })
     )
+  }
+
+  /** P68 — spawn the default profile rooted at this directory. The Rust side
+   * re-verifies the dir exists (the renderer never spawns by raw path trust). */
+  const openTerminalHere = async (dir: string) => {
+    if (!inTauri()) {
+      notify('Open-in-terminal needs the desktop shell', 'error')
+      return
+    }
+    try {
+      const reg = await terminalProfiles()
+      const offered = reg.profiles.filter((p) => p.offered)
+      const profile =
+        offered.find((p) => p.profileName === reg.defaultProfile) ??
+        offered.find((p) => p.isDefault) ??
+        offered[0]
+      if (!profile) {
+        notify('No terminal profile is offered on this machine', 'error')
+        return
+      }
+      await terminalSpawn(profile.profileName, 24, 80, dir)
+      notify(`Terminal opened in ${dir.split('/').pop() || dir}`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not open terminal here', 'error')
+    }
   }
 
   const renderTree = (entries: FsEntry[], base: string) =>
@@ -80,7 +109,7 @@ export function ExplorerPanel({
       return (
         <div key={full}>
           <button
-            className="flex w-full items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-[11px] hover:bg-accent/50"
+            className="group flex w-full items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-[11px] hover:bg-accent/50"
             style={{ paddingLeft: 6 }}
             onClick={() => {
               const next = !open
@@ -93,8 +122,21 @@ export function ExplorerPanel({
             ) : (
               <ChevronRight className="h-3 w-3 text-muted-foreground" />
             )}
-            {open ? <FolderOpen className="h-3.5 w-3.5 text-orange-400" /> : <Folder className="h-3.5 w-3.5 text-orange-400" />}
+            {open ? <FolderOpen className="h-3.5 w-3.5 text-primary" /> : <Folder className="h-3.5 w-3.5 text-primary" />}
             <span className="truncate text-foreground">{e.name}</span>
+            {/* P68 — open a terminal session rooted at this directory. */}
+            <button
+              type="button"
+              aria-label={`Open terminal in ${e.name}`}
+              title={`Open terminal in ${e.name}`}
+              onClick={(ev) => {
+                ev.stopPropagation()
+                void openTerminalHere(full)
+              }}
+              className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+            >
+              <TerminalSquare className="h-3 w-3" />
+            </button>
           </button>
           {open && (
             <div className="ml-3 border-l border-border/60 pl-1.5">

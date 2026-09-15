@@ -70,6 +70,7 @@ pub mod rss_measure;
 pub mod scheduler_service;
 pub mod search_config;
 pub mod self_audit;
+pub mod shell_integration;
 pub mod sidecar_link;
 pub mod supervisor;
 pub mod sync;

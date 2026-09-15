@@ -8,6 +8,7 @@ import {
   FileText,
   Mic,
   Plus,
+  TerminalSquare,
   type LucideIcon,
 } from 'lucide-react'
 import type { PermissionMode } from '@/lib/ui-prefs'
@@ -53,6 +54,7 @@ const MACROS: { cmd: string; desc: string; expand: string }[] = [
 
 const MENTIONS: { cmd: string; desc: string; icon: LucideIcon }[] = [
   { cmd: '@files', desc: 'Attach a workspace file as turn context', icon: FileText },
+  { cmd: '@terminal', desc: 'Attach the last terminal command + output as turn context', icon: TerminalSquare },
 ]
 
 export { splitAtRefs } from '@/lib/at-refs'
@@ -551,10 +553,43 @@ export default function ChatComposer({ budget, centered }: Props) {
     const macro = MACROS.find((m) => m.cmd === first)
     if (macro) text = `${text} ${macro.expand}`
     if (!text.trim() && !attachment) return
-    // P53.8 — `@path` file refs: extract refs (path refs for the ACP
-    // resource seam when advertised) and send the clean text. The `@files`
-    // picker attachment still rides as `userDocuments` text.
-    // Sync import (the splitter is pure) — the send path stays sync.
+    // P68 — `@terminal`: Copilot-style follow. The shell's own trusted record
+    // (command, cwd, exit code, output) rides as the turn's attachment. When
+    // the shell has reported nothing trusted, the user is told instead of a
+    // fabricated block being sent.
+    if (/^@terminal(?=\s|$)/.test(text.trimStart())) {
+      void (async () => {
+        try {
+          const { terminalStatus, terminalLastCommandContext } = await import('@/lib/terminal')
+          const { ptys } = await terminalStatus()
+          // Prefer a live human tab; fall back to the newest live session.
+          const live = ptys.filter((p) => p.running)
+          const target = live.find((p) => p.origin === 'human') ?? live[0]
+          if (!target) {
+            notify('No live terminal session — open one in the Terminal view first', 'error')
+            return
+          }
+          const block = await terminalLastCommandContext(target.ptyId)
+          if (!block) {
+            notify(
+              'The terminal has no trusted command record yet (shell integration reports it after a command finishes)',
+              'error',
+            )
+            return
+          }
+          const rest = text.replace(/^@terminal/, '').trim()
+          setComposerValue('')
+          setAttachment(null)
+          await sendUserMessage(rest || 'Explain this terminal result', {
+            title: `terminal · ${target.profileId}`,
+            content: block,
+          })
+        } catch (e) {
+          notify(e instanceof Error ? e.message : 'Could not read terminal context', 'error')
+        }
+      })()
+      return
+    }
     const { clean, refs } = splitAtRefs(text)
     const refSuffix = refs.length > 0 ? `\n\n[refs: ${refs.map((r) => `@${r}`).join(' ')}]` : ''
     const sendText = (clean.trim() ? clean : text) + refSuffix

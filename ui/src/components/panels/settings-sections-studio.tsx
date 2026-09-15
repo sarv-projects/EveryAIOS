@@ -47,6 +47,14 @@ import {
   type DesktopPolicy,
   type DesktopReadiness,
 } from '@/lib/desktop-apps'
+import {
+  browserGetConfig,
+  browserListInstalled,
+  browserSetConfig,
+  type BrowserCandidate,
+  type BrowserConfig,
+  type BrowserChannel,
+} from '@/lib/browser'
 import { Row, SectionShell } from './settings-shared'
 
 function Honest({ children }: { children: React.ReactNode }) {
@@ -376,15 +384,134 @@ export function BrowserNetworkSection() {
   const [localLinks, setLocalLinks] = usePref('browser.localLinks', 'inapp')
   const [webLinks, setWebLinks] = usePref('browser.webLinks', true)
   const notify = useAppStore((s) => s.notify)
+
+  const [browserConfig, setBrowserConfigState] = useState<BrowserConfig>({
+    preferred_channel: 'auto',
+    custom_executable_path: null,
+    profile_mode: 'isolated',
+    headless: true,
+    extra_args: ['--mute-audio'],
+  })
+  const [candidates, setCandidates] = useState<BrowserCandidate[]>([])
+  const [loadingConfig, setLoadingConfig] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const [cfg, list] = await Promise.all([
+          browserGetConfig(),
+          browserListInstalled(),
+        ])
+        if (active) {
+          setBrowserConfigState(cfg)
+          setCandidates(list)
+          setLoadingConfig(false)
+        }
+      } catch {
+        if (active) setLoadingConfig(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const updateConfig = async (patch: Partial<BrowserConfig>) => {
+    const updated = { ...browserConfig, ...patch }
+    setBrowserConfigState(updated)
+    try {
+      await browserSetConfig(updated)
+      notify('Browser configuration saved', 'default')
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Failed to save browser config', 'error')
+    }
+  }
+
+  const selectedCandidate = useMemo(() => {
+    if (browserConfig.preferred_channel === 'auto') {
+      return candidates.find((c) => c.is_default) ?? candidates[0]
+    }
+    return candidates.find((c) => c.channel === browserConfig.preferred_channel)
+  }, [candidates, browserConfig.preferred_channel])
+
   return (
-    <SectionShell title="Browser & Network" desc="Where the agent opens pages, protection, HTTP, required domains">
-      <div className="text-xs font-medium">Browser</div>
+    <SectionShell title="Browser & Network" desc="Where the agent opens pages, browser selection, protection, HTTP, required domains">
+      <div className="text-xs font-medium">Browser Selection</div>
+      <Row label="Preferred Browser" desc="Choose Brave, Chrome, Edge, Chromium, Arc, Vivaldi, or custom binary">
+        <Select
+          value={browserConfig.preferred_channel}
+          onValueChange={(v) => updateConfig({ preferred_channel: v as BrowserChannel })}
+          disabled={loadingConfig}
+        >
+          <SelectTrigger className="h-8 w-56 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Auto-detect Default</SelectItem>
+            <SelectItem value="brave">Brave Browser</SelectItem>
+            <SelectItem value="chrome">Google Chrome</SelectItem>
+            <SelectItem value="edge">Microsoft Edge</SelectItem>
+            <SelectItem value="chromium">Chromium</SelectItem>
+            <SelectItem value="arc">Arc Browser</SelectItem>
+            <SelectItem value="vivaldi">Vivaldi</SelectItem>
+            <SelectItem value="custom">Custom Path...</SelectItem>
+          </SelectContent>
+        </Select>
+      </Row>
+
+      {browserConfig.preferred_channel === 'custom' && (
+        <Row label="Custom Executable Path" desc="Full path to custom browser binary (must support CDP)">
+          <Input
+            value={browserConfig.custom_executable_path ?? ''}
+            onChange={(e) => updateConfig({ custom_executable_path: e.target.value.trim() || null })}
+            placeholder="/usr/bin/google-chrome or C:\...\chrome.exe"
+            className="h-8 w-64 font-mono text-xs"
+          />
+        </Row>
+      )}
+
+      {selectedCandidate && (
+        <div className="rounded-md border border-neutral-800 bg-neutral-900/40 p-2.5 text-xs text-neutral-300">
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-neutral-200">{selectedCandidate.name}</span>
+            {selectedCandidate.version && (
+              <Badge variant="outline" className="text-[10px] font-mono">
+                v{selectedCandidate.version}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 truncate font-mono text-[10px] text-neutral-400" title={selectedCandidate.executable_path}>
+            {selectedCandidate.executable_path}
+          </p>
+        </div>
+      )}
+
+      <Row label="Headless Session" desc="Run browser in background without showing a window">
+        <Switch
+          checked={browserConfig.headless}
+          onCheckedChange={(v) => updateConfig({ headless: v })}
+        />
+      </Row>
+
+      <Row label="Profile Isolation" desc="Isolate session per channel in EveryAIOS data directory">
+        <Select
+          value={browserConfig.profile_mode}
+          onValueChange={(v) => updateConfig({ profile_mode: v as 'isolated' | 'paired' })}
+        >
+          <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="isolated">Channel Isolated</SelectItem>
+            <SelectItem value="paired">Paired Profile</SelectItem>
+          </SelectContent>
+        </Select>
+      </Row>
+
+      <div className="pt-2 text-xs font-medium">Browser Automation</div>
       <Row label="Browser automation" desc="Which surface receives agent clicks">
         <Select value={engine} onValueChange={setEngine}>
           <SelectTrigger className="h-8 w-52 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="builtin">Browse tab</SelectItem>
-            <SelectItem value="system">System Chrome / Edge</SelectItem>
+            <SelectItem value="system">System Chrome / Edge / Brave</SelectItem>
             <SelectItem value="ask">Ask each time</SelectItem>
           </SelectContent>
         </Select>
