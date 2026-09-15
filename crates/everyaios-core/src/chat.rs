@@ -535,6 +535,19 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         }
     }
 
+    /// P68.9 — attach the **one PTY plane** as the `script.run` executor.
+    ///
+    /// The host calls this at boot with the same `PtyHost` the Shell view uses,
+    /// so an agent command runs on the automation profile with `Agent`
+    /// provenance: audited as `terminal.agent_run` and rendered as a labelled
+    /// read-only tab. Until it is attached, `script.run` fails honestly rather
+    /// than quietly substituting a private pipe nobody can watch.
+    pub fn attach_terminal(&self, terminal: Arc<dyn crate::tools::TerminalExecutor>) {
+        if let Ok(mut tools) = self.tools.lock() {
+            tools.attach_terminal(terminal);
+        }
+    }
+
     /// The Stage-0 plan service handle (the coordinator steps per-plan
     /// circuit breakers via `plan/*`; trips surface as chat interrupts).
     pub fn plan(&self) -> Arc<Mutex<PlanService>> {

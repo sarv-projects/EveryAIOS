@@ -207,6 +207,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         acp_cmds::acp_install_request,
         acp_cmds::acp_install_commit,
         acp_cmds::acp_install,
+        acp_cmds::acp_agent_import,
+        acp_cmds::acp_agent_verify,
         acp_cmds::acp_authenticate,
         // Maintenance: audit retention sweep (ledger-growth fault line).
         maintenance_cmds::audit_compact,
@@ -281,6 +283,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         terminal_cmds::terminal_set_shell_integration,
         terminal_cmds::terminal_spawn,
         terminal_cmds::terminal_run,
+        // P68.8 — replay retained output into a view that reattached.
+        terminal_cmds::terminal_replay,
         terminal_cmds::terminal_write,
         terminal_cmds::terminal_resize,
         terminal_cmds::terminal_kill,

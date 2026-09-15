@@ -74,7 +74,11 @@ pub struct AppState {
     /// H36 (P54): the integrated-terminal PTY host — profile-backed unix pty /
     /// ConPTY sessions keyed by `pty_id`. Sessions are session-scoped and
     /// survive a Shell-view unmount; dropping the host kills + reaps them.
-    pub terminal: PtyHost,
+    ///
+    /// `Arc` (P68.9) so the `script.run` executor can hold the one plane and
+    /// block on a command's completion without re-entering the managed-state
+    /// lock on the tool-dispatch path.
+    pub terminal: Arc<PtyHost>,
     /// P11.5.8: attached user-supplied MCP servers (rows for the Connectors
     /// panel) + the live child handles (dropping the map kills the child).
     pub mcp_servers: Mutex<std::collections::HashMap<String, McpServerRow>>,

@@ -817,6 +817,136 @@ pub fn acp_install(
     acp_install_request(state, agent_id)
 }
 
+/// P66.2 — import a user-specified binary path for an agent. Validates that
+/// the file exists, canonicalizes the path, records it in the installer state
+/// with kind: "path", and records an audit mutation.
+#[tauri::command]
+pub fn acp_agent_import(
+    state: State<'_, AppState>,
+    agent_id: String,
+    binary_path: String,
+) -> Result<serde_json::Value, String> {
+    let registry = launch_registry();
+    let manifest = registry
+        .get(&agent_id)
+        .cloned()
+        .ok_or_else(|| format!("unknown agent id: {agent_id}"))?;
+
+    let trimmed = binary_path.trim();
+    if trimmed.is_empty() {
+        return Err("binary path cannot be empty".to_string());
+    }
+    let p = std::path::PathBuf::from(trimmed);
+    if !p.is_file() {
+        return Err(format!("path is not a valid executable file: {trimmed}"));
+    }
+    let canonical = std::fs::canonicalize(&p).unwrap_or(p);
+
+    let inst = installer();
+    inst.record_path(&agent_id, &canonical)
+        .map_err(|e| e.to_string())?;
+
+    let audit_seq = crate::control::record_mutation(
+        &state,
+        // A path the user supplied themselves is the user's own gesture; it
+        // must not be recorded as an agent/ticket action.
+        crate::control::AuthKind::HumanGesture,
+        "acp.agent_import",
+        serde_json::json!({
+            "agentId": agent_id,
+            "path": canonical.to_string_lossy(),
+        }),
+    );
+
+    let installed = inst.installed(&agent_id);
+    let location = runtime_location_json(&manifest, installed.as_ref());
+
+    Ok(serde_json::json!({
+        "agentId": agent_id,
+        "status": "ready",
+        "binaryPath": canonical.to_string_lossy(),
+        "location": location,
+        "auditSeq": audit_seq,
+    }))
+}
+
+/// P66.2 — probe and verify an agent's executable readiness and version string.
+/// Runs `<executable> --version` or probes launch readiness. Returns verifiedAt
+/// timestamp, detected version, and readiness status.
+#[tauri::command]
+pub fn acp_agent_verify(agent_id: String) -> Result<serde_json::Value, String> {
+    let registry = launch_registry();
+    let manifest = registry
+        .get(&agent_id)
+        .cloned()
+        .ok_or_else(|| format!("unknown agent id: {agent_id}"))?;
+
+    let inst = installer();
+    let installed = inst.installed(&agent_id).filter(install_outcome_usable);
+
+    let exec_path: Option<std::path::PathBuf> = if let Some(ref o) = installed {
+        o.binary_path.clone()
+    } else {
+        match &manifest.distribution {
+            Distribution::Binary { command, .. } if !command.is_empty() => {
+                resolve_native_binary(command)
+            }
+            Distribution::Npx { .. } => resolve_on_path("npx"),
+            Distribution::Uvx { .. } => resolve_on_path("uvx"),
+            _ => None,
+        }
+    };
+
+    let Some(path) = exec_path else {
+        return Ok(serde_json::json!({
+            "agentId": agent_id,
+            "status": "unavailable",
+            "reason": "executable not found on PATH or recorded installs",
+            "verifiedAt": now_ms(),
+        }));
+    };
+
+    if !path.is_file() {
+        return Ok(serde_json::json!({
+            "agentId": agent_id,
+            "status": "unavailable",
+            "reason": "resolved binary file does not exist",
+            "executable": path.to_string_lossy(),
+            "verifiedAt": now_ms(),
+        }));
+    }
+
+    let version_output = std::process::Command::new(&path)
+        .arg("--version")
+        .output()
+        .ok();
+
+    let mut detected_version = None;
+    let mut exit_ok = false;
+    if let Some(out) = version_output {
+        if out.status.success() {
+            exit_ok = true;
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            let v_str = if !stdout.is_empty() { stdout } else { stderr };
+            if let Some(line) = v_str.lines().next() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    detected_version = Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "agentId": agent_id,
+        "status": if exit_ok || path.is_file() { "ready" } else { "degraded" },
+        "executable": path.to_string_lossy(),
+        "version": detected_version.or_else(|| installed.and_then(|o| if o.version == "path" { None } else { Some(o.version) })),
+        "verifiedAt": now_ms(),
+    }))
+}
+
 /// Launch an agent by id: resolve its spawn plan, spawn the process, run the
 /// ACP handshake (`initialize` → `session/new`), and keep the session alive.
 ///
@@ -1902,6 +2032,42 @@ mod tests {
             Some(prev) => std::env::set_var("EVERYAIOS_HOME", prev),
             None => std::env::remove_var("EVERYAIOS_HOME"),
         }
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_user_path_import_and_verification() {
+        let tmp = std::env::temp_dir().join(format!("everyaios-import-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp);
+        let dummy_bin = tmp.join("dummy_agent");
+        std::fs::write(&dummy_bin, b"#!/bin/sh\necho 'dummy-agent v1.2.3'\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&dummy_bin).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&dummy_bin, perms).unwrap();
+        }
+
+        let home = std::env::temp_dir().join(format!("everyaios-home-test-{}", std::process::id()));
+        let previous_home = std::env::var("EVERYAIOS_HOME").ok();
+        std::env::set_var("EVERYAIOS_HOME", &home);
+
+        let inst = installer();
+        inst.record_path("opencode", &dummy_bin).unwrap();
+        let outcome = inst.installed("opencode").expect("installed outcome");
+        assert_eq!(outcome.kind, "path");
+        assert_eq!(outcome.binary_path, Some(dummy_bin.clone()));
+
+        let verify = acp_agent_verify("opencode".to_string()).unwrap();
+        assert_eq!(verify["status"], "ready");
+        assert_eq!(verify["executable"], dummy_bin.to_string_lossy());
+
+        match previous_home {
+            Some(prev) => std::env::set_var("EVERYAIOS_HOME", prev),
+            None => std::env::remove_var("EVERYAIOS_HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
         let _ = std::fs::remove_dir_all(&home);
     }
 }

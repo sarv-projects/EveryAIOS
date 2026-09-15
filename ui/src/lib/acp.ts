@@ -363,3 +363,63 @@ export async function chiefDefaultGet(): Promise<{
 export async function chiefDefaultSet(primaryChief: string): Promise<string> {
   return nativeCall('chief default set', () => invoke<string>("chief_default_set", { primaryChief }));
 }
+
+export type AgentLifecycleState = 'discover' | 'inspect' | 'import' | 'verify' | 'ready'
+
+export interface AgentVerificationResult {
+  agentId: string
+  status: 'ready' | 'degraded' | 'unavailable'
+  executable?: string
+  version?: string
+  reason?: string
+  verifiedAt: number
+}
+
+/** P66.2 — Import a user-specified executable path for an agent. */
+export async function acpAgentImport(
+  agentId: string,
+  binaryPath: string,
+): Promise<{
+  agentId: string
+  status: string
+  binaryPath: string
+  location?: unknown
+  auditSeq?: number
+}> {
+  return nativeCall('ACP agent import', () =>
+    invoke('acp_agent_import', { agentId, binaryPath }),
+  )
+}
+
+/** P66.2 — Probe and verify an agent executable. */
+export async function acpAgentVerify(
+  agentId: string,
+): Promise<AgentVerificationResult> {
+  return nativeCall('ACP agent verify', () =>
+    invoke<AgentVerificationResult>('acp_agent_verify', { agentId }),
+  )
+}
+
+/**
+ * Derive the current explicit lifecycle state for an agent.
+ */
+export function getAgentLifecycleState(
+  status: string,
+  launchable: boolean,
+  verified?: boolean,
+): AgentLifecycleState {
+  if (status === 'installed' || (status === 'discovered' && launchable && verified)) {
+    return 'ready'
+  }
+  if (status === 'discovered' && launchable) {
+    return 'verify'
+  }
+  if (status === 'discovered') {
+    return 'inspect'
+  }
+  if (status === 'updating') {
+    return 'import'
+  }
+  return 'discover'
+}
+

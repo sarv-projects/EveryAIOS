@@ -7,11 +7,14 @@ import {
   Square,
   X,
   ChevronDown,
+  Columns2,
   Eye,
   EyeOff,
-  ShieldAlert,
-  Search,
   History,
+  Minimize2,
+  Rows2,
+  Search,
+  ShieldAlert,
 } from 'lucide-react'
 import { Terminal, type ILink } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -40,6 +43,7 @@ import {
   terminalConfirmUnsafe,
   terminalKill,
   terminalProfiles,
+  terminalReplay,
   terminalResize,
   terminalSetDefault,
   terminalSpawn,
@@ -87,11 +91,14 @@ interface TermHandle {
  *   codes (OSC 633). Exit codes render as decorations, the cwd shows in the
  *   header, and `#terminalLastCommand` chat context is fed from the same
  *   records.
- * - Sessions live in the shell: switching tabs or unmounting does not kill
- *   them. Output produced while the view is closed is honestly announced as
- *   non-replayed (no ring buffer yet).
- *
- * Open (kept as TODOs): splits (P54.4), output ring-buffer replay.
+ * - **Sessions live in the shell**: switching tabs or unmounting does not kill
+ *   them. Bytes produced while this view was closed are *replayed* from the
+ *   PTY host's bounded ring (P68.8), and a replay that lost earlier bytes to
+ *   the rolling window says so instead of showing a seamless scrollback.
+ * - **Splits** (P68.8): the pane area holds up to two panes over the one PTY
+ *   plane. A split never spawns a second kind of terminal — it shows a second
+ *   *session* side by side (or stacked), so watching a human tab and an agent
+ *   tab at once stays the same product surface.
  */
 export default function ShellView() {
   const { theme } = useTheme()
@@ -107,16 +114,29 @@ export default function ShellView() {
   const [findUp, setFindUp] = useState(false)
   const [commands, setCommands] = useState<TerminalCommandRecord[]>([])
   const [commandsOpen, setCommandsOpen] = useState(false)
+  /** P68.8 — pane split direction. `null` = a single pane. */
+  const [splitDir, setSplitDir] = useState<'row' | 'col' | null>(null)
+  /** P68.8 — the tab shown in the second pane. Never the same as `activeId`. */
+  const [secondaryId, setSecondaryId] = useState<string | null>(null)
+  /** P68.8 — which pane owns the keyboard. */
+  const [focusedPane, setFocusedPane] = useState<'primary' | 'secondary'>('primary')
 
   const terms = useRef<Map<string, TermHandle>>(new Map())
   /** tabId → live ptyId, readable from the xterm `onData` closure (which is
    * registered once, at mount, before the spawn resolves). */
   const ptyRef = useRef<Map<string, string>>(new Map())
   const cwdRef = useRef<Map<string, string>>(new Map())
+  /** P68.8 — tabId → replay cursor (`seq`) already written to that terminal.
+   * Kept per tab so a second replay fetches only what is new. */
+  const seqRef = useRef<Map<string, number>>(new Map())
   const findState = useRef({ open: false, text: '', up: false })
   findState.current = { open: findOpen, text: findText, up: findUp }
   const tabsRef = useRef<Tab[]>([])
   tabsRef.current = tabs
+  /** The detected registry, readable from callbacks that must not re-create
+   * themselves on every detection refresh. */
+  const registryRef = useRef<TerminalProfilesResponse | null>(null)
+  registryRef.current = registry
   const interactiveRef = useRef(interactive)
   interactiveRef.current = interactive
   const booted = useRef(false)
@@ -380,7 +400,7 @@ export default function ShellView() {
                 `Profile "${profile.profileName}" was not spawned.\r\n`,
             )
         }, 0)
-        return
+        return id
       }
 
       const handle = terms.current.get(id)
@@ -408,9 +428,61 @@ export default function ShellView() {
           setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, error: msg } : t)))
           terms.current.get(id)?.term.write(`\x1b[31m${msg}\x1b[0m\r\n`)
         })
+      // The id is returned so a split can place the new tab in a pane without
+      // re-deriving which tab it just created.
+      return id
     },
     [],
   )
+
+  /**
+   * P68.8 — write a session's retained output into a tab that is (re)attaching.
+   *
+   * Bytes go through the same decoder as a live `data` frame, so xterm keeps
+   * owning VT interpretation. Two facts are never faked: a replay that lost
+   * bytes to the rolling window is labelled as truncated, and a session with
+   * nothing retained says so rather than showing an empty-but-plausible pane.
+   *
+   * The tab's xterm is created during the re-render that follows the reattach,
+   * so the first attempt can legitimately lose the race; retry briefly instead
+   * of dropping the replay.
+   */
+  const replayInto = useCallback(async (tabId: string, ptyId: string, reset = false) => {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const handle = terms.current.get(tabId)
+      if (handle) {
+        if (reset) seqRef.current.delete(tabId)
+        const from = seqRef.current.get(tabId)
+        let replayed: Awaited<ReturnType<typeof terminalReplay>> = null
+        try {
+          replayed = await terminalReplay(ptyId, from)
+        } catch {
+          handle.term.write(
+            '\x1b[2m[reattached to a live session — its retained output could not be read]\x1b[0m\r\n',
+          )
+          return
+        }
+        if (!replayed) return
+        seqRef.current.set(tabId, replayed.seq)
+        const kib = Math.max(1, Math.round(replayed.capacity / 1024))
+        if (replayed.dropped > 0) {
+          handle.term.write(
+            `\x1b[2m[replayed from a rolling ${kib} KiB buffer — ${replayed.dropped} earlier byte${
+              replayed.dropped === 1 ? '' : 's'
+            } had already scrolled out]\x1b[0m\r\n`,
+          )
+        } else if (!replayed.data) {
+          handle.term.write(
+            '\x1b[2m[reattached to a live session — no output retained to replay]\x1b[0m\r\n',
+          )
+        }
+        const bytes = decodeChunk(replayed.data)
+        if (bytes) handle.term.write(bytes)
+        return
+      }
+      await new Promise((r) => window.setTimeout(r, 50))
+    }
+  }, [])
 
   // On first mount: reattach live PTYs if any, else spawn the default profile.
   // The session is owned by the shell (`AppState.terminal`), so a view unmount
@@ -442,16 +514,12 @@ export default function ShellView() {
           }
           setTabs(next)
           setActiveId(next[0].id)
-          // Honest limitation: bytes produced while this view was closed were
-          // emitted with no listener, so they cannot be replayed (no ring
-          // buffer yet). Say so instead of showing a seamless scrollback.
+          // P68.8 — replay what the session produced while this view was
+          // closed, from the PTY host's bounded ring. Blocks of output we can
+          // no longer prove are labelled, never silently skipped.
           setTimeout(() => {
             for (const t of next) {
-              terms.current
-                .get(t.id)
-                ?.term.write(
-                  '\x1b[2m[reattached to a live session — output produced while this view was closed is not replayed]\x1b[0m\r\n',
-                )
+              if (t.ptyId) void replayInto(t.id, t.ptyId, true)
             }
           }, 0)
           return
@@ -468,16 +536,67 @@ export default function ShellView() {
     if (tab.ptyId) void terminalKill(tab.ptyId)
     ptyRef.current.delete(tab.id)
     cwdRef.current.delete(tab.id)
+    seqRef.current.delete(tab.id)
     const handle = terms.current.get(tab.id)
     if (handle) {
       handle.disposer()
       terms.current.delete(tab.id)
+    }
+    // A closing tab can be the second pane's; the split collapses rather than
+    // leaving an empty pane behind.
+    if (secondaryId === tab.id) {
+      setSecondaryId(null)
+      setSplitDir(null)
+      setFocusedPane('primary')
     }
     setTabs((prev) => {
       const next = prev.filter((t) => t.id !== tab.id)
       if (activeId === tab.id) setActiveId(next[next.length - 1]?.id ?? null)
       return next
     })
+  }
+
+  /**
+   * P68.8 — split the pane area and show a second session beside the active
+   * one.
+   *
+   * The second pane is another *tab* over the same PTY plane, not a second
+   * terminal implementation: reusing an existing tab avoids spawning a process
+   * the user did not ask for, and with only one tab open the active profile is
+   * duplicated so the split is still a real second session. A split never
+   * changes a tab's provenance — an agent tab stays watch-only in either pane.
+   */
+  const splitActive = useCallback(
+    (dir: 'row' | 'col') => {
+      setSplitDir(dir)
+      setFocusedPane(secondaryId ? 'secondary' : 'primary')
+      if (secondaryId) return
+      const other = tabsRef.current.find((t) => t.id !== activeId && t.ptyId !== null)
+      if (other) {
+        setSecondaryId(other.id)
+        return
+      }
+      // No other live tab: open a second one on the active profile. The new
+      // tab goes to the *second* pane, so the pane the user was already in
+      // keeps its session and only the second half changes.
+      const current = tabsRef.current.find((t) => t.id === activeId)
+      const profile = registryRef.current?.profiles.find(
+        (p) => p.profileName === (current?.profileName ?? ''),
+      )
+      if (!profile || !current) return
+      const id = openProfile(profile)
+      if (activeId) setActiveId(activeId)
+      setSecondaryId(id)
+      setFocusedPane('secondary')
+    },
+    [activeId, secondaryId, openProfile],
+  )
+
+  /** Collapse the split. Both sessions keep running — nothing is killed. */
+  const unsplit = () => {
+    setSplitDir(null)
+    setSecondaryId(null)
+    setFocusedPane('primary')
   }
 
   const offered = registry?.profiles.filter((p) => p.offered) ?? []
@@ -519,6 +638,30 @@ export default function ShellView() {
   }
 
   const activeInteractive = active ? isInteractiveOrigin(active.origin) && interactive : false
+  /** The tab in the second pane (only meaningful while split). */
+  const secondary = useMemo(
+    () => (splitDir ? (tabs.find((t) => t.id === secondaryId) ?? null) : null),
+    [splitDir, secondaryId, tabs],
+  )
+
+  /** Clicking a tab selects it in the pane it already occupies. */
+  const focusTab = (t: Tab) => {
+    if (secondary && t.id === secondary.id) {
+      setFocusedPane('secondary')
+      terms.current.get(t.id)?.term.focus()
+      return
+    }
+    setActiveId(t.id)
+    setFocusedPane('primary')
+    loadHistory(t.id)
+    terms.current.get(t.id)?.term.focus()
+  }
+
+  /** Clicking inside a pane gives that pane the keyboard. */
+  const focusPane = (tabId: string) => {
+    setFocusedPane(secondary && tabId === secondary.id ? 'secondary' : 'primary')
+    terms.current.get(tabId)?.term.focus()
+  }
 
   return (
     <div className="flex h-full w-full flex-col bg-background text-foreground">
@@ -720,14 +863,53 @@ export default function ShellView() {
           </DropdownMenu>
 
           {active && (
-            <button
-              type="button"
-              onClick={() => closeTab(active)}
-              aria-label="Close terminal tab"
-              className="rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-rose-400"
-            >
-              <Square className="h-3 w-3" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => splitActive('col')}
+                aria-label="Split right"
+                aria-pressed={splitDir === 'col'}
+                title="Split right — show a second session beside this one"
+                className={cn(
+                  'rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground',
+                  splitDir === 'col' && 'border-primary/40 text-foreground',
+                )}
+              >
+                <Columns2 className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => splitActive('row')}
+                aria-label="Split down"
+                aria-pressed={splitDir === 'row'}
+                title="Split down — show a second session below this one"
+                className={cn(
+                  'rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground',
+                  splitDir === 'row' && 'border-primary/40 text-foreground',
+                )}
+              >
+                <Rows2 className="h-3 w-3" />
+              </button>
+              {splitDir !== null && (
+                <button
+                  type="button"
+                  onClick={unsplit}
+                  aria-label="Unsplit panes"
+                  title="Unsplit — both sessions keep running"
+                  className="rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  <Minimize2 className="h-3 w-3" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => closeTab(active)}
+                aria-label="Close terminal tab"
+                className="rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground hover:text-rose-400"
+              >
+                <Square className="h-3 w-3" />
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -759,9 +941,12 @@ export default function ShellView() {
               className={cn(
                 'group flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px]',
                 t.id === activeId ? 'bg-accent text-foreground' : 'text-muted-foreground',
+                // The second pane's tab is highlighted differently: two panes
+                // are visible at once, so the strip must say which is which.
+                secondary && t.id === secondary.id && 'bg-accent/50 text-foreground',
               )}
             >
-              <button type="button" onClick={() => { setActiveId(t.id); loadHistory(t.id) }} className="max-w-[14rem] truncate">
+              <button type="button" onClick={() => focusTab(t)} className="max-w-[14rem] truncate">
                 {t.origin !== 'human' && (
                   <span className={cn('mr-1', t.origin === 'agent' ? 'text-sky-400' : 'text-violet-400')}>
                     {t.origin === 'agent' ? '◆' : '⧗'}
@@ -784,7 +969,13 @@ export default function ShellView() {
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1">
+      <div
+        className={cn(
+          'relative min-h-0 flex-1',
+          splitDir === 'col' && 'flex flex-row',
+          splitDir === 'row' && 'flex flex-col',
+        )}
+      >
         {tabs.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center font-mono text-xs text-muted-foreground">
             <TerminalIcon className="h-5 w-5 text-primary" />
@@ -798,14 +989,55 @@ export default function ShellView() {
             )}
           </div>
         )}
-        {tabs.map((t) => (
-          <div
-            key={t.id}
-            ref={(el) => mountTerm(t, el)}
-            className={cn('h-full w-full', t.id !== activeId && 'hidden')}
-            onClick={() => terms.current.get(t.id)?.term.focus()}
-          />
-        ))}
+        {tabs.map((t) => {
+          const isPrimary = t.id === activeId
+          const isSecondary = Boolean(secondary && t.id === secondary.id)
+          const visible = isPrimary || isSecondary
+          return (
+            <div
+              key={t.id}
+              className={cn(
+                'min-h-0 min-w-0',
+                splitDir
+                  ? cn('flex flex-1 flex-col', !visible && 'hidden')
+                  : cn('h-full w-full', !isPrimary && 'hidden'),
+              )}
+            >
+              {splitDir && (
+                <div
+                  className={cn(
+                    'flex shrink-0 items-center gap-2 border-b border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground',
+                    (isSecondary ? focusedPane === 'secondary' : focusedPane === 'primary')
+                      ? 'bg-muted/50'
+                      : 'bg-muted/20',
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full',
+                      (isSecondary ? focusedPane === 'secondary' : focusedPane === 'primary')
+                        ? 'bg-primary'
+                        : 'bg-muted-foreground/40',
+                    )}
+                  />
+                  <span className="truncate">{t.label ?? t.profileName}</span>
+                  {t.cwd && <span className="truncate">{cwdLeaf(t.cwd)}</span>}
+                  <span className="flex-1" />
+                  <span className="shrink-0">
+                    {originLabel(t.origin)}
+                    {!isInteractiveOrigin(t.origin) && ' · watch-only'}
+                  </span>
+                </div>
+              )}
+              <div
+                ref={(el) => mountTerm(t, el)}
+                className="min-h-0 flex-1"
+                onClick={() => focusPane(t.id)}
+              />
+            </div>
+          )
+        })}
       </div>
 
       {/* Status line — provenance, integration quality, and the authority
