@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Boxes,
   Check,
@@ -49,6 +49,17 @@ import {
   type TaskKind,
 } from '@/lib/agents'
 import { acpIdFor, acpInstallCommit, acpInstallRequest } from '@/lib/acp'
+import {
+  agentBackendClear,
+  agentBackendGet,
+  agentBackendProbe,
+  agentBackendProviders,
+  agentBackendSet,
+  channelLabel,
+  type AgentBackendState,
+  type AgentProviderRow,
+  type ProviderProbeResult,
+} from '@/lib/agent-backend'
 import { refreshAgentCatalog } from '@/lib/bridge'
 import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
@@ -59,6 +70,273 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`
   return String(n)
+}
+
+// === P63 — per-agent model backend ==========================================
+
+/**
+ * The post-install control: point this agent at one of the user's own
+ * providers.
+ *
+ * Nothing here writes the agent's config file. The choice is handed to the
+ * shell, which injects the provider's env vars (and, when asked, the key from
+ * the EveryAIOS vault) when the agent is spawned — so the override lasts one
+ * child process and is undone by not injecting it. The panel therefore shows
+ * the variable *names* a launch will carry, never values, and reports anything
+ * the chosen agent has no variable for instead of silently dropping it.
+ */
+function AgentBackendPanel({ agentId }: { agentId: string }) {
+  const notify = useAppStore((s) => s.notify)
+  const [state, setState] = useState<AgentBackendState | null>(null)
+  const [providers, setProviders] = useState<AgentProviderRow[]>([])
+  const [query, setQuery] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [checks, setChecks] = useState<Record<string, ProviderProbeResult>>({})
+
+  const load = async () => {
+    try {
+      const [s, p] = await Promise.all([
+        agentBackendGet(agentId),
+        agentBackendProviders(agentId),
+      ])
+      setState(s)
+      // Providers already holding a vault key first — those are the ones the
+      // user can actually switch on in one click.
+      setProviders([...p].sort((a, b) => Number(b.keyInVault) - Number(a.keyInVault)))
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not read this agent\u2019s backend', 'error')
+    }
+  }
+
+  useEffect(() => {
+    void load()
+    // Re-read when the agent id changes (the card is reused across rows).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId])
+
+  const choose = async (row: AgentProviderRow) => {
+    setBusy(true)
+    try {
+      const next = await agentBackendSet({
+        agentId,
+        provider: row.id,
+        useVaultKey: row.keyInVault,
+      })
+      setState(next)
+      notify(
+        row.keyInVault
+          ? `${row.name} set — its key is injected from the EveryAIOS vault at launch`
+          : `${row.name} set — add a key in Settings \u2192 Providers for it to work`,
+      )
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not set the provider', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const clear = async () => {
+    setBusy(true)
+    try {
+      setState(await agentBackendClear(agentId))
+      notify(`${agentId} returns to its own configuration`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not clear the binding', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const test = async (row: AgentProviderRow) => {
+    try {
+      const r = await agentBackendProbe(row.id)
+      setChecks((c) => ({ ...c, [row.id]: r }))
+      notify(
+        r.ok
+          ? `${row.name}: reachable (${r.models} models)`
+          : `${row.name}: not reachable \u2014 ${r.message}`,
+        r.ok ? 'default' : 'error',
+      )
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Probe failed', 'error')
+    }
+  }
+
+  if (!state) {
+    return (
+      <div className="mt-2 flex items-center gap-2 rounded-md border border-border/40 bg-background/30 px-2 py-2 text-[10px] text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" /> reading this agent’s backend…
+      </div>
+    )
+  }
+
+  const q = query.trim().toLowerCase()
+  const visible = (q
+    ? providers.filter(
+        (p) => p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q),
+      )
+    : providers
+  ).slice(0, 8)
+
+  return (
+    <div
+      className="mt-2 rounded-md border border-border/50 bg-background/40 p-2"
+      data-testid={`agent-backend-${agentId}`}
+    >
+      <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+        <KeyRound className="h-2.5 w-2.5" />
+        {channelLabel(state.channel)}
+        {state.configFile && (
+          <span className="ml-auto truncate normal-case text-muted-foreground/70">
+            {state.configFile}
+          </span>
+        )}
+      </div>
+
+      {state.injectable ? (
+        <>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            {state.note}
+          </p>
+
+          {state.configured && (
+            <div className="mt-2 rounded border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-[10px] text-emerald-100/90">
+              <div className="flex items-center gap-1.5">
+                <Check className="h-2.5 w-2.5 text-emerald-300" />
+                <span className="font-mono">
+                  {state.configured.provider}
+                  {state.configured.model ? ` \u00b7 ${state.configured.model}` : ''}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-5 px-1 text-[9px]"
+                  disabled={busy}
+                  onClick={() => void clear()}
+                >
+                  <X className="h-2.5 w-2.5" /> clear
+                </Button>
+              </div>
+              <div className="mt-0.5 text-emerald-100/70">
+                {state.injectedEnv.length > 0
+                  ? `Injected at launch: ${state.injectedEnv.join(', ')}`
+                  : 'No variable can be injected for this choice.'}
+              </div>
+              {state.keyPresent ? (
+                <div className="text-emerald-100/70">
+                  Key: from the EveryAIOS vault (read in Rust at spawn)
+                </div>
+              ) : state.configured ? (
+                <div className="text-amber-200/80">
+                  No vault key for this provider \u2014 the agent will use whatever it has.
+                </div>
+              ) : null}
+              {state.unexpressed.length > 0 && (
+                <div className="text-amber-200/80">
+                  Not expressible by env for this agent: {state.unexpressed.join(', ')}
+                </div>
+              )}
+              <div className="mt-0.5 text-emerald-100/50">
+                Nothing is written to this agent’s own config file.
+              </div>
+            </div>
+          )}
+
+          {state.refusal && (
+            <div className="mt-2 text-[10px] text-amber-200/80">{state.refusal}</div>
+          )}
+
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search providers…"
+            aria-label={`Provider for ${agentId}`}
+            className="mt-2 h-7 w-full rounded border border-border bg-background px-2 font-mono text-[10px] text-foreground placeholder:text-muted-foreground/60"
+          />
+
+          <div className="mt-1.5 space-y-1">
+            {visible.length === 0 && (
+              <div className="px-1 text-[10px] text-muted-foreground">
+                No provider matches “{query}”.
+              </div>
+            )}
+            {visible.map((p) => {
+              const check = checks[p.id]
+              const active = state.configured?.provider === p.id
+              return (
+                <div
+                  key={p.id}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded border px-1.5 py-1 text-[10px]',
+                    active
+                      ? 'border-emerald-500/40 bg-emerald-500/5'
+                      : 'border-border/40 bg-background/30',
+                  )}
+                >
+                  <span className="truncate text-foreground">{p.name}</span>
+                  {p.env && (
+                    <span className="truncate font-mono text-[8px] text-muted-foreground/70">
+                      {p.env}
+                    </span>
+                  )}
+                  {p.keyInVault && (
+                    <Badge className="bg-emerald-500/15 text-[8px] text-emerald-300">
+                      vault key
+                    </Badge>
+                  )}
+                  {p.local && (
+                    <Badge className="bg-blue-500/15 text-[8px] text-blue-300">local</Badge>
+                  )}
+                  {check && (
+                    <Badge
+                      className={cn(
+                        'text-[8px]',
+                        check.ok
+                          ? 'bg-emerald-500/15 text-emerald-300'
+                          : 'bg-rose-500/15 text-rose-300',
+                      )}
+                    >
+                      {check.ok ? `healthy \u00b7 ${check.models}` : 'unreachable'}
+                    </Badge>
+                  )}
+                  {!check && p.verifiedAt && (
+                    <Badge className="bg-emerald-500/10 text-[8px] text-emerald-300/80">
+                      verified
+                    </Badge>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto h-5 px-1 text-[9px]"
+                    onClick={() => void test(p)}
+                  >
+                    <Gauge className="h-2.5 w-2.5" /> test
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-5 px-1.5 text-[9px]"
+                    disabled={busy || active}
+                    onClick={() => void choose(p)}
+                  >
+                    {active ? 'in use' : 'use'}
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      ) : (
+        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+          {state.refusal ?? state.note}
+          {state.channel === 'config_file' && state.configFile
+            ? ` (${state.configFile})`
+            : ''}
+        </p>
+      )}
+    </div>
+  )
 }
 
 // === Agent card ===============================================================
@@ -126,6 +404,9 @@ function AgentCard({
   const acpOptions = useAppStore((s) => s.acpConfigOptions[agent.id])
   const [busyInstall, setBusyInstall] = useState(false)
   const [busyScan, setBusyScan] = useState(false)
+  // P63 — the per-agent model-backend control is a disclosure, not a permanent
+  // control on all 46 rows.
+  const [configOpen, setConfigOpen] = useState(false)
 
   // Re-run discovery (ACP registry + install status + PATH probe) so the
   // row reflects what is actually on this machine right now.
@@ -247,6 +528,8 @@ function AgentCard({
         </p>
       )}
 
+      {configOpen && usable && !native && <AgentBackendPanel agentId={agent.id} />}
+
       <div className="mt-2.5 flex items-center gap-1">
         {agent.status === 'installed' || agent.status === 'updating' || agent.id === 'everyaios-native' ? (
           <Button
@@ -295,6 +578,23 @@ function AgentCard({
               <ChevronRight className="h-3 w-3" />
             )}
             Model catalog ({models.length})
+          </Button>
+        )}
+        {usable && !native && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-[10px]"
+            aria-expanded={configOpen}
+            data-testid={`agent-configure-${agent.id}`}
+            onClick={() => setConfigOpen((v) => !v)}
+          >
+            {configOpen ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+            Configure model
           </Button>
         )}
         <Button

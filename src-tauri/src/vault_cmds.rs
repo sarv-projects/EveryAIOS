@@ -107,6 +107,13 @@ pub fn vault_key_add(
         profile_saved = true;
     }
 
+    // P63 — this *is* the moment the provider became connected: a key (and
+    // possibly an endpoint) now exists for it. Register its endpoint on the
+    // live relay so the next turn can use it, instead of waiting for the next
+    // boot (the boot pass resolves only the connected set on purpose — it will
+    // not invent a dial plan for a provider the user never connected).
+    crate::catalog_cmds::refresh_endpoint_live(&state, &provider);
+
     Ok(serde_json::json!({
         "ok": true,
         "provider": provider,
@@ -122,10 +129,17 @@ pub fn vault_key_remove(
     provider: String,
     key_id: String,
 ) -> Result<serde_json::Value, String> {
-    let vault = state.vault.lock().map_err(|e| e.to_string())?;
-    let ring = KeyRing::new(&vault);
-    ring.delete_key(&provider, &key_id)
-        .map_err(|e| e.to_string())?;
+    {
+        let vault = state.vault.lock().map_err(|e| e.to_string())?;
+        let ring = KeyRing::new(&vault);
+        ring.delete_key(&provider, &key_id)
+            .map_err(|e| e.to_string())?;
+    } // release the vault lock before the connected-set recompute (not reentrant)
+      // P63 — when that was the provider's last key (and it has no usable profile
+      // and is not keyless), it is disconnected: retire its live endpoint so the
+      // next turn cannot still route to it. If another key remains, this is a
+      // no-op re-register.
+    crate::catalog_cmds::refresh_endpoint_live(&state, &provider);
     Ok(serde_json::json!({ "ok": true, "provider": provider, "keyId": key_id }))
 }
 

@@ -11,6 +11,30 @@
 //! `set_provider` rewrites it. No filesystem I/O here — the caller decides
 //! the path (the Tauri command layer). Keys are written only when a value is
 //! present; existing unknown keys are preserved.
+//!
+//! # Status: **deliberately uncalled** (read this before wiring it)
+//!
+//! Nothing invokes this module in production, and that is a recorded decision,
+//! not an oversight. P30.7's deliverable was the **pure trait**; the impure
+//! half — detect → read → preview → Guard → atomic-write → verify →
+//! EffectReceipt → rollback — is the **P47.7 ClientCompatibility ring**, which
+//! is **post-v1 by ADR** (`TODO.md` P47.7; spec §6 #21). It cannot ship earlier
+//! because every path it would write (`.claude/`, `.codex/`, `.cursor/`, …)
+//! is a `protected_paths` write floor (`floor:protected-settings`), so it must
+//! move through the effect funnel.
+//!
+//! **What *did* ship for v1 instead:** `agent_backend.rs` / P63 — the same user
+//! goal (point an external agent at your provider) solved by injecting the
+//! provider's environment **at spawn**, which writes nothing to disk and needs
+//! no funnel. Prefer extending that path; treat this module as the Tier-3
+//! (disk-projection) adapters for P47.7.
+//!
+//! Known schema gaps against the real CLIs, to fix when P47.7 opens: OpenCode
+//! wants `models` as an **object map** (this writes a string array) and writes
+//! no `options.baseURL`/`options.apiKey`/`npm`; Codex needs the
+//! `[model_providers.<id>]` table (`name`/`base_url`/`env_key`/`wire_api`)
+//! alongside `model_provider`; and `api_key_env` is documented as an env-var
+//! **name** but written into the value slot.
 
 use serde_json::{json, Value};
 

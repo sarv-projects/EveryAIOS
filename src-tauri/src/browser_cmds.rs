@@ -22,6 +22,40 @@ use tauri::State;
 
 use crate::AppState;
 
+/// Wait briefly for the page target a just-created `about:blank` produces.
+///
+/// Chrome does not always publish the new target on the very next
+/// `Target.list` call, so a single immediate read is not enough. This used to
+/// be an `.expect("page target after create")`, which killed the whole desktop
+/// app when Chrome was merely slow — the opposite of what an optional browse
+/// view should be able to do. Polls for up to 3s, then returns an honest
+/// error.
+pub(crate) fn wait_for_page_target(
+    client: &everyaios_cdp::CdpClient,
+) -> Result<everyaios_cdp::TargetInfo, String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    let mut last_err: Option<String> = None;
+    loop {
+        match client.list_targets() {
+            Ok(ts) => {
+                if let Some(t) = ts
+                    .into_iter()
+                    .find(|t| t.target_type == everyaios_cdp::TargetType::Page)
+                {
+                    return Ok(t);
+                }
+            }
+            Err(e) => last_err = Some(format!("list targets: {e}")),
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(last_err.unwrap_or_else(|| {
+                "no page target appeared after Target.createTarget (3s)".to_string()
+            }));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 /// The live browser session held in `AppState.browser`.
 pub struct LiveBrowser {
     /// Owns the Chrome child — `BrowserChild::drop` kills the process when
@@ -179,24 +213,22 @@ pub fn browser_start(state: State<'_, AppState>) -> Result<serde_json::Value, St
     let targets = client
         .list_targets()
         .map_err(|e| format!("list targets: {e}"))?;
-    let page = targets
+    let page = match targets
         .iter()
         .find(|t| t.target_type == everyaios_cdp::TargetType::Page)
         .cloned()
-        .unwrap_or_else(|| {
-            let _ = client.call(
-                "Target.createTarget",
-                serde_json::json!({ "url": "about:blank" }),
-            );
+    {
+        Some(page) => page,
+        None => {
             client
-                .list_targets()
-                .ok()
-                .and_then(|ts| {
-                    ts.into_iter()
-                        .find(|t| t.target_type == everyaios_cdp::TargetType::Page)
-                })
-                .expect("page target after create")
-        });
+                .call(
+                    "Target.createTarget",
+                    serde_json::json!({ "url": "about:blank" }),
+                )
+                .map_err(|e| format!("create target: {e}"))?;
+            wait_for_page_target(&client)?
+        }
+    };
     let session = client
         .attach(&page.target_id)
         .map_err(|e| format!("attach: {e}"))?;

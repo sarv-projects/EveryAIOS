@@ -33,6 +33,7 @@ import { catalogPickLabel } from '@/lib/catalog-models'
 import { CompanionChip } from './companion-chip'
 import { cn } from '@/lib/utils'
 import { useRuntimeState } from '@/lib/runtime'
+import { ARCH_VERSION } from '@/lib/version'
 
 
 interface Stat {
@@ -370,7 +371,7 @@ export function StatusBar() {
           <Radar className="h-2.5 w-2.5" />
           cockpit
         </button>
-        <span className="pr-3 text-muted-foreground/40">EveryAIOS v3.57</span>
+        <span className="pr-3 text-muted-foreground/40">EveryAIOS {ARCH_VERSION}</span>
       </footer>
     )
   }
@@ -502,7 +503,7 @@ export function StatusBar() {
           cockpit
         </button>
         <span className="text-muted-foreground/40">·</span>
-        <span className="text-muted-foreground/50">EveryAIOS v3.57</span>
+        <span className="text-muted-foreground/50">EveryAIOS {ARCH_VERSION}</span>
       </div>
     </footer>
   )

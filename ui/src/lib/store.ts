@@ -2543,11 +2543,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     try {
       const { chatToolRetry } = await import('./tauri')
+      // P49: carry the real Work so the coordinator files the retry under it
+      // (`registerStreamIdentity` keys on workId), not under the session id.
+      // Off-plan retries have no Work yet; Rust falls back to the session id.
+      const retryWorkId = get().pendingPlan?.workId
       await chatToolRetry({
         sessionId: st.activeSessionId,
         streamId: activeStreamMsg[st.activeSessionId] ?? recordId,
         toolId: rec.toolId,
         args: rec.args ?? {},
+        ...(retryWorkId ? { workId: retryWorkId } : {}),
       })
     } catch (err) {
       patchActiveAssistant(set, (m) => ({

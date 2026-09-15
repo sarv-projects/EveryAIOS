@@ -567,6 +567,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// [`crate::LocalManager`] for discovery (ollama always, llamafile only
     /// when a binary exists) before calling this.
     pub fn with_local(&self, provider: &str, endpoint: LocalEndpoint) -> &Self {
+        self.grant_egress_url(&endpoint.base_url);
         self.local_endpoints
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -576,11 +577,31 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
 
     /// Override a provider base URL (config / tests).
     pub fn with_base_url(&self, provider: &str, url: impl Into<String>) -> &Self {
+        let url = url.into();
+        self.grant_egress_url(&url);
         self.base_urls
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .insert(provider.to_string(), url.into());
+            .insert(provider.to_string(), url);
         self
+    }
+
+    /// **P62.4** — a user-chosen endpoint is an authorized destination, so
+    /// grant its host through the network floor.
+    ///
+    /// The destination floor (P62.1) exists to refuse destinations an *agent*
+    /// chose — cloud metadata, link-local, and (policy-gated) private ranges —
+    /// and `urlfloor` still refuses all of those on the agent tool path. But a
+    /// provider `base_url` reaching this relay only exists because the user (or
+    /// the shipped catalog) configured it: a self-hosted gateway, a NAS, a
+    /// loopback runtime. Without this grant the floor's private-range refusal
+    /// would silently break exactly those endpoints, which is the failure mode
+    /// the floor was never meant to cause. The unconditional classes
+    /// (metadata/link-local/multicast) are **not** bypassed by a grant.
+    fn grant_egress_url(&self, url: &str) {
+        if let Ok(mut e) = self.egress.lock() {
+            e.grant_url(url);
+        }
     }
 
     /// **P55.5** — register a resolved provider endpoint (base URL + wire
@@ -592,11 +613,29 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         provider: &str,
         endpoint: everyaios_vault::ProviderEndpoint,
     ) -> &Self {
+        self.grant_egress_url(&endpoint.base_url);
         self.endpoints
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(provider.to_string(), endpoint);
         self
+    }
+
+    /// **P63** — retire a provider endpoint when it stops being connected (its
+    /// last vault key was removed, or its profile was deleted). Without this
+    /// the resolved-endpoint map is append-only for the life of the process,
+    /// so the next turn could still dial a provider the user just disconnected.
+    ///
+    /// The egress grant for the old `base_url` is intentionally **not** revoked:
+    /// grants are an additive, user-authorized destination set, and the agent
+    /// tool path is unaffected because it floors destinations on its own
+    /// (`urlfloor`), never through this relay map.
+    pub fn remove_endpoint(&self, provider: &str) -> bool {
+        self.endpoints
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(provider)
+            .is_some()
     }
 
     /// **P55.6** — attach the durable provider-profile store. The relay reads
@@ -1659,6 +1698,13 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     }
 
     /// S0.5: re-run a failed tool through the same guarded exec→commit path.
+    ///
+    /// P49: `work_id` is the real Work the retry belongs to. The coordinator
+    /// registers stream identity from `workId` (`registerStreamIdentity`), so
+    /// passing the session id here would file the retry under a fabricated
+    /// Work. Falls back to `session_id` only when the caller has no Work —
+    /// the same convention as `chat/stream` (see `params.work_id
+    /// .unwrap_or_else(|| params.session_id.clone())`).
     pub fn retry_tool(
         &self,
         session_id: &str,
@@ -1666,13 +1712,14 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         tool_id: &str,
         args: serde_json::Value,
         agent_id: Option<&str>,
+        work_id: Option<&str>,
     ) -> Result<(), ChatRelayError> {
         let mut body = serde_json::json!({
             "sessionId": session_id,
             "streamId": stream_id,
             "toolId": tool_id,
             "args": args,
-            "workId": session_id,
+            "workId": work_id.unwrap_or(session_id),
         });
         if let Some(a) = agent_id {
             body["agentId"] = serde_json::Value::String(a.to_string());
@@ -1716,6 +1763,11 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// executor. The coordinator begins the plan breaker via `plan/begin`,
     /// steps it per LLM turn/tool call, and emits `chat/interrupt` on a trip
     /// + `chat/plan_done` at the end. Returns once the coordinator acks.
+    /// `work_id` is the canonical Work this plan belongs to. The coordinator
+    /// registers plan stream identity from `workId` (its `PlanExecutionParams`
+    /// has carried the field since P49), so omitting it here would file the
+    /// plan's lifecycle events under a fabricated Work. Falls back to
+    /// `session_id` — the same convention as `chat/stream`.
     pub fn start_plan(
         &self,
         session_id: &str,
@@ -1724,12 +1776,14 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         tasks: serde_json::Value,
         provider: Option<&str>,
         model: Option<&str>,
+        work_id: Option<&str>,
     ) -> Result<(), ChatRelayError> {
         let mut body = serde_json::json!({
             "sessionId": session_id,
             "planId": plan_id,
             "streamId": stream_id,
             "tasks": tasks,
+            "workId": work_id.unwrap_or(session_id),
         });
         if let Some(p) = provider {
             body["provider"] = serde_json::Value::String(p.to_string());
@@ -2469,15 +2523,84 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn retry_tool_forwards_the_real_work_id() {
+        // P49: the coordinator registers stream identity from `workId`
+        // (`registerStreamIdentity({streamId, sessionId, workId})`), so the
+        // retry path must carry the *real* Work. It previously hard-coded
+        // `"workId": session_id`, which filed every retry under a fabricated
+        // Work and dropped the UI-supplied id at the Rust/Tauri hop.
+        let (a, b) = pair();
+        let seen: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_side = Arc::clone(&seen);
+        let side = std::thread::spawn(move || {
+            let mut s = b;
+            while let Ok(Some(payload)) = frame::decode(&mut s) {
+                let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
+                if v.get("method").and_then(|m| m.as_str()) == Some("chat/tool_retry") {
+                    let done = {
+                        let mut g = seen_side.lock().unwrap_or_else(|x| x.into_inner());
+                        g.push(v.get("params").cloned().unwrap_or(serde_json::Value::Null));
+                        g.len()
+                    };
+                    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
+                    let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
+                    if done >= 2 {
+                        break;
+                    }
+                }
+            }
+        });
+
+        let (_dir, vault) = temp_vault("retry-work-id");
+        let vault = Arc::new(Mutex::new(vault));
+        let relay = ChatRelay::new(link_from(a), vault, |_| {});
+        let args = serde_json::json!({ "path": "/tmp/x" });
+        relay
+            .retry_tool("s1", "st-1", "t1", args.clone(), None, Some("w-real"))
+            .expect("retry_tool with a Work");
+        relay
+            .retry_tool("s1", "st-2", "t2", args, None, None)
+            .expect("retry_tool without a Work");
+        side.join().unwrap();
+
+        let g = seen.lock().unwrap_or_else(|x| x.into_inner());
+        assert_eq!(g.len(), 2, "fake sidecar saw {g:?}");
+        assert_eq!(
+            g[0].get("workId"),
+            Some(&serde_json::json!("w-real")),
+            "retry must carry the real Work, not the session id: {}",
+            g[0]
+        );
+        assert_eq!(g[0].get("sessionId"), Some(&serde_json::json!("s1")));
+        assert_eq!(
+            g[1].get("workId"),
+            Some(&serde_json::json!("s1")),
+            "with no Work, workId falls back to the session id (chat/stream convention): {}",
+            g[1]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn relay_forwards_plan_interrupt_notifications() {
         // Stage-0 (P6.3): a `chat/interrupt` notification from the coordinator
         // arrives as a ChatWireEvent::Interrupt — the H2 MCQ card payload.
+        //
+        // P49: this also pins the plan's Work forwarding — the coordinator's
+        // `PlanExecutionParams` has carried `workId` since P49 and
+        // `registerStreamIdentity` keys plan streams on it, so the relay must
+        // send the real Work rather than letting it fall back to the session.
         let (a, b) = pair();
+        let plan_params: Arc<Mutex<Option<serde_json::Value>>> = Arc::new(Mutex::new(None));
+        let plan_params_side = Arc::clone(&plan_params);
         let side = std::thread::spawn(move || {
             let mut s = b;
             while let Ok(Some(payload)) = frame::decode(&mut s) {
                 let v: serde_json::Value = serde_json::from_slice(&payload).unwrap_or_default();
                 if v.get("method").and_then(|m| m.as_str()) == Some("plan/execute") {
+                    *plan_params_side.lock().unwrap_or_else(|x| x.into_inner()) =
+                        v.get("params").cloned();
                     let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
                     let reply = serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": { "accepted": true } });
                     let _ = frame::write_frame(&mut s, &serde_json::to_vec(&reply).unwrap());
@@ -2517,6 +2640,7 @@ mod tests {
                 serde_json::json!([{ "id": "t1", "goal": "g" }]),
                 None,
                 None,
+                Some("w-plan"),
             )
             .expect("start_plan");
 
@@ -2545,6 +2669,14 @@ mod tests {
             matches!(evs[1], ChatWireEvent::PlanDone { ref plan_id, tasks_done: 2, error: None, .. } if plan_id == "p1")
         );
         side.join().unwrap();
+        let pp = plan_params.lock().unwrap_or_else(|x| x.into_inner());
+        let pp = pp.as_ref().expect("fake sidecar saw plan/execute");
+        assert_eq!(
+            pp.get("workId"),
+            Some(&serde_json::json!("w-plan")),
+            "plan/execute must carry the real Work: {pp}"
+        );
+        assert_eq!(pp.get("sessionId"), Some(&serde_json::json!("s1")));
     }
 
     #[test]

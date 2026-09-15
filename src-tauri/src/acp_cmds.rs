@@ -735,6 +735,13 @@ pub fn acp_launch(
         })
         .ok_or_else(|| format!("agent {agent_id} has no installed or PATH-resolved launch path"))?;
 
+    // P63 — the user's per-agent provider binding (chosen in Agent runtimes)
+    // is injected as environment. The key is read from the vault here, in
+    // Rust, and never travels through IPC or the renderer; the binding comes
+    // last so an explicit user choice wins over a manifest default. A refusal
+    // or a missing binding yields nothing and never blocks the launch.
+    let backend_env: Vec<(String, String)> =
+        crate::agent_backend_cmds::spawn_env_for(&state, &agent_id);
     let mut env: Vec<(&str, &str)> = plan
         .env
         .iter()
@@ -744,6 +751,9 @@ pub fn acp_launch(
         for (k, v) in &o.env {
             env.push((k.as_str(), v.as_str()));
         }
+    }
+    for (k, v) in &backend_env {
+        env.push((k.as_str(), v.as_str()));
     }
     let args: Vec<&str> = plan.args.iter().map(String::as_str).collect();
     let transport = ProcessTransport::spawn(&command, &args, &env)
@@ -1236,7 +1246,12 @@ pub fn acp_prompt(
     let outcome = entry
         .session
         .prompt_with_content(content, |req| {
-            let mut g = guard.lock().expect("guard_service poisoned");
+            // A poisoned guard lock means an earlier decision panicked mid-way.
+            // Fail **closed**: a permission we cannot evaluate is denied, never
+            // granted, and never a panic that takes the whole turn down.
+            let Ok(mut g) = guard.lock() else {
+                return PermissionDecision::deny();
+            };
             let (op, risk) = map_tool_call(&req.tool_call);
             let paths: Vec<String> = req
                 .tool_call
@@ -1279,7 +1294,9 @@ pub fn acp_prompt(
                     let approved = rx
                         .recv_timeout(std::time::Duration::from_secs(300))
                         .unwrap_or(false);
-                    let mut g = guard.lock().expect("guard_service poisoned");
+                    let Ok(mut g) = guard.lock() else {
+                        return PermissionDecision::deny();
+                    };
                     if approved {
                         match g.use_ticket(&ticket_id, &args_hash) {
                             Ok(()) => PermissionDecision::allow(),

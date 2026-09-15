@@ -96,9 +96,9 @@ impl AttachedServer {
 
     /// Spawn under an explicit posture (P62.2). `Confined` needs a scratch dir
     /// the child may write (its own cache); `network` is `"allow"` for the
-    /// API-calling servers that need it. Falls back to the ambient path — and
-    /// reports `is_sandboxed() == false` — when containment is unavailable, so
-    /// a caller never mistakes the two.
+    /// API-calling servers that need it. A requested confined launch fails
+    /// closed when the backend is unavailable or fails to start; it never
+    /// silently downgrades a third-party child to ambient execution.
     pub fn spawn_with_posture(
         posture: SandboxPosture,
         scratch: &str,
@@ -109,13 +109,26 @@ impl AttachedServer {
         if posture.is_contained() {
             #[cfg(target_os = "linux")]
             {
-                if everyaios_guard::sandbox::linux_bwrap_available() {
-                    if let Ok(server) = Self::spawn_confined(scratch, network, command, args) {
-                        return Ok(server);
-                    }
+                if !everyaios_guard::sandbox::linux_bwrap_available() {
+                    return Err(AttachError::Spawn(std::io::Error::other(
+                        "confined MCP posture unavailable: bubblewrap is not installed",
+                    )));
                 }
+                // A backend error is returned to the caller. Falling back to
+                // ambient here would turn a failed security boundary into a
+                // successful-looking unconfined launch.
+                return Self::spawn_confined(scratch, network, command, args);
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                return Err(AttachError::Spawn(std::io::Error::other(
+                    "confined MCP posture is unavailable on this platform",
+                )));
             }
         }
+        // Ambient is an explicit posture selected by `preferred()` only when
+        // no supported containment backend exists, or by a caller that has
+        // deliberately accepted the weaker contract.
         Self::spawn_uncontrolled(command, args)
     }
 
@@ -132,7 +145,9 @@ impl AttachedServer {
         command: &str,
         args: &[&str],
     ) -> Result<Self, AttachError> {
-        use everyaios_guard::sandbox::{profiles, LinuxBwrapBackend, SandboxRole, SandboxSpec};
+        use everyaios_guard::sandbox::{
+            essential_env, profiles, LinuxBwrapBackend, SandboxRole, SandboxSpec,
+        };
         // The backend refuses to bind a path that does not exist (fail-closed),
         // so the child's scratch dir has to exist before the spawn.
         std::fs::create_dir_all(scratch).map_err(AttachError::Spawn)?;
@@ -146,8 +161,14 @@ impl AttachedServer {
             credentials: "opaque_handles".into(),
             resource_limit_bytes: 512 << 20,
         };
+        // P62.2 — `--clearenv` stays (that is the containment win), but a
+        // completely empty environment breaks interpreter-based stdio servers
+        // (`python server.py` cannot even find `python`). The allow-list is the
+        // documented middle path: path/loader/discovery vars only, secret-shaped
+        // names refused by the backend, everything else still scrubbed.
+        let env = essential_env();
         let sandboxed = LinuxBwrapBackend
-            .spawn_stdio(&spec, &argv)
+            .spawn_stdio_with_env(&spec, &argv, &env)
             .map_err(|e| AttachError::Spawn(std::io::Error::other(e.to_string())))?;
         Ok(Self {
             child: None,
@@ -352,12 +373,25 @@ impl AttachedServer {
     }
 
     /// P51.18 — non-blocking liveness probe for the no-restart refresh path.
-    /// `None` (already reaped / never spawned) counts as not alive.
+    /// `None` (already reaped / never spawned) counts as not alive. Sandboxed
+    /// children are owned by `sandbox_process`; ambient children use `child`.
     pub fn is_alive(&mut self) -> bool {
+        if let Some(process) = self.sandbox_process.as_mut() {
+            return matches!(process.try_wait(), Ok(None));
+        }
         matches!(
             self.child.as_mut().map(|child| child.try_wait()),
             Some(Ok(None))
         )
+    }
+
+    /// The OS pid of the owned child, if one is live. Sandboxed children are
+    /// owned by the backend monitor; ambient children by the std `Child`.
+    pub fn pid(&self) -> Option<u32> {
+        if let Some(process) = self.sandbox_process.as_ref() {
+            return Some(process.pid);
+        }
+        self.child.as_ref().map(std::process::Child::id)
     }
 
     pub fn import_root(&self) -> Option<&PathBuf> {
@@ -373,6 +407,17 @@ impl AttachedServer {
             let _ = child.kill();
             let _ = child.wait();
         }
+    }
+}
+
+/// P51.18 — an attached server owns a live child process; dropping the handle
+/// must not orphan it. `mcp_detach` removes the handle from the live map and
+/// `mcp_refresh` prunes a dead one, so both rely on this `Drop` to actually
+/// end the child. Without it, `std::process::Child` is not kill-on-drop and
+/// every detached server would keep running (a third-party process leak).
+impl Drop for AttachedServer {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
@@ -490,6 +535,32 @@ mod tests {
             args.contains(&"--unshare-net".into()),
             "network must be denied"
         );
+    }
+
+    /// P51.18 — the child must not outlive its handle. `mcp_detach` drops the
+    /// map entry and `mcp_refresh` prunes a dead one; without a `Drop` impl the
+    /// std `Child` is not kill-on-drop, so a detached third-party server would
+    /// keep running forever. Linux-gated because the liveness probe is `/proc`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn dropping_an_attached_server_kills_its_child() {
+        fn alive(pid: u32) -> bool {
+            std::path::Path::new(&format!("/proc/{pid}")).exists()
+        }
+        let server = match AttachedServer::spawn("sleep", &["30"]) {
+            Ok(s) => s,
+            Err(_) => return, // `sleep` unavailable — not a Drop regression
+        };
+        let pid = server.pid().expect("spawned child exposes a pid");
+        assert!(alive(pid), "child {pid} should start alive");
+        drop(server);
+        for _ in 0..100 {
+            if !alive(pid) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        panic!("child {pid} survived Drop — detached MCP server leaked");
     }
 
     /// Live proof the confined path actually spawns and reports containment.

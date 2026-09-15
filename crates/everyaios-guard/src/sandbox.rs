@@ -299,6 +299,45 @@ impl LinuxBwrapBackend {
     }
 }
 
+/// True for environment-variable names that exist to carry credentials. The
+/// confined-spawn env allow-list must never carry these (they would re-open
+/// the exact channel `--clearenv` closed); secrets reach a child only through
+/// the vault broker or an explicit caller that passes them another way.
+#[cfg(target_os = "linux")]
+fn is_secret_like_env_name(name: &str) -> bool {
+    let n = name.to_ascii_uppercase();
+    n.contains("API_KEY")
+        || n.contains("_TOKEN")
+        || n.ends_with("SECRET")
+        || n.contains("PASSWORD")
+        || n.starts_with("EVERYAIOS_")
+}
+
+#[cfg(target_os = "linux")]
+/// The environment an MCP interpreter child genuinely needs to run. Deliberately
+/// minimal and credential-free: path/loader/discovery vars only.
+pub fn essential_env() -> Vec<(String, String)> {
+    const KEEP: &[&str] = &[
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "TERM",
+        "NODE_PATH",
+        "VIRTUAL_ENV",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "TMPDIR",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+    ];
+    std::env::vars()
+        .filter(|(k, _)| KEEP.contains(&k.as_str()))
+        .filter(|(k, _)| !is_secret_like_env_name(k))
+        .collect()
+}
+
 #[cfg(target_os = "linux")]
 impl LinuxBwrapBackend {
     /// Spawn a sandboxed child with piped stdio. The monitor retains process
@@ -308,8 +347,38 @@ impl LinuxBwrapBackend {
         spec: &SandboxSpec,
         command: &[String],
     ) -> Result<SandboxedStdio, SandboxError> {
+        self.spawn_stdio_with_env(spec, command, &[])
+    }
+
+    /// [`Self::spawn_stdio`] with an explicit allow-list of environment
+    /// variables the child needs to function.
+    ///
+    /// `--clearenv` is the containment win (no ambient secrets reach the
+    /// child), but a completely empty environment breaks *interpreters*: a
+    /// `python server.py` needs `PATH` to find `python` itself, and node/venv
+    /// layouts need the usual loader vars. This is the documented middle path
+    /// (P62.2): an explicit, small allow-list — never the ambient environment,
+    /// never a `*_API_KEY`/`*_TOKEN` — set **on top of** `--clearenv`, so
+    /// everything except these names is still scrubbed. Secrets stay on the
+    /// brokered credential path.
+    pub fn spawn_stdio_with_env(
+        &self,
+        spec: &SandboxSpec,
+        command: &[String],
+        env: &[(String, String)],
+    ) -> Result<SandboxedStdio, SandboxError> {
         self.validate(spec)?;
         let mut child = Self::command(spec, command)?;
+        for (k, v) in env {
+            // Refuse to smuggle a secret-shaped variable through the
+            // allow-list — that would silently undo the containment.
+            if is_secret_like_env_name(k) {
+                return Err(SandboxError::InvalidPolicy(format!(
+                    "refusing to pass secret-shaped env var {k:?} into a confined child"
+                )));
+            }
+            child.env(k, v);
+        }
         child
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

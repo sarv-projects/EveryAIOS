@@ -5,6 +5,13 @@
 //! feed commands are the seam), and the UI polls `cockpit_snapshot`. The
 //! control-channel writes (`agent/undo`, `agent/interrupt-response`) mirror
 //! the existing `agent/stop` pattern.
+//!
+//! The cockpit lock recovers from poison (`.unwrap_or_else(PoisonError::
+//! into_inner)`) rather than panicking. It is plain display state — agent
+//! cards, open interrupts, a quiet flag — with no invariant to protect, so a
+//! thread that panicked while holding it must not permanently wedge the flight
+//! deck for every later poll. (The guard-service lock is the opposite case: it
+//! holds ticket/policy authority, so it fails **closed**.)
 
 use everyaios_audit::cockpit::{AgentCard, CockpitState};
 use tauri::{AppHandle, Manager, State};
@@ -15,7 +22,11 @@ use crate::AppState;
 /// flag) — the UI polls this for the flight deck.
 #[tauri::command]
 pub fn cockpit_snapshot(state: State<'_, AppState>) -> CockpitState {
-    state.cockpit.lock().expect("cockpit poisoned").clone()
+    state
+        .cockpit
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
 }
 
 /// Feed seam: record a live agent action (the coordinator's tool calls land
@@ -31,7 +42,7 @@ pub fn cockpit_activity(
     state
         .cockpit
         .lock()
-        .expect("cockpit poisoned")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .agent_action(ts, agent_id, tool, summary);
     Ok(())
 }
@@ -47,7 +58,7 @@ pub fn cockpit_tokens(
     let ok = state
         .cockpit
         .lock()
-        .expect("cockpit poisoned")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .agent_tokens(&agent_id, tokens_in, tokens_out);
     if ok {
         Ok(())
@@ -67,7 +78,10 @@ pub fn cockpit_quiet(
     status: Option<String>,
 ) -> Result<(), String> {
     {
-        let mut s = state.cockpit.lock().expect("cockpit poisoned");
+        let mut s = state
+            .cockpit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.quiet = quiet;
     }
     let line = match status {
@@ -75,7 +89,7 @@ pub fn cockpit_quiet(
         None => state
             .cockpit
             .lock()
-            .expect("cockpit poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .quiet_status(now_ms()),
     };
     if let Some(tray) = app.tray_by_id("main-tray") {
@@ -121,7 +135,7 @@ pub fn cockpit_upsert_agent(
     state
         .cockpit
         .lock()
-        .expect("cockpit poisoned")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .upsert_agent(card);
     Ok(())
 }

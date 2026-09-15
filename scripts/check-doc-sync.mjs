@@ -149,6 +149,24 @@ if (gateOpen > 0) {
   }
 }
 
+// 6. The shipped shell chrome must advertise the current architecture version.
+//    `title-bar` + `status-bar` hardcoded `v3.57` and silently drifted 15 minor
+//    revisions behind the spec; they now read the single `ui/src/lib/version.ts`
+//    constant, and this keeps that constant honest.
+const archVersion = /ARCH_VERSION\s*=\s*['"]([^'"]+)['"]/.exec(read("ui/src/lib/version.ts"))?.[1];
+const newestChangelog = /^##\s+(v[\d.]+)\s+—/m.exec(read("SPEC-CHANGELOG.md"))?.[1];
+if (!archVersion) {
+  failures.push(
+    `ui/src/lib/version.ts must export ARCH_VERSION (the shell chrome's version badge).`,
+  );
+} else if (newestChangelog && archVersion !== newestChangelog) {
+  failures.push(
+    `ui/src/lib/version.ts ARCH_VERSION is ${archVersion} but the newest ` +
+      `SPEC-CHANGELOG.md entry is ${newestChangelog} — the shell would advertise a ` +
+      `stale version. Update one to match the other.`,
+  );
+}
+
 if (failures.length) {
   console.error("❌ doc-sync check FAILED:");
   for (const f of failures) console.error(`   - ${f}`);
@@ -160,6 +178,7 @@ const gateNote =
 console.log(
   `✅ doc-sync: ${yaml.length} capabilities in sync (yaml == ARCH/09 == spec §0); ` +
     `TODO.md ${counts.total} = ${counts.done} done + ${counts.open} open matches header` +
+    (archVersion ? `; shell chrome ${archVersion} matches the changelog` : "") +
     gateNote +
     ".",
 );

@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod acp_cmds;
+mod agent_backend_cmds;
 mod agent_cmds;
 mod artifact_cmds;
 mod boot;
@@ -151,18 +152,24 @@ fn connect_chat_relay(
     }
     let policy_path = everyaios_core::default_data_dir().join("permissions.toml");
     relay.with_policy(&policy_path);
+    eprintln!("everyaios-desktop: relay stage policy ok");
     // P55.6 — the durable provider-profile store (custom endpoints + the
     // OpenCode/NIM overlays). A base URL entered in Settings now reaches the
     // broker instead of being discarded.
     relay.with_profiles(everyaios_catalog::ProfileStore::in_dir(
         everyaios_core::default_data_dir(),
     ));
-    // P55.5 — resolve every provider endpoint from the live catalog +
-    // profiles so a chat turn can reach any models.dev provider, not just the
-    // hardcoded defaults (`base_urls` was never populated at runtime before).
+    // P55.5 — resolve the endpoints the relay actually needs: the **connected**
+    // set (vault-keyed providers + keyless locals + the user's own profiles),
+    // from the live catalog + profiles. The rest of the ~250-row catalog is
+    // display-only — resolving it would invent a dial plan for a provider the
+    // user never connected (and cost a full snapshot parse each). A provider
+    // connected or disconnected mid-session is reconciled on the live relay by
+    // its own command (`catalog_cmds::refresh_endpoint_live`).
     for (provider, endpoint) in catalog_cmds::resolve_endpoints(&state) {
         relay.with_endpoint(&provider, endpoint);
     }
+    eprintln!("everyaios-desktop: relay stage endpoints ok");
     // P1.8 (A5): register keyless local endpoints so a sidecar
     // `provider/stream` for ollama/llamafile routes to the local runtime
     // (GBNF grammar constraint included — B5). Ollama always registers;
@@ -178,6 +185,7 @@ fn connect_chat_relay(
             relay.with_local("llamafile", ep);
         }
     }
+    eprintln!("everyaios-desktop: relay stage locals ok");
     // P43 (B7 v3.53) — push completion: every terminal transition of the
     // task ledger wakes the UI via a `task-update` event (never polling).
     {
@@ -194,7 +202,11 @@ fn connect_chat_relay(
             }));
     }
     relay.spawn();
+    eprintln!("everyaios-desktop: relay stage spawn ok");
     *state.chat_relay.lock().expect("chat_relay poisoned") = Some(relay);
+    // Boot diagnostic: `runtime_status.sidecar` reads this slot, so "coordinator
+    // offline" in the UI is exactly "this line never printed".
+    eprintln!("everyaios-desktop: chat relay live — coordinator connected");
 }
 
 #[derive(serde::Serialize)]
@@ -352,6 +364,7 @@ fn plan_execute(
     tasks: serde_json::Value,
     provider: Option<String>,
     model: Option<String>,
+    work_id: Option<String>,
 ) -> Result<String, String> {
     let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
     let relay = relay
@@ -366,6 +379,7 @@ fn plan_execute(
             tasks,
             provider.as_deref(),
             model.as_deref(),
+            work_id.as_deref(),
         )
         .map_err(|e| e.to_string())?;
     Ok(stream_id)
@@ -438,7 +452,14 @@ fn chat_tool_retry(
         .as_ref()
         .ok_or_else(|| "sidecar not connected".to_string())?;
     relay
-        .retry_tool(&session_id, &stream_id, &tool_id, args, agent_id.as_deref())
+        .retry_tool(
+            &session_id,
+            &stream_id,
+            &tool_id,
+            args,
+            agent_id.as_deref(),
+            work_id.as_deref(),
+        )
         .map_err(|e| e.to_string())
 }
 
@@ -619,6 +640,7 @@ fn pre_spawn_coordinator(app: AppHandle) {
     // Link thread: rebuild the chat relay on every (re)spawn handoff.
     std::thread::spawn(move || {
         while let Ok((stdin, stdout)) = link_rx.recv() {
+            eprintln!("everyaios-desktop: sidecar link acquired — building chat relay");
             connect_chat_relay(&app, stdin, stdout, Arc::clone(&activity));
         }
     });
