@@ -2,7 +2,10 @@
 
 Plan for the alpha → beta → RC user-testing rounds. Smallest viable group: 5
 testers per round, 3 rounds. Every round is **moderated** (task-based, not
-free-play) with the same skeleton so results are comparable.
+free-play) with the same skeleton so results are comparable. The first release
+leg is Windows desktop; Linux/WSL development is not evidence of Windows
+release readiness. WSL may be tested as an optional execution profile, but its
+paths and discovery provenance must remain distinct from Windows paths.
 
 > **Plane (ARCH/17 §17.1):** rounds must exercise the two-plane picker surface
 > (ARCH/17 §17.5): when an external agent is selected, its **native**
@@ -35,6 +38,10 @@ free-play) with the same skeleton so results are comparable.
    - Researcher: connect a provider, run a research task, export + wipe.
 3. **Open exploration (10 min).** Anything they want; observer notes friction.
 4. **Debrief (10 min).** NPS-style 0–10 + "one thing you'd change".
+
+## Windows-first runtime and cowork acceptance (P66)
+
+Before an RC claim, add a real Windows evidence sheet for: PATH/App Paths/user-path/managed agent discovery; WSL distro discovery; exact path and provenance display; agent-owned model/auth selection for OpenCode, Claude Code, Codex, Cline, and Pi-style runtimes where available; Vault launch binding without config-file copying; and the session capability pane for MCP, skills, plugins, connectors, Office, Browser, Computer Use, and Memory. Record OS/build, runtime version, path/source, action, postcondition, Guard/audit receipt, restart result, and failure recovery. A mock catalog row, browser preview, unit-only Office test, or “configured” badge is not pass evidence.
 
 ## What we measure (ties to P11.6.4 local metrics where present)
 

@@ -81,19 +81,30 @@ function mergeAgentCatalog(
   for (const m of manifests) {
     const catalogId = ACP_TO_CATALOG[m.id] ?? m.id;
     const state = installs[m.id];
-    const status = state?.installed || m.id === "everyaios" ? "installed" : "available";
+    const status =
+      state?.installed || m.id === "everyaios"
+        ? "installed"
+        : state?.discovered
+          ? "discovered"
+          : "available";
     const existing = merged.find((a) => a.id === catalogId);
     if (existing) {
       existing.status = status;
+      existing.discovered = state?.discovered ?? existing.discovered;
+      existing.launchable = state?.launchable ?? existing.launchable;
       existing.version =
         state?.version ?? (state?.kind === "path" ? undefined : existing.version);
       existing.path = state?.binaryPath ?? existing.path;
+      existing.location = state?.location ?? existing.location;
       existing.note = m.description;
     } else if (!seen.has(catalogId)) {
       const row = synthesizeAgent(m);
       row.status = status;
+      row.discovered = state?.discovered;
+      row.launchable = state?.launchable;
       row.version = state?.version;
       row.path = state?.binaryPath ?? undefined;
+      row.location = state?.location;
       merged.push(row);
       seen.add(catalogId);
     }
@@ -143,7 +154,7 @@ function synthesizeAgent(m: HarnessManifest): AgentRuntime {
     tagline: m.description,
     status: "available",
     mark,
-    accent: "bg-orange-500 text-black",
+    accent: "bg-sky-500 text-slate-950",
     capabilities: [],
     models: [],
     defaultModel: "",

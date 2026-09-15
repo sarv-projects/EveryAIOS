@@ -46,7 +46,8 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 | **Bring Any AI Model You Want**<br/>*(DeepSeek, Claude, GPT-4o, Qwen, Groq, Llama, Ollama)* | ✅ **Universal Freedom**<br/>*(100+ models or local offline)* | ❌ **Locked**<br/>*(Only their own model)* | ⚠️ **Limited**<br/>*(A few selected providers)* | ⚠️ **Limited**<br/>*(Requires command-line setup)* |
 | **Use Your Favorite Coding Agents**<br/>*(Claude Code, Cline, Aider, OpenCode, or Native)* | ✅ **Run them all inside EveryAIOS** | ❌ None | ❌ Locked to their own editor | ❌ Standalone separate CLIs |
 | **Real Excel & Document Editing**<br/>*(Recalculates formulas, edits Word & PDFs)* | ✅ **Built-in Local Engine**<br/>*(0 AI tokens wasted on math)* | ❌ **Burns message quota**<br/>*(Guesses formulas as text)* | ❌ None | ❌ None |
-| **Autonomous Browser & Desktop Actions**<br/>*(Clicks, fills forms, navigates apps)* | ✅ **Built-in (37 Actions)** | ⚠️ Limited / slow cloud beta | ❌ None | ❌ None |
+| **Autonomous Browser Use (Web Automation)**<br/>*(37 CDP tools, navigates web, fills forms, extracts data, reuses logins)* | ✅ **Built-in Browser Engine**<br/>*(Fast, private, local session vault)* | ⚠️ Limited cloud beta | ❌ None | ❌ None |
+| **Native Computer Use (Desktop Automation)**<br/>*(Controls desktop apps, clicks UI elements, OCR, keyboard/mouse)* | ✅ **Built-in Computer Use**<br/>*(Windows, macOS, Linux)* | ⚠️ Cloud CUA (slow / costly) | ❌ None | ❌ None |
 | **No Annoying "Wait 4 Hours" Limits** | ✅ **Auto-rotates backup keys**<br/>*(Work never stops)* | ❌ **Strict message caps**<br/>*(Locked out when limit hit)* | ❌ Fails when quota hit | ⚠️ Manual fallback |
 | **Safety & 1-Click Undo** | ✅ **Safe Approval Cards**<br/>*+ Instant 1-Click Rollback* | ❌ No file rollback | ⚠️ Standard git only | ⚠️ Terminal prompts |
 | **100% Private & Local-First** | ✅ **Your files stay on your machine** | ❌ Cloud-hosted | ⚠️ Cloud telemetry | ⚠️ Local terminal |
@@ -63,8 +64,8 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 │        1. CHAT          │         2. COWORK          │         3. CODE           │
 │  • Brainstorm & write   │  • Real Excel formulas     │  • Fix bugs & write code  │
 │  • Deep web research    │  • Word documents & PDFs   │  • Use Claude Code, Cline,│
-│  • Remembers your style │  • Automate web browser    │    Aider, or Native Agent │
-│  • Zero-cost memory     │  • Control desktop apps    │  • 1-Click Undo any diff  │
+│  • Remembers your style │  • Autonomous Browser Use  │    Aider, or Native Agent │
+│  • Zero-cost memory     │  • Native Computer Use     │  • 1-Click Undo any diff  │
 │  • Any AI model         │  • Connect Email & Slack   │  • Runs your tests first  │
 └─────────────────────────┴────────────────────────────┴───────────────────────────┘
 ```
@@ -74,15 +75,15 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 * **Cut AI costs by up to 90%:** Static prompts are cached efficiently, making turns faster and dramatically cheaper.
 * **Choose the right model for the job:** Use ultra-fast, cheap models (like DeepSeek or Haiku) for quick lookups, and switch to heavy reasoning models (like Claude 3.7 or OpenAI o3) for hard thinking.
 
-### 2. 📊 Cowork (Real Documents & Browser Automation)
+### 2. 📊 Cowork (Real Documents, Browser Use & Computer Use)
 * **Real Excel Spreadsheets:** Unlike chat apps that guess math in text, EveryAIOS includes a real calculation engine. It recalculates formulas across `.xlsx` sheets, updates charts, and leaves your formatting intact.
 * **Word & PDF Editing:** Fill forms, extract tables, redact sensitive data, and draft clean `.docx` files.
-* **Smart Browser Automation:** The built-in browser can navigate websites, research competitors, log into portals, and extract clean information without ads or clutter.
-* **Computer Control:** Can interact with desktop applications on Windows, macOS, and Linux to get tedious tasks done.
+* **Autonomous Browser Use:** Built-in 37-tool browser engine navigates complex websites, logs into portals with your existing sessions, fills forms, and extracts clean information without ads or clutter.
+* **Native Computer Use:** Controls desktop software across Windows, macOS, and Linux. Takes screenshots, locates UI controls with visual grounding & OCR, clicks buttons, and types text to automate tasks in apps without APIs.
 
 ### 3. 💻 Autonomous Coding (With a Safety Net)
 * **Your Favorite Agents in One Home:** Prefer Claude Code or Aider for terminal work? Love Cline for in-editor patching? EveryAIOS hosts them seamlessly in the same app.
-* **1-Click Time-Travel Undo:** Every single code change is automatically checkpointed. If an agent makes a mistake, click **"Undo"** to instantly roll your files back to the exact previous second.
+* **1-Click Time-Travel Undo:** Every single code change is automatically saved in an isolated version checkpoint. If an agent makes a mistake, click **"Undo"** to instantly roll your files back to the exact previous second.
 * **Never Guesses Edits:** The code engine insists on finding the exact right spot before changing files. If an edit is ambiguous, it stops and asks rather than breaking your project.
 
 ---
@@ -143,6 +144,8 @@ cd src-tauri && cargo tauri dev
 
 * 📁 **Clean up a messy 5GB Downloads folder:** Drop the folder in. It spots duplicates by file hash, proposes a tidy organization plan, and moves everything once you click approve.
 * 📊 **Update a company budget model:** Drop in an Excel spreadsheet. It recalculates the formulas, updates the summary sheet, and highlights discrepancies without changing your formulas into static text.
+* 🌐 **Autonomous Browser Use:** Ask it to research competitor pricing across 10 vendor sites. It logs into your supplier portal, traverses paginated results, downloads PDFs, and compiles an organized comparison matrix.
+* 🖥️ **Desktop Computer Use:** Tell it to extract 50 entries from a spreadsheet and enter them into a legacy desktop accounting program. It sees the screen, navigates menus, types the fields, and submits each record automatically.
 * 🛠️ **Debug a failing test suite:** Give it a repository. It reads compiler errors, pinpoints the broken line, applies a surgical fix, runs the tests to prove it works, and gives you a 1-click rollback if you want to revert.
 * 🔍 **Write a comprehensive briefing:** Give it a topic. It browses dozens of sources, filters out marketing fluff, keeps exact links to every claim, and formats a clean report or slide deck.
 
@@ -163,10 +166,17 @@ Instead of juggling separate chat subscriptions, web spreadsheets, browser exten
 - **Word & PDF Processing:** Read, edit, and generate `.docx` and `.pdf` files. Extract tables, fill out forms, redact sensitive information, and summarize contracts with precision.
 - **Zero Token Waste:** All spreadsheet calculations and document parsing are performed locally on your device—saving your precious AI tokens for actual thinking.
 
-### 🌐 Autonomous Web Research & Browser Actions
-- **Deep Multi-Source Research:** Ask any complex question. EveryAIOS searches the web across multiple independent sources, filters out marketing clutter, and produces comprehensive research memos backed by exact source citations.
-- **Smart Web Actions:** The built-in browser engine can navigate web portals, search catalogs, interact with web apps, and extract structured data automatically.
-- **Zero Login Headaches:** Safely reuse your existing authenticated browser sessions to look up information behind logins without exposing your passwords.
+### 🌐 Autonomous Browser Use & Web Automation
+- **37 Native Browser Actions:** Navigate websites, click buttons, fill multi-step forms, handle dynamic Single Page Apps (SPAs), scroll, and take full-page captures.
+- **Zero-Auth Session Vault:** Safely reuse your existing logged-in sessions (GitHub, AWS console, CRM, internal company intranets) without ever typing passwords into AI prompts or exposing cookies to third parties.
+- **Deep Research & Fact Verification:** Autonomously searches multiple independent web sources, filters marketing fluff, and builds rich citation graphs with direct links to every source.
+- **Accessibility-Aware Navigation:** Reads the web the way screen readers do—using real semantic accessibility trees (a11y) so it never gets confused by popups, ads, or floating banners.
+
+### 🖥️ Native Computer Use & Desktop Automation
+- **Control Real Desktop Software:** Go beyond the browser. EveryAIOS can interact with native desktop applications across Windows, macOS, and Linux—including legacy business software, ERPs, Photoshop, CAD, file managers, and terminal utilities.
+- **See & Act (Visual Grounding + OCR):** Uses high-resolution screen capture, OCR, and vision AI to locate buttons, text inputs, dropdowns, and icons on your screen just like a human operator.
+- **Natural Keyboard & Mouse Interaction:** Moves the cursor, performs clicks, drags, and types keyboard shortcuts naturally to execute multi-step desktop workflows.
+- **Always in Your Control:** Watch the agent work live on your screen. You can pause, review, or halt computer use at any millisecond with a single click or keyboard shortcut.
 
 ### 💻 Powerful Coding & Instant 1-Click Rollback
 - **Bring Your Favorite Coding Agents:** Connect the tools you already love—Claude Code, Cline, Aider, OpenCode, or our Native Agent—directly inside EveryAIOS.
@@ -216,6 +226,15 @@ Yes! EveryAIOS natively supports the open Agent Client Protocol (ACP). If you al
 <summary><strong>Where are my API keys stored?</strong></summary>
 <br/>
 Your API keys are stored locally on your device in an encrypted SQLCipher database using AES-256 encryption. They never leave your machine except in direct, encrypted HTTPS requests to the official provider endpoints (e.g., `api.anthropic.com` or `api.openai.com`). Keys are never sent to any third-party relay or proxy.
+</details>
+
+<details>
+<summary><strong>How do Browser Use and Computer Use work in EveryAIOS?</strong></summary>
+<br/>
+EveryAIOS includes both a <strong>built-in 37-action browser engine</strong> and a <strong>native desktop computer use agent</strong>:
+1. <strong>Autonomous Browser Use:</strong> The agent navigates websites, clicks elements using semantic accessibility trees, fills forms, performs multi-source research, and safely reuses your logged-in web sessions without exposing passwords.
+2. <strong>Native Computer Use:</strong> On Windows, macOS, and Linux, the agent captures high-resolution screen snapshots, uses vision AI and OCR to recognize UI controls, and interacts via mouse and keyboard to operate desktop applications that have no APIs.
+3. <strong>Safety & Control:</strong> You watch every move live on screen and can pause, inspect, or stop the agent with a single keystroke or click.
 </details>
 
 ---

@@ -125,12 +125,26 @@ export interface AcpPromptResult {
   executionId?: string;
 }
 
-/** One agent's install state (F8 — flip Install ↔ Launch in the picker). */
+/** P66 — non-secret runtime provenance. Catalog membership is not occupancy. */
+export type RuntimeLocation =
+  | { kind: 'managed'; source: 'everyaios_install'; executable?: string; version?: string | null; verifiedAt?: string | null }
+  | { kind: 'path' | 'windows_path'; source: 'path_probe' | 'app_paths' | 'user_selected'; executable: string; version?: string | null; verifiedAt?: string | null }
+  | { kind: 'package_manager'; source: 'path_probe' | 'everyaios_install'; manager: 'npx' | 'uvx'; command?: string; package?: string; version?: string | null; verifiedAt?: string | null }
+  | { kind: 'wsl'; source: 'wsl_probe' | 'user_selected'; distro: string; linuxPath: string; windowsLauncher: string; version?: string | null; verifiedAt?: string | null }
+  | { kind: 'unavailable'; source: 'registry_catalog' | 'path_probe'; reason: string };
+
+/** One agent's install state (F8/P66 — flip Install ↔ Launch honestly). */
 export interface InstallState {
+  /** EveryAIOS-managed install or package-manager-ready launch path. */
   installed: boolean;
+  /** A catalog entry has a verified runtime location, including WSL-only. */
+  discovered?: boolean;
+  /** The selected native launch adapter can currently start it. */
+  launchable?: boolean;
   version?: string;
   kind?: string;
   binaryPath?: string | null;
+  location?: RuntimeLocation;
 }
 
 /** The install-request verdict (Guard-2 ticket minted, or auto-allowed).

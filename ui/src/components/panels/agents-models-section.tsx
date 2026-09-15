@@ -345,16 +345,17 @@ function StatusBadge({ status }: { status: AgentRuntime['status'] }) {
   const tone =
     status === 'installed'
       ? 'bg-emerald-500/15 text-emerald-300'
-      : status === 'updating'
-        ? 'bg-orange-500/15 text-orange-300'
-        : status === 'disabled'
-          ? 'bg-rose-500/15 text-rose-300'
-          : 'bg-zinc-500/15 text-zinc-400'
-  // P55.4 — never label a runtime "available". A registry/catalog entry is not
-  // an install: the honest label for a binary this machine does not have is
-  // `not installed`.
-  const label =
-    status === 'available' ? 'not installed' : status
+      : status === 'discovered'
+        ? 'bg-sky-500/15 text-sky-300'
+        : status === 'updating'
+          ? 'bg-blue-500/15 text-blue-300'
+          : status === 'disabled'
+            ? 'bg-rose-500/15 text-rose-300'
+            : 'bg-zinc-500/15 text-zinc-400'
+  // P55.4/P66 — catalog membership is not occupancy. `discovered` means a
+  // verified location exists; it does not necessarily mean the current
+  // adapter can launch it (for example, WSL before the WSL adapter lands).
+  const label = status === 'available' ? 'not installed' : status
   return (
     <Badge className={cn('text-[9px] capitalize', tone)}>
       <CircleDot className="h-2.5 w-2.5" />
@@ -459,7 +460,7 @@ function AgentCard({
     <div
       className={cn(
         'rounded-lg border bg-background/40 p-3 transition-all hover-lift border-glow',
-        isSelected ? 'border-orange-500/60 bg-orange-500/5 gradient-border' : 'border-border/60 hover:border-border',
+        isSelected ? 'border-sky-500/60 bg-sky-500/5 gradient-border' : 'border-border/60 hover:border-border',
       )}
     >
       <div className="flex items-start gap-2.5">
@@ -469,12 +470,19 @@ function AgentCard({
             <span className="text-[13px] font-semibold text-foreground">{agent.name}</span>
             <StatusBadge status={agent.status} />
             {isSelected && (
-              <Badge className="bg-orange-500/20 text-[9px] text-orange-300">active</Badge>
+              <Badge className="bg-sky-500/20 text-[9px] text-sky-300">active</Badge>
             )}
           </div>
           <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
             {agent.vendor} · v{agent.version ?? '—'} · {agent.path ?? 'no path'}
           </div>
+          {agent.location && (
+            <div className="mt-0.5 flex flex-wrap gap-x-2 text-[9px] text-muted-foreground/70">
+              <span>source: {agent.location.source.replaceAll('_', ' ')}</span>
+              <span>location: {agent.location.kind}</span>
+              {agent.location.kind === 'wsl' && <span>distro: {agent.location.distro}</span>}
+            </div>
+          )}
           <p className="mt-1 text-[11px] text-muted-foreground">{agent.tagline}</p>
         </div>
       </div>
@@ -531,13 +539,13 @@ function AgentCard({
       {configOpen && usable && !native && <AgentBackendPanel agentId={agent.id} />}
 
       <div className="mt-2.5 flex items-center gap-1">
-        {agent.status === 'installed' || agent.status === 'updating' || agent.id === 'everyaios-native' ? (
+        {usable || agent.id === 'everyaios-native' ? (
           <Button
             size="sm"
             variant={isSelected ? 'default' : 'outline'}
             className={cn(
               'h-7 px-2 text-[10px]',
-              isSelected && 'bg-orange-500 text-black hover:bg-orange-400',
+              isSelected && 'bg-sky-500 text-black hover:bg-sky-400',
             )}
             onClick={() => setSelectedAgent(agent.id)}
             disabled={isSelected}
@@ -805,7 +813,7 @@ function NativeModelCatalog() {
                   className={cn(
                     'transition-colors',
                     isActive
-                      ? 'bg-orange-500/10'
+                      ? 'bg-sky-500/10'
                       : compareIds.includes(m.id)
                         ? 'bg-blue-500/10'
                         : 'hover:bg-accent/30',
@@ -817,8 +825,8 @@ function NativeModelCatalog() {
                       className={cn(
                         'h-3.5 w-3.5 rounded border transition-colors',
                         compareIds.includes(m.id)
-                          ? 'bg-orange-500 border-orange-500'
-                          : 'border-border hover:border-orange-500/40'
+                          ? 'bg-sky-500 border-sky-500'
+                          : 'border-border hover:border-sky-500/40'
                       )}
                     />
                   </td>
@@ -834,7 +842,7 @@ function NativeModelCatalog() {
                       </span>
                       <span className="font-medium text-foreground">{m.label}</span>
                       {isActive && (
-                        <Badge className="bg-orange-500/20 text-[8px] text-orange-300">active</Badge>
+                        <Badge className="bg-sky-500/20 text-[8px] text-sky-300">active</Badge>
                       )}
                     </div>
                   </td>
@@ -847,7 +855,7 @@ function NativeModelCatalog() {
                   <td className="px-2 py-1.5 text-right font-mono text-[10px] text-emerald-300">
                     {formatPrice(m.inputPrice)}
                   </td>
-                  <td className="px-2 py-1.5 text-right font-mono text-[10px] text-orange-300">
+                  <td className="px-2 py-1.5 text-right font-mono text-[10px] text-sky-300">
                     {formatPrice(m.outputPrice)}
                   </td>
                   <td className="px-2 py-1.5">
@@ -897,7 +905,7 @@ function NativeModelCatalog() {
         label="API keys (BYOK)"
         desc="Per-provider keys live in the API Keys section"
       >
-        <KeyRound className="h-4 w-4 text-orange-400" />
+        <KeyRound className="h-4 w-4 text-sky-400" />
       </Row>
 
     {/* Model Comparison Dialog */}
@@ -905,7 +913,7 @@ function NativeModelCatalog() {
       <DialogContent className="max-w-2xl glass-panel">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
-            <GitCompare className="h-4 w-4 text-orange-500" />
+            <GitCompare className="h-4 w-4 text-sky-500" />
             Model Comparison
           </DialogTitle>
         </DialogHeader>
@@ -936,7 +944,7 @@ function NativeModelCatalog() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Output price</span>
-                      <span className="font-mono text-orange-300">{formatPrice(m.outputPrice)} / 1M</span>
+                      <span className="font-mono text-sky-300">{formatPrice(m.outputPrice)} / 1M</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Available</span>
@@ -954,7 +962,7 @@ function NativeModelCatalog() {
                     {m.recommendedFor && (
                       <div>
                         <div className="text-muted-foreground mb-0.5">Best for</div>
-                        <span className="text-orange-300 text-[10px]">{m.recommendedFor}</span>
+                        <span className="text-sky-300 text-[10px]">{m.recommendedFor}</span>
                       </div>
                     )}
                   </div>
@@ -1004,7 +1012,7 @@ function RoutingTab() {
       desc="Occupancy is the composer picker: Browse, Computer use, Office, and the right rail all run as the currently picked Chief. This table is not that path. Auto-route only affects model-tier (A7) inside the same Chief — it must not swap Claude/Codex/Grok per view."
       action={
         <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background/40 px-2 py-1">
-          <Route className="h-3 w-3 text-orange-400" />
+          <Route className="h-3 w-3 text-sky-400" />
           <span className="text-[10px] font-medium text-foreground">Auto-route</span>
           <Switch checked={autoRoute} onCheckedChange={setAutoRoute} className="scale-75" />
         </div>
@@ -1066,7 +1074,7 @@ function RoutingTab() {
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-md border border-border/60 bg-background/40 p-2">
           <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground">
-            <Zap className="h-3 w-3 text-orange-400" />
+            <Zap className="h-3 w-3 text-sky-400" />
             Tokens tracked
           </div>
           <div className="mt-1 font-mono text-lg text-foreground">
@@ -1110,11 +1118,11 @@ export default function AgentsModelsSection() {
     >
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="h-8 bg-background/40">
-          <TabsTrigger value="agents" className="text-[11px] data-[state=active]:bg-orange-500/15 data-[state=active]:text-orange-300">
+          <TabsTrigger value="agents" className="text-[11px] data-[state=active]:bg-sky-500/15 data-[state=active]:text-sky-300">
             <Boxes className="mr-1 h-3 w-3" />
             Runtimes
           </TabsTrigger>
-          <TabsTrigger value="routing" className="text-[11px] data-[state=active]:bg-orange-500/15 data-[state=active]:text-orange-300">
+          <TabsTrigger value="routing" className="text-[11px] data-[state=active]:bg-sky-500/15 data-[state=active]:text-sky-300">
             <Route className="mr-1 h-3 w-3" />
             Routing
           </TabsTrigger>

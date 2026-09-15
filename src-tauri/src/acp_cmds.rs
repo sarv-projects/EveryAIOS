@@ -88,21 +88,40 @@ pub fn chief_default_set(primary_chief: String) -> Result<String, String> {
 /// P53.3 — installed-ness for Chief occupancy: `inbuilt` always; otherwise an
 /// EveryAIOS install record **or** a PATH-discovered binary (the same two legs
 /// `acp_install_status` reports — one predicate, no second definition).
+fn install_outcome_usable(outcome: &everyaios_acp::InstallOutcome) -> bool {
+    match outcome.kind.as_str() {
+        // A stale pointer is not occupancy. The executable must still be
+        // present before Settings or Chief can call this agent installed.
+        "binary" | "path" => outcome
+            .binary_path
+            .as_deref()
+            .map(std::path::Path::is_file)
+            .unwrap_or(false),
+        // npx/uvx are self-installing at launch; readiness means their
+        // package manager is available, not that EveryAIOS downloaded the
+        // package into its own tree.
+        "npx" => resolve_on_path("npx").is_some(),
+        "uvx" => resolve_on_path("uvx").is_some(),
+        _ => false,
+    }
+}
+
+fn resolve_native_binary(command: &str) -> Option<std::path::PathBuf> {
+    resolve_on_path(command).or_else(|| discover_windows_app_path(command))
+}
+
 fn agent_installed(agent_id: &str) -> bool {
     if agent_id == "inbuilt" || agent_id == "everyaios" {
         return true;
     }
     let registry = launch_registry();
-    if installer().installed(agent_id).is_some() {
-        return true;
+    if let Some(outcome) = installer().installed(agent_id) {
+        return install_outcome_usable(&outcome);
     }
     match registry.get(agent_id).map(|m| &m.distribution) {
         Some(Distribution::Binary { command, .. }) => {
-            !command.is_empty() && resolve_on_path(command).is_some()
+            !command.is_empty() && resolve_native_binary(command).is_some()
         }
-        // npx/uvx agents fetch on demand — "installed" means the package
-        // manager itself resolves on PATH (launch would otherwise fail
-        // closed at spawn with no npx/uvx at all).
         Some(Distribution::Npx { .. }) => resolve_on_path("npx").is_some(),
         Some(Distribution::Uvx { .. }) => resolve_on_path("uvx").is_some(),
         None => false,
@@ -417,13 +436,159 @@ fn resolve_on_path(name: &str) -> Option<std::path::PathBuf> {
     None
 }
 
-/// F8 — **install state** for every registry agent (installed? version? kind?
-/// binary path?). The picker reads this once to flip Install ↔ Launch.
-///
-/// Install state = EveryAIOS-installed records **plus PATH auto-discovery**: a
-/// `Distribution::Binary` agent whose command resolves on PATH (or a Windows
-/// `.exe`/`.cmd`/`.bat` shim) is reported `installed` with `kind: "path"` —
-/// honest "already on this machine", no download implied.
+/// Read a Windows App Paths registration without invoking a shell. App Paths
+/// is a discovery source only: its result is never treated as a managed
+/// EveryAIOS install and is never persisted as an install record.
+#[cfg(windows)]
+fn discover_windows_app_path(command: &str) -> Option<std::path::PathBuf> {
+    use std::process::Command;
+
+    let exe = command
+        .strip_suffix(".exe")
+        .or_else(|| command.strip_suffix(".EXE"))
+        .unwrap_or(command);
+    let exe = format!("{exe}.exe");
+    for hive in ["HKCU", "HKLM"] {
+        let key = format!(
+            r"{hive}\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{exe}"
+        );
+        let output = Command::new("reg")
+            .args(["query", &key, "/ve"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            continue;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        for line in text.lines() {
+            if let Some((_, value)) = line.split_once("REG_SZ") {
+                let value = value.trim().trim_matches('"');
+                let path = std::path::PathBuf::from(value);
+                if path.is_file() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn discover_windows_app_path(_command: &str) -> Option<std::path::PathBuf> {
+    None
+}
+
+/// Discover a CLI installed only inside WSL. This is intentionally separate
+/// from Windows PATH/App Paths: the returned Linux path must be launched via
+/// `wsl.exe -d <distro> -- <command>`, never as a Windows executable.
+#[cfg(windows)]
+fn discover_wsl_path(command: &str) -> Option<(String, String)> {
+    use std::process::Command;
+
+    let output = Command::new("wsl.exe").args(["-l", "-q"]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let distros = String::from_utf8_lossy(&output.stdout);
+    for distro in distros.lines().map(str::trim).filter(|d| !d.is_empty()) {
+        let output = Command::new("wsl.exe")
+            .args(["-d", distro, "--", "which", command])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            continue;
+        }
+        let linux_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !linux_path.is_empty() && !linux_path.contains('\\') {
+            return Some((distro.to_string(), linux_path));
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn discover_wsl_path(_command: &str) -> Option<(String, String)> {
+    None
+}
+
+/// Build the public, non-secret runtime location record consumed by Settings
+/// and the picker. Catalog membership is never used as occupancy evidence.
+fn runtime_location_json(
+    manifest: &everyaios_acp::HarnessManifest,
+    install: Option<&everyaios_acp::InstallOutcome>,
+) -> serde_json::Value {
+    if let Some(o) = install {
+        let kind = match o.kind.as_str() {
+            "path" => if cfg!(windows) { "windows_path" } else { "path" },
+            "binary" => "managed",
+            "npx" => "package_manager",
+            "uvx" => "package_manager",
+            _ => "unavailable",
+        };
+        return serde_json::json!({
+            "kind": kind,
+            "source": if o.kind == "path" { "path_probe" } else { "everyaios_install" },
+            "executable": o.binary_path.as_ref().map(|p| p.to_string_lossy().into_owned()),
+            "version": if o.version == "path" { serde_json::Value::Null } else { serde_json::json!(o.version) },
+            "verifiedAt": serde_json::Value::Null,
+        });
+    }
+
+    match &manifest.distribution {
+        Distribution::Binary { command, .. } if !command.is_empty() => {
+            if let Some(path) = resolve_on_path(command) {
+                return serde_json::json!({
+                    "kind": if cfg!(windows) { "windows_path" } else { "path" },
+                    "source": "path_probe",
+                    "executable": path.to_string_lossy(),
+                    "version": serde_json::Value::Null,
+                    "verifiedAt": serde_json::Value::Null,
+                });
+            }
+            if let Some(path) = discover_windows_app_path(command) {
+                return serde_json::json!({
+                    "kind": "windows_path",
+                    "source": "app_paths",
+                    "executable": path.to_string_lossy(),
+                    "version": serde_json::Value::Null,
+                    "verifiedAt": serde_json::Value::Null,
+                });
+            }
+            if let Some((distro, linux_path)) = discover_wsl_path(command) {
+                return serde_json::json!({
+                    "kind": "wsl",
+                    "source": "wsl_probe",
+                    "distro": distro,
+                    "linuxPath": linux_path,
+                    "windowsLauncher": "wsl.exe",
+                    "version": serde_json::Value::Null,
+                    "verifiedAt": serde_json::Value::Null,
+                });
+            }
+            serde_json::json!({ "kind": "unavailable", "source": "path_probe", "reason": "executable not found on PATH, Windows App Paths, or WSL" })
+        }
+        Distribution::Npx { package, .. } => {
+            if let Some(path) = resolve_on_path("npx") {
+                serde_json::json!({ "kind": "package_manager", "source": "path_probe", "manager": "npx", "command": path.to_string_lossy(), "package": package })
+            } else {
+                serde_json::json!({ "kind": "unavailable", "source": "path_probe", "reason": "npx is not available on the effective PATH" })
+            }
+        }
+        Distribution::Uvx { package, .. } => {
+            if let Some(path) = resolve_on_path("uvx") {
+                serde_json::json!({ "kind": "package_manager", "source": "path_probe", "manager": "uvx", "command": path.to_string_lossy(), "package": package })
+            } else {
+                serde_json::json!({ "kind": "unavailable", "source": "path_probe", "reason": "uvx is not available on the effective PATH" })
+            }
+        }
+        Distribution::Binary { .. } => serde_json::json!({ "kind": "unavailable", "source": "registry_catalog", "reason": "manifest has no executable command" }),
+    }
+}
+
+/// F8/P66 — install state plus exact non-secret runtime provenance for every
+/// registry agent. Managed installs, user PATH/App Paths discoveries, and
+/// npx/uvx readiness are distinct. WSL is reported as a separate discovery
+/// location and is never treated as a native Windows executable.
 #[tauri::command]
 pub fn acp_install_status() -> Result<serde_json::Value, String> {
     let registry = launch_registry();
@@ -433,44 +598,46 @@ pub fn acp_install_status() -> Result<serde_json::Value, String> {
         if m.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
             continue;
         }
-        match inst.installed(&m.id) {
-            Some(o) => {
-                out.insert(
-                    m.id.clone(),
-                    serde_json::json!({
-                        "installed": true,
-                        "version": o.version,
-                        "kind": o.kind,
-                        "binaryPath": o.binary_path.map(|p| p.to_string_lossy().into_owned()),
-                    }),
-                );
-            }
-            None => {
-                // Auto-discovery leg: the user's own PATH install counts as
-                // installed (kind "path", version unknown — never fabricated).
-                if let Distribution::Binary { command, .. } = &m.distribution {
-                    if !command.is_empty() {
-                        if let Some(p) = resolve_on_path(command) {
-                            // P53.7 — write the discovered absolute path back
-                            // before reporting occupancy. A later launch can
-                            // therefore avoid a bare-name PATH guess.
-                            let _ = inst.record_path(&m.id, &p);
-                            out.insert(
-                                m.id.clone(),
-                                serde_json::json!({
-                                    "installed": true,
-                                    "version": serde_json::Value::Null,
-                                    "kind": "path",
-                                    "binaryPath": p.to_string_lossy().into_owned(),
-                                }),
-                            );
-                            continue;
-                        }
+        let mut installed = inst
+            .installed(&m.id)
+            .filter(install_outcome_usable);
+        if installed.is_none() {
+            if let Distribution::Binary { command, .. } = &m.distribution {
+                if !command.is_empty() {
+                    if let Some(path) = resolve_native_binary(command) {
+                        // Persist the exact user-owned path so later launches
+                        // do not depend on a mutable child PATH.
+                        let _ = inst.record_path(&m.id, &path);
+                        installed = inst.installed(&m.id);
                     }
                 }
-                out.insert(m.id.clone(), serde_json::json!({ "installed": false }));
             }
         }
+        let location = runtime_location_json(m, installed.as_ref());
+        let location_kind = location
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unavailable");
+        let package_manager_ready = matches!(location_kind, "package_manager");
+        let discovered = location_kind != "unavailable";
+        // App Paths is launchable through the native Windows executable branch;
+        // WSL is discovered but deliberately not launchable until the WSL
+        // transport adapter exists.
+        let launchable = installed.is_some()
+            || package_manager_ready
+            || matches!(location_kind, "path" | "windows_path");
+        out.insert(
+            m.id.clone(),
+            serde_json::json!({
+                "installed": installed.is_some() || package_manager_ready,
+                "discovered": discovered,
+                "launchable": launchable,
+                "version": installed.as_ref().and_then(|o| if o.version == "path" { None } else { Some(o.version.clone()) }),
+                "kind": installed.as_ref().map(|o| o.kind.clone()).or_else(|| package_manager_ready.then(|| "package_manager".to_string())),
+                "binaryPath": installed.as_ref().and_then(|o| o.binary_path.as_ref().map(|p| p.to_string_lossy().into_owned())),
+                "location": location,
+            }),
+        );
     }
     Ok(serde_json::Value::Object(out))
 }
@@ -703,8 +870,7 @@ pub fn acp_launch(
             registry.get(&agent_id).map(|m| &m.distribution),
             Some(Distribution::Binary { .. })
         ) =>
-        {
-            resolve_on_path(&p.command).map(|p| p.to_string_lossy().into_owned())
+        {                resolve_native_binary(&p.command).map(|p| p.to_string_lossy().into_owned())
         }
         _ => None,
     };
@@ -1592,6 +1758,44 @@ mod tests {
             resolve_on_path("definitely-not-a-real-everyaios-binary-xyz").is_none(),
             "unknown names must not resolve"
         );
+    }
+
+    #[test]
+    fn stale_managed_install_is_not_occupancy() {
+        let root = std::env::temp_dir().join(format!(
+            "everyaios-stale-agent-{}-{}",
+            std::process::id(),
+            ACP_COUNTER.load(Ordering::Relaxed)
+        ));
+        let outcome = everyaios_acp::InstallOutcome {
+            agent_id: "test-agent".into(),
+            version: "1.0.0".into(),
+            kind: "binary".into(),
+            binary_path: Some(root.join("missing.exe")),
+            env: vec![],
+        };
+        assert!(!install_outcome_usable(&outcome));
+        std::fs::create_dir_all(&root).unwrap();
+        let binary = root.join("agent.exe");
+        std::fs::write(&binary, b"test").unwrap();
+        let usable = everyaios_acp::InstallOutcome {
+            binary_path: Some(binary),
+            ..outcome
+        };
+        assert!(install_outcome_usable(&usable));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn package_manager_install_requires_manager_readiness() {
+        let outcome = everyaios_acp::InstallOutcome {
+            agent_id: "test-agent".into(),
+            version: "1.0.0".into(),
+            kind: "npx".into(),
+            binary_path: None,
+            env: vec![],
+        };
+        assert_eq!(install_outcome_usable(&outcome), resolve_on_path("npx").is_some());
     }
 
     #[test]
