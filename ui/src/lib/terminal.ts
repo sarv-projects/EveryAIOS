@@ -251,6 +251,39 @@ export async function terminalHistoryContext(
   )
 }
 
+/**
+ * P68.8 — replay a session's retained output after a view reattaches.
+ *
+ * Bytes come back base64-encoded, exactly like a live `data` frame, so the same
+ * decoder feeds xterm and xterm keeps owning VT interpretation. `dropped > 0`
+ * means our cursor had already been evicted from the ring: the replay is then
+ * *truncated* and the caller must label it rather than present a seamless
+ * scrollback that hides a gap. `null` is returned off-Tauri only; a real read
+ * failure rejects (via `nativeCall`) so the caller can say the replay is
+ * unavailable instead of showing an empty scrollback as if it were complete.
+ */
+export interface TerminalReplayResponse {
+  ptyId: string
+  /** Newest retained cursor — pass back as `fromSeq` to fetch only updates. */
+  seq: number
+  /** Retained output, base64 (same shape as a `data` event frame). */
+  data: string
+  /** Bytes missed because the cursor was evicted. Nonzero ⇒ truncated view. */
+  dropped: number
+  /** The ring's capacity in bytes — the honest size of the retention window. */
+  capacity: number
+}
+
+export async function terminalReplay(
+  ptyId: string,
+  fromSeq?: number,
+): Promise<TerminalReplayResponse | null> {
+  if (!inTauri()) return null
+  return nativeCall('terminal replay', () =>
+    invoke<TerminalReplayResponse>('terminal_replay', { ptyId, fromSeq: fromSeq ?? null }),
+  )
+}
+
 /** Subscribe to `terminal-event` frames. Returns an unsubscribe fn. */
 export function onTerminalEvent(cb: (ev: TerminalEvent) => void): UnlistenFn {
   if (!inTauri()) return () => {}

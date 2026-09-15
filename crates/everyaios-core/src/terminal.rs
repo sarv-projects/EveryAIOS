@@ -28,17 +28,21 @@
 //! Detection is pure where possible (fs + env injected), so the tests run
 //! the real algorithms without spawning shells.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
+// P68.8/P68.9 — re-exported: `PtyHost` hands these back (`tracker()`) and the
+// `script.run` executor reads a session's records, so a consumer of the PTY
+// plane gets the record types from the plane itself rather than having to reach
+// into the shell-integration module.
+pub use crate::shell_integration::{CommandRecord, CommandTracker};
 use crate::shell_integration::{
-    CommandRecord, CommandTracker, IntegrationEvent, IntegrationParser, IntegrationShell, Segment,
-    INJECTION_ENV, NONCE_ENV,
+    IntegrationEvent, IntegrationParser, IntegrationShell, Segment, INJECTION_ENV, NONCE_ENV,
 };
 
 // ---------------------------------------------------------------------------
@@ -260,6 +264,147 @@ pub struct TerminalConfig {
     /// facts (no cwd, no exit codes, no command history for the agent).
     #[serde(rename = "shellIntegration", default = "default_true")]
     pub shell_integration: bool,
+    /// P68.8 — retained output bytes per PTY session (the replay ring).
+    /// `None` = [`DEFAULT_SCROLLBACK_BYTES`]. Normalized by
+    /// [`TerminalConfig::scrollback_bytes`], which clamps it so a config value
+    /// can neither starve replay nor grow unbounded.
+    #[serde(
+        rename = "scrollbackBytes",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub scrollback_bytes: Option<usize>,
+}
+
+// ---------------------------------------------------------------------------
+// P68.8 — output ring buffer + replay after reattach
+// ---------------------------------------------------------------------------
+
+/// Retained output per session when `terminal.scrollbackBytes` is unset.
+/// 256 KiB is ~4× a full 80×24 screen of dense TUI output and ~2.5k lines of
+/// plain text — enough that a view closed for a moment replays seamlessly,
+/// small enough that a dozen live sessions stay trivial in memory.
+pub const DEFAULT_SCROLLBACK_BYTES: usize = 256 * 1024;
+/// Floor: below this the ring is a decoration (a single `ls -l` would evict it).
+/// `0` is deliberately *not* reachable through config — it is only reachable by
+/// constructing [`TerminalRing`] directly, where it means "retention disabled".
+pub const MIN_SCROLLBACK_BYTES: usize = 8 * 1024;
+/// Ceiling: 16 MiB per session bounds the worst case (a `yes` loop) so a
+/// runaway program cannot make the host the memory fault line.
+pub const MAX_SCROLLBACK_BYTES: usize = 16 * 1024 * 1024;
+
+impl TerminalConfig {
+    /// P68.8 — the effective replay-ring capacity, clamped to
+    /// [`MIN_SCROLLBACK_BYTES`]..=[`MAX_SCROLLBACK_BYTES`].
+    pub fn scrollback_bytes(&self) -> usize {
+        self.scrollback_bytes
+            .unwrap_or(DEFAULT_SCROLLBACK_BYTES)
+            .clamp(MIN_SCROLLBACK_BYTES, MAX_SCROLLBACK_BYTES)
+    }
+}
+
+/// A bounded, byte-oriented ring over a session's rendered output.
+///
+/// The cursor is a **byte sequence** (`seq`), not an index, so a consumer that
+/// already rendered some of the stream can ask for only what it has not seen.
+/// When a cursor falls outside the retained window the difference is reported
+/// as a gap ([`TerminalReplay::dropped`]) rather than silently stitched — the
+/// same honesty rule the shell-reporting path follows for untrusted records.
+#[derive(Debug, Clone)]
+pub struct TerminalRing {
+    buf: VecDeque<u8>,
+    /// Maximum retained bytes; `0` disables retention (cursor still advances).
+    cap: usize,
+    /// Sequence of the oldest retained byte — i.e. bytes discarded so far.
+    start: u64,
+    /// Total bytes ever pushed (`seq()`).
+    total: u64,
+}
+
+impl TerminalRing {
+    pub fn new(cap: usize) -> Self {
+        Self {
+            buf: VecDeque::new(),
+            cap,
+            start: 0,
+            total: 0,
+        }
+    }
+
+    /// Append rendered output; returns the new cursor. Oldest bytes are evicted
+    /// until the ring is within capacity.
+    pub fn push(&mut self, bytes: &[u8]) -> u64 {
+        let n = bytes.len() as u64;
+        if self.cap == 0 || bytes.is_empty() {
+            self.total += n;
+            self.start = self.total;
+            return self.total;
+        }
+        self.buf.extend(bytes.iter().copied());
+        self.total += n;
+        if self.buf.len() > self.cap {
+            let excess = self.buf.len() - self.cap;
+            self.buf.drain(..excess);
+        }
+        self.start = self.total - self.buf.len() as u64;
+        self.total
+    }
+
+    /// The newest cursor (pass back as `fromSeq` on the next replay).
+    pub fn seq(&self) -> u64 {
+        self.total
+    }
+
+    /// Bytes dropped so far (== the sequence of the oldest retained byte).
+    pub fn discarded(&self) -> u64 {
+        self.start
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.cap
+    }
+
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
+
+    /// Everything retained, plus the current cursor (gap is always zero here).
+    pub fn snapshot(&self) -> (u64, Vec<u8>) {
+        (self.total, self.buf.iter().copied().collect())
+    }
+
+    /// Bytes written strictly after `from`, plus the new cursor and how many
+    /// bytes lie before the retained window (`dropped > 0` ⇒ the caller's
+    /// cursor was already evicted and the replay is a truncated view).
+    pub fn since(&self, from: u64) -> (u64, Vec<u8>, u64) {
+        if from >= self.total {
+            return (self.total, Vec::new(), 0);
+        }
+        let dropped = self.start.saturating_sub(from);
+        let offset = from.saturating_sub(self.start) as usize;
+        let bytes: Vec<u8> = self.buf.iter().skip(offset).copied().collect();
+        (self.total, bytes, dropped)
+    }
+}
+
+/// One replay response: the bytes to render, the cursor to resume from, and an
+/// explicit statement of any gap.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalReplay {
+    /// Newest retained cursor — pass back as `fromSeq` to fetch only updates.
+    pub seq: u64,
+    /// Output to render (empty is honest: "nothing retained since your cursor").
+    pub bytes: Vec<u8>,
+    /// Bytes the caller missed because its cursor was evicted. Nonzero means
+    /// the replay is a truncated view and must be labelled as such.
+    pub dropped: u64,
+    /// The ring's capacity, so the UI can state its retention window honestly.
+    pub capacity: usize,
 }
 
 pub type ProfileMap = HashMap<String, TerminalProfile>;
@@ -1269,6 +1414,9 @@ pub struct PtySession {
     /// Structured facts the shell reported — the source for the terminal's
     /// cwd, exit decorations, recent-command picker and chat context.
     pub tracker: Arc<Mutex<CommandTracker>>,
+    /// P68.8 — retained rendered output for replay after a view reattach.
+    /// Written by the reader thread; read by [`PtyHost::replay`].
+    pub ring: Arc<Mutex<TerminalRing>>,
     writer: Mutex<Box<dyn Write + Send>>,
     killer: Box<dyn portable_pty::ChildKiller + Send + Sync>,
     exited: Arc<AtomicU64>, // 0 = running; otherwise exit-code bits
@@ -1307,6 +1455,10 @@ pub struct PtyHost {
     /// Tauri's shared state. Only `openpty` touches it — a brief lock.
     pty_system: Mutex<Box<dyn portable_pty::PtySystem + Send>>,
     counter: AtomicU64,
+    /// P68.8 — replay-ring capacity (bytes) for sessions spawned from now on,
+    /// set once at boot from `terminal.scrollbackBytes`. Read at spawn so a
+    /// live session's scrollback never silently shrinks under the user.
+    scrollback_bytes: Arc<AtomicUsize>,
 }
 
 impl Default for PtyHost {
@@ -1321,7 +1473,23 @@ impl PtyHost {
             ptys: Mutex::new(HashMap::new()),
             pty_system: Mutex::new(portable_pty::native_pty_system()),
             counter: AtomicU64::new(1),
+            scrollback_bytes: Arc::new(AtomicUsize::new(DEFAULT_SCROLLBACK_BYTES)),
         }
+    }
+
+    /// P68.8 — set the replay-ring capacity (bytes) for future sessions,
+    /// clamped to the supported range. Called once at boot from
+    /// `terminal.scrollbackBytes`.
+    pub fn set_scrollback_bytes(&self, bytes: usize) {
+        self.scrollback_bytes.store(
+            bytes.clamp(MIN_SCROLLBACK_BYTES, MAX_SCROLLBACK_BYTES),
+            Ordering::Relaxed,
+        );
+    }
+
+    /// The capacity future sessions will be spawned with.
+    pub fn scrollback_bytes(&self) -> usize {
+        self.scrollback_bytes.load(Ordering::Relaxed)
     }
 
     fn next_pty_id(&self) -> String {
@@ -1440,6 +1608,9 @@ impl PtyHost {
             })
             .map_err(|e| TerminalError::Io(e.to_string()))?;
 
+        // P68.8 — this session's replay ring. Capacity is snapshotted here so a
+        // later config change cannot retroactively resize a live scrollback.
+        let ring = Arc::new(Mutex::new(TerminalRing::new(self.scrollback_bytes())));
         let session = Arc::new(PtySession {
             pty_id: pty_id.clone(),
             profile_id: profile.profile_name.clone(),
@@ -1452,6 +1623,7 @@ impl PtyHost {
             cols,
             pid,
             tracker: tracker.clone(),
+            ring: ring.clone(),
             writer: Mutex::new(writer),
             killer,
             exited: exited.clone(),
@@ -1460,7 +1632,7 @@ impl PtyHost {
         let parser = integration.as_ref().map(|i| {
             IntegrationParser::new(true, Some(i.nonce.clone()))
         });
-        let output = PtyOutput::new(&pty_id, reader, exited.clone(), parser, tracker);
+        let output = PtyOutput::new(&pty_id, reader, exited.clone(), parser, tracker, ring);
 
         self.ptys
             .lock()
@@ -1562,6 +1734,47 @@ impl PtyHost {
         map.get(pty_id).map(|e| e.session.tracker.clone())
     }
 
+    /// P68.8 — replay a session's retained output.
+    ///
+    /// `from_seq = None` returns everything still retained (a view reattaching
+    /// with nothing rendered); `Some(n)` returns only what the caller has not
+    /// seen. A cursor that has already been evicted yields a nonzero
+    /// `dropped`, so the renderer can say the view is truncated instead of
+    /// presenting a seamless scrollback that lies about the gap.
+    ///
+    /// Reads a live session's ring, so it works after the original reader
+    /// callback has been replaced by a reattached view — and equally when no
+    /// listener was ever attached.
+    pub fn replay(
+        &self,
+        pty_id: &str,
+        from_seq: Option<u64>,
+    ) -> Result<TerminalReplay, TerminalError> {
+        let ring = {
+            let map = self
+                .ptys
+                .lock()
+                .map_err(|e| TerminalError::Io(e.to_string()))?;
+            map.get(pty_id)
+                .map(|e| e.session.ring.clone())
+                .ok_or_else(|| TerminalError::PtyNotFound(pty_id.to_string()))?
+        };
+        let ring = ring.lock().map_err(|e| TerminalError::Io(e.to_string()))?;
+        let (seq, bytes, dropped) = match from_seq {
+            None => {
+                let (seq, bytes) = ring.snapshot();
+                (seq, bytes, 0)
+            }
+            Some(from) => ring.since(from),
+        };
+        Ok(TerminalReplay {
+            seq,
+            bytes,
+            dropped,
+            capacity: ring.capacity(),
+        })
+    }
+
     /// Full session view for the status chip + tab strip.
     pub fn sessions(&self) -> Vec<SessionInfo> {
         match self.ptys.lock() {
@@ -1626,6 +1839,9 @@ pub struct PtyOutput {
     exited: Arc<AtomicU64>,
     parser: Option<IntegrationParser>,
     tracker: Arc<Mutex<CommandTracker>>,
+    /// P68.8 — the session's replay ring; every rendered byte is retained here
+    /// before it is handed to the (possibly absent) listener.
+    ring: Arc<Mutex<TerminalRing>>,
 }
 
 impl PtyOutput {
@@ -1635,6 +1851,7 @@ impl PtyOutput {
         exited: Arc<AtomicU64>,
         parser: Option<IntegrationParser>,
         tracker: Arc<Mutex<CommandTracker>>,
+        ring: Arc<Mutex<TerminalRing>>,
     ) -> Self {
         Self {
             pty_id: pty_id.to_string(),
@@ -1642,6 +1859,7 @@ impl PtyOutput {
             exited,
             parser,
             tracker,
+            ring,
         }
     }
 
@@ -1656,6 +1874,7 @@ impl PtyOutput {
         let mut reader = self.reader;
         let mut parser = self.parser;
         let tracker = self.tracker.clone();
+        let ring = self.ring.clone();
         std::thread::Builder::new()
             .name(format!("pty-read-{pty_id}"))
             .spawn(move || {
@@ -1669,7 +1888,15 @@ impl PtyOutput {
                     };
                     let chunk = &buf[..n];
                     match parser.as_mut() {
-                        None => on_frame(PtyFrame::Data(chunk.to_vec())),
+                        None => {
+                            // Retain before handing off: a consumer that never
+                            // attaches (a closed view) must not cost the user
+                            // the output.
+                            if let Ok(mut r) = ring.lock() {
+                                r.push(chunk);
+                            }
+                            on_frame(PtyFrame::Data(chunk.to_vec()))
+                        }
                         Some(p) => {
                             for seg in p.feed_segments(chunk) {
                                 match seg {
@@ -1681,6 +1908,9 @@ impl PtyOutput {
                                         // own output.
                                         if let Ok(mut t) = tracker.lock() {
                                             t.push_output(&b);
+                                        }
+                                        if let Ok(mut r) = ring.lock() {
+                                            r.push(&b);
                                         }
                                         on_frame(PtyFrame::Data(b));
                                     }
@@ -1715,6 +1945,9 @@ impl PtyOutput {
                 if let Some(p) = parser.as_mut() {
                     let tail = p.flush();
                     if !tail.is_empty() {
+                        if let Ok(mut r) = ring.lock() {
+                            r.push(&tail);
+                        }
                         on_frame(PtyFrame::Data(tail));
                     }
                 }
@@ -1924,6 +2157,137 @@ mod tests {
     /// Does `hay` contain `needle`? (test helper; no `windows(0)` panic)
     fn contains(hay: &[u8], needle: &[u8]) -> bool {
         hay.windows(needle.len()).any(|w| w == needle)
+    }
+
+    // --- P68.8 replay ring ---------------------------------------------------
+
+    #[test]
+    fn ring_keeps_the_newest_bytes_and_advances_the_cursor() {
+        let mut ring = TerminalRing::new(8);
+        assert_eq!(ring.push(b"abc"), 3);
+        assert_eq!(ring.push(b"defgh"), 8);
+        let (seq, bytes) = ring.snapshot();
+        assert_eq!(seq, 8);
+        assert_eq!(bytes, b"abcdefgh".to_vec());
+        // Overflow: oldest bytes are evicted, the cursor keeps counting.
+        assert_eq!(ring.push(b"XY"), 10);
+        let (seq, bytes) = ring.snapshot();
+        assert_eq!(seq, 10);
+        assert_eq!(bytes, b"cdefghXY".to_vec());
+        assert_eq!(ring.discarded(), 2);
+        // A cursor still inside the window gets only the unseen suffix.
+        let (seq, bytes, dropped) = ring.since(8);
+        assert_eq!(seq, 10);
+        assert_eq!(bytes, b"XY".to_vec());
+        assert_eq!(dropped, 0);
+        // A cursor at the head gets nothing, and that is not a gap.
+        let (_, bytes, dropped) = ring.since(10);
+        assert!(bytes.is_empty());
+        assert_eq!(dropped, 0);
+    }
+
+    #[test]
+    fn replay_reports_an_evicted_cursor_as_a_gap() {
+        let mut ring = TerminalRing::new(16);
+        ring.push(&[b'a'; 32]);
+        let (seq, bytes, dropped) = ring.since(0);
+        assert_eq!(seq, 32);
+        assert_eq!(bytes.len(), 16);
+        assert_eq!(dropped, 16, "an evicted cursor is a reported gap, never silence");
+    }
+
+    #[test]
+    fn ring_capacity_zero_disables_retention_but_keeps_the_cursor() {
+        let mut ring = TerminalRing::new(0);
+        assert_eq!(ring.push(b"abc"), 3);
+        assert!(ring.snapshot().1.is_empty());
+        assert_eq!(ring.discarded(), 3);
+    }
+
+    #[test]
+    fn replay_on_an_unknown_pty_fails_closed() {
+        let host = PtyHost::new();
+        assert!(host.replay("pty-nope", None).is_err());
+    }
+
+    #[test]
+    fn scrollback_capacity_is_clamped_to_the_supported_range() {
+        let host = PtyHost::new();
+        assert_eq!(host.scrollback_bytes(), DEFAULT_SCROLLBACK_BYTES);
+        host.set_scrollback_bytes(0);
+        assert_eq!(host.scrollback_bytes(), MIN_SCROLLBACK_BYTES);
+        host.set_scrollback_bytes(usize::MAX);
+        assert_eq!(host.scrollback_bytes(), MAX_SCROLLBACK_BYTES);
+    }
+
+    /// The P68.8 claim itself, end to end: bytes produced while **no view is
+    /// listening** are still recoverable. Drain the reader with a no-op
+    /// consumer (exactly what a closed view looks like), run a command, and
+    /// assert `replay()` returns its output.
+    ///
+    /// Skipped (not failed) when there is no bash on this host.
+    #[test]
+    fn ring_replays_output_produced_with_no_listener_attached() {
+        let bash = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"]
+            .iter()
+            .find(|p| Path::new(p).exists());
+        let Some(bash) = bash else {
+            eprintln!("skipping: no bash on this host");
+            return;
+        };
+        let profile = DetectedProfile {
+            profile_name: "bash".into(),
+            path: (*bash).into(),
+            is_unsafe_path: false,
+            is_from_path: false,
+            is_auto_detected: true,
+            is_default: true,
+            args: Vec::new(),
+            env: None,
+            icon: None,
+            backend: TerminalBackend::Local,
+            source: None,
+            wsl_distro: None,
+            cwd: None,
+        };
+        let host = PtyHost::new();
+        let (pty_id, output) = host
+            .spawn_with(
+                &profile,
+                None,
+                24,
+                80,
+                SpawnOpts {
+                    origin: TerminalOrigin::Agent,
+                    integration: false,
+                },
+            )
+            .expect("spawn into a real pty");
+
+        // A view with no listener: the reader still drains the PTY (or the
+        // child would block on a full buffer) but nothing is rendered.
+        output.stream(|_frame| {}).expect("stream");
+        host.write(&pty_id, b"echo everyaios-ring-ok\r")
+            .expect("write to pty master");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut seen = false;
+        while std::time::Instant::now() < deadline {
+            if let Ok(r) = host.replay(&pty_id, None) {
+                if r.seq > 0 && contains(&r.bytes, b"everyaios-ring-ok") {
+                    assert_eq!(r.dropped, 0, "a full snapshot has no gap");
+                    assert!(r.capacity >= MIN_SCROLLBACK_BYTES);
+                    seen = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(
+            seen,
+            "replay() must return output produced with no listener attached"
+        );
+        host.kill(&pty_id).expect("kill");
     }
 
     #[test]

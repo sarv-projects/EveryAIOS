@@ -20,6 +20,7 @@ import {
 } from './agents'
 import type { ComposerRole, PermissionMode } from './ui-prefs'
 import type { WorkAddress, WorkEventEnvelope, WorkPresence } from './work'
+import type { SessionCapabilityLoadout } from './capabilities'
 
 // === Types ============================================================
 
@@ -267,6 +268,8 @@ export interface Session {
   goal?: string
   /** P51.9 — the user marked the goal as achieved this run. */
   goalAchieved?: boolean
+  /** P66.4 — per-session capability loadout overrides (MCP, skills, connectors, shared cowork tools) */
+  capabilityLoadout?: SessionCapabilityLoadout
 }
 
 /**
@@ -1341,6 +1344,10 @@ interface AppState {
   // P11.5.5 — NL automation draft text
   nlAutomationDraft?: string
   setNlAutomationDraft: (v?: string) => void
+
+  // P66.4 — per-session capability loadout overrides
+  setSessionCapabilityOverride: (sessionId: string, capabilityId: string, enabled: boolean) => void
+  resetSessionCapabilities: (sessionId: string) => void
 }
 
 // Bind the test-isolation hook to the store once it exists (see
@@ -2915,6 +2922,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   // P11.5.5 — NL automation draft text.
   nlAutomationDraft: undefined,
   setNlAutomationDraft: (v) => set({ nlAutomationDraft: v }),
+
+  // P66.4 — per-session capability loadout overrides
+  setSessionCapabilityOverride: (sessionId, capabilityId, enabled) =>
+    set((s) => {
+      const session = s.sessions.find((x) => x.id === sessionId)
+      if (!session) return s
+      const currentLoadout = session.capabilityLoadout ?? { overrides: {}, updatedAt: Date.now() }
+      const nextLoadout: SessionCapabilityLoadout = {
+        overrides: { ...currentLoadout.overrides, [capabilityId]: enabled },
+        updatedAt: Date.now(),
+      }
+      return {
+        sessions: s.sessions.map((x) =>
+          x.id === sessionId ? { ...x, capabilityLoadout: nextLoadout } : x,
+        ),
+      }
+    }),
+  resetSessionCapabilities: (sessionId) =>
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id === sessionId
+          ? { ...x, capabilityLoadout: { overrides: {}, updatedAt: Date.now() } }
+          : x,
+      ),
+    })),
 }))
 
 /** Vault-backed persist (Codex JSONL / Claude transcripts analog). The browser

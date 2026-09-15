@@ -25,12 +25,17 @@
 //! no implementation yet and fails closed with `remote_unavailable` — never a
 //! silent local fallback, which would run a command on the wrong machine.
 
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
 use base64::Engine as _;
-use tauri::{AppHandle, Emitter, State};
+// `Manager` brings `AppHandle::state()` into scope (the `script.run` executor
+// reaches the managed shell state to record its own audit entry).
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use everyaios_core::terminal::{
-    detect_available_profiles, DetectedProfile, Platform, PtyFrame, SpawnOpts, TerminalBackend,
-    TerminalConfig, TerminalOrigin,
+    detect_available_profiles, CommandRecord, CommandTracker, DetectedProfile, Platform, PtyFrame,
+    PtyHost, SpawnOpts, TerminalBackend, TerminalConfig, TerminalOrigin,
 };
 use everyaios_core::Config;
 
@@ -39,6 +44,20 @@ use crate::AppState;
 /// Max PTY dimension accepted from the renderer (a bogus resize would be
 /// forwarded to the kernel verbatim).
 const MAX_DIM: u16 = 1000;
+
+/// P68.9 — how long `script.run` waits for the shell to report its command
+/// finished. The wait returns the moment the shell reports, so this is only the
+/// ceiling for a command whose completion the shell never announces (an
+/// interactive prompt, for example).
+const AGENT_RUN_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// P68.9 — poll interval while waiting for the shell's completion record.
+const AGENT_RUN_POLL: Duration = Duration::from_millis(20);
+
+/// P68.9 — how long to wait for output to settle when the session has no shell
+/// integration: no completion record will ever arrive, so there is nothing
+/// meaningful to block on and we return the retained output as unverified.
+const AGENT_RUN_SETTLE: Duration = Duration::from_millis(750);
 
 fn profile_json(p: &DetectedProfile, confirmed: &[String], hide_unsafe: bool) -> serde_json::Value {
     serde_json::json!({
@@ -350,6 +369,104 @@ pub fn terminal_spawn(
     )
 }
 
+/// P68.9 — resolve the shell an *agent* or *task* command runs in: the
+/// automation profile, falling back to the interactive default so a fresh
+/// install still works.
+///
+/// One resolution shared by `terminal_run` and the `script.run` executor, so
+/// the renderer path and the model path cannot end up on different shells.
+fn resolve_automation_profile(cfg: &Config) -> Result<DetectedProfile, String> {
+    let name = cfg
+        .terminal
+        .automation_profile_name()
+        .or_else(|| cfg.terminal.default_profile_name())
+        .ok_or_else(|| "no automation or default terminal profile is configured".to_string())?;
+    resolve_profile(cfg, name)
+}
+
+/// P68.9 — non-empty command lines we are about to send. Each one becomes its
+/// own shell-reported record, which is what lets the completion wait know how
+/// many records to expect.
+fn command_line_count(command: &str) -> usize {
+    command.lines().filter(|l| !l.trim().is_empty()).count()
+}
+
+/// P68.9 — spawn an agent/task command on the **one PTY plane** and hand back
+/// its id and tracker.
+///
+/// `terminal_run` (renderer) and the `script.run` executor (tool loop) both go
+/// through here, so profile resolution, provenance, stream wiring and the audit
+/// kind have exactly one implementation — an agent command cannot be audited
+/// one way from the UI and another way from the model's own tool call.
+fn spawn_agent_command(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    command: &str,
+    label: Option<&str>,
+    origin: TerminalOrigin,
+    rows: Option<u16>,
+    cols: Option<u16>,
+) -> Result<(String, Arc<Mutex<CommandTracker>>), String> {
+    let cfg = Config::load().map_err(|e| e.to_string())?;
+    // Prefer the automation profile; fall back to the interactive default so a
+    // fresh install still works, and name which one was used in the audit.
+    let resolved = resolve_automation_profile(&cfg)?;
+
+    let rows = rows.unwrap_or(24).clamp(1, MAX_DIM);
+    let cols = cols.unwrap_or(80).clamp(1, MAX_DIM);
+
+    let (pty_id, output) = state
+        .terminal
+        .spawn_with(
+            &resolved,
+            None,
+            rows,
+            cols,
+            SpawnOpts {
+                origin,
+                integration: cfg.terminal.shell_integration,
+            },
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Grab the tracker before writing: the reader thread can start producing
+    // records the instant the first line lands, and a tracker taken afterwards
+    // could miss the earliest ones.
+    let tracker = state
+        .terminal
+        .tracker(&pty_id)
+        .ok_or_else(|| "terminal: session vanished immediately after spawn".to_string())?;
+
+    // Send the command(s). The shell echoes them and its integration script
+    // reports `E` (line) + `D` (exit) back to us.
+    for line in command.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        state
+            .terminal
+            .write(&pty_id, format!("{line}\r").as_bytes())
+            .map_err(|e| format!("terminal: write failed: {e}"))?;
+    }
+
+    finish_spawn(
+        app,
+        state,
+        pty_id.clone(),
+        output,
+        origin,
+        label,
+        serde_json::json!({
+            "profileId": resolved.profile_name,
+            "command": command.trim(),
+            "rows": rows,
+            "cols": cols,
+        }),
+    )?;
+    Ok((pty_id, tracker))
+}
+
 /// P67 — run a command for the agent / a durable task in a real PTY, on the
 /// *automation* profile, and let the shell report it.
 ///
@@ -381,60 +498,196 @@ pub fn terminal_run(
         // a *human* session through this path (that would launder authority).
         _ => TerminalOrigin::Agent,
     };
+    let (pty_id, _tracker) =
+        spawn_agent_command(&app, &state, trimmed, label.as_deref(), origin, rows, cols)?;
+    Ok(pty_id)
+}
 
-    let cfg = Config::load().map_err(|e| e.to_string())?;
-
-    // Prefer the automation profile; fall back to the interactive default so a
-    // fresh install still works, and name which one was used in the audit.
-    let profile_name = cfg
+/// P68.8 — replay a session's retained output after a view reattaches.
+///
+/// Bytes come back base64-encoded, exactly like a live `terminal-event` frame,
+/// so the renderer can hand them to the same decoder and xterm keeps ownership
+/// of VT interpretation. `dropped > 0` means the caller's cursor had already
+/// been evicted from the ring: the replay is then a *truncated* view and the UI
+/// must say so rather than present a seamless scrollback that hides a gap.
+#[tauri::command]
+pub fn terminal_replay(
+    state: State<'_, AppState>,
+    pty_id: String,
+    from_seq: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    let replayed = state
         .terminal
-        .automation_profile_name()
-        .map(String::from)
-        .or_else(|| cfg.terminal.default_profile_name().map(String::from))
-        .ok_or_else(|| {
-            "terminal_run: no automation or default profile is configured".to_string()
-        })?;
-    let resolved = resolve_profile(&cfg, &profile_name)?;
-
-    let rows = rows.unwrap_or(24).clamp(1, MAX_DIM);
-    let cols = cols.unwrap_or(80).clamp(1, MAX_DIM);
-
-    let (pty_id, output) = state
-        .terminal
-        .spawn_with(
-            &resolved,
-            None,
-            rows,
-            cols,
-            SpawnOpts {
-                origin,
-                integration: cfg.terminal.shell_integration,
-            },
-        )
+        .replay(&pty_id, from_seq)
         .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "ptyId": pty_id,
+        "seq": replayed.seq,
+        "data": base64::engine::general_purpose::STANDARD.encode(&replayed.bytes),
+        "dropped": replayed.dropped,
+        "capacity": replayed.capacity,
+    }))
+}
 
-    // Send the command(s). The shell echoes them and its integration script
-    // reports `E` (line) + `D` (exit) back to us.
-    for line in trimmed.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
+/// P68.9 — wait until the shell reports `expected` finished commands, or the
+/// deadline passes.
+///
+/// Completion here is the shell's own statement (an `E`/`D` pair attributed to
+/// a session nonce), never a quiet-output heuristic: "the command stopped
+/// printing" is not "the command finished". A record that cannot be attributed
+/// is reported with `trusted: false` and the caller must not present it as
+/// fact.
+fn await_command_records(
+    tracker: &Arc<Mutex<CommandTracker>>,
+    expected: usize,
+    deadline: Instant,
+) -> Option<CommandRecord> {
+    loop {
+        if let Ok(t) = tracker.lock() {
+            if t.len() >= expected {
+                if let Some(rec) = t.last() {
+                    return Some(rec.clone());
+                }
+            }
         }
-        state
-            .terminal
-            .write(&pty_id, format!("{line}\r").as_bytes())
-            .map_err(|e| format!("terminal_run: write failed: {e}"))?;
+        if Instant::now() >= deadline {
+            // The shell never announced completion. Hand back whatever it did
+            // report — `exit_code: None` is the absence of evidence, not a
+            // success, and the executor surfaces that to the model.
+            return tracker.lock().ok().and_then(|t| t.last().cloned());
+        }
+        std::thread::sleep(AGENT_RUN_POLL);
     }
+}
 
-    finish_spawn(
-        &app,
-        &state,
-        pty_id,
-        output,
-        origin,
-        label.as_deref(),
-        serde_json::json!({ "profileId": resolved.profile_name, "command": trimmed }),
-    )
+/// P68.9 — the `script.run` executor.
+///
+/// The agent's command runs on the **one PTY plane** with `Agent` provenance:
+/// same host a human tab uses, on the automation profile, audited as
+/// `terminal.agent_run`, and rendered as a labelled read-only tab. It blocks
+/// until the shell reports the command finished, because a tool result the
+/// model cannot see is not a tool result.
+///
+/// When the session has no shell integration there is no completion signal to
+/// wait for, so it returns the session's retained output with `trusted: false`
+/// and `exit_code: None` — absent evidence, never an implied success.
+///
+/// It never spawns a `Human`-origin session: neither the renderer nor the model
+/// may launder authority by asking the agent path for a user terminal, and the
+/// origin is taken from the caller rather than derived from the command.
+pub struct TerminalPlaneExecutor {
+    host: Arc<PtyHost>,
+    app: AppHandle,
+}
+
+impl TerminalPlaneExecutor {
+    /// The host is the same `Arc<PtyHost>` the Shell view uses, so a session
+    /// spawned here is the session the user sees. Holding it directly keeps the
+    /// tool-dispatch path off the managed-state lock while a command runs.
+    pub fn new(host: Arc<PtyHost>, app: AppHandle) -> Self {
+        Self { host, app }
+    }
+}
+
+impl everyaios_core::tools::TerminalExecutor for TerminalPlaneExecutor {
+    fn run(
+        &self,
+        command: &str,
+        label: &str,
+        origin: TerminalOrigin,
+    ) -> Result<everyaios_core::tools::TerminalRun, String> {
+        let trimmed = command.trim();
+        if trimmed.is_empty() {
+            return Err("script.run: command must not be empty".into());
+        }
+        let cfg = Config::load().map_err(|e| e.to_string())?;
+        let resolved = resolve_automation_profile(&cfg)?;
+        let profile_id = resolved.profile_name.clone();
+
+        let (pty_id, output) = self
+            .host
+            .spawn_with(
+                &resolved,
+                None,
+                24,
+                80,
+                SpawnOpts {
+                    origin,
+                    integration: cfg.terminal.shell_integration,
+                },
+            )
+            .map_err(|e| e.to_string())?;
+        let tracker = self
+            .host
+            .tracker(&pty_id)
+            .ok_or_else(|| "script.run: session vanished immediately after spawn".to_string())?;
+        let expected = command_line_count(trimmed).max(1);
+        for line in trimmed.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            self.host
+                .write(&pty_id, format!("{line}\r").as_bytes())
+                .map_err(|e| format!("script.run: write failed: {e}"))?;
+        }
+        // Wiring the reader is what produces the records; do it once the
+        // command is on the wire so no frame is emitted before the UI is
+        // listening (the ring covers replay for a view that attaches later).
+        let state = self.app.state::<AppState>();
+        finish_spawn(
+            &self.app,
+            &state,
+            pty_id.clone(),
+            output,
+            origin,
+            Some(label),
+            serde_json::json!({ "profileId": profile_id, "command": trimmed }),
+        )?;
+
+        // Without shell integration no completion record will ever arrive, so
+        // there is nothing to block on — settle, then read the ring.
+        let integrated = state
+            .terminal
+            .sessions()
+            .into_iter()
+            .find(|s| s.pty_id == pty_id)
+            .map(|s| s.integration.is_some())
+            .unwrap_or(false);
+        let record = if integrated {
+            await_command_records(&tracker, expected, Instant::now() + AGENT_RUN_TIMEOUT)
+        } else {
+            std::thread::sleep(AGENT_RUN_SETTLE);
+            None
+        };
+
+        let (command_line, cwd, exit_code, output, trusted) = match record {
+            Some(rec) => (rec.command, rec.cwd, rec.exit_code, rec.output, rec.trusted),
+            None => {
+                let cwd = tracker
+                    .lock()
+                    .map(|t| t.cwd().to_string())
+                    .unwrap_or_default();
+                // The ring is the session's own bytes: honest raw output for a
+                // session the shell cannot describe structurally.
+                let output = state
+                    .terminal
+                    .replay(&pty_id, None)
+                    .map(|r| String::from_utf8_lossy(&r.bytes).to_string())
+                    .unwrap_or_default();
+                (trimmed.to_string(), cwd, None, output, false)
+            }
+        };
+        Ok(everyaios_core::tools::TerminalRun {
+            pty_id,
+            profile_id,
+            command: command_line,
+            cwd,
+            exit_code,
+            output,
+            trusted,
+        })
+    }
 }
 
 /// Write raw input (keystrokes / paste) to a live PTY.

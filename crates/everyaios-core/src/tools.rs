@@ -26,7 +26,6 @@ use everyaios_guard::{
     RiskTier,
 };
 use everyaios_mcp::{all_tools, ArgDef, ArgKind, ExternalTool, ToolDef, ToolKind};
-use everyaios_script::ScriptSandbox;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -127,6 +126,49 @@ pub trait ConnectorToolBackend: Send + Sync {
 /// absent, external tools fail honestly ("external tool session not attached").
 pub trait ExternalToolBackend: Send + Sync {
     fn call(&self, tool_id: &str, args: &Value) -> Result<Value, String>;
+}
+
+/// P68.9 — the shell-execution seam behind the `script.run` tool.
+///
+/// The agent's command execution must land in the **one PTY plane** — the same
+/// host human tabs use, on the automation profile, carrying
+/// [`TerminalOrigin::Agent`](crate::terminal::TerminalOrigin) provenance — so the
+/// run is audited (`terminal.agent_run`), appears in the Shell view as a
+/// labelled read-only tab, and the user can watch the agent work instead of
+/// trusting an invisible pipe. The host installs this at boot
+/// (`src-tauri`); when it is absent `script.run` fails **honestly** rather than
+/// silently substituting a different executor.
+///
+/// Implementations must never create a `Human`-origin session: neither the
+/// renderer nor the model may launder authority by asking the agent path for a
+/// human terminal.
+pub trait TerminalExecutor: Send + Sync {
+    fn run(
+        &self,
+        command: &str,
+        label: &str,
+        origin: crate::terminal::TerminalOrigin,
+    ) -> Result<TerminalRun, String>;
+}
+
+/// One agent/task shell command's outcome, normalized for the model.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalRun {
+    /// The PTY the command ran in — the Shell-view tab the user watched.
+    pub pty_id: String,
+    pub profile_id: String,
+    /// The command line the shell reported.
+    pub command: String,
+    pub cwd: String,
+    /// Shell-reported exit code. `None` means the shell never reported
+    /// completion (integration off, no integration script for this shell, or
+    /// the wait timed out). That is an **absence of evidence**, never an
+    /// implied success.
+    pub exit_code: Option<i32>,
+    pub output: String,
+    /// True only when the record came from nonce-attributed shell reporting.
+    pub trusted: bool,
 }
 
 /// One catalog entry — the single source of truth for `tool/list`, guard
@@ -757,6 +799,9 @@ pub struct ToolService {
     desktop: Option<Arc<dyn DesktopBackend>>,
     /// P48.3 — optional connector-write engine (`connector.*` tools).
     connector: Option<Arc<dyn ConnectorToolBackend>>,
+    /// P68.9 — the one PTY plane, as the `script.run` executor. Absent until
+    /// the host attaches it at boot; absent ⇒ `script.run` fails honestly.
+    terminal: Option<Arc<dyn TerminalExecutor>>,
     /// P49.7 — optional opaque capability broker for connector authorization.
     capabilities: Option<Arc<Mutex<everyaios_guard::LocalCapabilityBroker>>>,
     /// P48.3 — attached external MCP servers (user-supplied tools).
@@ -808,6 +853,7 @@ impl ToolService {
             browser: None,
             desktop: None,
             connector: None,
+            terminal: None,
             capabilities: None,
             external: Vec::new(),
             // P55.8 — local-first (your own SearXNG, then the DDG fallback),
@@ -846,6 +892,13 @@ impl ToolService {
     /// email/calendar writes.
     pub fn attach_connector(&mut self, connector: Arc<dyn ConnectorToolBackend>) {
         self.connector = Some(connector);
+    }
+
+    /// P68.9 — attach the one PTY plane as the `script.run` executor. The host
+    /// calls this at boot; until it does, `script.run` fails honestly rather
+    /// than running the command somewhere the user cannot see.
+    pub fn attach_terminal(&mut self, terminal: Arc<dyn TerminalExecutor>) {
+        self.terminal = Some(terminal);
     }
 
     /// Attach the relay-owned capability broker. The broker validates opaque
@@ -1240,7 +1293,7 @@ impl ToolService {
         match spec.family {
             ToolFamily::FileOps => self.dispatch_file_ops(&spec.id, args),
             ToolFamily::Storage => self.dispatch_storage(&spec.id, args),
-            ToolFamily::Script => self.dispatch_script(args),
+            ToolFamily::Script => self.dispatch_script(&spec.id, args),
             ToolFamily::Search => self.dispatch_search(args),
             ToolFamily::Browser => self.dispatch_browser(&spec.id, args),
             ToolFamily::Office => self.dispatch_office(&spec.id, args),
@@ -1488,16 +1541,50 @@ impl ToolService {
         }
     }
 
-    fn dispatch_script(&self, args: &Value) -> Value {
+    /// P68.9 — the agent's shell.
+    ///
+    /// `script.run` executes its `code` on the **one PTY plane**: the same host
+    /// a human tab uses, on the automation profile, with `TerminalOrigin::Agent`
+    /// provenance. The run is audited as `terminal.agent_run` and renders as a
+    /// labelled read-only tab, which is the whole point — "watch the agent work"
+    /// has to be a property of the product, not a claim.
+    ///
+    /// The `{ code }` payload is therefore a **shell command line**, not
+    /// JavaScript. The rquickjs `everyaios-script` sandbox is unchanged and
+    /// still the engine for `forge.run_js` and the automation runtime's
+    /// `run_code` steps — those are internal deterministic workflows, not agent
+    /// shell calls.
+    ///
+    /// No terminal plane attached ⇒ honest failure. A host with no PTY host has
+    /// no shell, and quietly evaluating the string as JavaScript under a tool id
+    /// that now means *shell* would be exactly the kind of silent substitution
+    /// that makes "what did the agent run?" unanswerable.
+    fn dispatch_script(&self, id: &str, args: &Value) -> Value {
         let code = match args.get("code").and_then(Value::as_str) {
-            Some(c) => c,
-            None => return json!({"ok": false, "error": "code required"}),
+            Some(c) if !c.trim().is_empty() => c,
+            _ => return json!({"ok": false, "error": "code required"}),
         };
-        let host = Arc::new(DenyBrowser);
-        let sb = everyaios_script::Sandbox::new(everyaios_script::SandboxLimits::default(), host);
-        match sb.eval(code) {
-            Ok(out) => json!({"ok": true, "result": out}),
-            Err(e) => json!({"ok": false, "error": e.to_string()}),
+        let Some(exec) = &self.terminal else {
+            return json!({
+                "ok": false,
+                "error": "terminal plane not attached — script.run has no shell executor on this host",
+            });
+        };
+        match exec.run(code, id, crate::terminal::TerminalOrigin::Agent) {
+            Ok(run) => json!({
+                // Only a shell-reported exit 0 is success. An unverified run is
+                // not a failure claim — it is reported as absent evidence via
+                // `exitCode: null` + `trusted: false`, and the model sees both.
+                "ok": run.exit_code == Some(0),
+                "ptyId": run.pty_id,
+                "profile": run.profile_id,
+                "command": run.command,
+                "cwd": run.cwd,
+                "exitCode": run.exit_code,
+                "output": run.output,
+                "trusted": run.trusted,
+            }),
+            Err(e) => json!({"ok": false, "error": e}),
         }
     }
 
@@ -2172,48 +2259,6 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
-}
-
-/// Browser host that refuses every primitive — `script.run` is compute-only.
-struct DenyBrowser;
-
-impl everyaios_script::BrowserHost for DenyBrowser {
-    fn authorize(
-        &self,
-        call: &everyaios_script::PrimitiveCall,
-    ) -> Result<(), everyaios_script::SandboxError> {
-        Err(everyaios_script::SandboxError::Primitive(
-            call.name.clone(),
-            "browser primitives denied in script.run".into(),
-        ))
-    }
-    fn record(
-        &self,
-        _call: &everyaios_script::PrimitiveCall,
-        _ok: bool,
-        _error: &str,
-    ) -> Result<(), everyaios_script::SandboxError> {
-        Ok(())
-    }
-    fn on_page_created(
-        &self,
-        _page_id: &str,
-        _created_from: &everyaios_script::PrimitiveCall,
-    ) -> Result<(), everyaios_script::SandboxError> {
-        Ok(())
-    }
-    fn pages(&self) -> Vec<everyaios_script::PageInfo> {
-        Vec::new()
-    }
-    fn exec(
-        &self,
-        call: &everyaios_script::PrimitiveCall,
-    ) -> Result<Value, everyaios_script::SandboxError> {
-        Err(everyaios_script::SandboxError::Primitive(
-            call.name.clone(),
-            "browser primitives denied in script.run".into(),
-        ))
-    }
 }
 
 #[cfg(test)]

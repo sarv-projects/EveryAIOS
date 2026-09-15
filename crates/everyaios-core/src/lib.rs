@@ -155,8 +155,8 @@ pub use task_ledger::{
 };
 pub use telemetry::{Telemetry, TelemetryEventKind, TelemetryMode, TelemetrySample};
 pub use tools::{
-    canonical_args_hash, BrowserBackend, ExternalToolBackend, RegisteredTool, ToolFamily,
-    ToolRegistry, ToolService,
+    canonical_args_hash, BrowserBackend, ExternalToolBackend, RegisteredTool, TerminalExecutor,
+    TerminalRun, ToolFamily, ToolRegistry, ToolService,
 };
 pub use vault_key::{
     gate_mode, keyfile_path, needs_passphrase_gate, resolve_vault_key, setup_vault_passphrase,

@@ -150,6 +150,15 @@ fn connect_chat_relay(
             let _ = h.emit(AGUI_EVENT, serde_json::json!({ "line": line }));
         });
     }
+    // P68.9 — the agent's shell is the *one* PTY plane: `script.run` runs on the
+    // automation profile with agent provenance, so it is audited as
+    // `terminal.agent_run` and shows up in the Shell view as a labelled
+    // read-only tab. Attached here, before the relay is published to state, so
+    // no tool call can race ahead of the executor.
+    relay.attach_terminal(Arc::new(terminal_cmds::TerminalPlaneExecutor::new(
+        Arc::clone(&state.terminal),
+        app.clone(),
+    )));
     let policy_path = everyaios_core::default_data_dir().join("permissions.toml");
     relay.with_policy(&policy_path);
     eprintln!("everyaios-desktop: relay stage policy ok");
@@ -761,7 +770,18 @@ pub fn run() {
             openai_server: Mutex::new(Default::default()),
             // H36 (P54) — the PTY host owns live terminal sessions; they
             // persist independently of any Shell-view mount.
-            terminal: everyaios_core::terminal::PtyHost::new(),
+            terminal: {
+                let host = everyaios_core::terminal::PtyHost::new();
+                // P68.8 — the replay ring's capacity comes from
+                // `terminal.scrollbackBytes` (clamped inside the setter). Read
+                // once, here: sessions snapshot the capacity at spawn, so a
+                // later config change never resizes a live scrollback under
+                // the user's cursor.
+                if let Ok(cfg) = everyaios_core::Config::load() {
+                    host.set_scrollback_bytes(cfg.terminal.scrollback_bytes());
+                }
+                std::sync::Arc::new(host)
+            },
             // P56.1 — the live models.dev catalog (snapshot + cadence).
             catalog: std::sync::Arc::new(catalog_cmds::CatalogState::new(
                 everyaios_core::default_data_dir().join("catalog"),

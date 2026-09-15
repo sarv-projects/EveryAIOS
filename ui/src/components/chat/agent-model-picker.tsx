@@ -1,7 +1,31 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, Cpu, Download, Gauge, KeyRound, Loader2, RotateCw, Route, Sparkles, Zap } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  Cpu,
+  Download,
+  Gauge,
+  KeyRound,
+  Loader2,
+  RotateCw,
+  Route,
+  Sparkles,
+  Zap,
+  FileSpreadsheet,
+  Globe,
+  Monitor,
+  Search,
+  HardDrive,
+  Brain,
+  Sliders,
+  CheckCircle2,
+  AlertCircle,
+  FolderOpen,
+  Wrench,
+  RefreshCw,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -24,8 +48,13 @@ import {
   chiefDefaultGet,
   chiefDefaultSet,
   governanceLabel,
+  acpAgentImport,
+  acpAgentVerify,
+  getAgentLifecycleState,
   type AcpConfigOption,
+  type AgentLifecycleState,
 } from '@/lib/acp'
+import { STANDARD_SHARED_CAPABILITIES, isCapabilityEnabled } from '@/lib/capabilities'
 import { refreshAgentCatalog } from '@/lib/bridge'
 import { inTauri } from '@/lib/tauri'
 import { catalogProviderModels, catalogProviders, formatPerM } from '@/lib/providers'
@@ -57,6 +86,95 @@ function StatusDot({ status }: { status: AgentRuntime['status'] }) {
             ? 'bg-zinc-500'
             : 'bg-zinc-700'
   return <span className={cn('inline-block h-1.5 w-1.5 rounded-full', tone)} />
+}
+
+function LifecycleBadge({ state }: { state: AgentLifecycleState }) {
+  switch (state) {
+    case 'ready':
+      return (
+        <Badge className="border-emerald-500/30 bg-emerald-500/15 px-1 text-[8px] font-mono text-emerald-300">
+          ready
+        </Badge>
+      )
+    case 'verify':
+      return (
+        <Badge className="border-sky-500/30 bg-sky-500/15 px-1 text-[8px] font-mono text-sky-300">
+          verify
+        </Badge>
+      )
+    case 'import':
+      return (
+        <Badge className="border-indigo-500/30 bg-indigo-500/15 px-1 text-[8px] font-mono text-indigo-300">
+          import
+        </Badge>
+      )
+    case 'inspect':
+      return (
+        <Badge className="border-amber-500/30 bg-amber-500/15 px-1 text-[8px] font-mono text-amber-300">
+          inspect
+        </Badge>
+      )
+    case 'discover':
+    default:
+      return (
+        <Badge className="border-zinc-700 bg-zinc-800/80 px-1 text-[8px] font-mono text-zinc-400">
+          discover
+        </Badge>
+      )
+  }
+}
+
+function ProvenanceBadge({ location }: { location?: AgentRuntime['location'] }) {
+  if (!location) return null
+  const kind = location.kind
+  const source = location.source
+  let label: string = source.replaceAll('_', ' ')
+  let tone = 'bg-zinc-800 text-zinc-300 border-zinc-700'
+
+  if (kind === 'managed' || source === 'everyaios_install') {
+    label = 'Managed'
+    tone = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+  } else if (source === 'user_selected') {
+    label = 'User Import'
+    tone = 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+  } else if (source === 'path_probe') {
+    label = 'PATH'
+    tone = 'bg-zinc-800 text-zinc-300 border-zinc-700'
+  } else if (source === 'app_paths') {
+    label = 'App Paths'
+    tone = 'bg-zinc-800 text-zinc-300 border-zinc-700'
+  } else if (kind === 'package_manager') {
+    label = 'npx/uvx'
+    tone = 'bg-zinc-800 text-zinc-300 border-zinc-700'
+  } else if (kind === 'wsl' || source === 'wsl_probe') {
+    label = `WSL · ${'distro' in location ? location.distro : 'Ubuntu'}`
+    tone = 'bg-purple-500/10 text-purple-300 border-purple-500/30'
+  }
+
+  return (
+    <span className={cn('inline-flex items-center rounded border px-1 py-0.2 font-mono text-[7px]', tone)}>
+      {label}
+    </span>
+  )
+}
+
+function getCapabilityIcon(family: string) {
+  switch (family) {
+    case 'office':
+      return <FileSpreadsheet className="h-3 w-3 text-sky-400" />
+    case 'browser':
+      return <Globe className="h-3 w-3 text-cyan-400" />
+    case 'desktop':
+      return <Monitor className="h-3 w-3 text-indigo-400" />
+    case 'search':
+      return <Search className="h-3 w-3 text-teal-400" />
+    case 'storage':
+      return <HardDrive className="h-3 w-3 text-blue-400" />
+    case 'memory':
+      return <Brain className="h-3 w-3 text-purple-400" />
+    default:
+      return <Sparkles className="h-3 w-3 text-sky-400" />
+  }
 }
 
 function AgentLogo({ agent, size = 'md' }: { agent: AgentRuntime; size?: 'sm' | 'md' }) {
@@ -107,6 +225,19 @@ export default function AgentModelPicker({ compact }: Props) {
   const [localRows, setLocalRows] = useState<LocalModelRow[]>([])
   const [localErr, setLocalErr] = useState<string | null>(null)
   const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
+
+  // P66.2 — Custom binary import & verification state
+  const [customBinaryPath, setCustomBinaryPath] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [verifyResult, setVerifyResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [showImportSection, setShowImportSection] = useState(false)
+
+  // P66.4 — Session capability loadout bindings
+  const activeSessionId = useAppStore((s) => s.activeSessionId)
+  const activeSession = useAppStore((s) => s.sessions.find((x) => x.id === s.activeSessionId))
+  const setSessionCapabilityOverride = useAppStore((s) => s.setSessionCapabilityOverride)
+  const resetSessionCapabilities = useAppStore((s) => s.resetSessionCapabilities)
+
   // P58.7 — the model rows come from the live models.dev catalog for the
   // providers this machine can actually reach (keyed / profiled / keyless),
   // not from the curated `MODELS` seed. `catalogNote` carries the honest
@@ -125,6 +256,70 @@ export default function AgentModelPicker({ compact }: Props) {
     methods: { id: string; name: string; type?: string; description?: string }[]
     waitingUrl?: string
   } | null>(null)
+
+  // Handlers for custom binary import & verification
+  const handleImportCustomBinary = async (agentId: string) => {
+    if (!customBinaryPath.trim()) {
+      notify('Please enter a valid binary path', 'error')
+      return
+    }
+    setVerifying(true)
+    setVerifyResult(null)
+    try {
+      const importRes = await acpAgentImport(agentId, customBinaryPath.trim())
+      const verifyRes = await acpAgentVerify(agentId)
+      if (verifyRes.status === 'ready') {
+        setVerifyResult({
+          ok: true,
+          message: `Verified v${verifyRes.version ?? 'unknown'} (${verifyRes.executable ?? importRes.binaryPath})`,
+        })
+        notify(`${agent.name} imported and verified successfully!`)
+        void refreshAgentCatalog().catch(() => {})
+      } else {
+        const reason = verifyRes.reason ?? 'Binary failed execution probe'
+        setVerifyResult({
+          ok: false,
+          message: reason,
+        })
+        notify(`Import recorded, but verification failed: ${reason}`, 'error')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setVerifyResult({ ok: false, message: msg })
+      notify(msg, 'error')
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const handleVerifyAgent = async (agentId: string) => {
+    setVerifying(true)
+    setVerifyResult(null)
+    try {
+      const verifyRes = await acpAgentVerify(agentId)
+      if (verifyRes.status === 'ready') {
+        setVerifyResult({
+          ok: true,
+          message: `Verified v${verifyRes.version ?? 'unknown'} (${verifyRes.executable ?? agent.path ?? 'executable'})`,
+        })
+        notify(`${agent.name} binary verified!`)
+        void refreshAgentCatalog().catch(() => {})
+      } else {
+        const reason = verifyRes.reason ?? 'Verification probe failed'
+        setVerifyResult({
+          ok: false,
+          message: reason,
+        })
+        notify(`Verification failed: ${reason}`, 'error')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setVerifyResult({ ok: false, message: msg })
+      notify(msg, 'error')
+    } finally {
+      setVerifying(false)
+    }
+  }
 
   // The trigger must name the *selection*, even when the inventory is
   // unknown — so fall back to the seed row by id (label only, never
@@ -634,27 +829,24 @@ export default function AgentModelPicker({ compact }: Props) {
                 {agentList.map((a) => {
                   const isActive = a.id === selectedAgentId
                   const usable = isRuntimeUsable(a)
+                  const lifecycle = getAgentLifecycleState(a.status, usable, Boolean(a.version))
                   return (
                     <button
                       key={a.id}
                       type="button"
                       data-agent-id={a.id}
-                      onClick={() =>
-                        usable
-                          ? setSelectedAgent(a.id)
-                          : (setOpen(false), setCenterScreen('settings'))
-                      }
+                      onClick={() => setSelectedAgent(a.id)}
                       title={
                         usable
                           ? undefined
-                          : `${a.name} is not installed on this machine — open Settings → Agent runtimes to install or connect it`
+                          : `${a.name} is not installed — select to inspect, import, or install`
                       }
                       className={cn(
                         'flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
                         isActive
                           ? 'border-sky-500/60 bg-sky-500/10'
                           : 'border-transparent hover:border-border hover:bg-accent/40',
-                        !usable && 'opacity-70',
+                        !usable && 'opacity-80',
                       )}
                     >
                       <AgentLogo agent={a} />
@@ -664,22 +856,19 @@ export default function AgentModelPicker({ compact }: Props) {
                             {a.name}
                           </span>
                           <StatusDot status={a.status} />
-                          {a.id === 'everyaios-native' && (
+                          {a.id === 'everyaios-native' ? (
                             <Badge className="bg-sky-500/20 px-1 text-[8px] text-sky-300">orchestrator</Badge>
-                          )}
-                          {!usable && (
-                            <Badge className="bg-background/70 px-1 text-[8px] text-muted-foreground">
-                              not installed
-                            </Badge>
+                          ) : (
+                            <LifecycleBadge state={lifecycle} />
                           )}
                         </div>
-                        <div className="truncate font-mono text-[9px] text-muted-foreground">
-                          {a.vendor} · v{a.version ?? '—'}
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
+                          <span className="truncate">{a.vendor} · v{a.version ?? '—'}</span>
+                          {a.location && <ProvenanceBadge location={a.location} />}
                         </div>
                         {a.location && (
                           <div className="truncate font-mono text-[8px] text-muted-foreground/70" title={a.path ?? undefined}>
-                            {a.location.source.replaceAll('_', ' ')} · {a.location.kind}
-                            {a.location.kind === 'wsl' ? ` · ${a.location.distro}` : a.path ? ` · ${a.path}` : ''}
+                            {a.location.kind === 'wsl' ? `WSL · ${a.location.distro || 'default'}` : a.path ? a.path : a.location.source.replaceAll('_', ' ')}
                           </div>
                         )}
                         <div className="truncate text-[10px] text-muted-foreground/80">{a.tagline}</div>
@@ -707,8 +896,208 @@ export default function AgentModelPicker({ compact }: Props) {
                 })}
               </div>
 
-              {/* Model column */}
+              {/* Model & Capabilities column */}
               <div className="scroll-thin min-h-0 overflow-y-auto p-3">
+                {/* External Agent Lifecycle & Verification Header */}
+                {external && (
+                  <div className="mb-3 rounded-lg border border-border/80 bg-zinc-950/60 p-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Wrench className="h-3 w-3 text-sky-400" />
+                        <span className="font-mono text-[10px] font-semibold text-foreground">
+                          Agent Lifecycle · {agent.name}
+                        </span>
+                      </div>
+                      <LifecycleBadge
+                        state={getAgentLifecycleState(agent.status, agentUsable, Boolean(agent.version))}
+                      />
+                    </div>
+
+                    {/* Step progression */}
+                    <div className="mt-2 grid grid-cols-5 gap-1 text-center font-mono text-[8px]">
+                      {[
+                        { step: 'Discover', active: true },
+                        { step: 'Inspect', active: agent.status === 'discovered' || agentUsable },
+                        { step: 'Import/Install', active: agent.status === 'installed' || agentUsable },
+                        { step: 'Verify', active: Boolean(agent.version) || agentUsable },
+                        { step: 'Ready', active: agentUsable },
+                      ].map((s, idx) => (
+                        <div
+                          key={s.step}
+                          className={cn(
+                            'rounded py-0.5 border',
+                            s.active
+                              ? 'border-sky-500/40 bg-sky-500/10 text-sky-300 font-semibold'
+                              : 'border-border/40 bg-background/40 text-muted-foreground/50',
+                          )}
+                        >
+                          {idx + 1}. {s.step}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Custom binary import & verify accordion / controls */}
+                    <div className="mt-2.5 border-t border-border/50 pt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">
+                          {agent.path ? `Binary: ${agent.path}` : 'Custom binary executable'}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {agent.path && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={verifying}
+                              className="h-5 gap-1 px-1.5 font-mono text-[9px] text-sky-300 hover:bg-sky-500/10"
+                              onClick={() => handleVerifyAgent(agent.id)}
+                            >
+                              <RefreshCw className={cn('h-2.5 w-2.5', verifying && 'animate-spin')} />
+                              Re-verify
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 px-1.5 font-mono text-[9px] text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowImportSection((v) => !v)}
+                          >
+                            {showImportSection ? 'Hide Import' : 'Import Custom Path'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {showImportSection && (
+                        <div className="mt-2 space-y-1.5 rounded-md border border-border/60 bg-background/50 p-2">
+                          <div className="text-[9px] text-muted-foreground">
+                            Specify the full absolute path to the <span className="font-mono text-foreground">{agent.name}</span> binary:
+                          </div>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={customBinaryPath}
+                              onChange={(e) => setCustomBinaryPath(e.target.value)}
+                              placeholder="e.g. C:\bin\agent.exe or /usr/local/bin/agent"
+                              className="h-6 flex-1 rounded border border-border bg-background px-2 font-mono text-[9px] text-foreground placeholder:text-muted-foreground/50 focus:border-sky-500 focus:outline-none"
+                            />
+                            <Button
+                              size="sm"
+                              disabled={verifying || !customBinaryPath.trim()}
+                              className="h-6 gap-1 bg-sky-500 px-2 font-mono text-[9px] text-white hover:bg-sky-600"
+                              onClick={() => handleImportCustomBinary(agent.id)}
+                            >
+                              {verifying ? (
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="h-2.5 w-2.5" />
+                              )}
+                              Import & Verify
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {verifyResult && (
+                        <div
+                          className={cn(
+                            'mt-1.5 flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[9px]',
+                            verifyResult.ok
+                              ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : 'border border-red-500/30 bg-red-500/10 text-red-300',
+                          )}
+                        >
+                          {verifyResult.ok ? (
+                            <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400" />
+                          ) : (
+                            <AlertCircle className="h-3 w-3 shrink-0 text-red-400" />
+                          )}
+                          <span className="truncate">{verifyResult.message}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* P66.4 — Session Capability Loadout Section */}
+                <div className="mb-3 rounded-lg border border-border/80 bg-zinc-950/40 p-2.5">
+                  <div className="flex items-center justify-between pb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Sliders className="h-3 w-3 text-sky-400" />
+                      <span className="font-mono text-[10px] font-semibold text-foreground">
+                        Session Capability Loadout
+                      </span>
+                      {anyBusy && (
+                        <Badge className="bg-amber-500/15 px-1 text-[7px] text-amber-300">
+                          applies next turn
+                        </Badge>
+                      )}
+                    </div>
+                    {activeSessionId && activeSession?.capabilityLoadout?.overrides && Object.keys(activeSession.capabilityLoadout.overrides).length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-4 px-1.5 font-mono text-[8px] text-muted-foreground hover:text-sky-300"
+                        onClick={() => {
+                          resetSessionCapabilities(activeSessionId)
+                          notify('Session capabilities reset to defaults')
+                        }}
+                      >
+                        Reset Defaults
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    {STANDARD_SHARED_CAPABILITIES.map((cap) => {
+                      const isEnabled = isCapabilityEnabled(
+                        cap.id,
+                        activeSession?.capabilityLoadout,
+                        cap.enabled,
+                      )
+                      return (
+                        <div
+                          key={cap.id}
+                          className={cn(
+                            'flex items-center justify-between rounded-md border p-1.5 transition-colors',
+                            isEnabled
+                              ? 'border-sky-500/30 bg-sky-500/5'
+                              : 'border-border/50 bg-background/30 opacity-70',
+                          )}
+                        >
+                          <div className="flex min-w-0 items-start gap-1.5">
+                            <span className="mt-0.5 shrink-0">{getCapabilityIcon(cap.family)}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1">
+                                <span className={cn('truncate text-[10px] font-medium', isEnabled ? 'text-foreground' : 'text-muted-foreground')}>
+                                  {cap.name}
+                                </span>
+                                {cap.requiresApproval && (
+                                  <Badge className="bg-amber-500/10 px-0.5 text-[6px] text-amber-300">
+                                    ticketed
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="line-clamp-1 text-[8px] text-muted-foreground/80">
+                                {cap.description}
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={isEnabled}
+                            onCheckedChange={(checked) => {
+                              if (activeSessionId) {
+                                setSessionCapabilityOverride(activeSessionId, cap.id, checked)
+                                if (anyBusy) {
+                                  notify(`${cap.name} ${checked ? 'enabled' : 'disabled'} for next turn`)
+                                }
+                              }
+                            }}
+                            className="scale-75 shrink-0 ml-1"
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 <div className="mb-1 flex items-center justify-between px-1">
                   <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
                     {external ? `Model · ${agent.name}` : `Models for ${agent.name}`}
