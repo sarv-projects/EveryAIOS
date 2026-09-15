@@ -41,9 +41,11 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 | **Bring Any AI Model You Want**<br/>*(Claude 3.7 Sonnet, OpenAI o3 / GPT-4o, DeepSeek-R1 / V3, Qwen 2.5 Coder, Gemini 2.0, Llama 3.3, Ollama)* | ✅ **Universal Freedom**<br/>*(100+ frontier & local models via BYOK or 100% offline with Ollama/MLX/vLLM)* | ❌ **Locked Walled Garden**<br/>*(Restricted to their own models only)* | ⚠️ **Curated Cloud Selection**<br/>*(Claude, GPT, proprietary models; limited local LLM support)* | ⚠️ **Limited / Complex**<br/>*(Claude Code is Anthropic-only; Aider requires terminal setup)* |
 | **Use Your Favorite Coding Agents**<br/>*(Claude Code, OpenAI Codex, Cline, Roo Code, Aider, OpenCode, or Native)* | ✅ **Run them all inside EveryAIOS**<br/>*(Native-first ACP agent hosting)* | ❌ **None**<br/>*(Cannot host external coding agents)* | ❌ **Locked to Editor Agent**<br/>*(Cannot run competing CLI agents)* | ⚠️ **Isolated CLIs**<br/>*(Separate terminal windows without unified app context)* |
 | **Universal Tool & MCP Support**<br/>*(Connect any MCP server, database, API, or local skill)* | ✅ **Full MCP Client & Server**<br/>*+ Two-Plane Native Tool Facades* | ⚠️ **Partial**<br/>*(Claude Desktop supports MCP servers; ChatGPT has no MCP)* | ⚠️ **IDE MCP Support**<br/>*(Can connect MCP tools in editor)* | ⚠️ **Manual CLI Setup**<br/>*(Requires JSON editing per tool)* |
-| **Real Excel & Document Editing**<br/>*(Recalculates formulas, edits Word & PDFs)* | ✅ **Built-in Local Calculation Engine**<br/>*(Recalculates formulas across `.xlsx`, edits Word & PDFs, 0 tokens spent on math)* | ❌ **Burns Message Quota**<br/>*(Guesses formulas as text or runs cloud Python sandbox; doesn't preserve Excel sheets)* | ❌ **None** | ❌ **None** |
+| **Real Office Spreadsheets & Documents**<br/>*(Recalculates formulas, edits Word, PowerPoint & PDFs)* | ✅ **Built-in Local Calculation Engine**<br/>*(Recalculates formulas across `.xlsx`, edits `.docx`, `.pptx`, `.pdf`, 0 tokens spent on math)* | ❌ **Burns Message Quota**<br/>*(Guesses formulas as text or runs cloud Python sandbox; doesn't preserve Excel sheets)* | ❌ **None** | ❌ **None** |
+| **Deep Web Research & Free Search**<br/>*(Multi-source research with zero API keys)* | ✅ **Built-in Tiered Search Cascade**<br/>*(SearXNG + DuckDuckGo fallback, cited reports, $0 search fees)* | ⚠️ **Burns Chat Quota**<br/>*(Limited web search or requires paid Perplexity/search keys)* | ⚠️ **Basic Search**<br/>*(Short code snippets only)* | ⚠️ **Requires Search API**<br/>*(Manual Tavily/Serper setup)* |
 | **Autonomous Browser Use (Web Automation)**<br/>*(37 CDP tools, navigates web, fills forms, extracts data, reuses logins)* | ✅ **Built-in Browser Engine**<br/>*(Multi-browser: Brave, Chrome, Edge, Arc; safe session vault reuses logins)* | ⚠️ **Limited / Slow**<br/>*(Cloud browsing only; Claude Computer Use preview is slow/costly)* | ❌ **None** | ❌ **None** |
 | **Native Computer Use (Desktop Automation)**<br/>*(Controls desktop apps, clicks UI elements, OCR, keyboard/mouse)* | ✅ **Native OS Desktop Control**<br/>*(Windows UIA/WGC, macOS AX, Linux X11; visual grounding & OCR)* | ⚠️ **Cloud CUA Beta**<br/>*(Expensive per-screenshot token streaming; macOS only)* | ❌ **None** | ❌ **None** |
+| **Background Automations & Scheduled Tasks**<br/>*(Runs cron jobs, alerts, briefings in background)* | ✅ **Built-in Tray Daemon & Scheduler**<br/>*(Runs unattended background tasks even when window is closed)* | ❌ **None**<br/>*(Active window only)* | ❌ **None** | ❌ **None**<br/>*(Requires external system cron)* |
 | **No Annoying "Wait 4 Hours" Limits** | ✅ **Auto-Rotates Backup Keys**<br/>*(Multi-key pools per provider; work never pauses)* | ❌ **Strict 3–5 Hour Caps**<br/>*(Locked out when message limits hit)* | ❌ **Monthly Fast-Request Cap**<br/>*(Throttled or extra charges when 500 fast requests exhausted)* | ⚠️ **Manual Fallback**<br/>*(Stops on 429; requires manual key swap)* |
 | **Safety & 1-Click Undo** | ✅ **Safe Approval Cards**<br/>*+ Instant 1-Click Shadow Git Rollback* | ❌ **No File Rollback**<br/>*(No local file versioning)* | ⚠️ **Standard Git / Checkpoints**<br/>*(Editor-only checkpoints)* | ⚠️ **Terminal Prompts**<br/>*(CLI prompts or manual git)* |
 | **100% Private & Local-First** | ✅ **Local Encrypted Vault**<br/>*(AES-256 SQLCipher; run 100% offline air-gapped)* | ❌ **Cloud-Hosted**<br/>*(All data sent to remote cloud infrastructure)* | ⚠️ **Cloud Indexing**<br/>*(Codebase indexed and processed on cloud servers)* | ⚠️ **Local CLI, Cloud APIs**<br/>*(Terminal is local, but sends files to cloud LLMs)* |
@@ -59,28 +61,33 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 ├─────────────────────────┬────────────────────────────┬───────────────────────────┤
 │        1. CHAT          │         2. COWORK          │         3. CODE           │
 │  • Brainstorm & write   │  • Real Excel formulas     │  • Fix bugs & write code  │
-│  • Deep web research    │  • Word documents & PDFs   │  • Claude Code, Codex,    │
-│  • Remembers your style │  • Autonomous Browser Use  │    Cline, Roo, Aider, etc.│
-│  • Zero-cost memory     │  • Native Computer Use     │  • 1-Click Undo any diff  │
-│  • Any AI model         │  • Connect Email & Slack   │  • Runs your tests first  │
+│  • Free deep research   │  • Word, PowerPoint, PDFs  │  • Claude Code, Codex,    │
+│  • 5-tier local memory  │  • Autonomous Browser Use  │    Cline, Roo, Aider, etc.│
+│  • Remembers your style │  • Native Computer Use     │  • Monaco IDE & real LSP  │
+│  • Any AI model         │  • Background Automations  │  • 1-Click Undo any diff  │
 └─────────────────────────┴────────────────────────────┴───────────────────────────┘
 ```
 
 ### 1. 💬 Chat & Ideate (Better, Faster, and Cheaper)
-* **Never lose context:** EveryAIOS remembers your project facts, preferences, and documents across sessions using smart local memory.
-* **Cut AI costs by up to 90%:** Static prompts are cached efficiently, making turns faster and dramatically cheaper.
+* **Never lose context:** 5-tier local memory (working, episodic, semantic, knowledge graph) remembers your project facts, style preferences, and documents across sessions with zero extra token costs.
+* **Deep web research for free:** Built-in tiered search cascade gathers fresh facts and cross-checks sources without requiring expensive search API subscriptions.
+* **Cut AI costs by up to 90%:** Static prompts and tool schemas are cached efficiently, making turns instantaneous and dramatically cheaper.
 * **Choose the right model for the job:** Use ultra-fast, cost-efficient models (like DeepSeek-V3, Claude 3.5 Haiku, or Gemini 2.0 Flash) for quick lookups, and switch to deep reasoning models (like Claude 3.7 Sonnet extended thinking, DeepSeek-R1, OpenAI o3, or Qwen 2.5 Coder) for hard engineering and complex logic.
 
-### 2. 📊 Cowork (Real Documents, Browser Use & Computer Use)
-* **Real Excel Spreadsheets:** Unlike chat apps that guess math in text, EveryAIOS includes a real calculation engine. It recalculates formulas across `.xlsx` sheets, updates charts, and leaves your formatting intact.
-* **Word & PDF Editing:** Fill forms, extract tables, redact sensitive data, and draft clean `.docx` files.
+### 2. 📊 Cowork (Real Documents, Browser Use, Computer Use & Automations)
+* **Real Excel Spreadsheets:** Unlike chat apps that guess math in text, EveryAIOS includes a real calculation engine. It recalculates formulas across `.xlsx` sheets, updates charts, and leaves your cell formatting 100% intact with 0 tokens spent on math.
+* **Word, PowerPoint & PDF Editing:** Surgical byte-stable edits for `.docx`, `.pptx`, and `.pdf` files. Fill forms, swap slides, extract tables, redact sensitive data, and draft clean documents.
 * **Autonomous Browser Use:** Built-in 37-tool browser engine navigates complex websites, logs into portals with your existing sessions, fills forms, and extracts clean information without ads or clutter.
 * **Native Computer Use:** Controls desktop software across Windows, macOS, and Linux. Takes screenshots, locates UI controls with visual grounding & OCR, clicks buttons, and types text to automate tasks in apps without APIs.
+* **Background Automations & Scheduling:** Schedule recurring morning briefings, repo health checks, or data syncs that run in the background via the system tray daemon—even when the window is closed.
+* **Storage Intelligence:** Spot duplicate files by cryptographic hash (xxHash3 + BLAKE3), find giant forgotten downloads, and visualize disk space with interactive treemaps.
 
 ### 3. 💻 Autonomous Coding (With a Safety Net)
 * **Your Favorite Agents in One Home:** Prefer Claude Code or Aider for terminal work? Love Cline or Roo Code for in-editor patching? Need OpenAI Codex or OpenCode? EveryAIOS hosts them seamlessly in the same cockpit alongside our Native Agent.
+* **Monaco IDE Workbench & Real LSP:** Full VS Code-grade code editor with file explorer, git status, syntax highlighting, and live LSP compiler diagnostics.
 * **1-Click Time-Travel Undo:** Every single code change is automatically saved in an isolated version checkpoint. If an agent makes a mistake, click **"Undo"** to instantly roll your files back to the exact previous second.
-* **Never Guesses Edits:** The code engine insists on finding the exact right spot before changing files. If an edit is ambiguous, it stops and asks rather than breaking your project.
+* **Tests Before Approval (TDD Loop):** Before proposing changes to your codebase, EveryAIOS runs your test suite in the background to prove the fix actually works (RED → GREEN).
+* **Surgical Precision:** Edits use a unified ladder (exact match → AST structured → fuzzy) that insists on finding the exact right spot before changing files. If an edit is ambiguous, it stops and asks rather than breaking your project.
 
 ---
 
@@ -138,12 +145,13 @@ cd src-tauri && cargo tauri dev
 
 ## Real-World Examples
 
-* 📁 **Clean up a messy 5GB Downloads folder:** Drop the folder in. It spots duplicates by file hash, proposes a tidy organization plan, and moves everything once you click approve.
-* 📊 **Update a company budget model:** Drop in an Excel spreadsheet. It recalculates the formulas, updates the summary sheet, and highlights discrepancies without changing your formulas into static text.
-* 🌐 **Autonomous Browser Use:** Ask it to research competitor pricing across 10 vendor sites. It logs into your supplier portal, traverses paginated results, downloads PDFs, and compiles an organized comparison matrix.
-* 🖥️ **Desktop Computer Use:** Tell it to extract 50 entries from a spreadsheet and enter them into a legacy desktop accounting program. It sees the screen, navigates menus, types the fields, and submits each record automatically.
-* 🛠️ **Debug a failing test suite:** Give it a repository. It reads compiler errors, pinpoints the broken line, applies a surgical fix, runs the tests to prove it works, and gives you a 1-click rollback if you want to revert.
-* 🔍 **Write a comprehensive briefing:** Give it a topic. It browses dozens of sources, filters out marketing fluff, keeps exact links to every claim, and formats a clean report or slide deck.
+* 📁 **Clean up a messy 50GB drive:** Drop a folder in. It scans files with a multi-threaded work-stealing walker, spots duplicates using 7-stage cryptographic hashes (xxHash3 + BLAKE3), visualizes disk space with interactive treemaps, and moves files only after you review the approval card.
+* 📊 **Update a company financial model:** Drop in an Excel workbook. It recalculates formulas using the built-in IronCalc engine, updates summary tabs, and flags discrepancies without hallucinating numbers or destroying your cell formatting.
+* 📑 **Update an executive slide deck:** Drop in a `.pptx` presentation. It swaps metrics on key slides, restyles text, and preserves the master presentation theme without corrupting untouched XML parts.
+* 🌐 **Autonomous Browser Research:** Tell it to analyze vendor pricing across 10 sites. It navigates paginated catalogs, logs into portals with your existing session vault, downloads price sheets, and compiles a comparison matrix.
+* 🖥️ **Desktop Computer Use:** Tell it to extract 50 records from a spreadsheet and enter them into a legacy desktop ERP or accounting tool. It views the screen, navigates menus, locates form controls with visual grounding & OCR, and inputs the data automatically.
+* 🛠️ **Debug a failing test suite:** Point it at a repo. It reads LSP compiler diagnostics, isolates the failing unit test, implements the fix, and runs your test suite to prove the fix works (RED → GREEN) with 1-click rollback.
+* ⏰ **Automate daily briefings:** Schedule a recurring task to pull your GitHub pull requests, scan industry news via the free search cascade, and prepare a morning digest every day at 8:00 AM while running quietly in the system tray.
 
 ---
 
@@ -158,8 +166,8 @@ Instead of juggling separate chat subscriptions, web spreadsheets, browser exten
 - **Smart Cost Saving:** Static system prompts and context are automatically cached, cutting your API token costs by up to 90% and making replies feel instant.
 
 ### 📊 Real Office Spreadsheets & Documents
-- **Real Math, Not Hallucinated Text:** Unlike web chat tools that output static markdown tables or approximate numbers, EveryAIOS includes a real local spreadsheet calculation engine. It calculates formulas across `.xlsx` workbooks, preserves your cell styling, and ensures financial models stay 100% accurate.
-- **Word & PDF Processing:** Read, edit, and generate `.docx` and `.pdf` files. Extract tables, fill out forms, redact sensitive information, and summarize contracts with precision.
+- **Real Math, Not Hallucinated Text:** Unlike web chat tools that output static markdown tables or approximate numbers, EveryAIOS includes a real local spreadsheet calculation engine. It calculates formulas across `.xlsx` workbooks, preserves your cell styling, and ensures financial models stay 100% accurate with 0 tokens burned on calculation.
+- **Word, PowerPoint & PDF Processing:** Read, edit, and generate `.docx`, `.pptx`, and `.pdf` files. Fill out PDF forms, redact sensitive information, author slides, and inspect document diffs with surgical byte-level XML stability.
 - **Zero Token Waste:** All spreadsheet calculations and document parsing are performed locally on your device—saving your precious AI tokens for actual thinking.
 
 ### 🌐 Autonomous Browser Use & Web Automation
@@ -177,15 +185,36 @@ Instead of juggling separate chat subscriptions, web spreadsheets, browser exten
 
 ### 💻 Powerful Coding & Instant 1-Click Rollback
 - **Bring Your Favorite Coding Agents:** Connect the tools you already love—Claude Code, OpenAI Codex, Cline, Roo Code, Aider, OpenCode, Block Goose, or our Native Agent—directly inside EveryAIOS.
+- **Monaco IDE Workbench & Real LSP:** Features an embedded VS Code editor core with workspace file trees, git diff tracking, worktrees, and live compiler diagnostics via LSP servers.
 - **Integrated PTY Shell & Watch-the-Agent-Work:** Coding agents run commands inside real PTY terminal tabs with OSC 133 shell integration, showing you exact commands, exit codes, and outputs with live syntax-highlighted progress.
 - **1-Click Time-Travel Undo:** Every single code change is automatically saved in an isolated version checkpoint. If an edit doesn't work as expected, hit **Undo** to roll back your files instantly to the exact previous second.
-- **Tests Before Approval:** Before proposing changes to your codebase, EveryAIOS runs your test suite in the background to prove the fix actually works.
+- **Tests Before Approval (TDD Loop):** Before proposing changes to your codebase, EveryAIOS runs your test suite in the background to prove the fix actually works (RED → GREEN).
 - **Surgical Precision:** Edits are verified against exact line matches and language syntax. No guessing or accidentally overwriting your functions.
+
+### ⚡ Background Automations & System Tray Daemon
+- **Unattended Scheduled Tasks:** Set 5-field cron schedules, interval triggers, or webhook events. Missed heartbeats and interrupted tasks resume safely from checkpoints.
+- **Runs While Minimized:** The system tray daemon keeps running automations, notifications, and scheduled research briefings even when the main app window is closed.
+- **Proactive Nudge Sentinels:** Detects stale tasks or broken workflows and suggests smart follow-up actions directly in your workspace.
+
+### 🔍 Free Deep Web Research & Search Cascade
+- **Zero Search API Fees:** Built-in G8 search cascade queries SearXNG and DuckDuckGo with health-gated fallbacks and local caching—search the live web without paying for external search APIs.
+- **Synthesized Evidence Briefings:** Compiles deep research queries into structured markdown reports complete with verified citations, source links, and confidence metrics.
+
+### 🧹 Storage Intelligence & Hash Deduplication
+- **7-Stage Cryptographic Deduplication:** Uses parallel work-stealing threads to scan folders, eliminating duplicate files using size checks, xxHash3, and BLAKE3 hashes without unnecessary disk I/O.
+- **Interactive Disk Treemaps:** Squarified visual treemaps show you exactly what is consuming your storage, with instant filters for large and stale files.
+- **Safe Review Proposals:** Proposes tidy organization and cleanup packages via approval cards; never deletes data behind your back.
+
+### 🧬 5-Tier Cognitive Memory & Knowledge Graph
+- **Persistent Personal Taste Profile:** Learns your favorite coding conventions, document formats, and tone preferences from your edits and feedback, injecting them seamlessly into future turns.
+- **Temporal Knowledge Graph:** Links entities, project decisions, and concepts over time with structured relationships (supports, contradicts, derived-from).
+- **Lightweight & Private:** Zero heavy vector database setup required; powered by fast local SQLite BM25 full-text search with optional neural embeddings.
 
 ### 🛡️ Enterprise-Grade Privacy & Security
 - **100% Local-First:** Your documents, conversations, notes, and API keys are stored locally on your machine in an encrypted AES-256 vault.
 - **Zero Telemetry, Zero Training:** Your data belongs to you. We never train models on your work, log your files, or send private data to central servers.
-- **Clear Approval Cards:** The AI cannot modify your files, run terminal commands, or send external emails without presenting a clear visual diff for you to review and approve.
+- **Clear Approval Cards & Dedicated Guard Window:** The AI cannot modify files, run terminal commands, or send external emails without presenting an approval card in an isolated, un-spoofable security window.
+- **Cryptographic Merkle Audit Trail:** Every action and tool execution is recorded in a tamper-proof, append-only Merkle hash chain for complete auditability.
 - **Protected Boundaries:** System directories, sensitive keys (`.ssh/`, `.git/`, environment variables), and cloud metadata are strictly walled off from the AI.
 
 ---
@@ -218,6 +247,14 @@ Yes! You can connect EveryAIOS to local runtimes such as <strong>Ollama</strong>
 <summary><strong>Can I bring my existing Claude Code, OpenAI Codex, Cline, Roo Code, or Aider setup?</strong></summary>
 <br/>
 Yes! EveryAIOS natively supports the open Agent Client Protocol (ACP). If you already love using Claude Code in your terminal, Cline or Roo Code in your IDE, OpenAI Codex, or Aider for git commits, you can connect them directly into EveryAIOS. They preserve their native loops and tools while gaining access to EveryAIOS's local Excel engine, autonomous browser actions, computer use, and shared memory automatically.
+</details>
+
+<details>
+<summary><strong>What is the "Two-Plane" architecture and how does it superpower external agents?</strong></summary>
+<br/>
+EveryAIOS respects the tools you already love through a strict two-plane design:
+1. <strong>The Agent-Native Plane:</strong> External coding agents (Claude Code, OpenAI Codex, Cline, Roo Code, Aider, OpenCode) retain 100% of their native prompts, reasoning loops, and tools. We never degrade or rewrite an agent's native capabilities.
+2. <strong>The Shared Cowork Plane:</strong> EveryAIOS augments those agents with capabilities they lack on their own: built-in local Excel formula recalculation, Word/PowerPoint/PDF editing, 37-action autonomous browser use, native desktop computer use, background cron scheduling, and shared 5-tier cognitive memory.
 </details>
 
 <details>
