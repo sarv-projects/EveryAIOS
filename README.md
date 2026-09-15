@@ -3,12 +3,13 @@
 </p>
 
 <h1 align="center">EveryAIOS</h1>
+<h3 align="center">Every AI. One Space.</h3>
 
-<p align="center"><strong>The All-in-One AI Desktop App — Chat, Cowork & Code on Your Computer.</strong></p>
+<p align="center"><strong>Every Model. Every Agent. Every Task. One Space.</strong></p>
 
 <p align="center">
-  One single desktop app for your everyday work: talk through ideas, crunch spreadsheets, edit documents, browse the web, and build software.<br/>
-  <strong>Run your favorite coding agents (Claude Code, OpenAI Codex, Cline, Roo Code, Aider, OpenCode, or our Native Agent).<br/>
+  One desktop cockpit for your daily work — talk through ideas, crunch spreadsheets, edit documents, automate browsers, control your desktop, and build software.<br/>
+  <strong>Run your favorite coding agents (Claude Code, OpenAI Codex, Google Antigravity, Cline, Aider, OpenCode, or our Native Agent).<br/>
   Bring any AI model (Claude 3.7 Sonnet, OpenAI o3 / GPT-4o, DeepSeek-R1 / V3, Qwen 2.5 Coder, Gemini 2.0, or local offline AI via Ollama). Keep 100% of your data private.</strong>
 </p>
 
@@ -39,7 +40,7 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 | :--- | :---: | :---: | :---: | :---: |
 | **All-in-One: Chat + Cowork + Coding** | ✅ **Yes (One Cockpit)** | ⚠️ **Chat-Centric**<br/>*(Claude has MCP & Computer Use preview; ChatGPT has Canvas & macOS Work with Apps; no unified IDE or Excel engine)* | ⚠️ **Code Editor Only**<br/>*(Agent Mode for coding; no Office/documents or general cowork)* | ⚠️ **Terminal Only**<br/>*(Headless CLI; no document viewers or visual interface)* |
 | **Bring Any AI Model You Want**<br/>*(Claude 3.7 Sonnet, OpenAI o3 / GPT-4o, DeepSeek-R1 / V3, Qwen 2.5 Coder, Gemini 2.0, Llama 3.3, Ollama)* | ✅ **Universal Freedom**<br/>*(100+ frontier & local models via BYOK or 100% offline with Ollama/MLX/vLLM)* | ❌ **Locked Walled Garden**<br/>*(Restricted to their own models only)* | ⚠️ **Curated Cloud Selection**<br/>*(Claude, GPT, proprietary models; limited local LLM support)* | ⚠️ **Limited / Complex**<br/>*(Claude Code is Anthropic-only; Aider requires terminal setup)* |
-| **Use Your Favorite Coding Agents**<br/>*(Claude Code, OpenAI Codex, Cline, Roo Code, Aider, OpenCode, or Native)* | ✅ **Run them all inside EveryAIOS**<br/>*(Native-first ACP agent hosting)* | ❌ **None**<br/>*(Cannot host external coding agents)* | ❌ **Locked to Editor Agent**<br/>*(Cannot run competing CLI agents)* | ⚠️ **Isolated CLIs**<br/>*(Separate terminal windows without unified app context)* |
+| **Use Your Favorite Coding Agents**<br/>*(Claude Code, OpenAI Codex, Google Antigravity, Cline, Aider, OpenCode, or Native)* | ✅ **Run them all inside EveryAIOS**<br/>*(Native-first ACP agent hosting)* | ❌ **None**<br/>*(Cannot host external coding agents)* | ❌ **Locked to Editor Agent**<br/>*(Cannot run competing CLI agents)* | ⚠️ **Isolated CLIs**<br/>*(Separate terminal windows without unified app context)* |
 | **Universal Tool & MCP Support**<br/>*(Connect any MCP server, database, API, or local skill)* | ✅ **Full MCP Client & Server**<br/>*+ Two-Plane Native Tool Facades* | ⚠️ **Partial**<br/>*(Claude Desktop supports MCP servers; ChatGPT has no MCP)* | ⚠️ **IDE MCP Support**<br/>*(Can connect MCP tools in editor)* | ⚠️ **Manual CLI Setup**<br/>*(Requires JSON editing per tool)* |
 | **Real Office Spreadsheets & Documents**<br/>*(Recalculates formulas, edits Word, PowerPoint & PDFs)* | ✅ **Built-in Local Calculation Engine**<br/>*(Recalculates formulas across `.xlsx`, edits `.docx`, `.pptx`, `.pdf`, 0 tokens spent on math)* | ❌ **Burns Message Quota**<br/>*(Guesses formulas as text or runs cloud Python sandbox; doesn't preserve Excel sheets)* | ❌ **None** | ❌ **None** |
 | **Deep Web Research & Free Search**<br/>*(Multi-source research with zero API keys)* | ✅ **Built-in Tiered Search Cascade**<br/>*(SearXNG + DuckDuckGo fallback, cited reports, $0 search fees)* | ⚠️ **Burns Chat Quota**<br/>*(Limited web search or requires paid Perplexity/search keys)* | ⚠️ **Basic Search**<br/>*(Short code snippets only)* | ⚠️ **Requires Search API**<br/>*(Manual Tavily/Serper setup)* |
@@ -62,7 +63,7 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 │        1. CHAT          │         2. COWORK          │         3. CODE           │
 │  • Brainstorm & write   │  • Real Excel formulas     │  • Fix bugs & write code  │
 │  • Free deep research   │  • Word, PowerPoint, PDFs  │  • Claude Code, Codex,    │
-│  • 5-tier local memory  │  • Autonomous Browser Use  │    Cline, Roo, Aider, etc.│
+│  • 5-tier local memory  │  • Autonomous Browser Use  │    Antigravity, Aider, etc│
 │  • Remembers your style │  • Native Computer Use     │  • Monaco IDE & real LSP  │
 │  • Any AI model         │  • Background Automations  │  • 1-Click Undo any diff  │
 └─────────────────────────┴────────────────────────────┴───────────────────────────┘
@@ -83,7 +84,7 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 * **Storage Intelligence:** Spot duplicate files by cryptographic hash (xxHash3 + BLAKE3), find giant forgotten downloads, and visualize disk space with interactive treemaps.
 
 ### 3. 💻 Autonomous Coding (With a Safety Net)
-* **Your Favorite Agents in One Home:** Prefer Claude Code or Aider for terminal work? Love Cline or Roo Code for in-editor patching? Need OpenAI Codex or OpenCode? EveryAIOS hosts them seamlessly in the same cockpit alongside our Native Agent.
+* **Your Favorite Agents in One Home:** Prefer Claude Code or Aider for terminal work? Love Google Antigravity or Cline for agentic workflows? Need OpenAI Codex or OpenCode? EveryAIOS hosts them seamlessly in the same cockpit alongside our Native Agent.
 * **Monaco IDE Workbench & Real LSP:** Full VS Code-grade code editor with file explorer, git status, syntax highlighting, and live LSP compiler diagnostics.
 * **1-Click Time-Travel Undo:** Every single code change is automatically saved in an isolated version checkpoint. If an agent makes a mistake, click **"Undo"** to instantly roll your files back to the exact previous second.
 * **Tests Before Approval (TDD Loop):** Before proposing changes to your codebase, EveryAIOS runs your test suite in the background to prove the fix actually works (RED → GREEN).
@@ -184,7 +185,7 @@ Instead of juggling separate chat subscriptions, web spreadsheets, browser exten
 - **Always in Your Control:** Watch the agent work live on your screen. You can pause, review, or halt computer use at any millisecond with a single click or keyboard shortcut.
 
 ### 💻 Powerful Coding & Instant 1-Click Rollback
-- **Bring Your Favorite Coding Agents:** Connect the tools you already love—Claude Code, OpenAI Codex, Cline, Roo Code, Aider, OpenCode, Block Goose, or our Native Agent—directly inside EveryAIOS.
+- **Bring Your Favorite Coding Agents:** Connect the tools you already love—Claude Code, OpenAI Codex, Google Antigravity, Cline, Aider, OpenCode, Block Goose, or our Native Agent—directly inside EveryAIOS.
 - **Monaco IDE Workbench & Real LSP:** Features an embedded VS Code editor core with workspace file trees, git diff tracking, worktrees, and live compiler diagnostics via LSP servers.
 - **Integrated PTY Shell & Watch-the-Agent-Work:** Coding agents run commands inside real PTY terminal tabs with OSC 133 shell integration, showing you exact commands, exit codes, and outputs with live syntax-highlighted progress.
 - **1-Click Time-Travel Undo:** Every single code change is automatically saved in an isolated version checkpoint. If an edit doesn't work as expected, hit **Undo** to roll back your files instantly to the exact previous second.
@@ -244,16 +245,16 @@ Yes! You can connect EveryAIOS to local runtimes such as <strong>Ollama</strong>
 </details>
 
 <details>
-<summary><strong>Can I bring my existing Claude Code, OpenAI Codex, Cline, Roo Code, or Aider setup?</strong></summary>
+<summary><strong>Can I bring my existing Claude Code, OpenAI Codex, Google Antigravity, Cline, or Aider setup?</strong></summary>
 <br/>
-Yes! EveryAIOS natively supports the open Agent Client Protocol (ACP). If you already love using Claude Code in your terminal, Cline or Roo Code in your IDE, OpenAI Codex, or Aider for git commits, you can connect them directly into EveryAIOS. They preserve their native loops and tools while gaining access to EveryAIOS's local Excel engine, autonomous browser actions, computer use, and shared memory automatically.
+Yes! EveryAIOS natively supports the open Agent Client Protocol (ACP). If you already love using Claude Code in your terminal, Google Antigravity or Cline for agentic coding, OpenAI Codex, or Aider for git commits, you can connect them directly into EveryAIOS. They preserve their native loops and tools while gaining access to EveryAIOS's local Excel engine, autonomous browser actions, computer use, and shared memory automatically.
 </details>
 
 <details>
 <summary><strong>What is the "Two-Plane" architecture and how does it superpower external agents?</strong></summary>
 <br/>
 EveryAIOS respects the tools you already love through a strict two-plane design:
-1. <strong>The Agent-Native Plane:</strong> External coding agents (Claude Code, OpenAI Codex, Cline, Roo Code, Aider, OpenCode) retain 100% of their native prompts, reasoning loops, and tools. We never degrade or rewrite an agent's native capabilities.
+1. <strong>The Agent-Native Plane:</strong> External coding agents (Claude Code, OpenAI Codex, Google Antigravity, Cline, Aider, OpenCode) retain 100% of their native prompts, reasoning loops, and tools. We never degrade or rewrite an agent's native capabilities.
 2. <strong>The Shared Cowork Plane:</strong> EveryAIOS augments those agents with capabilities they lack on their own: built-in local Excel formula recalculation, Word/PowerPoint/PDF editing, 37-action autonomous browser use, native desktop computer use, background cron scheduling, and shared 5-tier cognitive memory.
 </details>
 
