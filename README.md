@@ -42,16 +42,17 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 
 | Feature | **EveryAIOS** | **ChatGPT / Claude Desktop** | **Cursor / Windsurf** | **Terminal Tools (Claude Code, Aider)** |
 | :--- | :---: | :---: | :---: | :---: |
-| **All-in-One: Chat + Cowork + Coding** | ✅ **Yes (One App)** | ⚠️ Chat only | ⚠️ Code editing only | ⚠️ Terminal coding only |
-| **Bring Any AI Model You Want**<br/>*(DeepSeek, Claude, GPT-4o, Qwen, Groq, Llama, Ollama)* | ✅ **Universal Freedom**<br/>*(100+ models or local offline)* | ❌ **Locked**<br/>*(Only their own model)* | ⚠️ **Limited**<br/>*(A few selected providers)* | ⚠️ **Limited**<br/>*(Requires command-line setup)* |
-| **Use Your Favorite Coding Agents**<br/>*(Claude Code, Cline, Aider, OpenCode, or Native)* | ✅ **Run them all inside EveryAIOS** | ❌ None | ❌ Locked to their own editor | ❌ Standalone separate CLIs |
-| **Real Excel & Document Editing**<br/>*(Recalculates formulas, edits Word & PDFs)* | ✅ **Built-in Local Engine**<br/>*(0 AI tokens wasted on math)* | ❌ **Burns message quota**<br/>*(Guesses formulas as text)* | ❌ None | ❌ None |
-| **Autonomous Browser Use (Web Automation)**<br/>*(37 CDP tools, navigates web, fills forms, extracts data, reuses logins)* | ✅ **Built-in Browser Engine**<br/>*(Fast, private, local session vault)* | ⚠️ Limited cloud beta | ❌ None | ❌ None |
-| **Native Computer Use (Desktop Automation)**<br/>*(Controls desktop apps, clicks UI elements, OCR, keyboard/mouse)* | ✅ **Built-in Computer Use**<br/>*(Windows, macOS, Linux)* | ⚠️ Cloud CUA (slow / costly) | ❌ None | ❌ None |
-| **No Annoying "Wait 4 Hours" Limits** | ✅ **Auto-rotates backup keys**<br/>*(Work never stops)* | ❌ **Strict message caps**<br/>*(Locked out when limit hit)* | ❌ Fails when quota hit | ⚠️ Manual fallback |
-| **Safety & 1-Click Undo** | ✅ **Safe Approval Cards**<br/>*+ Instant 1-Click Rollback* | ❌ No file rollback | ⚠️ Standard git only | ⚠️ Terminal prompts |
-| **100% Private & Local-First** | ✅ **Your files stay on your machine** | ❌ Cloud-hosted | ⚠️ Cloud telemetry | ⚠️ Local terminal |
-| **Price** | 🟢 **Free & Open Source**<br/>*(Pay only for pennies of raw tokens)* | 🔴 \$20 – \$200 / month | 🔴 \$20 / month | 🟢 Open source |
+| **All-in-One: Chat + Cowork + Coding** | ✅ **Yes (One Cockpit)** | ⚠️ **Chat-Centric**<br/>*(Claude has MCP & Computer Use preview; ChatGPT has Canvas & macOS Work with Apps; no unified IDE or Excel engine)* | ⚠️ **Code Editor Only**<br/>*(Agent Mode for coding; no Office/documents or general cowork)* | ⚠️ **Terminal Only**<br/>*(Headless CLI; no document viewers or visual interface)* |
+| **Bring Any AI Model You Want**<br/>*(DeepSeek, Claude, GPT-4o, Qwen, Groq, Llama, Ollama)* | ✅ **Universal Freedom**<br/>*(100+ cloud models or 100% offline local with Ollama/MLX)* | ❌ **Locked Walled Garden**<br/>*(Restricted to their own models only)* | ⚠️ **Curated Cloud Selection**<br/>*(Claude, GPT, proprietary models; limited local LLM support)* | ⚠️ **Limited / Complex**<br/>*(Claude Code is Anthropic-only; Aider requires terminal setup)* |
+| **Use Your Favorite Coding Agents**<br/>*(Claude Code, Codex, Cline, Aider, OpenCode, or Native)* | ✅ **Run them all inside EveryAIOS** | ❌ **None**<br/>*(Cannot host external coding agents)* | ❌ **Locked to Editor Agent**<br/>*(Cannot run competing CLI agents)* | ⚠️ **Isolated CLIs**<br/>*(Separate terminal windows without unified app context)* |
+| **Universal Tool & MCP Support**<br/>*(Connect any MCP server, database, API, or local skill)* | ✅ **Full MCP Client & Server**<br/>*+ Two-Plane Native Tool Facades* | ⚠️ **Partial**<br/>*(Claude Desktop supports MCP servers; ChatGPT has no MCP)* | ⚠️ **IDE MCP Support**<br/>*(Can connect MCP tools in editor)* | ⚠️ **Manual CLI Setup**<br/>*(Requires JSON editing per tool)* |
+| **Real Excel & Document Editing**<br/>*(Recalculates formulas, edits Word & PDFs)* | ✅ **Built-in Local Calculation Engine**<br/>*(Recalculates formulas across `.xlsx`, edits Word & PDFs, 0 tokens spent on math)* | ❌ **Burns Message Quota**<br/>*(Guesses formulas as text or runs cloud Python sandbox; doesn't preserve Excel sheets)* | ❌ **None** | ❌ **None** |
+| **Autonomous Browser Use (Web Automation)**<br/>*(37 CDP tools, navigates web, fills forms, extracts data, reuses logins)* | ✅ **Built-in Browser Engine**<br/>*(Multi-browser: Brave, Chrome, Edge, Arc; safe session vault reuses logins)* | ⚠️ **Limited / Slow**<br/>*(Cloud browsing only; Claude Computer Use preview is slow/costly)* | ❌ **None** | ❌ **None** |
+| **Native Computer Use (Desktop Automation)**<br/>*(Controls desktop apps, clicks UI elements, OCR, keyboard/mouse)* | ✅ **Native OS Desktop Control**<br/>*(Windows UIA/WGC, macOS AX, Linux X11; visual grounding & OCR)* | ⚠️ **Cloud CUA Beta**<br/>*(Expensive per-screenshot token streaming; macOS only)* | ❌ **None** | ❌ **None** |
+| **No Annoying "Wait 4 Hours" Limits** | ✅ **Auto-Rotates Backup Keys**<br/>*(Multi-key pools per provider; work never pauses)* | ❌ **Strict 3–5 Hour Caps**<br/>*(Locked out when message limits hit)* | ❌ **Monthly Fast-Request Cap**<br/>*(Throttled or extra charges when 500 fast requests exhausted)* | ⚠️ **Manual Fallback**<br/>*(Stops on 429; requires manual key swap)* |
+| **Safety & 1-Click Undo** | ✅ **Safe Approval Cards**<br/>*+ Instant 1-Click Shadow Git Rollback* | ❌ **No File Rollback**<br/>*(No local file versioning)* | ⚠️ **Standard Git / Checkpoints**<br/>*(Editor-only checkpoints)* | ⚠️ **Terminal Prompts**<br/>*(CLI prompts or manual git)* |
+| **100% Private & Local-First** | ✅ **Local Encrypted Vault**<br/>*(AES-256 SQLCipher; run 100% offline air-gapped)* | ❌ **Cloud-Hosted**<br/>*(All data sent to remote cloud infrastructure)* | ⚠️ **Cloud Indexing**<br/>*(Codebase indexed and processed on cloud servers)* | ⚠️ **Local CLI, Cloud APIs**<br/>*(Terminal is local, but sends files to cloud LLMs)* |
+| **Price** | 🟢 **Free & Open Source**<br/>*(Pay only pennies for raw token use or $0 offline)* | 🔴 **\$20 – \$200 / month**<br/>*(Single-user monthly fee)* | 🔴 **\$20 / month**<br/>*(Plus overage fees for high usage)* | 🟢 **Free / Open Source**<br/>*(CLI only, pay raw token costs)* |
 
 ---
 
@@ -168,6 +169,7 @@ Instead of juggling separate chat subscriptions, web spreadsheets, browser exten
 
 ### 🌐 Autonomous Browser Use & Web Automation
 - **37 Native Browser Actions:** Navigate websites, click buttons, fill multi-step forms, handle dynamic Single Page Apps (SPAs), scroll, and take full-page captures.
+- **Your Choice of Browser:** Automatically discovers installed browsers on your system (**Brave**, **Google Chrome**, **Microsoft Edge**, **Arc**, **Vivaldi**, **Chromium**, or a custom binary) with channel-isolated profiles so your personal browser data is never disturbed.
 - **Zero-Auth Session Vault:** Safely reuse your existing logged-in sessions (GitHub, AWS console, CRM, internal company intranets) without ever typing passwords into AI prompts or exposing cookies to third parties.
 - **Deep Research & Fact Verification:** Autonomously searches multiple independent web sources, filters marketing fluff, and builds rich citation graphs with direct links to every source.
 - **Accessibility-Aware Navigation:** Reads the web the way screen readers do—using real semantic accessibility trees (a11y) so it never gets confused by popups, ads, or floating banners.
@@ -180,6 +182,7 @@ Instead of juggling separate chat subscriptions, web spreadsheets, browser exten
 
 ### 💻 Powerful Coding & Instant 1-Click Rollback
 - **Bring Your Favorite Coding Agents:** Connect the tools you already love—Claude Code, Cline, Aider, OpenCode, or our Native Agent—directly inside EveryAIOS.
+- **Integrated PTY Shell & Watch-the-Agent-Work:** Coding agents run commands inside real PTY terminal tabs with OSC 133 shell integration, showing you exact commands, exit codes, and outputs with live syntax-highlighted progress.
 - **1-Click Time-Travel Undo:** Every single code change is automatically saved in an isolated version checkpoint. If an edit doesn't work as expected, hit **Undo** to roll back your files instantly to the exact previous second.
 - **Tests Before Approval:** Before proposing changes to your codebase, EveryAIOS runs your test suite in the background to prove the fix actually works.
 - **Surgical Precision:** Edits are verified against exact line matches and language syntax. No guessing or accidentally overwriting your functions.
