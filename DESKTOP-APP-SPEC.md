@@ -723,6 +723,38 @@ The tables above are **gap observations**. Product UI layouts (required):
 2. Keys: one password field, placeholder “API key”, submit on **Enter**. Processing spinner on that bar. Success: green tick + `aria-label="verified"`; **then a + below that bar** for the next key. Failure: status code + message, field stays. Keyless: button “Use without key” (no Authorization).
 3. Models: a **dropdown** (session default) **and** a searchable table of **all** models: columns Model, Model id, Context, Output, Price (in/out per 1M), Reasoning, Tool call, Images, plus attachment/structured/temperature/knowledge/family/status when present. Clicking a row sets the default. `Images` = CUA-eligible.
 
+**Settings Control Center — provider, agent, connection, schedule, and extension configuration (v3.77).** Settings is a searchable, backend-authoritative control center. It composes existing registries; it is not a second provider, connector, scheduler, agent, or plugin runtime.
+
+**Settings navigation and ownership.** The settings surface contains these explicit areas:
+
+| Area | Authoritative owner | What the UI may show/change |
+|---|---|---|
+| `Providers` | A1–A11: catalog, provider profiles, vault/keyring, model resolver | Searchable catalog, configured/popular/all grouping, provider activation, key verification, model metadata/default, custom endpoint profile. Secrets are entered into Rust/vault; React state never owns them. |
+| `Agent settings` | F8/F12/J17 + ARCH/17 two-plane contract | Installed runtime status, native capability card, shared EveryAIOS capability grants, auth mode, launch/backend binding, readiness, and live ACP config options. External native tools/models remain agent-owned. |
+| `Channels & Connectors` | F1–F7/F13–F15, `everyaios-mcp`, vault OAuth | Installed/connected/disconnected resources, scopes, transport, health, enabled consumers, connect/disconnect/revoke. Raw tokens never enter an agent or renderer. |
+| `Schedules` | B7/H14 + Work Gateway | Schedule list, trigger/action summary, agent/Work binding, budget/network/autonomy snapshot, enable/pause/run-now/history. Editing a schedule never mutates an in-flight Run. |
+| `Installed` | I2/I6 skill/plugin registry + F8 managed resources | Installed skills, plugins, MCP servers, ACP runtimes, hooks, and tools; version, provenance, digest, trust, capabilities, bound agents, health, update/disable/remove. |
+| `Marketplace` | Signed discovery indexes only | Available entries and review metadata. Discovery is not installation, enablement, occupancy, or trust. |
+
+**Provider contract.** `ProviderSettingsRow = { id, name, aliases[], source, authKind, configured, keyCount, keyless, health, models[], docsUrl?, baseUrl?, transport?, capabilities[] }`. The list supports case-insensitive substring search across id, name, aliases, environment names, and model ids. The activation detail is a separate screen/pane: provider metadata → one or more key bars or “Use without key” → metadata-only verification → green `verified` state → searchable model table and default-model selection. A failed probe preserves the editable field and displays the provider error. Billable calls are never used for verification unless the user explicitly chooses them.
+
+Custom provider schema: `ProviderProfile = { id, name, base_url, format: openai-compatible|anthropic|openai-responses, api_key_ref?, headers?, body?, temperature?, models[], source: user-config, config_hash }`. `api_key_ref` is a vault reference, never the key. User-configured endpoints still pass the network floor and egress policy.
+
+**Agent settings contract.** `AgentSettings = { agent_id, installed, launch_path?, protocol, auth_mode, native_capabilities[], shared_capabilities[], model_owner: native|everyaios|managed, backend_binding?, config_options[], readiness, health, last_error? }`. The detail view must show two visibly separate cards:
+
+- **Native capabilities:** the selected runtime's own loop, tools, search, model/account, permissions, sessions, and native configuration. EveryAIOS does not rewrite or remove these.
+- **EveryAIOS shared capabilities:** explicitly granted Office, Browser, Computer Use, Workspace/CodeIntel, Connectors, Artifacts, Work, Scheduler, Recovery, Evidence, Budget, and Guard surfaces.
+
+`BackendBinding = { provider_id, injected_env_names[], unexpressed_settings[], writes_to_agent_config: false }` for the current P63 spawn-env path. Subscription-backed agents use their own sign-in and expose no EveryAIOS credential control. Native config-file projection is a separate P47.7/P63.8 effect and must use detect → read → preview → Guard-2 → atomic write → verify → receipt → rollback; no UI may imply it is live before that path exists.
+
+**Channels and connector contract.** `ConnectionRecord = { id, kind: remote-mcp|oauth-connector|native-adapter|message-channel, provider, transport, scopes[], enabled_consumers[], provenance, digest?, auth_ref?, state: discovered|installed|connected|disconnected|degraded|revoked, health, last_error?, config_hash }`. A channel is not a provider and a connector is not an agent. Connect flow is discover → explain scopes/data effects → Guard-2 consent where required → vault OAuth/API-key flow → attach/handshake → capability inventory → health. Disconnect revokes or detaches, removes live tools, and leaves an honest disconnected record. The UI never renders `connected` from local optimism alone.
+
+**Schedule contract.** `ScheduleSettings = { id, name, trigger: cron|interval|event|webhook, target_work_or_blueprint, chief_agent_id, capability_scope[], autonomy, budget, network_policy, timezone, enabled, next_run?, last_run?, state, config_hash }`. Each run freezes the schedule's runtime manifest. A schedule may queue or park for approval, but must never bypass Guard, vault, leases, or Work-event recording. `run-now` creates a normal Work/Run and cannot silently alter the recurring schedule.
+
+**Installed extension contract.** `InstalledExtension = { id, kind: skill|plugin|mcp|acp|hook|tool, version, abi_version?, provenance, digest, signature_status, trust_flags, capabilities_requested[], capabilities_granted[], bound_agents[], activation: lazy|active|disabled, health, installed_at, updated_at }`. Installation is validate signature/manifest → preview requested capabilities → Guard-2 consent → sandbox/host grant → atomic install → capability inventory → lazy activation → health. Marketplace entries have no granted capabilities until this completes. Uninstall disables first, persists an audit event, then removes only the owned files; rollback uses the pinned manifest/digest.
+
+**Persistence and readiness rule.** Every setting mutation is optimistic only in presentation: UI request → Rust validation/policy → atomic persistence → live subsystem apply → authoritative reread → `appliedLive`/`restartRequired`/`error`. Readiness is explicit (`configured`, `sign_in_required`, `api_key_required`, `local_cli`, `not_installed`, `unavailable`, `health_failed`, `ready`) and includes a sentence, not only a color. Search and grouping are presentation; they never create runtime occupancy.
+
 **Computer use vision modal.** Title: “Computer use needs a vision model”. Body: the current model cannot receive screenshots. Primary: picker (filtered `images?` + local VL). Secondary: Cancel (CUA unmounted). Never auto-pick a paid model.
 
 **Right rail.** Primary icons: Folder · Shell · Browse · **Computer use** · Code. Office flyout. Computer use view = see-pane (screenshot, “using this window”, Esc). Progress view shows the CUA DAG (nodes, status, replan marks); remaining nodes are editable.

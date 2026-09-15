@@ -18,6 +18,20 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## v3.77 — 2026-09-15 — Settings Control Center contract (providers, agents, channels, schedules, installed extensions)
+
+**Category:** product contract + architecture + implementation queue; no capability rows added. **Affected:** `DESKTOP-APP-SPEC.md` Settings Control Center contract, `ARCH/12-UI-SPEC.md` §4.1a, `ARCH/17-NATIVE-AGENT.md` §17.12, `TODO.md` P65, `ARCH/00-INDEX.md`, and shell architecture version metadata. Capability identity remains **166**; the live TODO count becomes **1411 = 1208 done + 203 open** because eight P65 implementation items were added.
+
+**Decision.** Adopt the useful Cline Desktop settings patterns — searchable inventory, Configured/Popular/All provider grouping, inventory/detail panes, schema-driven provider detail, explicit readiness, backend-authoritative persistence, and Installed versus Marketplace separation — while preserving EveryAIOS ownership boundaries. Settings composes existing provider, vault, ACP, MCP, connector, scheduler, Work Gateway, skill/plugin, Guard, and audit services. It does not create a competing registry or runtime.
+
+**Normative additions.** The contract now defines `ProviderSettingsRow`, `ProviderProfile`, `AgentSettings`, `BackendBinding`, `ConnectionRecord`, `ScheduleSettings`, and `InstalledExtension`; separates external agents' native capabilities from EveryAIOS shared capabilities; requires launch-time env binding rather than credential copying; requires live connection truth; freezes schedule manifests per Run; and requires signature/capability validation before extension installation. All settings writes follow validate → Guard/policy → atomic persist → live apply → authoritative reread, returning `appliedLive`, `restartRequired`, or an error.
+
+**What is deliberately not adopted.** No Cline registry, provider implementation, native agent loop, flat 51-tool injection, subscription credential extraction, silent external config-file writing, marketplace trust by discovery, or optimistic-only “configured/connected/installed” badges. P63.8/P47.7 remains the separate post-v1 native-config projection path.
+
+**Verification target.** P65.1–P65.8 are open and each has an implementation owner and acceptance gate in `TODO.md`. Until those gates pass, the new surfaces are contracts, not claims that the UI is live.
+
+---
+
 ## 2026-09-15 — One current count per document, one archive (no contract change; census 166)
 
 **Category:** documentation consistency only — no capability row, no schema, no code. Census unchanged (**166**); live count unchanged (**1403 = 1208 done + 195 open**).

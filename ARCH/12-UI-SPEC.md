@@ -278,6 +278,36 @@ Displayed when the agent creates/edits a file. Shows:
 └─────────────────────────────┘
 ```
 
+### 4.1a Settings Control Center (v3.77 — provider and installed-resource patterns)
+
+Settings is a control center, not a collection of decorative panels. It uses the same two-pane pattern as the agent picker: searchable inventory on the left, selected-resource detail on the right. Every row is backed by a Rust/Tauri read model and every mutation is reread from the backend.
+
+```
+┌──────────────────────────────┬─────────────────────────────────────┐
+│ Settings                     │ Selected resource                   │
+│ [Search settings/resources]  │ name · kind · readiness · health     │
+│                              │                                     │
+│ Providers                    │ Native capabilities                  │
+│ Agents                       │ Shared EveryAIOS capabilities         │
+│ Channels & Connectors       │ Configuration / scopes / model        │
+│ Schedules                    │ [Save] [Connect] [Verify] [Disable]  │
+│ Installed                    │                                     │
+│ Marketplace                 │ Activity / audit / error detail       │
+└──────────────────────────────┴─────────────────────────────────────┘
+```
+
+**Providers.** Sections are `Configured`, `Popular`, and `All providers`, with all-character search. Selecting a row opens activation detail: catalog metadata, auth method, key bars or keyless action, metadata-only verification, then searchable models and default model. The UI displays `configured`, `API key required`, `Sign in`, `Local CLI`, `Keyless`, `Health failed`, or `Ready`; a green tick always has an accessible `verified` label and is never inferred from a non-empty field.
+
+**Agents.** Selecting an installed agent shows two separate capability cards: `Native capabilities` (the agent's own loop, tools, search, model/account, permissions, and sessions) and `EveryAIOS shared capabilities` (Office, Browser, Computer Use, Workspace/CodeIntel, Connectors, Artifacts, Work, Scheduler, Recovery, Evidence, Budget, Guard). The settings screen may configure only the EveryAIOS side and the verified integration seam. Subscription agents show their own sign-in instead of a key-copy control. Current P63 provider binding is launch-time environment injection; the UI shows variable names and `writesToAgentConfig: false`.
+
+**Channels & Connectors.** Show `Discovered`, `Installed`, `Connected`, `Disconnected`, and `Degraded` groups. Each detail includes transport, scopes, data/effect summary, enabled consumers, health, last error, and connect/disconnect/revoke actions. A connected badge comes only from the backend's live attach/OAuth truth. MCP tools are not displayed as a flat 51-row wall; task-shaped shared façades are the target surface.
+
+**Schedules.** Show trigger, target Work/blueprint, Chief, capability scope, autonomy, budget, network policy, next run, last run, and state. `Run now` creates a normal Work and does not edit the recurrence. In-flight runs retain their frozen runtime manifest when settings change.
+
+**Installed / Marketplace.** `Installed` shows skills, plugins, MCP servers, ACP runtimes, hooks, and tools with version, digest/signature, trust, capabilities requested/granted, bound agents, activation, and health. `Marketplace` is discovery only. Install is validate → preview → Guard-2 consent → sandbox/grant → atomic write → inventory → lazy activation → health. Disable/remove/rollback actions operate on the pinned installed record.
+
+**Persistence and failures.** A setting change is rendered as pending until Rust validates, persists atomically, applies live where possible, and rereads. The result must identify `appliedLive`, `restartRequired`, or an actionable error. Missing credentials, missing binaries, unsupported transport, stale OAuth, failed health, and unavailable platform capabilities are separate states; none is represented as a generic green “configured” badge.
+
 ### 4.1b Multi-view tabbed panel (v3.0 — VS Code logic)
 
 The right viewport is a **tabbed view container** (VS Code editor-group / panel-region pattern), not a single surface.
