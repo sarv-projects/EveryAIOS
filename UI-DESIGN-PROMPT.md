@@ -1,9 +1,9 @@
 # EveryAIOS — Production UI Design Specification
 
-> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). `ui/src` is the **production frontend** used by the Tauri desktop application. A plain-browser Vite run (`npm run dev`) is a clearly labelled development preview with isolated fixtures; it is not the production runtime and must never imply real files, accounts, providers, tasks, or side effects. This file describes the shipped product contract (spec **v3.77** — the frozen two-plane Native agent model plus the Settings Control Center contract in `ARCH/17`, H36 terminal profiles, §4.5 backends), reconciled 2026-09-15 for the live catalog picker, not a wishlist of unbuilt chrome.
+> **Canonical UI spec.** `ui/src` implements this document (ARCH/12 §2.1: when ARCH/12 and this file disagree on pixels, **this file wins**). `ui/src` is the **production frontend** used by the Tauri desktop application. A plain-browser Vite run (`npm run dev`) is a clearly labelled development preview with isolated fixtures; it is not the production runtime and must never imply real files, accounts, providers, tasks, or side effects. This file describes the shipped product contract (spec **v3.78** — the frozen two-plane Native agent model plus the Settings Control Center and Windows-first runtime/picker contract in `ARCH/17`, H36 terminal profiles, §4.5 backends), reconciled 2026-09-15 for the live catalog picker, not a wishlist of unbuilt chrome.
 > **v3.67 / 2026-09-12 reconciliation:** composer remains **three independent controls** — **Agent ▾ (WHO)** · **Work Mode ▾ (WHAT: 🤖 Auto · 📐 Plan · 🔨 Build · 🔎 Research)** · **Autonomy ▾ (HOW MUCH: 🛡 Sandbox · 👀 Ask · ⚡ Auto · 🚀 Maximum)**. The **Agent ▾** list is installed-only selectable (a registry row with no binary renders `not installed` and routes to Settings rather than becoming a selection that cannot launch). Model ownership follows the agent: **EveryAIOS Native** shows the EveryAIOS provider/model surface (live catalog rows carried provider-qualified into routing, curated seed labelled fallback); an **external ACP agent** shows only its own ACP `configOptions` (`Model · <agent>`) or “managed by &lt;agent&gt;”. Settings has **one** agent surface — Agent runtimes — where the Native model catalog is a collapsed disclosure on the EveryAIOS Native card rather than a peer Models tab. Version badges are build-injected; do not hardcode a historical version string.
 > **v3.75 / 2026-09-15 reconciliation (two-plane Native agent model — `ARCH/17`, frozen):** this UI renders **one agent that owns two planes**. When **EveryAIOS Native** is selected the cockpit shows the EveryAIOS provider/model surface **and** the shared EveryAIOS cowork capabilities (Office · Browser · Computer use · connectors · workspace map · artifacts); when an **external ACP agent** is selected the cockpit must present the agent's **own native** capabilities as the agent's (`Model · <agent>`, its own session/auth) and the EveryAIOS additions as **shared augmentation** — a user must be able to tell which layer a capability comes from without reading docs (ARCH/17 §17.5, `UX-TESTING-PLAN.md`). This is a labeling/ownership rule over surfaces already described below, not new chrome; the picker's ownership split is unchanged.
-> **v3.77 / 2026-09-15 reconciliation (Settings Control Center):** Settings is a searchable, two-pane control center over the existing provider/catalog, vault, ACP, MCP, connector, scheduler, Work Gateway, skill/plugin, Guard, and audit registries. Providers show Configured/Popular/All plus activation detail and metadata-only verification; Agent settings visibly separates Native capabilities from EveryAIOS shared capabilities; Channels & Connectors show discovered/installed/connected/degraded truth; Schedules show the frozen Work/Run contract; Installed and Marketplace are separate. Every mutation is backend-authoritative (`validate → persist → apply → reread`) and reports `appliedLive`/`restartRequired`/error. No subscription credential copying, flat 51-tool wall, silent external config writes, or catalog-to-occupancy inference.
+> **v3.78 / 2026-09-15 reconciliation (Windows-first runtime and cowork UI):** Settings is a searchable, two-pane control-center target over the existing provider/catalog, vault, ACP, MCP, connector, scheduler, Work Gateway, skill/plugin, Guard, and audit registries. Providers show Configured/Popular/All plus activation detail and metadata-only verification; Agent settings visibly separates Native capabilities from EveryAIOS shared capabilities; Channels & Connectors show discovered/installed/connected/degraded truth; Schedules show the frozen Work/Run contract; Installed and Marketplace are separate. Windows runtime rows must show exact path/provenance and distinguish WSL. The chat picker must select an agent-owned model, not a global model; session capabilities are a separate loadout pane. The target shell uses cool-blue semantic theming with light/dark and selectable accents; the current orange legacy styling remains an explicit P66.5 implementation gap. Every mutation is backend-authoritative (`validate → persist → apply → reread`) and reports `appliedLive`/`restartRequired`/error. No subscription credential copying, flat 51-tool wall, silent external config writes, or catalog-to-occupancy inference. Office/browser/computer-use/memory readiness remains evidence-gated.
 > **v3.68 / 2026-09-13 reconciliation (casual surface — spec "What EveryAIOS is" + §0/H34 + §4.1 composer, P61):** casual mode asks **one** question, not three. **Agent ▾ / Work Mode ▾** are **power-only**; the autonomy control renders as one plain dial — **Look only · Ask me first · Balanced · Just do it** — with its meaning stated in a sentence. This is a **display layer over the same four `PermissionMode` values** (Look only=Sandbox, Ask me first=Ask, Balanced=Auto, Just do it=Maximum): the per-task `config_hash` freeze, `syncAutonomyFromRust()`, the Rust preset and every guard decision are unchanged, and the status bar names the running agent·model in both modes so the collapse hides nothing. Casual vocabulary is translated at render (`PLAIN_NOUNS`/`toPlainNoun`: Guard→Safety, Trust Ladder→how much it may do on its own, vault→your keys, …). **Empty state:** pre-scoped task cards each state what will happen and where the boundary is (“nothing moves until you approve”), not example phrases that only fill the box; a once-only 24 h nudge (`shouldNudgeFirstTask`) offers a single starter and never fires once the user has work. **Failure cards carry the exit:** Try again safer · Try differently · Undo (Undo only when a tool completed). **Interrupts are tiered:** `Needs you` for high-blast effects, and those require typing the resource name to approve; routine effects keep one click. **Artifact figures are never invented** — the badge renders only `Artifact.figures` (what the run reported) and is absent otherwise.
 
 ---
@@ -22,24 +22,26 @@ Everything below is what a power user sees; the casual differences are called ou
 
 ## 2. Design language
 
-### 2.1 Palette (light-first, warm cream)
+### 2.1 Palette (light-first, cool-blue semantic; selectable accents)
 
-| Token | Value | Use |
+| Token | Light | Use |
 |---|---|---|
-| Surface 0 (canvas) | `#F7F7F4` | window background |
+| Surface 0 (canvas) | `#F6F8FB` | window background |
 | Surface 1 (sidebar/panels) | `#FFFFFF` | sidebar, cards |
-| Surface 3 (hover) | `#F0EFEB` | hover, active washes |
-| Ink (primary) | `#26251E` | warm near-black text |
-| Ink (secondary) | `#6B6860` | secondary text |
-| Ink (tertiary) | `#9C9A94` | timestamps, meta |
-| **Brand (sole accent)** | `#F54E00` | CTAs, active indicators, brand mark |
+| Surface 3 (hover) | `#EDF1F7` | hover, active washes |
+| Ink (primary) | `#16202C` | near-black text |
+| Ink (secondary) | `#5A6675` | secondary text |
+| Ink (tertiary) | `#8A94A3` | timestamps, meta |
+| **Brand (selection + actions)** | `#2563EB` | CTAs, active indicators, brand mark, focus ring |
 | Success | `#16A34A` | completed, connected |
-| Running/Live | `#2563EB` | streaming, active jobs |
+| Running/Live | `#0EA5E9` | streaming, active jobs |
 | Warning/Ask | `#CA8A04` | approval needed |
 | Error | `#DC2626` | Guard-1 blocks, failures |
-| Border | `#E8E5E0` | warm hairline |
+| Border | `#DCE3EC` | cool hairline |
 
-Dark mode is a user toggle (`Sun/Moon` in the title bar) — same orange accent, surface base `#1A1917`.
+Dark mode is a user toggle (`Sun/Moon` in the title bar) — the same semantic roles on a `#0F141B` surface base. Brand is a **semantic accent token**, not a fixed hue, so Settings can offer selectable accent themes (cool blue default) without redefining status meanings. Orange is **not** the brand or selection state; it may remain only where an existing status meaning explicitly requires it.
+
+> **Implementation gap (P66.5):** `ui/src` still carries legacy `orange-*` utility styling in several surfaces, and some per-surface descriptions further down this file name orange for selection or decoration. Read those as the **legacy implementation**, not the target — the tokens above are the contract, and the picker/agent cards already follow them. Status meanings keep their own semantic color (success/live/warning/error); selection and brand use the accent token. Do not add new orange brand/selection styling.
 
 ### 2.2 Typography
 
@@ -48,7 +50,7 @@ Dark mode is a user toggle (`Sun/Moon` in the title bar) — same orange accent,
 
 ### 2.3 Motion philosophy
 
-Purposeful, swift, never bouncy. **No horizontal slides** — surfaces replace with a 150ms crossfade. Approval cards spring in from below (250ms overdamped). Streaming shows a blinking orange caret. No loading spinners — partial results grow in place. Reduced-motion (`prefers-reduced-motion`) collapses everything to instant swaps. The full animation inventory lives in §9.
+Purposeful, swift, never bouncy. **No horizontal slides** — surfaces replace with a 150ms crossfade. Approval cards spring in from below (250ms overdamped). Streaming shows a blinking brand-accent caret. No loading spinners — partial results grow in place. Reduced-motion (`prefers-reduced-motion`) collapses everything to instant swaps. The full animation inventory lives in §9.
 
 ---
 
@@ -67,7 +69,7 @@ Purposeful, swift, never bouncy. **No horizontal slides** — surfaces replace w
 
 ### 3.1 Title bar (36px, native-drag)
 
-Traffic lights → **brand mark** (orange sparkles tile) + `EveryAIOS` + **build-injected version badge** (rendered from `ui/src/lib/version.ts` at build time — never a hardcoded historical string) → workspace breadcrumb (`everyaios / work ∨`, hover-dropdown) → active session title + status dot + label → center **command-palette launcher** (`Search sessions, files, commands… ⌘K · ⌘/ help`) → right cluster: Guard chip (`🛡 Guard · Standard` — click opens Guard control center; **not** a sidebar item) · spend chip (`$1.84 / $5.00`, power only) · token chip (`184K tok`, power only) · theme toggle · 🔔 notifications popover (badge = unread) · sidebar toggle (⌘B) · avatar.
+Traffic lights → **brand mark** (accent sparkles tile) + `EveryAIOS` + **build-injected version badge** (rendered from `ui/src/lib/version.ts` at build time — never a hardcoded historical string) → workspace breadcrumb (`everyaios / work ∨`, hover-dropdown) → active session title + status dot + label → center **command-palette launcher** (`Search sessions, files, commands… ⌘K · ⌘/ help`) → right cluster: Guard chip (`🛡 Guard · Standard` — click opens Guard control center; **not** a sidebar item) · spend chip (`$1.84 / $5.00`, power only) · token chip (`184K tok`, power only) · theme toggle · 🔔 notifications popover (badge = unread) · sidebar toggle (⌘B) · avatar.
 
 ### 3.2 Left sidebar
 
@@ -105,7 +107,7 @@ Agent mark (selected runtime) + session title + pinned marker + **agent·model c
 ### 4.3 Messages
 
 - **User:** right-aligned bubble (secondary fill), avatar right.
-- **Assistant:** left-aligned card on canvas, orange sparkles avatar, markdown-rendered (inline code, block code with copy header, lists, links). Streaming = blinking orange caret. Optional collapsible **Reasoning** (violet, `›` chevron). Hover actions: copy · 👍/👎 vote · regenerate.
+- **Assistant:** left-aligned card on canvas, accent sparkles avatar, markdown-rendered (inline code, block code with copy header, lists, links). Streaming = blinking brand-accent caret. Optional collapsible **Reasoning** (violet, `›` chevron). Hover actions: copy · 👍/👎 vote · regenerate.
 - **System:** centered pill.
 - Entry animation: 280ms rise+fade (`fade-up`); code blocks in a `#0d0d0f` frame with mono header.
 - **In-chat search:** filters the transcript, shows `N match(es)` counter.
@@ -132,7 +134,7 @@ Message-width cards with a per-type **rendered preview**: xlsx → mini grid wit
 - **Empty state:** centered card (`glow-pulse` sparkles mark, headline, contextual example prompts — developer phrases in power mode, consumer outcomes in casual — plus **nudge chips** from P6.4 scheduler sentinels: `Make “Morning brief” a recurring task · 0 8 * * *`).
 - Once chat starts, the composer **bottom-pins**.
 - **Power row (v3.57 — three independent controls, replacing the old `Normal · Plan · Research · Quick · Code` pills):** **Work Mode ▾** (`🤖 Auto` · `📐 Plan` · `🔨 Build` · `🔎 Research` — Auto lets the agent pick and transition modes; Code/browser/Office/terminal are capabilities *inside* Build, not modes) · **Agent ▾** (H32 picker, EveryAIOS default, Auto = router) · **Autonomy ▾** (H34: 🛡 Sandbox · 👀 Ask · ⚡ Auto · 🚀 Maximum — authority policy, separate from mode). Collapsed composer shows `[🤖 Auto] [🛡 Ask]`; expanding reveals all three. Right mono cluster: `$spent / $cap` · `tokensK tok` · **context gauge** `{pct}% ctx` (amber ≥75%, red ≥90% with tooltip). **Casual (v3.68):** Work Mode and Agent are not rendered and the row is **one plain dial** (`Look only · Ask me first · Balanced · Just do it`) with a one-line meaning — display-only over the same `PermissionMode`, so the frozen per-task policy and every guard decision are identical in both modes.
-- **Input row:** `+` attach · auto-expanding textarea · 🎙 voice (toast "coming soon") · 🔊 TTS toggle · orange **send** arrow (disabled when empty; Enter sends, Shift+Enter newline).
+- **Input row:** `+` attach · auto-expanding textarea · 🎙 voice (toast "coming soon") · 🔊 TTS toggle · brand **send** arrow (disabled when empty; Enter sends, Shift+Enter newline).
 - **Helper row (power):** `Enter to send · Shift+Enter newline · Esc clear` + `@ mention · / slash · !macro`.
 - **Live hint popovers:** typing `/` lists **the pinned Chief's** slash commands (inbuilt = EveryAIOS catalog; ACP = live `available_commands_update` — `/name` submitted as `session/prompt` text, never intercepted as EveryAIOS control while an external Chief is pinned), `!` lists macros (inbuilt), `@` lists workspace file refs — filtered as you type, orange mono commands.
 
@@ -254,8 +256,8 @@ Every view is a full-fidelity surface with per-view header actions (wired — se
 
 ## 7. Overlays & popovers
 
-- **Command palette (⌘K)** — `scale-in-palette` dialog, grouped results (Actions · Sessions · Views · Navigate · Settings) with hints + shortcuts, ↑↓/↵/esc navigation, orange selection bar, footer key hints. Includes new-session, theme toggle, every session, every view, all six panels, agent switching (⌘⇧1–3), model switching, auto-route toggle.
-- **Notifications (🔔)** — `fade-up slide-in-right` popover: seeded 8-item activity feed (cost / guard / success / agent / warning / git / info / error kinds, each with tinted icon tile + source chip + relative time), unread orange highlight, `Mark all read`, `Notification settings`, `View all activity`.
+- **Command palette (⌘K)** — `scale-in-palette` dialog, grouped results (Actions · Sessions · Views · Navigate · Settings) with hints + shortcuts, ↑↓/↵/esc navigation, semantic selection bar, footer key hints. Includes new-session, theme toggle, every session, every view, all six panels, agent switching (⌘⇧1–3), model switching, auto-route toggle.
+- **Notifications (🔔)** — `fade-up slide-in-right` popover: seeded 8-item activity feed (cost / guard / success / agent / warning / git / info / error kinds, each with tinted icon tile + source chip + relative time), unread accent highlight, `Mark all read`, `Notification settings`, `View all activity`.
 - **Agent picker, office flyout, add-view dropdown** — §3.4 / §4.8.
 - **Keyboard shortcuts overlay (⌘?)** — full-screen, categorized key-pill grid, closes on esc/outside. Chat: `⌥ M` cycles Work Mode (Auto · Plan · Build · Research); `⌥ U` cycles Autonomy (Sandbox · Ask · Auto · Maximum). We do **not** steal OpenCode’s Tab-for-Plan/Build — Tab stays focus.
 
@@ -276,7 +278,7 @@ The visual surface is explorable in a plain browser (`npm run dev`) using explic
 | Notifications | 8 seeded items across 8 kinds |
 | Browse | 6 products, 2 tabs, bookmarks, extensions, AI-mode summary, inspector DOM |
 | Office | Q3-Financials.xlsx grid + recalc + Avg/Count/Sum, exec-summary.docx blocks/tracks, quarterly-deck.pptx slides+notes, invoice-8402.pdf (pdf.js + annotate/redact/fill) |
-| Agent picker | 7 runtimes × their model sets, install + connect flows |
+| Agent picker | Development-preview fixtures only; the Windows shell must use live discovery, exact path provenance, agent-owned model/config options, and explicit install/connect states (P66.1–P66.4) |
 
 ---
 
@@ -284,7 +286,7 @@ The visual surface is explorable in a plain browser (`npm run dev`) using explic
 
 | Action | Animation | Class / impl |
 |---|---|---|
-| Streaming text | ~80 tok/s + blinking orange caret 500ms | `caret-blink` |
+| Streaming text | ~80 tok/s + blinking brand-accent caret 500ms | `caret-blink` |
 | Message enter | 280ms rise+fade | framer `fade-up` |
 | Viewport switch | 150ms crossfade (no slide) | `enter-surface` + framer |
 | Panel/section switch | 180–220ms fade+6px rise | framer `AnimatePresence` |

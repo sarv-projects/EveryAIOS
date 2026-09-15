@@ -49,11 +49,13 @@ function StatusDot({ status }: { status: AgentRuntime['status'] }) {
   const tone =
     status === 'installed'
       ? 'bg-emerald-400'
-      : status === 'updating'
-        ? 'bg-orange-400'
-        : status === 'available'
-          ? 'bg-zinc-500'
-          : 'bg-zinc-700'
+      : status === 'discovered'
+        ? 'bg-sky-400'
+        : status === 'updating'
+          ? 'bg-blue-400'
+          : status === 'available'
+            ? 'bg-zinc-500'
+            : 'bg-zinc-700'
   return <span className={cn('inline-block h-1.5 w-1.5 rounded-full', tone)} />
 }
 
@@ -493,8 +495,8 @@ export default function AgentModelPicker({ compact }: Props) {
         onClick={() => setOpen((o) => !o)}
         aria-label="Choose agent and model"
         className={cn(
-          'group flex max-w-[220px] items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] transition-all duration-200 hover:border-orange-500/40 hover:bg-orange-500/5',
-          open && 'border-orange-500/60 bg-orange-500/10',
+          'group flex max-w-[220px] items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] transition-all duration-200 hover:border-sky-500/40 hover:bg-sky-500/5',
+          open && 'border-sky-500/60 bg-sky-500/10',
         )}
       >
         <span key={selectedAgentId} className="agent-switch-pulse inline-flex">
@@ -507,14 +509,14 @@ export default function AgentModelPicker({ compact }: Props) {
           {!compact && (
             <>
               <span className="text-muted-foreground/40">·</span>
-              <span className="max-w-[9rem] truncate text-orange-300">{pinnedLabel}</span>
+              <span className="max-w-[9rem] truncate text-sky-300">{pinnedLabel}</span>
             </>
           )}
         </span>
         {autoRoute && !compact && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="ml-0.5 flex items-center gap-0.5 rounded border border-orange-500/30 bg-orange-500/10 px-1 text-[8px] text-orange-300">
+              <span className="ml-0.5 flex items-center gap-0.5 rounded border border-sky-500/30 bg-sky-500/10 px-1 text-[8px] text-sky-300">
                 <Route className="h-2 w-2" />
                 auto
               </span>
@@ -537,10 +539,10 @@ export default function AgentModelPicker({ compact }: Props) {
             className="fixed inset-0 z-20 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="scale-in absolute bottom-full left-0 z-30 mb-1.5 w-[min(680px,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-popover shadow-2xl">
+          <div className="scale-in fixed inset-4 z-30 flex max-h-[calc(100vh-2rem)] min-h-[min(640px,calc(100vh-2rem))] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl">
             <div className="flex items-center justify-between border-b border-border bg-zinc-900/60 px-3 py-1.5">
               <div className="flex items-center gap-1.5">
-                <Cpu className="h-3 w-3 text-orange-400" />
+                <Cpu className="h-3 w-3 text-sky-400" />
                 <span className="text-[11px] font-semibold text-foreground">
                   {autoRoute ? 'Auto · agent runtime & model' : 'Agent runtime & model'}
                 </span>
@@ -551,7 +553,7 @@ export default function AgentModelPicker({ compact }: Props) {
                   setOpen(false)
                   setCenterScreen('settings')
                 }}
-                className="text-[10px] text-muted-foreground underline-offset-2 hover:text-orange-300 hover:underline"
+                className="text-[10px] text-muted-foreground underline-offset-2 hover:text-sky-300 hover:underline"
               >
                 Manage in settings
               </button>
@@ -560,10 +562,10 @@ export default function AgentModelPicker({ compact }: Props) {
             {/* P38 — Dynamic Chief slot: the swappable top brain */}
             <div className="flex items-center justify-between gap-2 border-b border-border bg-zinc-950/40 px-3 py-1.5">
               <div className="flex min-w-0 items-center gap-1.5">
-                <Route className="h-3 w-3 shrink-0 text-orange-400" />
+                <Route className="h-3 w-3 shrink-0 text-sky-400" />
                 <span className="truncate text-[10px] text-muted-foreground">
                   Chief slot:{' '}
-                  <span className="font-mono text-orange-300">{defaultChiefLabel}</span>
+                  <span className="font-mono text-sky-300">{defaultChiefLabel}</span>
                 </span>
                 {defaultChief !== 'inbuilt' && (
                   <Badge className="shrink-0 bg-emerald-500/15 px-1 text-[8px] text-emerald-300">
@@ -576,7 +578,7 @@ export default function AgentModelPicker({ compact }: Props) {
                   <button
                     type="button"
                     onClick={handlePinChief}
-                    className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-orange-300 hover:underline"
+                    className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-sky-300 hover:underline"
                     title="Pin this agent as the Chief for the active session only (outranks the user default); click again to unpin"
                   >
                     {sessionPin
@@ -591,7 +593,7 @@ export default function AgentModelPicker({ compact }: Props) {
                     type="button"
                     onClick={handleSetChief}
                     disabled={chiefEligibleId === defaultChief}
-                    className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-orange-300 hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted-foreground disabled:hover:no-underline"
+                    className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-sky-300 hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted-foreground disabled:hover:no-underline"
                   >
                     {chiefEligibleId === defaultChief
                       ? 'default chief'
@@ -605,7 +607,7 @@ export default function AgentModelPicker({ compact }: Props) {
                 session shows "default applies — pin cleared" instead of
                 silence, even after a restart (the marker is vault-persisted). */}
             {sessionPin && (
-              <div className="border-b border-border bg-orange-500/5 px-3 py-1 font-mono text-[9px] text-orange-300/90">
+              <div className="border-b border-border bg-sky-500/5 px-3 py-1 font-mono text-[9px] text-sky-300/90">
                 Session pinned to <span className="font-semibold">{sessionPin}</span> — outranks the user default for this chat.
               </div>
             )}
@@ -615,9 +617,9 @@ export default function AgentModelPicker({ compact }: Props) {
               </div>
             )}
 
-            <div className="grid grid-cols-[minmax(0,260px)_1fr]">
+            <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
               {/* Agent column */}
-              <div className="scroll-thin max-h-[360px] overflow-y-auto border-r border-border p-1.5">
+              <div className="scroll-thin max-h-48 min-h-0 overflow-y-auto border-b border-border p-2 md:max-h-none md:border-b-0 md:border-r">
                 <div className="px-1 pb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
                   Runtimes
                 </div>
@@ -650,7 +652,7 @@ export default function AgentModelPicker({ compact }: Props) {
                       className={cn(
                         'flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
                         isActive
-                          ? 'border-orange-500/60 bg-orange-500/10'
+                          ? 'border-sky-500/60 bg-sky-500/10'
                           : 'border-transparent hover:border-border hover:bg-accent/40',
                         !usable && 'opacity-70',
                       )}
@@ -658,12 +660,12 @@ export default function AgentModelPicker({ compact }: Props) {
                       <AgentLogo agent={a} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className={cn('text-[11px] font-medium', isActive ? 'text-orange-200' : 'text-foreground')}>
+                          <span className={cn('text-[11px] font-medium', isActive ? 'text-sky-200' : 'text-foreground')}>
                             {a.name}
                           </span>
                           <StatusDot status={a.status} />
                           {a.id === 'everyaios-native' && (
-                            <Badge className="bg-orange-500/20 px-1 text-[8px] text-orange-300">orchestrator</Badge>
+                            <Badge className="bg-sky-500/20 px-1 text-[8px] text-sky-300">orchestrator</Badge>
                           )}
                           {!usable && (
                             <Badge className="bg-background/70 px-1 text-[8px] text-muted-foreground">
@@ -674,6 +676,12 @@ export default function AgentModelPicker({ compact }: Props) {
                         <div className="truncate font-mono text-[9px] text-muted-foreground">
                           {a.vendor} · v{a.version ?? '—'}
                         </div>
+                        {a.location && (
+                          <div className="truncate font-mono text-[8px] text-muted-foreground/70" title={a.path ?? undefined}>
+                            {a.location.source.replaceAll('_', ' ')} · {a.location.kind}
+                            {a.location.kind === 'wsl' ? ` · ${a.location.distro}` : a.path ? ` · ${a.path}` : ''}
+                          </div>
+                        )}
                         <div className="truncate text-[10px] text-muted-foreground/80">{a.tagline}</div>
                         {/* P50.3.9 — governance truth badge: the picker never
                             implies EveryAIOS audit coverage that does not exist. */}
@@ -693,14 +701,14 @@ export default function AgentModelPicker({ compact }: Props) {
                           </div>
                         )}
                       </div>
-                      {isActive && <Check className="mt-1 h-3 w-3 shrink-0 text-orange-400" />}
+                      {isActive && <Check className="mt-1 h-3 w-3 shrink-0 text-sky-400" />}
                     </button>
                   )
                 })}
               </div>
 
               {/* Model column */}
-              <div className="scroll-thin max-h-[360px] overflow-y-auto p-1.5">
+              <div className="scroll-thin min-h-0 overflow-y-auto p-3">
                 <div className="mb-1 flex items-center justify-between px-1">
                   <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
                     {external ? `Model · ${agent.name}` : `Models for ${agent.name}`}
@@ -798,11 +806,11 @@ export default function AgentModelPicker({ compact }: Props) {
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
                           isActive
-                            ? 'border-orange-500/60 bg-orange-500/10'
+                            ? 'border-sky-500/60 bg-sky-500/10'
                             : 'border-transparent hover:border-border hover:bg-accent/40',
                         )}
                       >
-                        <span className="flex h-6 w-6 items-center justify-center rounded bg-orange-500/15 text-[9px] font-bold text-orange-300">
+                        <span className="flex h-6 w-6 items-center justify-center rounded bg-sky-500/15 text-[9px] font-bold text-sky-300">
                           {m.label.charAt(0).toUpperCase()}
                         </span>
                         <div className="min-w-0 flex-1">
@@ -810,13 +818,13 @@ export default function AgentModelPicker({ compact }: Props) {
                             <span
                               className={cn(
                                 'truncate text-[11px] font-medium',
-                                isActive ? 'text-orange-200' : 'text-foreground',
+                                isActive ? 'text-sky-200' : 'text-foreground',
                               )}
                             >
                               {m.label}
                             </span>
                             {isActive && (
-                              <Badge className="bg-orange-500/15 px-1 text-[8px] text-orange-300">
+                              <Badge className="bg-sky-500/15 px-1 text-[8px] text-sky-300">
                                 sticky
                               </Badge>
                             )}
@@ -832,7 +840,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             )}
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[9px] text-muted-foreground">
-                            <span className="text-orange-300/80">{m.provider}</span>
+                            <span className="text-sky-300/80">{m.provider}</span>
                             <span className="text-muted-foreground/30">|</span>
                             <span className="truncate text-muted-foreground/70">{m.id}</span>
                           </div>
@@ -843,7 +851,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             </span>
                             <span className="text-muted-foreground/30">|</span>
                             <span className="flex items-center gap-0.5">
-                              <Zap className="h-2.5 w-2.5 text-orange-400" />
+                              <Zap className="h-2.5 w-2.5 text-sky-400" />
                               {formatPerM(m.inputPrice, m.free)}/in ·{' '}
                               {formatPerM(m.outputPrice, m.free)}/out
                             </span>
@@ -864,7 +872,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             )}
                           </div>
                         </div>
-                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-orange-400" />}
+                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
                       </button>
                     )
                   })}
@@ -888,7 +896,7 @@ export default function AgentModelPicker({ compact }: Props) {
                 {!external && catalogRows.length === 0 && models.length === 0 && agentUsable && (
                   <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
                     No catalog rows and no curated list for this runtime — {agent.name} drives its
-                    own models internally. Turn on <span className="text-orange-300">Auto-route by task</span>{' '}
+                    own models internally. Turn on <span className="text-sky-300">Auto-route by task</span>{' '}
                     (below) and EveryAIOS picks the best provider per turn.
                   </div>
                 )}
@@ -896,13 +904,13 @@ export default function AgentModelPicker({ compact }: Props) {
                 {!external && catalogRows.length === 0 && models.length === 0 && !agentUsable && (
                   <div className="rounded-md border border-dashed border-border/60 bg-background/30 px-2 py-2 text-[10px] leading-relaxed text-muted-foreground">
                     {agent.name} is not installed — its model list loads live after
-                    install. Use <span className="text-orange-300">Install</span> below,
+                    install. Use <span className="text-sky-300">Install</span> below,
                     then pick a model.
                   </div>
                 )}
 
                 {!external && autoRoute && (models.length > 0 || catalogRows.length > 0) && (
-                  <div className="mb-1.5 rounded-md border border-orange-500/20 bg-orange-500/5 px-2 py-1 font-mono text-[9px] leading-relaxed text-orange-200/80">
+                  <div className="mb-1.5 rounded-md border border-sky-500/20 bg-sky-500/5 px-2 py-1 font-mono text-[9px] leading-relaxed text-sky-200/80">
                     Auto-route is on — the router picks the best model per turn.
                     Click any model to pin it (auto-route turns off for this chat).
                   </div>
@@ -948,7 +956,7 @@ export default function AgentModelPicker({ compact }: Props) {
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40',
                           isActive
-                            ? 'border-orange-500/60 bg-orange-500/10'
+                            ? 'border-sky-500/60 bg-sky-500/10'
                             : 'border-transparent hover:border-border hover:bg-accent/40',
                         )}
                       >
@@ -957,13 +965,13 @@ export default function AgentModelPicker({ compact }: Props) {
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className={cn('text-[11px] font-medium', isActive ? 'text-orange-200' : 'text-foreground')}>
+                            <span className={cn('text-[11px] font-medium', isActive ? 'text-sky-200' : 'text-foreground')}>
                               {m.label}
                             </span>
                             {/* P52.9 — sticky (pinned, auto-route off) vs
                                 default (auto-route's per-agent fallback). */}
                             {isSticky && (
-                              <Badge className="bg-orange-500/15 px-1 text-[8px] text-orange-300">
+                              <Badge className="bg-sky-500/15 px-1 text-[8px] text-sky-300">
                                 sticky
                               </Badge>
                             )}
@@ -995,7 +1003,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             </span>
                             <span className="text-muted-foreground/30">|</span>
                             <span className="flex items-center gap-0.5">
-                              <Zap className="h-2.5 w-2.5 text-orange-400" />
+                              <Zap className="h-2.5 w-2.5 text-sky-400" />
                               {formatPrice(m.inputPrice)}/in · {formatPrice(m.outputPrice)}/out
                             </span>
                             {!m.available && (
@@ -1005,7 +1013,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             )}
                           </div>
                         </div>
-                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-orange-400" />}
+                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
                       </button>
                     )
                   })}
@@ -1018,7 +1026,7 @@ export default function AgentModelPicker({ compact }: Props) {
                       </div>
                       <button
                         type="button"
-                        className="font-mono text-[9px] text-orange-300 underline-offset-2 hover:underline"
+                        className="font-mono text-[9px] text-sky-300 underline-offset-2 hover:underline"
                         onClick={() => {
                           setOpen(false)
                           useAppStore.getState().setSettingsSection('local')
@@ -1048,7 +1056,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             className={cn(
                               'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left',
                               isActive
-                                ? 'border-orange-500/60 bg-orange-500/10'
+                                ? 'border-sky-500/60 bg-sky-500/10'
                                 : 'border-transparent hover:border-border hover:bg-accent/40',
                               !row.fits && 'opacity-60',
                             )}
@@ -1093,7 +1101,7 @@ export default function AgentModelPicker({ compact }: Props) {
                           useAppStore.getState().setSettingsSection('local')
                           setCenterScreen('settings')
                         }}
-                        className="w-full rounded-md border border-dashed border-border/60 px-2 py-2 text-left font-mono text-[10px] text-muted-foreground hover:border-orange-500/40 hover:text-orange-300"
+                        className="w-full rounded-md border border-dashed border-border/60 px-2 py-2 text-left font-mono text-[10px] text-muted-foreground hover:border-sky-500/40 hover:text-sky-300"
                       >
                         No local models yet — open Discover (search, downloads, quant, GPU offload).
                       </button>
@@ -1103,7 +1111,7 @@ export default function AgentModelPicker({ compact }: Props) {
                 {/* Auto-route toggle */}
                 <div className="mt-3 flex items-center justify-between rounded-md border border-border/60 bg-background/40 px-2 py-1.5">
                   <div className="flex items-center gap-1.5">
-                    <Route className="h-3 w-3 text-orange-400" />
+                    <Route className="h-3 w-3 text-sky-400" />
                     <div>
                       <div className="text-[10px] font-medium text-foreground">Auto-route by task</div>
                       <div className="text-[9px] text-muted-foreground">
@@ -1121,14 +1129,14 @@ export default function AgentModelPicker({ compact }: Props) {
                     the ranked list is empty the excluded reasons ARE the
                     message (unkeyed providers explain where to add a key). */}
                 {!external && autoRoute && routeFeed && (
-                  <div className="mt-1.5 space-y-1 rounded-md border border-orange-500/20 bg-orange-500/5 px-2 py-1.5">
-                    <div className="font-mono text-[8px] uppercase tracking-wider text-orange-300/80">
+                  <div className="mt-1.5 space-y-1 rounded-md border border-sky-500/20 bg-sky-500/5 px-2 py-1.5">
+                    <div className="font-mono text-[8px] uppercase tracking-wider text-sky-300/80">
                       Live route feed
                     </div>
                     {routeFeed.ranked.length > 0 ? (
                       routeFeed.ranked.slice(0, 3).map((r, i) => (
                         <div key={r.id} className="flex items-center gap-1.5 font-mono text-[9px] text-muted-foreground">
-                          <span className="text-orange-300">#{i + 1}</span>
+                          <span className="text-sky-300">#{i + 1}</span>
                           <span className="flex-1 truncate text-foreground/80">{r.id}</span>
                           <span className="text-muted-foreground/60">{r.score.toFixed(2)}</span>
                           <span className={cn('truncate', r.health === 'healthy' ? 'text-emerald-400/80' : 'text-amber-400/80')}>
@@ -1169,11 +1177,11 @@ export default function AgentModelPicker({ compact }: Props) {
 
                 {/* Install + connect (F8/J17) — one click, then use */}
                 <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
-                  {agent.status === 'installed' || agent.id === 'everyaios-native' ? (
+                  {agentUsable || agent.id === 'everyaios-native' ? (
                     <div className="flex items-center justify-between px-1">
                       <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
                         <Check className="h-2.5 w-2.5" />
-                        installed
+                        {agent.status === 'discovered' ? 'discovered · launchable' : 'installed'}
                         {agent.version ? ` · v${agent.version}` : ''}
                       </span>
                       {agent.id !== 'everyaios-native' && (
@@ -1184,10 +1192,15 @@ export default function AgentModelPicker({ compact }: Props) {
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
+                      {agent.status === 'discovered' && (
+                        <span className="font-mono text-[9px] text-sky-300">
+                          discovered · launch adapter unavailable
+                        </span>
+                      )}
                       <Button
                         size="sm"
                         disabled={installing}
-                        className="h-6 gap-1 bg-orange-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
+                        className="h-6 gap-1 bg-sky-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
                         onClick={() => installAgent(agent.id)}
                       >
                         {installing ? (
@@ -1220,8 +1233,8 @@ export default function AgentModelPicker({ compact }: Props) {
                           </span>
                         </div>
                       ) : auth ? (
-                        <div className="space-y-1 rounded-md border border-orange-500/30 bg-orange-500/5 p-2">
-                          <div className="flex items-center gap-1 font-mono text-[9px] text-orange-300">
+                        <div className="space-y-1 rounded-md border border-sky-500/30 bg-sky-500/5 p-2">
+                          <div className="flex items-center gap-1 font-mono text-[9px] text-sky-300">
                             <KeyRound className="h-2.5 w-2.5" />
                             {auth.waitingUrl ? 'Waiting for sign-in…' : `${agent.name} needs sign-in`}
                           </div>
@@ -1265,7 +1278,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             {connecting ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
-                              <KeyRound className="h-3 w-3 text-orange-400" />
+                              <KeyRound className="h-3 w-3 text-sky-400" />
                             )}
                             {connecting ? 'connecting…' : 'Connect / sign in'}
                           </Button>

@@ -13,7 +13,7 @@ export type AgentCapability =
   | 'tools'
   | 'parallel'
 
-export type AgentInstallStatus = 'installed' | 'available' | 'updating' | 'disabled'
+export type AgentInstallStatus = 'installed' | 'discovered' | 'available' | 'updating' | 'disabled'
 
 export interface AgentModel {
   id: string
@@ -39,6 +39,8 @@ export interface AgentModel {
   recommendedFor?: string
 }
 
+import type { RuntimeLocation } from './acp'
+
 export type ModelProvider =
   | 'anthropic'
   | 'openai'
@@ -57,10 +59,16 @@ export interface AgentRuntime {
   vendor: string
   /** One-line tagline */
   tagline: string
-  /** Install status on this machine */
+  /** Install/discovery status on this machine */
   status: AgentInstallStatus
+  /** A verified runtime location was found, even if it cannot launch yet. */
+  discovered?: boolean
+  /** The current adapter can launch this runtime in this environment. */
+  launchable?: boolean
   /** Binary path if installed */
   path?: string
+  /** P66 — non-secret discovery/install provenance */
+  location?: RuntimeLocation
   /** Reported version */
   version?: string
   /** Logo mark — 1-2 chars shown in a colored square */
@@ -100,7 +108,7 @@ export const MODELS: AgentModel[] = [
     available: true,
     strengths: ['agentic', 'long-context', 'reasoning', 'vision'],
     recommendedFor: 'Hard multi-step agents',
-    tone: 'bg-orange-500/20 text-orange-300',
+    tone: 'bg-sky-500/20 text-sky-300',
   },
   {
     id: 'claude-sonnet-4.5',
@@ -113,7 +121,7 @@ export const MODELS: AgentModel[] = [
     available: true,
     strengths: ['balanced', 'code', 'vision'],
     recommendedFor: 'Default coding',
-    tone: 'bg-orange-500/20 text-orange-300',
+    tone: 'bg-sky-500/20 text-sky-300',
   },
   {
     id: 'claude-haiku-4.5',
@@ -126,7 +134,7 @@ export const MODELS: AgentModel[] = [
     available: true,
     strengths: ['fast', 'cheap', 'classification'],
     recommendedFor: 'Quick turns',
-    tone: 'bg-orange-500/20 text-orange-300',
+    tone: 'bg-sky-500/20 text-sky-300',
   },
   // OpenAI
   {
@@ -354,7 +362,7 @@ export const AGENTS: AgentRuntime[] = [
     status: 'installed',
     path: 'internal://everyaios/agent',
     mark: 'E',
-    accent: 'bg-orange-500 text-black',
+    accent: 'bg-sky-500 text-black',
     capabilities: ['code', 'plan', 'research', 'browser', 'shell', 'office', 'tools', 'parallel'],
     models: [
       'claude-opus-4.1',
@@ -379,7 +387,7 @@ export const AGENTS: AgentRuntime[] = [
     tagline: 'Terminal coding agent with diff-first edits and MCP tools',
     status: 'available',
     mark: 'CC',
-    accent: 'bg-orange-500/90 text-black',
+    accent: 'bg-sky-500/90 text-black',
     capabilities: ['code', 'plan', 'shell', 'tools', 'vision'],
     models: ['claude-opus-4.1', 'claude-sonnet-4.5', 'claude-haiku-4.5'],
     defaultModel: 'claude-sonnet-4.5',
@@ -517,7 +525,9 @@ export function isNativeRuntime(agentId: string | undefined): boolean {
  * models — the model list loads live only after install. */
 export function isRuntimeUsable(a: AgentRuntime | undefined): boolean {
   if (!a) return false
-  return a.id === NATIVE_AGENT_ID || a.status === 'installed' || a.status === 'updating'
+  if (a.id === NATIVE_AGENT_ID) return true
+  if (a.launchable !== undefined) return a.launchable
+  return a.status === 'installed' || a.status === 'updating'
 }
 
 /** Model rows this runtime is allowed to display.

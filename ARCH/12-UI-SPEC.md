@@ -1,11 +1,12 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
-> **Version:** UI-spec rev 3.9 (2026-09-13 — casual surface, P61). **Numbering note:** the `3.x` in this header is the **UI-spec document revision**, a separate series from the workspace/shell version in `ui/src/lib/version.ts` (currently **v3.75** — the value `scripts/check-doc-sync.mjs` verifies). A `3.x` here is therefore *not* a stale shell version and never should be read as one.
+> **Version:** UI-spec rev 3.10 (2026-09-15 — Windows-first runtime/picker/cowork audit, P66). **Numbering note:** the `3.x` in this header is the **UI-spec document revision**, a separate series from the workspace/shell version in `ui/src/lib/version.ts` (currently **v3.78** — the value `scripts/check-doc-sync.mjs` verifies). A `3.x` here is therefore *not* a stale shell version and never should be read as one.
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
 > **Principle:** ONE project, ONE durable Work, ONE session, ONE effect-authorization model, ONE timeline. Chat + live progress stay in the center; the **right activity rail** selects the active lens while the viewport supports multiple open, reorderable tabs. Only one view is rendered at a time inside that viewport; the product is not split into separate Chat/Cowork/Code applications.
 > **Cross-refs:** ARCH/01 (system architecture) · ARCH/09 (feature matrix H1–H36 — H20 redefined doc 67) · **ARCH/17 (the Native agent plane — the chat surface this spec renders: §17.3 the Chief loop, §17.4.3 the first-class tools `ask`/`plan`/`subagent`/`todo`, §17.1 the two-plane boundary with external agents)** · ARCH/DIAGRAMS #7 (MCQ interrupt) + #27 (two planes) · doc 67 §6 (finalization record)
-> **v2.1 (2026-08-16):** `UI-DESIGN-PROMPT.md` (repo root) is now the **canonical production UI spec** — pixel-level design language (warm-cream `#F7F7F4` + orange `#F54E00`, full screen/panel/tab/overlay inventory, motion + mock-data tables) that supersedes this doc's visual details. The cockpit in `ui/` implements it; this ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
+> **v2.1 (2026-08-16, superseded visually by v3.78):** `UI-DESIGN-PROMPT.md` (repo root) is the **canonical production UI spec** — light/dark surfaces, cool-blue semantic brand, selectable accent tokens, full screen/panel/tab/overlay inventory, motion + mock-data tables. This ARCH/12 stays the layout/architecture contract (rail + one viewport, chat states, view contracts, keyboard map). When the two disagree on pixels, UI-DESIGN-PROMPT.md wins.
 >
+> **v3.10 (2026-09-15 — Windows-first runtime/picker audit):** Windows is the first release target. Agent discovery now has an explicit provenance contract (managed absolute path, PATH/App Paths, user path, package manager, or WSL distro/path); catalog entries never imply occupancy. The agent picker is a two-pane/full-screen configuration surface: installed/discovered agents left, selected agent-owned model/auth/native capabilities plus EveryAIOS shared grants right. The chat bar remains compact and blue-semantic themed; session capabilities are enabled in a separate pane. Office/browser/computer-use/memory claims remain evidence-gated on real Windows acceptance. **Implementation status (2026-09-15):** the provenance read model, App Paths/WSL probes, stale-record rejection, full-screen two-pane picker, and cool-blue picker/agent cards are landed and unit/type/doc verified; WSL launch, the session capability pane, global theme migration, and all Windows/cowork live acceptance remain open (TODO P66).
 > **v3.9 (2026-09-13 — casual surface, P61):** casual mode asks **one** question instead of three. The composer keeps the SPEC three-control taxonomy in **power**, but casual renders **one plain autonomy dial** (`Look only · Ask me first · Balanced · Just do it`) over the same four `PermissionMode` values — a display layer only, so the per-task `config_hash` freeze, `syncAutonomyFromRust()` and every guard decision are unchanged. The right rail/viewport remains a power surface (`setActiveView`/`addView` switch to power when a view opens, so nothing traps the user). Home's empty state is pre-scoped starter cards; the Guard panel states one sentence in casual instead of the Trust Ladder meter and 5×5 matrix; high-blast interrupts require typing the resource name.
 > **v3.8 (2026-09-10):** Two surfaces — Browse + Office inbuilt (no vision); Computer use = real OS see-pane + primary rail icon. Vision-gate modal. Progress renders CUA DAG.
 > **v3.8 (2026-09-12 reconciliation):** Status bar and agent/model picker consume reachable live catalog rows, preserve provider-qualified model identity through routing, and label curated seed rows as fallback. Provider/profile rows with no supported transport are unavailable rather than guessed.
@@ -278,7 +279,7 @@ Displayed when the agent creates/edits a file. Shows:
 └─────────────────────────────┘
 ```
 
-### 4.1a Settings Control Center (v3.77 — provider and installed-resource patterns)
+### 4.1a Settings Control Center (v3.78 — provider, runtime, and installed-resource patterns)
 
 Settings is a control center, not a collection of decorative panels. It uses the same two-pane pattern as the agent picker: searchable inventory on the left, selected-resource detail on the right. Every row is backed by a Rust/Tauri read model and every mutation is reread from the backend.
 
@@ -307,6 +308,32 @@ Settings is a control center, not a collection of decorative panels. It uses the
 **Installed / Marketplace.** `Installed` shows skills, plugins, MCP servers, ACP runtimes, hooks, and tools with version, digest/signature, trust, capabilities requested/granted, bound agents, activation, and health. `Marketplace` is discovery only. Install is validate → preview → Guard-2 consent → sandbox/grant → atomic write → inventory → lazy activation → health. Disable/remove/rollback actions operate on the pinned installed record.
 
 **Persistence and failures.** A setting change is rendered as pending until Rust validates, persists atomically, applies live where possible, and rereads. The result must identify `appliedLive`, `restartRequired`, or an actionable error. Missing credentials, missing binaries, unsupported transport, stale OAuth, failed health, and unavailable platform capabilities are separate states; none is represented as a generic green “configured” badge.
+
+### 4.1a.1 Windows agent discovery and configuration surface
+
+The production Windows shell must make runtime provenance visible. An agent row includes `source` (`EveryAIOS install`, `PATH`, `App Paths`, `user selected`, `package manager`, `WSL`) and an exact path when one exists. WSL rows include the distro and Linux executable path and launch through the WSL terminal backend; they are not merged into the Windows executable list. The list separates `Discovered`, `Installed`, `Ready`, `Needs sign-in`, `Needs key`, `Unavailable`, and `WSL` rather than using one installed badge.
+
+Selecting an agent opens a wide/two-pane view, not another dense card grid:
+
+```
+┌──────────────────────────────┬─────────────────────────────────────────┐
+│ Installed / discovered       │ Claude Code                             │
+│ ● EveryAIOS Native           │ Native capabilities · auth · readiness  │
+│ ● OpenCode · PATH            │ [agent-owned model selector]             │
+│ ● Cline · WSL Ubuntu         │ EveryAIOS shared capabilities            │
+│ ○ Codex · not found          │ [Use vault provider at launch] [Health] │
+└──────────────────────────────┴─────────────────────────────────────────┘
+```
+
+The selected agent's model selector is the only model selector in this view. Native uses EveryAIOS's provider/model catalog; external agents use ACP/config options or their own native account. The vault button is a launch-time binding and displays env-variable names only. The view must expose `path`, `source`, `distro`, `version`, `verified_at`, and `last_error` without exposing secrets.
+
+### 4.1a.2 Session capability pane
+
+MCP servers, skills, plugins, connectors, Office, Browser, Computer Use, artifacts, and memory are managed as session capability rows with `enabled`, `health`, `scope`, `source`, `native_or_shared`, and `applies_to` fields. Installed healthy capabilities default enabled, but a user may disable them for the session/run. The pane changes the next turn/run only, snapshots into the Work `RuntimeManifest`, and never dumps all schemas into the prompt. A disabled, unhealthy, or unpermissioned capability is not presented as active.
+
+### 4.1a.3 Visual system update
+
+The shell uses a cool blue semantic brand with light/dark themes and selectable accent tokens. Existing `orange-*` utility usage must be migrated to semantic tokens; orange may remain only where an existing status meaning explicitly requires it and must not represent selection or brand. The composer has one calm row—Agent, agent-owned Model, Work Mode, Autonomy—with advanced configuration in a popover/full-screen surface. Accessibility labels and text state accompany every status color.
 
 ### 4.1b Multi-view tabbed panel (v3.0 — VS Code logic)
 
@@ -738,7 +765,7 @@ Unified timeline of all agent actions:
 
 > **SUPERSEDED (2026-09-10):** the token values in §10.1–10.2 below are the
 > pre-v2.1 draft (`#FFFFFF/#FF6B00`). The canonical production tokens live in
-> `UI-DESIGN-PROMPT.md` (warm-cream `#F7F7F4` + orange `#F54E00`) and the
+> `UI-DESIGN-PROMPT.md` (cool-blue semantic brand + selectable light/dark accent tokens) and the
 > implementation in `ui/src/globals.css` — per the v2.1 note at the top of
 > this doc, UI-DESIGN-PROMPT.md wins on pixels. This section is kept for
 > history; do not build from it.

@@ -1,6 +1,6 @@
 # ARCH/17 — The EveryAIOS Native Agent (frozen)
 
-> **Status:** Architecture contract, frozen 2026-09-15 (spec v3.75; the nine native-plane capability rows **B10/B11/C14/C15/F16/I14–I17** became first-class in spec v3.76, same day). This file defines the **Native agent plane**, the **shared cowork plane**, the **capability-resolution policy**, and the **schema contract** for every native tool, shared façade, and agent type.
+> **Status:** Architecture contract, frozen 2026-09-15 (two-plane contract v3.75; native-plane rows **B10/B11/C14/C15/F16/I14–I17** in v3.76; Settings Control Center v3.77; Windows-first runtime/picker/cowork evidence contract v3.78). This file defines the **Native agent plane**, the **shared cowork plane**, the **capability-resolution policy**, and the **schema contract** for every native tool, shared façade, and agent type.
 > **Ownership:** This is architecture, not delivery. Delivery status for every row lives in `../TODO.md` (phase **P64**). Capability *identity* stays in `../capabilities.yaml` + `09-FEATURE-MATRIX.md` + `../DESKTOP-APP-SPEC.md` §0. This file **adds no ids of its own** — but the native-plane capabilities it freezes are now first-class rows in those three surfaces (v3.76: **B10** · **B11** · **C14** · **C15** · **F16** · **I14** · **I15** · **I16** · **I17**), so the contract and this document cannot be read two ways. Everything else derives behavior, boundaries, and schemas for existing rows (B1–B9, C*, D*, E9, F*, G*, H*, I*, J*).
 > **Non-negotiables carried from `00-INDEX.md`:** one effect-authorization model · one append-only event log · one Progress timeline · Work is the durable unit. ARCH/17 must not weaken any of them.
 
@@ -507,3 +507,28 @@ No settings control may:
 - treat a catalog entry as installed or an installed entry as healthy;
 - expose raw vault secrets to the UI, sidecar, model, or external agent;
 - bypass the one Guard, one Work event log, one scheduler, one vault, or one registry.
+
+### 17.12.4 Windows-first paths and occupancy
+
+The first desktop release is Windows. `AgentSettings.location` is a discriminated value, not a display string:
+
+```ts
+type RuntimeLocation =
+  | { kind: 'managed'; executable: string; installRoot: string; version: string }
+  | { kind: 'windows_path'|'windows_registry'|'user_path'; executable: string; source: string }
+  | { kind: 'package_manager'; manager: 'npx'|'uvx'; package: string; version?: string }
+  | { kind: 'wsl'; distro: string; linuxPath: string; windowsLauncher: string }
+  | { kind: 'unavailable'; reason: string };
+```
+
+The ACP registry is a catalog. Occupancy is proven by an install record, a resolved Windows executable, a package-manager probe, an explicit user path, or a WSL probe. The shell must return provenance, exact path, version only when measured, and `verifiedAt`; it must not conflate `%APPDATA%`, `%LOCALAPPDATA%`, `%PROGRAMDATA%`, `%ProgramFiles%`, effective `PATH`, and WSL roots. Discovery is read-only. Import/launch is a separate guarded action. A WSL path is launched only through the named distro/backend and never handed to `CreateProcess` as if it were a Windows executable.
+
+### 17.12.5 Agent picker and shared capability loadout
+
+The chat picker is a compact selection control; its expanded state is a two-pane/full-screen Agent Settings surface. The left pane is the installed/discovered runtime inventory. The right pane is selected-agent truth: native model/auth/config options and native capabilities first, then explicitly available EveryAIOS shared capabilities. `modelOwner` is authoritative: `native` for EveryAIOS, `agent` for external ACP, `managed` only for a verified launch-time binding. Selecting a model from EveryAIOS's catalog while an external agent is active is forbidden.
+
+Session capability controls are a loadout, not a tool dump. Each row has `capabilityId`, `source`, `nativeOrShared`, `enabled`, `health`, `scope`, `requiresApproval`, and `appliesFrom`. Defaults come from live install/health/policy state; changes apply to the next turn/run and are frozen into the Work manifest. The Chief resolves native capability first, then a shared façade, and records the choice. MCP/skills/plugins/connectors remain globally installed resources but are session-selectable consumers.
+
+### 17.12.6 Evidence gates
+
+Office must pass real DOCX/XLSX/PPTX/PDF read/edit/recalc/render/rollback tests on Windows, including the LibreOffice oracle where available. Browser must pass a real Chrome/CDP snapshot/action/verify/recovery run. Computer Use must pass Windows UI Automation semantic actions and guarded screenshot/coordinate fallback with foreground/background truth. Memory must pass restart hydration, scope isolation, conflict/forgetting, and retrieval-budget tests. MCP/skills/plugins must pass signed install, capability grant, disable/remove, restart, and live-tool reconciliation. Until then each settings row is `unverified` or `available`, never `ready`.
