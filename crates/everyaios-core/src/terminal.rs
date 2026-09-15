@@ -30,11 +30,16 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
+
+use crate::shell_integration::{
+    CommandRecord, CommandTracker, IntegrationEvent, IntegrationParser, IntegrationShell, Segment,
+    INJECTION_ENV, NONCE_ENV,
+};
 
 // ---------------------------------------------------------------------------
 // P54.1 — TerminalConfig (everyaios.toml `terminal.*`)
@@ -250,6 +255,11 @@ pub struct TerminalConfig {
     /// but never offered in the `+` dropdown until confirmed.
     #[serde(rename = "hiddenUnsafe", default)]
     pub hidden_unsafe: bool,
+    /// P67 — inject the OSC 633 shell-integration script at spawn. On by
+    /// default; turning it off gives a plain terminal with no structured
+    /// facts (no cwd, no exit codes, no command history for the agent).
+    #[serde(rename = "shellIntegration", default = "default_true")]
+    pub shell_integration: bool,
 }
 
 pub type ProfileMap = HashMap<String, TerminalProfile>;
@@ -1184,6 +1194,59 @@ pub enum TerminalError {
     Io(String),
 }
 
+/// Who owns a PTY session. This is the whole point of the unified plane: a
+/// human tab is authorized by the user's own gesture, while an agent/task tab
+/// is ticket-authorized and rendered read-only, so the user can *watch* the
+/// agent work in the same terminal view instead of in an invisible pipe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum TerminalOrigin {
+    #[default]
+    Human,
+    /// EveryAIOS Native `script.run` (the agent's own shell).
+    Agent,
+    /// A durable task / automation run.
+    Task,
+}
+
+impl TerminalOrigin {
+    pub fn is_human(self) -> bool {
+        matches!(self, TerminalOrigin::Human)
+    }
+}
+
+/// Options for one spawn. `integration` is explicit rather than read from
+/// config here, so the automation path can force it off for a non-interactive
+/// command runner that has no prompt to hook.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpawnOpts {
+    pub origin: TerminalOrigin,
+    pub integration: bool,
+}
+
+impl Default for SpawnOpts {
+    fn default() -> Self {
+        Self {
+            origin: TerminalOrigin::Human,
+            integration: true,
+        }
+    }
+}
+
+/// A frame from a PTY reader thread. `Data` carries only bytes that should be
+/// rendered — shell-integration sequences are already removed.
+#[derive(Debug, Clone)]
+pub enum PtyFrame {
+    /// Bytes for the renderer.
+    Data(Vec<u8>),
+    /// A command the shell reported finishing (with exit code + output).
+    Command(Box<CommandRecord>),
+    /// The shell's working directory changed.
+    Cwd(String),
+    /// The child exited.
+    Exit(Option<u32>),
+}
+
 /// A live PTY session (H36 `PtySession` shape): process survives client
 /// disconnect; the UI attaches by `pty_id`. The reaper thread owns the child
 /// (wait/reap); the session keeps a killer clone so `kill` works while the
@@ -1192,9 +1255,20 @@ pub struct PtySession {
     pub pty_id: String,
     pub profile_id: String,
     pub backend: TerminalBackend,
+    /// P67 — human / agent / task provenance.
+    pub origin: TerminalOrigin,
+    /// Display label for non-human tabs (`script.run`, task name).
+    pub label: Option<String>,
+    /// Which shell integration script was injected (and its quality), if any.
+    pub integration: Option<IntegrationShell>,
+    /// Scratch dir holding the generated integration script (removed on kill).
+    pub scratch: Option<PathBuf>,
     pub rows: u16,
     pub cols: u16,
     pub pid: Option<u32>,
+    /// Structured facts the shell reported — the source for the terminal's
+    /// cwd, exit decorations, recent-command picker and chat context.
+    pub tracker: Arc<Mutex<CommandTracker>>,
     writer: Mutex<Box<dyn Write + Send>>,
     killer: Box<dyn portable_pty::ChildKiller + Send + Sync>,
     exited: Arc<AtomicU64>, // 0 = running; otherwise exit-code bits
@@ -1255,9 +1329,8 @@ impl PtyHost {
         format!("pty-{n}")
     }
 
-    /// Spawn a profile into a real PTY. Returns `(pty_id, exit_rx)` where
-    /// `exit_rx` resolves when the child reaps. Output streams on the
-    /// returned reader thread via `on_output`.
+    /// Spawn a profile into a real PTY. Returns `(pty_id, PtyOutput)`; the
+    /// reader thread started by [`PtyOutput::stream`] delivers [`PtyFrame`]s.
     pub fn spawn_profile(
         &self,
         profile: &DetectedProfile,
@@ -1265,11 +1338,29 @@ impl PtyHost {
         rows: u16,
         cols: u16,
     ) -> Result<(String, PtyOutput), TerminalError> {
+        self.spawn_with(profile, cwd, rows, cols, SpawnOpts::default())
+    }
+
+    /// P67 — the full spawn path, with provenance + shell integration.
+    pub fn spawn_with(
+        &self,
+        profile: &DetectedProfile,
+        cwd: Option<&str>,
+        rows: u16,
+        cols: u16,
+        opts: SpawnOpts,
+    ) -> Result<(String, PtyOutput), TerminalError> {
         if profile.backend == TerminalBackend::Remote {
             // H33 v1 attach — fail closed, never silently local.
             return Err(TerminalError::RemoteUnavailable);
         }
         let pty_id = self.next_pty_id();
+        let integration = if opts.integration {
+            setup_integration(&pty_id, profile)
+        } else {
+            None
+        };
+        let tracker = Arc::new(Mutex::new(CommandTracker::new()));
 
         let pair = {
             let sys = self
@@ -1291,6 +1382,18 @@ impl PtyHost {
             for (k, v) in env {
                 cmd.env(k, v);
             }
+        }
+        if let Some(int) = &integration {
+            // Injection is additive: the profile's own args/env stay intact and
+            // the generated wrapper sources the user's own rc first, so
+            // aliases, prompt and PATH behave exactly as in a plain terminal.
+            cmd.args(&int.extra_args);
+            cmd.env(NONCE_ENV, &int.nonce);
+            cmd.env(INJECTION_ENV, "1");
+            for (k, v) in &int.extra_env {
+                cmd.env(k, v);
+            }
+            cmd.env("TERM_PROGRAM", "everyaios");
         }
         if profile.backend == TerminalBackend::Wsl {
             // F10 owns path translation; the profile runs `wsl.exe -d <d>`,
@@ -1341,15 +1444,23 @@ impl PtyHost {
             pty_id: pty_id.clone(),
             profile_id: profile.profile_name.clone(),
             backend: profile.backend,
+            origin: opts.origin,
+            label: None,
+            integration: integration.as_ref().map(|i| i.shell),
+            scratch: integration.as_ref().map(|i| i.dir.clone()),
             rows,
             cols,
             pid,
+            tracker: tracker.clone(),
             writer: Mutex::new(writer),
             killer,
             exited: exited.clone(),
         });
 
-        let output = PtyOutput::new(&pty_id, reader, exited.clone());
+        let parser = integration.as_ref().map(|i| {
+            IntegrationParser::new(true, Some(i.nonce.clone()))
+        });
+        let output = PtyOutput::new(&pty_id, reader, exited.clone(), parser, tracker);
 
         self.ptys
             .lock()
@@ -1432,9 +1543,48 @@ impl PtyHost {
                 // Killer fires; the reaper thread's wait() returns and reaps.
                 // Dropping the master closes the pty (SIGHUP / ConPTY close).
                 entry.session.kill();
+                // Best-effort scratch cleanup: the generated scripts are not
+                // secrets (the nonce travels in the env, never the file), but
+                // a per-session dir should not outlive its session.
+                if let Some(dir) = &entry.session.scratch {
+                    let _ = std::fs::remove_dir_all(dir);
+                }
                 Ok(true)
             }
             None => Ok(false),
+        }
+    }
+
+    /// Structured facts (cwd, command records) for a live session. `None` when
+    /// the pty is unknown — never an empty tracker that reads as "nothing ran".
+    pub fn tracker(&self, pty_id: &str) -> Option<Arc<Mutex<CommandTracker>>> {
+        let map = self.ptys.lock().ok()?;
+        map.get(pty_id).map(|e| e.session.tracker.clone())
+    }
+
+    /// Full session view for the status chip + tab strip.
+    pub fn sessions(&self) -> Vec<SessionInfo> {
+        match self.ptys.lock() {
+            Ok(map) => map
+                .values()
+                .map(|e| SessionInfo {
+                    pty_id: e.session.pty_id.clone(),
+                    profile_id: e.session.profile_id.clone(),
+                    backend: e.session.backend,
+                    origin: e.session.origin,
+                    label: e.session.label.clone(),
+                    integration: e.session.integration.map(|s| s.quality()),
+                    pid: e.session.pid,
+                    cwd: e
+                        .session
+                        .tracker
+                        .lock()
+                        .ok()
+                        .map(|t| t.cwd().to_string())
+                        .unwrap_or_default(),
+                })
+                .collect(),
+            Err(_) => Vec::new(),
         }
     }
 
@@ -1467,44 +1617,105 @@ impl PtyHost {
     }
 }
 
-/// Handle to a PTY output stream: spawn the reader thread; deliver raw
-/// chunks + a terminal exit frame. Never parses lines — xterm.js owns VT
-/// interpretation.
+/// Handle to a PTY output stream. The reader thread removes shell-integration
+/// sequences, keeps the [`CommandTracker`] current, and emits [`PtyFrame`]s.
+/// It never interprets VT — xterm.js owns that.
 pub struct PtyOutput {
     pub pty_id: String,
     reader: Box<dyn Read + Send>,
     exited: Arc<AtomicU64>,
+    parser: Option<IntegrationParser>,
+    tracker: Arc<Mutex<CommandTracker>>,
 }
 
 impl PtyOutput {
-    fn new(pty_id: &str, reader: Box<dyn Read + Send>, exited: Arc<AtomicU64>) -> Self {
+    fn new(
+        pty_id: &str,
+        reader: Box<dyn Read + Send>,
+        exited: Arc<AtomicU64>,
+        parser: Option<IntegrationParser>,
+        tracker: Arc<Mutex<CommandTracker>>,
+    ) -> Self {
         Self {
             pty_id: pty_id.to_string(),
             reader,
             exited,
+            parser,
+            tracker,
         }
     }
 
-    /// Start streaming. `on_data` receives raw pty bytes; when the child
-    /// exits, `on_exit(code)` fires once and the thread ends.
-    pub fn stream<F, G>(self, mut on_data: F, mut on_exit: G) -> std::io::Result<()>
+    /// Start streaming. `on_frame` receives render bytes, command records,
+    /// cwd changes and finally the exit frame, in arrival order.
+    pub fn stream<F>(self, mut on_frame: F) -> std::io::Result<()>
     where
-        F: FnMut(Vec<u8>) + Send + 'static,
-        G: FnMut(Option<u32>) + Send + 'static,
+        F: FnMut(PtyFrame) + Send + 'static,
     {
         let pty_id = self.pty_id.clone();
         let exited = self.exited.clone();
         let mut reader = self.reader;
+        let mut parser = self.parser;
+        let tracker = self.tracker.clone();
         std::thread::Builder::new()
             .name(format!("pty-read-{pty_id}"))
             .spawn(move || {
                 let mut buf = [0u8; 8192];
                 loop {
-                    match reader.read(&mut buf) {
+                    let n = match reader.read(&mut buf) {
                         Ok(0) => break, // eof: pty closed
-                        Ok(n) => on_data(buf[..n].to_vec()),
+                        Ok(n) => n,
                         Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                         Err(_) => break,
+                    };
+                    let chunk = &buf[..n];
+                    match parser.as_mut() {
+                        None => on_frame(PtyFrame::Data(chunk.to_vec())),
+                        Some(p) => {
+                            for seg in p.feed_segments(chunk) {
+                                match seg {
+                                    Segment::Bytes(b) => {
+                                        // Bytes land in the tracker *before*
+                                        // they are rendered, and in the same
+                                        // order the shell emitted them, so a
+                                        // completed command carries exactly its
+                                        // own output.
+                                        if let Ok(mut t) = tracker.lock() {
+                                            t.push_output(&b);
+                                        }
+                                        on_frame(PtyFrame::Data(b));
+                                    }
+                                    Segment::Event(ev) => {
+                                        let mut closed: Option<CommandRecord> = None;
+                                        let mut cwd: Option<String> = None;
+                                        if let Ok(mut t) = tracker.lock() {
+                                            t.apply(&ev);
+                                            match &ev {
+                                                IntegrationEvent::CommandFinished(_) => {
+                                                    closed = t.last().cloned();
+                                                }
+                                                IntegrationEvent::Cwd(p) => {
+                                                    cwd = Some(p.clone())
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        if let Some(rec) = closed {
+                                            on_frame(PtyFrame::Command(Box::new(rec)));
+                                        }
+                                        if let Some(p) = cwd {
+                                            on_frame(PtyFrame::Cwd(p));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // A truncated sequence must not be swallowed silently.
+                if let Some(p) = parser.as_mut() {
+                    let tail = p.flush();
+                    if !tail.is_empty() {
+                        on_frame(PtyFrame::Data(tail));
                     }
                 }
                 let code = exited.load(Ordering::Acquire);
@@ -1513,10 +1724,165 @@ impl PtyOutput {
                 } else {
                     Some((code & 0xFFFF_FFFFu64) as u32)
                 };
-                on_exit(code);
+                on_frame(PtyFrame::Exit(code));
             })?;
         Ok(())
     }
+}
+
+/// What the Shell view needs to render a session row: identity, provenance,
+/// backend, and the shell's live cwd (when integration is active).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionInfo {
+    pub pty_id: String,
+    pub profile_id: String,
+    pub backend: TerminalBackend,
+    pub origin: TerminalOrigin,
+    /// `script.run` / task label for non-human tabs.
+    pub label: Option<String>,
+    /// `"Rich"` when a shell-integration script is active, else `None`.
+    pub integration: Option<&'static str>,
+    pub pid: Option<u32>,
+    pub cwd: String,
+}
+
+// ---------------------------------------------------------------------------
+// P67 — shell-integration injection
+// ---------------------------------------------------------------------------
+
+/// Everything a spawn needs to make the shell talk OSC 633.
+struct IntegrationSetup {
+    shell: IntegrationShell,
+    nonce: String,
+    dir: PathBuf,
+    extra_args: Vec<String>,
+    extra_env: Vec<(String, String)>,
+}
+
+/// A per-session nonce. This is **not a secret**: any program the user runs
+/// can read its own environment. What it prevents is the real attack — an
+/// *indirect* injection where tool/web output prints a forged command line,
+/// which must never enter the agent's context as fact. Same posture as VS
+/// Code's post-2023 nonce.
+fn new_nonce() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let pid = std::process::id() as u128;
+    let mut x = nanos
+        .rotate_left(17)
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (pid << 64)
+        ^ 0xDEAD_BEEF_CAFE_F00D_u128;
+    let mut out = String::with_capacity(32);
+    for _ in 0..32 {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        out.push(char::from_digit(((x >> 60) & 0xF) as u32, 16).unwrap());
+    }
+    out
+}
+
+/// Write the integration script (+ a wrapper that preserves the user's own
+/// rc file) and work out the args/env the shell needs.
+///
+/// Returns `None` for shells we have no script for — an honest "no structured
+/// facts" rather than a silently broken shell.
+fn setup_integration(pty_id: &str, profile: &DetectedProfile) -> Option<IntegrationSetup> {
+    let shell = IntegrationShell::for_path(&profile.path)?;
+    let dir = std::env::temp_dir().join(format!(
+        "everyaios-terminal-{}-{pty_id}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).ok()?;
+    let script = dir.join(shell.file_name());
+    std::fs::write(&script, shell.script()).ok()?;
+    let script_path = script.to_string_lossy().to_string();
+
+    let mut extra_args: Vec<String> = Vec::new();
+    let mut extra_env: Vec<(String, String)> = Vec::new();
+
+    let arg_present = |a: &str| profile.args.iter().any(|v| v == a);
+    let env_present = |k: &str| {
+        profile
+            .env
+            .as_ref()
+            .map(|e| e.contains_key(k))
+            .unwrap_or(false)
+    };
+
+    match shell {
+        IntegrationShell::Bash => {
+            // Measured on bash 5, not assumed:
+            //
+            // * `--rcfile <file>` (and its alias `--init-file`) work for an
+            //   interactive bash, and the file may source `~/.bashrc`.
+            // * `-i` **combined with either long option aborts bash** with
+            //   `--: invalid option`. So a profile that already passes `-i` is
+            //   left alone rather than turned into a shell that cannot start.
+            // * The user's `~/.bashrc` can take seconds to source
+            //   (bash-completion, lesspipe). Nothing here may assume a fixed
+            //   startup delay — the reader's first integration frame is the
+            //   only honest readiness signal.
+            if arg_present("--rcfile") || arg_present("--init-file") || arg_present("-i") {
+                return None;
+            }
+            let wrapper = dir.join("wrapper.bash");
+            // `--rcfile` *replaces* ~/.bashrc, so the wrapper restores it
+            // first — aliases, prompt and PATH stay exactly as the user's.
+            let body = format!(
+                "# EveryAIOS terminal wrapper — sources the user's rc, then integration.\n\
+                 if [ -f \"$HOME/.bashrc\" ]; then . \"$HOME/.bashrc\"; fi\n\
+                 . \"{script_path}\"\n"
+            );
+            std::fs::write(&wrapper, body).ok()?;
+            extra_args.push("--rcfile".into());
+            extra_args.push(wrapper.to_string_lossy().to_string());
+        }
+        IntegrationShell::Zsh => {
+            if env_present("ZDOTDIR") {
+                return None;
+            }
+            // zsh reads `$ZDOTDIR/.zshrc`; ours sources the real one first.
+            let zshrc = dir.join(".zshrc");
+            let body = format!(
+                "# EveryAIOS terminal wrapper — sources the user's rc, then integration.\n\
+                 if [ -f \"$HOME/.zshrc\" ]; then . \"$HOME/.zshrc\"; fi\n\
+                 . \"{script_path}\"\n"
+            );
+            std::fs::write(&zshrc, body).ok()?;
+            extra_env.push(("ZDOTDIR".into(), dir.to_string_lossy().to_string()));
+        }
+        IntegrationShell::Fish => {
+            if arg_present("--init-command") || arg_present("-C") {
+                return None;
+            }
+            extra_args.push("--init-command".into());
+            extra_args.push(format!("source \"{script_path}\""));
+        }
+        IntegrationShell::Pwsh => {
+            if arg_present("-Command") {
+                return None;
+            }
+            // pwsh loads its own profile first; `-Command` runs after, so the
+            // user's $PROFILE is preserved.
+            extra_args.push("-NoExit".into());
+            extra_args.push("-Command".into());
+            extra_args.push(format!(". \"{script_path}\""));
+        }
+    }
+
+    Some(IntegrationSetup {
+        shell,
+        nonce: new_nonce(),
+        dir,
+        extra_args,
+        extra_env,
+    })
 }
 
 impl PtyHost {
@@ -1953,8 +2319,19 @@ zsh = { path = "" }
             cwd: None,
         };
         let host = PtyHost::new();
+        // Integration off: this test is about raw PTY duplex semantics, and a
+        // piped non-interactive shell has no prompt to hook.
         let (pty_id, output) = host
-            .spawn_profile(&profile, None, 24, 80)
+            .spawn_with(
+                &profile,
+                None,
+                24,
+                80,
+                SpawnOpts {
+                    origin: TerminalOrigin::Human,
+                    integration: false,
+                },
+            )
             .expect("spawn into real pty");
         assert!(pty_id.starts_with("pty-"));
 
@@ -1970,13 +2347,12 @@ zsh = { path = "" }
         let collected = std::sync::Arc::new(Mutex::new(all.clone()));
         let collected2 = collected.clone();
         output
-            .stream(
-                move |chunk| {
+            .stream(move |frame| {
+                if let PtyFrame::Data(chunk) = frame {
                     let mut c = collected2.lock().unwrap();
                     c.extend_from_slice(&chunk);
-                },
-                move |_code| {},
-            )
+                }
+            })
             .expect("stream");
 
         // Read up to ~3s for the echo.
@@ -2006,5 +2382,318 @@ zsh = { path = "" }
         std::thread::sleep(std::time::Duration::from_millis(200));
         // After kill the pty is removed.
         assert!(host.exit_code(&pty_id).is_err());
+    }
+
+    /// P67 — the real end-to-end proof that the injected bash script speaks the
+    /// protocol we parse: spawn an interactive bash through the PTY host with
+    /// integration on, run a command that fails, and assert the host captured
+    /// the command line, its cwd, its exit code and its output.
+    ///
+    /// Skipped (not failed) when there is no bash on this host — the parser
+    /// itself is covered by `shell_integration` unit tests either way.
+    #[test]
+    fn integration_captures_command_cwd_exit_and_output_from_real_bash() {
+        let bash = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"]
+            .iter()
+            .find(|p| Path::new(p).exists());
+        let Some(bash) = bash else {
+            eprintln!("no bash on this host — skipping live shell-integration test");
+            return;
+        };
+        let profile = DetectedProfile {
+            profile_name: "integration-bash".into(),
+            path: (*bash).to_string(),
+            is_unsafe_path: false,
+            is_from_path: false,
+            is_auto_detected: true,
+            is_default: false,
+            args: vec![],
+            env: Some(HashMap::from([
+                ("PS1".to_string(), "EAIOS$ ".to_string()),
+                ("TERM".to_string(), "xterm-256color".to_string()),
+                // A scratch history file: the shell needs history to report
+                // the accepted line, and a test must not append to the
+                // developer's real ~/.bash_history.
+                (
+                    "HISTFILE".to_string(),
+                    std::env::temp_dir()
+                        .join("everyaios-integration-test-history")
+                        .to_string_lossy()
+                        .to_string(),
+                ),
+            ])),
+            icon: None,
+            backend: TerminalBackend::Local,
+            source: None,
+            wsl_distro: None,
+            cwd: Some("/tmp".to_string()),
+        };
+        let host = PtyHost::new();
+        let (pty_id, output) = host
+            .spawn_with(
+                &profile,
+                Some("/tmp"),
+                24,
+                90,
+                SpawnOpts {
+                    origin: TerminalOrigin::Agent,
+                    integration: true,
+                },
+            )
+            .expect("spawn integrated bash");
+
+        let frames = std::sync::Arc::new(Mutex::new(Vec::<PtyFrame>::new()));
+        let sink = frames.clone();
+        output
+            .stream(move |f| {
+                sink.lock().unwrap().push(f);
+            })
+            .expect("stream");
+
+        // Wait for readiness, not for a wall-clock guess: the integration
+        // script emits its first `Cwd` only after the user's own rc file has
+        // finished sourcing. That is genuinely slow on real machines — 11s on
+        // the box this was developed on (bash-completion + lesspipe + tool
+        // PATH shims) — so the budget is generous on purpose. A fixed sleep
+        // here is exactly the flake this test exists to catch, and it is also
+        // why the Shell view must render a "starting…" state rather than
+        // assuming a prompt appears promptly.
+        let ready = std::time::Instant::now() + std::time::Duration::from_secs(90);
+        let mut live = false;
+        while std::time::Instant::now() < ready {
+            if frames
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|f| matches!(f, PtyFrame::Cwd(_)))
+            {
+                live = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(
+            live,
+            "shell integration never armed — no cwd frame within 20s"
+        );
+        // Give the prompt a moment to finish drawing, then run a command.
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        host.write(&pty_id, b"echo everyaios-int-ok; false\r")
+            .expect("write");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        let mut record: Option<CommandRecord> = None;
+        while std::time::Instant::now() < deadline {
+            {
+                let f = frames.lock().unwrap();
+                for frame in f.iter() {
+                    if let PtyFrame::Command(rec) = frame {
+                        if rec.command.contains("everyaios-int-ok") {
+                            record = Some((**rec).clone());
+                        }
+                    }
+                }
+            }
+            if record.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        let cmd = record.unwrap_or_else(|| {
+            let f = frames.lock().unwrap();
+            let rendered: String = f
+                .iter()
+                .filter_map(|fr| match fr {
+                    PtyFrame::Data(b) => Some(String::from_utf8_lossy(b).to_string()),
+                    _ => None,
+                })
+                .collect();
+            let kinds: Vec<String> = f
+                .iter()
+                .map(|fr| match fr {
+                    PtyFrame::Data(_) => "data".to_string(),
+                    PtyFrame::Command(c) => format!("command({:?})", c.command),
+                    PtyFrame::Cwd(p) => format!("cwd({p})"),
+                    PtyFrame::Exit(c) => format!("exit({c:?})"),
+                })
+                .collect();
+            let live = host
+                .sessions()
+                .iter()
+                .map(|s| format!("{} origin={:?} integration={:?}", s.pty_id, s.origin, s.integration))
+                .collect::<Vec<_>>()
+                .join(", ");
+            panic!(
+                "no command captured.\n  rendered: {rendered:?}\n  frames: {kinds:?}\n  sessions: [{live}]"
+            )
+        });
+        assert!(
+            cmd.command.contains("echo everyaios-int-ok"),
+            "command line was {:?}",
+            cmd.command
+        );
+        assert!(cmd.trusted, "the nonce-bearing command line must be trusted");
+        assert_eq!(cmd.exit_code, Some(1), "exit code of `false`");
+        assert_eq!(cmd.cwd, "/tmp", "cwd reported by the shell");
+        assert!(
+            cmd.output.contains("everyaios-int-ok"),
+            "output was {:?}",
+            cmd.output
+        );
+
+        // The tracker stored on the session must agree with the frames.
+        let tracker = host.tracker(&pty_id).expect("tracker for live pty");
+        let last = tracker.lock().unwrap().last().cloned();
+        assert_eq!(last.map(|r| r.command), Some(cmd.command.clone()));
+
+        // Provenance is recorded on the session.
+        let sessions = host.sessions();
+        let s = sessions.iter().find(|s| s.pty_id == pty_id).unwrap();
+        assert_eq!(s.origin, TerminalOrigin::Agent);
+        assert_eq!(s.integration, Some("Rich"));
+
+        host.kill(&pty_id).expect("kill");
+    }
+
+    /// Unambiguous host check: `cat` has no shell semantics, so the only way
+    /// its output can appear is if the child is really running with the pty
+    /// slave as stdio. A shell round-trip cannot prove this — a tty echoes
+    /// input even when nothing is reading it.
+    #[test]
+    fn pty_child_actually_runs_with_the_slave_as_stdio() {
+        let cat = ["/bin/cat", "/usr/bin/cat"]
+            .iter()
+            .find(|p| Path::new(p).exists());
+        let Some(cat) = cat else {
+            eprintln!("no cat on this host");
+            return;
+        };
+        let profile = DetectedProfile {
+            profile_name: "cat".into(),
+            path: (*cat).to_string(),
+            is_unsafe_path: false,
+            is_from_path: false,
+            is_auto_detected: true,
+            is_default: false,
+            args: vec![],
+            env: None,
+            icon: None,
+            backend: TerminalBackend::Local,
+            source: None,
+            wsl_distro: None,
+            cwd: None,
+        };
+        let host = PtyHost::new();
+        let (pty_id, output) = host
+            .spawn_with(
+                &profile,
+                None,
+                24,
+                80,
+                SpawnOpts {
+                    origin: TerminalOrigin::Human,
+                    integration: false,
+                },
+            )
+            .expect("spawn cat");
+
+        let seen = std::sync::Arc::new(Mutex::new(Vec::<u8>::new()));
+        let sink = seen.clone();
+        output
+            .stream(move |f| {
+                if let PtyFrame::Data(b) = f {
+                    sink.lock().unwrap().extend_from_slice(&b);
+                }
+            })
+            .expect("stream");
+
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        host.write(&pty_id, b"pty-child-alive-42\n").expect("write");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let mut ok = false;
+        while std::time::Instant::now() < deadline {
+            if contains(&seen.lock().unwrap(), b"pty-child-alive-42") {
+                ok = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(
+            ok,
+            "the child never echoed our line back — its stdio is not the pty \
+             slave. saw: {:?}",
+            String::from_utf8_lossy(&seen.lock().unwrap())
+        );
+        host.kill(&pty_id).expect("kill");
+    }
+
+    #[test]
+    fn setup_integration_declines_shells_it_cannot_integrate() {
+        let base = DetectedProfile {
+            profile_name: "x".into(),
+            path: "/bin/sh".into(),
+            is_unsafe_path: false,
+            is_from_path: false,
+            is_auto_detected: true,
+            is_default: false,
+            args: vec![],
+            env: None,
+            icon: None,
+            backend: TerminalBackend::Local,
+            source: None,
+            wsl_distro: None,
+            cwd: None,
+        };
+        assert!(setup_integration("pty-test", &base).is_none(), "dash/sh");
+        let bash = DetectedProfile {
+            path: "/bin/bash".into(),
+            ..base.clone()
+        };
+        let setup = setup_integration("pty-test-bash", &bash).expect("bash integrates");
+        assert_eq!(setup.shell, IntegrationShell::Bash);
+        assert_eq!(setup.nonce.len(), 32);
+        assert!(
+            setup.extra_args.contains(&"--rcfile".to_string()),
+            "bash must be integrated with --rcfile (--init-file does not work)"
+        );
+        // The generated wrapper must preserve the user's own rc.
+        let wrapper = setup.dir.join("wrapper.bash");
+        let body = std::fs::read_to_string(&wrapper).expect("wrapper written");
+        assert!(body.contains(".bashrc"), "wrapper must source the user rc");
+        assert!(body.contains("integration.bash"), "wrapper must source ours");
+        let _ = std::fs::remove_dir_all(&setup.dir);
+
+        // Anything we cannot inject cleanly is declined, never half-applied.
+        for args in [
+            vec!["--init-file".into(), "/tmp/mine".into()],
+            vec!["--rcfile".into(), "/tmp/mine".into()],
+            vec!["-i".into()],
+        ] {
+            let custom = DetectedProfile {
+                path: "/bin/bash".into(),
+                args,
+                ..base.clone()
+            };
+            assert!(setup_integration("pty-test-custom", &custom).is_none());
+        }
+
+        // Nonces must not repeat across sessions.
+        let a = setup_integration("pty-nonce-a", &bash).unwrap();
+        let b = setup_integration("pty-nonce-b", &bash).unwrap();
+        assert_ne!(a.nonce, b.nonce);
+        let _ = std::fs::remove_dir_all(&a.dir);
+        let _ = std::fs::remove_dir_all(&b.dir);
+
+        // zsh goes through ZDOTDIR, not args.
+        let zsh = DetectedProfile {
+            path: "/usr/bin/zsh".into(),
+            ..base.clone()
+        };
+        if let Some(s) = setup_integration("pty-test-zsh", &zsh) {
+            assert!(s.extra_env.iter().any(|(k, _)| k == "ZDOTDIR"));
+            let _ = std::fs::remove_dir_all(&s.dir);
+        }
     }
 }

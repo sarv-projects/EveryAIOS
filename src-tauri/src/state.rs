@@ -22,7 +22,7 @@ use crate::catalog_cmds::CatalogState;
 use crate::control::FileUndo;
 use crate::desktop_cmds::DesktopSlot;
 use crate::mcp_cmds::McpServerRow;
-use crate::shell_cmds::ShellHandle;
+
 use everyaios_core::terminal::PtyHost;
 
 /// Shared state handed to every Tauri command via `State<'_, AppState>`.
@@ -70,7 +70,7 @@ pub struct AppState {
     /// `browser_start`). Dropping it kills the Chrome child.
     pub browser: Mutex<Option<LiveBrowser>>,
     /// P11.5.3: live shell processes keyed by session id (shell view).
-    pub shells: Mutex<std::collections::HashMap<String, ShellHandle>>,
+
     /// H36 (P54): the integrated-terminal PTY host — profile-backed unix pty /
     /// ConPTY sessions keyed by `pty_id`. Sessions are session-scoped and
     /// survive a Shell-view unmount; dropping the host kills + reaps them.

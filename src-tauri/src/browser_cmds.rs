@@ -58,7 +58,7 @@ pub(crate) fn wait_for_page_target(
 
 /// The live browser session held in `AppState.browser`.
 pub struct LiveBrowser {
-    /// Owns the Chrome child — `BrowserChild::drop` kills the process when
+    /// Owns the browser child — `BrowserChild::drop` kills the process when
     /// the session is cleared (browser_stop / app teardown). Never read
     /// directly; its Drop is the whole point.
     #[allow(dead_code)]
@@ -66,6 +66,9 @@ pub struct LiveBrowser {
     client: std::sync::Arc<everyaios_cdp::CdpClient>,
     session_id: String,
     url: String,
+    channel: everyaios_cdp::BrowserChannel,
+    browser_name: String,
+    browser_version: Option<String>,
 }
 
 /// Shared CDP backend injected into the agent `ToolService` so browser.*
@@ -73,6 +76,51 @@ pub struct LiveBrowser {
 struct LoopBrowser {
     client: std::sync::Arc<everyaios_cdp::CdpClient>,
     session_id: String,
+}
+
+fn browser_config_path() -> std::path::PathBuf {
+    everyaios_core::default_data_dir().join("browser_config.json")
+}
+
+pub fn load_browser_config() -> everyaios_cdp::BrowserConfig {
+    let path = browser_config_path();
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        if let Ok(cfg) = serde_json::from_str::<everyaios_cdp::BrowserConfig>(&data) {
+            return cfg;
+        }
+    }
+    everyaios_cdp::BrowserConfig::default()
+}
+
+pub fn save_browser_config(cfg: &everyaios_cdp::BrowserConfig) -> Result<(), String> {
+    let path = browser_config_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let data = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Discover all supported installed browsers on the host system.
+#[tauri::command]
+pub fn browser_list_installed() -> Result<Vec<everyaios_cdp::BrowserCandidate>, String> {
+    Ok(everyaios_cdp::discover_installed_browsers())
+}
+
+/// Get the current user browser configuration.
+#[tauri::command]
+pub fn browser_get_config() -> Result<everyaios_cdp::BrowserConfig, String> {
+    Ok(load_browser_config())
+}
+
+/// Update the user browser configuration.
+#[tauri::command]
+pub fn browser_set_config(
+    config: everyaios_cdp::BrowserConfig,
+) -> Result<everyaios_cdp::BrowserConfig, String> {
+    save_browser_config(&config)?;
+    Ok(config)
 }
 
 impl everyaios_core::BrowserBackend for LoopBrowser {
@@ -182,8 +230,8 @@ fn actions(b: &LiveBrowser) -> everyaios_browser::BrowserActions<'_, everyaios_c
     everyaios_browser::BrowserActions::new(&*b.client, Some(&b.session_id))
 }
 
-/// Spawn + connect a headless Chrome (idempotent — returns current status if
-/// already attached). The profile dir lives under the app data dir.
+/// Spawn + connect a browser session (idempotent — returns current status if
+/// already attached). Uses the configured browser binary and isolates profiles per channel.
 #[tauri::command]
 pub fn browser_start(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     {
@@ -193,17 +241,47 @@ pub fn browser_start(state: State<'_, AppState>) -> Result<serde_json::Value, St
                 "attached": true,
                 "url": b.url,
                 "fresh": false,
+                "channel": b.channel,
+                "name": b.browser_name,
+                "version": b.browser_version,
             }));
         }
     }
 
-    let profile = everyaios_core::default_data_dir().join("browser-profile");
+    let config = load_browser_config();
+    let (resolved_bin, channel) =
+        everyaios_cdp::resolve_browser_binary(&config).map_err(|e| e.to_string())?;
+    let browser_version = everyaios_cdp::probe_browser_version(&resolved_bin);
+    let browser_name = channel.display_name().to_string();
+
+    let channel_dir_name = match channel {
+        everyaios_cdp::BrowserChannel::Brave => "brave",
+        everyaios_cdp::BrowserChannel::Chrome => "chrome",
+        everyaios_cdp::BrowserChannel::Edge => "edge",
+        everyaios_cdp::BrowserChannel::Chromium => "chromium",
+        everyaios_cdp::BrowserChannel::Arc => "arc",
+        everyaios_cdp::BrowserChannel::Vivaldi => "vivaldi",
+        everyaios_cdp::BrowserChannel::Custom => "custom",
+        everyaios_cdp::BrowserChannel::Auto => "auto",
+    };
+
+    let profile = everyaios_core::default_data_dir()
+        .join("browser-profiles")
+        .join(channel_dir_name);
     std::fs::create_dir_all(&profile).map_err(|e| e.to_string())?;
+
+    let mut extra_args = vec!["--mute-audio".to_string()];
+    for arg in &config.extra_args {
+        if !extra_args.contains(arg) {
+            extra_args.push(arg.clone());
+        }
+    }
+
     let opts = everyaios_cdp::LaunchOptions {
         user_data_dir: profile,
-        headless: true,
-        browser_binary: None,
-        extra_args: vec!["--mute-audio".to_string()],
+        headless: config.headless,
+        browser_binary: Some(resolved_bin),
+        extra_args,
         wait_timeout: std::time::Duration::from_secs(30),
     };
     let child = everyaios_cdp::spawn_browser(&opts).map_err(|e| format!("spawn browser: {e}"))?;
@@ -239,6 +317,9 @@ pub fn browser_start(state: State<'_, AppState>) -> Result<serde_json::Value, St
         client: std::sync::Arc::clone(&client),
         session_id: session.session_id.clone(),
         url: "about:blank".to_string(),
+        channel,
+        browser_name: browser_name.clone(),
+        browser_version: browser_version.clone(),
     };
     {
         let mut guard = lock_browser(&state)?;
@@ -256,6 +337,9 @@ pub fn browser_start(state: State<'_, AppState>) -> Result<serde_json::Value, St
         "attached": true,
         "url": "about:blank",
         "fresh": true,
+        "channel": channel,
+        "name": browser_name,
+        "version": browser_version,
     }))
 }
 
@@ -478,6 +562,9 @@ pub fn browser_status(state: State<'_, AppState>) -> Result<serde_json::Value, S
             "attached": true,
             "url": b.url,
             "engine": "chrome",
+            "channel": b.channel,
+            "name": b.browser_name,
+            "version": b.browser_version,
         })),
         None => Ok(serde_json::json!({ "attached": false })),
     }

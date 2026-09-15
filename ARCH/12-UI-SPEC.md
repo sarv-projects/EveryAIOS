@@ -431,27 +431,33 @@ Unified timeline of all agent actions:
 - Expandable entries (click to see details/output)
 - Filterable by type (shell/code/browser/office/file)
 
-### 4.4 Shell View (view.shell) — H36 terminal profiles
+### 4.4 Shell View (view.shell) — H36 terminal profiles (v3.80 one-plane rewrite)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ ☰ PowerShell ▾   [+ ▾]  [split]              [▸ History] │
+│ ☰ PowerShell ▾   [+ ▾]  [Find] [History]     [Eye Int]   │
 │    PowerShell · cmd · Git Bash · Ubuntu (WSL) · bash     │
 ├──────────────────────────────────────────────────────────┤
+│ ◆ Agent · npm test (read-only)   ← provenance tab        │
 │ PS C:\work> npm test                                     │
 │ PASS 42 tests                                            │
+│ ● exit 0 · work         ← OSC 633 shell-integration mark │
 │ PS C:\work> _                                            │
 ├──────────────────────────────────────────────────────────┤
-│ profile: PowerShell · backend: Local · ConPTY            │
+│ You session · integration: Rich · keystrokes → gesture   │
 └──────────────────────────────────────────────────────────┘
 ```
 - **`+` dropdown** lists detected profiles (VS Code model): PowerShell, cmd, Git Bash, each WSL distro, `$SHELL`/bash/zsh/fish. Not one hardcoded `sh`/`cmd`.
 - Default profile per OS; **Select Default Profile** at the bottom of the dropdown.
-- **Automation profile** (tasks/agent `script.run`) is separate from the user shell.
-- Multiple tabs + splits. Each tab is a `PtySession` (`pty_id` + `profile_id` + `backend`).
-- Human typing = `human_gesture`; agent/ACP terminals stay ticketed.
-- **Honest ceiling today:** `shell_cmds.rs` is piped `sh -i`/`cmd`, one process per session, no PTY. P54 replaces that with ConPTY/unix-pty + xterm.js.
-- Remote profile (`backend: Remote`) targets a user-owned ExecutionNode (H33 v1 attach) — that is the cloud terminal, not a founder host.
+- **Automation profile** (tasks/agent `script.run`) is separate from the user shell, but renders in the same view.
+- Multiple tabs; each tab is a `PtySession` (`pty_id` + `profile_id` + `backend` + `origin`).
+- **Provenance (v3.80):** human / agent / task tabs share one PTY plane and render with origin chips; agent/task tabs are watch-only — the UI and the write path both refuse input (authority cannot be laundered through a tab). Reattach on view reopen restores origin.
+- **Shell integration (v3.80):** OSC 633 reporting (bash `PS0`, zsh/fish hooks, pwsh `PSConsoleHostReadLine`) gives the real cwd, per-command exit codes (rendered as `● exit N` marks), and trusted command records. Find-in-scrollback, web links (open externally only), and the recent-command picker all read those records. Quality ladder: Rich (integration reporting) / Basic / none.
+- Human typing = `human_gesture`; agent/ACP terminals stay ticketed. Keystrokes are never audited raw (PTYs carry passwords) — agent commands are audited as `terminal.agent_run`.
+- **One plane (v3.80):** the legacy piped `shell_cmds.rs` path is deleted; the IDE workbench bottom panel mounts this same view, so there is exactly one terminal surface in the product.
+- **Copilot-style follow (v3.80):** `@terminal` in the composer attaches the last trusted command block (command · cwd · exit · output) as turn context; `null` (never fabricated) when no trusted record exists.
+- **Open in terminal here (v3.80):** Explorer directory rows expose a terminal button that spawns the default profile rooted at that directory (Rust re-verifies the dir).
+- **Honest ceilings:** splits (P54.4) and output ring-buffer replay after reattach remain open. Remote profile (`backend: Remote`) targets a user-owned ExecutionNode (H33 v1 attach) — that is the cloud terminal, not a founder host; fail-closed `remote_unavailable` today.
 
 ### 4.5 Code View (view.code)
 

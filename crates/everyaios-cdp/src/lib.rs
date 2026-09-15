@@ -19,8 +19,10 @@ pub mod pairing;
 pub mod transport;
 
 pub use browser::{
-    default_profile_dir, install_chrome_for_testing, locate_system_browser, spawn_browser,
-    BrowserChild, LaunchOptions,
+    channel_candidates, default_profile_dir, detect_channel_from_path, discover_installed_browsers,
+    install_chrome_for_testing, locate_system_browser, probe_browser_version, resolve_browser_binary,
+    spawn_browser, BrowserCandidate, BrowserChannel, BrowserChild, BrowserConfig, BrowserProfileMode,
+    CandidateSource, LaunchOptions,
 };
 pub use discovery::{
     assert_loopback, connect_to_browser, discover_electron_apps, electron_from_json,

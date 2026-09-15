@@ -18,6 +18,41 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## v3.80 — 2026-09-15 — One terminal plane: shell integration, provenance, and the Copilot-style terminal follow
+
+**Category:** architecture + implementation; no capability rows added. **Affected:** new `crates/everyaios-core/src/shell_integration.rs`, `crates/everyaios-core/src/terminal.rs`, `src-tauri/src/terminal_cmds.rs`, `src-tauri/src/commands.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/state.rs`, **deleted** `src-tauri/src/shell_cmds.rs` and `ui/src/lib/shell.ts`, `ui/src/lib/terminal.ts`, `ui/src/components/views/shell-view.tsx`, `ui/src/components/views/ide/ide-workbench.tsx`, `ui/src/components/views/ide/explorer-panel.tsx`, `ui/src/components/chat/chat-composer.tsx`, `ARCH/12-UI-SPEC.md` §4.4, `TODO.md` P54/P68, and shell architecture version metadata. Capability identity remains **166**; the live TODO count becomes **1428 = 1214 done + 214 open** (six P68 items landed done, two added open).
+
+**Two real defects fixed.** (1) The agent had no terminal: `script.run` had no in-tree executor at all (P54.5 had been honest about this), so "watch the agent work" was not a property the product had. (2) The IDE workbench bottom panel ran a *second, unrelated* shell — the legacy piped `shell_cmds.rs` (`sh -i`/`cmd`, no PTY, no provenance, not the same session as the Shell view).
+
+**Decisions & Implementation.**
+1. **Shell-integration engine (P68.1):** `shell_integration.rs` parses VS Code's OSC 633 protocol with a per-session nonce: `A`/`B`/`C` prompt markers, `E;<line>;<nonce>` command line, `D;<exit>;<nonce>` exit, `P;Cwd=<path>` working directory. Ordered output segments make command-output attribution exact; lines that fail nonce attribution are reported `trusted:false` and are never presented as fact. `recent()`/`context_block()`/`history_block()` with byte budgets feed UI + chat. 22 tests.
+2. **Injection scripts (P68.2):** bash uses `PS0` (the DEBUG-trap variant was tried and rejected — it fights `.bashrc` `PROMPT_COMMAND` hooks like zoxide), zsh precmd/pre-exec, fish, pwsh `PSConsoleHostReadLine`. Bash is injected via `--rcfile` — `--init-file` without `-i` measurably kills interactivity. Quality ladder `Rich|Basic|null` surfaced in `terminal_status`.
+3. **Provenance PTY plane (P68.3):** `TerminalOrigin::{Human,Agent,Task}` on `SpawnOpts`; the new `terminal_run` command runs agent/task commands on the automation (or default) profile in the *same* host, audited as `terminal.agent_run`/`terminal.task_run`, rendered as labelled read-only tabs. `terminal_run` cannot create a human session (no authority laundering). Human keystrokes are still deliberately never audited raw (PTYs carry passwords).
+4. **Shell view rewrite (P68.4):** provenance chips, live cwd header, `● exit N` decorations (trusted records only), find-in-scrollback, web links (external open only), recent-command picker, and `computeXtermTheme()` reading the live CSS semantic tokens — the terminal no longer hardcodes the warm/cream/orange palette (P66.5 closed for this surface). New context commands: `terminal_commands`, `terminal_last_command_context`, `terminal_history_context`.
+5. **Copilot-style follow (P68.5):** `@terminal` in the composer attaches the last trusted command block (command · cwd · exit · output) as turn context; honest refusal when no live session or no trusted record — never a fabricated block.
+6. **One plane (P68.6):** `shell_cmds.rs` + `lib/shell.ts` deleted; the IDE workbench bottom terminal mounts the same `ShellView`. Explorer directory rows gained "open terminal here" (default profile rooted at that dir; Rust re-verifies the directory).
+
+**Verification.** `cargo test -p everyaios-core --lib terminal` 28/28; `shell_integration` 22/22; live PTY round-trips confirmed bash emits the full `E`/`D`/`P;Cwd` stream and the machine's slow `~/.bashrc` (11 s) was accounted for in test readiness rather than papered over. `cargo check --manifest-path src-tauri/Cargo.toml` clean; UI `tsc --noEmit` clean; `ipc:parity` **0 broken (321 registered)**; doc-sync green.
+
+**Not verified — explicit.** Windows ConPTY was never exercised live (P68.7 open); the pwsh integration script is untested on a real Windows host; splits and ring-buffer replay remain open (P68.8); the coordinator `script.run` → `terminalRun()` seam is wired Rust-side but the coordinator tool still needs to route through it.
+
+---
+
+## v3.79 — 2026-09-15 — User-Configurable Browser Selection & Isolated Profile Management
+
+**Category:** product contract + CDP engine + UI settings; no capability rows added. **Affected:** `crates/everyaios-cdp/src/browser.rs`, `crates/everyaios-cdp/src/lib.rs`, `src-tauri/src/browser_cmds.rs`, `src-tauri/src/commands.rs`, `ui/src/lib/browser.ts`, `ui/src/components/panels/settings-sections-studio.tsx`, `DESKTOP-APP-SPEC.md` §E1, and shell architecture version metadata. Capability identity remains **166**; live TODO count remains synchronized.
+
+**Decisions & Implementation.**
+1. **Multi-Channel Browser Discovery:** Added `BrowserChannel` (`Auto`, `Brave`, `Chrome`, `Edge`, `Chromium`, `Arc`, `Vivaldi`, `Custom`) and host discovery engine (`discover_installed_browsers`) scanning system paths, standard Program Files, LocalAppData, and PATH across Windows, macOS, and Linux.
+2. **Version Probing & Binary Resolution:** Added `probe_browser_version()` and `resolve_browser_binary()` to validate binaries, retrieve runtime version numbers, and fail closed if a custom path is missing or invalid.
+3. **Isolated Profile Separation:** Switched `--user-data-dir` from flat single-profile to channel-isolated directories under `<data_dir>/browser-profiles/<channel>`, avoiding Chrome 136+ default profile lockouts and isolating browser state per channel.
+4. **IPC Commands & Configuration:** Added `browser_list_installed`, `browser_get_config`, and `browser_set_config` Tauri IPC commands and registered them in `src-tauri/src/commands.rs`.
+5. **Settings UI:** Added user-configurable browser selection card, custom executable path input, headless mode toggle, and profile isolation mode selector to `BrowserNetworkSection` in Settings.
+
+**Verification.** `cargo test -p everyaios-cdp` passed 49/49 unit tests. Frontend `tsc --noEmit` passed with 0 errors. IPC parity confirmed 0 broken. Doc-sync validated.
+
+---
+
 ## v3.78 — 2026-09-15 — Windows-first runtime discovery, agent-owned picker, session loadout, and cowork evidence gates
 
 **Category:** product/UI architecture + implementation queue; no capability rows added. **Affected:** `DESKTOP-APP-SPEC.md`, `ARCH/12-UI-SPEC.md`, `ARCH/17-NATIVE-AGENT.md`, `ARCH/00-INDEX.md`, `UI-DESIGN-PROMPT.md`, `UX-TESTING-PLAN.md`, `TODO.md` P66, research doc 91, and shell version metadata. Capability identity remains **166**; the live TODO count becomes **1420 = 1208 done + 212 open** because nine P66 implementation items were added.

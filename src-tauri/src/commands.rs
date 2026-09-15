@@ -38,7 +38,7 @@ use crate::openai_cmds;
 use crate::replay_cmds;
 use crate::scheduler_cmds;
 use crate::search_cmds;
-use crate::shell_cmds;
+
 use crate::skills_cmds;
 use crate::storage_cmds;
 use crate::sync_cmds;
@@ -270,20 +270,27 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         fs_cmds::fs_undo_list,
         fs_cmds::fs_undo_restore,
         fs_cmds::fs_undo_snapshot,
-        shell_cmds::shell_spawn,
-        shell_cmds::shell_write,
-        shell_cmds::shell_kill,
-        shell_cmds::shell_status,
-        // H36 (P54) — profile-backed terminal + real PTY host.
+        // H36 (P54/P67) — the ONE terminal plane: profile registry + real PTY
+        // host, shared by human tabs, the agent's `script.run`, and durable
+        // tasks. `shell_cmds`'s piped `sh -i`/`cmd` path was retired here.
         terminal_cmds::terminal_profiles,
         terminal_cmds::terminal_set_default,
         terminal_cmds::terminal_set_automation,
         terminal_cmds::terminal_confirm_unsafe,
+        terminal_cmds::terminal_get_shell_integration,
+        terminal_cmds::terminal_set_shell_integration,
         terminal_cmds::terminal_spawn,
+        terminal_cmds::terminal_run,
         terminal_cmds::terminal_write,
         terminal_cmds::terminal_resize,
         terminal_cmds::terminal_kill,
         terminal_cmds::terminal_status,
+        terminal_cmds::terminal_commands,
+        terminal_cmds::terminal_last_command_context,
+        terminal_cmds::terminal_history_context,
+        browser_cmds::browser_list_installed,
+        browser_cmds::browser_get_config,
+        browser_cmds::browser_set_config,
         browser_cmds::browser_start,
         browser_cmds::browser_navigate,
         browser_cmds::browser_snapshot,

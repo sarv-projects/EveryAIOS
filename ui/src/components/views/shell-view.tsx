@@ -1,8 +1,19 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Terminal as TerminalIcon, Plus, Square, X, ChevronDown, Eye, EyeOff, ShieldAlert } from 'lucide-react'
-import { Terminal } from '@xterm/xterm'
+import {
+  Terminal as TerminalIcon,
+  Plus,
+  Square,
+  X,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  ShieldAlert,
+  Search,
+  History,
+} from 'lucide-react'
+import { Terminal, type ILink } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { Badge } from '@/components/ui/badge'
@@ -19,8 +30,13 @@ import { inTauri } from '@/lib/tauri'
 import { useTheme } from '@/components/theme-provider'
 import {
   backendLabel,
+  computeXtermTheme,
+  cwdLeaf,
   decodeChunk,
+  isInteractiveOrigin,
   onTerminalEvent,
+  originLabel,
+  terminalCommands,
   terminalConfirmUnsafe,
   terminalKill,
   terminalProfiles,
@@ -29,6 +45,8 @@ import {
   terminalSpawn,
   terminalStatus,
   terminalWrite,
+  type TerminalCommandRecord,
+  type TerminalOriginId,
   type TerminalProfile,
   type TerminalProfilesResponse,
 } from '@/lib/terminal'
@@ -37,39 +55,66 @@ interface Tab {
   id: string
   profileName: string
   backend: TerminalProfile['backend']
+  origin: TerminalOriginId
+  label: string | null
   ptyId: string | null
   exitCode: number | null
   error: string | null
+  /** Live shell-reported working directory (shell integration). */
+  cwd: string
+  /** Latest trusted command the shell reported finishing. */
+  lastCommand: TerminalCommandRecord | null
 }
 
 interface TermHandle {
   term: Terminal
   fit: FitAddon
   observer: ResizeObserver
+  disposer: () => void
 }
 
 /**
- * H36 (P54) — profile-backed terminal. The `+` dropdown lists the profiles
- * Rust actually detected on this machine (PowerShell, cmd, Git Bash, each WSL
- * distro, `$SHELL`/`/etc/shells` entries) — never a hardcoded two-shell list.
- * Rendering is xterm.js over raw PTY bytes, so full-screen TUI apps work and
- * resize reaches the child process. Sessions live in the shell: switching tabs
- * or unmounting this view does not kill them.
+ * H36 (P54/P67/P68) — profile-backed terminal at VS Code grade.
  *
- * Splits are not implemented yet (TODO P54.4 keeps that part open); tabs are.
+ * - The `+` dropdown lists the profiles Rust actually detected on this machine
+ *   (PowerShell, cmd, Git Bash, each WSL distro, `$SHELL`/`/etc/shells`), never
+ *   a hardcoded two-shell list.
+ * - Full-screen TUI apps work (raw PTY + xterm); resize reaches the child.
+ * - **Provenance**: human tabs, agent `script.run` runs and durable task runs
+ *   all appear in this view — agent/task tabs render as read-only labelled
+ *   tabs so "watch the agent work" is a real property, not a claim.
+ * - **Shell integration**: the shell reports cwd changes and per-command exit
+ *   codes (OSC 633). Exit codes render as decorations, the cwd shows in the
+ *   header, and `#terminalLastCommand` chat context is fed from the same
+ *   records.
+ * - Sessions live in the shell: switching tabs or unmounting does not kill
+ *   them. Output produced while the view is closed is honestly announced as
+ *   non-replayed (no ring buffer yet).
+ *
+ * Open (kept as TODOs): splits (P54.4), output ring-buffer replay.
  */
 export default function ShellView() {
   const { theme } = useTheme()
+  const dark = theme !== 'light'
   const [registry, setRegistry] = useState<TerminalProfilesResponse | null>(null)
   const [registryError, setRegistryError] = useState<string | null>(null)
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  /** Read-only is forced by provenance; the toggle only gates *human* tabs. */
   const [interactive, setInteractive] = useState(true)
+  const [findOpen, setFindOpen] = useState(false)
+  const [findText, setFindText] = useState('')
+  const [findUp, setFindUp] = useState(false)
+  const [commands, setCommands] = useState<TerminalCommandRecord[]>([])
+  const [commandsOpen, setCommandsOpen] = useState(false)
 
   const terms = useRef<Map<string, TermHandle>>(new Map())
   /** tabId → live ptyId, readable from the xterm `onData` closure (which is
    * registered once, at mount, before the spawn resolves). */
   const ptyRef = useRef<Map<string, string>>(new Map())
+  const cwdRef = useRef<Map<string, string>>(new Map())
+  const findState = useRef({ open: false, text: '', up: false })
+  findState.current = { open: findOpen, text: findText, up: findUp }
   const tabsRef = useRef<Tab[]>([])
   tabsRef.current = tabs
   const interactiveRef = useRef(interactive)
@@ -78,14 +123,9 @@ export default function ShellView() {
 
   const active = useMemo(() => tabs.find((t) => t.id === activeId) ?? null, [tabs, activeId])
 
-  // Theme: xterm needs explicit colors — inherit the cockpit's light/dark.
-  const themeOption = useMemo(
-    () =>
-      theme === 'light'
-        ? { background: '#faf7f0', foreground: '#2a2622', cursor: '#b4552d', selectionBackground: '#e6ddcc' }
-        : { background: '#0b0b0d', foreground: '#e7e3dc', cursor: '#f59e0b', selectionBackground: '#3f3a33' },
-    [theme],
-  )
+  // Theme: xterm needs explicit colors — computed from the live semantic
+  // tokens so light/dark and the accent token are followed (P66.5/P68).
+  const themeOption = useMemo(() => computeXtermTheme(dark), [dark])
 
   // --- profile registry -----------------------------------------------------
   useEffect(() => {
@@ -126,10 +166,53 @@ export default function ShellView() {
         convertEol: false,
         scrollback: 5000,
         theme: themeOption,
+        linkHandler: null,
       })
       const fit = new FitAddon()
       term.loadAddon(fit)
       term.open(el)
+
+      // P68 — web/secure links (OSC 8 + text URLs). Web links open externally;
+      // nothing executes from a click inside the terminal.
+      // P68 — web links (OSC 8 + text URLs) over the scrollback. Links open
+      // externally; nothing executes from a click inside the terminal.
+      try {
+        term.registerLinkProvider({
+          provideLinks: (
+            bufferLineNumber: number,
+            callback: (links: ILink[] | undefined) => void,
+          ) => {
+            const line = term.buffer.active.getLine(bufferLineNumber)
+            if (!line) {
+              callback(undefined)
+              return
+            }
+            const text = line.translateToString(true)
+            const re = /https?:\/\/[^\s)"']+/g
+            const links: ILink[] = []
+            let m: RegExpExecArray | null
+            while ((m = re.exec(text)) !== null) {
+              const start = m.index
+              const end = start + m[0].length
+              const uri = m[0]
+              links.push({
+                text: uri,
+                range: {
+                  start: { x: start + 1, y: bufferLineNumber },
+                  end: { x: end, y: bufferLineNumber },
+                },
+                activate: (_e: unknown, uri: string) => {
+                  window.open(uri, '_blank', 'noopener')
+                },
+              })
+            }
+            callback(links.length > 0 ? links : undefined)
+          },
+        })
+      } catch {
+        /* link provider unsupported — links degrade silently */
+      }
+
       try {
         fit.fit()
       } catch {
@@ -152,10 +235,19 @@ export default function ShellView() {
       // before `terminal_spawn` resolves.
       term.onData((d) => {
         const ptyId = ptyRef.current.get(tab.id)
-        if (!interactiveRef.current || !ptyId) return
+        if (!ptyId) return
+        // Provenance gate: agent/task tabs are watch-only by construction —
+        // the terminal itself is never writable for a non-human origin.
+        const t = tabsRef.current.find((x) => x.id === tab.id)
+        if (t && !isInteractiveOrigin(t.origin)) return
+        if (t && t.origin === 'human' && !interactiveRef.current) return
         void terminalWrite(ptyId, d)
       })
-      terms.current.set(tab.id, { term, fit, observer })
+      const disposer = () => {
+        observer.disconnect()
+        term.dispose()
+      }
+      terms.current.set(tab.id, { term, fit, observer, disposer })
     },
     [themeOption],
   )
@@ -167,50 +259,113 @@ export default function ShellView() {
   useEffect(() => {
     const map = terms.current
     return () => {
-      for (const h of map.values()) {
-        h.observer.disconnect()
-        h.term.dispose()
-      }
+      for (const h of map.values()) h.disposer()
       map.clear()
     }
   }, [])
+
+  // --- find -----------------------------------------------------------------
+  // Search-as-you-type over the scrollback via the buffer API (no addon
+  // dependency). Matches scroll into view; direction toggles from the input.
+  useEffect(() => {
+    if (!findOpen || !findText.trim() || !activeId) return
+    const handle = terms.current.get(activeId)
+    if (!handle) return
+    const { term } = handle
+    const needle = findText.toLowerCase()
+    const buf = term.buffer.active
+    const scanLine = (y: number): number | null => {
+      const line = buf.getLine(y)
+      if (!line) return null
+      const idx = line.translateToString(true).toLowerCase().indexOf(needle)
+      return idx >= 0 ? idx : null
+    }
+    const cursor = term.rows // start below the viewport
+    let hit: { y: number; x: number } | null = null
+    const dir = findUp ? -1 : 1
+    for (let i = 1; i <= buf.length; i++) {
+      const y = (dir === 1 ? cursor + i : buf.length - i + cursor) % Math.max(1, buf.length)
+      const x = scanLine(y)
+      if (x !== null) {
+        hit = { y, x }
+        break
+      }
+    }
+    if (hit) {
+      try {
+        term.scrollToLine(Math.min(hit.y, buf.length - term.rows))
+        term.selectLines(hit.y, hit.y)
+      } catch {
+        /* selection API unavailable */
+      }
+    }
+  }, [findOpen, findText, findUp, activeId, tabs])
 
   // --- output stream --------------------------------------------------------
   useEffect(() => {
     return onTerminalEvent((ev) => {
       const tab = tabsRef.current.find((t) => t.ptyId === ev.ptyId)
-      if (!tab) return
-      const handle = terms.current.get(tab.id)
+      const tabId = tab?.id
+      const handle = tabId ? terms.current.get(tabId) : undefined
       if (ev.kind === 'data') {
         const bytes = decodeChunk(ev.data)
         if (bytes) handle?.term.write(bytes)
+        return
+      }
+      if (ev.kind === 'command' && ev.command) {
+        if (tabId) {
+          setTabs((prev) =>
+            prev.map((t) => (t.id === tabId ? { ...t, lastCommand: ev.command! } : t)),
+          )
+          if (tabId === activeId) {
+            setCommands((prev) => [...prev.slice(-49), ev.command!])
+          }
+        }
+        // P68 — exit-code decoration next to the finished command (trust gate:
+        // untrusted records are not decorated as fact).
+        if (handle && ev.command.trusted && typeof ev.command.exitCode === 'number') {
+          const ok = ev.command.exitCode === 0
+          const color = ok ? '\x1b[32m' : '\x1b[31m'
+          handle.term.write(
+            `\r\n${color}● exit ${ev.command.exitCode}${ev.command.cwd ? ` · ${cwdLeaf(ev.command.cwd)}` : ''}\x1b[0m\r\n`,
+          )
+        }
+        return
+      }
+      if (ev.kind === 'cwd' && tabId && ev.cwd) {
+        cwdRef.current.set(tabId, ev.cwd)
+        setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, cwd: ev.cwd! } : t)))
         return
       }
       if (ev.kind === 'exit') {
         handle?.term.write(
           `\r\n\x1b[2m[process exited${typeof ev.code === 'number' ? ` with code ${ev.code}` : ''}]\x1b[0m\r\n`,
         )
-        ptyRef.current.delete(tab.id)
+        ptyRef.current.delete(tabId ?? '')
         setTabs((prev) =>
-          prev.map((t) => (t.id === tab.id ? { ...t, exitCode: ev.code ?? 0, ptyId: null } : t)),
+          prev.map((t) => (t.id === tabId ? { ...t, exitCode: ev.code ?? 0, ptyId: null } : t)),
         )
         return
       }
       handle?.term.write(`\r\n\x1b[31m[terminal error]\x1b[0m\r\n`)
     })
-  }, [])
+  }, [activeId])
 
   // --- spawn ----------------------------------------------------------------
   const openProfile = useCallback(
-    (profile: TerminalProfile) => {
+    (profile: TerminalProfile, cwd?: string) => {
       const id = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
       const tab: Tab = {
         id,
         profileName: profile.profileName,
         backend: profile.backend,
+        origin: 'human',
+        label: null,
         ptyId: null,
         exitCode: null,
         error: null,
+        cwd: cwd ?? '',
+        lastCommand: null,
       }
       setTabs((prev) => [...prev, tab])
       setActiveId(id)
@@ -231,7 +386,7 @@ export default function ShellView() {
       const handle = terms.current.get(id)
       const rows = handle?.term.rows || 24
       const cols = handle?.term.cols || 80
-      void terminalSpawn(profile.profileName, rows, cols)
+      void terminalSpawn(profile.profileName, rows, cols, cwd)
         .then((ptyId) => {
           ptyRef.current.set(id, ptyId)
           setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ptyId } : t)))
@@ -260,7 +415,7 @@ export default function ShellView() {
   // On first mount: reattach live PTYs if any, else spawn the default profile.
   // The session is owned by the shell (`AppState.terminal`), so a view unmount
   // does not kill it — reopening this view must show the same processes, not
-  // an extra duplicate one.
+  // an extra duplicate one. Reattach also restores agent/task provenance tabs.
   useEffect(() => {
     if (!registry || booted.current) return
     booted.current = true
@@ -273,11 +428,18 @@ export default function ShellView() {
             id: `tab-live-${i}-${p.ptyId}`,
             profileName: p.profileId,
             backend: p.backend,
+            origin: p.origin,
+            label: p.label,
             ptyId: p.ptyId,
             exitCode: null,
             error: null,
+            cwd: p.cwd,
+            lastCommand: null,
           }))
-          for (const t of next) if (t.ptyId) ptyRef.current.set(t.id, t.ptyId)
+          for (const t of next) {
+            if (t.ptyId) ptyRef.current.set(t.id, t.ptyId)
+            if (t.cwd) cwdRef.current.set(t.id, t.cwd)
+          }
           setTabs(next)
           setActiveId(next[0].id)
           // Honest limitation: bytes produced while this view was closed were
@@ -305,10 +467,10 @@ export default function ShellView() {
   const closeTab = (tab: Tab) => {
     if (tab.ptyId) void terminalKill(tab.ptyId)
     ptyRef.current.delete(tab.id)
+    cwdRef.current.delete(tab.id)
     const handle = terms.current.get(tab.id)
     if (handle) {
-      handle.observer.disconnect()
-      handle.term.dispose()
+      handle.disposer()
       terms.current.delete(tab.id)
     }
     setTabs((prev) => {
@@ -321,6 +483,17 @@ export default function ShellView() {
   const offered = registry?.profiles.filter((p) => p.offered) ?? []
   const blocked = registry?.profiles.filter((p) => !p.offered) ?? []
 
+  // Load the trusted command history when the active tab changes or the
+  // history drawer opens (also feeds `#terminalLastCommand` parity checks).
+  useEffect(() => {
+    if (!activeId) return
+    const ptyId = ptyRef.current.get(activeId)
+    if (!ptyId) return
+    void terminalCommands(ptyId, 50)
+      .then((r) => setCommands(r.commands.slice(-50).reverse()))
+      .catch(() => setCommands([]))
+  }, [activeId, active?.lastCommand])
+
   // Ctrl+` focuses the active terminal (the global handler switches the view).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -328,17 +501,31 @@ export default function ShellView() {
         const h = activeId ? terms.current.get(activeId) : null
         h?.term.focus()
       }
+      if (e.ctrlKey && (e.key === 'f' || e.key === 'F') && findOpen) {
+        e.preventDefault()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [activeId])
+  }, [activeId, findOpen])
+
+  /** Attach an event to a fresh tab once its terminal exists. */
+  const loadHistory = (tabId: string) => {
+    const ptyId = ptyRef.current.get(tabId)
+    if (!ptyId) return
+    void terminalCommands(ptyId, 50)
+      .then((r) => setCommands(r.commands.slice(-50).reverse()))
+      .catch(() => setCommands([]))
+  }
+
+  const activeInteractive = active ? isInteractiveOrigin(active.origin) && interactive : false
 
   return (
-    <div className="flex h-full w-full flex-col bg-zinc-950">
+    <div className="flex h-full w-full flex-col bg-background text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2 font-mono text-xs">
           <span className="flex items-center gap-1.5 font-medium text-foreground">
-            <TerminalIcon className="h-3.5 w-3.5 text-orange-400" />
+            <TerminalIcon className="h-3.5 w-3.5 text-primary" />
             Terminal
           </span>
           {active && (
@@ -347,29 +534,109 @@ export default function ShellView() {
               <span className="text-muted-foreground">· {backendLabel(active.backend)}</span>
             </Badge>
           )}
+          {/* Provenance chip — who owns this session. Agent/task tabs are
+              watch-only; the label is the honest surface for that fact. */}
+          {active && active.origin !== 'human' && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-sky-500/40 bg-sky-500/10 text-[10px] font-normal text-sky-400"
+            >
+              {originLabel(active.origin)}
+              {active.label ? ` · ${active.label}` : ''} · read-only
+            </Badge>
+          )}
+          {active?.cwd && (
+            <span className="max-w-[16rem] truncate text-[10px] text-muted-foreground" title={active.cwd}>
+              {active.cwd}
+            </span>
+          )}
           {active?.exitCode !== null && active?.exitCode !== undefined && (
             <span className="text-[10px] text-muted-foreground">exited {active.exitCode}</span>
           )}
         </div>
 
         <div className="flex items-center gap-2">
+          {active && active.origin === 'human' && (
+            <button
+              type="button"
+              onClick={() => setInteractive((v) => !v)}
+              aria-pressed={!interactive}
+              title={
+                interactive
+                  ? 'Interactive — your keystrokes reach the shell (human_gesture)'
+                  : 'Read-only — watching output; keystrokes are not sent'
+              }
+              className={cn(
+                'flex items-center gap-1 rounded border border-border px-2 py-0.5 font-mono text-[10px]',
+                interactive ? 'text-emerald-500' : 'text-amber-500',
+              )}
+            >
+              {interactive ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+              {interactive ? 'Interactive' : 'Read-only'}
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={() => setInteractive((v) => !v)}
-            aria-pressed={!interactive}
-            title={
-              interactive
-                ? 'Interactive — your keystrokes reach the shell (human_gesture)'
-                : 'Read-only — watching output; keystrokes are not sent'
-            }
+            onClick={() => setFindOpen((v) => !v)}
+            aria-label="Find in terminal"
+            aria-pressed={findOpen}
+            title="Find in terminal (searches the scrollback)"
             className={cn(
-              'flex items-center gap-1 rounded border border-border px-2 py-0.5 font-mono text-[10px]',
-              interactive ? 'text-emerald-300' : 'text-amber-300',
+              'flex items-center gap-1 rounded border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:text-foreground',
+              findOpen && 'border-primary/50 text-foreground',
             )}
           >
-            {interactive ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-            {interactive ? 'Interactive' : 'Read-only'}
+            <Search className="h-3 w-3" />
+            Find
           </button>
+
+          <DropdownMenu open={commandsOpen} onOpenChange={setCommandsOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Recent commands"
+                title="Recent commands reported by shell integration (trusted records only)"
+                className="flex items-center gap-1 rounded border border-border px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+              >
+                <History className="h-3 w-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-96">
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                Recent commands{active?.cwd ? ` · ${cwdLeaf(active.cwd)}` : ''}
+              </DropdownMenuLabel>
+              {commands.length === 0 && (
+                <DropdownMenuItem disabled className="text-[11px] text-muted-foreground">
+                  {registry?.shellIntegration === false
+                    ? 'Shell integration is off — enable it in Settings → Terminal'
+                    : 'No trusted command records yet'}
+                </DropdownMenuItem>
+              )}
+              {commands.map((c, i) => (
+                <DropdownMenuItem
+                  key={i}
+                  onSelect={() => {
+                    if (!active || !isInteractiveOrigin(active.origin)) return
+                    const ptyId = ptyRef.current.get(active.id)
+                    if (ptyId) {
+                      void terminalWrite(ptyId, c.command + '\\r')
+                    }
+                  }}
+                  className="flex flex-col items-start gap-0.5 py-1.5"
+                >
+                  <span className="w-full truncate font-mono text-[11px] text-foreground">$ {c.command}</span>
+                  <span className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span className={c.failed ? 'text-rose-500' : 'text-emerald-500'}>
+                      exit {c.exitCode ?? '?'}
+                    </span>
+                    {c.cwd && <span className="truncate">{cwdLeaf(c.cwd)}</span>}
+                    {!c.trusted && <span>untrusted</span>}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -412,7 +679,7 @@ export default function ShellView() {
               {blocked.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-amber-400">
+                  <DropdownMenuLabel className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-amber-500">
                     <ShieldAlert className="h-3 w-3" /> Unsafe until confirmed
                   </DropdownMenuLabel>
                   {blocked.map((p) => (
@@ -426,7 +693,7 @@ export default function ShellView() {
                           void terminalProfiles().then(setRegistry)
                         })
                       }}
-                      className="flex items-center justify-between gap-2 text-[12px] text-amber-300"
+                      className="flex items-center justify-between gap-2 text-[12px] text-amber-500"
                     >
                       <span className="truncate">{p.profileName}</span>
                       <span className="shrink-0 text-[10px]">Confirm…</span>
@@ -465,23 +732,48 @@ export default function ShellView() {
         </div>
       </header>
 
+      {findOpen && (
+        <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-3 py-1.5">
+          <Search className="h-3 w-3 text-muted-foreground" />
+          <input
+            autoFocus
+            value={findText}
+            onChange={(e) => setFindText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') setFindUp((v) => !v)
+              if (e.key === 'Escape') setFindOpen(false)
+              if (e.key === 'Enter' && e.shiftKey) setFindUp(true)
+            }}
+            placeholder="Find in scrollback — Enter toggles direction, Esc closes"
+            className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+          />
+          <span className="font-mono text-[10px] text-muted-foreground">{findUp ? '↑' : '↓'}</span>
+        </div>
+      )}
+
       {tabs.length > 0 && (
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-zinc-900 px-2 py-1 scroll-thin">
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-border bg-muted/40 px-2 py-1 scroll-thin">
           {tabs.map((t) => (
             <div
               key={t.id}
               className={cn(
                 'group flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px]',
-                t.id === activeId ? 'bg-zinc-800 text-foreground' : 'text-muted-foreground',
+                t.id === activeId ? 'bg-accent text-foreground' : 'text-muted-foreground',
               )}
             >
-              <button type="button" onClick={() => setActiveId(t.id)} className="max-w-[16rem] truncate">
-                {t.profileName}
+              <button type="button" onClick={() => { setActiveId(t.id); loadHistory(t.id) }} className="max-w-[14rem] truncate">
+                {t.origin !== 'human' && (
+                  <span className={cn('mr-1', t.origin === 'agent' ? 'text-sky-400' : 'text-violet-400')}>
+                    {t.origin === 'agent' ? '◆' : '⧗'}
+                  </span>
+                )}
+                {t.label ?? t.profileName}
+                {t.cwd && <span className="ml-1 text-muted-foreground">{cwdLeaf(t.cwd)}</span>}
                 {t.ptyId === null && t.exitCode !== null ? ' (exited)' : ''}
               </button>
               <button
                 type="button"
-                aria-label={`Close ${t.profileName}`}
+                aria-label={`Close ${t.label ?? t.profileName}`}
                 onClick={() => closeTab(t)}
                 className="opacity-0 group-hover:opacity-100"
               >
@@ -495,7 +787,7 @@ export default function ShellView() {
       <div className="relative min-h-0 flex-1">
         {tabs.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center font-mono text-xs text-muted-foreground">
-            <TerminalIcon className="h-5 w-5 text-orange-400" />
+            <TerminalIcon className="h-5 w-5 text-primary" />
             {registryError ? (
               <span className="text-rose-400">Terminal detection failed: {registryError}</span>
             ) : (
@@ -515,6 +807,51 @@ export default function ShellView() {
           />
         ))}
       </div>
+
+      {/* Status line — provenance, integration quality, and the authority
+          boundary, in one line. */}
+      <footer className="flex items-center gap-3 border-t border-border px-3 py-1 font-mono text-[10px] text-muted-foreground">
+        {active ? (
+          <>
+            <span>{originLabel(active.origin)} session</span>
+            <span>·</span>
+            <span>
+              integration:{' '}
+              {active.lastCommand || active.cwd
+                ? 'Rich'
+                : registry?.shellIntegration
+                  ? 'pending'
+                  : 'off'}
+            </span>
+            <span>·</span>
+            <span>
+              {active.origin === 'human'
+                ? activeInteractive
+                  ? 'keystrokes → human_gesture'
+                  : 'read-only (toggle to type)'
+                : 'agent output — input denied by provenance'}
+            </span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              onClick={() => {
+                const ptyId = active.ptyId
+                if (!ptyId) return
+                void terminalCommands(ptyId, 1).then((r) => {
+                  const last = r.commands[0]
+                  if (last && navigator.clipboard) void navigator.clipboard.writeText(last.output || last.command)
+                })
+              }}
+              className="hover:text-foreground"
+              title="Copy the last command's reported output"
+            >
+              copy last output
+            </button>
+          </>
+        ) : (
+          <span>no session</span>
+        )}
+      </footer>
     </div>
   )
 }

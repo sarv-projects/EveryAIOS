@@ -41,7 +41,7 @@ mod replay_cmds;
 // P55.8 — the SearXNG endpoint config + searx.space instance feed surface.
 mod scheduler_cmds;
 mod search_cmds;
-mod shell_cmds;
+
 mod skills_cmds;
 mod state;
 mod storage_cmds;
@@ -749,7 +749,7 @@ pub fn run() {
             file_undos: Mutex::new(Vec::new()),
             battery: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             browser: Mutex::new(None),
-            shells: Mutex::new(std::collections::HashMap::new()),
+
             mcp_servers: Mutex::new(mcp_cmds::load_attached_servers()),
             mcp_live: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_remote_flows: Arc::new(Mutex::new(std::collections::HashMap::new())),

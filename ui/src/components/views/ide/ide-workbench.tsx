@@ -20,7 +20,7 @@ import { ExplorerPanel } from './explorer-panel'
 import { ScmPanel } from './scm-panel'
 import { ProblemsPanel } from './problems-panel'
 import { DiffRail } from './diff-rail'
-import { shellSpawn, shellWrite, onShellEvent, shellKill } from '@/lib/shell'
+import ShellView from '@/components/views/shell-view'
 import { useAppStore } from '@/lib/store'
 
 type ActivityId = 'explorer' | 'search' | 'scm' | 'run' | 'extensions' | 'everyaios'
@@ -33,13 +33,12 @@ type PanelId = 'problems' | 'terminal' | 'output' | 'diff'
  * sidebar · editor tabs + Monaco (MIT — VS Code's own editor) · bottom
  * Problems/Terminal panel · status bar — but every surface talks to the
  * EveryAIOS Rust layer: real FS explorer (fs_cmds), real git SCM
- * (git_cmds), real LSP diagnostics (lsp_cmds → everyaios-codeintel), real
- * shell terminal (shell_cmds).
+ * (git_cmds), real LSP diagnostics (lsp_cmds → everyaios-codeintel), and
+ * the *same* real PTY terminal as the Shell view (terminal_cmds — one
+ * plane, provenance-tracked; the legacy piped `shell_cmds` path is gone).
  *
  * Honest ceilings: search/run/extensions are honest placeholders (grep,
- * debug adapters and the extension marketplace are follow-ups); the
- * terminal is piped stdio (portable-pty upgrade is the Terax pattern,
- * Apache-2.0).
+ * debug adapters and the extension marketplace are follow-ups).
  */
 export function IdeWorkbench() {
   const activeSessionId = useAppStore((s) => s.activeSessionId)
@@ -48,9 +47,6 @@ export function IdeWorkbench() {
   const [activePath, setActivePath] = useState<string | null>(null)
   const [panel, setPanel] = useState<PanelId>('problems')
   const [cwd, setCwd] = useState<string | null>(null)
-  const [termLines, setTermLines] = useState<string[]>(['EveryAIOS terminal — type a command…'])
-  const [termInput, setTermInput] = useState('')
-  const termBooted = useRef<string | null>(null)
 
   const activeFile = files.find((f) => f.path === activePath) ?? null
 
@@ -70,22 +66,9 @@ export function IdeWorkbench() {
     return () => window.removeEventListener('everyaios:open-file', handler)
   }, [])
 
-  // Spawn the terminal once per session.
-  useEffect(() => {
-    if (termBooted.current === activeSessionId) return
-    termBooted.current = activeSessionId
-    void shellSpawn(activeSessionId)
-    return () => {
-      void shellKill(activeSessionId)
-    }
-  }, [activeSessionId])
-
-  useEffect(() => {
-    return onShellEvent((ev) => {
-      if (ev.sessionId !== activeSessionId) return
-      setTermLines((prev) => [...prev.slice(-200), ev.line])
-    })
-  }, [activeSessionId])
+  // The bottom terminal panel is the same PTY plane as the Shell view
+  // (sessions are owned by the Rust shell, so mounting here never spawns a
+  // duplicate — ShellView reattaches to live sessions on boot).
 
   const onDirty = (path: string, dirty: boolean) =>
     setFiles((prev) => prev.map((f) => (f.path === path ? { ...f, dirty } : f)))
@@ -234,28 +217,8 @@ export function IdeWorkbench() {
             />
           )}
           {panel === 'terminal' && (
-            <div className="flex h-full flex-col">
-              <div className="min-h-0 flex-1 overflow-auto p-2 font-mono text-[11px] leading-relaxed text-[#d4d4d4]">
-                {termLines.map((l, i) => (
-                  <div key={i} className="whitespace-pre-wrap">{l}</div>
-                ))}
-              </div>
-              <div className="flex items-center gap-2 border-t border-[#333] px-2 py-1 font-mono text-[11px]">
-                <span className="text-emerald-400">$</span>
-                <input
-                  value={termInput}
-                  onChange={(e) => setTermInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && termInput.trim()) {
-                      setTermLines((prev) => [...prev, `$ ${termInput}`])
-                      void shellWrite(activeSessionId, termInput)
-                      setTermInput('')
-                    }
-                  }}
-                  aria-label="Terminal input"
-                  className="min-w-0 flex-1 bg-transparent text-[#d4d4d4] focus:outline-none"
-                />
-              </div>
+            <div className="h-full">
+              <ShellView />
             </div>
           )}
           {panel === 'output' && (
