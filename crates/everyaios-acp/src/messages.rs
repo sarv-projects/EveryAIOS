@@ -144,8 +144,35 @@ pub struct AuthMethod {
     /// Terminal-type methods carry args/env for the out-of-band launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Terminal-type methods carry env for the out-of-band launch. Real agents
+    /// send this as a JSON **object** (`"env": {}` on `pi-acp`), while the
+    /// pair-list form appears elsewhere — accept both.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_env_pairs"
+    )]
     pub env: Option<Vec<(String, String)>>,
+}
+
+/// Accept an env payload as either a list of `[key, value]` pairs or a
+/// `{ key: value }` object. Absent/null stays `None`.
+fn deserialize_env_pairs<'de, D>(deserializer: D) -> Result<Option<Vec<(String, String)>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Pairs(Vec<(String, String)>),
+        Map(std::collections::BTreeMap<String, String>),
+    }
+
+    Ok(match Option::<Raw>::deserialize(deserializer)? {
+        None => None,
+        Some(Raw::Pairs(pairs)) => Some(pairs),
+        Some(Raw::Map(map)) => Some(map.into_iter().collect()),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +193,56 @@ pub struct InitializeResult {
     pub protocol_version: u64,
     pub agent_capabilities: AgentCapabilities,
     pub agent_info: AgentInfo,
+    #[serde(default, deserialize_with = "deserialize_auth_methods")]
     pub auth_methods: Vec<AuthMethod>,
+}
+
+/// `authMethods` is a **sequence** in most ACP agents (live-verified against
+/// `pi-acp`, which sends an array), while **id → method maps** also appear in
+/// the ecosystem. Both describe the same thing, so accept either: when the
+/// payload is a map, the key is the method id and the name falls back to it.
+///
+/// This is one of several places the ACP wire format is not self-consistent
+/// (with `session/update`'s `content` — a single block on chunk updates, an
+/// array on tool calls — and an auth method's `env`, which arrives as an object
+/// on real agents). The tolerant parse is deliberate: refusing a real agent
+/// over a shape difference is worse than normalizing it.
+fn deserialize_auth_methods<'de, D>(deserializer: D) -> Result<Vec<AuthMethod>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize, Default)]
+    #[serde(rename_all = "camelCase", default)]
+    struct AuthMethodBody {
+        id: Option<String>,
+        name: Option<String>,
+        description: Option<String>,
+        r#type: Option<AuthMethodType>,
+        args: Option<Vec<String>>,
+        env: Option<Vec<(String, String)>>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        List(Vec<AuthMethod>),
+        Map(std::collections::BTreeMap<String, AuthMethodBody>),
+    }
+
+    match Raw::deserialize(deserializer)? {
+        Raw::List(list) => Ok(list),
+        Raw::Map(map) => Ok(map
+            .into_iter()
+            .map(|(key, body)| AuthMethod {
+                id: body.id.unwrap_or_else(|| key.clone()),
+                name: body.name.unwrap_or(key),
+                description: body.description,
+                r#type: body.r#type,
+                args: body.args,
+                env: body.env,
+            })
+            .collect()),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -657,6 +733,109 @@ mod tests {
 
         let back: InitializeResult = serde_json::from_value(v).unwrap();
         assert!(back.agent_capabilities.load_session);
+    }
+
+    #[test]
+    fn auth_methods_accept_the_array_shape() {
+        // Most agents: a sequence of methods, each carrying its own id.
+        let v = serde_json::json!({
+            "protocolVersion": 1,
+            "agentCapabilities": {},
+            "agentInfo": { "name": "a", "title": "A", "version": "1" },
+            "authMethods": [
+                { "id": "login", "name": "Log in", "type": "url" }
+            ]
+        });
+        let r: InitializeResult = serde_json::from_value(v).unwrap();
+        assert_eq!(r.auth_methods.len(), 1);
+        assert_eq!(r.auth_methods[0].id, "login");
+        assert_eq!(r.auth_methods[0].r#type, Some(AuthMethodType::Url));
+    }
+
+    #[test]
+    fn auth_methods_accept_the_map_shape_pi_acp_sends() {
+        // pi-acp sends `authMethods` as a map of methodId → method (observed
+        // live). The key becomes the id; the name falls back to the key.
+        let v = serde_json::json!({
+            "protocolVersion": 1,
+            "agentCapabilities": {},
+            "agentInfo": { "name": "pi-acp", "title": "pi", "version": "1" },
+            "authMethods": {
+                "terminal": { "type": "terminal", "description": "Run pi in a terminal" }
+            }
+        });
+        let r: InitializeResult = serde_json::from_value(v).unwrap();
+        assert_eq!(r.auth_methods.len(), 1);
+        assert_eq!(r.auth_methods[0].id, "terminal");
+        assert_eq!(r.auth_methods[0].name, "terminal");
+        assert_eq!(r.auth_methods[0].r#type, Some(AuthMethodType::Terminal));
+        assert_eq!(
+            r.auth_methods[0].description.as_deref(),
+            Some("Run pi in a terminal")
+        );
+    }
+
+    #[test]
+    fn terminal_auth_method_env_parses_as_an_object_or_a_pair_list() {
+        // Exactly what `pi-acp` sends (live-captured 2026-09-14): a sequence of
+        // methods whose `env` is an object, not a pair list.
+        let v = serde_json::json!({
+            "protocolVersion": 1,
+            "agentCapabilities": {
+                "loadSession": true,
+                "mcpCapabilities": { "http": false, "sse": false },
+                "promptCapabilities": { "audio": false, "embeddedContext": false, "image": true },
+                "sessionCapabilities": { "delete": {}, "list": {} }
+            },
+            "agentInfo": { "name": "pi-acp", "title": "pi ACP adapter", "version": "0.0.33" },
+            "authMethods": [{
+                "args": ["--terminal-login"],
+                "description": "Start pi in an interactive terminal to configure API keys or login",
+                "env": {},
+                "id": "pi_terminal_login",
+                "name": "Launch pi in the terminal",
+                "type": "terminal"
+            }]
+        });
+        let r: InitializeResult = serde_json::from_value(v).unwrap();
+        assert_eq!(r.protocol_version, 1);
+        assert!(r.agent_capabilities.load_session);
+        assert!(r.agent_capabilities.prompt_capabilities.image);
+        assert_eq!(r.agent_info.name, "pi-acp");
+        assert_eq!(r.auth_methods.len(), 1);
+        assert_eq!(r.auth_methods[0].id, "pi_terminal_login");
+        assert_eq!(r.auth_methods[0].r#type, Some(AuthMethodType::Terminal));
+        assert_eq!(r.auth_methods[0].env.as_deref(), Some(&[][..]));
+
+        // The pair-list form still parses.
+        let pairs = serde_json::json!({ "env": [ ["A", "1"], ["B", "2"] ] });
+        let m: AuthMethod = serde_json::from_value(serde_json::json!({
+            "id": "x", "name": "X", "env": pairs["env"].clone()
+        }))
+        .unwrap();
+        assert_eq!(
+            m.env.as_deref(),
+            Some(&[("A".into(), "1".into()), ("B".into(), "2".into())][..])
+        );
+
+        // And an object map becomes pairs.
+        let m2: AuthMethod = serde_json::from_value(serde_json::json!({
+            "id": "y", "name": "Y", "env": { "K": "V" }
+        }))
+        .unwrap();
+        assert_eq!(m2.env.as_deref(), Some(&[("K".into(), "V".into())][..]));
+    }
+
+    #[test]
+    fn auth_methods_tolerate_being_absent_or_empty() {
+        let v = serde_json::json!({
+            "protocolVersion": 1,
+            "agentCapabilities": {},
+            "agentInfo": { "name": "a", "title": "A", "version": "1" },
+            "authMethods": {}
+        });
+        let r: InitializeResult = serde_json::from_value(v).unwrap();
+        assert!(r.auth_methods.is_empty());
     }
 
     #[test]

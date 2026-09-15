@@ -39,6 +39,7 @@ import { useTheme } from '@/components/theme-provider'
 import { cn } from '@/lib/utils'
 import { useRuntimeState } from '@/lib/runtime'
 import { inTauri } from '@/lib/tauri'
+import { ARCH_VERSION } from '@/lib/version'
 import { NotificationsPopover } from './notifications-popover'
 
 /** Native window controls (Tauri shell only — static dots in preview). */
@@ -133,7 +134,7 @@ export function TitleBar() {
           EveryAIOS
         </span>
         <Badge variant="secondary" className="h-4 text-[10px] px-1 py-0 font-mono">
-          v3.57
+          {ARCH_VERSION}
         </Badge>
       </div>
 

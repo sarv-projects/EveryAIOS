@@ -180,6 +180,15 @@ impl Drop for SelectedKey {
 pub struct KeyRing<'a> {
     conn: &'a Connection,
     /// Round-robin cursor per provider.
+    ///
+    /// Both selection heuristics below recover from a poisoned lock
+    /// (`.unwrap_or_else(PoisonError::into_inner)`) rather than panicking. They
+    /// are advisory state with no invariant to protect: the worst case is a
+    /// lost cache-prefix pin or a reset rotation cursor, which costs one extra
+    /// key pick. Panicking here used to poison the lock permanently and take
+    /// every later turn's key selection down with it. (Contrast the guard
+    /// service lock, which fails **closed** — a permission it cannot evaluate
+    /// is denied.)
     rr_cursor: Mutex<HashMap<String, usize>>,
     /// Affinity: (provider, model, session) → opaque handle.
     affinity: Mutex<HashMap<(String, String, String), String>>,
@@ -264,7 +273,7 @@ impl<'a> KeyRing<'a> {
         )?;
         self.affinity
             .lock()
-            .expect("affinity poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .retain(|_, h| h != &handle);
         Ok(())
     }
@@ -475,7 +484,7 @@ impl<'a> KeyRing<'a> {
             let handle = self
                 .affinity
                 .lock()
-                .expect("affinity poisoned")
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .get(&(
                     provider.to_string(),
                     model.to_string(),
@@ -497,7 +506,10 @@ impl<'a> KeyRing<'a> {
                 RoutingPolicy::Priority => pool.sort_by_key(|k| k.priority),
                 RoutingPolicy::LeastUsed => pool.sort_by_key(|k| (k.tokens_day, k.priority)),
                 RoutingPolicy::RoundRobin => {
-                    let mut cursor = self.rr_cursor.lock().expect("rr poisoned");
+                    let mut cursor = self
+                        .rr_cursor
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     let c = cursor.entry(provider.to_string()).or_insert(0);
                     let pick = *c % pool.len();
                     *c = (*c + 1) % pool.len().max(1);
@@ -517,16 +529,83 @@ impl<'a> KeyRing<'a> {
         // Persist the affinity pin so later calls in the same session reuse
         // the same key.
         if !session_id.is_empty() {
-            self.affinity.lock().expect("affinity poisoned").insert(
-                (
-                    provider.to_string(),
-                    model.to_string(),
-                    session_id.to_string(),
-                ),
-                pick.opaque_handle.clone(),
-            );
+            self.affinity
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(
+                    (
+                        provider.to_string(),
+                        model.to_string(),
+                        session_id.to_string(),
+                    ),
+                    pick.opaque_handle.clone(),
+                );
         }
         Ok(selected)
+    }
+
+    // ---- Child-process handover (P63) -----------------------------------
+
+    /// **Reveal a provider's key for child-process env injection.**
+    ///
+    /// This is the one path where a raw secret leaves the vault for a purpose
+    /// other than an authorized HTTP call: handing an external agent CLI the
+    /// user's own provider key at spawn (`everyaios-acp`'s per-agent backend
+    /// configuration). It is deliberately narrow and auditable:
+    ///
+    /// - **Named for its purpose**, so every call site is a one-line grep.
+    /// - **The caller is the Rust shell**, which passes the value straight
+    ///   into a spawn env. It is never serialized, logged, or returned through
+    ///   a `Serialize` type — nothing in this crate's public DTOs carries a
+    ///   secret, and this keeps that true.
+    /// - **Zeroized**: the returned [`zeroize::Zeroizing<String>`] scrubs on
+    ///   drop, and the intermediate `KeyEntry` is scrubbed before it drops.
+    ///
+    /// Selection prefers the broker's own policy (affinity, cooldown, daily
+    /// budget) — note that this path therefore *does* persist an affinity pin
+    /// for `session_id`, exactly as a broker call would. When nothing is
+    /// currently eligible it deliberately falls back to the highest-priority
+    /// **non-suspended** key, because spawn injection is not a rate-limit
+    /// decision: the agent CLI owns its own retry/cooldown, so a cooling-down
+    /// key is still the right key to hand over — but a key the user
+    /// *suspended* never is.
+    pub fn reveal_for_spawn(
+        &self,
+        provider: &str,
+        model: &str,
+        session_id: &str,
+    ) -> Result<zeroize::Zeroizing<String>, KeyRingError> {
+        if let Ok(selected) = self.select(provider, model, session_id, RoutingPolicy::Priority) {
+            let mut value = selected.value.clone();
+            let out = zeroize::Zeroizing::new(String::from_utf8_lossy(&value).into_owned());
+            value.zeroize();
+            if !out.is_empty() {
+                return Ok(out);
+            }
+        }
+
+        let mut stmt = self
+            .conn
+            .prepare(KEY_SELECT_SQL)
+            .map_err(KeyRingError::from)?;
+        let rows = stmt
+            .query_map([provider], row_to_entry)
+            .map_err(KeyRingError::from)?;
+        let mut pool: Vec<KeyEntry> = Vec::new();
+        for r in rows {
+            pool.push(r?);
+        }
+        // A suspended key is the user's explicit "do not use this".
+        pool.retain(|k| k.status != KeyStatus::Suspended && !k.value.is_empty());
+        // Same convention as `RoutingPolicy::Priority`: lower number wins.
+        pool.sort_by_key(|k| k.priority);
+        let mut pick = pool
+            .into_iter()
+            .next()
+            .ok_or_else(|| KeyRingError::AllKeysExhausted(provider.into()))?;
+        let out = zeroize::Zeroizing::new(String::from_utf8_lossy(&pick.value).into_owned());
+        pick.value.zeroize();
+        Ok(out)
     }
 
     // ---- Health / cooldown / budget reports -----------------------------
@@ -824,6 +903,76 @@ mod tests {
             daily_token_cap: None,
             daily_cost_cap: None,
         }
+    }
+
+    #[test]
+    fn reveal_for_spawn_returns_the_stored_key() {
+        let ring = ring();
+        let _ = ring
+            .add_key(spec("openai", "prod-1", "sk-spawn-me"))
+            .unwrap();
+        let revealed = ring
+            .reveal_for_spawn("openai", "gpt-4o", "agent-spawn")
+            .unwrap();
+        assert_eq!(revealed.as_str(), "sk-spawn-me");
+    }
+
+    #[test]
+    fn reveal_for_spawn_never_returns_a_suspended_key() {
+        let ring = ring();
+        let _ = ring.add_key(spec("openai", "k1", "sk-1")).unwrap();
+        ring.set_status("openai", "k1", KeyStatus::Suspended)
+            .unwrap();
+        // A suspended key is the user's explicit "do not use this" — the
+        // fallback must not resurrect it.
+        assert!(ring.reveal_for_spawn("openai", "gpt-4o", "s").is_err());
+    }
+
+    #[test]
+    fn reveal_for_spawn_errors_when_the_provider_has_no_keys() {
+        let ring = ring();
+        assert!(ring.reveal_for_spawn("nobody", "m", "s").is_err());
+    }
+
+    #[test]
+    fn reveal_for_spawn_falls_back_when_the_broker_policy_refuses_every_key() {
+        // Spawn injection is not a rate-limit decision: the agent CLI owns its
+        // own retry/cooldown, so a key the *broker* would refuse (daily budget
+        // already reached) is still handed over rather than blocking a launch.
+        let ring = ring();
+        let mut capped = spec("openai", "budget-capped", "sk-capped");
+        capped.daily_token_cap = Some(0);
+        let _ = ring.add_key(capped).unwrap();
+
+        assert!(
+            ring.select("openai", "gpt-4o", "sess", RoutingPolicy::Priority)
+                .is_err(),
+            "a budget-capped key is not eligible for a broker call"
+        );
+        assert_eq!(
+            ring.reveal_for_spawn("openai", "gpt-4o", "spawn")
+                .unwrap()
+                .as_str(),
+            "sk-capped"
+        );
+    }
+
+    #[test]
+    fn reveal_for_spawn_fallback_prefers_the_lowest_priority_number() {
+        let ring = ring();
+        let mut lower = spec("p", "low-priority", "sk-low");
+        lower.daily_token_cap = Some(0);
+        lower.priority = 50;
+        let mut higher = spec("p", "high-priority", "sk-high");
+        higher.daily_token_cap = Some(0);
+        higher.priority = 5;
+        let _ = ring.add_key(lower).unwrap();
+        let _ = ring.add_key(higher).unwrap();
+        // Lower number wins, matching RoutingPolicy::Priority.
+        assert_eq!(
+            ring.reveal_for_spawn("p", "m", "spawn").unwrap().as_str(),
+            "sk-high"
+        );
     }
 
     #[test]

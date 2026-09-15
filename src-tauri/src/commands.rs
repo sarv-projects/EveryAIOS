@@ -13,6 +13,7 @@
 //! stays complete as commands are added.
 
 use crate::acp_cmds;
+use crate::agent_backend_cmds;
 use crate::agent_cmds;
 use crate::artifact_cmds;
 use crate::browser_cmds;
@@ -180,6 +181,12 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         agent_cmds::agent_registry_set_disabled,
         acp_cmds::acp_agents,
         acp_cmds::acp_launch,
+        // P63 — per-agent model-backend configuration (install-tab card).
+        agent_backend_cmds::agent_backend_get,
+        agent_backend_cmds::agent_backend_providers,
+        agent_backend_cmds::agent_backend_set,
+        agent_backend_cmds::agent_backend_clear,
+        agent_backend_cmds::agent_backend_probe,
         acp_cmds::acp_prompt,
         acp_cmds::acp_session_commands,
         acp_cmds::acp_session_config_options,

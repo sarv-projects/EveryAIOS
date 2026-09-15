@@ -21,9 +21,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use everyaios_catalog::{
-    base_registry, refresh_now, CatalogStore, HttpFetch, ProfileFormat, ProfileModel,
-    ProfileSource, ProfileStore, ProviderProfile, RefreshDecision, RefreshOutcome,
-    DEFAULT_REFRESH_SECS,
+    base_registry, refresh_now, Auth, CatalogSnapshot, CatalogStore, HttpFetch, ProfileFormat,
+    ProfileModel, ProfileSource, ProfileStore, ProviderProfile, ProviderProfilesFile,
+    ProviderRegistry, RefreshDecision, RefreshOutcome, DEFAULT_REFRESH_SECS,
 };
 use everyaios_vault::{KeyRing, ProviderEndpoint, WireTransport};
 use serde_json::{json, Value};
@@ -268,95 +268,255 @@ pub fn provider_rows(state: &AppState) -> Vec<Value> {
     out
 }
 
-/// The base URL a probe should hit, in precedence order: user profile → live
-/// catalog `api` → the vendored registry. `None` is honest — some models.dev
-/// providers ship an SDK-default endpoint we cannot construct ourselves.
-fn probe_base_url(state: &AppState, provider: &str) -> Option<String> {
-    if let Some(p) = profile_store().get(provider) {
-        if let Some(url) = p.normalized_base_url() {
-            return Some(url);
+/// Pre-loaded catalog inputs for endpoint resolution.
+///
+/// `resolve_endpoint` used to re-read the ~4.6 MB models.dev snapshot, re-read
+/// `providers.json`, and rebuild the 212-provider registry **per provider** —
+/// and the boot path ran it for every catalog row, so one boot cost hundreds
+/// of full parses and minutes of CPU. The relay never installed, and the UI
+/// reported "coordinator offline". This context reads each of the three
+/// exactly once and resolves any number of providers against it.
+struct ResolveCtx {
+    snapshot: Option<CatalogSnapshot>,
+    profiles: ProviderProfilesFile,
+    registry: ProviderRegistry,
+}
+
+impl ResolveCtx {
+    fn load(state: &AppState) -> Self {
+        Self {
+            snapshot: state.catalog.store.load(),
+            profiles: profile_store().load(),
+            registry: base_registry(),
         }
     }
-    if let Some(snap) = state.catalog.store.load() {
-        if let Some(p) = snap.provider(provider) {
-            if let Some(api) = p.api.clone() {
-                return Some(api.trim_end_matches('/').to_string());
+
+    fn profile(&self, provider: &str) -> Option<ProviderProfile> {
+        self.profiles.profiles.get(provider).cloned()
+    }
+
+    /// The base URL a probe should hit, in precedence order: user profile →
+    /// live catalog `api` → the vendored registry. `None` is honest — some
+    /// models.dev providers ship an SDK-default endpoint we cannot construct
+    /// ourselves.
+    fn base_url(&self, provider: &str) -> Option<String> {
+        if let Some(p) = self.profile(provider) {
+            if let Some(url) = p.normalized_base_url() {
+                return Some(url);
             }
         }
+        if let Some(snap) = &self.snapshot {
+            if let Some(p) = snap.provider(provider) {
+                if let Some(api) = p.api.clone() {
+                    return Some(api.trim_end_matches('/').to_string());
+                }
+            }
+        }
+        self.registry
+            .resolve(provider)
+            .and_then(|r| r.base_url.clone())
     }
-    base_registry()
-        .resolve(provider)
-        .and_then(|r| r.base_url.clone())
+
+    /// Resolve the endpoint for a provider (P55.5) — profile → catalog →
+    /// registry.
+    fn endpoint(&self, provider: &str) -> Option<ProviderEndpoint> {
+        let profile = self.profile(provider);
+        let base = self.base_url(provider)?;
+        let (transport, headers, session_headers, keyless) = match &profile {
+            Some(p) => (
+                match p.format {
+                    ProfileFormat::Anthropic => WireTransport::AnthropicMessages,
+                    ProfileFormat::OpenaiResponses | ProfileFormat::OpenaiCompatible => {
+                        WireTransport::OpenaiChat
+                    }
+                },
+                p.headers
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect::<Vec<_>>(),
+                p.session_headers,
+                !p.api_key_required,
+            ),
+            None => {
+                let snap_transport = self
+                    .snapshot
+                    .as_ref()
+                    .and_then(|s| s.provider(provider).map(|p| p.transport()));
+                match snap_transport {
+                    // Only the dialects the broker can actually speak get an
+                    // endpoint; anything else keeps the legacy path rather
+                    // than being pointed at a wrong URL.
+                    Some(everyaios_catalog::Transport::AnthropicMessages) => {
+                        (WireTransport::AnthropicMessages, Vec::new(), false, false)
+                    }
+                    Some(everyaios_catalog::Transport::OpenaiChat) | None => {
+                        (WireTransport::OpenaiChat, Vec::new(), false, false)
+                    }
+                    Some(_) => return None,
+                }
+            }
+        };
+        let overlay_session = everyaios_catalog::opencode_overlay_profiles()
+            .iter()
+            .find(|p| p.id == provider)
+            .map(|p| p.session_headers)
+            .unwrap_or(false);
+        Some(ProviderEndpoint {
+            base_url: base,
+            transport,
+            headers,
+            session_headers: session_headers || overlay_session,
+            keyless: keyless
+                || self
+                    .registry
+                    .resolve(provider)
+                    .map(|r| matches!(r.auth, Auth::Keyless))
+                    .unwrap_or(false),
+        })
+    }
+
+    /// The providers that can actually execute right now — the only ones the
+    /// chat relay needs:
+    ///
+    /// * providers with a key in the vault (the BYOK set),
+    /// * keyless entries (local runtimes + the free overlays),
+    /// * the user's own provider profiles.
+    ///
+    /// Everything else in the catalog is display-only: resolving it would
+    /// invent a dial plan for a provider the user never connected.
+    fn connected_ids(&self, state: &AppState) -> Vec<String> {
+        let mut keyed: Vec<String> = Vec::new();
+        if let Ok(vault) = state.vault.lock() {
+            if let Ok(k) = KeyRing::new(&vault).providers_with_keys() {
+                keyed = k;
+            }
+        }
+        let usable_profiles: Vec<String> = self
+            .profiles
+            .profiles
+            .values()
+            .filter(|p| p.is_usable())
+            .map(|p| p.id.clone())
+            .collect();
+        let keyless: Vec<String> = self
+            .registry
+            .all()
+            .filter(|r| matches!(r.auth, Auth::Keyless))
+            .map(|r| r.id.clone())
+            .chain(
+                everyaios_catalog::opencode_overlay_profiles()
+                    .iter()
+                    .filter(|p| !p.api_key_required)
+                    .map(|p| p.id.clone()),
+            )
+            .collect();
+        connected_ids_from(&keyed, &usable_profiles, &keyless)
+    }
+
+    /// P63 — is *this* provider still connected? Membership in the connected
+    /// set is the exact rule the relay uses, so a disconnect verdict here can
+    /// never disagree with what the next boot would resolve.
+    fn is_connected(&self, state: &AppState, provider: &str) -> bool {
+        self.connected_ids(state).iter().any(|id| id == provider)
+    }
+}
+
+/// Pure union of the three "connected" sources — sorted and de-duplicated. A
+/// provider is dialable only if at least one of them names it; the rest of the
+/// catalog stays display-only.
+fn connected_ids_from(
+    keyed: &[String],
+    usable_profiles: &[String],
+    keyless: &[String],
+) -> Vec<String> {
+    let mut ids: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    for s in keyed.iter().chain(usable_profiles).chain(keyless) {
+        ids.insert(s.as_str());
+    }
+    ids.into_iter().map(str::to_string).collect()
+}
+
+/// The base URL a probe should hit (one catalog read — see [`ResolveCtx`]).
+fn probe_base_url(state: &AppState, provider: &str) -> Option<String> {
+    ResolveCtx::load(state).base_url(provider)
 }
 
 /// Resolve the endpoint for a provider (P55.5) — profile → catalog → registry.
 pub fn resolve_endpoint(state: &AppState, provider: &str) -> Option<ProviderEndpoint> {
-    let profile = profile_store().get(provider);
-    let base = probe_base_url(state, provider)?;
-    let (transport, headers, session_headers, keyless) = match &profile {
-        Some(p) => (
-            match p.format {
-                ProfileFormat::Anthropic => WireTransport::AnthropicMessages,
-                ProfileFormat::OpenaiResponses | ProfileFormat::OpenaiCompatible => {
-                    WireTransport::OpenaiChat
-                }
-            },
-            p.headers
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect::<Vec<_>>(),
-            p.session_headers,
-            !p.api_key_required,
-        ),
-        None => {
-            let snap_transport = state
-                .catalog
-                .store
-                .load()
-                .and_then(|s| s.provider(provider).map(|p| p.transport()));
-            match snap_transport {
-                // Only the dialects the broker can actually speak get an
-                // endpoint; anything else keeps the legacy path rather than
-                // being pointed at a wrong URL.
-                Some(everyaios_catalog::Transport::AnthropicMessages) => {
-                    (WireTransport::AnthropicMessages, Vec::new(), false, false)
-                }
-                Some(everyaios_catalog::Transport::OpenaiChat) | None => {
-                    (WireTransport::OpenaiChat, Vec::new(), false, false)
-                }
-                Some(_) => return None,
-            }
-        }
-    };
-    let overlay_session = everyaios_catalog::opencode_overlay_profiles()
-        .iter()
-        .find(|p| p.id == provider)
-        .map(|p| p.session_headers)
-        .unwrap_or(false);
-    Some(ProviderEndpoint {
-        base_url: base,
-        transport,
-        headers,
-        session_headers: session_headers || overlay_session,
-        keyless: keyless
-            || base_registry()
-                .resolve(provider)
-                .map(|r| matches!(r.auth, everyaios_catalog::Auth::Keyless))
-                .unwrap_or(false),
-    })
+    ResolveCtx::load(state).endpoint(provider)
 }
 
-/// Every endpoint the chat relay should know about. Providers whose transport
-/// we cannot speak are simply absent — the relay then behaves exactly as it
-/// did before instead of failing at a wrong URL.
+/// Hand an already-resolved endpoint to the live relay (no catalog read).
+/// Called by the boot pass, by `probe_provider` (which already holds the
+/// endpoint it just probed), and through [`refresh_endpoint_live`].
+fn register_endpoint(state: &AppState, provider: &str, endpoint: ProviderEndpoint) {
+    if let Ok(relay) = state.chat_relay.lock() {
+        if let Some(relay) = relay.as_ref() {
+            relay.with_endpoint(provider, endpoint);
+        }
+    }
+}
+
+/// P63 — reconcile one provider's *live* endpoint with its current connected
+/// state. Adding a key or saving a profile connects a provider; removing the
+/// last key or deleting the profile disconnects it. Before this, only the
+/// connect direction existed, so the relay's resolved-endpoint map was
+/// append-only for the process lifetime and the next turn could still dial a
+/// provider the user had just disconnected. This is the one seam both
+/// directions go through — it resolves and registers while connected, and
+/// retires the endpoint once nothing connects it.
+///
+/// Must be called with no vault lock held: it re-reads the vault to recompute
+/// the connected set, and `std::sync::Mutex` is not reentrant.
+pub fn refresh_endpoint_live(state: &AppState, provider: &str) {
+    let ctx = ResolveCtx::load(state);
+    let connected = ctx.is_connected(state, provider);
+    let endpoint = ctx.endpoint(provider);
+    match endpoint_action(connected, endpoint.is_some()) {
+        EndpointAction::Register => {
+            if let Some(ep) = endpoint {
+                register_endpoint(state, provider, ep);
+            }
+        }
+        EndpointAction::Retire => {
+            if let Ok(relay) = state.chat_relay.lock() {
+                if let Some(relay) = relay.as_ref() {
+                    relay.remove_endpoint(provider);
+                }
+            }
+        }
+    }
+}
+
+/// P63 — the pure decision behind [`refresh_endpoint_live`]. Register only when
+/// the provider is connected **and** has a resolvable endpoint; every other case
+/// (disconnected, or connected but with a transport we cannot speak so no
+/// endpoint is built) retires it, so the live map can never keep an entry the
+/// connected-set rule would not produce.
+#[derive(Debug, PartialEq, Eq)]
+enum EndpointAction {
+    Register,
+    Retire,
+}
+
+fn endpoint_action(connected: bool, resolvable: bool) -> EndpointAction {
+    if connected && resolvable {
+        EndpointAction::Register
+    } else {
+        EndpointAction::Retire
+    }
+}
+
+/// Every endpoint the chat relay should know about: the **connected** set
+/// only. Providers whose transport we cannot speak are simply absent — the
+/// relay then behaves exactly as it did before instead of failing at a wrong
+/// URL.
 pub fn resolve_endpoints(state: &AppState) -> HashMap<String, ProviderEndpoint> {
+    let ctx = ResolveCtx::load(state);
     let mut out = HashMap::new();
-    for row in provider_rows(state) {
-        let Some(id) = row["id"].as_str() else {
-            continue;
-        };
-        if let Some(ep) = resolve_endpoint(state, id) {
-            out.insert(id.to_string(), ep);
+    for id in ctx.connected_ids(state) {
+        if let Some(ep) = ctx.endpoint(&id) {
+            out.insert(id, ep);
         }
     }
     out
@@ -431,13 +591,15 @@ pub fn catalog_provider_models(state: State<'_, AppState>, provider: String) -> 
 
     if let Some(s) = &snap {
         if let Some(p) = s.provider(&provider) {
-            free_subset = Some(s.opencode_free_models());
+            // Computed once, used by the filter below and reported in the
+            // payload. The previous shape re-borrowed it *inside* the loop
+            // through `free_subset.as_ref().unwrap()` — a panic surface that
+            // bought nothing.
+            let free = s.opencode_free_models();
+            let free_only = provider == "opencode-free";
             for m in p.model_rows() {
-                if provider == "opencode-free" {
-                    let free = free_subset.as_ref().unwrap();
-                    if !free.iter().any(|f| f == &m.id) {
-                        continue;
-                    }
+                if free_only && !free.iter().any(|f| f == &m.id) {
+                    continue;
                 }
                 rows.push(json!({
                     "id": m.id,
@@ -464,6 +626,7 @@ pub fn catalog_provider_models(state: State<'_, AppState>, provider: String) -> 
                     "status": m.status,
                 }));
             }
+            free_subset = Some(free);
         }
     }
 
@@ -506,7 +669,14 @@ pub fn catalog_provider_models(state: State<'_, AppState>, provider: String) -> 
 /// provider behind. The UI persists on a tick, with the `verifiedAt` stamp.
 #[tauri::command]
 pub fn provider_probe(state: State<'_, AppState>, provider: String, key: Option<String>) -> Value {
-    let Some(base) = probe_base_url(&state, &provider) else {
+    probe_provider(&state, &provider, key.as_deref())
+}
+
+/// The plain-function form of [`provider_probe`], so other modules (P63's
+/// per-agent backend cards) can run the same read-only probe without holding a
+/// Tauri `State`. Behaviour is identical — this is pure extraction.
+pub fn probe_provider(state: &AppState, provider: &str, key: Option<&str>) -> Value {
+    let Some(base) = probe_base_url(state, provider) else {
         return json!({
             "ok": false,
             "status": 0,
@@ -514,14 +684,24 @@ pub fn provider_probe(state: State<'_, AppState>, provider: String, key: Option<
             "models": 0,
         });
     };
-    let endpoint = resolve_endpoint(&state, &provider);
+    let endpoint = resolve_endpoint(state, provider);
     let is_anthropic = endpoint
         .as_ref()
         .map(|e| e.transport == WireTransport::AnthropicMessages)
         .unwrap_or(false);
-    let headers = endpoint.map(|e| e.headers).unwrap_or_default();
-    let probe =
-        everyaios_catalog::probe_models_endpoint(&base, is_anthropic, &headers, key.as_deref());
+    let headers = endpoint
+        .as_ref()
+        .map(|e| e.headers.clone())
+        .unwrap_or_default();
+    let probe = everyaios_catalog::probe_models_endpoint(&base, is_anthropic, &headers, key);
+    // A successful probe is the moment this provider became reachable, so give
+    // the live relay its endpoint now instead of waiting for the next boot
+    // (the boot pass only resolves the connected set).
+    if probe.ok {
+        if let Some(ep) = endpoint {
+            register_endpoint(state, provider, ep);
+        }
+    }
     json!({
         "ok": probe.ok,
         "status": probe.status,
@@ -627,14 +807,20 @@ pub fn provider_profile_upsert(
             .and_then(|s| s.as_bool())
             .unwrap_or(false),
     })?;
-    // A profile changes routing immediately for the next turn.
-    let _ = state;
+    // P63 — a saved profile is itself a connection (keyless custom endpoints /
+    // base-URL overrides). Register it on the live relay now, so the base URL
+    // entered in Settings is used by the next turn instead of the next boot.
+    refresh_endpoint_live(&state, &saved.id);
     Ok(json!({ "ok": true, "profile": saved }))
 }
 
 #[tauri::command]
-pub fn provider_profile_remove(id: String) -> Result<Value, String> {
+pub fn provider_profile_remove(state: State<'_, AppState>, id: String) -> Result<Value, String> {
     let removed = profile_store().remove(&id)?;
+    // P63 — deleting a profile can disconnect a provider (if it had no vault key
+    // and is not keyless). Reconcile its live endpoint so a deleted profile
+    // stops routing immediately.
+    refresh_endpoint_live(&state, &id);
     Ok(json!({ "ok": true, "removed": removed, "id": id }))
 }
 
@@ -727,4 +913,62 @@ pub fn spawn_refresh_job(catalog: Arc<CatalogState>) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{connected_ids_from, endpoint_action, EndpointAction};
+
+    /// P63 — the endpoint lifecycle decision. A disconnected provider retires
+    /// its live endpoint; a connected one with an unspeakable transport also
+    /// retires (nothing built), so the relay map is never append-only.
+    #[test]
+    fn connected_resolvable_registers_everything_else_retires() {
+        assert_eq!(endpoint_action(true, true), EndpointAction::Register);
+        assert_eq!(endpoint_action(true, false), EndpointAction::Retire);
+        assert_eq!(endpoint_action(false, true), EndpointAction::Retire);
+        assert_eq!(endpoint_action(false, false), EndpointAction::Retire);
+    }
+
+    /// P63.2 — the relay resolves only the connected set. A provider is
+    /// dialable if it is vault-keyed, keyless, or the user profiled it; a
+    /// catalog row that is none of those must stay absent.
+    #[test]
+    fn connected_set_is_the_union_of_the_three_sources() {
+        let keyed = vec!["anthropic".to_string(), "openai".to_string()];
+        let profiles = vec!["my-vps".to_string()];
+        let keyless = vec!["ollama".to_string(), "opencode-free".to_string()];
+        let ids = connected_ids_from(&keyed, &profiles, &keyless);
+        assert_eq!(
+            ids,
+            vec!["anthropic", "my-vps", "ollama", "openai", "opencode-free"]
+                .into_iter()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn connected_set_is_deduplicated_and_sorted() {
+        let keyed = vec!["openai".to_string(), "anthropic".to_string()];
+        let profiles = vec!["openai".to_string()];
+        let keyless = vec!["anthropic".to_string()];
+        assert_eq!(
+            connected_ids_from(&keyed, &profiles, &keyless),
+            vec!["anthropic", "openai"]
+        );
+    }
+
+    #[test]
+    fn an_unconnected_catalog_row_is_never_dialable() {
+        // `deepseek` exists in the catalog but has no key, no profile and is
+        // not keyless — so it is display-only and must not resolve.
+        let ids = connected_ids_from(&["anthropic".to_string()], &[], &[]);
+        assert!(!ids.iter().any(|id| id == "deepseek"));
+    }
+
+    #[test]
+    fn an_empty_device_connects_nothing() {
+        assert!(connected_ids_from(&[], &[], &[]).is_empty());
+    }
 }

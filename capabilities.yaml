@@ -56,7 +56,7 @@
   layer: A
   name: Local OpenAI-compatible server
   post_v1: true
-  source: v2.0 §P3 · **P9.5 post-v1 — zero work yet; 🟡 corrected to ⚪ 2026-08-18**
+  source: v2.0 §P3 · **P9.5 post-v1 (partially scaffolded — corrected 2026-09-14):** a loopback bearer-token server exists and non-streaming `/chat/completions` works through the vault broker, but `tools`/`tool_choice` are dropped, the token is minted per boot, and `BrokerBackend` does not override `stream()` (pseudo-streaming) — so it is usable for plain completion, **not** for an autonomous coding loop. That is exactly why external agents are configured natively and spawned with injected env instead of proxied (P63).
 
 - id: A9
   layer: A
@@ -452,7 +452,7 @@
   layer: F
   name: Harness-driving
   post_v1: false
-  source: doc 35 §C, 45, 52, 56, 57 + 65 §11 + 68 §4 + 2026-08-23 live-verified repos
+  source: doc 35 §C, 45, 52, 56, 57 + 65 §11 + 68 §4 + 2026-08-23 live-verified repos + **P63 (2026-09-14) per-agent provider binding injected at spawn (`everyaios_acp::agent_backend` contract matrix + env planner · `KeyRing::reveal_for_spawn` · `acp_launch` env merge · the install-tab card)**
 
 - id: F13
   layer: F
@@ -842,7 +842,7 @@
   layer: J
   name: Path/scope hard-floors
   post_v1: false
-  source: **✅ P7.7 landed: `pathfloor` — `normalize_lexical` + `canonicalize_no_follow`, `enforce_floor` (Allowed/ParentEscape/SymlinkEscape/OutsideRoot), adversarial fuzz gate (Allowed ⟹ inside) + P7.8 6-axis `PathGrant`/`GrantAxis` (read_only_recursive/read_write_create/… feeding permissions.toml, 0-escape invariant) + ✅ P62.1/P62.3 (2026-09-13) the network-destination floor is now ONE classifier, `everyaios-guard::netfloor` (`NetClass`/`NetPolicy`): cloud-metadata/link-local/multicast/unspecified/reserved space is refused under every policy and cannot be opted into, private/LAN/CGNAT/ULA/discovery names need the explicit opt-in, loopback is the local-desktop default but strict for agent-chosen URLs; `urlfloor` (check_url_strict/block_reason), `egress` (plan_with_policy), `toctou::is_blocked_ip` and the browser tier engine all call it, replacing three partial copies. Other harnesses' settings surfaces (`.claude/`, `.codex/`, `.cursor/`, `.mcp.json`, …) are protected floors while `AGENTS.md`/`CLAUDE.md` stay editable — RESEARCH doc 89**
+  source: **✅ P7.7 landed: `pathfloor` — `normalize_lexical` + `canonicalize_no_follow`, `enforce_floor` (Allowed/ParentEscape/SymlinkEscape/OutsideRoot), adversarial fuzz gate (Allowed ⟹ inside) + P7.8 6-axis `PathGrant`/`GrantAxis` (read_only_recursive/read_write_create/… feeding permissions.toml, 0-escape invariant) + ✅ P62.1/P62.3 (2026-09-13) the network-destination floor is now ONE classifier, `everyaios-guard::netfloor` (`NetClass`/`NetPolicy`): cloud-metadata/link-local/multicast/unspecified/reserved space is refused under every policy and cannot be opted into, private/LAN/CGNAT/ULA/discovery names need the explicit opt-in, loopback is the local-desktop default but strict for agent-chosen URLs; `urlfloor` (check_url_strict/block_reason), `egress` (plan_with_policy), `toctou::is_blocked_ip` and the browser tier engine all call it, replacing three partial copies. Other harnesses' settings surfaces (`.claude/`, `.codex/`, `.cursor/`, `.mcp.json`, …) are protected floors while `AGENTS.md`/`CLAUDE.md` stay editable + ✅ P62.2/P62.4 (v3.74) the live MCP attach path runs the confined posture with an explicit credential-free env allow-list and fails closed, and a user-configured provider endpoint is granted through the floor (`ChatRelay::with_endpoint` → `EgressEngine::grant_url`) while the unconditional classes stay refused — RESEARCH doc 89**
 
 - id: J5
   layer: J
@@ -920,7 +920,7 @@
   layer: J
   name: ACP harness bridge
   post_v1: false
-  source: 45, 57, 61, 69 + 2026-08-23 ACP-spec + codeg/vscode-acp/registry live verification
+  source: 45, 57, 61, 69 + 2026-08-23 ACP-spec + codeg/vscode-acp/registry live verification + **P63 (2026-09-14) real-CLI interop fixes (`pi` authMethods env shape + absolute `cwd`, codex response pushback, streamed-content single-block; opencode/codex/cline/grok driven live)**
 
 - id: J18
   layer: J

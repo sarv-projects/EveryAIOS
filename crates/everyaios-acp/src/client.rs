@@ -218,6 +218,13 @@ pub struct AcpSession<T: AcpTransport> {
     agent_capabilities: Option<AgentCapabilities>,
     config_options: Vec<ConfigOption>,
     authenticated: bool,
+    /// Inbound messages that arrived **before** the response we were waiting
+    /// for. ACP agents interleave freely — `codex-acp` sends `session/update`
+    /// notifications between our `session/new` request and its reply — so a
+    /// response reader that assumes the next frame is its own answer breaks on
+    /// a real agent. Non-matching frames are parked here and drained by
+    /// [`AcpSession::prompt_with_content`].
+    pending: std::collections::VecDeque<Value>,
 }
 
 impl<T: AcpTransport> AcpSession<T> {
@@ -232,6 +239,7 @@ impl<T: AcpTransport> AcpSession<T> {
             agent_capabilities: None,
             config_options: Vec::new(),
             authenticated: false,
+            pending: std::collections::VecDeque::new(),
         }
     }
 
@@ -299,8 +307,18 @@ impl<T: AcpTransport> AcpSession<T> {
         });
         self.transport.send(&req.to_string())?;
         let resp = self.read_response(id)?;
-        let result: InitializeResult =
-            serde_json::from_value(resp).map_err(|e| AcpError::Malformed(e.to_string()))?;
+        let result: InitializeResult = serde_json::from_value(resp.clone()).map_err(|e| {
+            // A bare "malformed agent message" costs a debugging cycle: the
+            // `pi-acp` authMethods shape was only identifiable from the bytes.
+            // The initialize reply carries capabilities + auth methods and no
+            // secrets, so the snippet is safe to surface here.
+            let raw = resp.to_string();
+            let mut snip: String = raw.chars().take(600).collect();
+            if raw.chars().count() > 600 {
+                snip.push('\u{2026}');
+            }
+            AcpError::Malformed(format!("initialize result: {e} — reply was {snip}"))
+        })?;
         if result.protocol_version != PROTOCOL_VERSION {
             return Err(AcpError::ProtocolMismatch(result.protocol_version));
         }
@@ -365,6 +383,13 @@ impl<T: AcpTransport> AcpSession<T> {
     }
 
     /// Create a session in the agent's workspace (`session/new`).
+    ///
+    /// ACP requires `cwd` to be an **absolute** path, and agents enforce it
+    /// (`pi-acp` answers `cwd must be an absolute path: .` with -32602). The
+    /// path is therefore canonicalized here, in the one place every driver
+    /// goes through, rather than trusting each caller to remember — a relative
+    /// path is resolved against the process cwd, which is the same directory
+    /// the agent was spawned in.
     pub fn session_new(
         &mut self,
         cwd: &str,
@@ -373,11 +398,14 @@ impl<T: AcpTransport> AcpSession<T> {
         self.ensure_ready()?;
         let id = self.next_id;
         self.next_id += 1;
+        let cwd_abs = std::fs::canonicalize(cwd)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| cwd.to_string());
         let req = json!({
             "jsonrpc": "2.0",
             "id": id,
             "method": "session/new",
-            "params": { "cwd": cwd, "mcpServers": mcp_servers }
+            "params": { "cwd": cwd_abs, "mcpServers": mcp_servers }
         });
         self.transport.send(&req.to_string())?;
         let resp = self.read_response(id)?;
@@ -457,11 +485,17 @@ impl<T: AcpTransport> AcpSession<T> {
 
         let mut outcome = PromptOutcome::default();
         loop {
-            let Some(raw) = self.transport.recv()? else {
-                return Err(AcpError::Eof);
+            // Anything parked while waiting on a handshake response is handled
+            // first, in arrival order — a notification that arrives before a
+            // reply must not be lost.
+            let v: Value = if let Some(parked) = self.pending.pop_front() {
+                parked
+            } else {
+                let Some(raw) = self.transport.recv()? else {
+                    return Err(AcpError::Eof);
+                };
+                serde_json::from_str(&raw).map_err(|e| AcpError::Malformed(e.to_string()))?
             };
-            let v: Value =
-                serde_json::from_str(&raw).map_err(|e| AcpError::Malformed(e.to_string()))?;
 
             // Our prompt response?
             if v.get("id").and_then(Value::as_u64) == Some(id)
@@ -555,25 +589,42 @@ impl<T: AcpTransport> AcpSession<T> {
         Ok(())
     }
 
+    /// Read until the response to `expected_id` arrives.
+    ///
+    /// JSON-RPC permits anything to be interleaved: notifications (no `id`) and
+    /// agent→client requests (`fs/*`, `terminal/*`, `session/request_permission`
+    /// — these *do* carry an id). Both are parked on `pending` and drained by
+    /// the prompt loop, instead of being mistaken for our answer (the
+    /// `response without id` failure `codex-acp` produced).
     fn read_response(&mut self, expected_id: u64) -> Result<Value, AcpError> {
-        let Some(raw) = self.transport.recv()? else {
-            return Err(AcpError::Eof);
-        };
-        let v: Value =
-            serde_json::from_str(&raw).map_err(|e| AcpError::Malformed(e.to_string()))?;
-        let got = v
-            .get("id")
-            .and_then(Value::as_u64)
-            .ok_or_else(|| AcpError::Malformed("response without id".into()))?;
-        if got != expected_id {
-            return Err(AcpError::Malformed(format!(
-                "id mismatch: expected {expected_id}, got {got}"
-            )));
+        loop {
+            let Some(raw) = self.transport.recv()? else {
+                return Err(AcpError::Eof);
+            };
+            let v: Value =
+                serde_json::from_str(&raw).map_err(|e| AcpError::Malformed(e.to_string()))?;
+
+            // A notification: no id, but a method.
+            let Some(got) = v.get("id").and_then(Value::as_u64) else {
+                self.pending.push_back(v);
+                continue;
+            };
+            // An agent→client request: it has an id AND a method, so it is not
+            // a response to anything we sent.
+            if v.get("method").is_some() {
+                self.pending.push_back(v);
+                continue;
+            }
+            if got != expected_id {
+                return Err(AcpError::Malformed(format!(
+                    "id mismatch: expected {expected_id}, got {got}"
+                )));
+            }
+            if let Some(err) = v.get("error") {
+                return Err(map_error(err));
+            }
+            return Ok(v.get("result").cloned().unwrap_or(Value::Null));
         }
-        if let Some(err) = v.get("error") {
-            return Err(map_error(err));
-        }
-        Ok(v.get("result").cloned().unwrap_or(Value::Null))
     }
 }
 

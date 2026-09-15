@@ -66,8 +66,22 @@ impl EgressEngine {
     /// Comparison is exact and ASCII-insensitive on the host, port stripped.
     pub fn grant_host(&mut self, host: &str) {
         let h = host.trim().to_ascii_lowercase();
-        if !h.is_empty() && !self.granted_hosts.iter().any(|g| *g == h) {
+        if !h.is_empty() && !self.granted_hosts.contains(&h) {
             self.granted_hosts.push(h);
+        }
+    }
+
+    /// Grant the host of a full `http(s)` URL — the form the shell holds for a
+    /// user-chosen endpoint (a provider `base_url`, a local runtime, a NAS).
+    ///
+    /// This is the P62.4 seam: the destination floor exists to stop
+    /// *agent-chosen* destinations (metadata, link-local, an address the model
+    /// read out of a page). A base URL only exists because the user or the
+    /// shipped catalog put it there, so it is authorized by construction. Host
+    /// parsing stays here so there is exactly one implementation.
+    pub fn grant_url(&mut self, url: &str) {
+        if let Some(host) = host_of(url) {
+            self.grant_host(host);
         }
     }
 
@@ -99,7 +113,7 @@ impl EgressEngine {
             return false;
         };
         let h = host.to_ascii_lowercase();
-        self.granted_hosts.iter().any(|g| *g == h)
+        self.granted_hosts.contains(&h)
     }
 
     pub fn plan(
@@ -361,6 +375,47 @@ mod tests {
         assert_eq!(
             g.plan("http://169.254.169.254/", "network", None, "ssrf", &[])
                 .verdict,
+            EgressVerdict::Deny
+        );
+    }
+
+    /// P62.4 — the shell grants the hosts of the endpoints the user configured
+    /// (provider `base_url`, local runtime, NAS). `grant_url` is the one seam
+    /// for that, so the host parsing cannot drift from [`host_of`].
+    #[test]
+    fn grant_url_registers_the_host_of_a_configured_endpoint() {
+        let mut e = EgressEngine::new(ConnectivityMode::ThirdParty);
+        // A self-hosted / NAS endpoint the user typed in Settings.
+        e.grant_url("http://192.168.1.50:8000/v1");
+        assert_eq!(e.granted_hosts(), ["192.168.1.50"]);
+        assert_eq!(
+            e.plan(
+                "http://192.168.1.50:8000/v1/chat/completions",
+                "network",
+                None,
+                "user",
+                &[]
+            )
+            .verdict,
+            EgressVerdict::Allow
+        );
+        // A loopback runtime (Ollama / LM Studio) likewise.
+        e.grant_url("http://127.0.0.1:11434/v1");
+        assert!(e.granted_hosts().contains(&"127.0.0.1".to_string()));
+        // A non-http string grants nothing rather than inventing a host.
+        e.grant_url("capability:search");
+        assert_eq!(e.granted_hosts().len(), 2);
+        // And the hard floor still outranks a granted URL.
+        e.grant_url("http://169.254.169.254/latest/meta-data/");
+        assert_eq!(
+            e.plan(
+                "http://169.254.169.254/latest/meta-data/",
+                "network",
+                None,
+                "ssrf",
+                &[]
+            )
+            .verdict,
             EgressVerdict::Deny
         );
     }

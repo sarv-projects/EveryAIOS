@@ -41,7 +41,7 @@ Wired call sites (all VERIFIED in the diff): `urlfloor::check_url_with_policy`/`
 | `cargo test -p everyaios-guard --lib` | 171 passed / 6 ignored |
 | `cargo test -p everyaios-core --lib` | 620 passed |
 | `cargo test -p everyaios-browser --lib` | 188 passed |
-| `cargo test -p everyaios-mcp --lib` | 59 passed |
+| `cargo test -p everyaios-mcp --lib` | 59 passed (60 after v3.74) |
 | `cargo fmt --all -- --check` | clean |
 | `node scripts/check-doc-sync.mjs` | green |
 | `node scripts/ipc-parity.mjs` | 283 registered, 0 broken |
@@ -50,3 +50,11 @@ Wired call sites (all VERIFIED in the diff): `urlfloor::check_url_with_policy`/`
 
 - **P62.2 — MCP attach containment is a primitive, not a live path.** `SandboxPosture`, `spawn_with_posture` and `spawn_confined` (`--clearenv` + `--unshare-net` through `LinuxBwrapBackend`) are landed and tested, but `src-tauri/src/mcp_cmds.rs` still calls the legacy uncontrolled `AttachedServer::spawn`. **Why it was not flipped:** `--clearenv` removes `PATH`/`HOME`, which env-based stdio MCP servers require, so making `Confined` the default before those servers move onto the brokered credential path would break working installs. The ACP harness child already spawns sandboxed; MCP is the remaining outlier (this is also the long-standing P7.8/P7.9 note in `TODO.md`).
 - **P62.4 — user-configured endpoints are not granted into the egress engine.** `EgressEngine::grant_host`/`with_granted_hosts`/`with_policy` exist but have **no production caller**, while the engine itself is constructed with `NetPolicy::default()` (`ToolService` and `chat.rs`). Because the pre-fix `urlfloor` had no network check at all, the new private/LAN refusal is a **behaviour change**: a user-typed LAN endpoint (e.g. a provider `base_url` on a NAS) that used to pass can now be denied. That is the intended floor for agent-chosen destinations, but the *user's own* configured endpoints must be granted — which is exactly what the unwired API is for. Recorded as an open row rather than papered over.
+
+## 6. Resolution (v3.74 — 2026-09-15)
+
+Both open items above are now closed; the findings themselves are kept verbatim as the audit's point-in-time record.
+
+- **P62.2 closed.** The live path flipped: `src-tauri/src/mcp_cmds.rs::mcp_attach_commit` spawns through `AttachedServer::spawn_with_posture(SandboxPosture::preferred(), …)`, so on Linux an attached third-party stdio server runs confined. The recorded blocker (`--clearenv` removing `PATH`/`HOME`) is solved by `everyaios_guard::sandbox::essential_env()` — a small, explicit allow-list applied on top of `--clearenv`, with `spawn_stdio_with_env` refusing any secret-shaped name (`*_API_KEY`/`*_TOKEN`/`*SECRET`/`*PASSWORD`/`EVERYAIOS_*`). A requested confined launch **fails closed** rather than downgrading to ambient; non-Linux stays honestly `Ambient` (the recorded P49.5 platform gap).
+- **P62.4 closed.** `ChatRelay::{with_endpoint, with_local, with_base_url}` call `grant_egress_url` → `EgressEngine::grant_url`, so a user-configured endpoint is a granted destination. The **unconditional** classes (cloud-metadata, link-local, multicast, broadcast) are still refused even with a grant, and the agent tool path floors on its own through `urlfloor` — the grant applies only to user/catalog-configured destinations.
+- **Also closed in the same pass (P63.9/.10):** an attached MCP child is now killed on handle `Drop` (it was being orphaned), and provider endpoint resolution is two-way (`refresh_endpoint_live` retires a provider that loses its last key / profile). See `SPEC-CHANGELOG.md` v3.74 for evidence.

@@ -86,6 +86,15 @@ pub struct PendingRemoteCall {
 /// Stable args-hash for a remote call / attach request — the commit half
 /// recomputes it so the ticket can only be consumed by the exact operation
 /// that was approved (no bait-and-switch after the card).
+/// The writable scratch dir a confined MCP child gets (P62.2): one dir per
+/// server under `<data_dir>/mcp-scratch/`, so the bwrap bind exists before the
+/// spawn and each server's writes stay in its own box.
+fn mcp_scratch_dir(name: &str) -> std::path::PathBuf {
+    everyaios_core::default_data_dir()
+        .join("mcp-scratch")
+        .join(everyaios_mcp::attach::sanitize_attach_name(name).unwrap_or_else(|| "default".into()))
+}
+
 fn call_args_hash(parts: &[&str]) -> String {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -339,6 +348,8 @@ pub fn mcp_attach_commit(
     ticket_id: String,
 ) -> Result<serde_json::Value, String> {
     use everyaios_mcp::attach::AttachedServer;
+    let name = everyaios_mcp::sanitize_attach_name(&name)
+        .ok_or_else(|| "invalid MCP server name (letters/digits/-/_/., 1-64 chars)".to_string())?;
     let args_hash = call_args_hash(&["mcp.attach", &name, &command, &args.join("\u{1f}")]);
     {
         let mut guard = state.guard_service.lock().map_err(|e| e.to_string())?;
@@ -347,7 +358,20 @@ pub fn mcp_attach_commit(
             .map_err(|e| format!("MCP attach ticket invalid: {e}"))?;
     } // never hold the guard lock across a process spawn
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let mut server = AttachedServer::spawn(&command, &arg_refs).map_err(|e| e.to_string())?;
+    // P62.2 — the live attach path uses the containment posture machinery:
+    // Confined (bwrap `--clearenv` + an essential-env allow-list) on Linux
+    // when the backend is available, or explicit Ambient only on platforms
+    // where `preferred()` cannot offer containment. A failed confined spawn
+    // fails the attach; it is never silently downgraded to ambient execution.
+    let scratch = mcp_scratch_dir(&name).to_string_lossy().into_owned();
+    let mut server = AttachedServer::spawn_with_posture(
+        everyaios_mcp::attach::SandboxPosture::preferred(),
+        &scratch,
+        "allow", // MCP servers that need the network declare it; default allow keeps stdio-only servers working
+        &command,
+        &arg_refs,
+    )
+    .map_err(|e| e.to_string())?;
     // P55.11 — the handshake is part of the product path, not a library extra:
     // a server that cannot answer `tools/list` is torn down and never recorded
     // as connected.

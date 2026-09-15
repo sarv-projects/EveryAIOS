@@ -17,6 +17,7 @@
 //!   install-state persistence).
 
 pub mod a2a;
+pub mod agent_backend;
 pub mod chief;
 pub mod client;
 pub mod frame;
@@ -28,6 +29,10 @@ pub mod registry_client;
 pub mod registry_index;
 
 pub use a2a::{A2aError, AgentCard, AgentCardVerifier, AgentSkill, CardTrust, SignedAgentCard};
+pub use agent_backend::{
+    backend_spec, builtin_backend_specs, injected_names, plan_env, unexpressed, AgentBackendSpec,
+    BackendChannel, BackendError, ProviderBinding,
+};
 pub use chief::{
     build_chief_prompt, governance_mode, AcpChief, Approval, ChiefAdapter, ChiefCapabilities,
     ChiefError, ChiefEvent, DelegateChief, EventStream, GovernedSession, PermissionRequest,
