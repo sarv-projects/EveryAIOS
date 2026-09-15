@@ -1,8 +1,8 @@
 # Doc 90 — Native agent peer schemas & loops (2026-09-15)
 
-> **Purpose:** research provenance for **ARCH/17-NATIVE-AGENT.md** (frozen spec v3.75; the nine native-plane rows landed as first-class capabilities in spec v3.76). This is the pass that asked: *what does each leading agent actually expose as tools and loops, so EveryAIOS Native can adopt the schemas/invariants — without copying product behavior we cannot observe at runtime?*
+> **Purpose:** research provenance for **ARCH/17-NATIVE-AGENT.md** (two-plane contract frozen in spec v3.75; nine native-plane rows landed in v3.76; Settings Control Center composition added in v3.77). This is the pass that asked: *what does each leading agent actually expose as tools and loops, so EveryAIOS Native can adopt the schemas/invariants — without copying product behavior we cannot observe at runtime?*
 > **Evidence grade:** **DOC-VERIFIED** = the vendor's own documentation page was located and its content checked (titles/snippets). **REPO-VERIFIED** = this repository's own code (the only source of truth for what EveryAIOS already has). **No source clones in this pass** — unlike docs 55/64/67, nothing here was cloned and read line-by-line; treat every external claim below as documentation-level, not code-level.
-> **Outputs:** `ARCH/17-NATIVE-AGENT.md` (new) · spec §4.6 (new) · `TODO.md` **P64** (10 rows) · `ARCH/00-INDEX.md`.
+> **Outputs:** `ARCH/17-NATIVE-AGENT.md` (Native plane + Settings Control Center §17.12) · spec §4.6 + Settings Control Center contract · `TODO.md` **P64** + **P65** · `ARCH/00-INDEX.md`.
 > **Ledger:** 0 new repos — all six sources were already tracked (docs 05, 46, 51, 69, 83, 86).
 
 ## 1. Sources and what was actually verified
@@ -45,3 +45,9 @@
 ## 4. The honest position this pass establishes
 
 EveryAIOS Native is not *behind* the peers on architecture — the two-plane model and the schema registry already exist in this repo. What is missing is **wiring**, and that is now enumerated as `TODO.md` **P64.1–P64.10** with a named owning module and a gate for each. No new subsystem is proposed; no peer product behavior is copied.
+
+## 5. Cline Desktop Settings pattern adapted, not copied
+
+The Cline Desktop repository/settings surface was checked as a UX reference. The useful patterns are: searchable provider inventory; Configured/Popular/All grouping; a list/detail configuration pane; provider-specific auth/model fields; explicit readiness; backend-authoritative persistence; and separate Installed/Marketplace areas. EveryAIOS maps those patterns onto its own contracts: A1–A11 for providers, F1–F16 for channels/connectors, B7/H14 for schedules, I2/I6 for installed skills/plugins, F8/J17 for installed agents, and ARCH/17's two-plane boundary for agent settings.
+
+The following were explicitly rejected: copying Cline's registry or provider implementation, presenting all external agents as if they share EveryAIOS's model/account, exposing subscription credentials, treating marketplace discovery as installation, or showing a connected/healthy state from local UI optimism. The adapted schemas and acceptance gates are recorded in `DESKTOP-APP-SPEC.md`, `ARCH/12`, `ARCH/17 §17.12`, and `TODO.md P65.1–P65.8`.

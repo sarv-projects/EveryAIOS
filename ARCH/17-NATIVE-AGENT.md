@@ -437,3 +437,73 @@ Provenance rule: adopt **patterns and schemas**, never vendor product behavior w
 3. Coordinator + UI suites green; `tsc` clean.
 4. No new tool id without a handler (registry test), no second TypeScript tool schema (grep gate), no duplicate implementation behind two façades.
 5. Every specialist in §17.6.3 that becomes callable must have its per-child tool grants derived via `derive_child_permissions`.
+
+---
+
+## 17.12 Settings Control Center — shared configuration surface
+
+Settings is a **composition surface over authoritative subsystems**, not a new runtime. It is the user-facing control center for the two-plane architecture and adopts the useful Cline Desktop patterns (searchable inventory, configured/popular/all grouping, detail pane, explicit readiness, installed-versus-marketplace separation, and backend-authoritative persistence) without copying Cline's registries or native runtime.
+
+### 17.12.1 Ownership map
+
+| Settings area | Authoritative subsystem | Native/external rule |
+|---|---|---|
+| Providers | `everyaios-catalog`, `everyaios-vault`, provider resolver | Native owns its model surface. External agents own their native model/account surface; P63 only injects a verified provider environment at spawn. |
+| Agents | `everyaios-acp`, agent registry, `ARCH/17` plane resolver | Native and external native capabilities remain separate; shared grants are explicit and scoped. |
+| Channels/connectors | `everyaios-mcp`, vault OAuth, F1–F7/F13–F15 | Tokens remain in the vault; attached tools are live only after handshake/health. |
+| Schedules | `everyaios-core::scheduler_service`, B7, Work Gateway | A schedule creates a normal Work/Run with a frozen manifest; settings cannot mutate an in-flight run. |
+| Installed extensions | `everyaios-blueprint` skill/plugin registry, `everyaios-guard` granter, F8 managed resources | Signed manifest, capability preview, Guard-2, sandbox/grant, lazy activation, health. |
+| Marketplace | signed discovery indexes | Discovery never implies installed, enabled, trusted, or occupied. |
+
+### 17.12.2 Canonical read models
+
+```ts
+type SettingsReadModel = {
+  id: string; kind: 'provider'|'agent'|'connection'|'schedule'|'extension';
+  state: 'discovered'|'installed'|'configured'|'connected'|'disconnected'|'degraded'|'disabled'|'unavailable';
+  health: 'ready'|'permission_required'|'missing'|'failed'|'unknown';
+  lastError?: string; configHash: string; appliedLive: boolean; restartRequired: boolean;
+};
+
+type AgentSettings = {
+  agentId: string; installed: boolean; protocol: 'inbuilt'|'acp'|'mcp';
+  authMode: 'subscription'|'api_key'|'local_cli'|'keyless'|'unknown';
+  nativeCapabilities: string[]; sharedCapabilities: string[];
+  modelOwner: 'native'|'agent'|'managed';
+  backendBinding?: { providerId: string; injectedEnvNames: string[]; unexpressed: string[]; writesToAgentConfig: false };
+  configOptions: Array<{ id: string; name: string; value?: string; options?: string[] }>;
+  readiness: 'ready'|'sign_in_required'|'api_key_required'|'local_cli'|'not_installed'|'unavailable'|'health_failed';
+};
+
+type ConnectionRecord = {
+  id: string; kind: 'remote_mcp'|'oauth_connector'|'native_adapter'|'message_channel';
+  transport: 'stdio'|'http'|'oauth'|'api_key'|'browser_session'; scopes: string[];
+  enabledConsumers: string[]; state: 'discovered'|'installed'|'connected'|'disconnected'|'degraded'|'revoked';
+  health: string; authRef?: string; configHash: string;
+};
+
+type ScheduleSettings = {
+  id: string; trigger: 'cron'|'interval'|'event'|'webhook'; target: string;
+  chiefAgentId: string; capabilityScope: string[]; autonomy: string; budget: string;
+  networkPolicy: string; timezone: string; enabled: boolean; configHash: string;
+};
+
+type InstalledExtension = {
+  id: string; kind: 'skill'|'plugin'|'mcp'|'acp'|'hook'|'tool'; version: string;
+  abiVersion?: number; provenance: string; digest: string; signatureStatus: string;
+  capabilitiesRequested: string[]; capabilitiesGranted: string[]; boundAgents: string[];
+  activation: 'lazy'|'active'|'disabled'; health: string;
+};
+```
+
+### 17.12.3 Mutation protocol and failure rules
+
+All Settings writes follow one protocol: `request → Rust validate → Guard/policy → atomic persist → live apply → reread`. The response is `{ appliedLive, restartRequired, state, health, lastError? }`; optimistic UI state is discarded when the authoritative reread disagrees. Provider keys and OAuth tokens use references only. Provider verification is metadata-only by default. Schedule changes affect future Runs only. Extension installation validates signature/manifest before any file is written, grants only the intersection of manifest and host capabilities, and disables before removal.
+
+No settings control may:
+
+- copy subscription credentials;
+- rewrite an external agent's native config unless the P47.7/P63.8 effect funnel is live;
+- treat a catalog entry as installed or an installed entry as healthy;
+- expose raw vault secrets to the UI, sidecar, model, or external agent;
+- bypass the one Guard, one Work event log, one scheduler, one vault, or one registry.

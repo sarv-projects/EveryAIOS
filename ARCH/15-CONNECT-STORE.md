@@ -11,7 +11,7 @@
 > others use community/known public client IDs (override anytime). 4 new vault
 > oauth tests (110 vault tests total).
 >
-> **Plane (ARCH/17 §17.1):** the connect store, its OAuth providers and the MCP
+> **Settings ownership (ARCH/17 §17.12):** this document defines the shared connector/store backend; the Settings Control Center composes its `ConnectionRecord` read model and must not create a second connector registry. The connect store, its OAuth providers and the MCP
 > children it instals are **Shared Cowork Plane** — connector capabilities are
 > borrowed by every agent (Native included) through the shared façade, and raw
 > OAuth tokens never leave the vault for an agent. The monitored-transport note
