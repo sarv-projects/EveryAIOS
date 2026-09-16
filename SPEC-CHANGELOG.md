@@ -38,6 +38,38 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## 2026-09-16 — Runtime/E2E evidence reconciliation and P66 source-slice update
+
+**Category:** documentation and delivery-status reconciliation; no product contract change and no capability identity change. This entry records the current source state after a targeted reread of the ACP/runtime plane, terminal plane, P50 release harnesses, workflows, TODO ledger, and relevant UI/theme surfaces. It does not replace packaged or platform acceptance evidence.
+
+### ACP and Windows-first runtime status
+
+- **P66.1 remains open and is now more complete at source level.** `src-tauri/src/acp_cmds.rs` exposes distinct managed, PATH, package-manager, App Paths, and WSL provenance; stale managed/path records are rejected when their executable no longer exists; `resolve_wsl_spawn()` translates a WSL-discovered Linux executable into `wsl.exe -d <distro> -- <linuxPath>`; verification reports WSL provenance separately. This preserves the boundary that a WSL executable is not a native Windows executable.
+- **The unverified boundary is explicit:** no Windows host acceptance has been recorded for App Paths discovery, WSL distro enumeration, WSL output handling, `--version` verification, or actual ACP launch through WSL. The P66.1 checkbox therefore remains open.
+- **P66.2/P66.3/P66.4 remain represented as landed source slices:** custom agent import/verification, the two-pane picker, external-agent-owned model/config state, and session capability loadout are wired into the existing ACP/store/picker owners. The broader Windows cowork acceptance rows remain open; catalog rows, unit tests, and preview fixtures are not treated as installed-runtime evidence.
+
+### Theme and accent status
+
+- The current source contains the P66.5 semantic accent slice: cool-blue default brand tokens, light/dark values, `data-accent` CSS overrides for blue/sky/emerald/violet/amber, `theme-provider.tsx` ownership and local persistence under `everyaios.accent`, and Settings → Appearance controls.
+- `theme-persist.test.ts` covers accepted values and fallback behavior; the existing work log records five passing tests. This entry does not claim a new test run.
+- **P66.5 remains open as a global acceptance item.** Explicit orange declarations still exist in legacy/decorative CSS and some surfaces; first-paint accent restoration, complete semantic-token migration, contrast/keyboard coverage, and full visual/DOM acceptance have not been recorded. The terminal surface is the completed semantic-token consumer, not proof that the entire UI migration is complete.
+
+### P50.5 release-gate evidence reconciliation
+
+- **P50.5.1:** real-provider vertical chat coverage exists in both the Rust relay test and coordinator-side harnesses: real streaming, non-empty output, cancellation, honest provider errors, retry validation, restart-at-wire continuity, and durable ledger reopen. Historical Ollama evidence is retained. The packaged click-through and current repeat run remain release-matrix work.
+- **P50.5.2:** live SearXNG, cache replay, citations, outage, and offline exhaustion are implemented; the core composition leg records search → receipt → audit → reopen. The packaged UI/trajectory citation producer remains unproven, so the TODO row stays open.
+- **P50.5.3:** the Rust vertical test verifies a real temporary-file mutation through Guard-2 approval, commit, audit receipt, single-use rejection, and ticketed byte-exact undo. Packaged Office/native acceptance is not inferred from this crate test.
+- **P50.5.4:** the MCP suite uses a real local stdio child and real NDJSON-RPC dispatch for attach/list/read/mutation/reconnect/refusal paths. It is protocol-level evidence, not an external production-service or packaged-shell acceptance run.
+- **P50.5.5/P50.5.6:** failure-injection and state-recovery harnesses cover locked/corrupt persistence, missing providers, sidecar restart, expired tickets, scheduler/task/kernel recovery, audit continuity, invalid commands, and display-gated Chrome behavior. The remaining packaged/native legs are still separate.
+- **P50.5.7:** `security-gate.mjs` provides below-packaged-line evidence for guard, adversarial core, audit, MCP, IPC parity, approval provenance, and nonce checks. It does not substitute for interactive packaged guard-window, renderer-compromise, or native sandbox-backend acceptance.
+- **P50.5.8 remains open:** the three-OS workflow exists and runs source/debug gates, but a workflow definition is not the same as a recorded clean-install run of the packaged application with live vault/keyring, sidecar-resource, browser/desktop, updater, Office, and unavailable-state workflows.
+
+### Verification boundary
+
+No checkboxes were flipped solely because this documentation was written. The current TODO live count is **1428 total = 1217 done + 211 open**. Open status is retained wherever evidence is source-level, crate-level, headless, historical, display-gated, or platform-specific rather than a current packaged acceptance record.
+
+---
+
 ## v3.79 — 2026-09-15 — User-Configurable Browser Selection & Isolated Profile Management
 
 **Category:** product contract + CDP engine + UI settings; no capability rows added. **Affected:** `crates/everyaios-cdp/src/browser.rs`, `crates/everyaios-cdp/src/lib.rs`, `src-tauri/src/browser_cmds.rs`, `src-tauri/src/commands.rs`, `ui/src/lib/browser.ts`, `ui/src/components/panels/settings-sections-studio.tsx`, `DESKTOP-APP-SPEC.md` §E1, and shell architecture version metadata. Capability identity remains **166**; live TODO count remains synchronized.
