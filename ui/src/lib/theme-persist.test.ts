@@ -1,15 +1,20 @@
 import { afterAll, describe, expect, test } from 'bun:test'
-import { THEME_STORAGE_KEY, readStoredTheme } from '@/components/theme-provider'
+import { THEME_STORAGE_KEY, ACCENT_STORAGE_KEY, readStoredTheme, readStoredAccent } from '@/components/theme-provider'
 
-// P55.12 / P58.12 — one theme owner that survives a reload. These cover the
-// stored-value contract the provider (and the pre-paint script in index.html)
-// both rely on: the key is stable and only 'light' | 'dark' is accepted.
+// P55.12 / P58.12 / P66.5 — one theme & accent owner that survives a reload. These cover the
+// stored-value contract the provider relies on: the keys are stable and valid.
 
 const originalWindow = (globalThis as { window?: unknown }).window
 
-function stubStorage(value: string | null) {
+function stubStorage(themeVal: string | null, accentVal: string | null = null) {
   ;(globalThis as { window?: unknown }).window = {
-    localStorage: { getItem: (k: string) => (k === THEME_STORAGE_KEY ? value : null) },
+    localStorage: {
+      getItem: (k: string) => {
+        if (k === THEME_STORAGE_KEY) return themeVal
+        if (k === ACCENT_STORAGE_KEY) return accentVal
+        return null
+      },
+    },
   }
 }
 
@@ -21,9 +26,10 @@ afterAll(() => {
   }
 })
 
-describe('theme persistence', () => {
-  test('uses the shared storage key', () => {
+describe('theme and accent persistence', () => {
+  test('uses the shared storage keys', () => {
     expect(THEME_STORAGE_KEY).toBe('everyaios.theme')
+    expect(ACCENT_STORAGE_KEY).toBe('everyaios.accent')
   })
 
   test('restores a stored theme', () => {
@@ -33,15 +39,27 @@ describe('theme persistence', () => {
     expect(readStoredTheme('dark')).toBe('light')
   })
 
+  test('restores a stored accent', () => {
+    stubStorage(null, 'sky')
+    expect(readStoredAccent('blue')).toBe('sky')
+    stubStorage(null, 'emerald')
+    expect(readStoredAccent('blue')).toBe('emerald')
+    stubStorage(null, 'violet')
+    expect(readStoredAccent('blue')).toBe('violet')
+  })
+
   test('falls back when the stored value is absent or unrecognised', () => {
     stubStorage(null)
     expect(readStoredTheme('light')).toBe('light')
-    stubStorage('sepia')
+    expect(readStoredAccent('blue')).toBe('blue')
+    stubStorage('sepia', 'neon-pink')
     expect(readStoredTheme('light')).toBe('light')
+    expect(readStoredAccent('blue')).toBe('blue')
   })
 
   test('falls back when storage is unavailable', () => {
     delete (globalThis as { window?: unknown }).window
     expect(readStoredTheme('light')).toBe('light')
+    expect(readStoredAccent('blue')).toBe('blue')
   })
 })
