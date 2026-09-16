@@ -497,29 +497,31 @@ pub fn enforced_backend_capabilities() -> Vec<String> {
     #[cfg(target_os = "linux")]
     {
         if linux_bwrap_available() {
-            return vec![
+            vec![
                 "linux-bwrap".into(),
                 "process-monitoring".into(),
                 "postflight-receipts".into(),
-            ];
+            ]
+        } else {
+            Vec::new()
         }
     }
     #[cfg(windows)]
     {
-        return vec![
+        vec![
             "windows-job-object".into(),
             "restricted-tokens".into(),
             "process-monitoring".into(),
             "postflight-receipts".into(),
-        ];
+        ]
     }
     #[cfg(target_os = "macos")]
     {
-        return vec![
+        vec![
             "macos-seatbelt".into(),
             "process-monitoring".into(),
             "postflight-receipts".into(),
-        ];
+        ]
     }
     #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
     Vec::new()
