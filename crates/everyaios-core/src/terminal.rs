@@ -1629,9 +1629,9 @@ impl PtyHost {
             exited: exited.clone(),
         });
 
-        let parser = integration.as_ref().map(|i| {
-            IntegrationParser::new(true, Some(i.nonce.clone()))
-        });
+        let parser = integration
+            .as_ref()
+            .map(|i| IntegrationParser::new(true, Some(i.nonce.clone())));
         let output = PtyOutput::new(&pty_id, reader, exited.clone(), parser, tracker, ring);
 
         self.ptys
@@ -1923,9 +1923,7 @@ impl PtyOutput {
                                                 IntegrationEvent::CommandFinished(_) => {
                                                     closed = t.last().cloned();
                                                 }
-                                                IntegrationEvent::Cwd(p) => {
-                                                    cwd = Some(p.clone())
-                                                }
+                                                IntegrationEvent::Cwd(p) => cwd = Some(p.clone()),
                                                 _ => {}
                                             }
                                         }
@@ -2005,9 +2003,7 @@ fn new_nonce() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let pid = std::process::id() as u128;
-    let mut x = nanos
-        .rotate_left(17)
-        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+    let mut x = nanos.rotate_left(17).wrapping_mul(0x9E37_79B9_7F4A_7C15)
         ^ (pid << 64)
         ^ 0xDEAD_BEEF_CAFE_F00D_u128;
     let mut out = String::with_capacity(32);
@@ -2125,7 +2121,7 @@ impl PtyHost {
     pub fn resolve_automation_command(cfg: &TerminalConfig) -> Option<(String, Vec<String>)> {
         let name = cfg.automation_profile_name()?;
         let found = detect_available_profiles(cfg);
-        let p = match found.iter().find(|d| &d.profile_name == name) {
+        let p = match found.iter().find(|d| d.profile_name == name) {
             Some(p) => p.clone(),
             None => found.into_iter().next()?,
         };
@@ -2139,6 +2135,11 @@ impl PtyHost {
 
 #[cfg(test)]
 mod tests {
+    // Test setup builds a `*::default()` fixture and then sets the two or three
+    // fields the case actually cares about; spelling each as a struct literal
+    // with `..Default::default()` would be longer and harder to read than the
+    // assignments.
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
 
     fn win_env() -> DetectEnv {
@@ -2193,7 +2194,10 @@ mod tests {
         let (seq, bytes, dropped) = ring.since(0);
         assert_eq!(seq, 32);
         assert_eq!(bytes.len(), 16);
-        assert_eq!(dropped, 16, "an evicted cursor is a reported gap, never silence");
+        assert_eq!(
+            dropped, 16,
+            "an evicted cursor is a reported gap, never silence"
+        );
     }
 
     #[test]
@@ -2897,7 +2901,10 @@ zsh = { path = "" }
             "command line was {:?}",
             cmd.command
         );
-        assert!(cmd.trusted, "the nonce-bearing command line must be trusted");
+        assert!(
+            cmd.trusted,
+            "the nonce-bearing command line must be trusted"
+        );
         assert_eq!(cmd.exit_code, Some(1), "exit code of `false`");
         assert_eq!(cmd.cwd, "/tmp", "cwd reported by the shell");
         assert!(
@@ -3026,7 +3033,10 @@ zsh = { path = "" }
         let wrapper = setup.dir.join("wrapper.bash");
         let body = std::fs::read_to_string(&wrapper).expect("wrapper written");
         assert!(body.contains(".bashrc"), "wrapper must source the user rc");
-        assert!(body.contains("integration.bash"), "wrapper must source ours");
+        assert!(
+            body.contains("integration.bash"),
+            "wrapper must source ours"
+        );
         let _ = std::fs::remove_dir_all(&setup.dir);
 
         // Anything we cannot inject cleanly is declined, never half-applied.

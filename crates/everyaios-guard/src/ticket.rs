@@ -373,8 +373,10 @@ impl TicketStore {
     }
 
     /// P52.x — mutable access for Pending-gated TTL extension (nonce rotation
-    /// + expiry bump). Callers must enforce the Pending gate themselves; the
-    /// store does not change state here.
+    /// + expiry bump).
+    ///
+    /// Callers must enforce the Pending gate themselves; the store does not
+    /// change state here.
     pub fn get_mut(&mut self, id: &str) -> Option<&mut AuthorizationTicket> {
         self.tickets.get_mut(id)
     }

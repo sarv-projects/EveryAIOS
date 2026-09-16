@@ -175,6 +175,23 @@ if (!archVersion) {
   );
 }
 
+// 7. TODO.md's declared doc revision must match the newest changelog entry.
+//    The build-plan header drifted to v3.78 while SPEC-CHANGELOG.md was already
+//    at v3.80 — nothing checked this stamp. Check 6 guards the UI's
+//    ARCH_VERSION constant, but not the plan's own header, so the two could
+//    disagree with each other while both passed.
+const todoRevision = /current doc revision\s+(v[\d.]+)/.exec(read("TODO.md"))?.[1];
+if (!todoRevision) {
+  failures.push(
+    `TODO.md header must declare its revision as "current doc revision vX.Y" (none found).`,
+  );
+} else if (newestChangelog && todoRevision !== newestChangelog) {
+  failures.push(
+    `TODO.md header declares doc revision ${todoRevision} but the newest ` +
+      `SPEC-CHANGELOG.md entry is ${newestChangelog} — update the header.`,
+  );
+}
+
 if (failures.length) {
   console.error("❌ doc-sync check FAILED:");
   for (const f of failures) console.error(`   - ${f}`);
@@ -187,6 +204,7 @@ console.log(
   `✅ doc-sync: ${yaml.length} capabilities in sync (yaml == ARCH/09 == spec §0); ` +
     `TODO.md ${counts.total} = ${counts.done} done + ${counts.open} open matches header` +
     (archVersion ? `; shell chrome ${archVersion} matches the changelog` : "") +
+    (todoRevision ? `; TODO header ${todoRevision} matches the changelog` : "") +
     gateNote +
     ".",
 );

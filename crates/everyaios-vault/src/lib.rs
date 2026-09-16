@@ -408,21 +408,24 @@ impl Vault {
 
     pub fn list_ui_calendars(&self) -> Result<Vec<CalendarRow>, VaultError> {
         let mut stmt = self.conn.prepare("SELECT id, name, color, visible, created_at, updated_at FROM ui_calendars ORDER BY created_at ASC")?;
-        let rows = stmt.query_map([], |r| {
-            Ok(CalendarRow {
-                id: r.get(0)?,
-                name: r.get(1)?,
-                color: r.get(2)?,
-                visible: r.get::<_, i64>(3)? != 0,
-                created_at: r.get(4)?,
-                updated_at: r.get(5)?,
-            })
-        })?.collect::<Result<Vec<_>, _>>()?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(CalendarRow {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    color: r.get(2)?,
+                    visible: r.get::<_, i64>(3)? != 0,
+                    created_at: r.get(4)?,
+                    updated_at: r.get(5)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }
 
     pub fn delete_ui_calendar(&self, id: &str) -> Result<(), VaultError> {
-        self.conn.execute("DELETE FROM ui_calendars WHERE id = ?1", [id])?;
+        self.conn
+            .execute("DELETE FROM ui_calendars WHERE id = ?1", [id])?;
         Ok(())
     }
 
@@ -448,7 +451,12 @@ impl Vault {
         Ok(())
     }
 
-    pub fn list_ui_calendar_events(&self, calendar_id: Option<&str>, start_ts: i64, end_ts: i64) -> Result<Vec<CalendarEventRow>, VaultError> {
+    pub fn list_ui_calendar_events(
+        &self,
+        calendar_id: Option<&str>,
+        start_ts: i64,
+        end_ts: i64,
+    ) -> Result<Vec<CalendarEventRow>, VaultError> {
         let mut out = Vec::new();
         if let Some(cal_id) = calendar_id {
             let mut stmt = self.conn.prepare(
@@ -505,7 +513,8 @@ impl Vault {
     }
 
     pub fn delete_ui_calendar_event(&self, id: &str) -> Result<(), VaultError> {
-        self.conn.execute("DELETE FROM ui_calendar_events WHERE id = ?1", [id])?;
+        self.conn
+            .execute("DELETE FROM ui_calendar_events WHERE id = ?1", [id])?;
         Ok(())
     }
 
@@ -877,12 +886,17 @@ mod tests {
         };
         vault.put_ui_calendar_event(&event).unwrap();
 
-        let events = vault.list_ui_calendar_events(Some("cal-work"), 1500, 3000).unwrap();
+        let events = vault
+            .list_ui_calendar_events(Some("cal-work"), 1500, 3000)
+            .unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].title, "Sprint Standup");
 
         vault.delete_ui_calendar_event("evt-1").unwrap();
-        assert!(vault.list_ui_calendar_events(Some("cal-work"), 1500, 3000).unwrap().is_empty());
+        assert!(vault
+            .list_ui_calendar_events(Some("cal-work"), 1500, 3000)
+            .unwrap()
+            .is_empty());
 
         vault.delete_ui_calendar("cal-work").unwrap();
         assert!(vault.list_ui_calendars().unwrap().is_empty());

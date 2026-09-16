@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   chiefRegistry,
   resolveSessionChief,
@@ -22,8 +22,35 @@ import {
   isCapabilityEnabled,
 } from "../../../ui/src/lib/capabilities";
 
+/**
+ * Is a real agent CLI installed on this machine?
+ *
+ * The live tests in this file spawn the **installed** `opencode` / `grok`
+ * binaries. CI installs neither, so without this gate they failed with
+ * `ENOENT` (2 failed + 2 errors) — reporting an environment gap as a product
+ * defect and making the suite red for everyone. A missing binary must SKIP.
+ *
+ * `spawnSync` without a shell sets `error` only when the spawn itself failed
+ * (ENOENT/EACCES); a binary that exists but exits non-zero is still present.
+ */
+function hasBinary(name: string): boolean {
+  return !spawnSync(name, ["--version"], { stdio: "ignore" }).error;
+}
+
+const hasOpencode = hasBinary("opencode");
+const hasGrok = hasBinary("grok");
+
+if (!hasOpencode || !hasGrok) {
+  // Say which side is missing, so a developer running locally knows what to
+  // install rather than assuming the harness passed.
+  console.warn(
+    `[live-agent-harness] skipping real-binary tests — ` +
+      `opencode=${hasOpencode ? "present" : "MISSING"} grok=${hasGrok ? "present" : "MISSING"}`,
+  );
+}
+
 describe("Live Real-World Agent Harness Verification", () => {
-  test("Live OpenCode ACP stdio handshake (real binary)", async () => {
+  test.skipIf(!hasOpencode)("Live OpenCode ACP stdio handshake (real binary)", async () => {
     // 1. Spawn real opencode acp process
     const proc = spawn("opencode", ["acp"], {
       stdio: ["pipe", "pipe", "pipe"],
@@ -83,7 +110,7 @@ describe("Live Real-World Agent Harness Verification", () => {
     expect(parsed.result.agentCapabilities.loadSession).toBe(true);
   });
 
-  test("Live Grok Build binary presence and execution", async () => {
+  test.skipIf(!hasGrok)("Live Grok Build binary presence and execution", async () => {
     const proc = spawn("grok", ["--version"], {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}` },
@@ -179,7 +206,9 @@ describe("Live Real-World Agent Harness Verification", () => {
     }
   });
 
-  test("OpenCode model verification confirms opencode/big-pickle zero-login model", async () => {
+  test.skipIf(!hasOpencode)(
+    "OpenCode model verification confirms opencode/big-pickle zero-login model",
+    async () => {
     const proc = spawn("opencode", ["models"], {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}` },
@@ -196,9 +225,11 @@ describe("Live Real-World Agent Harness Verification", () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain("opencode/big-pickle");
-  }, 15000);
+    },
+    15000,
+  );
 
-  test("Grok Build models command lists available execution tiers", async () => {
+  test.skipIf(!hasGrok)("Grok Build models command lists available execution tiers", async () => {
     const proc = spawn("grok", ["models"], {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}` },

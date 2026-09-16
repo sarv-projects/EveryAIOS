@@ -18,7 +18,8 @@
 use std::sync::{Arc, Mutex};
 
 use everyaios_core::{
-    ChatCompletionRequest, CompletionBackend, CompletionResult, ModelLister, ModelRow, OpenAiServer,
+    ChatCompletionRequest, CompletionBackend, CompletionResult, ModelLister, ModelRow,
+    OpenAiServer, StreamPiece, ToolCallFunction, ToolCallOut,
 };
 use tauri::State;
 
@@ -61,16 +62,36 @@ impl BrokerBackend {
     }
 }
 
-impl CompletionBackend for BrokerBackend {
-    fn complete(&self, req: &ChatCompletionRequest) -> Result<CompletionResult, String> {
-        let (provider, model) = self.resolve(&req.model);
-        // Build the upstream body: pass messages through; forward optional
-        // temperature/max_tokens. The broker adds auth + prompt-cache markers.
+/// The session id the A8 server files its broker usage under. Fixed on
+/// purpose: the local server is one logical client, so its J11 budget is the
+/// server's budget rather than a per-request one.
+const SERVER_SESSION: &str = "openai-compat-server";
+
+impl BrokerBackend {
+    /// Build the upstream request body: messages (including the tool-calling
+    /// round trip) pass through, and the client's `tools`/`tool_choice`/
+    /// `parallel_tool_calls` are **forwarded unchanged**. Dropping those was the
+    /// single reason this endpoint could not serve a tool-calling client.
+    ///
+    /// The broker adds auth + prompt-cache markers; the server never sees a key.
+    fn upstream_body(&self, req: &ChatCompletionRequest, model: &str) -> serde_json::Value {
         let mut body = serde_json::json!({
             "model": model,
-            "messages": req.messages.iter().map(|m| serde_json::json!({
-                "role": m.role, "content": m.content,
-            })).collect::<Vec<_>>(),
+            "messages": req.messages.iter().map(|m| {
+                let mut msg = serde_json::json!({
+                    "role": m.role, "content": m.content,
+                });
+                // A tool result must name the call it answers, and an assistant
+                // tool-calling turn must carry its calls back, or the provider
+                // cannot reconstruct the conversation.
+                if let Some(id) = m.tool_call_id.as_deref() {
+                    msg["tool_call_id"] = serde_json::json!(id);
+                }
+                if let Some(calls) = m.tool_calls.as_ref() {
+                    msg["tool_calls"] = calls.clone();
+                }
+                msg
+            }).collect::<Vec<_>>(),
         });
         if let Some(t) = req.temperature {
             body["temperature"] = serde_json::json!(t);
@@ -78,33 +99,161 @@ impl CompletionBackend for BrokerBackend {
         if let Some(mt) = req.max_tokens {
             body["max_tokens"] = serde_json::json!(mt);
         }
+        if let Some(tools) = req.tools.as_ref() {
+            body["tools"] = tools.clone();
+        }
+        if let Some(tc) = req.tool_choice.as_ref() {
+            body["tool_choice"] = tc.clone();
+        }
+        if let Some(p) = req.parallel_tool_calls {
+            body["parallel_tool_calls"] = serde_json::json!(p);
+        }
+        body
+    }
 
-        let vault = self.vault.lock().map_err(|e| e.to_string())?;
-        let broker = everyaios_vault::Broker::new(&vault);
-        let session_id = "openai-compat-server";
-        let resp = broker
-            .chat_completion(&provider, &model, session_id, body)
-            .map_err(|e| e.to_string())?;
-
-        // Extract the assistant content + usage from the OpenAI-shaped reply.
-        let content = resp
-            .pointer("/choices/0/message/content")
+    /// Shape an OpenAI response into the engine result (content + usage +
+    /// native tool calls).
+    fn shape(resp: &serde_json::Value, provider: &str, model: &str) -> CompletionResult {
+        let message = resp.pointer("/choices/0/message");
+        let content = message
+            .and_then(|m| m.get("content"))
             .and_then(|v| v.as_str())
             .unwrap_or_default()
             .to_string();
-        let prompt_tokens = resp
-            .pointer("/usage/prompt_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let completion_tokens = resp
-            .pointer("/usage/completion_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let tool_calls = message
+            .and_then(|m| m.get("tool_calls"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|t| {
+                        let name = t.pointer("/function/name")?.as_str()?.to_string();
+                        // `arguments` is a JSON string on the wire; some
+                        // OpenAI-compatible servers send a bare object, so an
+                        // object is re-encoded rather than dropped.
+                        let arguments = match t.pointer("/function/arguments") {
+                            Some(serde_json::Value::String(s)) => s.clone(),
+                            Some(other) if !other.is_null() => other.to_string(),
+                            _ => String::new(),
+                        };
+                        let id = t
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string)
+                            .unwrap_or_default();
+                        Some(ToolCallOut {
+                            id,
+                            kind: "function".into(),
+                            function: ToolCallFunction { name, arguments },
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        CompletionResult {
+            content,
+            prompt_tokens: resp
+                .pointer("/usage/prompt_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            completion_tokens: resp
+                .pointer("/usage/completion_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            model: format!("{provider}/{model}"),
+            tool_calls,
+        }
+    }
+}
+
+impl CompletionBackend for BrokerBackend {
+    fn complete(&self, req: &ChatCompletionRequest) -> Result<CompletionResult, String> {
+        let (provider, model) = self.resolve(&req.model);
+        let body = self.upstream_body(req, &model);
+
+        let vault = self.vault.lock().map_err(|e| e.to_string())?;
+        let broker = everyaios_vault::Broker::new(&vault);
+        let resp = broker
+            .chat_completion(&provider, &model, SERVER_SESSION, body)
+            .map_err(|e| e.to_string())?;
+        Ok(Self::shape(&resp, &provider, &model))
+    }
+
+    /// Real per-chunk delivery: the vault broker's incremental stream reports
+    /// each parsed SSE event as it comes off the provider socket, so the A8
+    /// server forwards genuine token-level frames instead of one blob. Tool-call
+    /// fragments are relayed with their OpenAI `delta.tool_calls` grouping
+    /// (`index` + first-fragment `id`/`name`), while `assemble_tool_calls`
+    /// reconstructs the aggregate call for the non-terminal result.
+    fn stream(
+        &self,
+        req: &ChatCompletionRequest,
+        on_piece: &mut dyn FnMut(StreamPiece),
+    ) -> Result<CompletionResult, String> {
+        let (provider, model) = self.resolve(&req.model);
+        let body = self.upstream_body(req, &model);
+
+        let vault = self.vault.lock().map_err(|e| e.to_string())?;
+        let broker = everyaios_vault::Broker::new(&vault);
+        let mut seen_id: std::collections::HashSet<i64> = std::collections::HashSet::new();
+        let events = broker
+            .chat_completion_stream_cb(
+                &provider,
+                &model,
+                SERVER_SESSION,
+                body,
+                &mut |ev: &everyaios_vault::ChatStreamEvent| {
+                    if let Some(delta) = ev.delta.as_deref() {
+                        if !delta.is_empty() {
+                            on_piece(StreamPiece::Content(delta.to_string()));
+                        }
+                    }
+                    for tc in &ev.tool_calls {
+                        // Announce each call once (id + name), then stream its
+                        // argument fragments — the OpenAI delta contract.
+                        let first = seen_id.insert(tc.index);
+                        on_piece(StreamPiece::ToolCall {
+                            index: tc.index,
+                            id: if first { tc.id.clone() } else { None },
+                            name: if first { tc.name.clone() } else { None },
+                            arguments: tc.arguments.clone(),
+                        });
+                    }
+                },
+            )
+            .map_err(|e| e.to_string())?;
+
+        // Aggregate usage + the assembled calls from the same buffered events.
+        let finished_by_length = events.iter().any(|e| e.finish.as_deref() == Some("length"));
+        let content = events
+            .iter()
+            .filter_map(|e| e.delta.as_deref())
+            .collect::<String>();
+        let tool_calls = everyaios_vault::assemble_tool_calls(&events, finished_by_length)
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, args))| ToolCallOut {
+                id: format!("call_{i}"),
+                kind: "function".into(),
+                function: ToolCallFunction {
+                    name,
+                    arguments: args.to_string(),
+                },
+            })
+            .collect::<Vec<_>>();
+        let usage = events.iter().filter_map(|e| e.usage).fold(
+            everyaios_vault::Usage::default(),
+            |mut acc, u| {
+                acc.merge_max(u);
+                acc
+            },
+        );
+
         Ok(CompletionResult {
             content,
-            prompt_tokens,
-            completion_tokens,
+            prompt_tokens: usage.prompt,
+            completion_tokens: usage.output,
             model: format!("{provider}/{model}"),
+            tool_calls,
         })
     }
 }

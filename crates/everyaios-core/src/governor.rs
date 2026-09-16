@@ -4,8 +4,8 @@
 //! 20-30 subagents). Ensures that subagent requests are admitted, queued, and
 //! dispatched within system CPU, memory, provider rate-limit, and budget boundaries.
 
-use std::collections::VecDeque;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

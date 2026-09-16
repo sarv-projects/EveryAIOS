@@ -1057,7 +1057,10 @@ mod tests {
             t.apply(&IntegrationEvent::CommandFinished(Some(0)));
         }
         assert_eq!(t.len(), MAX_TRACKED_COMMANDS);
-        assert_eq!(t.last().unwrap().command, format!("cmd {}", MAX_TRACKED_COMMANDS + 9));
+        assert_eq!(
+            t.last().unwrap().command,
+            format!("cmd {}", MAX_TRACKED_COMMANDS + 9)
+        );
     }
 
     #[test]
@@ -1120,7 +1123,10 @@ mod tests {
             IntegrationShell::for_path("/usr/bin/fish"),
             Some(IntegrationShell::Fish)
         );
-        assert_eq!(IntegrationShell::for_path(r"C:\Windows\System32\cmd.exe"), None);
+        assert_eq!(
+            IntegrationShell::for_path(r"C:\Windows\System32\cmd.exe"),
+            None
+        );
         // dash must not receive a bash-only init file.
         assert_eq!(IntegrationShell::for_path("/bin/sh"), None);
         assert_eq!(IntegrationShell::for_path("/bin/dash"), None);

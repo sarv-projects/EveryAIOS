@@ -497,7 +497,7 @@ mod tests {
             b"[Desktop Entry]\nType=Application\nName=My Editor\nExec=myeditor\n",
         )
         .unwrap();
-        let apps = collect_desktop_entries(&[root.clone()], &[bin.clone()]);
+        let apps = collect_desktop_entries(std::slice::from_ref(&root), std::slice::from_ref(&bin));
         assert_eq!(apps.len(), 1);
         assert_eq!(apps[0].path, exe.to_string_lossy());
         // A vendor subdirectory is walked.
@@ -508,9 +508,12 @@ mod tests {
             b"[Desktop Entry]\nType=Application\nName=Other\nExec=/usr/bin/other\n",
         )
         .unwrap();
-        assert_eq!(collect_desktop_entries(&[root.clone()], &[bin]).len(), 2);
+        assert_eq!(
+            collect_desktop_entries(std::slice::from_ref(&root), &[bin]).len(),
+            2
+        );
         let _ = std::fs::remove_dir_all(&root);
-        let _ = std::fs::remove_dir_all(&tmp("collect-bin"));
+        let _ = std::fs::remove_dir_all(tmp("collect-bin"));
     }
 
     #[test]
@@ -525,7 +528,7 @@ mod tests {
             )
             .unwrap();
         }
-        let apps = collect_desktop_entries(&[root.clone()], &[]);
+        let apps = collect_desktop_entries(std::slice::from_ref(&root), &[]);
         assert_eq!(apps.len(), 1, "one row per program, not per desktop file");
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -651,7 +654,7 @@ mod tests {
         for name in ["Safari", "Notes"] {
             std::fs::create_dir_all(root.join(format!("{name}.app"))).unwrap();
         }
-        let apps = collect_app_bundles(&[root.clone()]);
+        let apps = collect_app_bundles(std::slice::from_ref(&root));
         assert_eq!(apps.len(), 2);
         assert!(apps.iter().all(|a| a.source == AppSource::AppBundle));
         assert!(apps.iter().any(|a| a.path.ends_with("Safari.app")));

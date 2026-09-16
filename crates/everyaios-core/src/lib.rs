@@ -93,7 +93,9 @@ pub mod worktrees;
 pub mod wsl;
 
 pub use git_queue::{GitOperationQueue, GitQueueError};
-pub use governor::{ConcurrencyGovernor, GovernorConfig, SubagentTask, FleetTaskKind, FleetTaskStatus};
+pub use governor::{
+    ConcurrencyGovernor, FleetTaskKind, FleetTaskStatus, GovernorConfig, SubagentTask,
+};
 pub use worktrees::{WorktreeError, WorktreeLease, WorktreeManager};
 
 pub use adapter::{exact_command_consent, is_install_script, Stage0Adapter};
@@ -135,7 +137,7 @@ pub use memory_service::{FactStatus, MemoryService, StoredFact};
 pub use messaging::{MessageReminder, ReminderQueue};
 pub use openai_server::{
     ChatCompletionRequest, ChatMessage, CompletionBackend, CompletionResult, ModelLister, ModelRow,
-    OpenAiServer,
+    OpenAiServer, StreamPiece, ToolCallFunction, ToolCallOut,
 };
 pub use plan_service::PlanService;
 pub use provider_ref::{

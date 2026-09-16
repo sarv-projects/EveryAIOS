@@ -199,7 +199,10 @@ fn live_x11_list_capture_ocr_act_verify() {
         "verify locator not satisfied (OCR {joined2:?})"
     );
 
+    // `Child` neither kills nor reaps on drop: the fixture app is killed here
+    // and then `wait()`ed, or it lingers as a zombie for the rest of the run.
     let _ = tk.kill();
+    let _ = tk.wait();
 }
 
 /// P57.4 — the Background coordinate click must **not** move the user's pointer.
@@ -295,7 +298,10 @@ fn live_background_click_leaves_the_pointer_alone() {
         "background synthetic click: pointer held at {before:?}; fixture OCR after = {joined2:?}"
     );
 
+    // `Child` neither kills nor reaps on drop: the fixture app is killed here
+    // and then `wait()`ed, or it lingers as a zombie for the rest of the run.
     let _ = tk.kill();
+    let _ = tk.wait();
 }
 
 /// P57.1 — a real path-based launch through the X11 backend: the file itself is

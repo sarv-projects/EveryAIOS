@@ -135,7 +135,13 @@ mod tests {
 
     #[test]
     fn test_git_queue_creation_and_lock_cleanup() {
-        let unique = format!("git_queue_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        let unique = format!(
+            "git_queue_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
         let test_dir = std::env::temp_dir().join(unique);
         let git_dir = test_dir.join(".git");
         fs::create_dir_all(&git_dir).unwrap();

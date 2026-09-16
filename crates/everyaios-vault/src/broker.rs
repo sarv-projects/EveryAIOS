@@ -357,16 +357,62 @@ impl<'a> Broker<'a> {
     /// budgets stay accurate) and returns the parsed SSE event list (deltas +
     /// finish reasons). Usage is extracted from the final SSE chunk when the
     /// provider echoes it back (`stream_options.include_usage`).
+    ///
+    /// This is the **buffered** form — the whole upstream stream is consumed
+    /// before it returns. A caller that has a downstream client to feed (the
+    /// A8 local OpenAI-compatible server) wants
+    /// [`Broker::chat_completion_stream_cb`] instead, which reports every event
+    /// as it is parsed.
     pub fn chat_completion_stream(
         &self,
         provider: &str,
         model: &str,
         session_id: &str,
+        body: serde_json::Value,
+    ) -> Result<Vec<ChatStreamEvent>, BrokerError> {
+        self.chat_completion_stream_cb(provider, model, session_id, body, &mut |_| {})
+    }
+
+    /// Streaming chat completion with **incremental delivery** (P9.5/A8).
+    ///
+    /// Identical contract to [`Broker::chat_completion_stream`] — the same
+    /// `stream: true` + `include_usage` body shaping, the same dialect-specific
+    /// SSE grammar (OpenAI `chat.completion.chunk` / Anthropic
+    /// `content_block_delta`), the same cache-aware usage accounting and J11
+    /// budget choke point, the same 429/401 failover — except every parsed
+    /// event is also handed to `on_event` **as it is read off the socket**, so
+    /// a downstream client sees real token-level streaming rather than one
+    /// completed blob.
+    ///
+    /// `on_event` fires only for a **successful** attempt. A try that fails
+    /// (429 → cool the key down and rotate, 401 → suspend the credential) has
+    /// not produced a response body yet, so it emits nothing and the failover
+    /// loop moves on without the caller having observed a partial answer. A
+    /// transport error *mid*-body has already emitted, which the caller must
+    /// surface in-band (the A8 server writes an SSE error frame) — that is the
+    /// same posture as any real streaming endpoint.
+    ///
+    /// Local runtimes (P1.8 ollama/llamafile) buffer their upstream SSE inside
+    /// `local.rs`; their events are replayed through `on_event` in order. The
+    /// frames the caller emits are still real SSE, but for a local runtime they
+    /// are not latency-incremental. That asymmetry is deliberate and documented
+    /// rather than papered over.
+    pub fn chat_completion_stream_cb(
+        &self,
+        provider: &str,
+        model: &str,
+        session_id: &str,
         mut body: serde_json::Value,
+        on_event: &mut dyn FnMut(&ChatStreamEvent),
     ) -> Result<Vec<ChatStreamEvent>, BrokerError> {
         // P1.8 (A5): keyless local runtime — no key ring, no auth header.
         if let Some(ep) = self.local_endpoints.get(provider) {
-            return self.local_chat_completion_stream(ep, provider, model, session_id, body);
+            let events =
+                self.local_chat_completion_stream(ep, provider, model, session_id, body)?;
+            for e in &events {
+                on_event(e);
+            }
+            return Ok(events);
         }
         let endpoint = self.endpoints.get(provider).cloned();
         let transport = self.transport(provider);
@@ -383,6 +429,11 @@ impl<'a> Broker<'a> {
             }
         }
         let extra = self.extra_headers.clone();
+        // `run_with_failover`'s runner is `Fn`, but incremental delivery needs a
+        // `&mut` callback. The `RefCell` bridges that without widening the
+        // failover signature (the runner is invoked sequentially, never
+        // concurrently, so the borrow cannot be live twice).
+        let on_event_cell = std::cell::RefCell::new(on_event);
         self.run_with_failover(
             provider,
             model,
@@ -398,12 +449,18 @@ impl<'a> Broker<'a> {
                 let req = decorate(req, &extra, endpoint.as_ref(), session_id);
                 match req.send_json(body) {
                     // The dialect decides the SSE grammar.
-                    Ok(resp) => Ok(match transport {
-                        WireTransport::OpenaiChat => parse_sse(BufReader::new(resp.into_reader())),
-                        WireTransport::AnthropicMessages => {
-                            parse_sse_anthropic(BufReader::new(resp.into_reader()))
-                        }
-                    }),
+                    Ok(resp) => {
+                        let mut cb = on_event_cell.borrow_mut();
+                        Ok(match transport {
+                            WireTransport::OpenaiChat => {
+                                parse_sse_with(BufReader::new(resp.into_reader()), &mut **cb)
+                            }
+                            WireTransport::AnthropicMessages => parse_sse_anthropic_with(
+                                BufReader::new(resp.into_reader()),
+                                &mut **cb,
+                            ),
+                        })
+                    }
                     Err(ureq::Error::Status(429, resp)) => Err(BrokerError::RateLimited {
                         retry_after_secs: parse_retry_after(&resp),
                     }),
@@ -1009,7 +1066,14 @@ fn anthropic_response_to_openai(resp: serde_json::Value) -> serde_json::Value {
 /// Anthropic SSE → the same [`ChatStreamEvent`] stream the OpenAI parser
 /// yields (P55.5). Events are keyed off the JSON `type` field, not the
 /// `event:` line, because the payload is the contract.
-pub(crate) fn parse_sse_anthropic<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
+///
+/// Incremental delivery: every parsed event is also handed to `on_event` the
+/// moment it is read (P9.5/A8). There is no separate buffered form — the broker
+/// is the only non-test caller and always wants the callback.
+pub(crate) fn parse_sse_anthropic_with<R: BufRead>(
+    mut reader: R,
+    on_event: &mut dyn FnMut(&ChatStreamEvent),
+) -> Vec<ChatStreamEvent> {
     let mut events = Vec::new();
     let mut line = String::new();
     loop {
@@ -1032,10 +1096,12 @@ pub(crate) fn parse_sse_anthropic<R: BufRead>(mut reader: R) -> Vec<ChatStreamEv
                     .and_then(|d| d.get("text"))
                     .and_then(|t| t.as_str())
                 {
-                    events.push(ChatStreamEvent {
+                    let ev = ChatStreamEvent {
                         delta: Some(text.to_string()),
                         ..Default::default()
-                    });
+                    };
+                    on_event(&ev);
+                    events.push(ev);
                 }
             }
             "message_delta" => {
@@ -1052,11 +1118,13 @@ pub(crate) fn parse_sse_anthropic<R: BufRead>(mut reader: R) -> Vec<ChatStreamEv
                         .to_string()
                     });
                 let usage = value.get("usage").and_then(Usage::from_any);
-                events.push(ChatStreamEvent {
+                let ev = ChatStreamEvent {
                     finish,
                     usage,
                     ..Default::default()
-                });
+                };
+                on_event(&ev);
+                events.push(ev);
             }
             "message_start" => {
                 if let Some(usage) = value
@@ -1064,10 +1132,12 @@ pub(crate) fn parse_sse_anthropic<R: BufRead>(mut reader: R) -> Vec<ChatStreamEv
                     .and_then(|m| m.get("usage"))
                     .and_then(Usage::from_any)
                 {
-                    events.push(ChatStreamEvent {
+                    let ev = ChatStreamEvent {
                         usage: Some(usage),
                         ..Default::default()
-                    });
+                    };
+                    on_event(&ev);
+                    events.push(ev);
                 }
             }
             _ => {}
@@ -1112,7 +1182,18 @@ fn cost_of_usage(pricing: &HashMap<String, Pricing>, provider: &str, usage: Usag
 /// and the stream ends with `data: [DONE]`.
 ///
 /// `pub(crate)` — the local llamafile path (P1.8) streams the same shape.
-pub(crate) fn parse_sse<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
+pub(crate) fn parse_sse<R: BufRead>(reader: R) -> Vec<ChatStreamEvent> {
+    parse_sse_with(reader, &mut |_| {})
+}
+
+/// [`parse_sse`] with incremental delivery: every parsed event is also handed
+/// to `on_event` the moment it is read off the socket (P9.5/A8). The returned
+/// `Vec` is unchanged, so the buffered callers and the usage accountant keep
+/// working exactly as before.
+pub(crate) fn parse_sse_with<R: BufRead>(
+    mut reader: R,
+    on_event: &mut dyn FnMut(&ChatStreamEvent),
+) -> Vec<ChatStreamEvent> {
     let mut events = Vec::new();
     let mut line = String::new();
     loop {
@@ -1166,12 +1247,14 @@ pub(crate) fn parse_sse<R: BufRead>(mut reader: R) -> Vec<ChatStreamEvent> {
             .and_then(|t| t.as_array())
             .map(|arr| arr.iter().filter_map(parse_tool_call_delta).collect())
             .unwrap_or_default();
-        events.push(ChatStreamEvent {
+        let ev = ChatStreamEvent {
             delta,
             finish,
             usage,
             tool_calls,
-        });
+        };
+        on_event(&ev);
+        events.push(ev);
     }
     events
 }
@@ -2148,6 +2231,60 @@ mod tests {
             (spend - expected).abs() < 1e-9,
             "spend {spend} != {expected}"
         );
+    }
+
+    #[test]
+    fn streaming_callback_delivers_each_event_as_it_is_parsed() {
+        // P9.5/A8: the incremental variant hands every parsed event to the
+        // caller (the A8 server forwards these as SSE frames) in order, and
+        // still returns the same buffered set the blocking variant returns —
+        // the usage accountant and the failover loop depend on that return.
+        let sse = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"a\"},\"finish_reason\":null}]}\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"b\"},\"finish_reason\":null}]}\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n",
+            "data: [DONE]\n",
+        );
+        let base = mock_server(move |_| (200, sse.into()));
+        let vault = vault();
+        let broker = Broker::new(vault).with_base_url("nvidia", base);
+        broker.ring().add_key(spec("nvidia", "nim", "sk")).unwrap();
+
+        let mut seen: Vec<String> = Vec::new();
+        let events = broker
+            .chat_completion_stream_cb(
+                "nvidia",
+                "m",
+                "s1",
+                serde_json::json!({}),
+                &mut |e: &ChatStreamEvent| {
+                    if let Some(d) = e.delta.as_deref() {
+                        seen.push(d.to_string());
+                    }
+                },
+            )
+            .unwrap();
+        // One callback per parsed event, in wire order.
+        assert_eq!(seen, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].delta.as_deref(), Some("a"));
+        assert_eq!(events[2].finish.as_deref(), Some("stop"));
+    }
+
+    #[test]
+    fn anthropic_sse_parser_keys_off_the_payload_type() {
+        // The dialect is decided by the JSON `type` field, not the `event:`
+        // line — the payload is the contract (P55.5). `tool_use` normalizes to
+        // the OpenAI `tool_calls` finish reason so downstream sees one
+        // vocabulary regardless of provider.
+        let sse = concat!(
+            "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"x\"}}\n",
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":3}}\n",
+        );
+        let events = parse_sse_anthropic_with(std::io::BufReader::new(sse.as_bytes()), &mut |_| {});
+        assert_eq!(events[0].delta.as_deref(), Some("x"));
+        assert_eq!(events[1].finish.as_deref(), Some("tool_calls"));
+        assert_eq!(events[1].usage.map(|u| u.output), Some(3));
     }
 
     #[test]
