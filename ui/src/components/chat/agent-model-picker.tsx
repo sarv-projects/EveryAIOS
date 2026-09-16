@@ -118,7 +118,7 @@ function LifecycleBadge({ state }: { state: AgentLifecycleState }) {
     default:
       return (
         <Badge className="border-zinc-700 bg-zinc-800/80 px-1 text-[8px] font-mono text-zinc-400">
-          discover
+          discover · not installed
         </Badge>
       )
   }
@@ -835,7 +835,11 @@ export default function AgentModelPicker({ compact }: Props) {
                       key={a.id}
                       type="button"
                       data-agent-id={a.id}
-                      onClick={() => setSelectedAgent(a.id)}
+                      onClick={() => {
+                        if (usable) {
+                          setSelectedAgent(a.id)
+                        }
+                      }}
                       title={
                         usable
                           ? undefined

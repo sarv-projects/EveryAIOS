@@ -511,6 +511,17 @@ fn discover_wsl_path(_command: &str) -> Option<(String, String)> {
     None
 }
 
+/// P66.1 — Dedicated WSL spawn adapter: Translates a WSL-discovered command into
+/// a `wsl.exe -d <distro> -- <linux_path>` execution tuple.
+pub fn resolve_wsl_spawn(command: &str) -> Option<(String, Vec<String>)> {
+    discover_wsl_path(command).map(|(distro, linux_path)| {
+        (
+            "wsl.exe".to_string(),
+            vec!["-d".to_string(), distro, "--".to_string(), linux_path],
+        )
+    })
+}
+
 /// Build the public, non-secret runtime location record consumed by Settings
 /// and the picker. Catalog membership is never used as occupancy evidence.
 fn runtime_location_json(
@@ -620,12 +631,10 @@ pub fn acp_install_status() -> Result<serde_json::Value, String> {
             .unwrap_or("unavailable");
         let package_manager_ready = matches!(location_kind, "package_manager");
         let discovered = location_kind != "unavailable";
-        // App Paths is launchable through the native Windows executable branch;
-        // WSL is discovered but deliberately not launchable until the WSL
-        // transport adapter exists.
+        // App Paths, PATH, and WSL (via dedicated WSL spawn adapter) are launchable.
         let launchable = installed.is_some()
             || package_manager_ready
-            || matches!(location_kind, "path" | "windows_path");
+            || matches!(location_kind, "path" | "windows_path" | "wsl");
         out.insert(
             m.id.clone(),
             serde_json::json!({
@@ -884,40 +893,84 @@ pub fn acp_agent_verify(agent_id: String) -> Result<serde_json::Value, String> {
     let inst = installer();
     let installed = inst.installed(&agent_id).filter(install_outcome_usable);
 
-    let exec_path: Option<std::path::PathBuf> = if let Some(ref o) = installed {
-        o.binary_path.clone()
+    let (exec_cmd, verify_args, is_wsl, display_exec): (String, Vec<String>, bool, String) = if let Some(ref o) = installed {
+        if let Some(ref p) = o.binary_path {
+            let s = p.to_string_lossy().into_owned();
+            (s.clone(), vec!["--version".to_string()], false, s)
+        } else {
+            ("npx".to_string(), vec!["--version".to_string()], false, "npx".to_string())
+        }
     } else {
         match &manifest.distribution {
             Distribution::Binary { command, .. } if !command.is_empty() => {
-                resolve_native_binary(command)
+                if let Some(p) = resolve_native_binary(command) {
+                    let s = p.to_string_lossy().into_owned();
+                    (s.clone(), vec!["--version".to_string()], false, s)
+                } else if let Some((wsl_bin, wsl_prefix)) = resolve_wsl_spawn(command) {
+                    let mut args = wsl_prefix;
+                    let linux_exec = args.last().cloned().unwrap_or_else(|| command.clone());
+                    args.push("--version".to_string());
+                    (wsl_bin, args, true, format!("wsl://{}", linux_exec))
+                } else {
+                    return Ok(serde_json::json!({
+                        "agentId": agent_id,
+                        "status": "unavailable",
+                        "reason": "executable not found on PATH, Windows App Paths, or WSL",
+                        "verifiedAt": now_ms(),
+                    }));
+                }
             }
-            Distribution::Npx { .. } => resolve_on_path("npx"),
-            Distribution::Uvx { .. } => resolve_on_path("uvx"),
-            _ => None,
+            Distribution::Npx { package, .. } => {
+                if let Some(p) = resolve_on_path("npx") {
+                    let s = p.to_string_lossy().into_owned();
+                    (s.clone(), vec!["--version".to_string()], false, s)
+                } else {
+                    return Ok(serde_json::json!({
+                        "agentId": agent_id,
+                        "status": "unavailable",
+                        "reason": "npx not found on PATH",
+                        "package": package,
+                        "verifiedAt": now_ms(),
+                    }));
+                }
+            }
+            Distribution::Uvx { package, .. } => {
+                if let Some(p) = resolve_on_path("uvx") {
+                    let s = p.to_string_lossy().into_owned();
+                    (s.clone(), vec!["--version".to_string()], false, s)
+                } else {
+                    return Ok(serde_json::json!({
+                        "agentId": agent_id,
+                        "status": "unavailable",
+                        "reason": "uvx not found on PATH",
+                        "package": package,
+                        "verifiedAt": now_ms(),
+                    }));
+                }
+            }
+            _ => {
+                return Ok(serde_json::json!({
+                    "agentId": agent_id,
+                    "status": "unavailable",
+                    "reason": "manifest has no executable target",
+                    "verifiedAt": now_ms(),
+                }));
+            }
         }
     };
 
-    let Some(path) = exec_path else {
-        return Ok(serde_json::json!({
-            "agentId": agent_id,
-            "status": "unavailable",
-            "reason": "executable not found on PATH or recorded installs",
-            "verifiedAt": now_ms(),
-        }));
-    };
-
-    if !path.is_file() {
+    if !is_wsl && !std::path::Path::new(&exec_cmd).is_file() && resolve_on_path(&exec_cmd).is_none() {
         return Ok(serde_json::json!({
             "agentId": agent_id,
             "status": "unavailable",
             "reason": "resolved binary file does not exist",
-            "executable": path.to_string_lossy(),
+            "executable": display_exec,
             "verifiedAt": now_ms(),
         }));
     }
 
-    let version_output = std::process::Command::new(&path)
-        .arg("--version")
+    let version_output = std::process::Command::new(&exec_cmd)
+        .args(&verify_args)
         .output()
         .ok();
 
@@ -940,10 +993,11 @@ pub fn acp_agent_verify(agent_id: String) -> Result<serde_json::Value, String> {
 
     Ok(serde_json::json!({
         "agentId": agent_id,
-        "status": if exit_ok || path.is_file() { "ready" } else { "degraded" },
-        "executable": path.to_string_lossy(),
+        "status": if exit_ok || (!is_wsl && std::path::Path::new(&exec_cmd).is_file()) { "ready" } else { "degraded" },
+        "executable": display_exec,
         "version": detected_version.or_else(|| installed.and_then(|o| if o.version == "path" { None } else { Some(o.version) })),
         "verifiedAt": now_ms(),
+        "isWsl": is_wsl,
     }))
 }
 
@@ -1004,32 +1058,21 @@ pub fn acp_launch(
         }
         _ => None,
     };
-    let command = installed
-        .as_ref()
-        .and_then(|o| o.binary_path.as_ref())
-        .map(|p| p.to_string_lossy().into_owned())
-        .or_else(|| {
-            path_resolved.clone().map(|path| {
-                // P53.7 — F8's PATH leg is durable: persist the exact path
-                // before this launch so the next Chief pin is deterministic.
-                let _ = installer().record_path(&agent_id, std::path::Path::new(&path));
-                path
-            })
-        })
-        .or_else(|| {
-            // Binary agents must never silently fall back to an unresolved
-            // catalog command. npx/uvx are intentionally resolved by their
-            // package managers and are handled below.
-            if matches!(
-                registry.get(&agent_id).map(|m| &m.distribution),
-                Some(Distribution::Binary { .. })
-            ) {
-                None
-            } else {
-                Some(plan.command.clone())
-            }
-        })
-        .ok_or_else(|| format!("agent {agent_id} has no installed or PATH-resolved launch path"))?;
+    let (command, extra_args): (String, Vec<String>) = if let Some(p) = installed.as_ref().and_then(|o| o.binary_path.as_ref()) {
+        (p.to_string_lossy().into_owned(), vec![])
+    } else if let Some(path) = path_resolved {
+        let _ = installer().record_path(&agent_id, std::path::Path::new(&path));
+        (path, vec![])
+    } else if let Some((wsl_bin, wsl_prefix)) = match &manifest.distribution {
+        Distribution::Binary { command, .. } if !command.is_empty() => resolve_wsl_spawn(command),
+        _ => None,
+    } {
+        (wsl_bin, wsl_prefix)
+    } else if matches!(registry.get(&agent_id).map(|m| &m.distribution), Some(Distribution::Binary { .. })) {
+        return Err(format!("agent {agent_id} has no installed, PATH-resolved, or WSL launch path"));
+    } else {
+        (plan.command.clone(), vec![])
+    };
 
     // P63 — the user's per-agent provider binding (chosen in Agent runtimes)
     // is injected as environment. The key is read from the vault here, in
@@ -1051,7 +1094,10 @@ pub fn acp_launch(
     for (k, v) in &backend_env {
         env.push((k.as_str(), v.as_str()));
     }
-    let args: Vec<&str> = plan.args.iter().map(String::as_str).collect();
+    let mut args: Vec<&str> = extra_args.iter().map(String::as_str).collect();
+    for a in &plan.args {
+        args.push(a.as_str());
+    }
     let transport = ProcessTransport::spawn(&command, &args, &env)
         .map_err(|e| format!("failed to spawn {command}: {e}"))?;
 
@@ -2061,7 +2107,7 @@ mod tests {
 
         let verify = acp_agent_verify("opencode".to_string()).unwrap();
         assert_eq!(verify["status"], "ready");
-        assert_eq!(verify["executable"], dummy_bin.to_string_lossy());
+        assert_eq!(verify["executable"], dummy_bin.to_string_lossy().as_ref());
 
         match previous_home {
             Some(prev) => std::env::set_var("EVERYAIOS_HOME", prev),
@@ -2069,5 +2115,13 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&tmp);
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn test_wsl_spawn_resolution() {
+        // On non-windows platforms, resolve_wsl_spawn degrades to None.
+        // On windows platforms with WSL distros installed, it returns wsl.exe with args.
+        let wsl_res = resolve_wsl_spawn("nonexistent-command-xyz-123");
+        assert!(wsl_res.is_none());
     }
 }

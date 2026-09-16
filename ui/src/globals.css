@@ -59,27 +59,22 @@
 }
 
 /* ============================================================================
-   EveryAIOS design system — legacy warm-cream light-first tokens.
+   EveryAIOS design system — cool-blue semantic accent tokens (v3.78).
    Palette: canvas #F7F7F4 · surface #FFFFFF/#F0EFEB · ink #26251E
-   Brand: #F54E00 orange (sole accent) · semantic green/blue/amber/red
-   Dark mode: secondary (user toggle), same orange accent.
-
-   TARGET (v3.78, UI-DESIGN-PROMPT.md §2.1): cool-blue semantic accent token
-   with light/dark and selectable accents; brand is not a fixed hue. This file
-   still carries the legacy orange brand — that migration is the tracked P66.5
-   gap, so do not add new orange brand/selection styling here.
+   Brand: #2563EB cool-blue default (semantic accent) · selectable accents
+   Dark mode: #3B82F6 cool-blue default.
    ==========================================================================*/
 :root {
   --font-geist-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-geist-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
   --radius: 0.5rem;
 
-  /* Brand accent — legacy orange #F54E00; target is a cool-blue semantic
-     accent token (P66.5). Kept until the theme migration lands. */
-  --brand: 19 100% 48%;
+  /* Brand accent — cool-blue semantic accent token (v3.78, UI-DESIGN-PROMPT.md §2.1).
+     Default cool blue #2563EB (221 83% 53%); selectable accents support. */
+  --brand: 221 83% 53%;
   --brand-foreground: 0 0% 100%;
-  --brand-hover: 17 100% 42%;
-  --brand-soft: 19 100% 48% / 0.08;
+  --brand-hover: 224 76% 48%;
+  --brand-soft: 221 83% 53% / 0.08;
 
   /* Semantic (meaning only, never decoration) */
   --success: 142 76% 36%;
@@ -99,7 +94,7 @@
   --card-foreground: 48 12% 13%;
   --popover: 0 0% 100%;
   --popover-foreground: 48 12% 13%;
-  --primary: 19 100% 48%;
+  --primary: 221 83% 53%;
   --primary-foreground: 0 0% 100%;
   --secondary: 48 14% 93%;
   --secondary-foreground: 48 12% 13%;
@@ -110,20 +105,20 @@
   --destructive: 0 72% 51%;
   --border: 38 17% 89%;               /* #E8E5E0 warm hairline */
   --input: 38 10% 82%;                /* #D4D1CC */
-  --ring: 19 100% 48%;
-  --chart-1: 19 100% 48%;
-  --chart-2: 221 83% 53%;
+  --ring: 221 83% 53%;
+  --chart-1: 221 83% 53%;
+  --chart-2: 199 89% 48%;
   --chart-3: 142 76% 36%;
   --chart-4: 41 96% 40%;
   --chart-5: 262 83% 58%;
   --sidebar: 0 0% 100%;
   --sidebar-foreground: 48 12% 13%;
-  --sidebar-primary: 19 100% 48%;
+  --sidebar-primary: 221 83% 53%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 48 14% 93%;
   --sidebar-accent-foreground: 48 12% 13%;
   --sidebar-border: 38 17% 89%;
-  --sidebar-ring: 19 100% 48%;
+  --sidebar-ring: 221 83% 53%;
 }
 
 .dark {
@@ -137,8 +132,12 @@
   --card-foreground: 48 14% 93%;
   --popover: 60 3% 13%;
   --popover-foreground: 48 14% 93%;
-  --primary: 19 100% 48%;
+  --primary: 217 91% 60%;
   --primary-foreground: 0 0% 100%;
+  --brand: 217 91% 60%;
+  --brand-foreground: 0 0% 100%;
+  --brand-hover: 213 94% 68%;
+  --brand-soft: 217 91% 60% / 0.12;
   --secondary: 60 4% 17%;
   --secondary-foreground: 48 14% 93%;
   --muted: 60 4% 17%;
@@ -148,20 +147,97 @@
   --destructive: 0 72% 60%;
   --border: 60 4% 20%;
   --input: 60 4% 20%;
-  --ring: 19 100% 48%;
-  --chart-1: 19 100% 48%;
-  --chart-2: 221 83% 60%;
+  --ring: 217 91% 60%;
+  --chart-1: 217 91% 60%;
+  --chart-2: 199 89% 55%;
   --chart-3: 142 76% 45%;
   --chart-4: 41 96% 50%;
   --chart-5: 262 83% 66%;
   --sidebar: 60 3% 13%;
   --sidebar-foreground: 48 14% 93%;
-  --sidebar-primary: 19 100% 48%;
+  --sidebar-primary: 217 91% 60%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 60 4% 17%;
   --sidebar-accent-foreground: 48 14% 93%;
   --sidebar-border: 60 4% 20%;
-  --sidebar-ring: 19 100% 48%;
+  --sidebar-ring: 217 91% 60%;
+}
+
+/* User-selectable Accent Theme Overrides (P66.5) */
+[data-accent="sky"] {
+  --brand: 199 89% 48%;
+  --brand-hover: 199 89% 42%;
+  --brand-soft: 199 89% 48% / 0.1;
+  --primary: 199 89% 48%;
+  --ring: 199 89% 48%;
+  --sidebar-primary: 199 89% 48%;
+  --sidebar-ring: 199 89% 48%;
+}
+.dark[data-accent="sky"], [data-accent="sky"] .dark {
+  --brand: 199 89% 55%;
+  --brand-hover: 199 89% 65%;
+  --brand-soft: 199 89% 55% / 0.15;
+  --primary: 199 89% 55%;
+  --ring: 199 89% 55%;
+  --sidebar-primary: 199 89% 55%;
+  --sidebar-ring: 199 89% 55%;
+}
+
+[data-accent="emerald"] {
+  --brand: 142 76% 36%;
+  --brand-hover: 142 76% 30%;
+  --brand-soft: 142 76% 36% / 0.1;
+  --primary: 142 76% 36%;
+  --ring: 142 76% 36%;
+  --sidebar-primary: 142 76% 36%;
+  --sidebar-ring: 142 76% 36%;
+}
+.dark[data-accent="emerald"], [data-accent="emerald"] .dark {
+  --brand: 142 76% 45%;
+  --brand-hover: 142 76% 55%;
+  --brand-soft: 142 76% 45% / 0.15;
+  --primary: 142 76% 45%;
+  --ring: 142 76% 45%;
+  --sidebar-primary: 142 76% 45%;
+  --sidebar-ring: 142 76% 45%;
+}
+
+[data-accent="violet"] {
+  --brand: 262 83% 58%;
+  --brand-hover: 262 83% 50%;
+  --brand-soft: 262 83% 58% / 0.1;
+  --primary: 262 83% 58%;
+  --ring: 262 83% 58%;
+  --sidebar-primary: 262 83% 58%;
+  --sidebar-ring: 262 83% 58%;
+}
+.dark[data-accent="violet"], [data-accent="violet"] .dark {
+  --brand: 262 83% 66%;
+  --brand-hover: 262 83% 74%;
+  --brand-soft: 262 83% 66% / 0.15;
+  --primary: 262 83% 66%;
+  --ring: 262 83% 66%;
+  --sidebar-primary: 262 83% 66%;
+  --sidebar-ring: 262 83% 66%;
+}
+
+[data-accent="amber"] {
+  --brand: 38 92% 45%;
+  --brand-hover: 38 92% 38%;
+  --brand-soft: 38 92% 45% / 0.1;
+  --primary: 38 92% 45%;
+  --ring: 38 92% 45%;
+  --sidebar-primary: 38 92% 45%;
+  --sidebar-ring: 38 92% 45%;
+}
+.dark[data-accent="amber"], [data-accent="amber"] .dark {
+  --brand: 41 96% 50%;
+  --brand-hover: 41 96% 60%;
+  --brand-soft: 41 96% 50% / 0.15;
+  --primary: 41 96% 50%;
+  --ring: 41 96% 50%;
+  --sidebar-primary: 41 96% 50%;
+  --sidebar-ring: 41 96% 50%;
 }
 
 @layer base {
