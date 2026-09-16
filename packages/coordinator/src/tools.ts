@@ -174,9 +174,11 @@ function canonicalize(v: unknown): unknown {
   return out;
 }
 
-/** P7.6 — strip instruction-shaped framing before the model sees a tool result. */
+/** P7.6 — strip instruction-shaped framing before the model sees a tool result and cap at 50KB. */
+export const MAX_TOOL_OUTPUT_CHARS = 51200;
+
 export function sanitizeToolResult(output: string): string {
-  return output
+  const sanitized = output
     .split("\n")
     .map((l) => {
       const t = l.trim();
@@ -192,6 +194,12 @@ export function sanitizeToolResult(output: string): string {
       return l;
     })
     .join("\n");
+
+  if (sanitized.length > MAX_TOOL_OUTPUT_CHARS) {
+    const truncated = sanitized.slice(0, MAX_TOOL_OUTPUT_CHARS);
+    return `${truncated}\n\n[Context-Mode: Output truncated from ${sanitized.length} characters to 50KB. Use targeted grep/slice or file reading tools for specific sections.]`;
+  }
+  return sanitized;
 }
 
 export function sanitizeUnknown(result: unknown): unknown {

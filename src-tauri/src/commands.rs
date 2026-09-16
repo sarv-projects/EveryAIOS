@@ -17,6 +17,7 @@ use crate::agent_backend_cmds;
 use crate::agent_cmds;
 use crate::artifact_cmds;
 use crate::browser_cmds;
+use crate::calendar_cmds;
 use crate::catalog_cmds;
 use crate::cockpit_cmds;
 use crate::codeintel_cmds;
@@ -80,6 +81,12 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::session_list,
         crate::session_put,
         crate::session_delete,
+        calendar_cmds::calendar_list,
+        calendar_cmds::calendar_put,
+        calendar_cmds::calendar_delete,
+        calendar_cmds::calendar_event_list,
+        calendar_cmds::calendar_event_put,
+        calendar_cmds::calendar_event_delete,
         oauth_cmds::oauth_status,
         oauth_cmds::oauth_accounts,
         oauth_cmds::oauth_start_pkce,
