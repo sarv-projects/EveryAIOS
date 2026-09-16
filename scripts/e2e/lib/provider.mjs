@@ -35,7 +35,11 @@ const DEFAULTS = {
 
 export function resolveProvider() {
   const wanted = process.env.EVERYAIOS_E2E_PROVIDER ?? null;
-  const candidates = wanted ? [wanted] : ["nvidia", "openai", "ollama"];
+  const candidates = wanted
+    ? [wanted]
+    : process.env.EVERYAIOS_E2E_BASE_URL
+      ? ["ollama", "openai", "nvidia"]
+      : ["nvidia", "openai"];
   for (const name of candidates) {
     const def = DEFAULTS[name];
     if (!def) continue;

@@ -19,6 +19,8 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
+import { existsSync } from "node:fs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** packages/coordinator is the sidecar's home (spawn target + cwd). */
@@ -69,9 +71,13 @@ export class CoordinatorClient extends EventEmitter {
     this.decoder = new FrameDecoder();
     this.buffer = "";
     this.setMaxListeners(100); // a gate runs many turns on one client
+    const bunDir = join(homedir(), ".bun", "bin");
+    const cargoDir = join(homedir(), ".cargo", "bin");
+    const existingPath = env.PATH ?? process.env.PATH ?? "";
+    const fullPath = `${bunDir}:${cargoDir}:${existingPath}`;
     this.child = spawn("bash", ["-lc", cmd], {
       cwd,
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...env, PATH: fullPath },
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.child.stdout.on("data", (d) => {
