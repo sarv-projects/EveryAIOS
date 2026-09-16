@@ -212,7 +212,7 @@ Six core Cowork problem statements were formulated and tested:
 
 ## 4. Root Cause Analysis & Fixes Applied
 
-During testing and verification of the cross-platform environment, two minor integration disconnects were identified and resolved:
+During testing and verification of the cross-platform environment, three integration disconnects were identified and resolved:
 
 1. **Relative Module Import in Bun Test Suite**:
    - *Symptom*: Initial run of `cowork-swarm-verification.test.ts` failed with `Cannot find module '../../ui/src/lib/capabilities'`.
@@ -222,6 +222,10 @@ During testing and verification of the cross-platform environment, two minor int
    - *Symptom*: Running `pnpm run type-check` initially reported `Cannot find type definition file for 'vite/client'`.
    - *Root Cause*: Workspace package dependencies in `ui/node_modules` were unlinked following cross-filesystem boundary operations.
    - *Fix Applied*: Executed `pnpm install --frozen-lockfile` across the 13 workspace projects. `tsc --noEmit` completed with 0 errors across 141 components.
+3. **`src-tauri` Calendar Command Type Mismatch & Argument Arity**:
+   - *Symptom*: Running `cargo test` in `src-tauri` failed on `calendar_cmds.rs` with `expected Result<bool, String>, found Result<(), String>` for `calendar_delete` and `calendar_event_delete`, and missing `start_ts`/`end_ts` arguments in `list_ui_calendar_events`.
+   - *Root Cause*: Underlying `everyaios-vault` functions return `Result<(), VaultError>` and accept date-range filters (`start_ts`, `end_ts`).
+   - *Fix Applied*: Updated `calendar_cmds.rs` to return `Ok(true)` on successful delete, and added `start_ts: Option<i64>` and `end_ts: Option<i64>` (defaulting to full epoch range `0..i64::MAX`). All 41 `src-tauri` tests passed cleanly.
 
 ---
 
@@ -233,3 +237,47 @@ During testing and verification of the cross-platform environment, two minor int
 - **Single Source of Truth**: Verified. `capabilities.yaml` 166 rows == `ARCH/09` == `DESKTOP-APP-SPEC.md §0`.
 - **Doc-Sync & IPC Parity**: Verified. 330 registered commands, 0 broken, 100% synchronized.
 - **Zero Mock Disk Persistence**: Verified. Clean-profile boot test passes without seeding mock state.
+
+---
+
+## 6. Live Real-World Agent Harness Verification (OpenCode & Grok Build)
+
+Automated live execution tests were performed directly against the installed binaries in `packages/coordinator/src/live-agent-harness.test.ts`:
+
+### 1. OpenCode ACP Stdio Integration
+- **Binary**: `/home/sarvesh/.bun/bin/opencode` (v1.18.31).
+- **Protocol**: Speaks Agent Client Protocol (ACP) over stdio via `opencode acp`.
+- **Handshake Verification**:
+  ```json
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "protocolVersion": 1,
+      "agentInfo": { "name": "OpenCode", "version": "1.18.31" },
+      "agentCapabilities": {
+        "loadSession": true,
+        "mcpCapabilities": { "http": true, "sse": true },
+        "promptCapabilities": { "embeddedContext": true, "image": true },
+        "sessionCapabilities": { "close": {}, "fork": {}, "list": {}, "resume": {} }
+      }
+    }
+  }
+  ```
+- **Free Model Verification**: OpenCode ships with built-in free models requiring no login (e.g. `kilo/openrouter/free`, `orcarouter/orcarouter/free`, `orcarouter/deepseek/deepseek-v4-flash-free`).
+
+### 2. Grok Build CLI Integration
+- **Binary**: `/home/sarvesh/.bun/bin/grok` (`@xai-official/grok` v1.0.25).
+- **Execution Modes**: Tested `grok --version`, `grok models` (default model `grok-4.6`), and headless stdio mode `grok agent stdio` with NDJSON streaming.
+
+### 3. Agent Swapping & Capability Matrix Between OpenCode and Grok Build
+- **OpenCode as Primary Chief, Grok Build as Subagent**:
+  - OpenCode runs as session Chief.
+  - Spawns Grok Build as subordinate subagent.
+  - Subagent inherits parent shared cowork permissions: `shared:office`, `shared:browser`, `shared:desktop`, `shared:calendar`, `shared:fleet`.
+- **Grok Build as Primary Chief, OpenCode as Subagent**:
+  - Grok Build runs as session Chief.
+  - Spawns OpenCode subagent with selective permission masking: child is granted code editing while `shared:desktop` GUI control is strictly denied.
+- **Shared Cowork Parity**: Both agents independently confirm access to the entire EveryAIOS cowork tool suite (IronCalc spreadsheets, CDP browser, OS desktop control, calendar, and cognitive memory).
+- **Live Test Outcome**: 5 passed, 0 failed in `live-agent-harness.test.ts`.
+
