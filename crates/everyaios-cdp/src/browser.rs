@@ -15,9 +15,10 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// The supported browser families / channels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserChannel {
+    #[default]
     Auto,
     Brave,
     Chrome,
@@ -80,19 +81,14 @@ pub struct BrowserCandidate {
 }
 
 /// Profile management strategy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserProfileMode {
     /// Dedicated clean profile isolated from personal browsing.
+    #[default]
     Isolated,
     /// Explicitly paired non-default profile (preserves specific logins).
     Paired,
-}
-
-impl Default for BrowserProfileMode {
-    fn default() -> Self {
-        BrowserProfileMode::Isolated
-    }
 }
 
 fn default_true() -> bool {
@@ -104,6 +100,9 @@ fn default_extra_args() -> Vec<String> {
 }
 
 /// Persisted configuration for browser automation.
+// NOTE: `Default` is implemented by hand below, not derived — the dynamic
+// default is `headless: true` + `extra_args: ["--mute-audio"]`, which a derive
+// would silently replace with `false` / `[]`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BrowserConfig {
     #[serde(default)]
@@ -116,12 +115,6 @@ pub struct BrowserConfig {
     pub headless: bool,
     #[serde(default = "default_extra_args")]
     pub extra_args: Vec<String>,
-}
-
-impl Default for BrowserChannel {
-    fn default() -> Self {
-        BrowserChannel::Auto
-    }
 }
 
 impl Default for BrowserConfig {
@@ -348,34 +341,67 @@ pub fn channel_candidates(channel: BrowserChannel) -> Vec<PathBuf> {
         BrowserChannel::Brave => {
             #[cfg(target_os = "linux")]
             {
-                out.extend(["brave-browser", "brave-browser-stable", "brave", "/usr/bin/brave-browser", "/snap/bin/brave"].iter().map(PathBuf::from));
+                out.extend(
+                    [
+                        "brave-browser",
+                        "brave-browser-stable",
+                        "brave",
+                        "/usr/bin/brave-browser",
+                        "/snap/bin/brave",
+                    ]
+                    .iter()
+                    .map(PathBuf::from),
+                );
             }
             #[cfg(target_os = "macos")]
             {
-                out.push(PathBuf::from("/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"));
+                out.push(PathBuf::from(
+                    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                ));
             }
             #[cfg(target_os = "windows")]
             {
-                out.push(PathBuf::from(r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"));
-                out.push(PathBuf::from(r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe"));
+                out.push(PathBuf::from(
+                    r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+                ));
+                out.push(PathBuf::from(
+                    r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
+                ));
                 if let Some(local) = env::var_os("LOCALAPPDATA") {
-                    out.push(PathBuf::from(local).join(r"BraveSoftware\Brave-Browser\Application\brave.exe"));
+                    out.push(
+                        PathBuf::from(local)
+                            .join(r"BraveSoftware\Brave-Browser\Application\brave.exe"),
+                    );
                 }
             }
         }
         BrowserChannel::Chrome => {
             #[cfg(target_os = "linux")]
             {
-                out.extend(["google-chrome", "google-chrome-stable", "/usr/bin/google-chrome"].iter().map(PathBuf::from));
+                out.extend(
+                    [
+                        "google-chrome",
+                        "google-chrome-stable",
+                        "/usr/bin/google-chrome",
+                    ]
+                    .iter()
+                    .map(PathBuf::from),
+                );
             }
             #[cfg(target_os = "macos")]
             {
-                out.push(PathBuf::from("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"));
+                out.push(PathBuf::from(
+                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                ));
             }
             #[cfg(target_os = "windows")]
             {
-                out.push(PathBuf::from(r"C:\Program Files\Google\Chrome\Application\chrome.exe"));
-                out.push(PathBuf::from(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"));
+                out.push(PathBuf::from(
+                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                ));
+                out.push(PathBuf::from(
+                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                ));
                 if let Some(local) = env::var_os("LOCALAPPDATA") {
                     out.push(PathBuf::from(local).join(r"Google\Chrome\Application\chrome.exe"));
                 }
@@ -384,16 +410,30 @@ pub fn channel_candidates(channel: BrowserChannel) -> Vec<PathBuf> {
         BrowserChannel::Edge => {
             #[cfg(target_os = "linux")]
             {
-                out.extend(["microsoft-edge", "microsoft-edge-stable", "/usr/bin/microsoft-edge"].iter().map(PathBuf::from));
+                out.extend(
+                    [
+                        "microsoft-edge",
+                        "microsoft-edge-stable",
+                        "/usr/bin/microsoft-edge",
+                    ]
+                    .iter()
+                    .map(PathBuf::from),
+                );
             }
             #[cfg(target_os = "macos")]
             {
-                out.push(PathBuf::from("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"));
+                out.push(PathBuf::from(
+                    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                ));
             }
             #[cfg(target_os = "windows")]
             {
-                out.push(PathBuf::from(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"));
-                out.push(PathBuf::from(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"));
+                out.push(PathBuf::from(
+                    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                ));
+                out.push(PathBuf::from(
+                    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                ));
                 if let Some(local) = env::var_os("LOCALAPPDATA") {
                     out.push(PathBuf::from(local).join(r"Microsoft\Edge\Application\msedge.exe"));
                 }
@@ -402,15 +442,28 @@ pub fn channel_candidates(channel: BrowserChannel) -> Vec<PathBuf> {
         BrowserChannel::Chromium => {
             #[cfg(target_os = "linux")]
             {
-                out.extend(["chromium", "chromium-browser", "/usr/bin/chromium", "/usr/bin/chromium-browser"].iter().map(PathBuf::from));
+                out.extend(
+                    [
+                        "chromium",
+                        "chromium-browser",
+                        "/usr/bin/chromium",
+                        "/usr/bin/chromium-browser",
+                    ]
+                    .iter()
+                    .map(PathBuf::from),
+                );
             }
             #[cfg(target_os = "macos")]
             {
-                out.push(PathBuf::from("/Applications/Chromium.app/Contents/MacOS/Chromium"));
+                out.push(PathBuf::from(
+                    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                ));
             }
             #[cfg(target_os = "windows")]
             {
-                out.push(PathBuf::from(r"C:\Program Files\Chromium\Application\chrome.exe"));
+                out.push(PathBuf::from(
+                    r"C:\Program Files\Chromium\Application\chrome.exe",
+                ));
                 if let Some(local) = env::var_os("LOCALAPPDATA") {
                     out.push(PathBuf::from(local).join(r"Chromium\Application\chrome.exe"));
                 }
@@ -433,15 +486,23 @@ pub fn channel_candidates(channel: BrowserChannel) -> Vec<PathBuf> {
         BrowserChannel::Vivaldi => {
             #[cfg(target_os = "linux")]
             {
-                out.extend(["vivaldi", "vivaldi-stable", "/usr/bin/vivaldi"].iter().map(PathBuf::from));
+                out.extend(
+                    ["vivaldi", "vivaldi-stable", "/usr/bin/vivaldi"]
+                        .iter()
+                        .map(PathBuf::from),
+                );
             }
             #[cfg(target_os = "macos")]
             {
-                out.push(PathBuf::from("/Applications/Vivaldi.app/Contents/MacOS/Vivaldi"));
+                out.push(PathBuf::from(
+                    "/Applications/Vivaldi.app/Contents/MacOS/Vivaldi",
+                ));
             }
             #[cfg(target_os = "windows")]
             {
-                out.push(PathBuf::from(r"C:\Program Files\Vivaldi\Application\vivaldi.exe"));
+                out.push(PathBuf::from(
+                    r"C:\Program Files\Vivaldi\Application\vivaldi.exe",
+                ));
                 if let Some(local) = env::var_os("LOCALAPPDATA") {
                     out.push(PathBuf::from(local).join(r"Vivaldi\Application\vivaldi.exe"));
                 }
@@ -510,7 +571,9 @@ pub fn discover_installed_browsers() -> Vec<BrowserCandidate> {
 }
 
 /// Resolve the browser binary according to the given user configuration.
-pub fn resolve_browser_binary(config: &BrowserConfig) -> Result<(PathBuf, BrowserChannel), CdpError> {
+pub fn resolve_browser_binary(
+    config: &BrowserConfig,
+) -> Result<(PathBuf, BrowserChannel), CdpError> {
     if config.preferred_channel == BrowserChannel::Custom {
         let path_str = config.custom_executable_path.as_deref().unwrap_or_default();
         if path_str.is_empty() {
@@ -1110,11 +1173,15 @@ mod tests {
             BrowserChannel::Brave
         );
         assert_eq!(
-            detect_channel_from_path(Path::new(r"C:\Program Files\Google\Chrome\Application\chrome.exe")),
+            detect_channel_from_path(Path::new(
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+            )),
             BrowserChannel::Chrome
         );
         assert_eq!(
-            detect_channel_from_path(Path::new(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")),
+            detect_channel_from_path(Path::new(
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+            )),
             BrowserChannel::Edge
         );
         assert_eq!(

@@ -44,9 +44,11 @@ impl AvoidanceStore {
 
     /// Record a failed action into the avoidance store.
     pub fn record_failure(&mut self, action: &str, context: &str, root_cause: &str, now_ms: i64) {
-        if let Some(existing) = self.rules.iter_mut().find(|r| {
-            r.action_pattern == action && r.context_pattern == context
-        }) {
+        if let Some(existing) = self
+            .rules
+            .iter_mut()
+            .find(|r| r.action_pattern == action && r.context_pattern == context)
+        {
             existing.fail_count += 1;
             existing.root_cause = root_cause.to_string();
             return;
@@ -69,10 +71,16 @@ impl AvoidanceStore {
     }
 
     /// Check if a candidate action matches any active avoidance rule in the current context.
-    pub fn should_avoid(&self, candidate_action: &str, current_context: &str) -> Option<&AvoidRule> {
+    pub fn should_avoid(
+        &self,
+        candidate_action: &str,
+        current_context: &str,
+    ) -> Option<&AvoidRule> {
         self.rules.iter().find(|r| {
-            (candidate_action.contains(&r.action_pattern) || r.action_pattern.contains(candidate_action)) &&
-            (current_context.contains(&r.context_pattern) || r.context_pattern.contains(current_context))
+            (candidate_action.contains(&r.action_pattern)
+                || r.action_pattern.contains(candidate_action))
+                && (current_context.contains(&r.context_pattern)
+                    || r.context_pattern.contains(current_context))
         })
     }
 

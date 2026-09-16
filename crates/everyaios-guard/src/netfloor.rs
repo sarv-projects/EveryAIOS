@@ -346,7 +346,7 @@ mod tests {
             "http://0177.0.0.1/",
         ] {
             let parsed = url::Url::parse(raw).unwrap();
-            let class = classify_url_host(&parsed.host().unwrap().into());
+            let class = classify_url_host(&parsed.host().unwrap());
             assert_eq!(class, NetClass::Loopback, "{raw}");
         }
     }

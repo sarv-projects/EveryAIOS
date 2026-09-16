@@ -673,9 +673,14 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     }
 
     /// Attach the AG-UI UI sink (P11.5.11). The shell calls this at boot so
-    /// `agui/event` notifications from the coordinator reach the UI as
+    /// `agui/event` notifications from the coordinator are forwarded as
     /// `agui-event` emits. Returns the relay (the shell's `agui_send` command
     /// uses it to push UI→coordinator events into the sidecar link).
+    ///
+    /// The emit is **unconsumed today**: no UI code listens for `agui-event`
+    /// (and `agui_send`/`agui_listen` are never invoked from the UI), because
+    /// the generative-UI surface that would consume them is the deferred half
+    /// of P11.5.11. Attaching the sink does not make AG-UI live.
     pub fn with_agui(&self, sink: impl Fn(String) + Send + 'static) -> crate::agui::AguiRelay {
         self.agui.attach(sink);
         self.agui.clone()
@@ -1775,12 +1780,17 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     /// Stage-0 (P6.3): dispatch a blueprint plan to the coordinator's plan
     /// executor. The coordinator begins the plan breaker via `plan/begin`,
     /// steps it per LLM turn/tool call, and emits `chat/interrupt` on a trip
-    /// + `chat/plan_done` at the end. Returns once the coordinator acks.
+    /// and `chat/plan_done` at the end. Returns once the coordinator acks.
     /// `work_id` is the canonical Work this plan belongs to. The coordinator
     /// registers plan stream identity from `workId` (its `PlanExecutionParams`
     /// has carried the field since P49), so omitting it here would file the
     /// plan's lifecycle events under a fabricated Work. Falls back to
     /// `session_id` — the same convention as `chat/stream`.
+    // Eight parameters is the honest shape of this directive (identity, plan
+    // identity, stream identity, the task tree, optional provider/model, and
+    // the Work it belongs to); bundling them into a struct would only move the
+    // arity, not remove it.
+    #[allow(clippy::too_many_arguments)]
     pub fn start_plan(
         &self,
         session_id: &str,

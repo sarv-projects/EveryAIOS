@@ -9,9 +9,9 @@
 //! 3. Mutex-serialized execution: routed via `GitOperationQueue`.
 //! 4. 3-File Blackboard: `task_plan.md`, `findings.md`, and `receipts/` state persistence.
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 
 use crate::git_queue::{GitOperationQueue, GitQueueError};
 use crate::worktree_cap::{CapVerdict, WorktreeCap};
@@ -83,10 +83,8 @@ impl WorktreeManager {
 
         // 3. Create git worktree via serialized write queue
         let path_str = worktree_path.to_string_lossy().to_string();
-        self.git_queue.run_write(
-            &["worktree", "add", "-b", &branch, &path_str],
-            None,
-        )?;
+        self.git_queue
+            .run_write(&["worktree", "add", "-b", &branch, &path_str], None)?;
 
         // 4. Initialize 3-file blackboard inside worktree
         self.initialize_blackboard(&worktree_path, task_id)?;
@@ -100,7 +98,11 @@ impl WorktreeManager {
     }
 
     /// Initialize the 3-file blackboard state sync inside the worktree.
-    fn initialize_blackboard(&self, worktree_path: &Path, task_id: &str) -> Result<(), std::io::Error> {
+    fn initialize_blackboard(
+        &self,
+        worktree_path: &Path,
+        task_id: &str,
+    ) -> Result<(), std::io::Error> {
         let blackboard_dir = worktree_path.join(".everyaios");
         fs::create_dir_all(&blackboard_dir)?;
         fs::create_dir_all(blackboard_dir.join("receipts"))?;
@@ -110,26 +112,43 @@ impl WorktreeManager {
         );
         fs::write(blackboard_dir.join("task_plan.md"), initial_plan)?;
 
-        let initial_findings = format!(
-            "# Findings & Discovered Context: {task_id}\n\n"
-        );
+        let initial_findings = format!("# Findings & Discovered Context: {task_id}\n\n");
         fs::write(blackboard_dir.join("findings.md"), initial_findings)?;
 
         Ok(())
     }
 
     /// Revert all uncommitted or committed changes in a worktree branch back to the target ref.
-    pub fn undo_worktree(&mut self, lease: &WorktreeLease, target_ref: Option<&str>) -> Result<(), WorktreeError> {
+    pub fn undo_worktree(
+        &mut self,
+        lease: &WorktreeLease,
+        target_ref: Option<&str>,
+    ) -> Result<(), WorktreeError> {
         let path_str = lease.path.to_string_lossy().to_string();
         let target = target_ref.unwrap_or("HEAD~1");
-        self.git_queue.run_write(&["-C", &path_str, "reset", "--hard", target], None)?;
+        self.git_queue
+            .run_write(&["-C", &path_str, "reset", "--hard", target], None)?;
         Ok(())
     }
 
     /// Restore a worktree branch from an existing checkpoint SHA.
-    pub fn restore_branch(&mut self, lease: &WorktreeLease, checkpoint_sha: &str) -> Result<(), WorktreeError> {
+    pub fn restore_branch(
+        &mut self,
+        lease: &WorktreeLease,
+        checkpoint_sha: &str,
+    ) -> Result<(), WorktreeError> {
         let path_str = lease.path.to_string_lossy().to_string();
-        self.git_queue.run_write(&["-C", &path_str, "checkout", "-B", &lease.branch_name, checkpoint_sha], None)?;
+        self.git_queue.run_write(
+            &[
+                "-C",
+                &path_str,
+                "checkout",
+                "-B",
+                &lease.branch_name,
+                checkpoint_sha,
+            ],
+            None,
+        )?;
         Ok(())
     }
 
@@ -138,7 +157,9 @@ impl WorktreeManager {
         let path_str = lease.path.to_string_lossy().to_string();
 
         // 1. Remove git worktree
-        let _ = self.git_queue.run_write(&["worktree", "remove", "--force", &path_str], None);
+        let _ = self
+            .git_queue
+            .run_write(&["worktree", "remove", "--force", &path_str], None);
 
         // 2. Remove directory if anything remains
         if lease.path.exists() {
@@ -158,13 +179,22 @@ mod tests {
 
     #[test]
     fn test_worktree_manager_initialization() {
-        let unique = format!("worktree_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+        let unique = format!(
+            "worktree_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
         let test_dir = std::env::temp_dir().join(unique);
         let cap = WorktreeCap::default();
         let mgr = WorktreeManager::new(&test_dir, cap);
 
         assert_eq!(mgr.cap.max_gib, 8);
-        assert_eq!(mgr.worktrees_dir, test_dir.join(".everyaios").join("worktrees"));
+        assert_eq!(
+            mgr.worktrees_dir,
+            test_dir.join(".everyaios").join("worktrees")
+        );
     }
 
     #[test]

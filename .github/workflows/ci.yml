@@ -185,6 +185,14 @@ jobs:
       - name: Build vendored core-* packages
         working-directory: desktop_app
         run: pnpm --filter './packages/core-*' run build
+      # The engine packages' own suites (49 test files across the ten core-*
+      # packages) were built here but never *run*, so a regression inside the
+      # vendored engine could not fail this workflow. Each package declares
+      # `test: vitest run` and vitest is its own devDependency, so no extra
+      # install step is needed.
+      - name: Vendored core-* tests
+        working-directory: desktop_app
+        run: pnpm --filter './packages/core-*' run test
       - name: Coordinator typecheck
         working-directory: desktop_app/packages/coordinator
         run: bun run type-check

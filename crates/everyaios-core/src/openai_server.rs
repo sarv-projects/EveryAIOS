@@ -44,12 +44,33 @@ const MAX_REQUEST_BYTES: usize = MAX_BODY_BYTES + 64 * 1024;
 // OpenAI wire types (the subset we implement).
 // ---------------------------------------------------------------------------
 
+/// Treat an explicit JSON `null` as an absent string.
+///
+/// OpenAI sends `"content": null` on an assistant message that carries only
+/// `tool_calls` (and on some `tool` messages). Without this an ordinary
+/// tool-calling round trip would be rejected with a 400 before it reached the
+/// engine.
+fn de_nullable_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<String>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 /// One chat message in the request.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ChatMessage {
     pub role: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_nullable_string")]
     pub content: String,
+    /// The `tool_calls` id this message answers (role `tool`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// Native tool calls on an assistant message. Opaque here — the shape is
+    /// the provider's, and it is forwarded upstream verbatim so a client can
+    /// replay its own tool-calling history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Value>,
 }
 
 /// `POST /v1/chat/completions` request body (the fields we honor).
@@ -63,6 +84,18 @@ pub struct ChatCompletionRequest {
     pub temperature: Option<f64>,
     #[serde(default)]
     pub max_tokens: Option<u64>,
+    /// The client's tool declarations — forwarded to the provider unchanged.
+    /// Dropping these silently breaks every tool-calling client (Continue /
+    /// Cursor / the OpenAI SDK), which is why A8 was previously declared
+    /// unusable for an autonomous agent.
+    #[serde(default)]
+    pub tools: Option<Value>,
+    /// `none` | `auto` | `required` | `{type:"function",function:{name}}` —
+    /// forwarded verbatim alongside `tools`.
+    #[serde(default)]
+    pub tool_choice: Option<Value>,
+    #[serde(default)]
+    pub parallel_tool_calls: Option<bool>,
 }
 
 /// A model row for `GET /v1/models`.
@@ -85,6 +118,23 @@ impl ModelRow {
     }
 }
 
+/// One native function call in a response (OpenAI `message.tool_calls`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ToolCallOut {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub function: ToolCallFunction,
+}
+
+/// The `function` object of a [`ToolCallOut`]. `arguments` stays a **string**
+/// because that is the OpenAI wire form (the client parses it).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ToolCallFunction {
+    pub name: String,
+    pub arguments: String,
+}
+
 /// The completion result the backend returns (non-stream) — content + token
 /// accounting (may be zero if the backend cannot measure it honestly).
 #[derive(Debug, Clone, PartialEq)]
@@ -94,6 +144,34 @@ pub struct CompletionResult {
     pub completion_tokens: u64,
     /// The model id actually used (after alias/router resolution).
     pub model: String,
+    /// Native tool calls. Empty for a plain content answer; a result that
+    /// carries any reports `finish_reason: "tool_calls"`.
+    pub tool_calls: Vec<ToolCallOut>,
+}
+
+/// The OpenAI `finish_reason` a result maps to.
+pub fn finish_reason_of(r: &CompletionResult) -> &'static str {
+    if r.tool_calls.is_empty() {
+        "stop"
+    } else {
+        "tool_calls"
+    }
+}
+
+/// One piece of a streamed completion.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StreamPiece {
+    /// A text delta.
+    Content(String),
+    /// A native tool-call fragment. Follows OpenAI `delta.tool_calls`
+    /// semantics: `index` groups fragments, `id`/`name` arrive on the first
+    /// fragment of a call, and `arguments` accumulates across fragments.
+    ToolCall {
+        index: i64,
+        id: Option<String>,
+        name: Option<String>,
+        arguments: Option<String>,
+    },
 }
 
 /// The engine seam. Live wiring bridges this to the coordinator/broker; tests
@@ -103,17 +181,26 @@ pub trait CompletionBackend: Send + Sync {
     /// Non-streaming completion.
     fn complete(&self, req: &ChatCompletionRequest) -> Result<CompletionResult, String>;
 
-    /// Streaming completion. Default impl runs `complete` and emits the whole
-    /// content as one delta — a correct (if non-incremental) SSE stream — so a
-    /// backend that cannot stream still speaks the protocol.
+    /// Streaming completion. The default impl runs `complete` and emits the
+    /// whole answer in a single piece — a correct (if non-incremental) SSE
+    /// stream — so a backend that cannot stream still speaks the protocol. The
+    /// live vault-broker backend overrides this with real per-chunk delivery.
     fn stream(
         &self,
         req: &ChatCompletionRequest,
-        on_delta: &mut dyn FnMut(&str),
+        on_piece: &mut dyn FnMut(StreamPiece),
     ) -> Result<CompletionResult, String> {
         let result = self.complete(req)?;
         if !result.content.is_empty() {
-            on_delta(&result.content);
+            on_piece(StreamPiece::Content(result.content.clone()));
+        }
+        for (i, tc) in result.tool_calls.iter().enumerate() {
+            on_piece(StreamPiece::ToolCall {
+                index: i as i64,
+                id: Some(tc.id.clone()),
+                name: Some(tc.function.name.clone()),
+                arguments: Some(tc.function.arguments.clone()),
+            });
         }
         Ok(result)
     }
@@ -147,6 +234,12 @@ fn completion_id() -> String {
 
 /// Build the non-streaming `chat.completion` JSON body.
 pub fn non_stream_body(id: &str, created: u64, r: &CompletionResult) -> Value {
+    let mut message = json!({ "role": "assistant", "content": r.content });
+    // `tool_calls` is present only when the answer actually calls a tool — an
+    // empty array would make a client think a tool-calling turn happened.
+    if !r.tool_calls.is_empty() {
+        message["tool_calls"] = serde_json::to_value(&r.tool_calls).unwrap_or(Value::Null);
+    }
     json!({
         "id": id,
         "object": "chat.completion",
@@ -154,8 +247,8 @@ pub fn non_stream_body(id: &str, created: u64, r: &CompletionResult) -> Value {
         "model": r.model,
         "choices": [{
             "index": 0,
-            "message": { "role": "assistant", "content": r.content },
-            "finish_reason": "stop",
+            "message": message,
+            "finish_reason": finish_reason_of(r),
         }],
         "usage": {
             "prompt_tokens": r.prompt_tokens,
@@ -177,15 +270,52 @@ pub fn stream_chunk(id: &str, created: u64, model: &str, delta: &str) -> String 
     format!("data: {}\n\n", obj)
 }
 
-/// The final SSE frame: an empty delta with `finish_reason:"stop"`, then the
-/// `[DONE]` sentinel every OpenAI SSE client waits for.
-pub fn stream_final(id: &str, created: u64, model: &str) -> String {
+/// One SSE `chat.completion.chunk` frame carrying a tool-call fragment.
+///
+/// `type:"function"` rides with the fragment that names the function, exactly
+/// as OpenAI emits it, so a strict client that keys off `type` still works.
+pub fn stream_tool_call_chunk(
+    id: &str,
+    created: u64,
+    model: &str,
+    index: i64,
+    call_id: Option<&str>,
+    name: Option<&str>,
+    arguments: Option<&str>,
+) -> String {
+    let mut call = json!({ "index": index });
+    if let Some(cid) = call_id {
+        call["id"] = json!(cid);
+    }
+    let mut function = json!({});
+    if let Some(n) = name {
+        function["name"] = json!(n);
+        call["type"] = json!("function");
+    }
+    if let Some(a) = arguments {
+        function["arguments"] = json!(a);
+    }
+    call["function"] = function;
+    let obj = json!({
+        "id": id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [{ "index": 0, "delta": { "tool_calls": [call] }, "finish_reason": Value::Null }],
+    });
+    format!("data: {}\n\n", obj)
+}
+
+/// The final SSE frame: an empty delta with the real `finish_reason`
+/// (`stop`, `tool_calls`, …), then the `[DONE]` sentinel every OpenAI SSE
+/// client waits for.
+pub fn stream_final(id: &str, created: u64, model: &str, finish_reason: &str) -> String {
     let stop = json!({
         "id": id,
         "object": "chat.completion.chunk",
         "created": created,
         "model": model,
-        "choices": [{ "index": 0, "delta": {}, "finish_reason": "stop" }],
+        "choices": [{ "index": 0, "delta": {}, "finish_reason": finish_reason }],
     });
     format!("data: {}\n\ndata: [DONE]\n\n", stop)
 }
@@ -503,18 +633,34 @@ fn stream_completion(
     stream.write_all(http_sse_headers().as_bytes())?;
     stream.flush()?;
 
-    // Collect any write error from within the delta callback.
+    // Collect any write error from within the piece callback.
     let mut write_err: Option<std::io::Error> = None;
     let result = {
         let stream_ref = &mut *stream;
         let id_ref = &id;
         let model_ref = &model;
         let write_err_ref = &mut write_err;
-        backend.stream(req, &mut |delta: &str| {
+        backend.stream(req, &mut |piece: StreamPiece| {
             if write_err_ref.is_some() {
                 return;
             }
-            let frame = stream_chunk(id_ref, created, model_ref, delta);
+            let frame = match piece {
+                StreamPiece::Content(delta) => stream_chunk(id_ref, created, model_ref, &delta),
+                StreamPiece::ToolCall {
+                    index,
+                    id,
+                    name,
+                    arguments,
+                } => stream_tool_call_chunk(
+                    id_ref,
+                    created,
+                    model_ref,
+                    index,
+                    id.as_deref(),
+                    name.as_deref(),
+                    arguments.as_deref(),
+                ),
+            };
             if let Err(e) = stream_ref
                 .write_all(frame.as_bytes())
                 .and_then(|_| stream_ref.flush())
@@ -528,7 +674,8 @@ fn stream_completion(
     }
     match result {
         Ok(r) => {
-            let _ = stream.write_all(stream_final(&id, created, &r.model).as_bytes());
+            let _ = stream
+                .write_all(stream_final(&id, created, &r.model, finish_reason_of(&r)).as_bytes());
         }
         Err(e) => {
             // Surface the engine error inside the SSE stream, then close.
@@ -579,6 +726,29 @@ mod tests {
                 prompt_tokens: last.split_whitespace().count() as u64,
                 completion_tokens: 2,
                 model: req.model.clone(),
+                tool_calls: Vec::new(),
+            })
+        }
+    }
+
+    /// A backend that answers with a native tool call and no content — the
+    /// shape that previously had nowhere to go in this server.
+    struct ToolCallingBackend;
+    impl CompletionBackend for ToolCallingBackend {
+        fn complete(&self, req: &ChatCompletionRequest) -> Result<CompletionResult, String> {
+            Ok(CompletionResult {
+                content: String::new(),
+                prompt_tokens: 11,
+                completion_tokens: 7,
+                model: req.model.clone(),
+                tool_calls: vec![ToolCallOut {
+                    id: "call_abc".into(),
+                    kind: "function".into(),
+                    function: ToolCallFunction {
+                        name: "read_file".into(),
+                        arguments: r#"{"path":"a.rs"}"#.into(),
+                    },
+                }],
             })
         }
     }
@@ -747,9 +917,108 @@ mod tests {
         assert_eq!(v["object"], "chat.completion.chunk");
         assert_eq!(v["choices"][0]["delta"]["content"], "hello");
 
-        let fin = stream_final("id1", 100, "m");
+        let fin = stream_final("id1", 100, "m", "stop");
         assert!(fin.contains("\"finish_reason\":\"stop\""));
         assert!(fin.trim_end().ends_with("data: [DONE]"));
+    }
+
+    #[test]
+    fn tool_call_chunk_carries_type_with_the_name_fragment() {
+        let first = stream_tool_call_chunk(
+            "id1",
+            100,
+            "m",
+            0,
+            Some("call_abc"),
+            Some("read_file"),
+            Some(r#"{"path":"#),
+        );
+        let v: Value = serde_json::from_str(first.trim_start_matches("data: ").trim()).unwrap();
+        let call = &v["choices"][0]["delta"]["tool_calls"][0];
+        assert_eq!(call["index"], 0);
+        assert_eq!(call["id"], "call_abc");
+        assert_eq!(call["type"], "function");
+        assert_eq!(call["function"]["name"], "read_file");
+        assert_eq!(call["function"]["arguments"], r#"{"path":"#);
+
+        // An arguments-only continuation omits id/name/type (OpenAI shape).
+        let cont = stream_tool_call_chunk("id1", 100, "m", 0, None, None, Some("a.rs\"}"));
+        let cv: Value = serde_json::from_str(cont.trim_start_matches("data: ").trim()).unwrap();
+        let c2 = &cv["choices"][0]["delta"]["tool_calls"][0];
+        assert_eq!(c2["index"], 0);
+        assert!(c2.get("id").is_none());
+        assert!(c2.get("type").is_none());
+        assert!(c2["function"].get("name").is_none());
+        assert_eq!(c2["function"]["arguments"], "a.rs\"}");
+    }
+
+    #[test]
+    fn null_tool_call_history_parses_instead_of_400ing() {
+        // The exact body a client replays after a tool call: the assistant
+        // message carries `content: null` + `tool_calls`, and the tool result
+        // carries `tool_call_id` with no content field at all.
+        let body = r#"{"model":"m","messages":[
+            {"role":"user","content":"read a.rs"},
+            {"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"read_file","arguments":"{}"}}]},
+            {"role":"tool","tool_call_id":"c1","content":"fn main() {}"}
+        ]}"#;
+        let req: ChatCompletionRequest = serde_json::from_str(body).unwrap();
+        assert_eq!(req.messages.len(), 3);
+        assert_eq!(req.messages[1].content, "");
+        assert!(req.messages[1].tool_calls.is_some());
+        assert_eq!(req.messages[2].tool_call_id.as_deref(), Some("c1"));
+        // And the handler accepts the same body (no 400).
+        let r = handle_request(
+            "POST",
+            "/v1/chat/completions",
+            body,
+            true,
+            &EchoBackend,
+            &StaticModels,
+        );
+        assert!(r.starts_with("HTTP/1.1 200 OK"), "got: {r}");
+    }
+
+    #[test]
+    fn tools_and_tool_choice_are_parsed_for_forwarding() {
+        let body = r#"{"model":"m","messages":[{"role":"user","content":"x"}],
+            "tools":[{"type":"function","function":{"name":"read_file","parameters":{"type":"object"}}}],
+            "tool_choice":"auto","parallel_tool_calls":false}"#;
+        let req: ChatCompletionRequest = serde_json::from_str(body).unwrap();
+        assert_eq!(
+            req.tools.as_ref().unwrap()[0]["function"]["name"],
+            "read_file"
+        );
+        assert_eq!(req.tool_choice.as_ref().unwrap(), "auto");
+        assert_eq!(req.parallel_tool_calls, Some(false));
+    }
+
+    #[test]
+    fn non_stream_body_reports_tool_calls_and_finish_reason() {
+        let req: ChatCompletionRequest = serde_json::from_str(
+            r#"{"model":"m","messages":[{"role":"user","content":"read a.rs"}]}"#,
+        )
+        .unwrap();
+        let r = ToolCallingBackend.complete(&req).unwrap();
+        let v = non_stream_body("id1", 100, &r);
+        assert_eq!(v["choices"][0]["finish_reason"], "tool_calls");
+        assert_eq!(
+            v["choices"][0]["message"]["tool_calls"][0]["id"],
+            "call_abc"
+        );
+        assert_eq!(
+            v["choices"][0]["message"]["tool_calls"][0]["function"]["name"],
+            "read_file"
+        );
+        assert_eq!(
+            v["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"],
+            r#"{"path":"a.rs"}"#
+        );
+        // A content-only answer must NOT carry a tool_calls key.
+        let plain = EchoBackend.complete(&req).unwrap();
+        let pv = non_stream_body("id2", 100, &plain);
+        assert_eq!(pv["choices"][0]["finish_reason"], "stop");
+        assert!(pv["choices"][0]["message"].get("tool_calls").is_none());
     }
 
     #[test]
@@ -760,16 +1029,52 @@ mod tests {
             messages: vec![ChatMessage {
                 role: "user".into(),
                 content: "hi".into(),
+                ..Default::default()
             }],
             stream: true,
             temperature: None,
             max_tokens: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
         };
         let r = EchoBackend
-            .stream(&req, &mut |d| deltas.push(d.to_string()))
+            .stream(&req, &mut |p| {
+                if let StreamPiece::Content(d) = p {
+                    deltas.push(d);
+                }
+            })
             .unwrap();
         assert_eq!(deltas, vec!["echo: hi".to_string()]);
         assert_eq!(r.content, "echo: hi");
+    }
+
+    #[test]
+    fn default_stream_impl_emits_tool_calls_for_a_non_streaming_backend() {
+        let req: ChatCompletionRequest = serde_json::from_str(
+            r#"{"model":"m","messages":[{"role":"user","content":"go"}],"stream":true}"#,
+        )
+        .unwrap();
+        let mut pieces = Vec::new();
+        let r = ToolCallingBackend
+            .stream(&req, &mut |p| pieces.push(p))
+            .unwrap();
+        assert_eq!(pieces.len(), 1);
+        match &pieces[0] {
+            StreamPiece::ToolCall {
+                index,
+                id,
+                name,
+                arguments,
+            } => {
+                assert_eq!(*index, 0);
+                assert_eq!(id.as_deref(), Some("call_abc"));
+                assert_eq!(name.as_deref(), Some("read_file"));
+                assert_eq!(arguments.as_deref(), Some(r#"{"path":"a.rs"}"#));
+            }
+            other => panic!("expected a tool-call piece, got {other:?}"),
+        }
+        assert_eq!(finish_reason_of(&r), "tool_calls");
     }
 
     #[test]
@@ -833,6 +1138,39 @@ mod tests {
         assert!(resp.contains("text/event-stream"));
         assert!(resp.contains("chat.completion.chunk"));
         assert!(resp.contains("echo: go"));
+        assert!(resp.trim_end().ends_with("data: [DONE]"));
+    }
+
+    #[test]
+    fn real_socket_streams_tool_call_deltas_and_reports_finish() {
+        let server = OpenAiServer::serve(
+            "127.0.0.1:0",
+            Arc::new(ToolCallingBackend),
+            Arc::new(StaticModels),
+        )
+        .unwrap();
+        let port = server.local_addr().unwrap().port();
+        let token = server.token().to_string();
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let reqbody = r#"{"model":"m","messages":[{"role":"user","content":"read a.rs"}],"stream":true,"tools":[{"type":"function","function":{"name":"read_file"}}]}"#;
+        let request = format!(
+            "POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\n\r\n{}",
+            token,
+            reqbody.len(),
+            reqbody
+        );
+        s.write_all(request.as_bytes()).unwrap();
+        let mut resp = String::new();
+        s.read_to_string(&mut resp).unwrap();
+        assert!(resp.contains("text/event-stream"), "got: {resp}");
+        // The tool call rides as a delta, not as content.
+        assert!(resp.contains("tool_calls"), "got: {resp}");
+        assert!(resp.contains("read_file"), "got: {resp}");
+        // …and the terminating frame carries the tool-calling finish reason.
+        assert!(
+            resp.contains("\"finish_reason\":\"tool_calls\""),
+            "got: {resp}"
+        );
         assert!(resp.trim_end().ends_with("data: [DONE]"));
     }
 

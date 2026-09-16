@@ -203,9 +203,9 @@ mod tests {
     fn a_bare_name_is_a_path_lookup_fallback_and_says_so_when_absent() {
         let dir = tmp("name");
         let exe = program(&dir, "myeditor");
-        let resolved = resolve_target(None, "myeditor", &[dir.clone()]).unwrap();
+        let resolved = resolve_target(None, "myeditor", std::slice::from_ref(&dir)).unwrap();
         assert_eq!(resolved, std::fs::canonicalize(&exe).unwrap());
-        let err = resolve_target(None, "no-such-program", &[dir.clone()]).unwrap_err();
+        let err = resolve_target(None, "no-such-program", std::slice::from_ref(&dir)).unwrap_err();
         assert!(err.to_string().contains("not on PATH"), "got: {err}");
         assert!(resolve_target(None, "   ", &[]).is_err());
         let _ = std::fs::remove_dir_all(&dir);

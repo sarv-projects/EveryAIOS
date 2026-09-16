@@ -13,6 +13,14 @@
 //! - UI → coordinator: the Tauri `agui_send` command writes an `agui/event`
 //!   notification to the sidecar; the coordinator dispatches it (e.g.
 //!   `interrupt_resolved` answers an outstanding AG-UI interrupt).
+//!
+//! **Build state (P11.5.11, deferred post-v1): the Rust/coordinator transport
+//! above is complete and tested, but there is no UI consumer yet.**
+//! `scripts/ipc-parity.mjs` reports `agui-event` as the one shell-emitted event
+//! nothing listens for, and both `agui_send` and `agui_listen` as commands the
+//! UI never invokes. Generative UI (H25) is the deferred feature that would
+//! consume them — so the emitter is real, the surface above it is not, and
+//! nothing should be described as "live" until the UI half lands.
 
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};

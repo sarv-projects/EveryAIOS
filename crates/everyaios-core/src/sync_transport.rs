@@ -465,7 +465,7 @@ mod tests {
         // client receives its reply. Wait briefly for that durable projection
         // instead of racing the worker thread.
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
-        while server.outcomes().len() < 1 && std::time::Instant::now() < deadline {
+        while server.outcomes().is_empty() && std::time::Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert_eq!(server.outcomes().len(), 1);
