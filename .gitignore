@@ -40,3 +40,7 @@ Thumbs.db
 # P50.3 sidecar resource: the bun-compiled coordinator binary (97MB, built
 # via `pnpm --filter @everyaios/coordinator build` + copy — never committed)
 src-tauri/bin/
+
+# Benchmark test artifacts
+.everyaios_bench/
+packages/coordinator/.everyaios_bench/
