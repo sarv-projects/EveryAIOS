@@ -45,7 +45,7 @@ import {
   worktreeSpecs,
   multiplex,
   foldFleetState,
-  type FleetEvent,
+  type FleetEventPayload,
 } from "./fleet";
 import {
   sanitizeToolResult,
@@ -69,7 +69,8 @@ describe("1. Agent Swapping & Dynamic Chief Registry", () => {
   test("Primary: OpenCode, Subagent: Grok Build", () => {
     // 1. User selects OpenCode as primary chief in picker
     chiefRegistry.setSessionPin("test-cowork-s1", "opencode");
-    const primary = resolveSessionChief({ sessionPin: chiefRegistry.sessionPin("test-cowork-s1") });
+    const pin = chiefRegistry.sessionPin("test-cowork-s1");
+    const primary = resolveSessionChief(pin !== undefined ? { sessionPin: pin } : {});
     expect(primary).toBe("opencode");
 
     // 2. OpenCode requests spawning Grok Build as subordinate subagent
@@ -105,7 +106,8 @@ describe("1. Agent Swapping & Dynamic Chief Registry", () => {
   test("Primary: Grok Build, Subagent: OpenCode", () => {
     // 1. User selects Grok Build as primary chief
     chiefRegistry.setSessionPin("test-cowork-s2", "grok");
-    const primary = resolveSessionChief({ sessionPin: chiefRegistry.sessionPin("test-cowork-s2") });
+    const pin = chiefRegistry.sessionPin("test-cowork-s2");
+    const primary = resolveSessionChief(pin !== undefined ? { sessionPin: pin } : {});
     expect(primary).toBe("grok");
 
     // 2. Grok Build delegates code refactoring to OpenCode subagent
@@ -265,13 +267,13 @@ describe("3. Multi-Agent Swarm Fleet Isolation & Event Multiplexing", () => {
       { agentId: "grok", task: "Task B", worktree: "/wt/2" },
     ];
 
-    function* agentAStream(): Generator<Omit<FleetEvent, "agent">> {
+    function* agentAStream(): Generator<FleetEventPayload> {
       yield { kind: "started", task: "Task A", worktree: "/wt/1" };
       yield { kind: "progress", text: "Analyzing AST" };
       yield { kind: "done", ok: true, summary: "Completed successfully" };
     }
 
-    function* agentBStream(): Generator<Omit<FleetEvent, "agent">> {
+    function* agentBStream(): Generator<FleetEventPayload> {
       yield { kind: "started", task: "Task B", worktree: "/wt/2" };
       yield { kind: "progress", text: "Executing test suite" };
       yield { kind: "done", ok: true, summary: "Tests passed" };

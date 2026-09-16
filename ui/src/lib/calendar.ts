@@ -4,53 +4,57 @@
 import { invoke } from "./tauri";
 import { bridgeCall } from "./runtime";
 
+/** Wire shape owned by everyaios-vault::CalendarRow. */
 export interface CalendarRow {
   id: string;
   name: string;
-  color?: string;
-  provider: string; // "local", "google", "ical", etc.
-  sync_token?: string;
+  color: string;
+  visible: boolean;
   created_at: number;
   updated_at: number;
 }
 
+/** Wire shape owned by everyaios-vault::CalendarEventRow. */
 export interface CalendarEventRow {
   id: string;
   calendar_id: string;
   title: string;
-  description?: string;
-  location?: string;
+  description: string;
   start_time: number;
   end_time: number;
   all_day: boolean;
-  recurrence_rule?: string;
-  metadata?: string;
+  rrule: string | null;
+  automation_id: string | null;
   created_at: number;
   updated_at: number;
 }
 
+// Preview-only fixtures. Native shell reads always come from SQLCipher and
+// return an empty list for a fresh vault; these values are never persisted.
 const DEMO_CALENDARS: CalendarRow[] = [
   {
-    id: "cal-default",
-    name: "Personal & AI Work",
-    color: "#3B82F6",
-    provider: "local",
-    created_at: Date.now() - 86400000,
-    updated_at: Date.now() - 86400000,
+    id: "cal-preview",
+    name: "Preview calendar",
+    color: "blue",
+    visible: true,
+    created_at: 0,
+    updated_at: 0,
   },
 ];
 
 const DEMO_EVENTS: CalendarEventRow[] = [
   {
-    id: "evt-001",
-    calendar_id: "cal-default",
-    title: "AI Swarm Codebase Review",
-    description: "Multi-agent swarm fleet analysis and test verification.",
-    start_time: Math.floor(Date.now() / 1000),
-    end_time: Math.floor(Date.now() / 1000) + 3600,
+    id: "evt-preview",
+    calendar_id: "cal-preview",
+    title: "Preview event",
+    description: "Preview-only event; not native runtime data.",
+    start_time: 0,
+    end_time: 3600,
     all_day: false,
-    created_at: Date.now() - 3600000,
-    updated_at: Date.now() - 3600000,
+    rrule: null,
+    automation_id: null,
+    created_at: 0,
+    updated_at: 0,
   },
 ];
 
@@ -85,11 +89,31 @@ export async function calendarDelete(id: string): Promise<boolean> {
   });
 }
 
-export async function calendarEventList(calendarId?: string): Promise<CalendarEventRow[]> {
+/** Exact argument names accepted by the native `calendar_event_list` command. */
+export function calendarEventListArgs(
+  calendarId?: string,
+  startTs?: number,
+  endTs?: number,
+): Record<string, string | number> {
+  const args: Record<string, string | number> = {};
+  if (calendarId !== undefined) args.calendar_id = calendarId;
+  if (startTs !== undefined) args.start_ts = startTs;
+  if (endTs !== undefined) args.end_ts = endTs;
+  return args;
+}
+
+export async function calendarEventList(
+  calendarId?: string,
+  startTs?: number,
+  endTs?: number,
+): Promise<CalendarEventRow[]> {
   return bridgeCall({
     operation: "calendar_event_list",
     live: async () => {
-      const out = (await invoke("calendar_event_list", { calendarId })) as {
+      const out = (await invoke(
+        "calendar_event_list",
+        calendarEventListArgs(calendarId, startTs, endTs),
+      )) as {
         events?: CalendarEventRow[];
       };
       return out.events ?? [];
