@@ -38,6 +38,31 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## 2026-09-16 — Multi-Agent Swarm Fleet, Failure Avoidance Store, Calendar Schema v8, and Context Mode Invariants
+
+**Category:** architecture + implementation; no capability rows added. **Affected:** `crates/everyaios-core/src/git_queue.rs`, `crates/everyaios-core/src/worktrees.rs`, `crates/everyaios-core/src/governor.rs`, `crates/everyaios-memory/src/avoid.rs`, `crates/everyaios-vault/src/lib.rs`, `src-tauri/src/calendar_cmds.rs`, `src-tauri/src/commands.rs`, `ui/src/lib/calendar.ts`, `packages/coordinator/src/prompt.ts`, `packages/coordinator/src/tools.ts`, `ui/src/lib/capabilities.ts`, `DESKTOP-APP-SPEC.md`, `ARCH/17-NATIVE-AGENT.md`, and `TODO.md`. Capability identity remains **166**; the live TODO count remains **1428 total = 1217 done + 211 open**.
+
+**Decisions & Implementation.**
+1. **Multi-Agent Swarm Fleet Isolation (`everyaios-core`):**
+   - **`GitOperationQueue` (`git_queue.rs`):** Mutex serialization of git write operations across concurrent subagents to prevent `.git/index.lock` contention and index corruption; automatic stale lock detection and purge (>5s threshold); non-blocking read-op passthrough. 3 unit tests.
+   - **`WorktreeManager` (`worktrees.rs`):** Isolated workspace management provisioning task directories under `.everyaios/worktrees/task-<id>`; disk space capacity enforcement (`WorktreeCap`, default 500MB headroom); initializes the standardized 3-file subagent blackboard protocol: `task_plan.md` (task goals and progress), `findings.md` (discovered insights and dependencies), and `receipts/<id>.json` (audit and effect receipts). 4 unit tests.
+   - **`ConcurrencyGovernor` (`governor.rs`):** Dynamic host resource-aware scheduling determining maximum concurrent active subagents based on CPU cores (1 worker per 2 physical cores, clamped [1, 32]) and available RAM (2GB per worker); automatic queuing and lifecycle tracking (`admit()`, `release()`). 3 unit tests.
+2. **Cognitive Failure Avoidance Store (`everyaios-memory`):**
+   - **`AvoidanceStore` (`avoid.rs`):** Negative constraint recording preventing repetitive agent failure loops. Captures failed tool calls, error categories (Syntax, Type, Network, Permission, Timeout, Logic, Resource), root-cause diagnoses, and negative instructions ("do NOT attempt X when Y"). Includes query retrieval filtering relevant avoidance rules into prompt context segments. 4 unit tests.
+3. **Calendar & AI Automations Engine (`everyaios-vault`, `src-tauri`, `ui`):**
+   - **SQLCipher Schema v8 (`lib.rs`):** Migration v8 creating `ui_calendars` (id, name, color, is_primary, sync_source, is_visible) and `ui_calendar_events` (id, calendar_id, title, description, location, start_time, end_time, is_all_day, rrule, status, attendees_json, reminders_json). Full CRUD round-trip tested.
+   - **Tauri IPC Commands (`calendar_cmds.rs`, `commands.rs`):** Exposed 6 IPC commands: `calendar_list`, `calendar_put`, `calendar_delete`, `calendar_event_list`, `calendar_event_put`, and `calendar_event_delete`. Registered in Tauri invoke handler and verified by `ipc-parity.mjs` (0 broken).
+   - **TypeScript Bridge (`ui/src/lib/calendar.ts`):** Typed IPC bridge functions for calendar and event lifecycle with full `bridgeCall` integration.
+4. **Context Engineering & Output Ceilings (`packages/coordinator`):**
+   - **Single Match & Context Mode Invariants (`prompt.ts`):** Exported `SINGLE_MATCH_EDIT_INVARIANT` (strict single-occurrence replacement constraint preventing corrupted edits) and `CONTEXT_MODE_SUMMARY_INVARIANT` (98% context reduction discipline).
+   - **Tool Payload Budgeting (`tools.ts`):** Enforced `MAX_TOOL_OUTPUT_CHARS = 51200` (50KB cap) with query refinement hints and line count indications, preventing runaway context consumption during file search and bash execution.
+5. **Session Capability Loadout (`ui/src/lib/capabilities.ts`):**
+   - Added `shared:fleet` and `shared:calendar` to `STANDARD_SHARED_CAPABILITIES` enabling explicit per-session activation of fleet isolation and calendar automation services.
+
+**Verification.** `cargo test -p everyaios-core` (666 passed), `cargo test -p everyaios-memory` (210 passed), `cargo test -p everyaios-vault` (140 passed). `node scripts/ipc-parity.mjs` (0 broken, 330 registered). `node scripts/check-doc-sync.mjs` (166 capabilities in sync, TODO header validated).
+
+---
+
 ## 2026-09-16 — Runtime/E2E evidence reconciliation and P66 source-slice update
 
 **Category:** documentation and delivery-status reconciliation; no product contract change and no capability identity change. This entry records the current source state after a targeted reread of the ACP/runtime plane, terminal plane, P50 release harnesses, workflows, TODO ledger, and relevant UI/theme surfaces. It does not replace packaged or platform acceptance evidence.
