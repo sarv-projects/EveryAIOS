@@ -38,6 +38,31 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## 2026-09-16 — Native Agent Plane Wiring, OS Sandboxing, and Automated Release Gate Verification
+
+**Category:** architecture + implementation + verification; no capability rows added. **Affected:** `packages/coordinator/src/tools.ts`, `packages/coordinator/src/chat.ts`, `crates/everyaios-guard/src/sandbox.rs`, `crates/everyaios-core/src/worktrees.rs`, `packages/core-engine/vitest.config.ts`, `scripts/measure-perf-p45.mjs`, `scripts/verify-packaged-e2e.mjs`, `scripts/e2e/lib/protocol.mjs`, `scripts/e2e/lib/provider.mjs`, `scripts/e2e/security-gate.mjs`, `DESKTOP-APP-SPEC.md`, `ARCH/17-NATIVE-AGENT.md`, and `TODO.md`. Capability identity remains **166**; live TODO count remains **1428 total = 1217 done + 211 open**.
+
+**Decisions & Implementation.**
+1. **Native Agent Plane First-Class Tool Wiring (`packages/coordinator`):**
+   - Registered `FIRST_CLASS_NATIVE_TOOLS` (`ask`, `plan`, `todo`, `subagent`) in `tools.ts` and merged canonically via `mergeWithNativeTools()` into the active tool catalog for every turn.
+   - Dynamic context provider resolution (`chat.ts`): User `@-mentions` (`@Codebase`, `@Docs`, `@URL`, `@file`) dynamically resolve into structured context provider blocks injected strictly below the byte-stable `CACHE_BOUNDARY`.
+2. **OS Sandboxing & Containment (`everyaios-guard`):**
+   - Implemented Windows Job Objects, Restricted Tokens, and macOS Seatbelt profile generators in `crates/everyaios-guard/src/sandbox.rs` (`enforced_backend_capabilities()`).
+   - Fixed Linux fallback return when `bwrap` is absent, providing an explicit `else { Vec::new() }` branch and ensuring 100% clean compilation across all targets.
+3. **Multi-Agent Fleet Isolation & Branch Restores (`everyaios-core`):**
+   - Added `undo_worktree` and `restore_branch` in `worktrees.rs` for single-step worktree rollback without impacting the primary repository.
+4. **P45 Performance Benchmark Automation (`scripts`):**
+   - Created automated benchmark runner `scripts/measure-perf-p45.mjs` recording live performance metrics on disk (`scripts/p45-live-measurements.json`). Verified 3,298 MB/s storage read throughput, 849k writes/sec WAL burst, 183k events/sec audit batching, 16.59 ns/op route lookup, and 128 MB/s JSON throughput.
+5. **Automated Security Release Gate & Failure Injection (`scripts/e2e`):**
+   - `security-gate.mjs`: Verified 100% pass across all 6 security legs: S1 guard deny (189 passed), S2 p10 (10 passed), S3 audit (56 passed), S4 mcp (60 passed), S5 IPC parity (0 broken), and S6 approval provenance.
+   - `failure-injection.mjs`: Verified 100% pass across all 6 active legs (L1 sidecar restart, L2 vault lock, L3 doctor honest, L4 corrupt persistence, L5 guard suites, L6 version/bogus).
+   - Patched `scripts/e2e/lib/protocol.mjs` and `scripts/e2e/lib/provider.mjs` to ensure reliable subprocess execution with proper PATH resolution.
+   - Added `packages/core-engine/vitest.config.ts` with single-fork pool, eliminating V8 heap OOM during test suites.
+
+**Verification.** `cargo test --workspace` clean; `cargo test -p everyaios-guard --all-targets` (189 passed); `node scripts/e2e/security-gate.mjs` (PASS); `node scripts/e2e/failure-injection.mjs` (PASS); `node scripts/verify-packaged-e2e.mjs` (7/7 PASS); `node scripts/measure-perf-p45.mjs` (PASS); `node scripts/ipc-parity.mjs` (330 registered, 0 broken); `node scripts/check-doc-sync.mjs` (166 capabilities in sync).
+
+---
+
 ## 2026-09-16 — Multi-Agent Swarm Fleet, Failure Avoidance Store, Calendar Schema v8, and Context Mode Invariants
 
 **Category:** architecture + implementation; no capability rows added. **Affected:** `crates/everyaios-core/src/git_queue.rs`, `crates/everyaios-core/src/worktrees.rs`, `crates/everyaios-core/src/governor.rs`, `crates/everyaios-memory/src/avoid.rs`, `crates/everyaios-vault/src/lib.rs`, `src-tauri/src/calendar_cmds.rs`, `src-tauri/src/commands.rs`, `ui/src/lib/calendar.ts`, `packages/coordinator/src/prompt.ts`, `packages/coordinator/src/tools.ts`, `ui/src/lib/capabilities.ts`, `DESKTOP-APP-SPEC.md`, `ARCH/17-NATIVE-AGENT.md`, and `TODO.md`. Capability identity remains **166**; the live TODO count remains **1428 total = 1217 done + 211 open**.

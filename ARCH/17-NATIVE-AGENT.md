@@ -243,21 +243,25 @@ understand → workspace preflight → plan → choose strategy
 
 **Inbuilt MCP catalog total: 51** — browser **37** · office **4** · memory **3** · search **2** · storage **5** (`everyaios_mcp::all_tools()`, grouped by `inbuilt_catalog()`, paginated per `ToolProfile`). Counts are stated once here; derive them from the crate in code and tests rather than repeating a magic number.
 
-### 17.4.3 Coordinator-side first-class tools (`packages/coordinator/src/first-class-tools.ts`)
+### 17.4.3 Coordinator-side first-class tools (`packages/coordinator/src/tools.ts`)
 
-These are the **model's own control tools**. They route to coordinator handlers, not to a native engine, and they are merged into the turn's tool list by `mergeFirstClassTools()` (currently written and **unhooked** — see §17.15).
+These are the **model's own control tools**. Implemented in `packages/coordinator/src/tools.ts` (`FIRST_CLASS_NATIVE_TOOLS`) and merged into every active turn via `mergeWithNativeTools()` in `packages/coordinator/src/chat.ts`.
 
 | id | family | readOnly | operation | risk | schema |
 |---|---|---|---|---|---|
-| `ask` | human | true | ask | R0 | `{ question, options?, reason? }` |
+| `ask` | human | true | ask | R0 | `{ question, options?, isMultiSelect?, reason? }` |
 | `plan` | human | true | plan | R0 | `{ goal, steps[] }` |
-| `subagent` | orchestration | false | spawn | R1 | `{ objective, isolation?, scope? }` |
+| `subagent` | orchestration | false | spawn | R1 | `{ objective, isolation?, scope?, role? }` |
 | `todo` | orchestration | false | todo | R0 | `{ items[] }` |
 
-**Contracts**
-- `ask` and `plan` are read-only and **wait for the human**; nothing executes until approved.
-- `subagent.isolation ∈ {worktree, sandbox, none}`; `scope` is the file/folder allow-list (empty = none).
-- `todo` renders the visible checklist; checked items persist in the trajectory.
+**Contracts & Execution Pipeline**
+- `ask` and `plan` are read-only and **wait for the human**; execution suspends until approved.
+- `subagent.isolation ∈ {worktree, sandbox, none}`; `scope` is the file/folder allow-list. Spawned subagents receive isolated task worktrees under `.everyaios/worktrees/task-<id>` with the standardized 3-file blackboard protocol (`task_plan.md`, `findings.md`, `receipts/<id>.json`).
+- `todo` renders the visible interactive checklist; checked items persist in turn trajectory.
+- **Dynamic Context Resolution**: User `@-mentions` (`@Codebase`, `@Docs`, `@URL`, `@file`) are dynamically resolved in `packages/coordinator/src/chat.ts` via `resolveMentions()` and injected as structured context provider blocks strictly below the byte-stable `CACHE_BOUNDARY`.
+- **Worktree Undo & Restore**: `crates/everyaios-core/src/worktrees.rs` provides `undo_worktree` and `restore_branch` for single-step worktree rollback without impacting the primary repository.
+- **Cognitive Failure Avoidance**: Failed tool calls capture negative constraints in `crates/everyaios-memory/src/avoid.rs` (`AvoidanceStore`), filtering negative rules into subsequent turns to prevent repetitive error loops.
+- **OS Sandboxing**: `crates/everyaios-guard/src/sandbox.rs` enforces Windows Job Objects / Restricted Tokens, macOS Seatbelt, and Linux bubblewrap process containment.
 
 ---
 

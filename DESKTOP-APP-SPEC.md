@@ -1290,12 +1290,15 @@ EveryAIOS runs two kinds of agent. **EveryAIOS Native** is a full harness that o
 2. Otherwise use the EveryAIOS shared capability.
 3. If both exist, the Chief chooses by quality · cost · permission · latency · context budget.
 
-**Boundaries that follow from the policy:**
+**Boundaries and subsystems that follow from the policy:**
 
 - EveryAIOS augments only capabilities reachable through the integrated runtime seam. A capability that exists solely inside a separate desktop GUI is **not** reachable and is never claimed.
 - One Rust implementation, two façades: a capability exposed to external agents as a small task-shaped surface (`office.edit`, `browser.operate`, `computer_use.act`, `workspace.map`) dispatches to the same service, Guard, and audit path as the native tool. Never a duplicate implementation.
-- Tool schemas have exactly one source of truth (`everyaios-core::tools::ToolRegistry`, served as `tool/list`). No second TypeScript catalog.
-- Sub-agents inherit **denies**, never escalated grants; delegation is summary-only and non-recursive (depth ≤ 2).
+- Tool schemas have exactly one source of truth (`everyaios-core::tools::ToolRegistry`, served as `tool/list`). First-class native tools (`ask`, `plan`, `todo`, `subagent`) are canonically merged into every active turn.
+- Sub-agents inherit **denies**, never escalated grants; delegation is summary-only and non-recursive (depth ≤ 2). Concurrent subagents execute in isolated task worktrees under `.everyaios/worktrees/task-<id>` with mutex-serialized git write operations (`GitOperationQueue`), 3-file blackboard protocols (`task_plan.md`, `findings.md`, `receipts/`), and single-turn branch undo/restore (`undo_worktree`).
+- Dynamic context providers: user `@-mentions` (`@Codebase`, `@Docs`, `@URL`, `@file`) are dynamically resolved into isolated context blocks injected below the `CACHE_BOUNDARY`.
+- Cognitive failure avoidance: execution failures record negative constraints in `everyaios-memory::AvoidanceStore`, preventing repetitive agent loops.
+- OS sandboxing: `everyaios-guard::sandbox` enforces Windows Job Objects and Restricted Tokens, macOS Seatbelt profiles, and Linux bubblewrap process containment.
 - The Chief's routing, context assembly, memory reasoning, verification, cost, recovery, and worker orchestration are native behavior, never model-callable tools.
 
 **Why Native can supersede narrow agents (product thesis, not a spec guarantee):** Native does not have to beat Codex at being Codex. It has to cover coding, research, computer use, documents, and long-running cowork in one durable Work, and to hire Codex/Claude/OpenCode as subordinate specialists. Everything else becomes a capability Native can *use* rather than *imitate*.
