@@ -8,9 +8,9 @@
 <p align="center"><strong>Every Model. Every Agent. Every Task. One Space.</strong></p>
 
 <p align="center">
-  One desktop cockpit for your daily work — talk through ideas, crunch spreadsheets, edit documents, automate browsers, control your desktop, and build software.<br/>
+  One desktop cockpit for your daily work — talk through ideas, crunch spreadsheets, edit documents, automate browsers, control your desktop, orchestrate multi-agent swarms, and build software.<br/>
   <strong>Run your favorite coding agents (Claude Code, OpenAI Codex, Google Antigravity, Cline, Aider, OpenCode, or our Native Agent).<br/>
-  Bring any AI model (Claude 3.7 Sonnet, OpenAI o3 / GPT-4o, DeepSeek-R1 / V3, Qwen 2.5 Coder, Gemini 2.0, or local offline AI via Ollama). Keep 100% of your data private.</strong>
+  Bring any AI model (GPT-6 Astra, Claude Fable 5.1 / Opus 5, Gemini 3.8 Flash, DeepSeek-V4.1-Flash / R1, Qwen3.8-Max, Meta Llama 4, or local offline AI via Ollama). Keep 100% of your data private.</strong>
 </p>
 
 <p align="center">
@@ -42,8 +42,8 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 
 | Feature | **EveryAIOS** | **ChatGPT / Claude Desktop** | **Cursor / Windsurf** | **Terminal Tools (Claude Code, Aider)** |
 | :--- | :---: | :---: | :---: | :---: |
-| **All-in-One: Chat + Cowork + Coding + Swarm** | ✅ **Yes (One Cockpit)** | ⚠️ **Chat-Centric**<br/>*(Limited MCP/canvas; no unified IDE, Excel engine, or swarm)* | ⚠️ **Code Editor Only**<br/>*(Agent Mode for coding; no Office/documents or general cowork)* | ⚠️ **Terminal Only**<br/>*(Headless CLI; no document viewers or visual interface)* |
-| **Bring Any AI Model You Want**<br/>*(Claude 3.7 Sonnet, OpenAI o3 / GPT-4o, DeepSeek-R1 / V3, Qwen 2.5 Coder, Gemini 2.0, Ollama)* | ✅ **Universal Freedom**<br/>*(100+ frontier & local models via BYOK or 100% offline with Ollama/MLX/vLLM)* | ❌ **Locked Walled Garden**<br/>*(Restricted to their own models only)* | ⚠️ **Curated Cloud Selection**<br/>*(Proprietary cloud models; limited local LLM support)* | ⚠️ **Limited / Complex**<br/>*(Claude Code is Anthropic-only; Aider requires manual terminal setup)* |
+| **All-in-One: Chat + Cowork + Coding + Swarm** | ✅ **Yes (One Cockpit)** | ⚠️ **Chat & Docs Centric**<br/>*(ChatGPT Work with Apps; Claude MCP + Cowork/Docs/Slides; no unified IDE or Excel engine)* | ⚠️ **Code Editor Only**<br/>*(Cursor Agent Mode / Composer; Windsurf Cascade flows; no Office/documents or general cowork)* | ⚠️ **Terminal Only**<br/>*(Headless CLI; no document viewers or visual interface)* |
+| **Bring Any AI Model You Want**<br/>*(GPT-6 Astra, Claude Fable 5.1 / Opus 5, Gemini 3.8 Flash, DeepSeek-V4.1-Flash / R1, Qwen3.8-Max, Llama 4, Ollama)* | ✅ **Universal Freedom**<br/>*(100+ frontier & local models via BYOK or 100% offline with Ollama/MLX/vLLM)* | ❌ **Locked Walled Garden**<br/>*(Restricted to their own models only)* | ⚠️ **Curated Cloud Selection**<br/>*(Proprietary cloud models; limited local LLM support)* | ⚠️ **Limited / Complex**<br/>*(Claude Code is Anthropic-only; Aider requires manual terminal setup)* |
 | **Host External Coding Agents**<br/>*(Claude Code, OpenAI Codex, Google Antigravity, Cline, Aider, OpenCode)* | ✅ **Run them all inside EveryAIOS**<br/>*(Native-first ACP agent hosting with zero capability degradation)* | ❌ **None**<br/>*(Cannot host external coding agents)* | ❌ **Locked to Editor Agent**<br/>*(Cannot run competing CLI agents)* | ⚠️ **Isolated CLIs**<br/>*(Separate terminal windows without unified app context)* |
 | **Multi-Agent Swarms & Fleet Isolation**<br/>*(Run 20–30 subagents concurrently without git collisions)* | ✅ **Dedicated Git Worktrees**<br/>*(Mutex `GitOperationQueue`, 3-file blackboards, concurrency governor)* | ❌ **None**<br/>*(Single turn loop)* | ❌ **None**<br/>*(Single composer/agent thread)* | ❌ **None**<br/>*(Single terminal process)* |
 | **Native Agent Tools & Dynamic Context**<br/>*(`ask`, `plan`, `todo`, `subagent`, `@Codebase`, `@Git`, `@Problems`)* | ✅ **First-Class Native Tools**<br/>*(Dynamic `@-mentions` injected below `CACHE_BOUNDARY`; 90% cost savings)* | ⚠️ **Basic Context**<br/>*(Flat attachment upload)* | ⚠️ **Editor Symbols**<br/>*(`@Files`, `@Codebase` cloud-indexed)* | ⚠️ **CLI Flags**<br/>*(Manual `/add` file lists)* |
@@ -82,7 +82,7 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 * **Cognitive Failure Avoidance:** The `AvoidanceStore` captures root causes from past execution failures and injects learned negative constraints into the prompt, preventing repetitive error loops.
 * **Free Deep Web Research:** Built-in tiered search cascade (SearXNG + DuckDuckGo) gathers fresh facts, cross-checks sources, and synthesizes cited reports without paid search API subscriptions.
 * **Cache-Affine Prompt Assembly:** Dynamic context is organized with byte-stable prefixes above a fixed `CACHE_BOUNDARY`, cutting your API token costs by up to 90% and making turns feel instantaneous.
-* **Dynamic Model Routing:** Automatically select the optimal model tier—routing simple queries to lightning-fast models (DeepSeek-V3, Claude 3.5 Haiku, Gemini 2.0 Flash) and deep engineering to frontier reasoning models (Claude 3.7 Sonnet, DeepSeek-R1, OpenAI o3, Qwen 2.5 Coder).
+* **Dynamic Model Routing:** Automatically select the optimal model tier—routing simple queries to lightning-fast models (DeepSeek-V4.1-Flash, Claude Haiku 4.5, Gemini 3.8 Flash) and deep engineering to frontier reasoning models (Claude Fable 5.1, Claude Opus 5, GPT-6 Astra, GPT-5.6 Sol, DeepSeek-R1, Qwen3.8-Max, Llama 4).
 
 ### 2. 📊 Cowork (Real Documents, Autonomous Browsing, Computer Use & Automations)
 * **Real Excel Spreadsheets:** Powered by the embedded IronCalc engine, EveryAIOS recalculates formulas across `.xlsx` workbooks, updates charts, and preserves cell formatting with 0 tokens spent on math.
@@ -108,8 +108,8 @@ Most people today juggle **3 to 5 separate AI tools**: a chat app for questions,
 
 You are never locked into a single AI provider:
 
-* **Cloud Frontier & Reasoning Models:** Anthropic (Claude 3.7 Sonnet hybrid reasoning & 3.5 Sonnet), OpenAI (o3, o3-mini, o1, GPT-4o), Google (Gemini 2.0 Pro & Flash).
-* **High-Speed, Global & Specialized Models:** DeepSeek (DeepSeek-R1 reasoning & DeepSeek-V3 671B MoE), Alibaba Qwen (Qwen 2.5 & Qwen 2.5-Coder 32B), Meta (Llama 3.3 70B), Mistral (Codestral, Mistral Large), Groq LPUs (ultra-fast inference), SiliconFlow, OpenRouter, and any OpenAI-compatible endpoint.
+* **Frontier Cloud & Reasoning Models:** OpenAI (GPT-6 Astra, GPT-5.6 Sol / Terra, GPT-4o), Anthropic (Claude Fable 5.1, Claude Mythos 5.1, Claude Opus 5, Claude Sonnet 5), Google (Gemini 3.8 Flash, Gemini 3.8 Live Extended Thinking, Gemini 3.1 Pro).
+* **High-Speed, Open Weights & Specialized Models:** DeepSeek (DeepSeek-V4.1-Flash MoE with 8x KV cache reduction, DeepSeek-R1, DeepSeek V4 Pro), Alibaba Qwen (Qwen3.8-Max, Qwen3.8-Flash-Next, Qwen3.8-27B, Qwen 2.5-Coder), Meta (Llama 4 Scout 109B & Maverick 400B, Muse Spark 1.3), Mistral (Mistral Large 2, Codestral), Groq LPUs (ultra-fast inference), SiliconFlow, OpenRouter, and any OpenAI-compatible endpoint.
 * **100% Private Offline Models:** Run models completely offline on your own hardware using **Ollama**, **LM Studio**, Apple Silicon **MLX**, or **vLLM / llama.cpp**. Zero data ever leaves your computer.
 * **Automatic Rate-Limit Protection:** Add backup API keys. If your primary key hits a rate limit, EveryAIOS switches to your backup key automatically so your work isn't interrupted.
 
@@ -173,8 +173,8 @@ cd src-tauri && cargo tauri dev
 EveryAIOS is engineered from the ground up as a native desktop platform rather than a simple web wrapper:
 
 ### 1. 🧠 Universal Model Freedom (Cloud & 100% Local Offline AI)
-- **Frontier Cloud & Reasoning Models:** Anthropic (Claude 3.7 Sonnet hybrid reasoning, 3.5 Sonnet & Haiku), OpenAI (o3, o3-mini, o1, GPT-4o), Google (Gemini 2.0 Pro & Flash).
-- **High-Speed & Specialized Open Weights:** DeepSeek (DeepSeek-R1 reasoning & DeepSeek-V3 MoE), Alibaba Qwen (Qwen 2.5 & 2.5-Coder 32B), Meta (Llama 3.3 70B), Mistral (Codestral, Large), Groq LPUs, and any OpenAI-compatible provider.
+- **Frontier Cloud & Reasoning Models:** OpenAI (GPT-6 Astra, GPT-5.6 Sol / Terra, GPT-4o), Anthropic (Claude Fable 5.1, Claude Mythos 5.1, Claude Opus 5, Claude Sonnet 5), Google (Gemini 3.8 Flash, Gemini 3.8 Live Extended Thinking, Gemini 3.1 Pro).
+- **High-Speed, Open Weights & Specialized Models:** DeepSeek (DeepSeek-V4.1-Flash MoE with 8x KV cache reduction, DeepSeek-R1, DeepSeek V4 Pro), Alibaba Qwen (Qwen3.8-Max, Qwen3.8-Flash-Next, Qwen3.8-27B, Qwen 2.5-Coder), Meta (Llama 4 Scout 109B & Maverick 400B, Muse Spark 1.3), Mistral (Mistral Large 2, Codestral), Groq LPUs, and any OpenAI-compatible provider.
 - **100% Private Offline Runtimes:** Native first-class integration with **Ollama**, **LM Studio**, **vLLM / llama.cpp**, and Apple Silicon **MLX**. Keep all prompts, files, and inference completely local.
 - **Automatic Key Pool Failover:** Configure multiple API keys per provider. If a key encounters rate limiting (429), EveryAIOS automatically fails over to a backup key without dropping the active session.
 
@@ -268,7 +268,7 @@ Yes! EveryAIOS is 100% free and open-source under the MIT and Apache-2.0 license
 <summary><strong>How is this different from paying $20/month for ChatGPT Plus or Claude Pro?</strong></summary>
 <br/>
 ChatGPT Plus and Claude Pro are single-provider web subscriptions:
-1. <strong>Single Model Lock-in:</strong> They restrict you to their own model family. With EveryAIOS, you can use Claude 3.7 Sonnet for writing, DeepSeek-R1 or Qwen 2.5 Coder for fast economical coding, OpenAI o3 for hard math, or Ollama for private offline work—all in the same session.
+1. <strong>Single Model Lock-in:</strong> They restrict you to their own model family. With EveryAIOS, you can use Claude Fable 5.1 / Opus 5 for writing and architecture, DeepSeek-V4.1-Flash or Qwen3.8-Max for fast economical coding, GPT-6 Astra for hard math and autonomous tasks, or Ollama for private offline work—all in the same session.
 2. <strong>Strict Hourly Limits:</strong> Hit your limit on Claude or ChatGPT, and you are locked out for hours. EveryAIOS lets you add backup keys and switch models instantly, so your work never stops.
 3. <strong>No Real Office Math:</strong> Web chatbots cannot run real Excel spreadsheets or preserve your formulas. EveryAIOS has a built-in local calculation engine.
 4. <strong>Privacy:</strong> Cloud chats store your conversations on their servers. EveryAIOS stores everything in an encrypted vault directly on your computer.
