@@ -332,7 +332,7 @@ Custom agents persist to the SQLite `agents` table (`id, name, icon, instruction
 | Security Auditor | Native | read + guard probes | all writes |
 | External Worker | Adapter | ACP session only | ecosystem control |
 
-### 17.6.4 Sub-agent orchestration contract (`everyaios-blueprint/src/subagent.rs`)
+### 17.6.4 Sub-agent orchestration contract (`everyaios-blueprint/src/subagent.rs`, `everyaios-core/src/worktrees.rs`)
 
 ```jsonc
 // SubAgentSpec
@@ -347,6 +347,16 @@ Custom agents persist to the SQLite `agents` table (`id, name, icon, instruction
 - Return = `SubAgentResult { task_id, summary, status, artifacts }` — **summary-only by construction** (no transcript field exists).
 - Messaging kinds: `peer_review | cross_check | request_sub_routine | handoff`, endpoint-validated.
 - Termination: `GoalMet | Timeout | MaxTurns | Aborted | Error`, each recorded on the audit timeline.
+
+#### Multi-Agent Swarm Fleet Isolation & Blackboards
+- **Worktree Isolation (`everyaios-core::worktrees`):** Parallel subagents execute inside isolated Git worktrees under `.everyaios/worktrees/task-<id>`, enforced by `WorktreeManager` with disk capacity validation (`WorktreeCap`, default 500MB headroom).
+- **Git Lock Serialization (`everyaios-core::git_queue`):** `GitOperationQueue` enforces write Mutex locking to prevent `.git/index.lock` collisions across concurrent subagents; automatically purges stale index locks older than 5s. Reads remain non-blocking.
+- **3-File Blackboard Protocol:** Subagents synchronize state without polluting parent context via three dedicated files in the worktree:
+  1. `task_plan.md`: subagent objective, assigned file boundaries, phase milestones, and progress status.
+  2. `findings.md`: discovered codebase insights, schemas, and shared dependencies.
+  3. `receipts/<id>.json`: effect and audit receipts.
+- **Dynamic Resource Governor (`everyaios-core::governor`):** `ConcurrencyGovernor` dynamically sizes active worker capacity based on host CPU cores (1 worker per 2 physical cores, clamped [1, 32]) and available RAM (2GB headroom per worker); surplus tasks queue until capacity is released.
+- **Cognitive Failure Avoidance (`everyaios-memory::avoid`):** `AvoidanceStore` captures failed tool executions, error classifications, root causes, and explicit negative constraints ("do NOT attempt X when Y") to prevent repetitive error cycles.
 
 ---
 
@@ -366,7 +376,9 @@ Custom agents persist to the SQLite `agents` table (`id, name, icon, instruction
 12   <user>              (current turn)
 ```
 
-**Invariants:** segments 1–7 byte-identical; tools sorted + capped; `assertAllLogged()` fails the turn closed (`context_not_logged`) if any model-visible block is absent from `ContextTrace`; tool output capped at 50 KB with a ref-handle + preview.
+**Invariants:** segments 1–7 byte-identical; tools sorted + capped; `assertAllLogged()` fails the turn closed (`context_not_logged`) if any model-visible block is absent from `ContextTrace`; tool output capped at 50 KB (`MAX_TOOL_OUTPUT_CHARS = 51200`) with query refinement hints and line count metrics, with a ref-handle + preview.
+- `SINGLE_MATCH_EDIT_INVARIANT`: strict single-occurrence match requirement before applying file replacements, preventing corrupted edits.
+- `CONTEXT_MODE_SUMMARY_INVARIANT`: 98% context reduction discipline summarizing raw tool outputs before LLM ingestion.
 
 **Routing:** task class → model role → provider/model, choosing among `reasoning | coding | cheap | research | vision | local`. Resolution loops **only over connected or keyless providers**; disconnected providers render as honest UI rows. Failover is **429-only** with key affinity; a 5xx retries the same key. Unsupported transports fail closed.
 
