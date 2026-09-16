@@ -118,6 +118,21 @@ impl WorktreeManager {
         Ok(())
     }
 
+    /// Revert all uncommitted or committed changes in a worktree branch back to the target ref.
+    pub fn undo_worktree(&mut self, lease: &WorktreeLease, target_ref: Option<&str>) -> Result<(), WorktreeError> {
+        let path_str = lease.path.to_string_lossy().to_string();
+        let target = target_ref.unwrap_or("HEAD~1");
+        self.git_queue.run_write(&["-C", &path_str, "reset", "--hard", target], None)?;
+        Ok(())
+    }
+
+    /// Restore a worktree branch from an existing checkpoint SHA.
+    pub fn restore_branch(&mut self, lease: &WorktreeLease, checkpoint_sha: &str) -> Result<(), WorktreeError> {
+        let path_str = lease.path.to_string_lossy().to_string();
+        self.git_queue.run_write(&["-C", &path_str, "checkout", "-B", &lease.branch_name, checkpoint_sha], None)?;
+        Ok(())
+    }
+
     /// Clean up and remove a worktree lease.
     pub fn release_worktree(&mut self, lease: &WorktreeLease) -> Result<(), WorktreeError> {
         let path_str = lease.path.to_string_lossy().to_string();
@@ -150,5 +165,20 @@ mod tests {
 
         assert_eq!(mgr.cap.max_gib, 8);
         assert_eq!(mgr.worktrees_dir, test_dir.join(".everyaios").join("worktrees"));
+    }
+
+    #[test]
+    fn test_worktree_lease_serialization() {
+        let lease = WorktreeLease {
+            task_id: "test-task-1".to_string(),
+            branch_name: "subtask/test-task-1".to_string(),
+            path: PathBuf::from("/tmp/wt/task-1"),
+            reserved_gib: 2,
+        };
+
+        let json = serde_json::to_string(&lease).expect("serialize lease");
+        let parsed: WorktreeLease = serde_json::from_str(&json).expect("deserialize lease");
+        assert_eq!(parsed.task_id, "test-task-1");
+        assert_eq!(parsed.reserved_gib, 2);
     }
 }
