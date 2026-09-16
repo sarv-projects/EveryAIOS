@@ -50,6 +50,7 @@
 
 pub mod abort;
 pub mod actr;
+pub mod avoid;
 #[cfg(test)]
 mod bench;
 pub mod bm25;
@@ -85,6 +86,7 @@ pub use actr::{
     activation, derive_queries, forget_sweep, is_protected, keyword_hits, recall_score, recency,
     Memory, RecallWeights, DEFAULT_IMPORTANCE_FLOOR,
 };
+pub use avoid::{AvoidRule, AvoidanceStore};
 pub use bm25::{
     fuse_signals, run_signals_parallel, tokenize, Bm25Doc, Bm25Index, Hit, SignalKind, SignalRank,
     SignalSource,

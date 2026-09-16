@@ -15,6 +15,7 @@ mod agent_cmds;
 mod artifact_cmds;
 mod boot;
 mod browser_cmds;
+mod calendar_cmds;
 mod catalog_cmds;
 mod cockpit_cmds;
 mod codeintel_cmds;

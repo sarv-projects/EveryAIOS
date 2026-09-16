@@ -11,7 +11,7 @@ export interface SessionCapabilityItem {
   id: string
   name: string
   description: string
-  category: 'office' | 'browser' | 'desktop' | 'search' | 'storage' | 'memory' | 'mcp' | 'skill' | 'connector'
+  category: 'office' | 'browser' | 'desktop' | 'search' | 'storage' | 'memory' | 'mcp' | 'skill' | 'connector' | 'fleet' | 'calendar'
   family: string
   nativeOrShared: 'native' | 'shared'
   enabled: boolean
@@ -94,6 +94,30 @@ export const STANDARD_SHARED_CAPABILITIES: SessionCapabilityItem[] = [
     description: 'Working, episodic, semantic, personal taste profile, and knowledge graph',
     category: 'memory',
     family: 'memory',
+    nativeOrShared: 'shared',
+    enabled: true,
+    requiresApproval: false,
+    appliesFrom: 'next_turn',
+    health: 'ready',
+  },
+  {
+    id: 'shared:fleet',
+    name: 'Multi-Agent Swarm Fleet',
+    description: 'Autonomous multi-worktree subagent delegation with GitOperationQueue synchronization',
+    category: 'fleet',
+    family: 'fleet',
+    nativeOrShared: 'shared',
+    enabled: true,
+    requiresApproval: true,
+    appliesFrom: 'next_turn',
+    health: 'ready',
+  },
+  {
+    id: 'shared:calendar',
+    name: 'Calendar & AI Automations',
+    description: 'Conversational event scheduling, RFC 5545 recurrence rules, background automations',
+    category: 'calendar',
+    family: 'calendar',
     nativeOrShared: 'shared',
     enabled: true,
     requiresApproval: false,

@@ -50,11 +50,36 @@ pub use tier::{
     TaskClass, TierConfig, TierDecision, TierMode, TierRole,
 };
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CalendarRow {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub visible: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CalendarEventRow {
+    pub id: String,
+    pub calendar_id: String,
+    pub title: String,
+    pub description: String,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub all_day: bool,
+    pub rrule: Option<String>,
+    pub automation_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
 
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 
 const INIT_SQL: &str = r#"
 PRAGMA journal_mode=WAL;
@@ -231,6 +256,32 @@ CREATE TABLE IF NOT EXISTS ui_sessions (
     payload    TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
+
+-- P71: UI Calendars & AI Scheduled Automations
+CREATE TABLE IF NOT EXISTS ui_calendars (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    color       TEXT NOT NULL DEFAULT 'blue',
+    visible     INTEGER NOT NULL DEFAULT 1,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ui_calendar_events (
+    id             TEXT PRIMARY KEY,
+    calendar_id    TEXT NOT NULL REFERENCES ui_calendars(id) ON DELETE CASCADE,
+    title          TEXT NOT NULL,
+    description    TEXT NOT NULL DEFAULT '',
+    start_time     INTEGER NOT NULL,
+    end_time       INTEGER NOT NULL,
+    all_day        INTEGER NOT NULL DEFAULT 0,
+    rrule          TEXT,
+    automation_id  TEXT,
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_cal ON ui_calendar_events(calendar_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON ui_calendar_events(start_time);
 "#;
 
 /// An open SQLCipher vault handle. Not `Clone` — ownership is the point.
@@ -340,6 +391,121 @@ impl Vault {
     pub fn delete_ui_session(&self, id: &str) -> Result<(), VaultError> {
         self.conn
             .execute("DELETE FROM ui_sessions WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    // ---- P71 UI Calendars & AI Scheduled Automations ----------------------
+
+    pub fn put_ui_calendar(&self, cal: &CalendarRow) -> Result<(), VaultError> {
+        self.conn.execute(
+            "INSERT INTO ui_calendars (id, name, color, visible, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, visible = excluded.visible, updated_at = excluded.updated_at",
+            rusqlite::params![cal.id, cal.name, cal.color, if cal.visible { 1 } else { 0 }, cal.created_at, now_ms()],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_ui_calendars(&self) -> Result<Vec<CalendarRow>, VaultError> {
+        let mut stmt = self.conn.prepare("SELECT id, name, color, visible, created_at, updated_at FROM ui_calendars ORDER BY created_at ASC")?;
+        let rows = stmt.query_map([], |r| {
+            Ok(CalendarRow {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                color: r.get(2)?,
+                visible: r.get::<_, i64>(3)? != 0,
+                created_at: r.get(4)?,
+                updated_at: r.get(5)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn delete_ui_calendar(&self, id: &str) -> Result<(), VaultError> {
+        self.conn.execute("DELETE FROM ui_calendars WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn put_ui_calendar_event(&self, event: &CalendarEventRow) -> Result<(), VaultError> {
+        self.conn.execute(
+            "INSERT INTO ui_calendar_events (id, calendar_id, title, description, start_time, end_time, all_day, rrule, automation_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+             ON CONFLICT(id) DO UPDATE SET title = excluded.title, description = excluded.description, start_time = excluded.start_time, end_time = excluded.end_time, all_day = excluded.all_day, rrule = excluded.rrule, automation_id = excluded.automation_id, updated_at = excluded.updated_at",
+            rusqlite::params![
+                event.id,
+                event.calendar_id,
+                event.title,
+                event.description,
+                event.start_time,
+                event.end_time,
+                if event.all_day { 1 } else { 0 },
+                event.rrule,
+                event.automation_id,
+                event.created_at,
+                now_ms(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_ui_calendar_events(&self, calendar_id: Option<&str>, start_ts: i64, end_ts: i64) -> Result<Vec<CalendarEventRow>, VaultError> {
+        let mut out = Vec::new();
+        if let Some(cal_id) = calendar_id {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, calendar_id, title, description, start_time, end_time, all_day, rrule, automation_id, created_at, updated_at
+                 FROM ui_calendar_events
+                 WHERE calendar_id = ?1 AND end_time >= ?2 AND start_time <= ?3
+                 ORDER BY start_time ASC",
+            )?;
+            let rows = stmt.query_map(rusqlite::params![cal_id, start_ts, end_ts], |r| {
+                Ok(CalendarEventRow {
+                    id: r.get(0)?,
+                    calendar_id: r.get(1)?,
+                    title: r.get(2)?,
+                    description: r.get(3)?,
+                    start_time: r.get(4)?,
+                    end_time: r.get(5)?,
+                    all_day: r.get::<_, i64>(6)? != 0,
+                    rrule: r.get(7)?,
+                    automation_id: r.get(8)?,
+                    created_at: r.get(9)?,
+                    updated_at: r.get(10)?,
+                })
+            })?;
+            for r in rows {
+                out.push(r?);
+            }
+        } else {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, calendar_id, title, description, start_time, end_time, all_day, rrule, automation_id, created_at, updated_at
+                 FROM ui_calendar_events
+                 WHERE end_time >= ?1 AND start_time <= ?2
+                 ORDER BY start_time ASC",
+            )?;
+            let rows = stmt.query_map(rusqlite::params![start_ts, end_ts], |r| {
+                Ok(CalendarEventRow {
+                    id: r.get(0)?,
+                    calendar_id: r.get(1)?,
+                    title: r.get(2)?,
+                    description: r.get(3)?,
+                    start_time: r.get(4)?,
+                    end_time: r.get(5)?,
+                    all_day: r.get::<_, i64>(6)? != 0,
+                    rrule: r.get(7)?,
+                    automation_id: r.get(8)?,
+                    created_at: r.get(9)?,
+                    updated_at: r.get(10)?,
+                })
+            })?;
+            for r in rows {
+                out.push(r?);
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn delete_ui_calendar_event(&self, id: &str) -> Result<(), VaultError> {
+        self.conn.execute("DELETE FROM ui_calendar_events WHERE id = ?1", [id])?;
         Ok(())
     }
 
@@ -657,7 +823,7 @@ mod tests {
 
         {
             let vault = Vault::open(&path, "test-key").expect("open");
-            assert!(vault.status().contains("schema v7"));
+            assert!(vault.status().contains("schema v8"));
             vault.register_key("anthropic", "key-1").unwrap();
             vault.register_key("anthropic", "key-2").unwrap();
             vault.register_key("openai", "key-3").unwrap();
@@ -676,6 +842,50 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_calendar_crud_roundtrip() {
+        let vault = Vault::open_in_memory("test-cal-key").expect("open");
+
+        let cal = CalendarRow {
+            id: "cal-work".into(),
+            name: "Work Calendar".into(),
+            color: "blue".into(),
+            visible: true,
+            created_at: 1000,
+            updated_at: 1000,
+        };
+        vault.put_ui_calendar(&cal).unwrap();
+
+        let cals = vault.list_ui_calendars().unwrap();
+        assert_eq!(cals.len(), 1);
+        assert_eq!(cals[0].name, "Work Calendar");
+
+        let event = CalendarEventRow {
+            id: "evt-1".into(),
+            calendar_id: "cal-work".into(),
+            title: "Sprint Standup".into(),
+            description: "Daily engineering sync".into(),
+            start_time: 2000,
+            end_time: 2500,
+            all_day: false,
+            rrule: Some("RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR".into()),
+            automation_id: None,
+            created_at: 1000,
+            updated_at: 1000,
+        };
+        vault.put_ui_calendar_event(&event).unwrap();
+
+        let events = vault.list_ui_calendar_events(Some("cal-work"), 1500, 3000).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].title, "Sprint Standup");
+
+        vault.delete_ui_calendar_event("evt-1").unwrap();
+        assert!(vault.list_ui_calendar_events(Some("cal-work"), 1500, 3000).unwrap().is_empty());
+
+        vault.delete_ui_calendar("cal-work").unwrap();
+        assert!(vault.list_ui_calendars().unwrap().is_empty());
     }
 
     /// P10.4 — SQLCipher vault is a portable byte file: the database is
@@ -832,7 +1042,7 @@ mod tests {
         // Reopen: version row must be bumped to the current schema.
         {
             let vault = Vault::open(&path, "test-key").expect("reopen");
-            assert!(vault.status().contains("schema v7"));
+            assert!(vault.status().contains("schema v8"));
             assert!(vault.ledger_count().unwrap() == 0);
         }
 
@@ -1157,7 +1367,7 @@ mod tests {
         // Opening migrates (adds the scope columns) and bumps the version.
         {
             let vault = Vault::open(&path, "mig-key").expect("open migrates legacy db");
-            assert!(vault.status().contains("schema v7"));
+            assert!(vault.status().contains("schema v8"));
             assert_eq!(vault.ledger_count().unwrap(), 1);
             // Legacy row reads back with empty scope — old rows stay valid.
             let unscoped = vault.usage_for_task("").unwrap();

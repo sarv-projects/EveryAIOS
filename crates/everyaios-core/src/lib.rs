@@ -36,6 +36,8 @@ pub mod execution;
 pub mod export;
 pub mod forge;
 pub mod git_commit;
+pub mod git_queue;
+pub mod governor;
 pub mod guard_service;
 pub mod hooks;
 pub mod hwfit;
@@ -87,7 +89,12 @@ pub mod widgets;
 pub mod work_gateway;
 pub mod worker_pool;
 pub mod worktree_cap;
+pub mod worktrees;
 pub mod wsl;
+
+pub use git_queue::{GitOperationQueue, GitQueueError};
+pub use governor::{ConcurrencyGovernor, GovernorConfig, SubagentTask, FleetTaskKind, FleetTaskStatus};
+pub use worktrees::{WorktreeError, WorktreeLease, WorktreeManager};
 
 pub use adapter::{exact_command_consent, is_install_script, Stage0Adapter};
 pub use automation_runtime::{
