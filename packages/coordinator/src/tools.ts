@@ -54,6 +54,133 @@ export interface OpenAIFunctionTool {
  */
 export const MAX_ACTIVE_TOOLS = 20;
 
+/**
+ * P64.1 / B11 — First-class Native Tools: ask, plan, todo, subagent.
+ * These are first-class native workflows integrated directly into the turn loop.
+ */
+export const FIRST_CLASS_NATIVE_TOOLS: ListedTool[] = [
+  {
+    id: "ask",
+    family: "native",
+    description:
+      "Ask the user an interactive question to clarify requirements, select between options, or request confirmation.",
+    readOnly: true,
+    operation: "read",
+    risk: "none",
+    argsSchema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The specific question or prompt to ask the user" },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional selectable choices for the user",
+        },
+        allowCustom: {
+          type: "boolean",
+          description: "Whether the user can provide a custom text input",
+        },
+      },
+      required: ["question"],
+    },
+  },
+  {
+    id: "plan",
+    family: "native",
+    description:
+      "Update or query the hierarchical execution plan and task DAG (state saved to task_plan.md).",
+    readOnly: false,
+    operation: "write",
+    risk: "low",
+    argsSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["create", "update_step", "view", "finish_step"],
+          description: "Planning action to take",
+        },
+        goal: { type: "string", description: "High level goal of the plan" },
+        stepId: { type: "string", description: "Step identifier when updating a specific step" },
+        status: {
+          type: "string",
+          enum: ["pending", "running", "completed", "failed", "skipped"],
+          description: "New step status",
+        },
+        notes: { type: "string", description: "Progress notes, findings, or blocking issues" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    id: "todo",
+    family: "native",
+    description: "Manage a lightweight checklist of tasks for the current turn or session.",
+    readOnly: false,
+    operation: "write",
+    risk: "low",
+    argsSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["add", "update", "list", "remove"], description: "Todo action" },
+        taskId: { type: "string", description: "Task identifier" },
+        title: { type: "string", description: "Task title/description" },
+        status: {
+          type: "string",
+          enum: ["pending", "in_progress", "completed", "cancelled"],
+          description: "Task status",
+        },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    id: "subagent",
+    family: "native",
+    description:
+      "Spawn an isolated subagent worker (inbuilt or external ACP agent) to execute a scoped subtask in a dedicated worktree or scratch space.",
+    readOnly: false,
+    operation: "write",
+    risk: "medium",
+    argsSchema: {
+      type: "object",
+      properties: {
+        agentId: {
+          type: "string",
+          description:
+            "Target agent id or specialization ('opencode', 'grok', 'inbuilt-coder', 'inbuilt-researcher')",
+        },
+        task: { type: "string", description: "Detailed task description and instructions for the subagent" },
+        worktreeBranch: {
+          type: "string",
+          description: "Optional dedicated branch/worktree name for filesystem isolation",
+        },
+        sharedCapabilities: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "EveryAIOS shared cowork capabilities to grant ('shared:office', 'shared:browser', 'shared:desktop', 'shared:calendar')",
+        },
+      },
+      required: ["agentId", "task"],
+    },
+  },
+];
+
+/**
+ * P64.1 — Merge catalog tools with first-class native tools without duplication.
+ */
+export function mergeWithNativeTools(catalog: ListedTool[]): ListedTool[] {
+  const existing = new Set(catalog.map((t) => t.id));
+  const merged = [...catalog];
+  for (const nativeTool of FIRST_CLASS_NATIVE_TOOLS) {
+    if (!existing.has(nativeTool.id)) {
+      merged.push(nativeTool);
+    }
+  }
+  return sortToolsStable(merged);
+}
+
 /** Stable id order — required for prompt-cache byte-stability (A9). */
 export function sortToolsStable(tools: ListedTool[]): ListedTool[] {
   return [...tools].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

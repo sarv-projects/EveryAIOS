@@ -31,12 +31,14 @@ import { buildDesktopSystemPrompt, CACHE_BOUNDARY, type PersonaId } from "./prom
 import { notifyAgui } from "./agui";
 import {
   listedToolsToOpenAI,
+  mergeWithNativeTools,
   resolveActiveTools,
   sortToolsStable,
   ToolExecutor,
   type ListedTool,
   type OpenAIFunctionTool,
 } from "./tools";
+import { resolveMentions } from "./context-providers";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
 import { chiefRegistry } from "./chief";
 import { recordObservation, currentObservations } from "./observations";
@@ -626,7 +628,8 @@ async function runInbuiltTurn(
   const injectedBlocks: { source: ContextSource; content: string }[] = [];
   if (toolExecutor) {
     try {
-      const listed: ListedTool[] = sortToolsStable(await toolExecutor.listTools());
+      const rawListed = await toolExecutor.listTools();
+      const listed: ListedTool[] = sortToolsStable(mergeWithNativeTools(rawListed));
       catalogIndex = listed.map((t) => t.id);
       const active = resolveActiveTools(listed, text);
       openaiTools = listedToolsToOpenAI(active);
@@ -738,6 +741,18 @@ async function runInbuiltTurn(
         contextTrace.record("tool_index", block);
         injectedBlocks.push({ source: "tool_index", content: block });
         system = injectBelowBoundary(system, block);
+      }
+      // P64.2 / C14: live @-mention resolution (@Codebase, @Docs, @URL, @file, @memory)
+      try {
+        const { payloads } = await resolveMentions(input.text);
+        for (const payload of payloads) {
+          const block = `<context_provider id="${payload.provider}" query="${payload.query}">\n${payload.content}\n</context_provider>`;
+          contextTrace.record("user", block);
+          injectedBlocks.push({ source: "user", content: block });
+          system = injectBelowBoundary(system, block);
+        }
+      } catch {
+        /* context provider resolution failure never blocks turn */
       }
       const userBlock = `<user>\n${input.text}\n</user>`;
       contextTrace.record("user", userBlock);

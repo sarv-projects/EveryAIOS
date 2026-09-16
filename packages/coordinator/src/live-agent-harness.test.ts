@@ -178,4 +178,42 @@ describe("Live Real-World Agent Harness Verification", () => {
       expect(isCapabilityEnabled(capId, null)).toBe(true);
     }
   });
+
+  test("OpenCode model verification confirms opencode/big-pickle zero-login model", async () => {
+    const proc = spawn("opencode", ["models"], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}` },
+    });
+
+    let stdout = "";
+    proc.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    const exitCode = await new Promise<number>((resolve) => {
+      proc.on("close", resolve);
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("opencode/big-pickle");
+  }, 15000);
+
+  test("Grok Build models command lists available execution tiers", async () => {
+    const proc = spawn("grok", ["models"], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}` },
+    });
+
+    let stdout = "";
+    proc.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    const exitCode = await new Promise<number>((resolve) => {
+      proc.on("close", resolve);
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("grok");
+  }, 15000);
 });

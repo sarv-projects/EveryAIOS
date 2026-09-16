@@ -61,13 +61,16 @@ export function worktreeSpecs(plan: FleetPlan): WorktreeSpec[] {
   }));
 }
 
+/** Event payload before the multiplexer adds the originating agent. */
+export type FleetEventPayload =
+  | { kind: "started"; task: string; worktree: string }
+  | { kind: "progress"; text: string }
+  | { kind: "tool"; tool: string }
+  | { kind: "done"; ok: boolean; summary: string }
+  | { kind: "error"; message: string };
+
 /** A typed event from one fleet member, tagged for the cockpit view. */
-export type FleetEvent =
-  | { agent: string; kind: "started"; task: string; worktree: string }
-  | { agent: string; kind: "progress"; text: string }
-  | { agent: string; kind: "tool"; tool: string }
-  | { agent: string; kind: "done"; ok: boolean; summary: string }
-  | { agent: string; kind: "error"; message: string };
+export type FleetEvent = FleetEventPayload & { agent: string };
 
 /**
  * Multiplex N per-agent event streams into one ordered feed. Deterministic
@@ -77,7 +80,7 @@ export type FleetEvent =
  */
 export function* multiplex(
   members: FleetMember[],
-  streams: Array<Generator<Omit<FleetEvent, "agent">>>,
+  streams: Array<Generator<FleetEventPayload>>,
 ): Generator<FleetEvent> {
   for (let i = 0; i < members.length; i++) {
     const member = members[i];

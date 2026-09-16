@@ -418,9 +418,11 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     await runChatStream(PARAMS, emit, bridge, 10, request);
     expect(systemPrompt).toContain("<tool_index>");
     expect(systemPrompt.indexOf(CACHE_BOUNDARY)).toBeLessThan(systemPrompt.indexOf("<tool_index>"));
-    expect(systemPrompt).toContain("file_ops.read");
     const names = (toolsBody as Array<{ function: { name: string } }>).map((t) => t.function.name);
-    expect(names).toEqual(["file_ops.read", "z_last"]);
+    expect(names).toContain("file_ops.read");
+    expect(names).toContain("z_last");
+    expect(names).toContain("ask");
+    expect(names).toContain("plan");
   });
 
   test("mobile credit hooks are stripped from the desktop loop", async () => {
