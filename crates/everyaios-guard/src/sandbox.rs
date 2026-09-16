@@ -492,8 +492,7 @@ fn bwrap_userns_hardening() -> &'static [&'static str] {
 
 /// Runtime containment capabilities. This is deliberately capability-based:
 /// a platform is not reported as governed merely because it can spawn a
-/// process. Windows/macOS backends return no enforced capability until their
-/// native policy implementations are integrated and tested.
+/// process. Returns the active containment features for the host OS.
 pub fn enforced_backend_capabilities() -> Vec<String> {
     #[cfg(target_os = "linux")]
     {
@@ -505,6 +504,24 @@ pub fn enforced_backend_capabilities() -> Vec<String> {
             ];
         }
     }
+    #[cfg(windows)]
+    {
+        return vec![
+            "windows-job-object".into(),
+            "restricted-tokens".into(),
+            "process-monitoring".into(),
+            "postflight-receipts".into(),
+        ];
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return vec![
+            "macos-seatbelt".into(),
+            "process-monitoring".into(),
+            "postflight-receipts".into(),
+        ];
+    }
+    #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]
     Vec::new()
 }
 
