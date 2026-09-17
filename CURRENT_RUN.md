@@ -1082,6 +1082,51 @@ source, not observed in a trace. `[UNVERIFIED]`
 
 ---
 
+## 2N. Master status map (2026-09-17) — the 208 open items, measured against call sites
+
+The waves above each measured one tier. This is the consolidated map, built the same way
+every time: read the code, look for **call sites** (not definitions, not `lib.rs`
+re-exports), and treat "the symbol exists" as different from "the code path runs it".
+Every row below is `[V]` **as a reading**; none is a passing gate (no toolchain — §2G).
+
+| Tier | Tracker says | Measured reality | Actionable now? |
+|---|---|---|---|
+| **1 — P64 native agent** | 7 open | **Mostly implemented.** P64.3 (repomap→prompt below boundary), P64.5 (edit ladder on the live `file_ops.edit` arm), P64.8 (`grow_from_task` from coordinator `plan.ts`), P64.9 (`FACADE_ROUTES`/`find_facade` from `everyaios-mcp`) are **done but marked not-done**. P64.6 + P64.7 exist but are **unwired** (no caller). P64.4 correctly `PARTIAL`; `derive_child_permissions` is dead. | **Wiring only** for 64.6/64.7 — needs a compiler |
+| **2 — P65/P66 settings** | 14 open | **Largely implemented.** P65.1–65.4 gates read as holding; P65.5 is genuinely `contract-only` (self-labelled); P65.6 envelope exists but reaches only 2 mutations; P65.7 audits every funnel mutation but hardcodes `HumanGesture` (**latent**, §2M); P66.5 done. | Panel migration blocked on the §2I vocabulary decision |
+| **3 — P68/P54 terminal** | 6 open | **P68.8 implemented** (`replayInto` + per-tab `seq` + honest truncation label); P54.4 splits implemented; `terminal_replay` registered. P54.7 remote backend + P54.8 shells-not-a-second-product genuinely open; P68.7 is Windows. | P54.7/54.8 small; **P68.7 is Windows-blocked** |
+| **4 — P59/P60/P57 CUA + swarm** | 30 open | **GENUINELY OPEN.** CUA *primitives* exist (`send_input`, `SendInput`/`win.rs`, `emergency_stop`) but the orchestration layer does not: `ScoutWorkerVerifier`, `scout`, `ComputerUseAction`, `locator_ladder`, `a11y_tree` are **absent from the entire repo**. P59.5–59.16 and P60.1–60.11 are real, unstarted work. | **Real work, but Rust-critical-path — needs a compiler** |
+| **5 — P50/P66 release qualification** | 21 open | **GENUINELY OPEN and hardware-blocked.** P50.5.8 needs Windows 11 + macOS Sonoma/Sequoia + Linux against `.msi`/`.dmg`/`.AppImage`; P50.2.1/2.2/2.5 are packaged click-through; P50.5.2/50.5.7 are `[PARTIAL]`. | **Not possible on this host** |
+
+### What this map changes
+1. **Tiers 1–3 are largely finished, not pending.** Four P64 items and P68.8 are implemented
+   while the tracker says otherwise. Re-implementing them would be pure waste, and the
+   *remaining* work there is small: wire P64.6/P64.7.
+2. **Tier 4 is the real remaining build** — and it is exactly where a compiler is
+   non-negotiable. `everyaios-core` is the coupling hub (§2A records the concentration risk),
+   and P59/P60 want to modify the execution/DAG paths. Writing that blind would be
+   irresponsible, so it was **not started**.
+3. **Tier 5 cannot be done here at all** — it is the Windows/macOS acceptance matrix already
+   marked at the top of §3.
+
+### The single unblocking action
+Everything above funnels into one thing: **a Rust toolchain**. It would (a) confirm or refute
+every `[UNVERIFIED]` Rust change from waves 4–7, (b) let the 13 dormant `settings_cmds` tests
+and the terminal/replay suites actually run, and (c) make it safe to wire P64.6/P64.7 and
+start Tier 4. `pnpm install` would additionally restore `tsc` and make the UI work verifiable.
+
+### Evidence actually executed
+- Absence sweep for the Tier-4 orchestration symbols across `crates/`, `src-tauri/src/`,
+  `packages/coordinator/src/`: `ScoutWorkerVerifier`, `scout`, `ComputerUseAction`,
+  `locator_ladder`, `a11y_tree` → **no matches anywhere** (the key distinction from Tiers 1–3,
+  where the symbols were present). `[V]`
+- Presence sweep for the CUA primitives → `send_input` (types/readiness/desktop_cmds),
+  `SendInput` (`platform/win.rs`), `emergency_stop` (desktop/lib.rs + desktop_cmds). `[V]`
+- Open-row extraction for P50.2/P50.5/P57/P59/P60 straight from `TODO.md` `[ ]` lines. `[V]`
+- `node scripts/check-doc-sync.mjs` → exit 0 · `node scripts/ipc-parity.mjs` → exit 0 ·
+  registered 341 · broken 0 · ghosts 60. `[V]`
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
