@@ -77,21 +77,21 @@ A built-in security layer reviews every potentially dangerous action before it r
 
 ## How it compares
 
-*As of September 2026 — after Anthropic launched Claude Cowork, Claude Docs, and Claude Slides.*
+*As of late 2026 — comparing the leading desktop agent platforms, developer CLIs, and AI editors:*
 
-| Feature | EveryAIOS | Claude Cowork (Sep 2026) |
-| :--- | :--- | :--- |
-| **AI models** | Any model — OpenAI, Anthropic, Gemini, DeepSeek, Qwen, local Ollama, custom endpoints | Anthropic Claude only |
-| **Your data location** | Your machine — SQLCipher encrypted vault, never leaves without your knowledge | Anthropic cloud servers |
-| **Agent choice** | Host any coding agent (Claude Code, Codex, Aider, etc.) — they keep their own tools | Single closed Anthropic agent |
-| **Spreadsheet engine** | Real IronCalc engine — 300+ Excel formulas, zero hallucination | Text generation only — no native formula recalculation |
-| **Document editing** | Surgical XML patch — preserves corporate templates, macros, VBA | Generates new markdown; loses existing formatting |
-| **Multi-agent parallel runs** | Up to 20–30 agents in isolated Git worktrees simultaneously | Single-session, linear execution |
-| **Browser automation** | Local tiered engine: Lightpanda + Chrome CDP + stealth scraping | Cloud-based remote browser |
-| **Desktop computer use** | Native OS control via Win32 / A11y tree — full local app access | Remote VM simulation |
-| **Background automations** | 24/7 cron daemon — runs when app is closed | Requires active session |
-| **Security governance** | 7-layer Guard-2: SSRF firewall, lexical sandbox, TTL approval tickets, Merkle audit | Platform-level cloud guardrails |
-| **Cost** | Free & open-source — pay only raw token costs (or \$0 with local models) | \$20–\$100+/month subscription |
+| Dimension | EveryAIOS | Claude (Desktop & Cowork) | OpenAI Codex / ChatGPT | Claude Code (CLI) | Cursor / Windsurf |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Primary Role** | **Universal Desktop OS & Agent Harness** | Knowledge work & conversational assistant | Developer workstation & coding agent | Terminal-first coding agent CLI | AI-first code editor (IDE) |
+| **Model Freedom & Privacy** | **100+ models + 100% offline** (Ollama, MLX, BYOK); AES-256 local vault | Anthropic Claude only; cloud-hosted data | OpenAI models only; cloud/hybrid execution | Anthropic Claude only; cloud inference | Curated cloud models + limited BYOK |
+| **External Agent Hosting** | **Yes** — hosts Claude Code, Codex, Aider, Cline via ACP stdio | ❌ None (closed Anthropic loop) | ❌ None (closed OpenAI loop) | N/A (runs as agent; hostable in EveryAIOS) | ❌ None (closed editor composer) |
+| **Multi-Agent Parallel Swarms** | **20–30 subagents** in isolated Git worktrees with 3-way merge | ❌ Single linear session | ⚠️ Background task execution (linear) | ❌ Single terminal loop | ❌ Single composer session |
+| **Office & Spreadsheet Engine** | **Native IronCalc 0.8.3** (300+ Excel formulas) + surgical OOXML patcher | Claude Docs & Slides (text/markdown; no formula DAG) | Scripted file generation (Python) | ❌ Code/text edits only | ❌ Code files only |
+| **Browser & Computer Use (CUA)** | **Tiered local browser** (Lightpanda + Chrome CDP) + Win32/A11y OS control | Cloud-rendered browser; remote VM preview | Cloud browsing tool; developer environment | CLI bash & web fetch tools | Basic web fetch / doc scraping |
+| **Background Automations** | **24/7 background cron daemon** (runs with window closed) | ❌ Active session only | ⚠️ CLI background tasks | ❌ Active terminal only | ❌ Active editor session only |
+| **Security & Governance** | **7-layer Guard-2**: zero-I/O SSRF firewall, diff cards, Merkle audit | Cloud safety filters & permissions | Sandbox execution & confirmation prompts | Terminal permission prompts (allow/ask/deny) | Standard IDE file permissions |
+| **Cost & Licensing** | **Free & open-source** (MIT/Apache-2.0); pay raw tokens or \$0 offline | \$20–\$100+/month subscription | \$20–\$30/month or API tokens | Anthropic API tokens or subscription | \$20/month subscription + usage |
+
+> 💡 **The Universal Harness Advantage:** EveryAIOS does not force you to choose. Because it acts as an open operating layer, you can run specialized developer tools like Claude Code or OpenAI Codex *inside* EveryAIOS. They retain 100% of their native prompts, tools, and reasoning, while gaining EveryAIOS's native superpowers: in-process Excel formula recalculation, surgical Word/PDF part-patching, local browser automation, 5-tier cognitive memory, and a 24/7 background daemon.
 
 ---
 
