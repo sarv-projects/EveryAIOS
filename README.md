@@ -54,6 +54,47 @@ A built-in security layer reviews every potentially dangerous action before it r
 
 ---
 
+## Capabilities at a glance
+
+| Capability | Details |
+| :--- | :--- |
+| **100+ AI models** | OpenAI, Anthropic, Google Gemini, DeepSeek, Qwen, Llama, and any OpenAI-compatible endpoint. Switch mid-session. |
+| **Fully offline** | Ollama, LM Studio, vLLM, llama.cpp, Apple MLX — zero network traffic when using local models. |
+| **Bring your own key** | Keys stay in an AES-256 encrypted local vault. Auto-rotates to a backup key on rate limits. |
+| **External agent hosting** | Run Claude Code, OpenAI Codex, Aider, Cline, Grok Build via open ACP stdio. They keep their own tools. |
+| **Multi-agent swarms** | Up to 20–30 parallel subagents in isolated Git worktrees, no file conflicts, automatic 3-way merge. |
+| **Real spreadsheet engine** | IronCalc 0.8.3 — 300+ Excel formulas recalculated natively in Rust. Zero hallucinated numbers. |
+| **Surgical document editing** | Word, PowerPoint, PDF — patches only the changed XML nodes, preserves formatting, macros, styles. |
+| **3-tier browser automation** | Lightpanda (fast headless) → stealth scraping → full Chrome CDP with 37 tools. All local. |
+| **Native desktop computer use** | Control real OS windows via accessibility tree + Win32 / macOS AX / Linux X11. Hardware emergency stop. |
+| **5-tier cognitive memory** | Working context → episodic logs → semantic search → knowledge graph → failure avoidance. Persists across sessions. |
+| **Background automations** | 5-field cron scheduler runs 24/7, even when the app window is closed. |
+| **Security review layer** | Every dangerous action gets a visual diff card and waits for your approval. Tamper-evident Merkle audit log. |
+| **51 governed tools** | Browser (37), Office (4), Memory (3), Search (2), Storage (5) — all in-process, zero IPC overhead. |
+| **12 cockpit screens + 19 side panels** | Chat, Projects, Files, Browser, Terminal, Office viewers, Guard dashboard, and more. |
+
+---
+
+## How it compares
+
+*As of September 2026 — after Anthropic launched Claude Cowork, Claude Docs, and Claude Slides.*
+
+| Feature | EveryAIOS | Claude Cowork (Sep 2026) |
+| :--- | :--- | :--- |
+| **AI models** | Any model — OpenAI, Anthropic, Gemini, DeepSeek, Qwen, local Ollama, custom endpoints | Anthropic Claude only |
+| **Your data location** | Your machine — SQLCipher encrypted vault, never leaves without your knowledge | Anthropic cloud servers |
+| **Agent choice** | Host any coding agent (Claude Code, Codex, Aider, etc.) — they keep their own tools | Single closed Anthropic agent |
+| **Spreadsheet engine** | Real IronCalc engine — 300+ Excel formulas, zero hallucination | Text generation only — no native formula recalculation |
+| **Document editing** | Surgical XML patch — preserves corporate templates, macros, VBA | Generates new markdown; loses existing formatting |
+| **Multi-agent parallel runs** | Up to 20–30 agents in isolated Git worktrees simultaneously | Single-session, linear execution |
+| **Browser automation** | Local tiered engine: Lightpanda + Chrome CDP + stealth scraping | Cloud-based remote browser |
+| **Desktop computer use** | Native OS control via Win32 / A11y tree — full local app access | Remote VM simulation |
+| **Background automations** | 24/7 cron daemon — runs when app is closed | Requires active session |
+| **Security governance** | 7-layer Guard-2: SSRF firewall, lexical sandbox, TTL approval tickets, Merkle audit | Platform-level cloud guardrails |
+| **Cost** | Free & open-source — pay only raw token costs (or \$0 with local models) | \$20–\$100+/month subscription |
+
+---
+
 ## 📦 Desktop Installers — Coming Soon
 
 We're putting the finishing touches on signed, auto-updating desktop installers.
