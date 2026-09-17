@@ -12,34 +12,41 @@
 
 ## 1. Active Goal
 
-**(Current, 2026-09-17 — 8 Full-Stack Modules Architecture Freeze & Universal Harness Positioning)**:
-- **Core Strategic Positioning**: Permanently freeze EveryAIOS as the "Switzerland of AI" universal agentic harness and desktop OS. Reject the proprietary coding agent trap (no competing against frontier research labs fine-tuning their own agent loops).
-- **8 Full-Stack Modules Packaged**: Entire app structured into 8 cohesive modules combining core logic and React 19 UI cockpit surfaces:
-  1. Universal Agent Harness & Swarm Orchestrator (`everyaios-acp`, `multirun.rs`, `worktrees.rs`, `chat.ts`, `chief.ts` ↔ UI `agents` screen, Chief dropdown, right-rail `diff`)
-  2. Model Gateway & Encrypted Keyring Vault (`everyaios-vault`, `catalog`, `broker.rs` ↔ UI `settings` Providers & Keys, `guard.html` unlock modal)
-  3. Unified Cockpit Shell & Context Compaction Engine (`prompt.ts`, `everyaios-engine`, `src-tauri` ↔ React 19 shell, `chat`, 19 right-rail viewports)
-  4. Governed MCP & Capability Marketplace (`everyaios-mcp`, `blueprint` ↔ UI `connectors` screen, tool scoping drawer)
-  5. Work-Native Primitives (Office, Browser, CUA) (`everyaios-office`/IronCalc 0.8.3, `everyaios-browser`, `everyaios-desktop` ↔ right-rails `office-xlsx`, `office-docx`, `office-pdf`, `browse`, `desktop`)
-  6. Durable Work & Cognitive 5-Tier Memory Subsystem (`everyaios-memory`/ACT-R, `storage`, `codeintel` ↔ UI `memory` screen, `projects`, `files`, right-rail `graph`)
-  7. Executive Automations & 24/7 Calendar Daemon (`scheduler.ts`, `automation_runtime.rs` ↔ UI `automations` screen, `calendar` screen, right-rail `terminal`)
-  8. Security Guard-2 & Merkle Audit Membrane (`everyaios-guard`, `everyaios-audit` ↔ UI `guard` screen, `activity` audit log viewer, Guard approval diff cards)
-- **Terminology Shift**: Replaced the ambiguous concept/word "capabilities" with **Modules**, **Submodules**, and **Functions** across specifications and matrices.
-- **Decoupling vs Coupling Test**: Formalized the 4-Question Coupling Test (State Lifespan, Fault Domain, Replacement Cadence, Authority Boundary).
-- **Claude Cowork Competitive Parity & Superiority**: Detailed competitive battlecard against Anthropic Claude Cowork (multi-agent swarms vs single agent, multi-provider BYOK vs single vendor, deterministic calculation vs hallucinated spreadsheets, tamper-evident audit vs closed telemetry, real OS CUA vs synthetic browser, open MCP ecosystem vs closed plugin directory).
-- **Specifications & Documentation Overhaul (Completed line-by-line)**:
-  - Overhauled `ARCH/00-INDEX.md`, `ARCH/01-SYSTEM-ARCHITECTURE.md`, `ARCH/02-MODULE-LAYOUT.md`, `ARCH/09-FEATURE-MATRIX.md`, `ARCH/17-NATIVE-AGENT.md`, `DESKTOP-APP-SPEC.md`, `TODO.md`.
-  - Updated `README.md`: 166 submodules badge, vendor-neutral external agent wording, full reorganization into the 8 Full-Stack Modules.
-  - Updated `TODO.md`: Line 1135 heading mapped to Module 5 Work-Native Primitives (all 1429 checkboxes intact).
-  - Updated `ARCH/16-CHAT-LOOP-RUST-PORT.md`: Declared de-prioritized/frozen following 2026-09-17 Architecture Freeze.
-  - Updated `COMPETITIVE-POSITIONING.md`: Added Section 5 Claude Cowork battlecard and Switzerland of AI positioning.
-  - Updated `ARCH/DIAGRAMS.md`: Aligned Diagram 1 system architecture topology with the 8 Full-Stack Modules.
-  - Updated headers of `ARCH/03`, `ARCH/04`, `ARCH/05`, `ARCH/06`, `ARCH/07`, `ARCH/08`, `ARCH/10`, `ARCH/11`, `ARCH/12`, `ARCH/13`, `ARCH/15` with explicit Full-Stack Module bindings.
-  - Removed obsolete `ARCH/14-SHOWUI-ALOHA-REFERENCE.md`.
-  - Machine verification: `node scripts/check-doc-sync.mjs` (166 IDs matched, 1429 checkboxes in sync, kernel gate clear), `node scripts/ipc-parity.mjs` (0 broken), `tsc --noEmit` (0 diagnostics).
+**(Current, 2026-09-17 — Enterprise MNC Master Test Cases Specification & Agent Skills Alignment)**:
+- **Enterprise MNC Master Test Cases Specification (`desktop_app/TEST-CASES.md`)**:
+  - Authored comprehensive ISO/IEC/IEEE 29119 & IEEE 829 compliant master test specification (83,869 bytes).
+  - Codified across **8 orthogonal testing dimensions**: (1) Unit & Algorithmic Correctness, (2) Subsystem & IPC Contract Parity, (3) Boundary, Stress & Resource Constraints, (4) Fault Injection, Chaos & Crash Recovery, (5) Security, Penetration & Sandbox Escapes, (6) UI/UX Craft & Accessibility (WCAG 2.2 AA), (7) Cross-Module Integration Suites, and (8) End-to-End Real-World Scenarios.
+  - Complete module-by-module testing matrix for all 8 Full-Stack Modules.
+  - 8 cross-module integration suites (`INT-01` through `INT-08`).
+  - **50 exhaustive, multi-step real-world end-to-end production use cases (`E2E-UC-01` through `E2E-UC-50`)** across 10 mission-critical enterprise categories:
+    1. Financial Engineering & IronCalc XLSX (`E2E-UC-01` to `05`)
+    2. Legal, Regulatory & OOXML Document Surgery (`E2E-UC-06` to `10`)
+    3. Multi-Agent Software Engineering & Git Worktrees (`E2E-UC-11` to `15`)
+    4. Autonomous Web Navigation & Stealth Scraping (`E2E-UC-16` to `20`)
+    5. Desktop Operating System Control & Legacy Software (`E2E-UC-21` to `25`)
+    6. Deep Web Research & Academic Synthesis (`E2E-UC-26` to `30`)
+    7. Executive Assistance & 24/7 Calendar Daemon (`E2E-UC-31` to `35`)
+    8. Cognitive Memory & AvoidanceStore Failure Immunity (`E2E-UC-36` to `40`)
+    9. Security Membrane, SSRF Netfloor & Merkle Audit (`E2E-UC-41` to `45`)
+    10. Disaster Recovery, Air-Gapped Offline & Vault Privacy (`E2E-UC-46` to `50`)
+- **Agent Skills & Personas Alignment (`.agents/`)**:
+  - Aligned all 10 domain skills in `.agents/skills/` (`architecture`, `ai-systems`, `typescript-tauri`, `rust-systems`, `office-documents`, `browser-computer-use`, `security`, `testing-verification`, `performance`, `ui-ux`) with the 8 Full-Stack Modules, Universal Harness ("Switzerland of AI"), and strict vendor-neutral protocol.
+  - Aligned all 9 agent persona definitions in `.agents/agents/` (`everyaios-lead.ts`, `everyaios-architect.ts`, `everyaios-verifier.ts`, `everyaios-code-tester.ts`, `everyaios-security-reviewer.ts`, `everyaios-security-tester.ts`, `everyaios-ui-craft.ts`, `everyaios-user-tester.ts`, `everyaios-performance-reviewer.ts`).
+  - Enforced strict **Vendor-Neutral Rule** (scrubbed all mentions of AI tool or agent brand names from codebase descriptions and prompts).
 
 ---
 
 ## 2. Where We Stopped (Latest Progress)
+- **Completed Deliverables**:
+  - `desktop_app/TEST-CASES.md`: Full 83KB specification with all 8 modules, 8 cross-module integration suites, and 50 E2E production use cases.
+  - `.agents/skills/`: All 10 skills rewritten and verified.
+  - `.agents/agents/`: All 9 agent definitions rewritten and verified.
+  - `desktop_app/SPEC-CHANGELOG.md`: Added release entry for 2026-09-17.
+- **Verification Evidence (All Passed)**:
+  - `node scripts/check-doc-sync.mjs` → **exit 0** (166 capabilities in sync, 1429 checkboxes intact, kernel gate clear).
+  - `node scripts/ipc-parity.mjs` → **exit 0** (321 commands registered).
+  - `ui/node_modules/.bin/tsc --noEmit -p tsconfig.json` → **exit 0** (0 type errors).
+  - `clean-profile-boot-check.mjs` → PASS / SKIP as expected without pre-built debug binary.
 - **Current session reconnaissance (read-only, re-measured 2026-09-16):** `desktop_app` only. True scale measured with `git ls-files`: **1,346 tracked files / 366,004 lines** (`rs` 490 files/185,969 lines · `ts` 425/62,625 · `tsx` 144/40,932 · `md` 136/24,283 · `json` 40/24,348 · `mjs` 14/2,081 · `css` 1/712), plus 21 ARCH docs (00–17 + DIAGRAMS + 2 ADR), 93 RESEARCH docs, 47 `src-tauri` files, 141 UI component files, 331 `#[tauri::command]` functions, 2,764 Rust `#[test]` fns, 27 Rust integration-test files, and 134 TS/TSX test files. (Previous entry said 1,331/361,083 and "310 test files" — superseded by this measurement.)
 - **Fully or substantially read this session:** all 10 `.agents/skills/*/SKILL.md`; root `AGENTS.md`; `README.md`; `package.json`/`pnpm-workspace.yaml`/`tsconfig.json`/`capabilities.yaml`/`.pre-commit-config.yaml`; all 22 crate `Cargo.toml`s + workspace manifest; all 11 package `package.json`s; `tauri.conf.json`; `ARCH/00`–`ARCH/17`, `DIAGRAMS.md`, `ARCH/ADR/0001`+`0002`; `TODO.md`; substantial portions of `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`, `capabilities.yaml`; `src-tauri/src/{lib,state,commands,catalog_cmds,acp_cmds}.rs`; every crate's `lib.rs` module map; `crates/everyaios-core/src/{tools,guard_service,execution}.rs`; `crates/everyaios-guard/src/sandbox.rs`; `crates/everyaios-audit/src/session_log.rs`; `crates/everyaios-memory/src/compaction.rs`; `crates/everyaios-vault/src/broker.rs` (partial); `packages/coordinator/src/{index,chat,plan,tools,router}.ts`; `packages/core-ai/src/{chat/system-prompt,context/tiered-compaction}.ts`; `packages/core-tools/src/{permission-gate,trust-ladder}.ts`; `ui/src/{main,App}.tsx`, `ui/src/lib/{bridge,runtime,tauri}.ts`, `ui/src/lib/store.ts` (partial, 450/2947).
 - **Core-code map pass (this wave):** extracted the module-doc header + line count of **every** `.rs`, `.ts` and `.tsx` file in the repo (from each file's own `//!` / leading block comment) to build a verified map, then read in full: `crates/everyaios-ipc/src/{lib,frame,message,channel,handle,budget,socket}.rs` (the whole process contract), `crates/everyaios-types/src/lib.rs`, `crates/everyaios-core/src/{lib,version,capability_manifest,adapter}.rs`, `crates/everyaios-guard/src/{lib,sandbox}.rs`, `crates/everyaios-audit/src/{lib,merkle,session_log}.rs`, `crates/everyaios-memory/src/compaction.rs`, `crates/everyaios-acp/src/acp_cmds`-adjacent domain, `src-tauri/src/{commands,catalog_cmds}.rs`; plus windows of `everyaios-core/src/{chat,guard_service,tools,execution}.rs`, `everyaios-vault/src/broker.rs`, `packages/coordinator/src/{chat,plan,tools,router,index}.ts`, `packages/core-ai/src/{chat/system-prompt,context/tiered-compaction}.ts`, `packages/core-tools/src/{permission-gate,trust-ladder}.ts`.
