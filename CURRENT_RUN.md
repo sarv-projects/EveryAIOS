@@ -12,27 +12,27 @@
 
 ## 1. Active Goal
 
-**(Current, 2026-09-17 — README complete rewrite + full "Switzerland of AI" removal)**:
+**(Current, 2026-09-17 — README complete rewrite + full "Switzerland of AI" removal + expanded 2026 multi-tool comparison matrix)**:
 
 **COMPLETED THIS SESSION:**
-1. **README.md — Complete Human-Friendly Rewrite** (`fa2a491`):
+1. **README.md — Complete Human-Friendly Rewrite & 2026 Multi-Tool Matrix** (`fa2a491`, `ba83ab2`, `532a8bb`):
    - Removed all ASCII box diagrams, competitive bashing, and engineering-heavy architecture sections from the top.
-   - New structure: Beautiful casual intro → What can you do with it → Installer status → Run from source → Plain-English module table → Architecture in a `<details>` dropdown → FAQ in `<details>` dropdowns at the bottom.
-   - No competitor comparisons in the main body. No ASCII art. No "we are better than X" tables.
+   - Flow: Beautiful casual intro → "What can you actually do with it?" → "Capabilities at a glance" (14 key dimensions) → "How it compares" (expanded late-2026 matrix across EveryAIOS, Claude Desktop & Cowork, OpenAI Codex / ChatGPT, Claude Code CLI, and Cursor / Windsurf) → "The Universal Harness Advantage" note → Installer status → Run from source → Plain-English module table → Architecture in `<details>` dropdown → 10 FAQ dropdowns.
+   - Objective, factual, respectful comparison showing EveryAIOS's unique role as a host and desktop operating harness.
 2. **"Switzerland of AI" — Removed from ALL docs**:
    - `ARCH/00-INDEX.md`, `ARCH/01-SYSTEM-ARCHITECTURE.md`, `ARCH/02-MODULE-LAYOUT.md`, `ARCH/16-CHAT-LOOP-RUST-PORT.md`, `ARCH/17-NATIVE-AGENT.md` — phrase stripped, substance preserved.
    - `DESKTOP-APP-SPEC.md` lines 81 and 91 — phrase stripped.
    - `SPEC-CHANGELOG.md` lines 23 and 43 — phrase stripped.
-   - `README.md` and `TEST-CASES.md` — already done in prior session.
+   - `README.md` and `TEST-CASES.md` — stripped.
    - `COMPETITIVE-POSITIONING.md` — intentionally untouched (internal strategic doc, not public surface).
 3. **Verification**: `node scripts/check-doc-sync.mjs` → exit 0 (166 capabilities, 1429 checkboxes, kernel gate clear).
-4. **Committed & pushed**: `fa2a491` → `origin/main`.
+4. **Committed & pushed**: `532a8bb` → `origin/main`.
 
 ---
 
 ## 2. Where We Stopped (Latest Progress)
 - **Completed Deliverables**:
-  - `desktop_app/README.md`: Completely rewritten. Human-readable intro. Architecture in dropdowns. FAQ at the bottom. No competitor bashing. No ASCII art. Committed as `fa2a491`.
+  - `desktop_app/README.md`: Completely rewritten. Human-readable intro. Expanded 2026 competitor matrix covering Claude (Desktop & Cowork), OpenAI Codex / ChatGPT, Claude Code, Cursor/Windsurf. Architecture in dropdowns. FAQ at the bottom. Committed as `532a8bb`.
   - `desktop_app/TEST-CASES.md`: Full 83KB specification with all 8 modules, 8 cross-module integration suites, and 50 E2E production use cases.
   - `ARCH/00-INDEX.md`, `ARCH/01`, `ARCH/02`, `ARCH/16`, `ARCH/17`: "Switzerland of AI" stripped from all.
   - `DESKTOP-APP-SPEC.md`: "Switzerland of AI" stripped from lines 81 and 91.
