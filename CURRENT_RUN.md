@@ -677,6 +677,29 @@ from the UI, and would have **failed** `tests/registration_sync.rs` — which wa
    Settings surfaces still read their own libs (`lib/providers`, `lib/scheduler`, `lib/mcp`,
    `lib/acp`). `settings.ts` is the typed seam they should migrate onto; none was rewritten
    in this wave, because doing so without a type-checker is not a verifiable change. `[CODE]`
+4. **OPEN DECISION — `ScheduleSettings` cannot reproduce what the schedules panel shows.**
+   `src-tauri/src/settings_cmds.rs::schedule_settings_for` maps `target` from `job.sessionId`,
+   and the struct carries **no `name`** and **no run count** (only `nextRunAt`/`lastRunAt`).
+   But `ui/src/components/panels/schedules-section.tsx` renders `job.name` (the human label)
+   and `` `${job.runs} runs` ``. So migrating P65.4 onto `settings_schedules_list()` **as the
+   struct stands today would silently drop the schedule's name and run count from Settings**.
+   This was deliberately **not** patched, because §17.12 freezes the canonical type names and
+   adding fields to `ScheduleSettings` is a contract change that belongs to the §17.12 owner —
+   not a mechanical gap to fill on a guess while no Rust toolchain is available to compile it.
+   Two ways forward, both one-file: (a) add `name`/`runs` to `ScheduleSettings` and to the
+   `§17.12.2` block; or (b) keep the name in a side-lookup the panel already has and accept
+   the read model is deliberately identity-only. **Needs an owner decision.** `[V]`
+5. **§17.12.2 is a baseline, not a ceiling — the implementation already extends it.**
+   `AgentSettings` in Rust carries `location` (§17.12.4), `sessionLoadout` (§17.12.5) and
+   two binding extras (`keyPresent`, `refusal`) that the §17.12.2 listing does not show.
+   So "frozen names" has in practice meant frozen *names*, with later subsections adding
+   fields. That precedent is the reason finding 4 is a judgement call rather than an
+   obvious violation. `[CODE]`
+6. **`amber` must not be swept during any future P66.5 pass.** `globals.css` maps
+   `--color-amber-500: hsl(var(--warning))`, and real UI depends on that: `schedules-section`
+   renders the "paused" state as amber. A global orange→blue find-and-replace would have
+   turned a genuine warning indicator into brand blue. The correct seam is the alias block
+   (lines 49–54), which is already correct. `[V]`
 
 ---
 
