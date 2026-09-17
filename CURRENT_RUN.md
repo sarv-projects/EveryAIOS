@@ -1519,12 +1519,97 @@ the other half — which is exactly what `p64-lane.test.ts` did. **The remaining
 
 ---
 
+## 2U. Implementation wave 16 (2026-09-17) — closing the harness gap, and P66.5
+## finished at the source level
+
+### 2U.1 The test that could not have caught waves 14–15
+The lane's tests called the RPC **helpers** directly (`skill_rpc(...)`,
+`codeintel_rpc(...)`). A helper-level test cannot tell "the relay arm is mounted"
+from "the helper works" — which is precisely how three methods sat behind the
+catch-all with every test green.
+
+`relay_dispatches_native_plane_requests` now pushes **real JSON-RPC frames**
+through `ChatRelay::spawn()` and asserts the replies the coordinator receives,
+for `codeintel/repomap`, `skill/grow`, `subagent/spawn`, `execution/begin`,
+`execution/record_edit` and `execution/record_preflight`. It is an interactive
+client (it reads the execution id back out of the `begin` ack, because a receipt
+can only target an execution that really exists) and it pins the **Guard-2
+refusals** too: a ticketless edit and an unknown execution must both error.
+
+| Method | Assertion |
+|---|---|
+| `codeintel/repomap` | a real tag for `alpha` over a temp workspace, in the `symbol/kind/file/line/rank` wire shape |
+| `skill/grow` | `ok:true` **and** `SKILL.md` exists on disk under the temp store |
+| `subagent/spawn` | `task_id` + `status:"running"` — an admission, never a fabricated `done` |
+| `execution/record_edit` | refused with no ticket; refused for an unknown execution; attaches with a real one |
+| `execution/record_preflight` | records `passed:true` |
+
+**Test isolation had to be fixed first.** `skill_rpc` built its own `SkillStore`
+from `SkillStore::default_home()` on every call — so it wrote into the
+developer's **real `~/.everyaios/skills/`** and could not be isolated. It is now
+a relay field like `scheduler`, which is what made the frame test possible.
+
+### 2U.2 A masked error, now surfaced
+`dispatchSubAgent` caught every spawn failure and rethrew a generic *"native
+runtime not wired"*. With the handler now mounted that catch swallowed the
+accounting policy's own reasons (depth / concurrency / total limits), turning an
+actionable refusal into a misleading diagnosis. The catch preserves a real
+`Error`, matching the guard pre-flight catch directly above it in the same file.
+
+### 2U.3 P66.5 — the source-level migration is now done
+The theme already aliased `orange-500/600` onto `--brand`, but **every other
+shade** of `orange-*`, `amber-*` and `yellow-*` still resolved to the retired
+orange palette — so those surfaces ignored the accent chosen in Settings.
+
+- **1,014 occurrences across 84 files** renamed to the token each one means.
+- `orange-*` → `brand` / `brand-hover` (it was only ever the accent).
+- `amber-*` / `yellow-*` → `warning`. **Kept separate on purpose**: amber only
+  ever marked caution, permission and degraded states (`permission_required`,
+  `driver_missing`, `app_unsupported`, runtime not-live, external-write), and
+  mapping those to the accent would have been exactly the trade the project's own
+  non-goal at `TODO.md:2325` forbids — *"no orange brand migration by replacing
+  semantic state meaning with decoration."*
+- First-class `brand`, `brand-hover`, `warning`, `success`, `danger`, `info`
+utilities added; the legacy families stay mapped as a back-compat net so an old
+class name cannot reach the retired palette.
+- **Dark-mode defect fixed on the way:** `--success` / `--warning` / `--danger` /
+  `--info` were defined in `:root` **only** — `.dark` never overrode them, so
+  `text-warning` and `text-success` rendered at light-canvas lightness on the
+  `#1A1917` surface. They now carry dark values.
+
+### Evidence (wave 16)
+| Gate | Result |
+|---|---|
+| `everyaios-core` `cargo test --lib` | **701 passed / 0 failed** |
+| `crates` `cargo test --workspace` | **2592 passed / 0 failed / 23 ignored** |
+| `crates` clippy `-D warnings` · `fmt --check` | **exit 0 · 0 diffs** |
+| `packages/coordinator` `tsc` · `bun test` | **0 errors · 25/25** |
+| `ui` `tsc` · `bun test` | **0 errors · 328/328** |
+| `ui` vite build | **exit 0** |
+| retired `orange|amber|yellow-<shade>` in `ui/src` | **0** (only the documented alias table in `globals.css`) |
+| chroma-bearing literal in the orange/amber/yellow hue band | **0** in the built CSS |
+| every renamed utility emits CSS in the bundle | **all present** |
+| `check-doc-sync.mjs` · `ipc-parity.mjs` | **exit 0 · exit 0** |
+
+**Still open on P66.5** (the checkbox stays open): global **visual/contrast**
+acceptance across the 12 center views and 19 viewports, keyboard coverage, and
+first-paint accent restoration. Those need a display, not a compiler.
+
+### Correction carried forward
+The `2P` header said "Rust is verified". It is — but the first full `src-tauri`
+build then found **10 defects in `settings_cmds.rs`** that no amount of reading
+had surfaced. **Compiled ≠ correct, and uncompiled is not evidence.**
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
 >
 > Everything below requires a **Windows host** or a Windows target build. This
-> session ran on Linux with no Rust toolchain, so none of it was attempted.
+> session ran on Linux; the Rust toolchain is now installed and the full
+> crate/`src-tauri` suites run green locally (§2P, §2R), but no Windows target
+> was compiled or run, so none of it was attempted.
 > These are **not** bugs and **not** blocked on code — they are blocked on the
 > environment. Each stays `unverified` until a real Windows acceptance record
 > exists (the readiness contract makes an unverifiable implementation worse than
