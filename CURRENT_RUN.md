@@ -12,40 +12,33 @@
 
 ## 1. Active Goal
 
-**(Current, 2026-09-17 — Enterprise MNC Master Test Cases Specification, Agent Skills Alignment & README Professionalization)**:
-- **Removal of "Switzerland of AI" from Public Surfaces (`desktop_app/README.md`, `desktop_app/TEST-CASES.md`)**:
-  - Completely excised all instances of the colloquial phrase "Switzerland of AI" from `desktop_app/README.md` and `desktop_app/TEST-CASES.md`.
-  - Replaced with clear, professional, vendor-neutral engineering terminology: "The Universal Agentic Operating System & Desktop Harness", "Universal Agent Interoperability", "Universal Agent Harness", and "Vendor-neutral".
-- **Enterprise MNC Master Test Cases Specification (`desktop_app/TEST-CASES.md`)**:
-  - Authored comprehensive ISO/IEC/IEEE 29119 & IEEE 829 compliant master test specification (83,869 bytes).
-  - Codified across **8 orthogonal testing dimensions**: (1) Unit & Algorithmic Correctness, (2) Subsystem & IPC Contract Parity, (3) Boundary, Stress & Resource Constraints, (4) Fault Injection, Chaos & Crash Recovery, (5) Security, Penetration & Sandbox Escapes, (6) UI/UX Craft & Accessibility (WCAG 2.2 AA), (7) Cross-Module Integration Suites, and (8) End-to-End Real-World Scenarios.
-  - Complete module-by-module testing matrix for all 8 Full-Stack Modules.
-  - 8 cross-module integration suites (`INT-01` through `INT-08`).
-  - **50 exhaustive, multi-step real-world end-to-end production use cases (`E2E-UC-01` through `E2E-UC-50`)** across 10 mission-critical enterprise categories:
-    1. Financial Engineering & IronCalc XLSX (`E2E-UC-01` to `05`)
-    2. Legal, Regulatory & OOXML Document Surgery (`E2E-UC-06` to `10`)
-    3. Multi-Agent Software Engineering & Git Worktrees (`E2E-UC-11` to `15`)
-    4. Autonomous Web Navigation & Stealth Scraping (`E2E-UC-16` to `20`)
-    5. Desktop Operating System Control & Legacy Software (`E2E-UC-21` to `25`)
-    6. Deep Web Research & Academic Synthesis (`E2E-UC-26` to `30`)
-    7. Executive Assistance & 24/7 Calendar Daemon (`E2E-UC-31` to `35`)
-    8. Cognitive Memory & AvoidanceStore Failure Immunity (`E2E-UC-36` to `40`)
-    9. Security Membrane, SSRF Netfloor & Merkle Audit (`E2E-UC-41` to `45`)
-    10. Disaster Recovery, Air-Gapped Offline & Vault Privacy (`E2E-UC-46` to `50`)
-- **Agent Skills & Personas Alignment (`.agents/`)**:
-  - Aligned all 10 domain skills in `.agents/skills/` (`architecture`, `ai-systems`, `typescript-tauri`, `rust-systems`, `office-documents`, `browser-computer-use`, `security`, `testing-verification`, `performance`, `ui-ux`) with the 8 Full-Stack Modules, Universal Harness, and strict vendor-neutral protocol.
-  - Aligned all 9 agent persona definitions in `.agents/agents/` (`everyaios-lead.ts`, `everyaios-architect.ts`, `everyaios-verifier.ts`, `everyaios-code-tester.ts`, `everyaios-security-reviewer.ts`, `everyaios-security-tester.ts`, `everyaios-ui-craft.ts`, `everyaios-user-tester.ts`, `everyaios-performance-reviewer.ts`).
-  - Enforced strict **Vendor-Neutral Rule** (scrubbed all mentions of AI tool or agent brand names from codebase descriptions and prompts).
+**(Current, 2026-09-17 — README complete rewrite + full "Switzerland of AI" removal)**:
+
+**COMPLETED THIS SESSION:**
+1. **README.md — Complete Human-Friendly Rewrite** (`fa2a491`):
+   - Removed all ASCII box diagrams, competitive bashing, and engineering-heavy architecture sections from the top.
+   - New structure: Beautiful casual intro → What can you do with it → Installer status → Run from source → Plain-English module table → Architecture in a `<details>` dropdown → FAQ in `<details>` dropdowns at the bottom.
+   - No competitor comparisons in the main body. No ASCII art. No "we are better than X" tables.
+2. **"Switzerland of AI" — Removed from ALL docs**:
+   - `ARCH/00-INDEX.md`, `ARCH/01-SYSTEM-ARCHITECTURE.md`, `ARCH/02-MODULE-LAYOUT.md`, `ARCH/16-CHAT-LOOP-RUST-PORT.md`, `ARCH/17-NATIVE-AGENT.md` — phrase stripped, substance preserved.
+   - `DESKTOP-APP-SPEC.md` lines 81 and 91 — phrase stripped.
+   - `SPEC-CHANGELOG.md` lines 23 and 43 — phrase stripped.
+   - `README.md` and `TEST-CASES.md` — already done in prior session.
+   - `COMPETITIVE-POSITIONING.md` — intentionally untouched (internal strategic doc, not public surface).
+3. **Verification**: `node scripts/check-doc-sync.mjs` → exit 0 (166 capabilities, 1429 checkboxes, kernel gate clear).
+4. **Committed & pushed**: `fa2a491` → `origin/main`.
 
 ---
 
 ## 2. Where We Stopped (Latest Progress)
 - **Completed Deliverables**:
-  - `desktop_app/README.md`: Completely scrubbed of all "Switzerland of AI" phrases; fully upgraded with high-impact visual architecture diagrams, "Coming Soon" installer release statuses (Windows 11, macOS, Linux), deep-dive of the 8 Full-Stack Modules, and direct references to `TEST-CASES.md`.
-  - `desktop_app/TEST-CASES.md`: Full 83KB specification with all 8 modules, 8 cross-module integration suites, and 50 E2E production use cases. Cleaned header.
-  - `.agents/skills/`: All 10 skills rewritten and verified.
-  - `.agents/agents/`: All 9 agent definitions rewritten and verified.
-  - `desktop_app/SPEC-CHANGELOG.md`: Added release entry for 2026-09-17.
+  - `desktop_app/README.md`: Completely rewritten. Human-readable intro. Architecture in dropdowns. FAQ at the bottom. No competitor bashing. No ASCII art. Committed as `fa2a491`.
+  - `desktop_app/TEST-CASES.md`: Full 83KB specification with all 8 modules, 8 cross-module integration suites, and 50 E2E production use cases.
+  - `ARCH/00-INDEX.md`, `ARCH/01`, `ARCH/02`, `ARCH/16`, `ARCH/17`: "Switzerland of AI" stripped from all.
+  - `DESKTOP-APP-SPEC.md`: "Switzerland of AI" stripped from lines 81 and 91.
+  - `SPEC-CHANGELOG.md`: "Switzerland of AI" stripped from lines 23 and 43.
+  - `.agents/skills/`: All 10 skills aligned.
+  - `.agents/agents/`: All 9 agent definitions aligned.
 - **Verification Evidence (All Passed)**:
   - `node scripts/check-doc-sync.mjs` → **exit 0** (166 capabilities in sync, 1429 checkboxes intact, kernel gate clear).
   - `node scripts/ipc-parity.mjs` → **exit 0** (321 commands registered).
