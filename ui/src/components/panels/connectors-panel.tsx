@@ -32,6 +32,14 @@ import {
 import { cn } from '@/lib/utils'
 import SkillsPanel from '@/components/panels/skills-panel'
 import {
+  connectionLabel,
+  connectionTone,
+  mcpRowToRecord,
+  oauthToRecord,
+  storeEntryToRecord,
+  type ConnectionRecord,
+} from '@/lib/connections'
+import {
   oauthAccounts,
   oauthPollDevice,
   oauthRevoke,
@@ -55,7 +63,7 @@ const PREVIEW_STATS = [
 
 const KIND_TONE: Record<string, string> = {
   read: 'bg-emerald-500/15 text-emerald-300',
-  edit: 'bg-orange-500/15 text-orange-300',
+  edit: 'bg-primary/15 text-primary',
   delete: 'bg-red-500/15 text-red-300',
   move: 'bg-amber-500/15 text-amber-300',
   search: 'bg-sky-500/15 text-sky-300',
@@ -63,6 +71,32 @@ const KIND_TONE: Record<string, string> = {
   think: 'bg-zinc-500/15 text-zinc-300',
   fetch: 'bg-cyan-500/15 text-cyan-300',
   other: 'bg-zinc-500/15 text-zinc-300',
+}
+
+// P65.3 — one ConnectionRecord badge. Status is never color-alone: the badge
+// carries an accessible label with the plain-language reason.
+function ConnectionBadge({ record }: { record: ConnectionRecord }) {
+  return (
+    <Badge
+      className={cn('text-[9px]', connectionTone(record.state))}
+      aria-label={connectionLabel(record)}
+      title={record.detail}
+    >
+      {record.state}
+    </Badge>
+  )
+}
+
+/** CLS=0 skeleton rows for the store/MCP lists (exact-fit, no layout push). */
+function ListSkeleton({ label }: { label: string }) {
+  return (
+    <div role="status" aria-busy="true" aria-label={label} className="space-y-1.5 [contain-intrinsic-size:auto_64px]">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="shimmer h-[64px] rounded-md border border-border/50" />
+      ))}
+      <span className="sr-only">{label}…</span>
+    </div>
+  )
 }
 
 const LOGO_COLORS = [
@@ -107,19 +141,34 @@ function initials(name: string) {
 export default function ConnectorsPanel() {
   const [tab, setTab] = useState('store')
   const [catalog, setCatalog] = useState<McpCatalog | null>(null)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const notify = useAppStore((s) => s.notify)
   const [oauthOn, setOauthOn] = useState(false)
   const [oauthAccts, setOauthAccts] = useState<OAuthAccount[]>([])
   const [deviceHint, setDeviceHint] = useState<string | null>(null)
   const [store, setStore] = useState<StoreEntry[]>([])
+  const [storeLoading, setStoreLoading] = useState(true)
+  const [storeError, setStoreError] = useState<string | null>(null)
   const [connectingId, setConnectingId] = useState<string | null>(null)
 
   // Connect Store — the curated "click → sign in → use" list (ARCH/15).
   useEffect(() => {
     let alive = true
+    setStoreLoading(true)
+    setStoreError(null)
     storeCatalog()
-      .then((s) => alive && setStore(s))
-      .catch(() => {})
+      .then((s) => {
+        if (!alive) return
+        setStore(s)
+        setStoreLoading(false)
+      })
+      .catch((e) => {
+        if (!alive) return
+        // Fail-closed: a store failure leaves rows unavailable, never connected.
+        setStore([])
+        setStoreError(e instanceof Error ? e.message : 'Store unavailable')
+        setStoreLoading(false)
+      })
     return () => {
       alive = false
     }
@@ -138,8 +187,16 @@ export default function ConnectorsPanel() {
   useEffect(() => {
     let alive = true
     mcpCatalog()
-      .then((c) => alive && setCatalog(c))
-      .catch(() => {})
+      .then((c) => {
+        if (!alive) return
+        setCatalog(c)
+        setCatalogError(null)
+      })
+      .catch((e) => {
+        if (!alive) return
+        setCatalog(null)
+        setCatalogError(e instanceof Error ? e.message : 'Tool registry unavailable')
+      })
     return () => {
       alive = false
     }
@@ -148,6 +205,8 @@ export default function ConnectorsPanel() {
   // P11.5.8 — the MCP servers list is live from Rust (`mcp_servers`: the
   // built-in catalog + user-attached stdio servers); demo fallback in preview.
   const [mcpList, setMcpList] = useState<McpServerRow[]>([])
+  const [mcpLoading, setMcpLoading] = useState(true)
+  const [mcpError, setMcpError] = useState<string | null>(null)
   // P55.11 — the tools the attach handshake actually discovered, so the count
   // and the names come from the same live source (never a hopeful estimate).
   const [external, setExternal] = useState<McpExternalCatalog>(EMPTY_EXTERNAL_CATALOG)
@@ -159,9 +218,21 @@ export default function ConnectorsPanel() {
 
   useEffect(() => {
     let alive = true
+    setMcpLoading(true)
+    setMcpError(null)
     mcpServers()
-      .then((rows) => alive && setMcpList(rows))
-      .catch(() => {})
+      .then((rows) => {
+        if (!alive) return
+        setMcpList(rows)
+        setMcpLoading(false)
+      })
+      .catch((e) => {
+        if (!alive) return
+        // Fail-closed: a list failure leaves servers unavailable, never connected.
+        setMcpList([])
+        setMcpError(e instanceof Error ? e.message : 'MCP servers unavailable')
+        setMcpLoading(false)
+      })
     mcpExternalTools()
       .then((cat) => alive && setExternal(cat))
       .catch(() => {})
@@ -171,11 +242,13 @@ export default function ConnectorsPanel() {
   }, [])
 
   const refreshMcp = async () => {
+    setMcpError(null)
     try {
       setMcpList(await mcpServers())
       setExternal(await mcpExternalTools())
-    } catch {
-      /* shell not ready */
+    } catch (e) {
+      // Fail-closed: keep the last good list, surface the failure.
+      setMcpError(e instanceof Error ? e.message : 'MCP refresh failed')
     }
   }
 
@@ -256,7 +329,7 @@ export default function ConnectorsPanel() {
       <header className="border-b border-border px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Plug className="h-4 w-4 text-orange-400" />
+            <Plug className="h-4 w-4 text-primary" aria-hidden />
             <h2 className="text-sm font-semibold text-foreground">Connectors</h2>
             <Badge variant="secondary" className="text-[9px]">
               MCP-first · BYO keys · local vault
@@ -277,7 +350,7 @@ export default function ConnectorsPanel() {
             </Button>
             <Button
               size="sm"
-              className="h-8 bg-orange-500 text-black hover:bg-orange-400"
+              className="h-8 bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => notify('Add native connector — opens the OAuth flow in the shell')}
             >
               <Plus className="h-3.5 w-3.5" />

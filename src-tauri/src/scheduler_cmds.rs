@@ -7,9 +7,21 @@
 
 use everyaios_core::SchedulerService;
 use serde_json::Value;
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 use crate::AppState;
+
+/// P65.4 — share the one scheduler handle with the Settings envelope.
+/// Same source as every command above (the relay-owned service); a second
+/// scheduler is never constructed here.
+pub(crate) fn scheduler_handle(state: &AppState) -> Result<Arc<Mutex<SchedulerService>>, String> {
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    let relay = relay
+        .as_ref()
+        .ok_or_else(|| "sidecar not connected — scheduler service not ready".to_string())?;
+    Ok(relay.scheduler())
+}
 
 /// Clone the shared scheduler service handle through the relay (single source
 /// of truth — the coordinator drives the same instance over `scheduler/*`).

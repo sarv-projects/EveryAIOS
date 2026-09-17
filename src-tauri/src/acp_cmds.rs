@@ -110,7 +110,7 @@ fn resolve_native_binary(command: &str) -> Option<std::path::PathBuf> {
     resolve_on_path(command).or_else(|| discover_windows_app_path(command))
 }
 
-fn agent_installed(agent_id: &str) -> bool {
+pub(crate) fn agent_installed(agent_id: &str) -> bool {
     if agent_id == "inbuilt" || agent_id == "everyaios" {
         return true;
     }
@@ -146,7 +146,7 @@ fn agent_installed(agent_id: &str) -> bool {
 /// re-parsing the registry JSON per row would be a real cost. A refresh that
 /// rewrites `registry.json` changes the mtime and invalidates the memo, so a
 /// newly fetched catalog is picked up on the next read without a restart.
-fn launch_registry() -> LaunchRegistry {
+pub(crate) fn launch_registry() -> LaunchRegistry {
     let client = registry_client();
     let stamp = std::fs::metadata(client.cache_dir().join("registry.json"))
         .and_then(|m| m.modified())
@@ -524,7 +524,7 @@ pub fn resolve_wsl_spawn(command: &str) -> Option<(String, Vec<String>)> {
 
 /// Build the public, non-secret runtime location record consumed by Settings
 /// and the picker. Catalog membership is never used as occupancy evidence.
-fn runtime_location_json(
+pub(crate) fn runtime_location_json(
     manifest: &everyaios_acp::HarnessManifest,
     install: Option<&everyaios_acp::InstallOutcome>,
 ) -> serde_json::Value {
@@ -594,6 +594,22 @@ fn runtime_location_json(
         }
         Distribution::Binary { .. } => serde_json::json!({ "kind": "unavailable", "source": "registry_catalog", "reason": "manifest has no executable command" }),
     }
+}
+
+/// P65.2 — the one occupancy-provenance builder for Settings: install record
+/// or PATH/App-Paths/WSL probe for one agent id, mapped to the location JSON.
+/// Inbuilt has no executable and reports `unavailable` here (its occupancy is
+/// "ships with the app", carried by `agent_installed`, not by a path).
+pub(crate) fn runtime_location_for(agent_id: &str) -> serde_json::Value {
+    let registry = launch_registry();
+    let Some(manifest) = registry.get(agent_id) else {
+        return serde_json::json!({ "kind": "unavailable", "reason": "unknown agent id" });
+    };
+    if manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
+        return serde_json::json!({ "kind": "unavailable", "reason": "inbuilt engine ships with the app" });
+    }
+    let installed = installer().installed(agent_id).filter(install_outcome_usable);
+    runtime_location_json(manifest, installed.as_ref())
 }
 
 /// F8/P66 — install state plus exact non-secret runtime provenance for every

@@ -377,6 +377,164 @@ function AgentLogo({ agent }: { agent: AgentRuntime }) {
   )
 }
 
+// === P65.2 — dual-card agent detail ===========================================
+// Native capabilities (owned by the agent itself) vs shared cowork (EveryAIOS
+// grants that apply from the next turn). Never copy an external agent's keys
+// into EveryAIOS config surfaces — this detail shows env *names* only, never
+// values, and external model picks stay inside the agent's own config.
+
+type AgentReadiness = 'ready' | 'degraded' | 'unavailable' | 'unverified'
+
+function agentReadiness(agent: AgentRuntime): { state: AgentReadiness; reason: string } {
+  if (agent.id === 'everyaios-native') {
+    return { state: 'ready', reason: 'built-in — always live' }
+  }
+  if (agent.status === 'disabled') {
+    return { state: 'unavailable', reason: 'disabled on this machine' }
+  }
+  if (agent.status === 'updating') {
+    return { state: 'degraded', reason: 'update in progress — launch may fail' }
+  }
+  const launchable = agent.launchable ?? agent.status === 'installed'
+  if (agent.status === 'installed' && launchable) {
+    return { state: 'ready', reason: 'verified launch path on this machine' }
+  }
+  if (agent.status === 'installed' && !launchable) {
+    return { state: 'degraded', reason: 'installed but the current adapter cannot launch it yet' }
+  }
+  if (agent.status === 'discovered') {
+    // WSL-only is the canonical case: a verified location exists but the
+    // current adapter cannot start it — never send a Linux path to CreateProcess.
+    if (agent.location?.kind === 'wsl') {
+      return { state: 'unavailable', reason: `WSL-only (${agent.location.distro}) — needs the WSL adapter` }
+    }
+    return { state: 'unverified', reason: 'location verified, launch not confirmed' }
+  }
+  return { state: 'unavailable', reason: 'not installed — catalog entry only' }
+}
+
+function readinessTone(state: AgentReadiness): string {
+  switch (state) {
+    case 'ready':
+      return 'bg-emerald-500/15 text-emerald-300'
+    case 'degraded':
+      return 'bg-amber-500/15 text-amber-300'
+    case 'unverified':
+      return 'bg-sky-500/15 text-sky-300'
+    case 'unavailable':
+    default:
+      return 'bg-zinc-500/15 text-zinc-400'
+  }
+}
+
+function ModelOwnerBadge({ agent }: { agent: AgentRuntime }) {
+  const native = isNativeRuntime(agent.id)
+  return (
+    <Badge
+      className={cn(
+        'text-[9px]',
+        native ? 'bg-sky-500/15 text-sky-300' : 'bg-zinc-500/15 text-zinc-300',
+      )}
+      title={
+        native
+          ? 'EveryAIOS owns this model surface (providers, keys, catalog)'
+          : `This agent owns its model and keys — EveryAIOS never copies them here`
+      }
+    >
+      {native ? 'model owner: EveryAIOS' : `model owner: ${agent.name}`}
+    </Badge>
+  )
+}
+
+function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
+  const native = isNativeRuntime(agent.id)
+  const acpOptions = useAppStore((s) => s.acpConfigOptions[agent.id])
+  const readiness = agentReadiness(agent)
+  return (
+    <div className="mt-2 grid gap-2 sm:grid-cols-2 [contain-intrinsic-size:auto_120px]">
+      {/* Native capabilities — owned by the agent itself. */}
+      <div className="rounded-md border border-border/50 bg-background/30 p-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-medium text-foreground">Native capabilities</span>
+          <Badge variant="outline" className="text-[8px] text-muted-foreground">
+            {native ? 'EveryAIOS' : `owned by ${agent.name}`}
+          </Badge>
+        </div>
+        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+          {native
+            ? 'The built-in agent. Model surface lives in Providers / BYOK and Local models.'
+            : 'What this runtime itself exposes. Model, sign-in, and routing stay in its own config — managed here only by reference.'}
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {agent.capabilities.map((c) => (
+            <Badge key={c} variant="secondary" className="bg-background/60 text-[8px] font-normal text-muted-foreground">
+              {CAPABILITY_LABELS[c]}
+            </Badge>
+          ))}
+        </div>
+        <dl className="mt-1.5 space-y-0.5 font-mono text-[9px] text-muted-foreground">
+          <div className="flex justify-between gap-2">
+            <dt>readiness</dt>
+            <dd className="text-foreground/80">{readiness.state} — {readiness.reason}</dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt>launch</dt>
+            <dd className="text-foreground/80">
+              {(agent.launchable ?? agent.status === 'installed' || native) ? 'launchable' : 'not launchable'}
+              {agent.location ? ` · ${agent.location.kind}/${agent.location.source.replaceAll('_', ' ')}` : ''}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt>models</dt>
+            <dd className="text-foreground/80">
+              {native
+                ? 'EveryAIOS catalog (see disclosure)'
+                : acpOptions?.length
+                  ? `${acpOptions.length} agent-owned options`
+                  : 'managed by the agent — no EveryAIOS copy'}
+            </dd>
+          </div>
+        </dl>
+        {!native && (
+          <p className="mt-1.5 rounded border border-border/40 bg-background/40 px-1.5 py-1 text-[9px] leading-relaxed text-muted-foreground">
+            Keys stay in the agent&apos;s own sign-in. EveryAIOS injects provider env <em>names</em> at
+            launch only — values are never copied into this surface.
+          </p>
+        )}
+      </div>
+      {/* Shared cowork — EveryAIOS grants, next-turn only. */}
+      <div className="rounded-md border border-border/50 bg-background/30 p-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-medium text-foreground">Shared cowork</span>
+          <Badge variant="outline" className="text-[8px] text-muted-foreground">EveryAIOS grants</Badge>
+        </div>
+        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+          Office, Browser, Computer Use, connectors, memory, and MCP for this runtime.
+          Changes apply from the next turn and freeze into the Work manifest — never into an in-flight run.
+        </p>
+        <ul className="mt-1.5 space-y-0.5">
+          {[
+            { label: 'Office (xlsx/docx/pptx/pdf)', hint: 'surgical patches' },
+            { label: 'Browser (tiered)', hint: 'Lightpanda → Chrome CDP' },
+            { label: 'Computer use', hint: 'guarded desktop' },
+            { label: 'MCP + connectors', hint: 'session loadout' },
+            { label: 'Memory (5-tier)', hint: 'scoped recall' },
+          ].map((r) => (
+            <li key={r.label} className="flex items-center justify-between gap-2 text-[9px]">
+              <span className="text-foreground/80">{r.label}</span>
+              <span className="font-mono text-muted-foreground/70">{r.hint}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-1.5 font-mono text-[8px] text-muted-foreground/70">
+          Capability resolution is native-first, augmentation-second. Status is unverified until a
+          real Windows acceptance record exists.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function AgentCard({
   agent,
   catalogExpanded,
@@ -408,6 +566,10 @@ function AgentCard({
   // P63 — the per-agent model-backend control is a disclosure, not a permanent
   // control on all 46 rows.
   const [configOpen, setConfigOpen] = useState(false)
+  // P65.2 — dual-card detail is a disclosure (open by default for the active
+  // runtime so its ownership boundary is visible without a click).
+  const [detailOpen, setDetailOpen] = useState(isSelected)
+  const readiness = agentReadiness(agent)
 
   // Re-run discovery (ACP registry + install status + PATH probe) so the
   // row reflects what is actually on this machine right now.
@@ -466,9 +628,13 @@ function AgentCard({
       <div className="flex items-start gap-2.5">
         <AgentLogo agent={agent} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[13px] font-semibold text-foreground">{agent.name}</span>
             <StatusBadge status={agent.status} />
+            <Badge className={cn('text-[9px]', readinessTone(readiness.state))} aria-label={`Readiness: ${readiness.state} — ${readiness.reason}`}>
+              {readiness.state}
+            </Badge>
+            <ModelOwnerBadge agent={agent} />
             {isSelected && (
               <Badge className="bg-sky-500/20 text-[9px] text-sky-300">active</Badge>
             )}
@@ -535,6 +701,8 @@ function AgentCard({
           {agent.note}
         </p>
       )}
+
+      {detailOpen && <AgentDetailCards agent={agent} />}
 
       {configOpen && usable && !native && <AgentBackendPanel agentId={agent.id} />}
 
@@ -605,6 +773,21 @@ function AgentCard({
             Configure model
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-[10px]"
+          aria-expanded={detailOpen}
+          aria-label={`${detailOpen ? 'Hide' : 'Show'} ${agent.name} detail (native vs shared)`}
+          onClick={() => setDetailOpen((v) => !v)}
+        >
+          {detailOpen ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+          Detail
+        </Button>
         <Button
           size="sm"
           variant="ghost"
@@ -718,10 +901,16 @@ function AgentsTab() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-        {otherRows.map((a) => (
-          <AgentCard key={a.id} agent={a} />
-        ))}
+      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2 [contain-intrinsic-size:auto_120px]">
+        {otherRows.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border/60 px-3 py-6 text-center text-[11px] text-muted-foreground">
+            No external runtimes in the catalog — use Discover more to refresh the registry.
+          </p>
+        ) : (
+          otherRows.map((a) => (
+            <AgentCard key={a.id} agent={a} />
+          ))
+        )}
       </div>
     </SectionShell>
   )
