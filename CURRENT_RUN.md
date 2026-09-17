@@ -1584,7 +1584,7 @@ class name cannot reach the retired palette.
 | `crates` `cargo test --workspace` | **2592 passed / 0 failed / 23 ignored** |
 | `crates` clippy `-D warnings` · `fmt --check` | **exit 0 · 0 diffs** |
 | `packages/coordinator` `tsc` · `bun test` | **0 errors · 25/25** |
-| `ui` `tsc` · `bun test` | **0 errors · 328/328** |
+| `ui` `tsc` · `bun test` | **0 errors · 336/336** (8 new contrast tests) |
 | `ui` vite build | **exit 0** |
 | retired `orange|amber|yellow-<shade>` in `ui/src` | **0** (only the documented alias table in `globals.css`) |
 | chroma-bearing literal in the orange/amber/yellow hue band | **0** in the built CSS |
@@ -1594,6 +1594,39 @@ class name cannot reach the retired palette.
 **Still open on P66.5** (the checkbox stays open): global **visual/contrast**
 acceptance across the 12 center views and 19 viewports, keyboard coverage, and
 first-paint accent restoration. Those need a display, not a compiler.
+
+### 2U.4 P66.5 contrast — measured, not eyeballed
+P66.5's remaining gap included "contrast coverage". That is decidable without a
+display, so `ui/src/lib/design-tokens.test.ts` parses `globals.css`, composes each
+theme variant the way the cascade does (`:root` + `.dark` + `[data-accent]`),
+converts HSL → sRGB, and computes WCAG 2.x ratios for the pairs the UI renders.
+It asserts AA (4.5:1) where the tokens meet it and records the rest.
+
+| Pair | Ratio | Verdict |
+|---|---|---|
+| `--foreground` / `--muted-foreground` on every surface, both themes | ≥ 4.5 | **AA ✓** |
+| `--brand` on every light surface (default accent) | 4.82 | **AA ✓** |
+| `--brand-foreground` on `--brand` (light button label) | ≥ 4.5 | **AA ✓** |
+| accent `violet`: `--brand` on light surfaces | ≥ 4.5 | **AA ✓** |
+| `--warning` on `--surface-0` / `--surface-1` | **2.74 / 2.96** | ✗ below AA |
+| accent `emerald` / `sky` / `amber`: `--brand` on canvas | **3.10 / 2.64 / 2.45** | ✗ below AA |
+| dark `--brand-foreground` on `--brand` (white on `#3B82F6`) | **3.63** | ✗ below AA |
+
+**These are not coding mistakes — they are the contract's own palette.**
+`UI-DESIGN-PROMPT.md` §2.1 pins `Warning/Ask = #CA8A04`, which is 2.96:1 on a
+white card: a hue too light to carry 10px text, whatever code paints it. The dark
+brand is pinned bright (`#3B82F6`), so a white label on it cannot reach AA either.
+
+The sub-AA pairs are therefore held in a named band (above their floor, below
+AA) so **the record cannot go stale silently**: closing one makes the test fail
+until the note is updated in the same commit. Nothing is claimed to pass that
+does not.
+
+**Decision left to the owner, because it is a design call, not a bug fix:** either
+darken the four offending hues (deviating from §2.1's pinned values), or restrict
+those tokens to non-text roles (icon, border, dot) and stop drawing them as small
+text. The second keeps the palette and the AA target both intact; the first keeps
+the styling and breaks the contract.
 
 ### Correction carried forward
 The `2P` header said "Rust is verified". It is — but the first full `src-tauri`
