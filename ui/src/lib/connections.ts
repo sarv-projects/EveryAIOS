@@ -1,9 +1,19 @@
-// P65.3 — ConnectionRecord: one honest connection state over the existing
+// P65.3 — ConnectionView: one honest connection state over the existing
 // Connector / McpServerRow / OAuthAccount / StoreEntry shapes.
 //
 // No new backend commands. Every adapter is a pure mapping from facts the
 // shell already reports; a failed probe renders fail-closed (Disconnected or
 // Degraded, never Connected).
+//
+// NAMING — why this is `ConnectionView` and not `ConnectionRecord`:
+// `ConnectionRecord` is the **wire** read model owned by ARCH/17 §17.12.2 and
+// implemented in `src-tauri/src/settings_cmds.rs`, whose TypeScript mirror is
+// `@/lib/settings`. This module is the **display projection** over the domain
+// libs, so it is deliberately named `ConnectionView` to keep one name meaning
+// one shape. Two incompatible types sharing the name `ConnectionRecord` is
+// exactly the contract drift `everyaios-types` exists to prevent on the Rust
+// side. Use `ConnectionView` for rendering; use `@/lib/settings`'s
+// `ConnectionRecord` when reading the authoritative wire state.
 //
 // States:
 //   Discovered   — catalog knows it, no live session (store entry not yet
@@ -22,25 +32,31 @@ import type { McpServerRow } from './mcp'
 import type { OAuthAccount } from './oauth'
 import type { StoreEntry } from './mcp'
 
-export type ConnectionState =
+// NOTE: this display vocabulary is PascalCase and lacks `revoked`, while the
+// §17.12.2 wire vocabulary is snake_case and includes it. Which one Settings
+// should standardise on is an open decision recorded in CURRENT_RUN.md — the
+// plan prose says `Discovered|Installed|Connected|Disconnected|Degraded`, the
+// normative contract says `discovered|installed|connected|disconnected|
+// degraded|revoked`. Not silently reconciled here.
+export type ConnectionViewState =
   | 'Discovered'
   | 'Installed'
   | 'Connected'
   | 'Disconnected'
   | 'Degraded'
 
-export interface ConnectionRecord {
+export interface ConnectionView {
   id: string
   name: string
   kind: 'connector' | 'mcp-server' | 'oauth-account' | 'store-entry'
-  state: ConnectionState
+  state: ConnectionViewState
   /** Plain-language reason, safe to render verbatim. */
   detail: string
   /** Where the fact came from (vault, mcp_servers, store probe, preview). */
   source: string
 }
 
-export function connectionTone(state: ConnectionState): string {
+export function connectionTone(state: ConnectionViewState): string {
   switch (state) {
     case 'Connected':
       return 'bg-emerald-500/15 text-emerald-300'
@@ -57,11 +73,11 @@ export function connectionTone(state: ConnectionState): string {
 }
 
 /** Accessible label — status is never color-alone. */
-export function connectionLabel(r: ConnectionRecord): string {
+export function connectionLabel(r: ConnectionView): string {
   return `${r.name}: ${r.state} — ${r.detail}`
 }
 
-export function connectorToRecord(c: Connector): ConnectionRecord {
+export function connectorToRecord(c: Connector): ConnectionView {
   if (c.status === 'connected') {
     return {
       id: c.id,
@@ -92,7 +108,7 @@ export function connectorToRecord(c: Connector): ConnectionRecord {
   }
 }
 
-export function mcpRowToRecord(row: McpServerRow): ConnectionRecord {
+export function mcpRowToRecord(row: McpServerRow): ConnectionView {
   const connected = row.status === 'connected'
   if (!connected) {
     // Seen before (tools on record) but not running now.
@@ -146,7 +162,7 @@ export function mcpRowToRecord(row: McpServerRow): ConnectionRecord {
   }
 }
 
-export function oauthToRecord(a: OAuthAccount): ConnectionRecord {
+export function oauthToRecord(a: OAuthAccount): ConnectionView {
   const expired = typeof a.expiresAt === 'number' && a.expiresAt > 0 && a.expiresAt < Date.now()
   if (expired) {
     return {
@@ -172,7 +188,7 @@ export function storeEntryToRecord(
   e: StoreEntry,
   connected: boolean,
   probeFailed = false,
-): ConnectionRecord {
+): ConnectionView {
   // Fail-closed: a probe failure never renders Connected.
   if (probeFailed && !connected) {
     return {
