@@ -480,7 +480,7 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
           <div className="flex justify-between gap-2">
             <dt>launch</dt>
             <dd className="text-foreground/80">
-              {(agent.launchable ?? agent.status === 'installed' || native) ? 'launchable' : 'not launchable'}
+              {(agent.launchable ?? (agent.status === 'installed' || native)) ? 'launchable' : 'not launchable'}
               {agent.location ? ` · ${agent.location.kind}/${agent.location.source.replaceAll('_', ' ')}` : ''}
             </dd>
           </div>
