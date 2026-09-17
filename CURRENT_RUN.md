@@ -1457,6 +1457,68 @@ competing census and the flip belongs with a doc-sync run (§3).
 
 ---
 
+## 2T. Implementation wave 15 (2026-09-17) — auditing the whole RPC surface: two more
+## dead features, same root cause as P64.3
+
+Rather than fix P64.3 and stop, the whole surface was audited: **every method the
+coordinator sends via `request(...)` cross-checked against every Rust handler**
+(relay prefix arms + exact-string handlers anywhere in `crates/` or `src-tauri/`).
+
+### What the audit found
+30 distinct methods are sent. **Two had no handler at all**, exactly like
+`codeintel/repomap`:
+
+| Method | Owning item | How it failed | Rust mechanism that already existed |
+|---|---|---|---|
+| `skill/grow` | **P64.8** | `plan.ts` wraps it in `catch {}` — **silent**, nothing ever distilled | `everyaios_blueprint::grow_from_task` |
+| `subagent/spawn` | **P64.4** | **loud** — every delegation threw *"native runtime not wired (no silent fallback)"* | `everyaios_blueprint::SubAgentRuntime` |
+
+### Corrigendum to §2N
+That section called P64.8 **"IMPLEMENTED"** and P64.4 **"PARTIAL"**. Both were too
+generous. Same defect as P64.3, and the method is worth naming: *"the symbol is
+referenced somewhere"* is not *"the wire carries a request to a handler"*. A grep
+for a function name is not reachability.
+
+### The fixes
+- **`skill/*`** → validated distillation. Deliberately **not** trusting the
+  caller's claim that the verify gate passed: `grow_from_task` enforces the tests
+  verdict, the 500-line budget, and the manifest check in Rust before anything
+  reaches disk. The store is `SkillStore::default_home()` — the *same* root the
+  UI's skills commands use, so a distilled skill is immediately visible to both.
+- **`subagent/*`** → the spawn **admission** seam. `everyaios_blueprint` owns
+  accounting (duplicate / parent-existence / depth / concurrent / total) and the
+  relay now holds a live `SubAgentRuntime`, so limits accumulate across spawns
+  rather than resetting per call. The reply is the admitted spec reported as
+  `running` — deliberately **not** a fabricated `done` with an invented summary,
+  because the LLM execution stays coordinator-side.
+- Both surfaces refuse an empty or unknown request as an **error**. The old
+  failure mode was a silent success-shaped no-op; the tests pin the refusal.
+
+### Evidence
+| Gate | Result |
+|---|---|
+| full-surface audit re-run | **0 unhandled of 30** (was 2) |
+| `everyaios-core` `cargo test --lib` | **700 passed / 0 failed** (incl. 2 new: `skill_rpc_refuses_a_grow_without_a_task_name`, `subagent_rpc_admits_a_spawn_and_enforces_the_limits`) |
+| `crates` `cargo test --workspace` | **2591 passed / 0 failed / 23 ignored** |
+| `crates` clippy `-D warnings` · `fmt --check` | **exit 0 · 0 diffs** |
+| `src-tauri` `cargo test` | **66 passed / 0 failed** |
+
+### The systemic finding, stated plainly
+Three dead features in one surface — P64.3, P64.4, P64.8. Each had a real
+implementation on at least one side, a green tracker row, and no error. The
+common cause is **built-but-unconnected halves**, and the two shapes it takes are:
+
+1. a caller with **no handler** (silent `method not found`, swallowed by an
+   honest-sounding "best-effort" catch), and
+2. a handler with **no caller** (a ghost command — `repomap_build` was one until
+   wave 14 gave it a shared implementation).
+
+Both are invisible to the compiler, to `tsc`, and to any test whose harness mocks
+the other half — which is exactly what `p64-lane.test.ts` did. **The remaining
+60 ghost commands** are the best place to look for more of shape 2.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
