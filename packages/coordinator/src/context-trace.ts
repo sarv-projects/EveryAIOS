@@ -21,7 +21,9 @@ export type ContextSource =
   | "repo_map"
   | "user_document"
   | "style_memory"
-  | "trajectory";
+  | "trajectory"
+  // P54.5 — the agent's own shell state, read from the one PTY plane.
+  | "terminal_plane";
 
 /** One recorded context block. */
 export interface ContextLogEntry {

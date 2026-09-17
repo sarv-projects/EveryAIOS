@@ -784,6 +784,43 @@ async function runInbuiltTurn(
           /* repomap is best-effort — a missing handler never blocks the turn */
         }
       }
+      // P54.5 — the agent's own shell state, read from the one PTY plane over
+      // the read-only `terminal/*` arm.
+      //
+      // This is the half of "route agent shell commands through the persistent
+      // PTY plane" that the tool call alone does not cover: `script.run` runs
+      // one command and returns, so without this the agent has no idea it
+      // already has a shell, where it is, or what its last command exited with —
+      // and re-runs work. Everything injected here is what the *shell itself
+      // reported*; a session with no trusted record yet contributes no line
+      // rather than an empty block, and a host with no PTY host contributes
+      // nothing at all. Injected below CACHE_BOUNDARY like every other dynamic
+      // block, so segments 1-7 stay byte-identical.
+      if (request && toolExecutor) {
+        try {
+          const plane = await toolExecutor.terminalPlaneStatus();
+          const agentSessions = plane.attached
+            ? plane.ptys.filter((s) => s.origin === 'agent' || s.origin === 'task')
+            : [];
+          if (agentSessions.length > 0) {
+            const latest = agentSessions[agentSessions.length - 1]!;
+            const lastBlock = await toolExecutor
+              .terminalLastCommand(latest.ptyId)
+              .catch(() => null);
+            const lines = [
+              `attached=true sessions=${plane.count} agent_sessions=${agentSessions.length}`,
+              `latest: ${latest.origin} · ${latest.profileId} · cwd ${latest.cwd}`,
+              lastBlock ?? 'no trusted command record yet in this session',
+            ];
+            const block = `<terminal_plane>\n${lines.join('\n')}\n</terminal_plane>`;
+            contextTrace.record('terminal_plane', block);
+            injectedBlocks.push({ source: 'terminal_plane', content: block });
+            system = injectBelowBoundary(system, block);
+          }
+        } catch {
+          /* no terminal plane on this host — the prompt is unchanged */
+        }
+      }
       // P64.2 / C14: live @-mention resolution (@Codebase, @Docs, @URL, @file, @memory)
       try {
         const { payloads } = await resolveMentions(input.text);
