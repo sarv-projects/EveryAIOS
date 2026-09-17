@@ -10,64 +10,46 @@
 
 ```mermaid
 graph TB
-    subgraph UI["UI LAYER — Tauri 2 Window (React SPA, ARCH/12)"]
-        Sidebar[Sidebar<br/>Nav + Sessions + Status]
-        Chat[Chat + Artifacts + Progress Steps]
-        Cockpit[Cockpit / Flight Deck]
-        Workspace[Workspace Panel<br/>Shell/Code/Browser/Excel/Word/PPT/PDF]
-        Office[Office Editors<br/>docx/xlsx/pptx/pdf]
-        Perms[Permission Cards + Guard UI]
-        Analytics[Token/Cost Analytics]
-        AutoBuilder[Automation Builder]
-        KnowledgeUI[Knowledge Browser]
-        Tray[Tray Daemon]
+    subgraph UI["FRONTEND UI COCKPIT (React 19 + Zustand 5 + Tailwind 4)"]
+        Sidebar[Sidebar Nav + 12 Center Screens]
+        Composer[Multi-Control Composer + CoT Rollup]
+        Rails[19 Right-Rail Viewports: Office / Diff / Browse / CUA / Terminal]
+        Perms[Guard Approval Cards + Diff Review]
+        Tray[System Tray Daemon Controller]
     end
 
-    subgraph RustCore["RUST CORE — everyaios-core binary"]
-        EosCDP[everyaios-cdp<br/>CDP Client]
-        EosBrowser[everyaios-browser<br/>Snapshot/Diff/Refs]
-        EosScript[everyaios-script<br/>rquickjs Sandbox]
-        EosGuard[everyaios-guard<br/>Guard-1 + Guard-2]
-        EosAudit[everyaios-audit<br/>NDJSON + Replay]
-        EosMCP[everyaios-mcp<br/>MCP Server]
-        EosVault[everyaios-vault<br/>SQLCipher Keys]
-        EosIPC[everyaios-ipc<br/>JSON-RPC Framing]
-        Supervisor[ProcessSupervisor]
+    subgraph M1_M2_M4["KERNEL MODULES (Rust Core Services)"]
+        M1["Module 1: Universal Agent Harness & Swarms<br/>everyaios-acp · multirun.rs · worktrees.rs"]
+        M2["Module 2: Model Gateway & Vault<br/>everyaios-vault · keyring.rs · broker.rs · catalog"]
+        M4["Module 4: Governed MCP Server<br/>everyaios-mcp · schema validation · ticket gate"]
     end
 
-    subgraph Sidecar["TS SIDECAR — coordinator (Bun compiled)"]
-        Engine[core-engine<br/>3-stage loop]
-        Memory[core-memory<br/>7 algorithms]
-        Files[core-files<br/>RAG + embeddings]
-        Connectors[core-connectors<br/>Hub routing]
-        Search[core-search<br/>Cascade + research]
-        Auto[core-automations<br/>Crystallization]
-        Providers[core-providers<br/>BYOK clients]
-        Tools[core-tools<br/>Trust Ladder]
+    subgraph M5_M6_M8["WORK-NATIVE & SECURITY MODULES (Rust Core Services)"]
+        M5["Module 5: Work-Native Primitives<br/>IronCalc XLSX · OOXML DOCX/PPTX · everyaios-browser · desktop CUA"]
+        M6["Module 6: Durable Work & Memory<br/>everyaios-memory ACT-R · SQLite FTS5 · storage dedupe"]
+        M8["Module 8: Security Guard-2 & Audit<br/>everyaios-guard netfloor/pathfloor · everyaios-audit Merkle"]
     end
 
-    subgraph Browser["BROWSER CHILDREN (tiered)"]
-        Chrome[System Chrome/Edge]
-        Lightpanda[Lightpanda ~16× less mem (vendor benchmark)]
-        Obscura[Obscura ~30MB (opt-in)]
-        Stealth[Fortress/Camoufox]
+    subgraph SIDECAR["COORDINATOR SIDECAR (TypeScript / Bun)"]
+        M3["Module 3: Cockpit Shell & Context Compactor<br/>chat turn loop · 12-segment prompt.ts · 50KB limits"]
+        M7["Module 7: Executive Automations & Calendar Daemon<br/>scheduler.ts · 5-field crons · heartbeat leases"]
     end
 
-    subgraph Storage["LOCAL STORAGE"]
-        SQLite[(SQLite<br/>app.db + memory.db)]
-        LadybugDB[(Rust-native graph store<br/>(LadybugDB optional))]
-        SqliteVec[(sqlite-vec<br/>Vectors)]
-        Vault[(SQLCipher<br/>vault.db)]
+    subgraph EXTERNAL["DECOUPLED OUT-OF-PROCESS RUNTIMES"]
+        ExtAgents["External Coding Agents via ACP: Claude Code · Codex · OpenCode · Aider · Cline"]
+        ExtMCP["External MCP Servers: GitHub · Slack · Postgres · Linear"]
+        ExtBrowser["Chromium CDP / Lightpanda headless"]
     end
 
-    UI -->|Tauri Commands + Events| RustCore
-    RustCore -->|stdio JSON-RPC<br/>length-prefixed| Sidecar
-    RustCore -->|CDP WebSocket<br/>loopback| Browser
-    Sidecar --> Storage
-    RustCore --> Storage
-    EosVault --> Vault
-    Supervisor -->|spawn/kill/restart| Sidecar
-    Supervisor -->|spawn/kill| Browser
+    UI -->|Tauri 2 IPC: 37 Command Modules| M1_M2_M4
+    UI -->|Tauri 2 IPC: 37 Command Modules| M5_M6_M8
+    M1_M2_M4 -->|stdio JSON-RPC length-prefixed| SIDECAR
+    M5_M6_M8 -->|stdio JSON-RPC length-prefixed| SIDECAR
+    M1 -->|ACP stdio JSON-RPC| ExtAgents
+    M4 -->|stdio / SSE JSON-RPC 2.0| ExtMCP
+    M5 -->|CDP WebSocket loopback| ExtBrowser
+    M8 -.->|Guard-2 Tickets & Audit Logging| M1_M2_M4
+    M8 -.->|Guard-2 Tickets & Audit Logging| M5_M6_M8
 ```
 
 

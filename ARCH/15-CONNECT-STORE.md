@@ -1,5 +1,6 @@
 # Connect Store — remote MCP + OAuth connectors (the "click → sign in → use" surface)
 
+> **Full-Stack Module:** Module 4 — Governed MCP & Capability Marketplace (`crates/everyaios-mcp`, stdio & remote SSE MCP client/server).
 > **Status:** v1.6 (2026-09-03 — the notes below reach v1.6; the header previously read v1.2). Companion to `manager.rs` (local stdio MCP installs)
 > and `everyaios-vault::oauth` (PKCE + device-flow OAuth). **New file `everyaios-mcp/src/store.rs`.**
 > Live code: `store_catalog` Tauri command → `ui/src/lib/mcp.ts` `storeCatalog()`.

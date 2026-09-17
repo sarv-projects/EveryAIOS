@@ -26,8 +26,14 @@
 - **Terminology Shift**: Replaced the ambiguous concept/word "capabilities" with **Modules**, **Submodules**, and **Functions** across specifications and matrices.
 - **Decoupling vs Coupling Test**: Formalized the 4-Question Coupling Test (State Lifespan, Fault Domain, Replacement Cadence, Authority Boundary).
 - **Claude Cowork Competitive Parity & Superiority**: Detailed competitive battlecard against Anthropic Claude Cowork (multi-agent swarms vs single agent, multi-provider BYOK vs single vendor, deterministic calculation vs hallucinated spreadsheets, tamper-evident audit vs closed telemetry, real OS CUA vs synthetic browser, open MCP ecosystem vs closed plugin directory).
-- **Specifications & Documentation Overhaul**:
+- **Specifications & Documentation Overhaul (Completed line-by-line)**:
   - Overhauled `ARCH/00-INDEX.md`, `ARCH/01-SYSTEM-ARCHITECTURE.md`, `ARCH/02-MODULE-LAYOUT.md`, `ARCH/09-FEATURE-MATRIX.md`, `ARCH/17-NATIVE-AGENT.md`, `DESKTOP-APP-SPEC.md`, `TODO.md`.
+  - Updated `README.md`: 166 submodules badge, vendor-neutral external agent wording, full reorganization into the 8 Full-Stack Modules.
+  - Updated `TODO.md`: Line 1135 heading mapped to Module 5 Work-Native Primitives (all 1429 checkboxes intact).
+  - Updated `ARCH/16-CHAT-LOOP-RUST-PORT.md`: Declared de-prioritized/frozen following 2026-09-17 Architecture Freeze.
+  - Updated `COMPETITIVE-POSITIONING.md`: Added Section 5 Claude Cowork battlecard and Switzerland of AI positioning.
+  - Updated `ARCH/DIAGRAMS.md`: Aligned Diagram 1 system architecture topology with the 8 Full-Stack Modules.
+  - Updated headers of `ARCH/03`, `ARCH/04`, `ARCH/05`, `ARCH/06`, `ARCH/07`, `ARCH/08`, `ARCH/10`, `ARCH/11`, `ARCH/12`, `ARCH/13`, `ARCH/15` with explicit Full-Stack Module bindings.
   - Removed obsolete `ARCH/14-SHOWUI-ALOHA-REFERENCE.md`.
   - Machine verification: `node scripts/check-doc-sync.mjs` (166 IDs matched, 1429 checkboxes in sync, kernel gate clear), `node scripts/ipc-parity.mjs` (0 broken), `tsc --noEmit` (0 diagnostics).
 

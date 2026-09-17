@@ -1,5 +1,6 @@
 # 11 — AI Chat Features: Copy · Convert · Reject (the derivation)
 
+> **Full-Stack Module:** Module 1 & Module 3 — Universal Harness Chief Loop & Cockpit Shell Conversation Features (`packages/coordinator/src/chat.ts`, `prompt.ts`, `chief.ts`).
 > **User directive (verbatim):** *"for the ai chat features, copy from hermes, etc., and the rest from under ~business_Dev/APP/architecture.md — check the AI chat section. You need to understand what to copy, or convert, and not."*
 > This doc is that analysis. It takes the **two source corpora** and produces one clear list:
 > 1. **COPY** — reuse as-is (already built & tested in the `@personal-ai/core-*` engine — **now vendored in-repo at `packages/core-*`**, originally `APP/packages/`; or a research pattern to implement directly).

@@ -1,5 +1,7 @@
 # ARCH/13 — Prompt Anatomy
 
+> **Full-Stack Module:** Module 3 — Unified Cockpit Shell & Context Compaction Engine (`packages/coordinator/src/prompt.ts`, 12-segment cache-affine prompt assembler).
+
 The desktop prompt is assembled in `packages/coordinator/src/prompt.ts`.
 Identity/persona content is scanned before insertion; third-party retrieval is
 wrapped as data-only content; user documents are separately delimited. The
