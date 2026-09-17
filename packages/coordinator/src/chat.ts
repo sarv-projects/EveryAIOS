@@ -27,13 +27,17 @@ import type { StreamChunk, TurnInput } from "@personal-ai/core-engine";
 // (see chunking.ts) — both self-contained, no package import graph.
 import { StreamSession } from "./stream-session";
 import { chunkText, estimateTokens } from "./chunking";
-import { buildDesktopSystemPrompt, CACHE_BOUNDARY, type PersonaId } from "./prompt";
+import { buildDesktopSystemPrompt, CACHE_BOUNDARY, fitRepoMapToBudget, rankRepoMapTags, renderRepoMapBlock, REPOMAP_DEFAULT_BUDGET_TOKENS, type PersonaId, type RepoMapTag } from "./prompt";
 import { notifyAgui } from "./agui";
 import {
+  buildSubAgentSpec,
+  dispatchSubAgent,
   listedToolsToOpenAI,
   mergeWithNativeTools,
   resolveActiveTools,
   sortToolsStable,
+  subAgentSpecFromToolArgs,
+  subAgentTracker,
   ToolExecutor,
   type ListedTool,
   type OpenAIFunctionTool,
@@ -721,10 +725,21 @@ async function runInbuiltTurn(
         try {
           const plan = (await request("memory/plan", { personaTokens: 0 })) as {
             coreFacts?: string[];
+            learnedSkills?: string[];
           };
           const facts = plan?.coreFacts ?? [];
           if (facts.length > 0) {
             const block = `<memory_warm_set>\n${facts.join("\n")}\n</memory_warm_set>`;
+            contextTrace.record("memory_warm_set", block);
+            injectedBlocks.push({ source: "memory_warm_set", content: block });
+            system = injectBelowBoundary(system, block);
+          }
+          // P64.8 warm-set half: validated learned skills ride the same
+          // retrieval seam below the boundary (never executable before the
+          // native validation pipeline stores them).
+          const skills = plan?.learnedSkills ?? [];
+          if (skills.length > 0) {
+            const block = `<skill_warm_set>\n${skills.join("\n")}\n</skill_warm_set>`;
             contextTrace.record("memory_warm_set", block);
             injectedBlocks.push({ source: "memory_warm_set", content: block });
             system = injectBelowBoundary(system, block);
@@ -741,6 +756,30 @@ async function runInbuiltTurn(
         contextTrace.record("tool_index", block);
         injectedBlocks.push({ source: "tool_index", content: block });
         system = injectBelowBoundary(system, block);
+      }
+      // P64.3 repo-map injection: native tags + PageRank rows, ranked and
+      // budget-fit deterministically, injected BELOW the boundary so
+      // segments 1-7 stay byte-identical. Best-effort: a missing handler
+      // (or empty map) leaves the prompt unchanged and never blocks.
+      if (request) {
+        try {
+          const map = (await request("codeintel/repomap", {
+            query: input.text,
+            maxTokens: REPOMAP_DEFAULT_BUDGET_TOKENS,
+          })) as { tags?: RepoMapTag[] };
+          const rows = Array.isArray(map?.tags) ? map.tags : [];
+          if (rows.length > 0) {
+            const fitted = fitRepoMapToBudget(rankRepoMapTags(rows));
+            const block = renderRepoMapBlock(fitted);
+            if (block.length > 0) {
+              contextTrace.record("repo_map", block);
+              injectedBlocks.push({ source: "repo_map", content: block });
+              system = injectBelowBoundary(system, block);
+            }
+          }
+        } catch {
+          /* repomap is best-effort — a missing handler never blocks the turn */
+        }
       }
       // P64.2 / C14: live @-mention resolution (@Codebase, @Docs, @URL, @file, @memory)
       try {
@@ -840,6 +879,34 @@ async function runInbuiltTurn(
               }
             }
             try {
+              // P64.4 — the `subagent` first-class tool binds to the worktree
+              // shape (spec-only fresh context, inherited denies, depth cap)
+              // with max_concurrent 3 / max_total 6 enforced through the
+              // shared gate. The parent receives the summary-only result.
+              if (toolId === "subagent") {
+                if (!request) {
+                  throw new Error("subagent spawn unavailable — no host channel (no silent fallback)");
+                }
+                const spec = buildSubAgentSpec(
+                  subAgentSpecFromToolArgs(args, { parentId: sessionId, depth: 1 }),
+                );
+                await subAgentTracker.begin(spec.depth);
+                try {
+                  const result = await dispatchSubAgent(request, spec, ctx);
+                  emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
+                  if (hooks) {
+                    await runStage("postExecute", hooks, {
+                      stage: "postExecute",
+                      streamId,
+                      toolId,
+                      result,
+                    });
+                  }
+                  return result;
+                } finally {
+                  subAgentTracker.release();
+                }
+              }
               const result = await toolExecutor.executeTool(toolId, args, ctx);
               emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
               if (hooks) {

@@ -82,6 +82,134 @@ fn atomic_write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), Checkpo
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// P64.7 — per-step checkpoint & rollback index (SPEC I16, ARCH/17 §17.10)
+// ---------------------------------------------------------------------------
+//
+// Every mutating tool call checkpoints: git for code workspaces (the SHA is
+// recorded by the caller via `everyaios-core::execution::commit_workspace_
+// snapshot`, which reuses `git_commit::commit_verified_edit`) + the JSON
+// snapshot below (reuses [`Blueprint::checkpoint_to`]). The UI restore picker
+// lists [`StepCheckpoint`] rows; restore itself is fence-checked in
+// `everyaios-core::execution` (`check_restore_fence` + the never-replay
+// predicate), never here — this module owns the index, not authority.
+
+/// P64.7 — one restorable step: the blueprint snapshot + the fencing token
+/// that owned the run when the step landed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StepCheckpoint {
+    /// Owning work id (`execution/begin*` id, e.g. `ex:3`).
+    pub work_id: String,
+    /// Monotonic step within the work (1-based).
+    pub step: u32,
+    /// Short git SHA when the workspace is a git checkout (`None` for
+    /// non-git resource snapshots — honest, never faked).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_sha: Option<String>,
+    /// File name of the blueprint snapshot inside the checkpoint dir.
+    pub snapshot_file: String,
+    /// Opaque `RunAuthority` fencing token at checkpoint time.
+    #[serde(default)]
+    pub fencing_token: u64,
+    /// Wall-clock ms when the checkpoint landed.
+    #[serde(default)]
+    pub created_at_ms: u64,
+}
+
+fn step_snapshot_name(work_id: &str, step: u32) -> String {
+    let safe: String = work_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("bp-{safe}-step-{step}.json")
+}
+
+fn step_index_name(work_id: &str, step: u32) -> String {
+    let snap = step_snapshot_name(work_id, step);
+    format!("{}.step.json", snap.trim_end_matches(".json"))
+}
+
+impl Blueprint {
+    /// P64.7 — checkpoint one mutating step: reuse [`Blueprint::checkpoint_to`]
+    /// for the snapshot payload, then write the [`StepCheckpoint`] index row
+    /// atomically beside it. Returns the index row.
+    pub fn checkpoint_step_to(
+        &self,
+        dir: &Path,
+        work_id: &str,
+        step: u32,
+        git_sha: Option<String>,
+        fencing_token: u64,
+    ) -> Result<StepCheckpoint, CheckpointError> {
+        if work_id.is_empty() {
+            return Err(CheckpointError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "checkpoint_step_to requires work_id",
+            )));
+        }
+        if step == 0 {
+            return Err(CheckpointError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "checkpoint_step_to requires step >= 1",
+            )));
+        }
+        std::fs::create_dir_all(dir)?;
+        let snapshot_file = step_snapshot_name(work_id, step);
+        self.checkpoint_to(&dir.join(&snapshot_file), None, step)?;
+        let row = StepCheckpoint {
+            work_id: work_id.to_string(),
+            step,
+            git_sha,
+            snapshot_file: snapshot_file.clone(),
+            fencing_token,
+            created_at_ms: now_ms(),
+        };
+        atomic_write_json(&dir.join(step_index_name(work_id, step)), &row)?;
+        Ok(row)
+    }
+
+    /// P64.7 — list all step rows for a work, sorted by step (the restore
+    /// picker's input). Missing dir ⇒ empty (no steps yet, not an error).
+    pub fn list_step_checkpoints(
+        dir: &Path,
+        work_id: &str,
+    ) -> Result<Vec<StepCheckpoint>, CheckpointError> {
+        let mut out = Vec::new();
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(out),
+            Err(e) => return Err(e.into()),
+        };
+        for entry in entries {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.ends_with(".step.json") {
+                continue;
+            }
+            let bytes = std::fs::read(entry.path())?;
+            let row: StepCheckpoint = serde_json::from_slice(&bytes)?;
+            if row.work_id == work_id {
+                out.push(row);
+            }
+        }
+        out.sort_by_key(|r| r.step);
+        Ok(out)
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 fn temp_sibling(path: &Path) -> PathBuf {
     let mut name = path
         .file_name()
@@ -273,5 +401,45 @@ mod tests {
         assert_eq!(cfgs.len(), 1);
         assert_eq!(cfgs[0].0, "a");
         assert_eq!(cfgs[0].1.permission_mode, PermissionMode::Plan);
+    }
+
+    // --- P64.7 per-step checkpoint ------------------------------------------------
+
+    #[test]
+    fn p64_step_checkpoint_reuses_snapshot_format() {
+        let dir = std::env::temp_dir().join(format!("bp-p64-step-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let b = bp("bp-step");
+        let row = b
+            .checkpoint_step_to(&dir, "ex:3", 1, Some("abc123".into()), 9)
+            .unwrap();
+        assert_eq!(row.work_id, "ex:3");
+        assert_eq!(row.step, 1);
+        assert_eq!(row.git_sha.as_deref(), Some("abc123"));
+        assert_eq!(row.fencing_token, 9);
+        // Snapshot payload is the same `Checkpoint` shape as `checkpoint_to`.
+        let cp = Blueprint::resume_from(&dir.join(&row.snapshot_file)).unwrap();
+        assert_eq!(cp.blueprint.id, "bp-step");
+        assert_eq!(cp.version, 1);
+        // Non-git step records honest None.
+        let row2 = b
+            .checkpoint_step_to(&dir, "ex:3", 2, None, 9)
+            .unwrap();
+        assert_eq!(row2.git_sha, None);
+        // Restore picker lists in step order.
+        let rows = Blueprint::list_step_checkpoints(&dir, "ex:3").unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!((rows[0].step, rows[1].step), (1, 2));
+        // Other works are filtered out; missing dir is empty, not an error.
+        assert!(Blueprint::list_step_checkpoints(&dir, "ex:9").unwrap().is_empty());
+        assert!(Blueprint::list_step_checkpoints(&dir.join("nope"), "ex:3")
+            .unwrap()
+            .is_empty());
+        // No leftover temp files.
+        assert!(!dir.join("bp.json.tmp").exists());
+        // Fail closed on bad inputs.
+        assert!(b.checkpoint_step_to(&dir, "", 1, None, 0).is_err());
+        assert!(b.checkpoint_step_to(&dir, "ex:3", 0, None, 0).is_err());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

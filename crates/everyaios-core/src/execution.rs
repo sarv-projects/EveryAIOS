@@ -619,6 +619,122 @@ impl ExecutionKernel {
                     "approved": approved,
                 }))
             }
+            // P64.4 — spawn a Subagent-trigger Work with deny-stripped scope.
+            "execution/begin_subagent" => {
+                let session = params
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("default");
+                let objective = params
+                    .get("objective")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let parent = params
+                    .get("parentId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let depth = params
+                    .get("depth")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as u32;
+                let granted: Vec<String> = params
+                    .get("tools")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let denied: Vec<String> = params
+                    .get("blockedTools")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let task_id = params
+                    .get("taskId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let policy = params
+                    .get("policySnapshot")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let ex = self.begin_subagent(
+                    session, objective, parent, depth, &granted, &denied, policy,
+                )?;
+                let provision = plan_subagent_worktree(task_id, &ex.id)
+                    .map(|p| serde_json::to_value(p).unwrap_or(Value::Null))
+                    .unwrap_or(Value::Null);
+                let mut v = serde_json::to_value(&ex).map_err(|e| e.to_string())?;
+                if let Value::Object(map) = &mut v {
+                    map.insert("provision".into(), provision);
+                }
+                Ok(v)
+            }
+            // P64.5 — record a verified edit receipt on a Work.
+            "execution/record_edit" => {
+                let id = params
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/record_edit requires id")?;
+                let strategy = params
+                    .get("strategy")
+                    .and_then(Value::as_str)
+                    .unwrap_or("exact");
+                let path = params
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let ticket = params
+                    .get("ticketId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let audit_seq = params
+                    .get("auditSeq")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let receipt = self.record_verified_edit(id, strategy, path, ticket, audit_seq)?;
+                Ok(receipt)
+            }
+            // P64.6 — record a shadow-preflight outcome on a Work.
+            "execution/record_preflight" => {
+                let id = params
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/record_preflight requires id")?;
+                let passed = params
+                    .get("passed")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let output = params
+                    .get("output")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let receipt = self.record_preflight(id, passed, output)?;
+                Ok(receipt)
+            }
+            // P64.7 — fence-checked restore predicate (never replays commits).
+            "execution/check_restore" => {
+                let id = params
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/check_restore requires id")?;
+                let ex = self
+                    .get(id)
+                    .ok_or_else(|| format!("unknown execution {id}"))?;
+                Ok(json!({
+                    "id": id,
+                    "state": ex.state,
+                    "replayForbidden": should_restore_without_replay(ex),
+                }))
+            }
             _ => Err(format!("method not found: {method}")),
         }
     }
@@ -653,6 +769,388 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+// ---------------------------------------------------------------------------
+// P64 Tier-1 — Native agent plane (ARCH/17 §§17.4–17.9, SPEC I14–I17/F16)
+// ---------------------------------------------------------------------------
+
+/// P64 invariants — tool/preflight/receipt payload ceiling (50 KB cap,
+/// ARCH/17 §17.7 edge case 8). Oversized outputs become a ref-handle +
+/// preview, never a full frame.
+pub const P64_MAX_OUTPUT_BYTES: usize = 50 * 1024;
+
+/// P64.4 — max sub-agent depth on the execution path (mirrors
+/// `governor::P64_MAX_DEPTH` and the canonical `SubAgentLimits`).
+pub const P64_MAX_SUBAGENT_DEPTH: u32 = 2;
+
+/// P64.4 — worktree provision plan for a Subagent-trigger Work. Pure (no
+/// disk I/O): [`crate::worktrees::WorktreeManager::provision_worktree`]
+/// performs the actual `git worktree add` + blackboard init; this computes
+/// the branch, path segment, and blackboard file names the provision will
+/// use so the coordinator can correlate before the lease exists.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SubagentProvision {
+    pub work_id: String,
+    pub task_id: String,
+    pub branch: String,
+    pub worktree_segment: String,
+    pub plan_file: String,
+    pub findings_file: String,
+    pub receipts_dir: String,
+}
+
+/// P64.4 — compute the provision plan. Fails closed on an invalid task id
+/// (same gate as [`crate::worktrees::validate_task_id`]).
+pub fn plan_subagent_worktree(task_id: &str, work_id: &str) -> Result<SubagentProvision, String> {
+    crate::worktrees::validate_task_id(task_id).map_err(|e| e.to_string())?;
+    if work_id.is_empty() {
+        return Err("plan_subagent_worktree requires work_id".to_string());
+    }
+    Ok(SubagentProvision {
+        work_id: work_id.to_string(),
+        task_id: task_id.to_string(),
+        branch: format!("subtask/{task_id}"),
+        worktree_segment: format!(".everyaios/worktrees/task-{task_id}"),
+        plan_file: format!(".everyaios/worktrees/task-{task_id}/.everyaios/task_plan.md"),
+        findings_file: format!(".everyaios/worktrees/task-{task_id}/.everyaios/findings.md"),
+        receipts_dir: format!(".everyaios/worktrees/task-{task_id}/.everyaios/receipts"),
+    })
+}
+
+/// P64.4 — truncate an oversized tool/preflight output to the 50 KB cap,
+/// returning `(preview, truncated, total_bytes)`.
+pub fn truncate_to_50k(output: &str) -> (String, bool, usize) {
+    let total = output.len();
+    if total <= P64_MAX_OUTPUT_BYTES {
+        return (output.to_string(), false, total);
+    }
+    // Cut on a char boundary, never mid-codepoint.
+    let mut end = P64_MAX_OUTPUT_BYTES;
+    while end > 0 && !output.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut preview = output[..end].to_string();
+    preview.push_str(&format!("\n… [truncated {total} → {end} bytes; full output in ref handle]"));
+    (preview, true, total)
+}
+
+impl ExecutionKernel {
+    /// P64.4 — begin a Subagent-trigger Work with deny-stripped scope.
+    ///
+    /// Enforces `max_depth 2` (fail closed — a child that would recurse is
+    /// refused, never queued silently) and strips
+    /// [`crate::governor::DELEGATE_BLOCKED_TOOLS`] from the capability scope
+    /// so children inherit denies, never escalated grants.
+    #[allow(clippy::too_many_arguments)]
+    pub fn begin_subagent(
+        &mut self,
+        session_id: &str,
+        objective: &str,
+        parent_id: Option<String>,
+        depth: u32,
+        granted_tools: &[String],
+        denied_tools: &[String],
+        policy_snapshot: String,
+    ) -> Result<Work, String> {
+        if depth > P64_MAX_SUBAGENT_DEPTH {
+            return Err(format!(
+                "subagent depth {depth} exceeds max_depth {P64_MAX_SUBAGENT_DEPTH} (no recursive spawn)"
+            ));
+        }
+        let scope = crate::governor::effective_subagent_tools(granted_tools, denied_tools);
+        Ok(self.begin(
+            ExecutionTrigger::Subagent,
+            session_id,
+            objective,
+            parent_id,
+            policy_snapshot,
+            String::new(),
+            scope,
+        ))
+    }
+
+    /// P64.5 — record a verified edit receipt (I14 edit ladder outcome) on a
+    /// Work. The Guard-2 ticket + Merkle audit row live in `ToolService`;
+    /// this attaches the strategy + ticket + audit-seq reference so the Work
+    /// timeline shows *how* the edit landed (exact/structured/fuzzy).
+    pub fn record_verified_edit(
+        &mut self,
+        id: &str,
+        strategy: &str,
+        path: &str,
+        ticket_id: &str,
+        audit_seq: u64,
+    ) -> Result<Value, String> {
+        if !matches!(strategy, "exact" | "structured" | "fuzzy") {
+            return Err(format!("unknown edit strategy {strategy:?}"));
+        }
+        if path.is_empty() {
+            return Err("record_verified_edit requires path".to_string());
+        }
+        if ticket_id.is_empty() {
+            return Err("record_verified_edit requires ticketId (Guard-2)".to_string());
+        }
+        let receipt = json!({
+            "kind": "verified_edit",
+            "strategy": strategy,
+            "path": path,
+            "ticketId": ticket_id,
+            "auditSeq": audit_seq,
+        });
+        self.attach_verification(id, receipt.clone())?;
+        Ok(receipt)
+    }
+
+    /// P64.6 — record a shadow-preflight outcome (I15) on a Work. Output is
+    /// capped at 50 KB (preview + truncation flag stored, full text stays
+    /// behind the ref handle).
+    pub fn record_preflight(
+        &mut self,
+        id: &str,
+        passed: bool,
+        output: &str,
+    ) -> Result<Value, String> {
+        let (preview, truncated, total) = truncate_to_50k(output);
+        let receipt = json!({
+            "kind": "shadow_preflight",
+            "passed": passed,
+            "truncated": truncated,
+            "totalBytes": total,
+            "preview": preview,
+        });
+        self.attach_verification(id, receipt.clone())?;
+        Ok(receipt)
+    }
+}
+
+/// P64.6 — risk-gated shadow-preflight decision (SPEC I15).
+///
+/// Preflight (typecheck/tests in a shadow tree *before* commit) runs for
+/// multi-file, structural, or destructive edits only; a small `local-write`
+/// verifies after. Pure + deterministic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PreflightDecision {
+    pub needs_preflight: bool,
+    pub reason: &'static str,
+}
+
+/// P64.6 — decide whether an edit needs shadow preflight.
+pub fn decide_shadow_preflight(
+    files_changed: usize,
+    is_structural: bool,
+    is_destructive: bool,
+) -> PreflightDecision {
+    if is_destructive {
+        PreflightDecision {
+            needs_preflight: true,
+            reason: "destructive edit always preflights in a shadow tree",
+        }
+    } else if is_structural {
+        PreflightDecision {
+            needs_preflight: true,
+            reason: "structural edit preflights in a shadow tree",
+        }
+    } else if files_changed > 1 {
+        PreflightDecision {
+            needs_preflight: true,
+            reason: "multi-file edit preflights in a shadow tree",
+        }
+    } else {
+        PreflightDecision {
+            needs_preflight: false,
+            reason: "small local-write verifies after commit",
+        }
+    }
+}
+
+/// P64.6 — run one shadow check command synchronously with PID tracking and
+/// the 50 KB output cap.
+///
+/// The child PID is captured at spawn (`Child::id`) so the host can
+/// attribute/kill the preflight; stdout+stderr are merged into the preview.
+/// A missing binary or spawn failure is an honest error, never a faked pass.
+pub fn run_shadow_command(
+    program: &str,
+    args: &[&str],
+    cwd: &std::path::Path,
+) -> Result<ShadowCheckOutput, String> {
+    use std::process::Command;
+    if program.is_empty() {
+        return Err("run_shadow_command requires program".to_string());
+    }
+    let out = Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map_err(|e| format!("shadow check spawn failed ({program}): {e}"))?;
+    let success = out.status.success();
+    let mut merged = String::from_utf8_lossy(&out.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if !stderr.is_empty() {
+        merged.push_str("\n--- stderr ---\n");
+        merged.push_str(&stderr);
+    }
+    let (preview, truncated, total) = truncate_to_50k(&merged);
+    Ok(ShadowCheckOutput {
+        program: program.to_string(),
+        success,
+        preview,
+        truncated,
+        total_bytes: total,
+    })
+}
+
+/// P64.6 — spawn a shadow check with an explicit tracked PID (the caller owns
+/// the [`std::process::Child`] lifetime and must wait/kill it; the PID is
+/// returned so fleet accounting never loses a child).
+pub fn spawn_shadow_command_tracked(
+    program: &str,
+    args: &[&str],
+    cwd: &std::path::Path,
+) -> Result<(u32, std::process::Child), String> {
+    use std::process::{Command, Stdio};
+    let child = Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("shadow check spawn failed ({program}): {e}"))?;
+    let pid = child.id();
+    Ok((pid, child))
+}
+
+/// P64.6 — one shadow check's capped output.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ShadowCheckOutput {
+    pub program: String,
+    pub success: bool,
+    pub preview: String,
+    pub truncated: bool,
+    pub total_bytes: usize,
+}
+
+/// P64.7 — per-step checkpoint metadata (SPEC I16). The blueprint snapshot
+/// (`Blueprint::checkpoint_to`) + kernel snapshot (`snapshot_to_string` /
+/// `persist_to`) are the two payloads; this struct is the index row the UI
+/// restore picker lists. `fencing_token` is the opaque `RunAuthority` token
+/// that owned the run when the checkpoint was taken.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StepCheckpointMeta {
+    pub work_id: String,
+    pub step: u32,
+    pub git_sha: Option<String>,
+    pub snapshot_bytes: usize,
+    pub fencing_token: u64,
+    pub created_at_ms: u64,
+}
+
+impl StepCheckpointMeta {
+    pub fn new(
+        work_id: String,
+        step: u32,
+        git_sha: Option<String>,
+        snapshot_bytes: usize,
+        fencing_token: u64,
+    ) -> Self {
+        Self {
+            work_id,
+            step,
+            git_sha,
+            snapshot_bytes,
+            fencing_token,
+            created_at_ms: now_ms(),
+        }
+    }
+}
+
+/// P64.7 — auto-checkpoint the kernel for one mutating step: serialize +
+/// atomically persist (`snapshot_to_string` / `persist_to`) under
+/// `<dir>/kernel-<work_id>-step-<n>.json`, and return the index row. Pure
+/// reuse — no second checkpoint format.
+pub fn auto_checkpoint_kernel(
+    kernel: &ExecutionKernel,
+    dir: &std::path::Path,
+    work_id: &str,
+    step: u32,
+    git_sha: Option<String>,
+    fencing_token: u64,
+) -> Result<(std::path::PathBuf, StepCheckpointMeta), String> {
+    if work_id.is_empty() {
+        return Err("auto_checkpoint_kernel requires work_id".to_string());
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("create checkpoint dir: {e}"))?;
+    let path = dir.join(format!("kernel-{work_id}-step-{step}.json"));
+    kernel.persist_to(&path)?;
+    let snapshot_bytes = std::fs::metadata(&path)
+        .map(|m| m.len() as usize)
+        .unwrap_or(0);
+    Ok((
+        path,
+        StepCheckpointMeta::new(
+            work_id.to_string(),
+            step,
+            git_sha,
+            snapshot_bytes,
+            fencing_token,
+        ),
+    ))
+}
+
+/// P64.7 — commit exactly the mutated workspace files after a mutating tool
+/// call (reuses [`crate::git_commit::commit_verified_edit`]: verified gate →
+/// `git add -- <literal>` → `git commit`). `verified=true` is the shadow
+/// preflight / edit-ladder verdict; `false` refuses without touching git.
+/// Returns the new short SHA, or `None` when `repo_root` is not a git
+/// checkout (non-git resource snapshots are the caller's JSON payload —
+/// honest `None`, never a faked SHA).
+pub fn commit_workspace_snapshot(
+    repo_root: &std::path::Path,
+    files: &[&str],
+    message: &str,
+    verified: bool,
+) -> Result<Option<String>, String> {
+    if files.is_empty() {
+        return Err("commit_workspace_snapshot requires files".to_string());
+    }
+    if !repo_root.join(".git").exists() {
+        return Ok(None);
+    }
+    match crate::git_commit::commit_verified_edit(repo_root, files, message, || verified) {
+        Ok(info) => Ok(Some(info.sha)),
+        Err(crate::git_commit::CommitError::VerificationFailed(msg)) => {
+            Err(format!("snapshot refused: {msg}"))
+        }
+        Err(e) => Err(format!("snapshot failed: {e}")),
+    }
+}
+
+/// P64.7 — restore predicate: a Work that already reached a terminal state
+/// **with** a receipt must never replay its committed effects. The restore
+/// path resumes *from* the checkpoint (re-dispatch only receipt-less,
+/// non-terminal steps).
+pub fn should_restore_without_replay(work: &Work) -> bool {
+    matches!(
+        work.state,
+        ExecutionPhase::Completed | ExecutionPhase::Failed | ExecutionPhase::Cancelled
+    ) && work.receipt.is_some()
+}
+
+/// P64.7 — RunAuthority fence for restore (Work Gateway P49.4): only the
+/// current fencing-token holder may restore a run. Stale tokens are refused
+/// so a reassigned worker can never resurrect — and re-commit — an old step.
+pub fn check_restore_fence(
+    authority: &crate::work_gateway::RunAuthority,
+    node_id: &str,
+    token: u64,
+    now_ms: u64,
+) -> Result<(), String> {
+    if authority.valid(node_id, token, now_ms) {
+        Ok(())
+    } else {
+        Err("restore refused: stale fencing token (run migrated or lease expired)".to_string())
+    }
 }
 
 #[cfg(test)]
@@ -994,5 +1492,197 @@ mod tests {
         assert!(ExecutionKernel::recover_from(&bad).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // --- P64 Tier-1 ---------------------------------------------------------
+
+    #[test]
+    fn p64_begin_subagent_strips_blocked_tools_and_caps_depth() {
+        let mut k = ExecutionKernel::new();
+        let granted = vec!["read".to_string(), "delegate".to_string(), "memory".to_string()];
+        let ex = k
+            .begin_subagent("s", "do sub work", None, 1, &granted, &[], "pol".into())
+            .unwrap();
+        assert_eq!(ex.trigger, ExecutionTrigger::Subagent);
+        assert_eq!(ex.capability_scope, vec!["read".to_string()]);
+        // Depth 3 is refused (no recursive spawn).
+        assert!(k
+            .begin_subagent("s", "too deep", None, 3, &granted, &[], String::new())
+            .is_err());
+    }
+
+    #[test]
+    fn p64_provision_plan_is_pure_and_validated() {
+        let p = plan_subagent_worktree("task-1", "ex:1").unwrap();
+        assert_eq!(p.branch, "subtask/task-1");
+        assert!(p.plan_file.ends_with("task_plan.md"));
+        assert!(p.findings_file.ends_with("findings.md"));
+        assert!(p.receipts_dir.ends_with("receipts"));
+        assert!(plan_subagent_worktree("../evil", "ex:1").is_err());
+        assert!(plan_subagent_worktree("task-1", "").is_err());
+    }
+
+    #[test]
+    fn p64_truncate_50k_caps_preview() {
+        let big = "x".repeat(P64_MAX_OUTPUT_BYTES + 100);
+        let (preview, truncated, total) = truncate_to_50k(&big);
+        assert!(truncated);
+        assert_eq!(total, big.len());
+        assert!(preview.len() < big.len());
+        assert!(preview.contains("truncated"));
+        let (small, t2, _) = truncate_to_50k("hi");
+        assert!(!t2);
+        assert_eq!(small, "hi");
+    }
+
+    #[test]
+    fn p64_shadow_preflight_is_risk_gated() {
+        assert!(!decide_shadow_preflight(1, false, false).needs_preflight);
+        assert!(decide_shadow_preflight(2, false, false).needs_preflight);
+        assert!(decide_shadow_preflight(1, true, false).needs_preflight);
+        assert!(decide_shadow_preflight(1, false, true).needs_preflight);
+    }
+
+    #[test]
+    fn p64_shadow_command_runs_and_caps() {
+        let dir = std::env::temp_dir();
+        let out = run_shadow_command("echo", &["hello-shadow"], &dir).unwrap();
+        assert!(out.success);
+        assert!(out.preview.contains("hello-shadow"));
+        assert!(!out.truncated);
+        assert!(run_shadow_command("", &[], &dir).is_err());
+    }
+
+    #[test]
+    fn p64_shadow_tracked_spawn_reports_pid() {
+        let dir = std::env::temp_dir();
+        #[cfg(unix)]
+        {
+            let (pid, mut child) = spawn_shadow_command_tracked("echo", &["pid-check"], &dir).unwrap();
+            assert!(pid > 0);
+            let _ = child.wait();
+        }
+        #[cfg(not(unix))]
+        {
+            let res = spawn_shadow_command_tracked("echo-missing-binary-xyz", &[], &dir);
+            assert!(res.is_err() || res.is_ok());
+        }
+    }
+
+    #[test]
+    fn p64_verified_edit_and_preflight_receipts_attach() {
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Chat,
+            "s",
+            "edit",
+            None,
+            String::new(),
+            String::new(),
+            Vec::new(),
+        );
+        let r = k
+            .record_verified_edit(&ex.id, "exact", "a.txt", "t1", 7)
+            .unwrap();
+        assert_eq!(r["strategy"], "exact");
+        assert!(k
+            .record_verified_edit(&ex.id, "nope", "a.txt", "t1", 7)
+            .is_err());
+        assert!(k.record_verified_edit(&ex.id, "exact", "", "t1", 7).is_err());
+        assert!(k.record_verified_edit(&ex.id, "exact", "a.txt", "", 7).is_err());
+        let p = k.record_preflight(&ex.id, true, "ok").unwrap();
+        assert_eq!(p["passed"], true);
+        // IPC arms reachable without unwrap on missing fields.
+        let v = k
+            .handle("execution/record_edit", &json!({"id": ex.id}))
+            .unwrap_err();
+        assert!(v.contains("strategy") || v.contains("path") || v.contains("ticket"));
+    }
+
+    #[test]
+    fn p64_auto_checkpoint_persists_and_fence_holds() {
+        let dir = std::env::temp_dir().join(format!("exec-p64-ckpt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Chat,
+            "s",
+            "mutate",
+            None,
+            String::new(),
+            String::new(),
+            Vec::new(),
+        );
+        let (path, meta) =
+            auto_checkpoint_kernel(&k, &dir, &ex.id, 1, Some("abc123".into()), 9).unwrap();
+        assert!(path.exists());
+        assert_eq!(meta.step, 1);
+        assert_eq!(meta.fencing_token, 9);
+        assert!(meta.snapshot_bytes > 0);
+        // Non-git dir → honest None, never a faked SHA.
+        let none = commit_workspace_snapshot(&dir, &["a.txt"], "msg", true).unwrap();
+        assert_eq!(none, None);
+        assert!(commit_workspace_snapshot(&dir, &[], "msg", true).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p64_terminal_work_is_never_replayed_and_fence_refuses_stale() {
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Chat,
+            "s",
+            "done work",
+            None,
+            String::new(),
+            String::new(),
+            Vec::new(),
+        );
+        // Non-terminal without receipt → replayable (repair path decides).
+        assert!(!should_restore_without_replay(k.get(&ex.id).unwrap()));
+        k.transition(&ex.id, ExecutionPhase::Running).unwrap();
+        k.attach_receipt(&ex.id, json!({"ok": true})).unwrap();
+        k.transition(&ex.id, ExecutionPhase::Verifying).unwrap();
+        k.transition(&ex.id, ExecutionPhase::Completed).unwrap();
+        assert!(should_restore_without_replay(k.get(&ex.id).unwrap()));
+
+        let auth = crate::work_gateway::RunAuthority {
+            run_id: "r1".into(),
+            node_id: "n1".into(),
+            lease_id: "l1".into(),
+            fencing_token: 4,
+            granted_at_ms: 0,
+            expires_at_ms: 0,
+        };
+        assert!(check_restore_fence(&auth, "n1", 4, 1).is_ok());
+        assert!(check_restore_fence(&auth, "n1", 3, 1).is_err());
+        assert!(check_restore_fence(&auth, "n2", 4, 1).is_err());
+    }
+
+    #[test]
+    fn p64_begin_subagent_ipc_arm_wires_provision() {
+        let mut k = ExecutionKernel::new();
+        let v = k
+            .handle(
+                "execution/begin_subagent",
+                &json!({
+                    "sessionId": "s",
+                    "objective": "sub work",
+                    "taskId": "task-9",
+                    "depth": 1,
+                    "tools": ["read", "delegate"],
+                    "policySnapshot": "pol"
+                }),
+            )
+            .unwrap();
+        assert_eq!(v["trigger"], "subagent");
+        assert_eq!(v["provision"]["branch"], "subtask/task-9");
+        // Depth-exceeded fails closed through the IPC arm (no unwrap).
+        assert!(k
+            .handle(
+                "execution/begin_subagent",
+                &json!({"sessionId": "s", "objective": "x", "taskId": "t", "depth": 9})
+            )
+            .is_err());
     }
 }

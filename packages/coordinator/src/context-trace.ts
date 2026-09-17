@@ -18,6 +18,7 @@ export type ContextSource =
   | "user"
   | "memory_warm_set"
   | "tool_index"
+  | "repo_map"
   | "user_document"
   | "style_memory"
   | "trajectory";

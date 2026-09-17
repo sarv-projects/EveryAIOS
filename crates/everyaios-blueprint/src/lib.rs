@@ -56,7 +56,7 @@ pub use change_set::{
     Change, ChangeSet, ChangeState, CommittedChange, EffectClass, ImportEntry, ImportError,
     RecoveryReport, ReviewedImport,
 };
-pub use checkpoint::{BlueprintRegistry, Checkpoint, CheckpointError, RegistryError};
+pub use checkpoint::{BlueprintRegistry, Checkpoint, CheckpointError, RegistryError, StepCheckpoint};
 pub use crystallize::{
     compile_to_script, decrystallize_check, signature as workflow_signature, CompiledSkill, Drift,
     ScriptLanguage, SkillRegistry, StepClass, Workflow, WorkflowDetector, WorkflowStep,
@@ -86,8 +86,9 @@ pub use plugin::{
     Slot, TrustFlagsDecl, ABI_VERSION,
 };
 pub use skill_store::{
-    grow_from_task, taste_skill, ScoredSkill, Skill, SkillError, SkillIndex, SkillManifest,
-    SkillReference, SkillScript, SkillStore, MAX_ACTIVE_SKILLS,
+    grow_from_task, grow_from_task_checked, taste_skill, validate_grown_skill, ScoredSkill, Skill,
+    SkillError, SkillIndex, SkillManifest, SkillReference, SkillScript, SkillStore,
+    MAX_ACTIVE_SKILLS, SKILL_MAX_LINES,
 };
 pub use skills_index::{
     compose_stack, ComposeOutcome, IndexEntry, RejectionReason, SelectionEvidence, SkillsIndexFile,

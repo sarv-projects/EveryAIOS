@@ -94,9 +94,14 @@ pub mod wsl;
 
 pub use git_queue::{GitOperationQueue, GitQueueError};
 pub use governor::{
-    ConcurrencyGovernor, FleetTaskKind, FleetTaskStatus, GovernorConfig, SubagentTask,
+    check_subagent_admission, effective_subagent_tools, ConcurrencyGovernor, FleetTaskKind,
+    FleetTaskStatus, GovernorConfig, SubagentTask, DELEGATE_BLOCKED_TOOLS,
+    DEFAULT_DENY_TASK_TOOLS, P64_MAX_CONCURRENT, P64_MAX_DEPTH, P64_MAX_TOTAL,
 };
-pub use worktrees::{WorktreeError, WorktreeLease, WorktreeManager};
+pub use worktrees::{
+    validate_task_id, WorktreeError, WorktreeLease, WorktreeManager, BLACKBOARD_FINDINGS,
+    BLACKBOARD_PLAN, BLACKBOARD_RECEIPTS, MAX_RECEIPT_BYTES,
+};
 
 pub use adapter::{exact_command_consent, is_install_script, Stage0Adapter};
 pub use automation_runtime::{
@@ -118,8 +123,13 @@ pub use everyaios_mcp::ExternalTool;
 /// Backward-compat alias: [`Execution`] was renamed to [`Work`] (P47.4).
 pub use execution::Work as Execution;
 pub use execution::{
-    ExecutionKernel, ExecutionPhase, ExecutionTrigger, ForkLineage, PendingApproval,
-    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest, Work,
+    auto_checkpoint_kernel, check_restore_fence, commit_workspace_snapshot,
+    decide_shadow_preflight, plan_subagent_worktree, run_shadow_command,
+    should_restore_without_replay, spawn_shadow_command_tracked, truncate_to_50k, ExecutionKernel,
+    ExecutionPhase, ExecutionTrigger, ForkLineage, PendingApproval, PreflightDecision,
+    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest,
+    ShadowCheckOutput, StepCheckpointMeta, SubagentProvision, Work, P64_MAX_OUTPUT_BYTES,
+    P64_MAX_SUBAGENT_DEPTH,
 };
 pub use export::{
     render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
@@ -164,8 +174,11 @@ pub use task_ledger::{
 };
 pub use telemetry::{Telemetry, TelemetryEventKind, TelemetryMode, TelemetrySample};
 pub use tools::{
-    canonical_args_hash, BrowserBackend, ExternalToolBackend, RegisteredTool, TerminalExecutor,
-    TerminalRun, ToolFamily, ToolRegistry, ToolService,
+    apply_edit_ladder, apply_exact_once, apply_fuzzy_edit, apply_structured_edit,
+    canonical_args_hash, count_occurrences, find_facade, is_facade, BrowserBackend,
+    EditShapeSource, EditStrategy, ExternalToolBackend, FACADE_ROUTES, FacadeRoute,
+    LexicalShapeSource, RegisteredTool, TerminalExecutor, TerminalRun, ToolFamily, ToolRegistry,
+    ToolService, EDIT_TOOL_ID, P64_MAX_EDIT_BYTES,
 };
 pub use vault_key::{
     gate_mode, keyfile_path, needs_passphrase_gate, resolve_vault_key, setup_vault_passphrase,

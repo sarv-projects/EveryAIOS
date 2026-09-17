@@ -193,3 +193,74 @@ export function buildDesktopSystemPrompt(opts: DesktopPromptOptions): string {
 
   return [parts.join("\n\n"), core, docs].filter((s) => s.length > 0).join("\n\n");
 }
+
+/**
+ * P64.3 — repo-map context injection (Tier-1 lane).
+ *
+ * The native map is built in the trusted layer (tags + PageRank over the
+ * symbol graph); this module only ranks, budget-fits, and renders the rows
+ * the native side returns. Injection always happens BELOW `CACHE_BOUNDARY`
+ * via `injectBelowBoundary` (chat.ts) so segments 1-7 stay byte-identical.
+ * No new prompt engine is introduced: these are pure render helpers over the
+ * single 12-segment assembler above.
+ */
+
+/** One ranked repo-map row as returned by the native `repomap_build` path. */
+export interface RepoMapTag {
+  symbol: string;
+  kind: string;
+  file: string;
+  line: number;
+  /** PageRank centrality; absent ranks as 0 (deterministic fallback). */
+  rank?: number;
+}
+
+/** Default repo-map token budget (mirrors the native ~1K map-token default). */
+export const REPOMAP_DEFAULT_BUDGET_TOKENS = 1000;
+
+/**
+ * Deterministic PageRank order: rank descending, then symbol/file/line
+ * ascending so equal ranks never flip between turns.
+ */
+export function rankRepoMapTags(tags: RepoMapTag[]): RepoMapTag[] {
+  return [...tags].sort((a, b) => {
+    const ra = a.rank ?? 0;
+    const rb = b.rank ?? 0;
+    if (rb !== ra) return rb > ra ? 1 : -1;
+    if (a.symbol !== b.symbol) return a.symbol < b.symbol ? -1 : 1;
+    if (a.file !== b.file) return a.file < b.file ? -1 : 1;
+    return a.line - b.line;
+  });
+}
+
+/**
+ * Deterministic budget fit over a PageRank-ordered list (mirrors the native
+ * `fit_budget`: ~4 chars/token, per-tag cost `symbol + file + 8`, binary
+ * search for the largest fitting prefix). Returns the fitting prefix only —
+ * never reorders, never drops the boundary stability.
+ */
+export function fitRepoMapToBudget(
+  ranked: RepoMapTag[],
+  maxTokens: number = REPOMAP_DEFAULT_BUDGET_TOKENS,
+): RepoMapTag[] {
+  const budget = Math.max(0, Math.floor(maxTokens));
+  const approxChars = budget * 4;
+  let lo = 0;
+  let hi = ranked.length;
+  const costOf = (t: RepoMapTag): number => t.symbol.length + t.file.length + 8;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    let cost = 0;
+    for (let i = 0; i < mid; i++) cost += costOf(ranked[i]!);
+    if (cost <= approxChars) lo = mid;
+    else hi = mid - 1;
+  }
+  return ranked.slice(0, lo);
+}
+
+/** Render fitted rows as a single injectable block (empty input → empty). */
+export function renderRepoMapBlock(tags: RepoMapTag[]): string {
+  if (tags.length === 0) return "";
+  const lines = tags.map((t) => `${t.symbol} (${t.kind}) ${t.file}:${t.line}`);
+  return `<repo_map>\n${lines.join("\n")}\n</repo_map>`;
+}

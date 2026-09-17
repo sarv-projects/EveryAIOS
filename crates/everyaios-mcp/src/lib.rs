@@ -684,6 +684,204 @@ pub fn find_inbuilt_tool(name: &str) -> Option<&'static ToolDef> {
     all_tools().into_iter().find(|t| t.name == name)
 }
 
+// ---------------------------------------------------------------------------
+// P64.9 — Shared-plane task façades (SPEC F16, ARCH/17 §17.5)
+// ---------------------------------------------------------------------------
+//
+// External agents never receive 51 raw primitives — they receive task-shaped
+// façades over the SAME Rust implementations (one engine, two façades). This
+// table is the MCP-side mirror of `everyaios-core::tools::FACADE_ROUTES`
+// (flat dot-hierarchy ids, `readOnly`/destructive hints, fan-out to canonical
+// 51-tool names). Guard-2 + audit are unchanged: façades dispatch through the
+// same ticketed executor.
+
+/// P64.9 — one shared-plane façade over the inbuilt catalog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FacadeDef {
+    /// Flat unique id, e.g. `office.edit`.
+    pub name: &'static str,
+    pub description: &'static str,
+    /// MCP `readOnlyHint` mirror (true = never mutates).
+    pub read_only: bool,
+    /// Destructive hint (true = can destroy data; always mutating).
+    pub destructive: bool,
+    /// Risk tier hint (`low`/`medium`/`high`).
+    pub risk: &'static str,
+    /// Canonical inbuilt tool names this façade fans out to.
+    pub fans_out_to: &'static [&'static str],
+}
+
+/// P64.9 — the 16 shared-plane façades (ARCH/17 §17.5): office 6 · browser 3
+/// · computer-use 2 · workspace 1 · artifact 2 · work 2.
+pub const SHARED_FACADES: &[FacadeDef] = &[
+    FacadeDef {
+        name: "office.open",
+        description: "Open a document for reading (docx/xlsx/pptx/pdf)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &["office_open"],
+    },
+    FacadeDef {
+        name: "office.inspect",
+        description: "Inspect document structure (outline, sheets, pages)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &["office_open"],
+    },
+    FacadeDef {
+        name: "office.edit",
+        description: "Edit one document block (surgical patch)",
+        read_only: false,
+        destructive: false,
+        risk: "medium",
+        fans_out_to: &["office_edit"],
+    },
+    FacadeDef {
+        name: "office.calculate",
+        description: "Recalculate a spreadsheet through the formula engine",
+        read_only: false,
+        destructive: false,
+        risk: "medium",
+        fans_out_to: &["office_edit", "office_open"],
+    },
+    FacadeDef {
+        name: "office.render",
+        description: "Render or export a document (pdf export path)",
+        read_only: false,
+        destructive: false,
+        risk: "medium",
+        fans_out_to: &["office_export", "office_open"],
+    },
+    FacadeDef {
+        name: "office.verify",
+        description: "Verify document conformance (open + inspect)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &["office_open"],
+    },
+    FacadeDef {
+        name: "browser.research",
+        description: "Research the web (search + read + deep research)",
+        read_only: true,
+        destructive: false,
+        risk: "medium",
+        fans_out_to: &["search_web", "read", "deep_research"],
+    },
+    FacadeDef {
+        name: "browser.operate",
+        description: "Operate the browser (navigate + snapshot + act + wait)",
+        read_only: false,
+        destructive: false,
+        risk: "high",
+        fans_out_to: &["navigate", "snapshot", "act", "wait"],
+    },
+    FacadeDef {
+        name: "browser.extract",
+        description: "Extract page content (read + grep + pdf + screenshot)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &["read", "grep", "pdf", "screenshot"],
+    },
+    FacadeDef {
+        name: "computer_use.see",
+        description: "Observe the desktop (windows + read)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &["windows", "tabs"],
+    },
+    FacadeDef {
+        name: "computer_use.act",
+        description: "Act on the desktop (act + wait)",
+        read_only: false,
+        destructive: true,
+        risk: "high",
+        fans_out_to: &["act", "wait"],
+    },
+    FacadeDef {
+        name: "workspace.map",
+        description: "Map the workspace (scan + filename search)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &["disk_scan", "filename_search"],
+    },
+    FacadeDef {
+        name: "artifact.store",
+        description: "Store an artifact (proposal + scan surface)",
+        read_only: false,
+        destructive: false,
+        risk: "medium",
+        fans_out_to: &["disk_scan", "disk_cleanup"],
+    },
+    FacadeDef {
+        name: "artifact.retrieve",
+        description: "Retrieve an artifact (scan + search surface)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &["disk_scan", "filename_search"],
+    },
+    FacadeDef {
+        name: "work.create",
+        description: "Create durable work (memory store + plan surface)",
+        read_only: false,
+        destructive: false,
+        risk: "medium",
+        fans_out_to: &["memory_store", "disk_scan"],
+    },
+    FacadeDef {
+        name: "work.status",
+        description: "Read durable work status (retrieve + review surface)",
+        read_only: true,
+        destructive: false,
+        risk: "low",
+        fans_out_to: &["memory_retrieve", "memory_review_due"],
+    },
+];
+
+/// P64.9 — look up a façade by id.
+pub fn find_facade(name: &str) -> Option<&'static FacadeDef> {
+    SHARED_FACADES.iter().find(|f| f.name == name)
+}
+
+/// P64.9 — validate the façade table: flat unique dot-hierarchy ids,
+/// `readOnly`/destructive consistency, and fan-out targets that all exist in
+/// the 51-tool catalog. Fails closed with the first violation.
+pub fn validate_facades() -> Result<(), String> {
+    use std::collections::HashSet;
+    let mut seen = HashSet::new();
+    for f in SHARED_FACADES {
+        if !f.name.contains('.') {
+            return Err(format!("façade {:?} needs dot hierarchy", f.name));
+        }
+        if !seen.insert(f.name) {
+            return Err(format!("duplicate façade {:?}", f.name));
+        }
+        if f.destructive && f.read_only {
+            return Err(format!("façade {:?} cannot be destructive + readOnly", f.name));
+        }
+        if f.fans_out_to.is_empty() {
+            return Err(format!("façade {:?} fans out to nothing", f.name));
+        }
+        for t in f.fans_out_to {
+            if find_inbuilt_tool(t).is_none() {
+                return Err(format!("façade {:?} fans out to unknown tool {t:?}", f.name));
+            }
+        }
+        // Destructive façades must be high-risk + mutating (same Guard path
+        // as the native tool they wrap).
+        if f.destructive && (f.read_only || f.risk != "high") {
+            return Err(format!("façade {:?} destructive must be mutating high-risk", f.name));
+        }
+    }
+    Ok(())
+}
+
 /// Tools belonging to a profile (doc 55: paginated discovery per profile).
 pub fn tools_for_profile(profile: ToolProfile) -> Vec<&'static ToolDef> {
     BROWSER_TOOLS
@@ -909,5 +1107,57 @@ mod tests {
         assert!(find_inbuilt_tool("memory_retrieve").is_some());
         assert!(find_inbuilt_tool("deep_research").is_some());
         assert_eq!(inbuilt_catalog().len(), 5);
+    }
+
+    // --- P64.9 façades ------------------------------------------------------
+
+    #[test]
+    fn p64_facades_validate_against_51_tool_catalog() {
+        assert!(validate_facades().is_ok());
+        assert!(SHARED_FACADES.len() >= 14, "got {}", SHARED_FACADES.len());
+    }
+
+    #[test]
+    fn p64_facade_ids_are_flat_unique_with_dot_hierarchy() {
+        use std::collections::HashSet;
+        let mut seen = HashSet::new();
+        for f in SHARED_FACADES {
+            assert!(f.name.contains('.'), "{:?} needs dot hierarchy", f.name);
+            assert!(!f.name.starts_with('.') && !f.name.ends_with('.'));
+            assert!(seen.insert(f.name), "duplicate façade {:?}", f.name);
+            assert!(!f.description.is_empty());
+        }
+    }
+
+    #[test]
+    fn p64_facade_annotations_carry_readonly_destructive_hints() {
+        // Read-only façades never mutate; destructive façades are high-risk.
+        for f in SHARED_FACADES {
+            assert!(!(f.destructive && f.read_only), "{:?}", f.name);
+            if f.destructive {
+                assert_eq!(f.risk, "high", "{:?}", f.name);
+            }
+        }
+        assert!(find_facade("office.edit").unwrap().read_only == false);
+        assert!(find_facade("office.open").unwrap().read_only == true);
+        assert!(find_facade("computer_use.act").unwrap().destructive == true);
+        assert!(find_facade("browser.extract").unwrap().read_only == true);
+    }
+
+    #[test]
+    fn p64_facade_fanout_targets_all_exist() {
+        for f in SHARED_FACADES {
+            for t in f.fans_out_to {
+                assert!(
+                    find_inbuilt_tool(t).is_some(),
+                    "façade {:?} fans out to unknown tool {t:?}",
+                    f.name
+                );
+            }
+        }
+        // Spot-check the ARCH/17 §17.5 fan-outs.
+        assert!(find_facade("browser.research").unwrap().fans_out_to.contains(&"search_web"));
+        assert!(find_facade("workspace.map").unwrap().fans_out_to.contains(&"disk_scan"));
+        assert!(find_facade("office.edit").unwrap().fans_out_to.contains(&"office_edit"));
     }
 }
