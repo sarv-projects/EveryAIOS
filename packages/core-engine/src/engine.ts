@@ -226,7 +226,11 @@ export class ConversationEngine {
       // When the model emits tool calls in the LAST allowed round, we must
       // stream one more time so the tool results become a real answer.
       // Without this flag, tools execute but fullResponse stays empty.
+      // It is deliberately one-shot (see the arm site below): a provider that
+      // keeps requesting tools must not be able to extend the loop past the
+      // cap, which is what made this loop unbounded.
       let extraFinalRound = false;
+      let extraFinalRoundUsed = false;
       while (toolRound < maxToolRounds || extraFinalRound) {
         extraFinalRound = false;
         if (abortSignal.aborted) return;
@@ -346,9 +350,14 @@ export class ConversationEngine {
         }
 
         toolRound += 1;
-        // One extra streaming round when the LAST allowed iteration produced tools.
-        if (toolRound >= maxToolRounds && previousToolResults.length > 0) {
+        // One extra streaming round when the LAST allowed iteration produced
+        // tools — armed at most once. Re-arming here looped forever against a
+        // provider that always requests tools: every pass pushed more into
+        // `previousToolResults` and `trajectorySteps` until the heap was
+        // exhausted, so `MAX_TOOL_ROUNDS` could never actually cap the loop.
+        if (!extraFinalRoundUsed && toolRound >= maxToolRounds && previousToolResults.length > 0) {
           extraFinalRound = true;
+          extraFinalRoundUsed = true;
         }
       }
 

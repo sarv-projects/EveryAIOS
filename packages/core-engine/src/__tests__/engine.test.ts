@@ -238,8 +238,14 @@ describe('ConversationEngine', () => {
       /* drain */
     }
 
-    // Rounds 0..4 inclusive = 5 model calls (MAX_TOOL_ROUNDS)
-    expect(rounds).toEqual([0, 1, 2, 3, 4]);
+    // Rounds 0..4 inclusive are the capped tool rounds (MAX_TOOL_ROUNDS = 5).
+    // Round 5 is the single extra answering round the engine streams so the
+    // last tool results become a real answer rather than leaving the response
+    // empty; it is armed at most once, which is what makes the cap hold.
+    // This assertion previously expected 5 rounds and had never passed: the
+    // arm site re-armed itself on every pass (the provider below always asks
+    // for another tool), so the loop grew until the heap was exhausted.
+    expect(rounds).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });
 
