@@ -386,10 +386,19 @@ fn stamp_tier(mut t: RegisteredTool) -> RegisteredTool {
 
 fn extra_tools() -> Vec<RegisteredTool> {
     vec![
+        // P54.5 — the id is historical; its meaning is not. `dispatch_script`
+        // runs `code` on the **one PTY plane** (automation profile, Agent
+        // provenance), so the description and the arg description must say
+        // shell, not JavaScript: this string is what the model reads before it
+        // decides what to send, and a model told "JavaScript source" sends
+        // `const x = 1` to a shell. The rquickjs sandbox is still the engine
+        // behind `forge.run_js` and the automation runtime's `run_code` steps.
         RegisteredTool {
             id: "script.run".into(),
             family: ToolFamily::Script,
-            description: "Evaluate JavaScript in the rquickjs sandbox (no host browser)".into(),
+            description:
+                "Run a shell command line in the terminal plane and return its output and exit code"
+                    .into(),
             read_only: false,
             operation: "terminal_shell".into(),
             risk: "high".into(),
@@ -397,7 +406,10 @@ fn extra_tools() -> Vec<RegisteredTool> {
             args_schema: json!({
                 "type": "object",
                 "properties": {
-                    "code": { "type": "string", "description": "JavaScript source" }
+                    "code": {
+                        "type": "string",
+                        "description": "Shell command line to run (e.g. `cargo test -p everyaios-core`)"
+                    }
                 },
                 "required": ["code"],
                 "additionalProperties": false

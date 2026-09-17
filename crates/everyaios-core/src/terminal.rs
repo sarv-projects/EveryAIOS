@@ -1979,6 +1979,185 @@ pub struct SessionInfo {
 }
 
 // ---------------------------------------------------------------------------
+// P54.5 — plane read models (one engine, two façades)
+// ---------------------------------------------------------------------------
+
+/// One shell-reported command, as both façades serve it.
+///
+/// `trusted: false` means the line could not be attributed to the session's own
+/// nonce — an *indirect* injection (tool/web output printing a forged prompt)
+/// must never enter the agent's context as fact, so the flag travels with the
+/// row rather than being decided by each caller.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalCommandView {
+    pub command: String,
+    pub cwd: String,
+    pub exit_code: Option<i32>,
+    pub output: String,
+    pub trusted: bool,
+    pub failed: bool,
+}
+
+/// One session row for the status surface (Shell tab strip + relay read).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalSessionView {
+    pub pty_id: String,
+    pub profile_id: String,
+    pub backend: TerminalBackend,
+    /// `human` is a user tab; `agent`/`task` are read-only.
+    pub origin: TerminalOrigin,
+    /// `script.run` / task label for non-human tabs.
+    pub label: Option<String>,
+    /// `"Rich"` when a shell-integration script is active, else `None`.
+    pub integration: Option<&'static str>,
+    pub cwd: String,
+    pub pid: Option<u32>,
+    /// `exit_code.is_none()` — a session that already exited is not running.
+    pub running: bool,
+    pub exit_code: Option<u32>,
+}
+
+/// What the one PTY plane currently looks like.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalPlaneStatus {
+    /// `false` when this host has no PTY host at all. A caller must render that
+    /// as "no shell on this host", never as "zero sessions".
+    pub attached: bool,
+    pub count: usize,
+    pub ptys: Vec<TerminalSessionView>,
+}
+
+/// The honest status for a host with no PTY host: `attached: false`, not an
+/// empty session list that reads as "a shell with nothing running".
+pub fn detached_plane_status() -> TerminalPlaneStatus {
+    TerminalPlaneStatus {
+        attached: false,
+        count: 0,
+        ptys: Vec::new(),
+    }
+}
+
+/// A **read-only** view of the one PTY plane.
+///
+/// Deliberately cannot run anything. The privileged shell path is the ticketed
+/// `script.run` tool (`tool/exec` → `tool/commit` → Guard-2 →
+/// [`TerminalExecutor`](crate::tools::TerminalExecutor)), so an observer can
+/// never become a second, unticketed executor for a privileged effect. The
+/// relay's `terminal/*` arm and the Tauri read commands both stand on this,
+/// which is what keeps the agent-facing and UI-facing views of one session
+/// identical instead of two hand-rolled projections that drift.
+pub trait TerminalPlaneObserver: Send + Sync {
+    /// Live sessions, with provenance and the shell's own cwd.
+    ///
+    /// Named `plane_status` rather than `status` because `PtyHost` already has
+    /// an inherent `status()` with a different (tuple) shape, and an inherent
+    /// method silently wins method resolution over a trait method — which would
+    /// have made this call return the wrong type rather than fail to compile.
+    fn plane_status(&self) -> TerminalPlaneStatus;
+    /// One session row, if it exists.
+    fn session(&self, pty_id: &str) -> Option<TerminalSessionView>;
+    /// The shell-reported records for one session (oldest first, bounded).
+    fn commands(&self, pty_id: &str, limit: usize) -> Result<Vec<TerminalCommandView>, String>;
+    /// The model-ready last-command block. `None` when the shell has not
+    /// reported a trusted command yet — never a fabricated empty block.
+    fn last_command(&self, pty_id: &str, max_chars: usize) -> Result<Option<String>, String>;
+    /// Recent command history as a compact block.
+    fn history(
+        &self,
+        pty_id: &str,
+        limit: usize,
+        max_chars: usize,
+    ) -> Result<Option<String>, String>;
+}
+
+impl TerminalPlaneObserver for PtyHost {
+    fn plane_status(&self) -> TerminalPlaneStatus {
+        let ptys: Vec<TerminalSessionView> = self
+            .sessions()
+            .into_iter()
+            .map(|s| {
+                let exit_code = self.exit_code(&s.pty_id).ok().flatten();
+                TerminalSessionView {
+                    pty_id: s.pty_id,
+                    profile_id: s.profile_id,
+                    backend: s.backend,
+                    origin: s.origin,
+                    label: s.label,
+                    integration: s.integration,
+                    cwd: s.cwd,
+                    pid: s.pid,
+                    running: exit_code.is_none(),
+                    exit_code,
+                }
+            })
+            .collect();
+        TerminalPlaneStatus {
+            attached: true,
+            count: ptys.len(),
+            ptys,
+        }
+    }
+
+    fn session(&self, pty_id: &str) -> Option<TerminalSessionView> {
+        self.plane_status()
+            .ptys
+            .into_iter()
+            .find(|s| s.pty_id == pty_id)
+    }
+
+    fn commands(&self, pty_id: &str, limit: usize) -> Result<Vec<TerminalCommandView>, String> {
+        let tracker = self
+            .tracker(pty_id)
+            .ok_or_else(|| format!("no such pty: {pty_id}"))?;
+        let t = tracker.lock().map_err(|e| e.to_string())?;
+        Ok(t.recent(limit.clamp(1, MAX_REPLAY_COMMANDS))
+            .into_iter()
+            .map(|r| TerminalCommandView {
+                command: r.command.clone(),
+                cwd: r.cwd.clone(),
+                exit_code: r.exit_code,
+                output: r.output.clone(),
+                trusted: r.trusted,
+                failed: r.failed(),
+            })
+            .collect())
+    }
+
+    fn last_command(&self, pty_id: &str, max_chars: usize) -> Result<Option<String>, String> {
+        let tracker = self
+            .tracker(pty_id)
+            .ok_or_else(|| format!("no such pty: {pty_id}"))?;
+        let t = tracker.lock().map_err(|e| e.to_string())?;
+        Ok(t.context_block(max_chars.clamp(1, MAX_CONTEXT_CHARS)))
+    }
+
+    fn history(
+        &self,
+        pty_id: &str,
+        limit: usize,
+        max_chars: usize,
+    ) -> Result<Option<String>, String> {
+        let tracker = self
+            .tracker(pty_id)
+            .ok_or_else(|| format!("no such pty: {pty_id}"))?;
+        let t = tracker.lock().map_err(|e| e.to_string())?;
+        Ok(t.history_block(
+            limit.clamp(1, MAX_REPLAY_COMMANDS),
+            max_chars.clamp(1, MAX_CONTEXT_CHARS),
+        ))
+    }
+}
+
+/// Upper bound on the session reads, so a caller cannot ask a façade for an
+/// unbounded slice of the tracker (the ring is bounded; the *response* is too).
+const MAX_REPLAY_COMMANDS: usize = 200;
+/// Upper bound on a rendered context block. Mirrors the Tauri commands' clamp.
+const MAX_CONTEXT_CHARS: usize = 64_000;
+
+// ---------------------------------------------------------------------------
 // P67 — shell-integration injection
 // ---------------------------------------------------------------------------
 
@@ -2660,6 +2839,97 @@ zsh = { path = "" }
         let names: Vec<&str> = found.iter().map(|d| d.profile_name.as_str()).collect();
         assert!(names.contains(&"Command Prompt"));
         assert!(names.contains(&"Windows PowerShell"));
+    }
+
+    // --- P54.5 plane read models (real PTY) ---
+
+    /// The observer over a **real** `PtyHost`, not a stub: the arm's wire shape
+    /// is asserted in `chat::tests`, so what matters here is that the read
+    /// models describe a live session truthfully — including the degenerate
+    /// cases that must stay distinguishable.
+    #[test]
+    fn plane_observer_reads_a_real_session() {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+        let profile = DetectedProfile {
+            profile_name: "observer-shell".into(),
+            path: shell,
+            is_unsafe_path: false,
+            is_from_path: false,
+            is_auto_detected: true,
+            is_default: false,
+            args: Vec::new(),
+            env: Some(HashMap::from([("PS1".to_string(), "$ ".to_string())])),
+            icon: None,
+            backend: TerminalBackend::Local,
+            source: None,
+            wsl_distro: None,
+            cwd: None,
+        };
+        let host = PtyHost::new();
+        // Integration off: this test is about the read model, and it must hold
+        // for a session whose shell cannot report anything structurally.
+        let (pty_id, output) = host
+            .spawn_with(
+                &profile,
+                None,
+                24,
+                80,
+                SpawnOpts {
+                    origin: TerminalOrigin::Agent,
+                    integration: false,
+                },
+            )
+            .expect("spawn into real pty");
+        output.stream(|_| {}).expect("reader drains");
+
+        let status = host.plane_status();
+        assert!(status.attached, "a host with a pty is attached");
+        assert_eq!(status.count, 1);
+        let row = &status.ptys[0];
+        assert_eq!(row.pty_id, pty_id);
+        assert_eq!(row.profile_id, "observer-shell");
+        // Provenance must survive the read: this is what makes an agent tab
+        // renderable as read-only rather than as the user's own shell.
+        assert_eq!(row.origin, TerminalOrigin::Agent);
+        assert!(row.running, "a freshly spawned session is running");
+        assert_eq!(row.integration, None, "integration was forced off");
+
+        assert!(
+            host.session(&pty_id).is_some(),
+            "the session is addressable by id"
+        );
+        assert!(host.session("pty-nope").is_none());
+
+        // The one case that must never be confused with the other: a session
+        // with integration off reports *no* command records, and the last
+        // command is an absence of evidence (`None`) — not an empty string a
+        // caller could render as "the command succeeded quietly".
+        let records = host.commands(&pty_id, 50).expect("commands read");
+        assert!(records.is_empty(), "no integration ⇒ no records");
+        assert_eq!(host.last_command(&pty_id, 6000).expect("read"), None);
+        assert_eq!(host.history(&pty_id, 10, 4000).expect("read"), None);
+
+        // An unknown session is a caller bug, not an empty result.
+        assert!(host.commands("pty-nope", 50).is_err());
+        assert!(host.last_command("pty-nope", 6000).is_err());
+
+        host.kill_all();
+    }
+
+    /// A host with no sessions still reports `attached: true` with zero rows.
+    /// The *detached* posture is a property of the host, not of an empty list —
+    /// collapsing the two is exactly the misreading `attached` exists to stop.
+    #[test]
+    fn plane_observer_distinguishes_empty_from_detached() {
+        let host = PtyHost::new();
+        let status = host.plane_status();
+        assert!(status.attached);
+        assert_eq!(status.count, 0);
+        assert!(status.ptys.is_empty());
+
+        let detached = detached_plane_status();
+        assert!(!detached.attached);
+        assert_eq!(detached.count, 0);
     }
 
     // --- real PTY round-trip (P54.3 evidence) ---
