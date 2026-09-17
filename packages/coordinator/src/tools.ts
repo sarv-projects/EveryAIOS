@@ -858,8 +858,10 @@ async function waitForTicketApproval(
 /**
  * Dispatch one sub-agent spawn through the Guard-2 ticket flow
  * (evaluate → useTicket → spawn RPC) and return the summary-only result.
- * The native spawn binds when the `subagent/spawn` handler lands; a missing
- * handler fails closed with an actionable error (never a fabricated success).
+ * The spawn binds to the Rust `subagent/spawn` handler, which owns the
+ * accounting policy (depth / concurrency / total) and returns a summary-only
+ * payload. A missing handler fails closed (never a fabricated success), and a
+ * rejection carrying a real reason is surfaced verbatim rather than masked.
  * Callers hold a tracker slot across this call (begin → finally release).
  */
 export async function dispatchSubAgent(
@@ -906,8 +908,12 @@ export async function dispatchSubAgent(
   let raw: unknown;
   try {
     raw = await request("subagent/spawn", { ...args, ticketId: gated.ticketId, argsHash });
-  } catch {
-    throw new Error("subagent spawn unavailable — native runtime not wired (no silent fallback)");
+  } catch (e) {
+    // A missing handler fails closed, but the accounting policy's own
+    // rejections (depth / concurrency / total exceeded) are the useful signal
+    // and must not be flattened into a generic "unavailable" message.
+    if (e instanceof Error) throw e;
+    throw new Error(`subagent spawn failed: ${String(e)}`);
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("subagent spawn returned no result — fail-closed");
