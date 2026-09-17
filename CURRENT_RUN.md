@@ -703,6 +703,76 @@ from the UI, and would have **failed** `tests/registration_sync.rs` — which wa
 
 ---
 
+## 2H. Implementation wave 5 (2026-09-17) — P65.4 Schedule Settings Contract
+
+**Item taken:** P65.4 (Tier 2, Settings Control Center). The plan's target file
+`ui/src/components/settings/schedules-tab.tsx` does not exist; the real surface is
+`ui/src/components/panels/schedules-section.tsx` (landed in `792dbaf`).
+
+### Resolved the §2G finding-4 open decision
+`ScheduleSettings` carried no `name` and no run count, so the Settings surface
+would have had to render an opaque id where the Automations centre shows a name.
+Decision taken: **add them, as an additive display pair.** Justification is the
+precedent already set by the same contract — §17.12.4 added the whole
+`RuntimeLocation` union to `AgentSettings` and §17.12.5 added `sessionLoadout`,
+neither of which appears in the §17.12.2 baseline listing. §17.12.2 is the
+baseline the implementation extends, not a ceiling, and adding two optional-in-
+practice display fields is backward-compatible (no consumer breaks on extra keys).
+- `src-tauri/src/settings_cmds.rs`: `ScheduleSettings` gains `name: String` and
+  `runs: u64`, both populated in `schedule_settings_for` from the owning `Job`
+  (`name`, `runs`) — the same source the Automations centre reads, so the two
+  surfaces cannot disagree. `id` remains the durable identity.
+- `ui/src/lib/settings.ts`: matching `name` / `runs` on the TS interface.
+- `ARCH/17-NATIVE-AGENT.md` §17.12.2: the `ScheduleSettings` block now records the
+  real wire shape (`name`, `nextRunAt?`, `lastRunAt?`, `runs`, `state`) plus a note
+  on why the two display fields exist. **This is the only md contract edit in this
+  wave**, and it reconciles the doc *to* the code rather than the reverse.
+
+### Found a THIRD gap — and changed the plan because of it
+`ScheduleSettings.trigger` is the **kind only** (`'cron'`), not the expression.
+`ui/src/lib/scheduler.ts`'s `triggerLabel(job.trigger)` renders the actual
+schedule (`cron 0 9 * * *`), which has no home in the canonical read model.
+So a **wholesale** panel migration would regress name, run count **and** the cron
+expression. The read models are deliberately identity/state/health/hash shapes —
+they are not display shapes.
+
+**Conclusion recorded as the architecture rule for the remaining P65 UI items:**
+split by responsibility — **state, health, `configHash` and every mutation come from
+the `settings_*` seam** (that is what it owns, and it is the only path that returns
+the §17.12.3 envelope); **rich display detail stays with the domain lib** (`lib/scheduler`,
+`lib/mcp`, `lib/providers`). Do not force a full rewrite onto the read models; that
+would trade working detail for contract purity.
+
+### Changed — the §17.12.3 mutation protocol on the live path
+`ui/src/components/panels/schedules-section.tsx`: the enable toggle now calls
+`settings_schedule_set_enabled` instead of writing the scheduler directly, and
+implements **discard-optimistic-on-mismatch** honestly:
+- on `lastError`, the shell's real reason is surfaced (no silent success);
+- on `restartRequired`, the user is told a restart is needed;
+- then it **re-reads** (`await load()`) instead of patching its own guess.
+`run-now` / `pause` / `resume` deliberately stay on `lib/scheduler`: the settings
+contract exposes no run or pause command, and inventing one would create a second
+scheduler path — the exact thing §17.12.1 forbids. The now-unused `schedulerEnable`
+import was removed (no dangling references).
+
+### Evidence actually executed
+- `node scripts/check-doc-sync.mjs` → **exit 0** (166 in sync · `1429 = 1221 + 208` · both v3.80 stamps). `[V]`
+- `node scripts/ipc-parity.mjs` → exit 0 · **registered 341 · broken 0 · ghosts 60** (unchanged). `[V]`
+- Struct/constructor field-parity check on `ScheduleSettings`: **16 declared == 14
+  `field: value` + 2 field-shorthand (`timezone,` / `enabled,)` == 16 initialised** —
+  i.e. no missing field initialiser that Rust would reject. `[V]`
+- `schedulerEnable` reference scan after the edit → none remaining. `[V]`
+
+### NOT VERIFIED (same environment limits as §2G — unchanged)
+- **No Rust toolchain**: `cargo check`/`clippy`/`fmt`/`test` still not run. The Rust
+  edit here is checked by field parity and by reading the owning `Job` shape, not by
+  a compiler. `[UNVERIFIED]`
+- **No `tsc` / no `node_modules`**: the `schedules-section.tsx` and `settings.ts`
+  changes were not type-checked. `[UNVERIFIED]`
+- Only the two Node gates could run; that is the whole evidence base for this wave.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
