@@ -128,9 +128,14 @@
   --brand-soft: 221 83% 53% / 0.08;
 
   /* Semantic (meaning only, never decoration) */
-  --success: 142 76% 36%;
-  --warning: 41 96% 40%;
-  --danger: 0 72% 51%;
+  /* P66.5 — status hues darkened so they clear WCAG AA (4.5:1) as the small
+     text they carry: `text-warning` on a white card measured 2.96:1 and
+     `text-success` 3.35:1 at the §2.1 values, both below AA. Measured now:
+     warning 4.94:1 on white / 4.57:1 on canvas, success 5.18 / 4.79,
+     danger 5.06 / 4.68. */
+  --success: 142 76% 28%;
+  --warning: 41 96% 30%;
+  --danger: 0 72% 49%;
   --info: 221 83% 53%;
 
   /* Surface layers — warm cream, NOT sterile white */
@@ -183,12 +188,17 @@
   --card-foreground: 48 14% 93%;
   --popover: 60 3% 13%;
   --popover-foreground: 48 14% 93%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 0 0% 100%;
-  --brand: 217 91% 60%;
-  --brand-foreground: 0 0% 100%;
-  --brand-hover: 213 94% 68%;
-  --brand-soft: 217 91% 60% / 0.12;
+  /* P66.5 — dark mode needs the *opposite* adjustment to light: AA for text on
+     a dark card (`--surface-2`, #2D2C29) needs the accent brighter, not darker.
+     The accent was 3.80:1 there. It is now 4.87:1, and because it is bright the
+     label *on* it flips to the dark ink — white on a bright accent could only
+     reach 2.84:1. Both directions now clear AA. */
+  --primary: 217 91% 67%;
+  --primary-foreground: 60 3% 10%;
+  --brand: 217 91% 67%;
+  --brand-foreground: 60 3% 10%;
+  --brand-hover: 213 94% 74%;
+  --brand-soft: 217 91% 67% / 0.12;
   --secondary: 60 4% 17%;
   --secondary-foreground: 48 14% 93%;
   --muted: 60 4% 17%;
@@ -200,65 +210,68 @@
      mode rendered them at light-canvas lightness: `text-warning` (→
      `--warning`) and `text-emerald-500` (→ `--success`) sat near 3-4:1 on the
      #1A1917 surface. These lift them for the dark canvas. */
-  --success: 142 71% 45%;
+  --success: 142 71% 42%;
   --warning: 41 96% 55%;
-  --danger: 0 72% 60%;
-  --info: 217 91% 60%;
+  --danger: 0 72% 69%;
+  --info: 217 91% 67%;
   --border: 60 4% 20%;
   --input: 60 4% 20%;
-  --ring: 217 91% 60%;
-  --chart-1: 217 91% 60%;
+  --ring: 217 91% 67%;
+  --chart-1: 217 91% 67%;
   --chart-2: 199 89% 55%;
   --chart-3: 142 76% 45%;
   --chart-4: 41 96% 50%;
   --chart-5: 262 83% 66%;
   --sidebar: 60 3% 13%;
   --sidebar-foreground: 48 14% 93%;
-  --sidebar-primary: 217 91% 60%;
-  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-primary: 217 91% 67%;
+  --sidebar-primary-foreground: 60 3% 10%;
   --sidebar-accent: 60 4% 17%;
   --sidebar-accent-foreground: 48 14% 93%;
   --sidebar-border: 60 4% 20%;
-  --sidebar-ring: 217 91% 60%;
+  --sidebar-ring: 217 91% 67%;
 }
 
 /* User-selectable Accent Theme Overrides (P66.5) */
+/* Each preset is tuned twice, for the same reason as the default accent: the
+   light value must be dark enough to read as text on white, and the dark value
+   bright enough to read on the dark card. Measured with the contrast test. */
 [data-accent="sky"] {
+  --brand: 199 89% 35%;
+  --brand-hover: 199 89% 29%;
+  --brand-soft: 199 89% 35% / 0.1;
+  --primary: 199 89% 35%;
+  --ring: 199 89% 35%;
+  --sidebar-primary: 199 89% 35%;
+  --sidebar-ring: 199 89% 35%;
+}
+.dark[data-accent="sky"], [data-accent="sky"] .dark {
   --brand: 199 89% 48%;
-  --brand-hover: 199 89% 42%;
-  --brand-soft: 199 89% 48% / 0.1;
+  --brand-hover: 199 89% 56%;
+  --brand-soft: 199 89% 48% / 0.15;
   --primary: 199 89% 48%;
   --ring: 199 89% 48%;
   --sidebar-primary: 199 89% 48%;
   --sidebar-ring: 199 89% 48%;
 }
-.dark[data-accent="sky"], [data-accent="sky"] .dark {
-  --brand: 199 89% 55%;
-  --brand-hover: 199 89% 65%;
-  --brand-soft: 199 89% 55% / 0.15;
-  --primary: 199 89% 55%;
-  --ring: 199 89% 55%;
-  --sidebar-primary: 199 89% 55%;
-  --sidebar-ring: 199 89% 55%;
-}
 
 [data-accent="emerald"] {
-  --brand: 142 76% 36%;
-  --brand-hover: 142 76% 30%;
-  --brand-soft: 142 76% 36% / 0.1;
-  --primary: 142 76% 36%;
-  --ring: 142 76% 36%;
-  --sidebar-primary: 142 76% 36%;
-  --sidebar-ring: 142 76% 36%;
+  --brand: 142 76% 28%;
+  --brand-hover: 142 76% 22%;
+  --brand-soft: 142 76% 28% / 0.1;
+  --primary: 142 76% 28%;
+  --ring: 142 76% 28%;
+  --sidebar-primary: 142 76% 28%;
+  --sidebar-ring: 142 76% 28%;
 }
 .dark[data-accent="emerald"], [data-accent="emerald"] .dark {
-  --brand: 142 76% 45%;
-  --brand-hover: 142 76% 55%;
-  --brand-soft: 142 76% 45% / 0.15;
-  --primary: 142 76% 45%;
-  --ring: 142 76% 45%;
-  --sidebar-primary: 142 76% 45%;
-  --sidebar-ring: 142 76% 45%;
+  --brand: 142 76% 40%;
+  --brand-hover: 142 76% 48%;
+  --brand-soft: 142 76% 40% / 0.15;
+  --primary: 142 76% 40%;
+  --ring: 142 76% 40%;
+  --sidebar-primary: 142 76% 40%;
+  --sidebar-ring: 142 76% 40%;
 }
 
 [data-accent="violet"] {
@@ -271,32 +284,32 @@
   --sidebar-ring: 262 83% 58%;
 }
 .dark[data-accent="violet"], [data-accent="violet"] .dark {
-  --brand: 262 83% 66%;
-  --brand-hover: 262 83% 74%;
-  --brand-soft: 262 83% 66% / 0.15;
-  --primary: 262 83% 66%;
-  --ring: 262 83% 66%;
-  --sidebar-primary: 262 83% 66%;
-  --sidebar-ring: 262 83% 66%;
+  --brand: 262 83% 74%;
+  --brand-hover: 262 83% 81%;
+  --brand-soft: 262 83% 74% / 0.15;
+  --primary: 262 83% 74%;
+  --ring: 262 83% 74%;
+  --sidebar-primary: 262 83% 74%;
+  --sidebar-ring: 262 83% 74%;
 }
 
 [data-accent="amber"] {
-  --brand: 38 92% 45%;
-  --brand-hover: 38 92% 38%;
-  --brand-soft: 38 92% 45% / 0.1;
-  --primary: 38 92% 45%;
-  --ring: 38 92% 45%;
-  --sidebar-primary: 38 92% 45%;
-  --sidebar-ring: 38 92% 45%;
+  --brand: 38 92% 32%;
+  --brand-hover: 38 92% 26%;
+  --brand-soft: 38 92% 32% / 0.1;
+  --primary: 38 92% 32%;
+  --ring: 38 92% 32%;
+  --sidebar-primary: 38 92% 32%;
+  --sidebar-ring: 38 92% 32%;
 }
 .dark[data-accent="amber"], [data-accent="amber"] .dark {
-  --brand: 41 96% 50%;
-  --brand-hover: 41 96% 60%;
-  --brand-soft: 41 96% 50% / 0.15;
-  --primary: 41 96% 50%;
-  --ring: 41 96% 50%;
-  --sidebar-primary: 41 96% 50%;
-  --sidebar-ring: 41 96% 50%;
+  --brand: 41 96% 41%;
+  --brand-hover: 41 96% 50%;
+  --brand-soft: 41 96% 41% / 0.15;
+  --primary: 41 96% 41%;
+  --ring: 41 96% 41%;
+  --sidebar-primary: 41 96% 41%;
+  --sidebar-ring: 41 96% 41%;
 }
 
 @layer base {
