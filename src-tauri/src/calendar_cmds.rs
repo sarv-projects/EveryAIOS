@@ -18,7 +18,8 @@ pub fn calendar_list(state: State<'_, AppState>) -> Result<Value, String> {
 
 #[tauri::command]
 pub fn calendar_put(state: State<'_, AppState>, calendar: Value) -> Result<bool, String> {
-    let row: CalendarRow = serde_json::from_value(calendar).map_err(|e| format!("bad calendar: {e}"))?;
+    let row: CalendarRow =
+        serde_json::from_value(calendar).map_err(|e| format!("bad calendar: {e}"))?;
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
     vault.put_ui_calendar(&row).map_err(|e| e.to_string())?;
     Ok(true)
@@ -52,13 +53,17 @@ pub fn calendar_event_put(state: State<'_, AppState>, event: Value) -> Result<bo
     let row: CalendarEventRow =
         serde_json::from_value(event).map_err(|e| format!("bad calendar event: {e}"))?;
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
-    vault.put_ui_calendar_event(&row).map_err(|e| e.to_string())?;
+    vault
+        .put_ui_calendar_event(&row)
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
 
 #[tauri::command]
 pub fn calendar_event_delete(state: State<'_, AppState>, id: String) -> Result<bool, String> {
     let vault = state.vault.lock().map_err(|e| e.to_string())?;
-    vault.delete_ui_calendar_event(&id).map_err(|e| e.to_string())?;
+    vault
+        .delete_ui_calendar_event(&id)
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
