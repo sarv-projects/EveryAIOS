@@ -1127,6 +1127,108 @@ start Tier 4. `pnpm install` would additionally restore `tsc` and make the UI wo
 
 ---
 
+## 2O. Implementation wave 11 (2026-09-17) — P64.5 receipt provenance, a HEAD-broken
+## typecheck fixed, and **TS/UI verification unlocked**
+
+### Correction to every earlier wave: TS/UI *can* be verified from this host
+Earlier waves (§2G–§2N) recorded "no `bun`, no `tsc`, `node_modules` has only
+`@tauri-apps`", and tagged every TS/UI change `[UNVERIFIED]`. That was true of
+the *checkout*, not of the *host*. The toolchain was restorable, and restoring
+it changed the evidence situation materially:
+
+```
+pnpm install --prefer-offline        → 592 packages, 13 workspace projects, exit 0
+pnpm -r --filter "./packages/core-*" run build
+                                     → all 10 vendored packages compiled (tsc), exit 0
+npx -y bun@1.1.38 …                  → bun available ephemerally, no global install
+```
+
+The vendored `@personal-ai/core-*` packages ship as `main: ./dist/index.js` and
+had never been built, which is why they resolved as `TS2307 Cannot find module`
+and why the coordinator suite could not run. Building them fixed both.
+
+**Consequence:** the TS/UI half of waves 4–10 is now *verifiable* rather than
+assumed, and this wave verified it. Only the **Rust** half remains unverifiable
+(no `cargo`/`rustc`/`rustup`), and that is the single remaining blocker (§3).
+
+### P64.5 — verified-edit receipt wired end to end (was: arm existed, unused)
+`ExecutionKernel` is **live** in production — it is held by `ChatRelay`
+(`everyaios-core/src/chat.rs:402/469`), exposed via `executions()`
+(`chat.rs:485`), and `chat.rs:1062` routes **any** `execution/*` method to
+`kernel.handle()` with **no whitelist**. So `execution/record_edit` was always
+reachable — nothing called it. (An earlier wave mis-read the kernel as
+"constructed only in tests"; `chat.rs:469` is the production instantiation.)
+
+| File | Change |
+|---|---|
+| `packages/coordinator/src/tools.ts` | `ToolExecutor` tracks the Guard-2 ticket of the last committed effect (`lastTicketId`), gains `setExecutionId()` + `recordVerifiedEdit()`. `applyExactEdit` now records `execution/record_edit` (strategy `exact` + path + ticket) after the write lands. |
+| `packages/coordinator/src/chat.ts` | binds the `execution/begin` id to the turn's `ToolExecutor`. |
+| `packages/coordinator/src/p64-lane.test.ts` | +4 tests for the receipt path. |
+| `ui/src/components/panels/agents-models-section.tsx` | **real HEAD bug fix** (below). |
+
+**Refused to fabricate:** a receipt with no real Guard-2 ticket is *skipped*,
+never invented — the kernel rejects an empty ticket, and a made-up id would be
+fake provenance. A receipt failure also never invalidates an edit that already
+landed (best-effort, matching how `chat.ts` treats the kernel as optional).
+
+### Real HEAD bug: `ui` did not typecheck
+`ui/src/components/panels/agents-models-section.tsx:483` contained
+`(agent.launchable ?? agent.status === 'installed' || native)`, which is
+**TS5076** (`??` and `||` cannot be mixed without parentheses). It came in with
+`792dbaf` — the same WIP commit that shipped the orphaned `settings_cmds.rs`.
+Since `tsc --noEmit` is the UI's *sole* mechanical gate, the UI package was
+failing its only gate at HEAD. Fixed to `launchable ?? (installed || native)`,
+which is the intent already expressed at line 398 of the same file and matches
+the `m.ctx ?? (m.ctx || 16384)` convention in `local-server-view.tsx`.
+
+### Evidence actually executed this wave — all real, none inferred
+| Gate | Result |
+|---|---|
+| `ui/node_modules/.bin/tsc --noEmit -p ui/tsconfig.json` | **0 errors** (was **1** at HEAD) |
+| `packages/coordinator/.bin/tsc --noEmit` | **0 errors** (was 25 before `core-*` were built: 14×TS2307 + 11×TS7006 — all from unresolved vendored dist) |
+| coordinator `bun test` (mine) | **374 pass / 3 fail / 1 error** |
+| coordinator `bun test` (stashed baseline) | **370 pass / 3 fail / 1 error** |
+| → delta | **+4 pass, identical failures — zero regressions** |
+| `ui` `bun test` | **328 pass / 0 fail** |
+| `node scripts/check-doc-sync.mjs` | exit 0 (166 caps · 1429 = 1221+208 open · kernel gate clear) |
+| `node scripts/ipc-parity.mjs` | exit 0 (341 registered · 0 broken) |
+| `node scripts/e2e/security-gate.mjs` | **SKIP** — no cargo toolchain (honest) |
+| `node scripts/e2e/failure-injection.mjs` | **SKIP** — no core binary (honest) |
+
+**The 3 coordinator failures are pre-existing and not mine.** Baseline and
+post-change runs fail the *same* 3: two `P64.3` repo-map-order tests that
+**pass in isolation** (`bun test src/p64-lane.test.ts` → 25/25) and are therefore
+a cross-file test-order/parallelism interaction, plus the
+`live-agent-harness` case that spawns a real `opencode` binary. The earlier
+"+1 error" is that same harness.
+
+### What is still NOT done, and why (no overclaiming)
+- **P64.6's runner is still not implemented.** Reading the code settled it: the
+  *mechanism* is complete and tested (`decide_shadow_preflight`,
+  `run_shadow_command`, `spawn_shadow_command_tracked`,
+  `WorktreeManager::shadow_worktree_path`, `record_preflight`) but every one of
+  them has **zero call sites outside `lib.rs` re-exports**. A grep for any
+  configured check/test command (`checkCommand`, `typecheckCommand`, …) across
+  `packages/coordinator/src`, `src-tauri/src`, `everyaios-core/src` returns
+  **nothing**. So "wire P64.6" means *first design* a project check-command
+  source + a bounded runner, then wire it — a feature build on the Rust-critical
+  path, not a two-line hookup. Earlier wording calling this "small wiring" is
+  **withdrawn**; it was too optimistic, and it is why this wave did not guess.
+- **P64.7 is further along than its row suggests.** The UI is complete and
+  wired end to end (`lib/checkpoints.ts` → `chat/turn-checkpoint.tsx` →
+  `session-timeline.tsx` → `message-bubble.tsx`), restoring through the
+  **existing** `fs_undo_restore` with no new commands, and the automatic
+  per-file snapshot already runs on every mutation via
+  `ToolDispatcher::snapshot_file` / `revert_last`. Residual: the git-commit
+  snapshot per mutating step (`commit_workspace_snapshot`) plus the
+  `StepCheckpointMeta`/`auto_checkpoint_kernel` index — both unwired, and
+  `commit_workspace_snapshot`'s `verified` flag is fed by P64.6, so it is coupled
+  to the item above. Not attempted.
+- **Nothing Rust was compiled.** Every Rust edit from waves 4–10 stands exactly
+  as it did: verified statically only, still `[UNVERIFIED]`.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
