@@ -237,7 +237,11 @@ pub fn terminal_set_shell_integration(enabled: bool) -> Result<bool, String> {
 /// Start the reader thread for a spawned PTY, mapping `PtyFrame`s onto the
 /// `terminal-event` channel. Every spawn path funnels through here so all
 /// three provenance kinds stream identically.
-fn stream_frames(app: AppHandle, pty_id: String, output: everyaios_core::terminal::PtyOutput) -> Result<(), String> {
+fn stream_frames(
+    app: AppHandle,
+    pty_id: String,
+    output: everyaios_core::terminal::PtyOutput,
+) -> Result<(), String> {
     let id = pty_id.clone();
     output
         .stream(move |frame| match frame {
@@ -298,9 +302,10 @@ fn finish_spawn(
     let (kind, subject) = match origin {
         TerminalOrigin::Human => (crate::control::AuthKind::HumanGesture, "terminal.spawn"),
         TerminalOrigin::Agent => (crate::control::AuthKind::AgentTicket, "terminal.agent_run"),
-        TerminalOrigin::Task => {
-            (crate::control::AuthKind::AutomationTicket, "terminal.task_run")
-        }
+        TerminalOrigin::Task => (
+            crate::control::AuthKind::AutomationTicket,
+            "terminal.task_run",
+        ),
     };
     let mut payload = audit_subject;
     if let Some(l) = label {

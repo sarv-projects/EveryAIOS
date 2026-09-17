@@ -449,9 +449,8 @@ fn discover_windows_app_path(command: &str) -> Option<std::path::PathBuf> {
         .unwrap_or(command);
     let exe = format!("{exe}.exe");
     for hive in ["HKCU", "HKLM"] {
-        let key = format!(
-            r"{hive}\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{exe}"
-        );
+        let key =
+            format!(r"{hive}\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{exe}");
         let output = Command::new("reg")
             .args(["query", &key, "/ve"])
             .output()
@@ -530,7 +529,13 @@ pub(crate) fn runtime_location_json(
 ) -> serde_json::Value {
     if let Some(o) = install {
         let kind = match o.kind.as_str() {
-            "path" => if cfg!(windows) { "windows_path" } else { "path" },
+            "path" => {
+                if cfg!(windows) {
+                    "windows_path"
+                } else {
+                    "path"
+                }
+            }
             "binary" => "managed",
             "npx" => "package_manager",
             "uvx" => "package_manager",
@@ -592,7 +597,9 @@ pub(crate) fn runtime_location_json(
                 serde_json::json!({ "kind": "unavailable", "source": "path_probe", "reason": "uvx is not available on the effective PATH" })
             }
         }
-        Distribution::Binary { .. } => serde_json::json!({ "kind": "unavailable", "source": "registry_catalog", "reason": "manifest has no executable command" }),
+        Distribution::Binary { .. } => {
+            serde_json::json!({ "kind": "unavailable", "source": "registry_catalog", "reason": "manifest has no executable command" })
+        }
     }
 }
 
@@ -608,7 +615,9 @@ pub(crate) fn runtime_location_for(agent_id: &str) -> serde_json::Value {
     if manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
         return serde_json::json!({ "kind": "unavailable", "reason": "inbuilt engine ships with the app" });
     }
-    let installed = installer().installed(agent_id).filter(install_outcome_usable);
+    let installed = installer()
+        .installed(agent_id)
+        .filter(install_outcome_usable);
     runtime_location_json(manifest, installed.as_ref())
 }
 
@@ -625,9 +634,7 @@ pub fn acp_install_status() -> Result<serde_json::Value, String> {
         if m.protocol == everyaios_acp::HarnessProtocol::Inbuilt {
             continue;
         }
-        let mut installed = inst
-            .installed(&m.id)
-            .filter(install_outcome_usable);
+        let mut installed = inst.installed(&m.id).filter(install_outcome_usable);
         if installed.is_none() {
             if let Distribution::Binary { command, .. } = &m.distribution {
                 if !command.is_empty() {
@@ -909,73 +916,80 @@ pub fn acp_agent_verify(agent_id: String) -> Result<serde_json::Value, String> {
     let inst = installer();
     let installed = inst.installed(&agent_id).filter(install_outcome_usable);
 
-    let (exec_cmd, verify_args, is_wsl, display_exec): (String, Vec<String>, bool, String) = if let Some(ref o) = installed {
-        if let Some(ref p) = o.binary_path {
-            let s = p.to_string_lossy().into_owned();
-            (s.clone(), vec!["--version".to_string()], false, s)
+    let (exec_cmd, verify_args, is_wsl, display_exec): (String, Vec<String>, bool, String) =
+        if let Some(ref o) = installed {
+            if let Some(ref p) = o.binary_path {
+                let s = p.to_string_lossy().into_owned();
+                (s.clone(), vec!["--version".to_string()], false, s)
+            } else {
+                (
+                    "npx".to_string(),
+                    vec!["--version".to_string()],
+                    false,
+                    "npx".to_string(),
+                )
+            }
         } else {
-            ("npx".to_string(), vec!["--version".to_string()], false, "npx".to_string())
-        }
-    } else {
-        match &manifest.distribution {
-            Distribution::Binary { command, .. } if !command.is_empty() => {
-                if let Some(p) = resolve_native_binary(command) {
-                    let s = p.to_string_lossy().into_owned();
-                    (s.clone(), vec!["--version".to_string()], false, s)
-                } else if let Some((wsl_bin, wsl_prefix)) = resolve_wsl_spawn(command) {
-                    let mut args = wsl_prefix;
-                    let linux_exec = args.last().cloned().unwrap_or_else(|| command.clone());
-                    args.push("--version".to_string());
-                    (wsl_bin, args, true, format!("wsl://{}", linux_exec))
-                } else {
+            match &manifest.distribution {
+                Distribution::Binary { command, .. } if !command.is_empty() => {
+                    if let Some(p) = resolve_native_binary(command) {
+                        let s = p.to_string_lossy().into_owned();
+                        (s.clone(), vec!["--version".to_string()], false, s)
+                    } else if let Some((wsl_bin, wsl_prefix)) = resolve_wsl_spawn(command) {
+                        let mut args = wsl_prefix;
+                        let linux_exec = args.last().cloned().unwrap_or_else(|| command.clone());
+                        args.push("--version".to_string());
+                        (wsl_bin, args, true, format!("wsl://{}", linux_exec))
+                    } else {
+                        return Ok(serde_json::json!({
+                            "agentId": agent_id,
+                            "status": "unavailable",
+                            "reason": "executable not found on PATH, Windows App Paths, or WSL",
+                            "verifiedAt": now_ms(),
+                        }));
+                    }
+                }
+                Distribution::Npx { package, .. } => {
+                    if let Some(p) = resolve_on_path("npx") {
+                        let s = p.to_string_lossy().into_owned();
+                        (s.clone(), vec!["--version".to_string()], false, s)
+                    } else {
+                        return Ok(serde_json::json!({
+                            "agentId": agent_id,
+                            "status": "unavailable",
+                            "reason": "npx not found on PATH",
+                            "package": package,
+                            "verifiedAt": now_ms(),
+                        }));
+                    }
+                }
+                Distribution::Uvx { package, .. } => {
+                    if let Some(p) = resolve_on_path("uvx") {
+                        let s = p.to_string_lossy().into_owned();
+                        (s.clone(), vec!["--version".to_string()], false, s)
+                    } else {
+                        return Ok(serde_json::json!({
+                            "agentId": agent_id,
+                            "status": "unavailable",
+                            "reason": "uvx not found on PATH",
+                            "package": package,
+                            "verifiedAt": now_ms(),
+                        }));
+                    }
+                }
+                _ => {
                     return Ok(serde_json::json!({
                         "agentId": agent_id,
                         "status": "unavailable",
-                        "reason": "executable not found on PATH, Windows App Paths, or WSL",
+                        "reason": "manifest has no executable target",
                         "verifiedAt": now_ms(),
                     }));
                 }
             }
-            Distribution::Npx { package, .. } => {
-                if let Some(p) = resolve_on_path("npx") {
-                    let s = p.to_string_lossy().into_owned();
-                    (s.clone(), vec!["--version".to_string()], false, s)
-                } else {
-                    return Ok(serde_json::json!({
-                        "agentId": agent_id,
-                        "status": "unavailable",
-                        "reason": "npx not found on PATH",
-                        "package": package,
-                        "verifiedAt": now_ms(),
-                    }));
-                }
-            }
-            Distribution::Uvx { package, .. } => {
-                if let Some(p) = resolve_on_path("uvx") {
-                    let s = p.to_string_lossy().into_owned();
-                    (s.clone(), vec!["--version".to_string()], false, s)
-                } else {
-                    return Ok(serde_json::json!({
-                        "agentId": agent_id,
-                        "status": "unavailable",
-                        "reason": "uvx not found on PATH",
-                        "package": package,
-                        "verifiedAt": now_ms(),
-                    }));
-                }
-            }
-            _ => {
-                return Ok(serde_json::json!({
-                    "agentId": agent_id,
-                    "status": "unavailable",
-                    "reason": "manifest has no executable target",
-                    "verifiedAt": now_ms(),
-                }));
-            }
-        }
-    };
+        };
 
-    if !is_wsl && !std::path::Path::new(&exec_cmd).is_file() && resolve_on_path(&exec_cmd).is_none() {
+    if !is_wsl && !std::path::Path::new(&exec_cmd).is_file() && resolve_on_path(&exec_cmd).is_none()
+    {
         return Ok(serde_json::json!({
             "agentId": agent_id,
             "status": "unavailable",
@@ -1070,11 +1084,14 @@ pub fn acp_launch(
             registry.get(&agent_id).map(|m| &m.distribution),
             Some(Distribution::Binary { .. })
         ) =>
-        {                resolve_native_binary(&p.command).map(|p| p.to_string_lossy().into_owned())
+        {
+            resolve_native_binary(&p.command).map(|p| p.to_string_lossy().into_owned())
         }
         _ => None,
     };
-    let (command, extra_args): (String, Vec<String>) = if let Some(p) = installed.as_ref().and_then(|o| o.binary_path.as_ref()) {
+    let (command, extra_args): (String, Vec<String>) = if let Some(p) =
+        installed.as_ref().and_then(|o| o.binary_path.as_ref())
+    {
         (p.to_string_lossy().into_owned(), vec![])
     } else if let Some(path) = path_resolved {
         let _ = installer().record_path(&agent_id, std::path::Path::new(&path));
@@ -1084,8 +1101,13 @@ pub fn acp_launch(
         _ => None,
     } {
         (wsl_bin, wsl_prefix)
-    } else if matches!(registry.get(&agent_id).map(|m| &m.distribution), Some(Distribution::Binary { .. })) {
-        return Err(format!("agent {agent_id} has no installed, PATH-resolved, or WSL launch path"));
+    } else if matches!(
+        registry.get(&agent_id).map(|m| &m.distribution),
+        Some(Distribution::Binary { .. })
+    ) {
+        return Err(format!(
+            "agent {agent_id} has no installed, PATH-resolved, or WSL launch path"
+        ));
     } else {
         (plan.command.clone(), vec![])
     };
@@ -1987,7 +2009,10 @@ mod tests {
             binary_path: None,
             env: vec![],
         };
-        assert_eq!(install_outcome_usable(&outcome), resolve_on_path("npx").is_some());
+        assert_eq!(
+            install_outcome_usable(&outcome),
+            resolve_on_path("npx").is_some()
+        );
     }
 
     #[test]
@@ -2099,7 +2124,8 @@ mod tests {
 
     #[test]
     fn test_user_path_import_and_verification() {
-        let tmp = std::env::temp_dir().join(format!("everyaios-import-test-{}", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("everyaios-import-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp);
         let dummy_bin = tmp.join("dummy_agent");
         std::fs::write(&dummy_bin, b"#!/bin/sh\necho 'dummy-agent v1.2.3'\n").unwrap();
