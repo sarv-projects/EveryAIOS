@@ -1612,21 +1612,27 @@ It asserts AA (4.5:1) where the tokens meet it and records the rest.
 | accent `emerald` / `sky` / `amber`: `--brand` on canvas | **3.10 / 2.64 / 2.45** | ✗ below AA |
 | dark `--brand-foreground` on `--brand` (white on `#3B82F6`) | **3.63** | ✗ below AA |
 
-**These are not coding mistakes — they are the contract's own palette.**
-`UI-DESIGN-PROMPT.md` §2.1 pins `Warning/Ask = #CA8A04`, which is 2.96:1 on a
-white card: a hue too light to carry 10px text, whatever code paints it. The dark
-brand is pinned bright (`#3B82F6`), so a white label on it cannot reach AA either.
+**These were not coding mistakes — they were the contract's own palette.**
+`UI-DESIGN-PROMPT.md` §2.1 pinned `Warning/Ask = #CA8A04`, which is 2.96:1 on a
+white card: a hue too light to carry 10px text, whatever code paints it.
 
-The sub-AA pairs are therefore held in a named band (above their floor, below
-AA) so **the record cannot go stale silently**: closing one makes the test fail
-until the note is updated in the same commit. Nothing is claimed to pass that
-does not.
-
-**Decision left to the owner, because it is a design call, not a bug fix:** either
-darken the four offending hues (deviating from §2.1's pinned values), or restrict
-those tokens to non-text roles (icon, border, dot) and stop drawing them as small
-text. The second keeps the palette and the AA target both intact; the first keeps
-the styling and breaks the contract.
+> **RESOLVED (same session, owner chose "darken the offending hues").** The
+> palette now clears AA everywhere, and the two themes needed **opposite**
+> adjustments — which is the part worth remembering:
+>
+> | | Direction | Why |
+> |---|---|---|
+> | Light | **darken** status hues | AA for text on a *white* card wants a darker hue: warning 2.96→4.94, success 3.35→5.18, error 4.43→5.06 (canvas) |
+> | Dark | **brighten** the accent | AA for text on a *dark* card (`#2D2C29`) wants a brighter one: accent 3.80→4.87 |
+> | Dark label | **flip to dark ink** | once the accent is bright, white on it can only reach 2.84:1; the dark ink gives 6.11:1 |
+>
+> Roles, hues and the pinned `#2563EB` brand are unchanged — only lightness
+> moved. `sky` / `emerald` / `amber` were retuned the same way; `violet` needed
+> no light change. The test now covers **every accent in both themes plus
+> label-on-fill for each** (10 assertions groups, all green), so none of it can
+> drift back. §2.1's table and `DESIGN-SYSTEM.md` were updated in the same commit
+> — "darken the offending hues" implied editing the pinned values, so the
+> contract and the code agree rather than quietly diverging.
 
 ### Correction carried forward
 The `2P` header said "Rust is verified". It is — but the first full `src-tauri`
