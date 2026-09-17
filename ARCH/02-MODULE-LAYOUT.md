@@ -1,41 +1,55 @@
-# 02 — Module Layout (Rust crates + TS packages)
+# 02 — Module Layout (The 8 Full-Stack Modules)
 
-> **Plane ownership (frozen v3.75).** Every module below belongs to exactly one of the two planes — **Native Agent Plane** (`packages/coordinator`, `core-agents`, `core-ai`, `core-engine`, `core-tools`, `core-memory`, `core-providers`, `everyaios-engine`) or the **Shared Cowork Plane** (`everyaios-mcp` catalog + browser/office/desktop/search/storage/memory) — with the kernel (`guard`, `vault`, `audit`, `ipc`) and shell (`src-tauri`, `ui`) serving both. `17-NATIVE-AGENT.md` §17.2 is the authoritative module → plane → contract table; this file remains the directory/structure map. **Rule:** a capability that appears in two modules is one implementation with two thin façades, never two implementations.
+> **The 8 Full-Stack Modules Architecture:** Every module in the repository belongs to exactly one of the 8 Full-Stack Modules. EveryAIOS functions as the **Universal Agentic OS & Desktop Harness ("Switzerland of AI")**, driving external coding agents while providing native Office primitives, tiered browsers, computer use, durable worktrees, and 7-layer Guard-2 security.
+> **Rule:** A function that appears in two contexts is one implementation with thin façades, never two competing implementations.
 
-## 2.1 The workspace
+## 2.1 The 8 Full-Stack Modules Mapping
+
+| Module | Rust Crates (`crates/`) | TS Sidecar Packages (`packages/`) | Frontend Cockpit Surfaces (`ui/src/`) |
+| :--- | :--- | :--- | :--- |
+| **Module 1: Universal Agent Harness & Swarm Orchestrator** | `everyaios-acp`, `everyaios-core` (`multirun.rs`, `worktrees.rs`), `everyaios-blueprint` (`subagent.rs`), `everyaios-agents` | `coordinator` (`chat.ts`, `chief.ts`), `core-agents` | `screens/AgentsScreen.tsx`, `screens/ChatScreen.tsx` (Chief picker), right-rail `diff` viewport |
+| **Module 2: Model Gateway & Encrypted Keyring Vault** | `everyaios-vault`, `everyaios-catalog` | `core-providers`, `core-ai` | `screens/SettingsScreen.tsx` (Providers & Keys, Local Models), `guard.html` unlock modal |
+| **Module 3: Unified Cockpit Shell & Context Compactor** | `everyaios-engine`, `everyaios-ipc`, `src-tauri` (37 command modules) | `coordinator` (`prompt.ts`, `tools.ts`), `core-engine` | `App.tsx`, `Layout.tsx`, multi-control composer, 19 right-rail viewports |
+| **Module 4: Governed MCP & Capability Marketplace** | `everyaios-mcp` | `core-connectors` (`connector_hub`) | `screens/ConnectorsScreen.tsx`, per-agent tool scoping drawer |
+| **Module 5: Work-Native Primitives (Office, Browser, CUA)** | `everyaios-office` (IronCalc 0.8.3, OOXML), `everyaios-browser`, `everyaios-cdp`, `everyaios-desktop` (CUA) | `coordinator` (`tools/browser.ts`, `tools/office.ts`) | Right-rails: `office-xlsx`, `office-docx`, `office-pdf`, `browse`, `desktop` |
+| **Module 6: Durable Work & Cognitive 5-Tier Memory** | `everyaios-memory` (ACT-R), `everyaios-storage`, `everyaios-codeintel` | `core-memory`, `core-files` | `screens/MemoryScreen.tsx`, `screens/ProjectsScreen.tsx`, `screens/FilesScreen.tsx`, right-rail `graph` |
+| **Module 7: Executive Automations & Calendar Daemon** | `everyaios-core` (`automation_runtime.rs`) | `coordinator` (`scheduler.ts`), `core-automations` | `screens/AutomationsScreen.tsx`, `screens/CalendarScreen.tsx`, right-rail `terminal` |
+| **Module 8: Security Guard-2 & Merkle Audit Membrane** | `everyaios-guard` (`netfloor.rs`, `pathfloor.rs`), `everyaios-audit`, `everyaios-script` (rquickjs) | `core-tools` (`trust-ladder`) | `screens/GuardScreen.tsx`, `screens/ActivityScreen.tsx`, Guard approval diff cards |
+
+## 2.2 Workspace Directory Structure
 
 ```
 desktop_app/
-├── ARCH/                        ← this architecture series
-├── crates/                      ← Rust workspace (new — everyaios-core)
-│   ├── everyaios-core/                ← the orchestrator binary (tauri-free; testable headless) + `MemoryService` (memory/* dispatch) + `GuardService` (guard/* dispatch — tickets/policy/estop/profile)
-│   ├── everyaios-cdp/                 ← CDP client + generated protocol types (BrowserOS browseros-cdp design)
-│   ├── everyaios-browser/             ← snapshot/refs/diff engine, input, observer, markdown walker
-│   ├── everyaios-script/              ← rquickjs sandbox (the `run` tool) + InnerCallHook audit
-│   ├── everyaios-guard/               ← regex interceptors (P7.4 blocklist+prescan+red-team+url-floor+tickets), injection defense (P7.6), path floors + **network-destination floor (P62.1 `netfloor` — one SSRF classifier)** + profiles + loop guard + manifests + config scan (P7.7) + **protected agent-config surfaces (P62.3)**, J21 permissions policy + decision package (P7.5), ECC guardrails (P7.1 plan-before-build + session scan), capability granter (P7.3 manifest allow-list ∧ host grant + `*`/`**` wildcards)
-│   ├── everyaios-audit/               ← NDJSON ingest, recording index, token estimators, replay store, session log (ContextInjection + Trajectory query), Merkle chain (P7.7), session repair (P7.7)
-│   ├── everyaios-mcp/                 ← official MCP Rust SDK server (Streamable HTTP + stdio, stateless 2026-07-28) + tool catalog
-│   ├── everyaios-vault/               ← SQLCipher key-ring store (per-provider key pools, OAuth tokens); `KeyRing::reveal_for_spawn` = the one documented secret egress (build a child's env, Rust-only) — P63
-│   ├── everyaios-office/              ← office engine (docx block-patch, IronCalc calc library, pptx part-editor, pdf suite, LibreOffice oracle) — P4
-│   ├── everyaios-storage/             ← storage intelligence (work-stealing walker, arena snapshots, 7-stage dedup, FTS5 search) — P4.8
-│   ├── everyaios-memory/              ← memory algorithms (fusion, ACT-R, taste, compaction, graph, paging, ghost, reference, FSRS, intent classifier, repo summary, reinforce queue) — P5
-│   ├── everyaios-eval/               ← verified-completion eval subsystem (status taxonomy, task manifest, deterministic verifier, evidence bundle, loop report, adversarial suite, retrieval scoring) — P8.0
-│   ├── everyaios-blueprint/          ← orchestration core (spec-per-task, verify-gated blueprint tasks, agent-frontmatter, multi-agent topologies, automation shapes, .md blueprint parser + registry, DAG state machine, checkpoint/resume, plan cache, sub-agent runtime, iteration budgets + loop detector, surgical routing, skill registry, plugin ABI) — P6 + P7.2 + P7.3
-│   ├── everyaios-search/            ← search & research (G8 cascade + circuit breaker, deep-research tree + gap-check, multi-channel adapters, cited reports, parallel fetch cascade, site TF-IDF index, repo-wide blast radius) — P8.4
-│   ├── everyaios-codeintel/          ← code intelligence (LSP framing + core types + session runtime, LSP runner live diagnostics, SCIP-style symbol index, tree-sitter-fed repo map + PageRank budget fit) — P7.1
-│   ├── everyaios-acp/                ← ACP harness bridge (ACP v1 wire types, newline-delimited JSON-RPC framing, `AcpSession` client lifecycle, `LaunchRegistry` agent catalog) — F12/J17; `agent_backend.rs` = the **P63 per-agent model-backend contract** (`BackendChannel` + the pure env planner `plan_env`/`injected_names`/`unexpressed`); `harness_config.rs` = the P30.7 pure half of the P47.7 (post-v1) native-config ring, still uncalled by design
-│   ├── everyaios-engine/             ← engine pure-stage port (contract · plan · risk · gate — Alg #2/#17; Evidence Grounding Score v3.59)
-│   ├── everyaios-agents/             ← P31/B9 agent bundles (agent.toml schema, registry, templates, scope)
-│   ├── everyaios-catalog/            ← P14/A11 model + provider catalog (ModelEntry, ProviderRecord, probes, pricing, routing)
-│   ├── everyaios-desktop/            ← E9/P9.1 desktop computer-use (see/read/act over native windows, OCR, verify, policy) — package renamed everyaios-computeruse (v3.61, collision with the src-tauri shell); host wiring = src-tauri/src/desktop_cmds. `platform/{linux,win,macos}.rs` are the three backends, `platform/wgc.rs` the Windows.Graphics.Capture occluded-capture path (P57.6, cfg(windows), cross-compile-checked), `readiness.rs` the H4 derived state. **P63 host wiring lives in the shell**: `src-tauri/src/agent_backend_cmds.rs` (the per-agent provider binding + `spawn_env_for`) merged into the launch env in `acp_cmds.rs`, and `catalog_cmds::ResolveCtx`/`refresh_endpoint_live` (connected-only boot resolution, reconciled both ways when a provider connects or disconnects).
-│   └── everyaios-ipc/                ← JSON-RPC over stdio (sidecar contract) + tauri command glue
-├── packages/                    ← TS workspace (core-* vendored in-repo + coordinator)
-│   ├── core-*/                  ← @personal-ai/core-* vendored in-repo (2026-08-29 — no ../APP sibling, no APP_CLONE_TOKEN gate)
-│   └── coordinator/             ← the Bun-compiled sidecar (agent loop, engine stages, hub, memory)
-└── ui/                          ← React SPA (webview frontend)
+├── ARCH/                        ← Architecture specifications (00-INDEX through 17-NATIVE-AGENT)
+├── crates/                      ← Rust workspace (22 crates)
+│   ├── everyaios-core/          ← Process lifecycle, worktree manager, multirun fanout, automation runtime
+│   ├── everyaios-acp/           ← ACP stdio JSON-RPC bridge (external agent harness)
+│   ├── everyaios-vault/         ← SQLCipher encrypted vault, keyring pools, 429 auto-failover, broker
+│   ├── everyaios-guard/         ← 7-layer defense: netfloor SSRF, pathfloor, Guard-2 tickets, OS sandboxes
+│   ├── everyaios-audit/         ← Merkle-tree verified execution log, replay store
+│   ├── everyaios-office/        ← Embedded IronCalc 0.8.3 spreadsheet DAG + surgical OOXML XML patcher
+│   ├── everyaios-browser/       ← Tiered browser engine (Lightpanda, Chrome CDP, Scrapling, CloakBrowser)
+│   ├── everyaios-cdp/           ← CDP WebSocket client and protocol types
+│   ├── everyaios-desktop/       ← Computer Use Agent (Windows Graphics Capture, A11y tree, Win32 SendInput)
+│   ├── everyaios-memory/        ← 5-tier memory, ACT-R activation, SQLite FTS5 BM25 search, knowledge graph
+│   ├── everyaios-storage/       ← Storage intelligence: work-stealing walker, arena snapshots, 7-stage dedup
+│   ├── everyaios-codeintel/     ← Code intelligence: tree-sitter AST repo-map, PageRank, LSP client
+│   ├── everyaios-mcp/           ← Model Context Protocol client & server (JSON-RPC 2.0 stdio & SSE)
+│   ├── everyaios-blueprint/     ← Task DAG state machine, checkpoint/resume, skill store (.everyaios/skills/)
+│   ├── everyaios-search/        ← Search cascade (SearXNG + DDG circuit-breaker), deep research tree
+│   ├── everyaios-catalog/       ← 4-hour models.dev catalog sync, capability probes
+│   ├── everyaios-engine/        ← Pure Rust stages: permission gate, evidence grounding, risk scoring
+│   ├── everyaios-agents/        ← Custom agent bundle schemas (agent.toml)
+│   ├── everyaios-eval/          ← Deterministic verifier, completion eval, adversarial test suite
+│   ├── everyaios-script/        ← rquickjs sandboxed JavaScript evaluation
+│   ├── everyaios-ipc/           ← stdio JSON-RPC framing and Tauri glue
+│   └── everyaios-types/         ← Shared domain types and ID primitives
+├── packages/                    ← TypeScript workspace (11 packages)
+│   ├── coordinator/             ← Master agent loop, 12-segment prompt assembler, token compaction, scheduler
+│   └── core-*/                  ← Reused domain engines (providers, memory, search, connectors, automations)
+├── src-tauri/                   ← Tauri 2 desktop shell (37 command modules)
+└── ui/                          ← React 19 + Zustand 5 + Tailwind 4 cockpit SPA
 ```
-
-**Workspace count (v3.64):** the Rust workspace has **22 crates + 1 planned `everyaios-sandbox`** (TODO P49.5) — `crates/Cargo.toml` is authoritative; this tree is the module map, not the membership list (older docs saying 17/18/21 predate `engine`/`agents`/`catalog`/`desktop`/`types`). The **`everyaios-types`** crate (shared IDs/enums, pure types) landed 2026-08-30 (P47.3). **(v3.64 §4.4):** `everyaios-core` gains a `work_gateway` module (WorkRegistry/SessionRegistry/RunRegistry/ClientRegistry/NodeRegistry/EventBus/AttachmentRegistry/RunAuthority/ReviewQueue/CapabilityResolver — TODO P49, all open) and a planned `everyaios-sandbox` crate (`SandboxBackend` trait + native-OS backends — bwrap/Seatbelt/Windows-restricted-token, not Docker-first). **(v3.65 §4.4a hardening baked into the module contract):** the event bus splits `DomainEvent`/`OperationalEvent`/`PresenceEvent`+`Telemetry` (only DomainEvent drives Work reconstruction); `sequence` (total persistence order) vs `causal_parent` (causal DAG); `RunAuthority` carries lease + fencing token; `CapabilityResolver` is effect-routing only (`ModelResolver` separate); node registry distinguishes `ExecutionNode` (user-owned) from `ExternalRuntime` (protocol-boundary) under `RuntimeEndpoint`; `TrustedGestureAttestation` stamps `AuthKind::human_gesture` for local mutations; `everyaios-sandbox` exposes `AgentSandbox`/`ChildExecutionSandbox` policy roles over the sandbox tiers `S0–S3` (browser tiers are `B0–B3`).
 
 **Reuse rule:** `@personal-ai/core-*` packages are **vendored in-repo** under `packages/core-*` (workspace glob `packages/*`; the old `../APP` sibling + `APP_CLONE_TOKEN` gate were removed 2026-08-29 — CI/release fail loudly if the workspace is incomplete). Desktop-specific additions go in `packages/coordinator/` or the Rust crates.
 

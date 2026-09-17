@@ -1,6 +1,6 @@
-# 09 — Capability → Feature → Module Matrix (the complete derivation)
+# 09 — Module, Submodule & Function Matrix (the complete derivation)
 
-> This matrix maps each capability to its feature shape, implementation home, status, and source reference. It is non-normative; the product contract is in `../DESKTOP-APP-SPEC.md`, historical decisions are in `../SPEC-CHANGELOG.md`, and open work is in `../TODO.md`. Status legend: 🟢 = exists/verified · 🟡 = partial/foundation · 🔵 = new-in-Rust and wired · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
+> This matrix maps each submodule and function across the 8 Modules to its feature shape, implementation home, status, and source reference. It is non-normative; the product contract is in `../DESKTOP-APP-SPEC.md`, historical decisions are in `../SPEC-CHANGELOG.md`, and open work is in `../TODO.md`. Status legend: 🟢 = exists/verified · 🟡 = partial/foundation · 🔵 = new-in-Rust and wired · ⚪ = later/optional. Module refs: sidecar = packages/coordinator + core-*; Rust = crates/everyaios-*; UI = ui/.
 
 > **Current reconciliation (2026-09-12):** A1 resolves supported catalog/profile transports through the broker; `DEFAULT_BASE_URLS` is only a legacy fallback and unsupported transports fail closed. A6’s P14.5 catalog seams and P56.1 scheduled `api.json` refresh are landed. H32 is now split by ownership (P60.12/P60.13): the **EveryAIOS Native** picker consumes reachable models.dev rows with provider-qualified selections and a clearly labelled curated fallback, while an **external ACP agent** shows only what that agent exposes over ACP `session/new` `configOptions` (or an explicit “managed by &lt;agent&gt;”), never EveryAIOS’s provider list; agent selection is installed-only. Live `available_commands`/slash handling landed in P53.1/P53.2. The ACP registry is a dynamic catalog merged into discovery/launch (`launch_registry()`), kept separate from installed occupancy. No rows were added or removed by this reconciliation — the status-bucket totals are unchanged and remain owned by the **Totals** line at the end of this file.
 
@@ -14,7 +14,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## A. Model & BYOK layer
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | A1 | Multi-provider BYOK | **All models.dev providers** (4h scheduled refresh) **+ OpenCode-shaped custom inference** + **NVIDIA/NIM** + **three OpenCode rows: OpenCode Zen (`opencode`) · OpenCode Go (`opencode-go`) · OpenCode Free (`opencode-free`, keyless regex + `big-pickle`)** + OAuth-when-flagged + Ollama/llamafile/LM Studio. Settings: list **+** opens Provider activate screen (models.dev name/package/API/docs; key bar → tick → + for next key; dropdown + full model table). **Live chat: `DEFAULT_BASE_URLS` only until P55.5/P55.6; UI/refresh/OpenCode trio = P56.** | sidecar (core-providers) + Rust vault + catalog | 🟢+🔵 | doc 19 + models.dev + opencode.ai/docs/providers + zen + go + user |
 | A2 | **Multi-key per provider** | Key rings: add N keys/provider, priority+weight, per-key model filter, budgets, health | Rust everyaios-vault | 🔵 **NEW (user req)** | ARCH/03 + doc 19 §7, doc 53 §2, doc 41 cc-switch |
@@ -30,7 +30,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## B. Agent orchestration
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | B1 | Agent loop (pi-style) | streaming, length-guard (fail truncated tool calls), model-swap hook, cost ledger | sidecar core-engine | 🟢 (length-guard landed 2026-08-29: broker `assemble_tool_calls` drops length-truncated tool calls; loop port stays ARCH/16) | doc 05/16 |
 | B2 | Spec-driven blueprints | .md → agent registry; continuous plan rewrite; dependency resolution; resume-after-reboot; **engine landed (Rust):** `everyaios-blueprint` — `.md` blueprint parser + `BlueprintRegistry`, status-block plan rewrite (`set_status`), dependency resolution (`topological_order`), resume-after-reboot + circuit-break freeze (`checkpoint.rs`), DAG state machine (`TaskStatus::transition`), plan cache (`plan_cache.rs`); **durable execution reference (doc 67 §2.2 — durable-execution-the-hard-way):** checkpoint task state to the audit event log, replay/retry steps from last checkpoint on crash (still open) | Rust everyaios-blueprint + sidecar loader | 🔵 (core); 🟡 doc-67 replay | v2.0 §P2, doc 03 + 67 §2.2 |
@@ -46,7 +46,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## C. Memory & context
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | C1 | C-series memory/context plane + 34-algorithm index | polarized, compass, phantom thread, anticipation, spreading activation, KG+conflict, decay, retrieval/fusion/rerank, paging, compaction, ACT-R, graph/provenance, reference handles, FSRS, and the remaining indexed algorithms | Rust-native memory/core services | 🟢 | 07, v2.0 §3 |
 | C2 | Multi-tier memory | sensory/working/episodic/semantic/procedural + Letta paging; **v3.39:** branch/lineage memory + `maintain()` tools | sidecar | 🟢+🟡 | 07, 34 §2 |
@@ -67,7 +67,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 ## D. Office & files (user-critical)
 > The matrix distinguishes supported document viewing and surgical mutation from optional full-fidelity editing. Unsupported formats and features remain explicitly unavailable; rows record implementation status. Full-fidelity editing is outside the current contract.
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | D1 | **Word open+edit** | block-patch engine, byte-preserving w:t, headers/tables/sections | sidecar office/docx | 🟡 **NEW** | 28, 04 | **✅ P4.1 landed: `crates/everyaios-office` — `OoxmlArchive` (ZIP open, parts index, `save` with `raw_copy_file` verbatim untouched entries — byte-stability proven by raw compressed-payload comparison) + `docx/` block-patch engine (anchored block tree w/ addresses `p1`/`t1:r1c2:p1`/`hdr1:p1`/`sec1` over body+headers/footers, plain-text render, minimal `w:t` prefix/suffix patch via byte-surgery with entity/UTF-8-aware splits, safety fallbacks NoTextAnchor/StaleEdit/PatchAcrossMarker). 30 tests — 393 ws tests (363 + 30), clippy 0, fmt clean. LibreOffice headless oracle → P4.5.** |
 | D2 | **Excel open+edit** | IronCalc recalc + calamine read + workbook DSL + deterministic planner + flash-fill/pivot | Rust sidecar + sidecar | 🟡 **NEW** | 28, 04 | **✅ P4.2 landed: `crates/everyaios-office/src/xlsx/` — `read.rs` (calamine 0.30 windowed reads), `recalc.rs` (ironcalc 0.8.3 truth engine — every computed number engine-made (deterministic recalc, never LLM-invented)), `dsl.rs` (WorkbookCommandBatch + Excel-accurate formula-shift: `$` doesn't pin, deleted→`#REF!`, shrink, LOG10/string/sheet-prefix protection), `planner.rs` (regex NLP → DSL, zero-LLM; `NeedsLlm` fallback), `patch.rs` (surgical sheetN.xml/sharedStrings.xml + workbook rename, byte-stable); `src-tauri xlsx_open` (windowed) + `ui/pages/Spreadsheet.tsx` virtualized 100K+ row grid. 64 office tests (+34), 427 ws tests, clippy 0, fmt clean. Univer = H5 view (P4.7), IronCalc = the one calc truth engine (doc 58).** |
@@ -84,7 +84,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## E. Browser & computer use
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | E1 | CDP child browser | system Chrome/Edge + chrome-for-testing fallback; loopback-only discovery; version-tolerant client (P2.1 ✅) | Rust everyaios-cdp | 🔵 | 33, 34, 08 |
 | E2 | 37-tool catalog (34 core + 3 file_ops) | tabs..run + bookmarks, tab_groups_manage, windows (8.2) — engine + 37-tool registry (P2.3 ✅; bookmarks/tab_groups gated: no CDP surface on stock Chrome); **v3.40:** read-only diagnostics (console/network/perf) on the same CDP session | Rust everyaios-browser (actions/read) + everyaios-mcp | 🔵 | 33 §6, 46, 55 |
@@ -106,7 +106,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## F. Connector hub
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | F1 | Hub routing | **MCP-first (Connector-platform decision 2026-08-16):** MCP Servers (user-supplied, stdio/npx or user-hosted HTTP) + Native (BYO OAuth/API-key in vault) + Tool Catalog (live `everyaios-mcp` registry); **Composio/Zapier/Nango aggregator tabs removed** — no double-connect | sidecar core-connectors | 🟢+🟡 | 13, decision 2026-08-16 | **✅ routing core + coordinator APP-registry bridge landed; external account attach remains credential/provider gated.** |
 | F2 | Native adapters | 27+ direct adapters | sidecar core-connectors | 🟢+🟡 | v2.0 §3 | **✅ APP `core-connectors` is now a live lazy coordinator dependency (`connector/list` + read/query plan); vault token resolver and write execution remain host-gated.** |
@@ -127,7 +127,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## G. Search & research
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | G1 | Free search surface (no API key) | the user-facing layer of G8 — searxng-first + public instances (live `searx.space/data/instances.json` feed, health-gated) + circuit breaker + SQLite 5-min TTL result cache; chat-level `search.query` tool | sidecar + everyaios-search | 🟡 | doc 52 §4, doc 63 | **not a second cascade — engine tiers = G8** |
 | G2 | Deep research | breadth×depth tree, learnings-up, gap-check, cited reports | Rust everyaios-search | 🔵 | 07 | **✅ P8.4: `DeepResearch` (build tree, `all_learnings`, `gap_check`) + `CitedReport` (assemble + render_markdown, confidence metrics).** |
@@ -141,7 +141,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## H. UI & product
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | H1 | Chat | streaming, token streamer, message branching, artifacts | UI | 🟢 (port) | v2.0 §P1 |
 | H2 | Cockpit dashboard | live agent cards, Watch/Stop, recent sessions | UI | 🟡 | 33 §9.5 | **✅ P3.2 landed: `everyaios-audit/src/cockpit.rs` — `CockpitState`/`AgentCard`/`InterruptCard` (status/model/provider, token counters, capped action trail, `quiet_status()` single-sentence line, MCQ interrupt lifecycle, stop/undo; +8 tests) + Tauri `cockpit_cmds.rs` (`cockpit_snapshot`/`activity`/`tokens`/`upsert_agent` feed seams, `cockpit_quiet` → tray tooltip + window hide, `agent_undo` + `interrupt_respond` JSON-RPC over the unix control channel) + `ui/src/pages/Cockpit.tsx` flight deck (Running-now cards w/ LIVE chip + STOP/UNDO, slide-over panel w/ action cards + token totals, MCQ interrupt cards, quiet toggle, 2s poll). 393 ws tests (355 + 8 + 30 office), clippy 0, fmt clean.** |
@@ -183,7 +183,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## I. Forge & skills
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | I1 | Code synthesis loop | write→sandbox→test→iterate | sidecar + sandbox | 🟡 | v2.0 §P6 | **✅ P7.1: `everyaios-core::forge::ForgeRuntime` — `iterate` (write→test→rewrite, SHA-256 loop guard + budget) + `tdd_loop` (RED→GREEN) + `run_js` (rquickjs `everyaios-script`) + `DockerSandbox` (mounts/network/limits → `docker run`); live execution stays executor-bound.** |
 | I2 | Skill registry | ~/.everyaios/skills/, manifest + ownership markers, auto-inject into planner; **SKILL.md format alignment** (name/description/allowed-tools frontmatter + references/ — agent-browser `skill-data`, doc 55) so our skills work with the ecosystem | sidecar + Rust | 🟡 | v2.0 §P6, 33 §8, 55 + 65 §4 (SKILL.md anatomy) + 65 §6 (skills_index.json) | **✅ P7.2: `everyaios-blueprint::skill_store` — scanner, SKILL.md manifest + ownership, `SkillIndex` (scoring + MAX_ACTIVE_SKILLS=20 + planner-tier render), restart-survival, `taste_skill`, `grow_from_task`.** |
@@ -205,7 +205,7 @@ The local foundation is implemented and tested: `WorkAddress`, `WorkGateway`, JS
 
 ## J. Cross-cutting
 
-| # | Capability | Feature | Module | Status | Source |
+| ID | Submodule / Function | Feature | Module | Status | Source |
 |---|---|---|---|---|---|
 | J1 | Trust Ladder | 0–100 graduated permissions, 15 tests built | sidecar core-tools | 🟢 | 06 |
 | J2 | Guard-1 regex interceptors | compiled blocklist, pre-exec scan | Rust everyaios-guard | 🔵 | 06, 03 §8 | **✅ P7.4 landed: `everyaios-guard` — `blocklist` (40+ patterns / 8 categories) + `prescan` (`scan_shell`/`scan_path`/`scan_url`/`scan_all`) + `urlfloor` (file:// inside granted roots, scheme guard) + `redteam` gate (35/35 blocked)** |
