@@ -1399,6 +1399,64 @@ Linux, and the Windows-deferred list at the top of §3 still stands.
 
 ---
 
+## 2S. Implementation wave 14 (2026-09-17) — **P64.3 never ran in production. Correcting
+## the record, then fixing it.**
+
+### Correction first
+§2N's P64.3 row said *"**IMPLEMENTED.** … **The TODO statement is false.**"* — that
+was **wrong**, and the delivery row was right. The change was real but the two
+halves were never connected, so the repo map was **never injected in production**.
+
+### What was actually there
+| Half | State |
+|---|---|
+| Coordinator (`chat.ts:766`) sends `request("codeintel/repomap", {query, maxTokens})` | present |
+| Rust handler for `codeintel/repomap` | **did not exist** |
+| `repomap_build` Tauri command (the only implementation) | **zero callers** — a ghost command |
+
+The relay's method match in `chat.rs` has **no `codeintel/` arm**, so the request
+hit the catch-all `_ => reply_error(id, "method not found: …")`. The coordinator
+surrounds that call in `catch { /* repomap is best-effort */ }`, so the failure was
+**silent by design**: no error, no log, no map. `p64-lane.test.ts` passed because
+its `request` is a mock that *does* answer `codeintel/repomap` — the test proved the
+coordinator's half, never the shell's.
+
+That is the exact failure mode the edit-and-delivery rules warn about: a gate that
+looks green because the harness, not the product, supplies the other side.
+
+### The fix
+- `chat.rs` now serves `codeintel/*` (a `codeintel_rpc` helper + a match arm)
+  returning `{ tags: [ {symbol, kind, file, line, rank} ] }` — the shape the
+  coordinator reads.
+- It is served from **`everyaios-codeintel`**, and `repomap_build` was reduced to a
+  thin wrapper over the *same* `ranked_tags` function, so the agent-facing method
+  and the UI command cannot drift (one engine, two façades).
+- The map covers the **tool layer's floored workspace** (`ToolService::workspace()`,
+  newly exposed), so the repo map describes the same tree the edit tools act on.
+- `read_source_files` now **sorts before truncating**. Truncation determinism is
+  part of the contract, and the previous early-break walk could not guarantee it:
+  the cut set depended on `read_dir` order.
+
+### Evidence (all executed)
+| Gate | Result |
+|---|---|
+| `everyaios-codeintel` `cargo test` | **61 passed / 0 failed** (incl. 2 new: sorted-walk determinism + skip/ignore rules, and a missing dir being empty rather than an error) |
+| `everyaios-core` `cargo test --lib` | **698 passed / 0 failed** (incl. `codeintel_rpc_serves_ranked_repo_map_tags`, which pins the wire keys and that an unknown `codeintel/*` method is still an error) |
+| `crates` `cargo test --workspace` | **2589 passed / 0 failed / 23 ignored** |
+| `crates` clippy `--all-targets -D warnings` · `fmt --check` | **exit 0 · 0 diffs** |
+| `src-tauri` `cargo test` · clippy `-D warnings` · fmt | **66 passed / 0 failed · exit 0 · 0 diffs** |
+
+### Delivery status
+P64.3's stated gate is *"Oversized repo-maps truncate deterministically; prompt
+prefix caching remains 100% stable"*. Deterministic truncation is now true and
+tested; the byte-stable prefix was already asserted in `p64-lane.test.ts`
+(`stablePrefixOf(injected) === stablePrefixOf(base)`). The mechanism is now wired
+end to end in Rust, so the row is **flippable on this evidence** — but the
+checkbox was left as-is here deliberately, because this file must not carry a
+competing census and the flip belongs with a doc-sync run (§3).
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
