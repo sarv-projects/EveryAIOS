@@ -108,7 +108,7 @@ describe("Live Real-World Agent Harness Verification", () => {
     expect(typeof parsed.result.agentInfo.version).toBe("string");
     expect(parsed.result.agentCapabilities).toBeDefined();
     expect(parsed.result.agentCapabilities.loadSession).toBe(true);
-  });
+  }, 15000);
 
   test.skipIf(!hasGrok)("Live Grok Build binary presence and execution", async () => {
     const proc = spawn("grok", ["--version"], {

@@ -8,20 +8,21 @@
 
 ## 17.0 Scope, purpose, and the one rule
 
-**Purpose.** EveryAIOS ships two kinds of agent users can select:
+**Purpose.** EveryAIOS operates as the **Universal Agentic OS & Desktop Harness ("Switzerland of AI")**:
 
-1. **EveryAIOS Native** — a full agent harness owned by us (loop, planning, routing, memory reasoning, context construction, sub-agents, native tools). It owns its cognitive plane **and** the shared cowork plane.
-2. **External agents** (Codex CLI, Claude Code, OpenCode, Aider, Cline/Roo, Grok Build …) — runtimes that keep their own loop, tools, model, permissions, and account. They may borrow the shared cowork plane.
+1. **EveryAIOS Native as Universal Chief & Swarm Harness** — an orchestrator owned by us that handles multi-model routing, task DAG planning, Git worktree isolation (`worktrees.rs`), multi-run diff fusion, subagent supervision, and Guard-2 ticket enforcement. It does NOT compete with Claude Code, OpenAI Codex, or OpenCode by building a proprietary coding prompt/loop; it hosts and coordinates them.
+2. **External Specialist Agents** (Claude Code, OpenAI Codex, OpenCode, Grok Build, Cline/Roo, Aider …) — first-class coding runtimes that execute their own proven loops, tools, models, and authentication via ACP or stdio JSON-RPC.
+3. **The Shared Cowork Plane** — native Office primitives (IronCalc 0.8.3, surgical OOXML), tiered browser engines, OS computer use, durable Work, 5-tier cognitive memory, and 7-layer Guard-2 security provided by EveryAIOS to any running agent.
 
 **The one rule (hard invariant):**
 
 > **Native Agent Plane belongs to the agent. Shared Cowork Plane belongs to EveryAIOS.**
-> EveryAIOS augments *only* capabilities reachable through the integrated seam (CLI / ACP / MCP). It never assumes access to capabilities inside a separate GUI product, and it never removes an external agent's native capability.
+> EveryAIOS augments *only* capabilities reachable through the integrated seam (CLI / ACP / MCP). It never attempts to build a second competing coding engine, never assumes access to capabilities inside a separate closed GUI, and never removes an external agent's native tools.
 
-**Capability-resolution policy (evaluated per capability family, per turn):**
+**Function-resolution policy (evaluated per function family, per turn):**
 
 ```
-need capability X
+need function X
         │
         ├─ is X reachable through the selected agent's native suite?
         │        └─ YES → use the agent's native X
@@ -30,8 +31,6 @@ need capability X
         └─ BOTH available → the Chief chooses by
                 quality · cost · permission · latency · context budget
 ```
-
-This policy is what makes the two planes composable instead of competing. It is enforced in the Chief loop, not in a prompt instruction.
 
 ---
 

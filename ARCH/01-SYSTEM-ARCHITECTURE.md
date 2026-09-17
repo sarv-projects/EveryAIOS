@@ -1,96 +1,156 @@
-# 01 — System Architecture (Hybrid)
+# 01 — System Architecture: The 8 Full-Stack Modules
 
-> **The two agent planes (frozen v3.75 — see `17-NATIVE-AGENT.md`).** The map below is the *runtime* topology. Orthogonally to it, the product has two **capability planes**: the **Native Agent Plane** (owned by the agent — loop, planning, routing, memory reasoning, sub-agents, native coding/shell/web tools) and the **EveryAIOS Shared Cowork Plane** (owned by EveryAIOS — office, browser, computer use, connectors, workspace/codeintel, artifacts, Work, scheduler, recovery, Guard, vault, budget). **EveryAIOS Native owns both planes; an external ACP agent keeps its own plane and borrows the shared one.** Capability resolution is native-first, augmentation-second. `17-NATIVE-AGENT.md` §17.2 assigns every module below to exactly one plane and one contract.
-
-## 1.1 The map
-
-```mermaid
-flowchart TD
-    UI["**UI LAYER** — Tauri 2 window (Rust), native webview, React SPA<br/>chat · cockpit dashboard · audit+replay · blueprint editor · office docs<br/>reader · connector hub · permission cards · token/cost analytics · tray"]
-    CORE["**RUST CORE** — everyaios-core binary (orchestrator + safety + browser)<br/>BrowserSvc (CDP child, 37 tools, snapshot/refs/diff) · ScriptEval (rquickjs sandbox)<br/>GuardRail (regex interceptors, diff cards) · Audit/Replay (NDJSON ingest, recording index, token estimates)<br/>MCP server (rust-sdk, 127.0.0.1:9200/mcp) · Key-ring vault · ProcessSupervisor"]
-    SIDE["**TS SIDECAR** — coordinator (Bun-compiled, reuses @personal-ai/core-*)<br/>Agent loop (pi-style) · Spec/blueprint loader · Memory+RAG (7 algos, FTS5+vec, KG)<br/>Connector Hub (MCP-first: MCP Servers/Native/Tool Catalog/AuthBridge — decision 2026-08-16) · Search cascade · automations<br/>Engine stages + risk compass · Trust Ladder · Providers + BYOK"]
-    CHROME["**Chromium child** — system Chrome/Edge or chrome-for-testing fallback"]
-    LOCAL["**Local services** — searxng (optional) · Ollama/llamafile · SQLite (app.db + memory.db + vault) · Rust-native graph store (LadybugDB optional) · sandbox (subprocess/WASM) · **PTY host (H36: ConPTY / unix pty / WSL / remote ExecutionNode)**"]
-    UI -->|"IPC: JSON-RPC over stdio + local WS"| CORE
-    CORE -->|"streamed events"| UI
-    CORE -->|"stdio JSON-RPC (supervised child)"| SIDE
-    SIDE -->|"events"| CORE
-    CHROME -->|"CDP (loopback, token-gated)"| CORE
-    LOCAL -->|"files · shell · network"| SIDE
-```
-
-## 1.2 Why this split (evidence)
-
-- **Keep TS sidecar** — the asset: ~100 vitest test files already shipping the hard parts (memory algos, RAG, connectors, providers, engine stages, trust ladder). Rewriting = months with no new capability. (v2.0 §3; docs 03 §9, 04.)
-- **Rust core for the new surfaces** — the research's most expensive-to-get-wrong pieces are all Rust-native and proven there: browser CDP control (BrowserOS `browseros-cdp`/`core`, 14K-LOC server), sandboxed script eval (rquickjs — BrowserOS `run` tool), security interceptors + audit (must not be in a dynamically-typed process), MCP serving (official `modelcontextprotocol/rust-sdk` — BrowserOS originally used `rmcp`; the official SDK now tracks the 2026-07-28 stateless spec), and the key-ring vault (keep secrets out of the LLM's reach, doc 19 §7). (Docs 33, 34 §2.)
-- **One UI, one binary family** — the Tauri shell is the only GUI process; sidecar and browser are supervised children (doc 03 reconnect/resume; BrowserOS supervision patterns).
-
-## 1.3 Processes & lifecycle
-
-| Process | Parent | Starts | Dies | Restart policy |
-|---|---|---|---|---|
-| `everyaios-core` (Rust) | OS (tray) | app launch | app quit | — (the root) |
-| `coordinator` (Bun-compiled sidecar) | everyaios-core | pre-spawned at boot (J16) | crash, idle, explicit stop | Supervisor: exponential backoff (1s→2s→4s→60s cap), circuit breaker after 5 crashes/10min, `reconnecting` state surfaced to UI (doc 03, v2.0 §4.3) |
-| Chromium child | everyaios-core | on first browser use | idle sweep (session retention 60min default), explicit close | one-shot spawn; no auto-restart |
-
-**Browser children are tiered (08 §8.8):** system Chrome/Edge = interactive default; **Lightpanda** (default) / **Obscura** (opt-in) = lightweight CDP tier for scrape/RAG at ~16× less memory (vendor benchmark); optional user-gated stealth engines (Camoufox via Playwright, CloakBrowser via CDP) for hard bot defenses. One CDP driver (`everyaios-cdp`), task tier picks the engine. Sessions/accounts live in the encrypted **Session Vault** (08 §8.9) with Trust-Ladder-gated access; challenges go through the handler tier (08 §8.10).
-| Ollama / llamafile | everyaios-core (optional) | on local-model use | user stop | spawned only when a local model is selected |
-| searxng instance | everyaios-core (optional) | on search use (if user-installed) | user stop | optional; primary path is public-instance cascade (core-search built) |
-
-**Startup order:** everyaios-core boots (config, vault, SQLite) → UI window → sidecar pre-spawned at Tauri boot (hidden, ~200ms perceived cold start per J16) → browser on first browser tool. **Idle RSS:** measure & publish the real numbers — <30MB idle / <80MB warm are targets to verify, not promises (the Bun-compiled sidecar alone is ~93MB, J16); browser adds only when used. No service is loaded at boot unless needed (spec §6.5).
-
-**Footprint roadmap (spec §9.1 R6, TODO P29):** the Tauri native webview is the OS's shared engine — keep it (Electron is the hog, a non-goal); the two real levers are (1) **lazy-load** heavy subsystems (IronCalc, LSP, graph store) until first use and (2) a **post-v1 native Rust sidecar** replacing the Bun process (~93MB → ~15MB) — explicitly deferred per spec §8 "Rust rewrite of the TS engine now", queued as a **three-tier migration (TODO P29, external review 2026-08-17)**: Tier 1 = collapse IPC + native guard + Rust-owned provider streaming; Tier 2 = core-memory/search/files/automations/engine as pure-Rust over the landed `everyaios-*` crates; Tier 3 = prompt/router/catalog → templates + core-ai/agents/connectors stay in the rquickjs sandbox. Gated on Stage 0 + P8 measured RSS; the "keys never touch TS" half is already enforced by the Rust credential broker. Process lifecycle (warm pool, 5min-idle kill, battery-aware) is already J16. The agent browser already prefers the user's own Chrome/Edge via CDP for interactive work (Session Inheritance, no re-login) and the lightweight tier for scrape/RAG.
-
-## 1.4 IPC contracts
-
-1. **Tauri ⇄ everyaios-core**: Tauri commands + events (typed Rust structs; streaming via channels). Covers UI actions, permission-card responses, live token/cost streams.
-2. **everyaios-core ⇄ coordinator**: **JSON-RPC over stdio** (the standard, robust child pattern — GenOffice watchdog, BrowserOS process-compose), with **length-prefixed framing** (`[u32 LE length][bytes]`) + bounded channels (doc 43 §2.2), an optional **UNIX-socket transport** at build time (zero port collision — doc 43 §1.2), and an **IPC payload budget** (tool result 50KB cap / ref-only for snapshots+office files — doc 42 §3.2, spec §4). Contract groups:
-   - `agent.*` — start/stop session, stream turn, inject blueprint, spawn subagent, nudge cards
-   - `memory.*` — retrieve (multi-signal), save, warm-set swap, morning-brief
-   - `connector.*` — hub routing, connect/disconnect, usage meters
-   - `search.*` / `research.*` — cascade + research tree
-   - `tool.*` — permission check (sidecar asks core; core enforces GuardRail + returns allow/ask/deny)
-   - `events.*` — audit rows, tool dispatches, token/cost deltas, status
-3. **everyaios-core ⇄ Chromium**: CDP over WebSocket on loopback port (system Chrome `--remote-debugging-port=0` → read the actual port from DevToolsActivePort; token-gated). **Recording**: browser-side injected recorder posts NDJSON batches with `x-recording-tab-id/document-id/batch-id` headers to everyaios-core's ingest endpoint (BrowserOS contract, doc 33 §9).
-4. **coordinator ⇄ providers**: HTTPS to BYOK endpoints via **key-ring manager** (ARCH/03) — the coordinator never holds raw keys; everyaios-core vault serves one resolved key per call through a sealed channel (v2.0 CES pattern, doc 19 §7).
-
-## 1.5 Data flow — one agent turn
-
-1. UI sends prompt → everyaios-core → sidecar.
-2. Sidecar: load blueprint/agent config → build messages → **token budget check** (05) → resolve provider via **key-ring** (03) → stream LLM.
-3. Loop: model emits tool call → sidecar normalizes (grammar extraction if weak model) → **permission check** → everyaios-core GuardRail (regex intercept; diff-card handshake for escalated ops) → execute (browser via CDP, files via core, connectors via hub) → **audit row + token estimate** (everyaios-core) → result (snip if stale/oversized) → loop.
-4. Compaction triggers per Reasonix/BrowserOS ratios (05). Memory writes/retrievals per 07. Every step lands in the audit DB (06).
-
-## 1.6 Security posture (summary — details in 06)
-
-- Secrets live in the **Rust vault** (SQLCipher), never in the LLM context, never in the sidecar process memory longer than one call.
-- All loopback listeners token-gated (MCP endpoint, CDP, ingest).
-- All mutating OS/browser actions pass the **dual-guard** (deterministic regex + human diff-card click).
-- Browser tabs are ownership-isolated: `mine | user | other-agent` (BrowserOS model, doc 33 §6).
-- Audit is append-only and replayable.
-
-**v3.39 resource record:** a live-registry hit is not a capability. MCP servers, ACP agents, model runners, browser children, sandboxes, and workers materialize as a durable `ManagedResource` (validate → install → inventory → enable → start → health → use → observe → update/rollback/remove). Install ≠ enable ≠ running ≠ healthy. Office and vault providers are *not* this type. Effects still require a ticket.
-
-**v3.45 Dynamic Chief (restated):** the top of the surgical hierarchy is a configurable slot, not a model faucet. `primary_chief` = inbuilt **or any ACP-installed agent with a registered launch path**. An external Chief runs **that product's loop** (tools, `/`, `@`); EveryAIOS stays the workspace shell (compacted context, memory passport, Guard-2 on `session/request_permission`, audit of mediated/Channel-B effects). Slash: `available_commands_update` + `/name` as `session/prompt` text. Handoff on swap: compacted transcript + passport + taste + goal/plan/tickets + file refs — not raw history, not snipped tool blobs. Return: visible reply only; tool history to a per-session observability file. Subagents: installed-CLI mix (B3); swarms deferred. **v3.46 correction still holds:** omitting `fs`/`terminal` does NOT force MCP Channel B — Self-contained internal writes stay outside our audit. Badge = Governed-Mediated | Self-contained | NotGoverned. Occupancy/handoff/`/` product path = TODO P53; P38 crate seams remain landed.
+> **Status:** Architecture Reference.
+> **Core Architectural Principle:** EveryAIOS is the **Universal Agentic OS & Desktop Harness ("Switzerland of AI")**. It rejects the proprietary coding agent trap and does not compete with Claude Code, OpenAI Codex, or OpenCode. Instead, EveryAIOS provides the durable desktop operating layer, sandboxed Git worktrees, native Office primitives, tiered browsers, computer use, cognitive memory, and 7-layer Guard-2 security that supercharges any model or agent.
 
 ---
 
-## 1.7 Data Layer Concurrency (SQLite WAL)
+## 1.1 Architectural Topology: The 8 Full-Stack Modules
 
-All local databases use **WAL (Write-Ahead Logging)** journal mode:
-- Reads NEVER block (multiple readers concurrent with one writer)
-- Single-writer at the DB level (serialized via Rust mutex)
-- Per-agent write queues drain into a FIFO merge queue before hitting the writer
-- `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` set on every connection open
-- Vault (SQLCipher) also uses WAL mode
+EveryAIOS is structured into 8 cohesive Full-Stack Modules spanning native Rust kernel services, TypeScript sidecar coordination, and React 19 cockpit views:
 
-**Concurrency model:**
 ```mermaid
-flowchart LR
-    A["Agent A write"] --> Q["FIFO merge queue"]
-    B["Agent B write"] --> Q
-    C["Agent C write"] --> Q
-    Q --> W["single SQLite writer"] --> WAL["WAL → readers see instantly"]
+flowchart TD
+    subgraph FRONTEND["Frontend UI Cockpit (React 19 + Zustand 5 + Tailwind 4)"]
+        UI_MAIN["Shell Layout & draggables"]
+        UI_VIEWS["12 Center Screens: home · chat · activity · projects · files · automations · memory · guard · connectors · agents · analytics · settings"]
+        UI_RAILS["19 Right-Rail Viewports: office-xlsx · office-docx · office-pdf · code · diff · browse · desktop · terminal · graph"]
+    end
+
+    subgraph TAURI_BRIDGE["Tauri 2 IPC Boundary (37 Command Modules)"]
+        IPC["Typed Commands & Channels · Event Streaming · Guard Modals"]
+    end
+
+    subgraph KERNEL["Rust Core Kernel (22 Crates)"]
+        M1["Module 1: Universal Harness & Swarm Orchestrator (everyaios-acp, multirun.rs, worktrees.rs)"]
+        M2["Module 2: Model Gateway & Vault (everyaios-vault, keyring.rs, broker.rs, catalog)"]
+        M4["Module 4: Governed MCP & Tools (everyaios-mcp, schema validation, tool interception)"]
+        M5["Module 5: Work-Native Primitives (everyaios-office/IronCalc, everyaios-browser, everyaios-desktop)"]
+        M6["Module 6: Durable Work & Memory (everyaios-memory/ACT-R, storage, codeintel)"]
+        M8["Module 8: Security Guard-2 & Audit (everyaios-guard/netfloor/pathfloor, everyaios-audit)"]
+    end
+
+    subgraph SIDECAR["TypeScript Sidecar (Coordinator)"]
+        M3["Module 3: Cockpit Shell & Context Compactor (chat turn loop, 12-segment prompt.ts, token budgets)"]
+        M7["Module 7: Executive Automations & Calendar Daemon (scheduler.ts, heartbeat leases, crons)"]
+    end
+
+    subgraph DECOUPLED["Decoupled External Ecosystem (Out-of-Process)"]
+        EXT_AGENTS["External Agents via ACP/Stdio: Claude Code · OpenAI Codex · OpenCode · Grok Build"]
+        EXT_MCP["External MCP Servers: GitHub · Slack · PostgreSQL · Linear · Docker"]
+        EXT_CHROME["System Chromium: CDP loopback automation"]
+    end
+
+    FRONTEND <--> TAURI_BRIDGE
+    TAURI_BRIDGE <--> KERNEL
+    KERNEL <--> SIDECAR
+    M1 <-->|"stdio JSON-RPC (ACP)"| EXT_AGENTS
+    M4 <-->|"stdio / SSE (JSON-RPC 2.0)"| EXT_MCP
+    M5 <-->|"CDP WebSocket"| EXT_CHROME
 ```
 
-This avoids SQLITE_BUSY errors entirely while maintaining append-only audit guarantees.
+---
+
+## 1.2 The 4-Question Coupling Test (Coupling vs. Decoupling)
+
+To prevent architectural bloat and maintain strict system integrity, EveryAIOS enforces the **4-Question Coupling Test** for every subsystem:
+
+1. **Does it enforce security boundaries, sandboxing, or audit integrity?**
+   - $\to$ **TIGHTLY COUPLED IN RUST KERNEL (`everyaios-guard`, `everyaios-vault`, `everyaios-audit`)**. Never rely on JavaScript or external agent runtimes for authorization, path validation, SSRF filtering, or secret storage.
+2. **Does it guarantee durable state recovery, worktree consistency, or crash resilience?**
+   - $\to$ **TIGHTLY COUPLED IN CORE (`everyaios-core/worktrees.rs`, `everyaios-storage`)**. Work must survive process restarts, Chief swaps, and machine reboots.
+3. **Is it a microsecond in-process calculation primitive?**
+   - $\to$ **TIGHTLY COUPLED IN RUST (`everyaios-office` / IronCalc DAG, OOXML surgical XML patcher)**. Local spreadsheet recalculation (300+ Excel functions) and document patching execute in-process with zero network overhead.
+4. **Is it an external LLM agent, SaaS integration, or browser instance?**
+   - $\to$ **DECOUPLED AS OUT-OF-PROCESS SUBPROCESSES**. External agents (Claude Code, Codex, OpenCode) connect via ACP stdio; MCP servers connect via stdio JSON-RPC; Chrome runs out-of-process via CDP. EveryAIOS never re-implements external coding agent loops or prompts.
+
+---
+
+## 1.3 Deep Breakdown of the 8 Full-Stack Modules
+
+### Module 1: Universal Agent Harness & Swarm Orchestrator
+- **Logic**: `crates/everyaios-acp`, `crates/everyaios-core/src/multirun.rs`, `worktrees.rs`, `packages/coordinator/src/chat.ts`, `chief.ts`.
+- **Submodules & Functions**:
+  - `acp_client_server`: Bidirectional stdio JSON-RPC transport driving external agents.
+  - `worktree_swarm_manager`: Isolated Git worktrees (`.everyaios/worktrees/task-<id>`) with serialized queue and disk headroom reservations.
+  - `multirun_fanout_engine`: Fans out 1 prompt across up to 5 concurrent models in parallel worktrees with 3-way merge fusion.
+  - `subagent_lifecycle_supervisor`: Enforces depth $\le 2$, concurrency $\le 6$, budget fences, and circuit breakers.
+- **Frontend UI**: `agents` screen, Chief picker dropdown in `chat`, right-rail `diff` viewport (3-way merge resolver), `activity` tree.
+
+### Module 2: Model Gateway & Encrypted Keyring Vault
+- **Logic**: `crates/everyaios-vault`, `crates/everyaios-catalog`, `packages/core-providers`.
+- **Submodules & Functions**:
+  - `sqlcipher_vault`: AES-256 encrypted SQLite store for credentials, session keys, and secrets.
+  - `keyring_pool_manager`: Multi-key pools per provider with priority weights.
+  - `rate_limit_failover_rotator`: Honest 429-only key rotation with exponential cooldown (`5s` to `300s`). 5xx server errors do not rotate.
+  - `provider_wire_broker`: Native HTTP transports for OpenAI, Anthropic, Bedrock SigV4, Vertex, OpenCode Zen/Go/Free, and local keyless runtimes.
+  - `catalog_discovery_engine`: 4-hour scheduled sync with `models.dev/api.json`.
+- **Frontend UI**: `settings` $\to$ Providers & Keys, `settings` $\to$ Local Models (hardware fit inspector), isolated `guard.html` unlock modal.
+
+### Module 3: Unified Cockpit Shell & Context Compaction Engine
+- **Logic**: `packages/coordinator/src/prompt.ts`, `crates/everyaios-engine`, `src-tauri/src/`.
+- **Submodules & Functions**:
+  - `prompt_assembler`: 12-segment cache-affine prompt builder with `CACHE_BOUNDARY` markers.
+  - `context_compaction_pipeline`: Trims volatile turns, enforces pass-by-ref handles (`refRegistry`), paginates large outputs (50KB cap).
+  - `streaming_telemetry_batcher`: 33ms batched token emission with TTFT and token cost tracking.
+  - `tauri_ipc_gateway`: 37 native Tauri command modules bridging Rust to React.
+- **Frontend UI**: Cockpit layout (`Layout.tsx`), `chat` screen with CoT rollups, 19 right-rail viewports with physical spring motion (CLS = 0).
+
+### Module 4: Governed MCP & Capability Marketplace
+- **Logic**: `crates/everyaios-mcp`, `crates/everyaios-blueprint`.
+- **Submodules & Functions**:
+  - `mcp_client_transport`: JSON-RPC 2.0 client supporting stdio child processes and SSE.
+  - `tool_schema_registry`: Discovers, parses, and normalizes tool schemas.
+  - `guard2_tool_interceptor`: Computes IEEE-754 argument hashes and validates Guard-2 tickets.
+  - `marketplace_catalog`: Curated catalog of MCP servers with one-click install.
+- **Frontend UI**: `connectors` screen, per-agent tool scoping drawer, manual tool test bench.
+
+### Module 5: Work-Native Primitives (Office, Browser, CUA)
+- **Logic**: `crates/everyaios-office`, `crates/everyaios-browser`, `crates/everyaios-desktop`.
+- **Submodules & Functions**:
+  - `ironcalc_spreadsheet_engine`: Embedded IronCalc 0.8.3 native Rust spreadsheet engine with full DAG formula evaluation (300+ functions) and live formula repair.
+  - `ooxml_surgical_patcher`: Byte-preserving XML part patcher for DOCX, XLSX, and PPTX.
+  - `pdf_document_runtime`: Form-filling with `pdf.js` annotation storage, lopdf text extraction, and redaction.
+  - `tiered_browser_engine`: Lightpanda headless + Chrome CDP automation + Scrapling + CloakBrowser anti-bot stealth.
+  - `desktop_operator_cua`: OS-level Computer Use Agent utilizing Windows Graphics Capture, A11y tree extraction, and Win32 `SendInput`.
+- **Frontend UI**: Right-rail `office-xlsx` (interactive spreadsheet grid), `office-docx`, `office-pdf`, `browse`, `desktop`.
+
+### Module 6: Durable Work & Cognitive 5-Tier Memory Subsystem
+- **Logic**: `crates/everyaios-memory`, `crates/everyaios-storage`, `crates/everyaios-codeintel`.
+- **Submodules & Functions**:
+  - `durable_work_persistence`: Crash-resilient session ledger and task checkpoints.
+  - `five_tier_memory_model`: Working, Episodic, Semantic (SQLite FTS5 BM25), Procedural (`SKILL.md`), and Entity Knowledge Graph.
+  - `actr_activation_engine`: ACT-R cognitive activation ($A_i = B_i + \sum W_j S_{ji}$) with power-law recency decay.
+  - `codeintel_repomap`: Tree-sitter AST symbol extractor and PageRank graph for token-compact repo mapping.
+- **Frontend UI**: `memory` screen, `projects` & `files` screens, right-rail `graph` (force-directed 2D/3D knowledge graph).
+
+### Module 7: Executive Automations & 24/7 Calendar Daemon
+- **Logic**: `packages/coordinator/src/scheduler.ts`, `crates/everyaios-core/src/automation_runtime.rs`.
+- **Submodules & Functions**:
+  - `heartbeat_cron_daemon`: 24/7 background scheduler evaluating 5-field cron expressions.
+  - `lease_execution_supervisor`: Heartbeat lease model preventing OS sleep during active runs.
+  - `calendar_sync_gateway`: Bidirectional iCal, Google Calendar, and Outlook sync with meeting prep workflows.
+  - `deadletter_retry_handler`: Exponential backoff retries with dead-letter queue.
+- **Frontend UI**: `automations` screen, `calendar` screen (Month/Week/Day view with AI time blocks), right-rail `terminal`.
+
+### Module 8: Security Guard-2 & Merkle Audit Membrane
+- **Logic**: `crates/everyaios-guard`, `crates/everyaios-audit`.
+- **Submodules & Functions**:
+  - `prompt_injection_firewall`: J6 `<user_document>` delimiter wrapping and "prompt-is-not-permission" invariant.
+  - `ssrf_netfloor`: Zero-I/O network filter blocking RFC1918 private subnets and cloud metadata IP (`169.254.169.254`).
+  - `pathfloor_lexical_jail`: Strict directory boundary enforcement preventing path traversal.
+  - `guard2_ttl_ticket_authority`: Cryptographically signed, time-limited mutation tickets.
+  - `os_sandbox_containment`: Multi-platform isolation (Windows Win32 Job Objects & Restricted Tokens, Linux `bubblewrap`, macOS Seatbelt).
+  - `merkle_audit_chain`: Append-only execution log with SHA-256 Merkle tree verification.
+- **Frontend UI**: `guard` screen, `activity` audit log viewer, isolated Guard approval diff cards.
+
+---
+
+## 1.4 Data Layer Concurrency (SQLite WAL)
+
+All local databases use **WAL (Write-Ahead Logging)** journal mode:
+- Reads NEVER block (multiple readers concurrent with one writer).
+- Single-writer at the DB level serialized via Rust mutex.
+- Per-agent write queues drain into a FIFO merge queue before hitting the writer.
+- `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;` set on every connection.
+- Vault (SQLCipher) also uses WAL mode.
