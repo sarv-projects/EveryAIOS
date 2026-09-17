@@ -1358,9 +1358,10 @@ impl ToolService {
                     "office.xlsx_open"
                 } else if lower.ends_with(".pptx") {
                     "office.pptx_open"
-                } else if lower.ends_with(".pdf") {
-                    "office.pdf_open"
-                } else if route.targets.contains(&"office.pdf_pages") {
+                } else if lower.ends_with(".pdf") || route.targets.contains(&"office.pdf_pages") {
+                    // Both conditions select the same native target, so they are
+                    // one branch: a .pdf path, or a façade whose fan-out can
+                    // read pages. Splitting them was a no-op `else if`.
                     "office.pdf_open"
                 } else {
                     route.targets.first().copied().unwrap_or("office.docx_open")
