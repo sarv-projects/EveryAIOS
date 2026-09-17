@@ -908,6 +908,58 @@ No `tsc` either — no TS was changed in this wave.
 
 ---
 
+## 2K. Implementation wave 8 (2026-09-17) — P65.1 Provider Control-Center (verification only)
+
+**Item taken:** P65.1 (Tier 2). Plan target `ui/src/components/settings/providers-tab.tsx`
+does not exist; the real surface is `ui/src/components/panels/settings-providers.tsx`.
+
+**Outcome: its acceptance gate already holds — no code change was needed or made.**
+The gate is *"Failed provider probe renders actionable error without storing an invalid
+key; valid probe displays green verified checkmark."* `verifyAndSave`
+(`settings-providers.tsx:551`) implements exactly that, and the ordering is the guarantee:
+
+```ts
+const p = await providerProbe(row.id, secret.trim() || undefined)
+setProbe(p)
+if (!p.ok) {
+  notify(`${row.name}: ${p.message}`, 'error')   // actionable, from the probe
+  return                                          // ← nothing persisted
+}
+// only past this point: providerProfileUpsert + vault_key_add
+```
+
+The `return` on `!p.ok` is what makes it fail-closed: `vault_key_add` is unreachable on a
+failed probe, so an invalid key cannot be stored. The green tick is the `probe?.ok`
+conditional at `:759`/`:774`. This predates the P65 wave (tagged P56.3), and it satisfies
+P65.1 — re-implementing it would have been churn. `[V]`
+
+**Remaining P65.1 gap (recorded, not implemented):** the plan asks for a searchable
+**Configured / Popular / All** inventory, and `settings_providers_list` already returns
+canonical `groups: { configured, popular, all }` — but the panel still computes its own
+buckets via `configuredProviders(filtered)` from `@/lib/providers` and never consumes the
+read model. Migrating it is the same call as §2H/§2I and is deliberately not done here:
+it would touch a 1,234-line panel with no type-checker available, to replace working
+filtering, in exchange for canonical grouping. Needs the state-vs-display decision to be
+settled first (see §2I). `[CODE]`
+
+### Tier-2 read-model sweep: complete
+All five Tier-2 items have now been dispositioned, each by *reading the code* rather than
+assuming the plan's description was accurate:
+
+| Item | Disposition |
+|---|---|
+| P65.1 Providers | Gate verified already correct (probe-then-persist). Panel not migrated; gap recorded. |
+| P65.2 Agents | Gate verified correct (`writesToAgentConfig` hardcoded false + tested). **Fixed a latent CI-breaking `dead_code`.** |
+| P65.3 Connections | **Fixed** a real `ConnectionRecord`/`ConnectionState` name collision. Vocabulary conflict surfaced. |
+| P65.4 Schedules | **Fixed** the read-model gap (`name`/`runs`) and routed the toggle through the §17.12.3 mutation funnel. |
+| P66.5 Blue theme | Already correct centrally via the semantic alias block; 3 stale comments fixed. Bulk sweep deliberately refused. |
+
+**Net: 3 genuine defects fixed, 2 contract gaps closed, 2 decisions surfaced, 1 destructive
+"fix" correctly refused.** Every remaining Tier-2 UI item waits on the same two things:
+a toolchain to verify against, or the vocabulary decision in §2I.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
