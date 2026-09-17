@@ -960,6 +960,70 @@ a toolchain to verify against, or the vocabulary decision in §2I.
 
 ---
 
+## 2L. Implementation wave 9 (2026-09-17) — P64 reconciliation: the tracker is wrong, and it matters
+
+**Why this wave is analysis and not code:** the plan (and the prior checklist) is built on
+`TODO.md`, and `TODO.md` **materially understates what is already implemented**. Writing
+code against those rows would re-implement working features. So the highest-value action was
+to establish ground truth by call-site evidence, then redirect the work to what is genuinely
+open. Every claim below is from reading the code, and **none of it was verified by running
+a test** (no toolchain — see §2G limits).
+
+### P64 — measured, item by item
+
+| Item | TODO.md says | What the code shows |
+|---|---|---|
+| **P64.3** Repo-map as default context | `[NOT DONE]` — *"the map is never selected or injected"* | **IMPLEMENTED.** `chat.ts:763` requests `codeintel/repomap`, then `rankRepoMapTags` → `fitRepoMapToBudget` → `renderRepoMapBlock` → `injectBelowBoundary`, so segments 1–7 stay byte-identical (the gate). Best-effort: a missing handler never blocks. Covered by `p64-lane.test.ts`. **The TODO statement is false.** |
+| **P64.4** Sub-agent execution side | `[PARTIAL]` | **PARTIAL — accurate.** `DELEGATE_BLOCKED_TOOLS` is wired across `execution.rs`, `governor.rs`, `blueprint/subagent.rs` **and** `coordinator/tools.ts`. But `SubAgentRuntime` has no production caller (only a `p10_e2e.rs` test + the `lib.rs` re-export) and **`derive_child_permissions` is referenced in exactly one file — its own definition.** The permission-derivation half is dead. |
+| **P64.5** Unified native edit engine | `[NOT DONE]` | **IMPLEMENTED.** `dispatch_edit` is on the live `"file_ops.edit"` dispatch arm and runs `apply_edit_ladder` (exact → structured → fuzzy), snapshotting before an atomic tmp+rename write and returning the strategy used. The ambiguity invariant holds by construction (comment + `apply_exact_once` failing on 0/2+). |
+| **P64.6** Risk-gated shadow preflight | `[NOT DONE]` | **GENUINELY OPEN — mechanism exists, never called.** `decide_shadow_preflight`, `run_shadow_command`, `spawn_shadow_command_tracked`, `Should_restore` exist in `execution.rs` but are referenced only there and in the `lib.rs` re-export. **No caller.** |
+| **P64.7** Checkpoint + rollback UX | `[NOT DONE]` | **GENUINELY OPEN — same pattern.** `auto_checkpoint_kernel`, `commit_workspace_snapshot`, `check_restore_fence`, `should_restore_without_replay` exist in `execution.rs`, referenced only there + the re-export. **No caller.** |
+| **P64.8** Validated skill distillation | `[NOT DONE]` | **IMPLEMENTED (cross-language).** `grow_from_task` is referenced from `coordinator/plan.ts` plus `blueprint/{skill_store,learn}.rs` and `memory/journey.rs`. |
+| **P64.9** Shared-plane fa\u00e7ades | `[NOT DONE]` | **IMPLEMENTED.** `FACADE_ROUTES` and `find_facade` are both referenced from **`everyaios-mcp/src/lib.rs`** — i.e. the task-shaped fa\u00e7ades are exposed over the MCP catalog, which is the item's stated mechanism. |
+
+### The conclusion that changes the plan
+**P64.3, P64.5, P64.8 and P64.9 are implemented but marked `[NOT DONE]`.** The genuinely
+open P64 work is **P64.6 and P64.7** — and both are *wiring* jobs, not authoring jobs: the
+mechanisms are written and sit one call site away from the live path. **P64.4** is correctly
+tagged `[PARTIAL]`, with `derive_child_permissions` unreferenced.
+
+This is the same "implemented but unreachable" class the §2B/C audit documented for the
+Script sandbox and `attach_desktop` — and it is the third time this session that reading the
+code disagreed with a tracker line (cf. §2G P66.5, §2H `ScheduleSettings`).
+
+### P68.8 also measured — TODO row is stale
+`P68.8` is tagged `[NOT DONE]` with *"reattach still announces that output produced while the
+view was closed is not replayed."* That is no longer true: `shell-view.tsx:450` defines
+`replayInto`, which calls `terminalReplay(ptyId, from)` with a **per-tab `seq` cursor**
+(`seqRef`), labels a truncated replay honestly when `dropped > 0`, and prints
+"no output retained to replay" only for a genuinely empty ring. The split-pane work is also
+present (`splitDir`, `splitActive`, `unsplit` — *"Both sessions keep running — nothing is
+killed"*). The `terminal_replay` command is registered. **Not flipped to done** — see below.
+
+### Deliberately NOT done
+**`TODO.md` was not edited and no checkbox was flipped.** Every item above is a *reading*
+result; this repository's contract is that readiness is **evidence-gated** and that an
+unverifiable claim is worse than an honest `unverified` (§3 of the handover, and the P50.4
+readiness rule). Marking P64.3/5/8/9 done without executing `cargo test` would repeat the
+exact failure this wave is reporting. **The rows should be re-tagged only after the Rust
+suite runs on the items' own named tests.** Recorded here so the discrepancy is not lost.
+
+### Evidence actually executed
+- Call-site sweeps (symbol → referencing files) for 12 P64 mechanisms; cross-module
+  references distinguished from definition-only and from `lib.rs` re-exports. `[V]`
+- Direct reads: `chat.ts:752–806` (repomap injection), `tools.rs:1580–1612`
+  (the ladder on the live `file_ops.edit` arm), `shell-view.tsx:440–520` + `lib/terminal.ts`
+  (replay wiring, `fromSeq`), `TODO.md` rows at `:1794–1821` and `:2302–2321`. `[V]`
+- `node scripts/check-doc-sync.mjs` → exit 0 (208 open / 1221 done still matches the header —
+  **note the checker validates the arithmetic, not the accuracy of any individual row**). `[V]`
+- `node scripts/ipc-parity.mjs` → exit 0 · registered 341 · broken 0 · ghosts 60. `[V]`
+
+### NOT VERIFIED
+No Rust toolchain and no `tsc`. Every "IMPLEMENTED" claim above is a **static reading**
+(call sites exist, wiring is present) and **not** a passing gate. `[UNVERIFIED]`
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
