@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
@@ -36,11 +36,13 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { explainError } from '@/lib/errors'
 import { saferMode, saferPrompt, differentlyPrompt, hasUndoableWork } from '@/lib/recovery'
+import { checkpointSummary, isMutatingMessage } from '@/lib/checkpoints'
 import ArtifactCard from './artifact-card'
 import { staggerStyle } from '@/lib/stagger'
 import McqInterruptCard from './mcq-interrupt-card'
 import ProgressSteps from './progress-steps'
 import ToolChips from './tool-chip'
+import { TurnCheckpoint } from './turn-checkpoint'
 
 function CodeBlock({ children, className, ...props }: React.ComponentProps<'code'> & { inline?: boolean }) {
   const [copied, setCopied] = useState(false)
@@ -619,6 +621,38 @@ interface Props {
   streaming?: boolean
 }
 
+/**
+ * P64.7 — per-turn checkpoint affordance under a mutating assistant message.
+ * Lazy: the shell snapshot list loads only when the user opens Details, so a
+ * long transcript does not fan out one IPC call per turn. Eager data lives in
+ * the timeline; this row is the in-context entry point to the same restore.
+ */
+function AssistantCheckpoint({ message }: { message: ChatMessage }) {
+  const sessionId = useAppStore((s) => s.activeSessionId)
+  const { summary, turnIndex } = useMemo(() => {
+    const st = useAppStore.getState()
+    const sess = st.sessions.find((s) => s.id === st.activeSessionId)
+    const assistants = (sess?.messages ?? []).filter((m) => m.role === 'assistant')
+    const idx = assistants.findIndex((m) => m.id === message.id)
+    return {
+      summary: checkpointSummary(message),
+      turnIndex: idx >= 0 ? idx + 1 : assistants.length > 0 ? assistants.length : 1,
+    }
+  }, [message])
+  if (!sessionId) return null
+  return (
+    <div className="mt-1.5">
+      <TurnCheckpoint
+        sessionId={sessionId}
+        messageId={message.id}
+        timestamp={message.timestamp}
+        summary={summary}
+        turnIndex={turnIndex}
+      />
+    </div>
+  )
+}
+
 // P45.9 — memoized: store updates are immutable (untouched messages keep
 // identity), so a shallow compare re-renders only the message whose object
 // changed (the one streaming). Custom comparison is avoided: `streaming` is a
@@ -724,6 +758,10 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
 
         {message.steps && message.steps.length > 0 && (
           <ProgressSteps steps={message.steps} />
+        )}
+
+        {isMutatingMessage(message) && !streaming && (
+          <AssistantCheckpoint message={message} />
         )}
 
         {message.artifacts && message.artifacts.length > 0 && (

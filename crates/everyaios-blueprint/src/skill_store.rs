@@ -121,6 +121,8 @@ pub enum SkillError {
         lines: usize,
         max: usize,
     },
+    #[error("skill `{name}` failed the tests gate: {msg}")]
+    TestsGate { name: String, msg: String },
 }
 
 impl SkillManifest {
@@ -706,7 +708,38 @@ pub fn grow_from_task(
     author: &str,
     version: &str,
 ) -> Result<Skill, SkillError> {
+    // Back-compat entry: the coordinator only calls this after the run's own
+    // verify gate passed. New callers that carry an explicit tests verdict
+    // must use `grow_from_task_checked` so the gate is auditable.
+    grow_from_task_checked(store, task_name, solution, author, version, true)
+}
+
+/// P64.8 — validated skill distillation (SPEC I17, ARCH/17 edge case 11):
+/// candidate → manifest + tests → stored → retrieved. Nothing becomes
+/// executable before validation:
+///
+/// 1. `SKILL_MAX_LINES` line budget (500) — enforced pre-save, so an
+///    over-budget candidate never touches disk.
+/// 2. Tests gate — `tests_passed=false` refuses with [`SkillError::TestsGate`]
+///    (the caller passes the run's verify verdict; a skill grown from a
+///    failing run is never stored).
+/// 3. Manifest gate — name/description/body validated by
+///    [`validate_grown_skill`] before [`SkillStore::save`].
+pub fn grow_from_task_checked(
+    store: &SkillStore,
+    task_name: &str,
+    solution: &str,
+    author: &str,
+    version: &str,
+    tests_passed: bool,
+) -> Result<Skill, SkillError> {
     let slug = slugify(task_name);
+    if !tests_passed {
+        return Err(SkillError::TestsGate {
+            name: slug,
+            msg: "the source run did not pass its verify gate; refusing to distill".into(),
+        });
+    }
     let existing = store.load(&slug).ok();
     let final_version = if let Some(old) = existing {
         // Version bump: `1.0.0` → `1.0.1` (patch) — the ownership marker
@@ -733,10 +766,49 @@ pub fn grow_from_task(
         },
         body: solution.to_string(),
     };
+    // Pre-save validation (line budget + manifest gate) before any disk effect.
+    validate_grown_skill(&skill, tests_passed)?;
     // Overwrite=true: growing a skill tree intentionally updates the leaf
     // (version bump preserves the history trail).
     store.save(&skill, true)?;
     Ok(skill)
+}
+
+/// P64.8 — pre-save validation for a grown skill candidate. Checks the
+/// manifest gate (valid name, non-empty description/body) + the
+/// [`SKILL_MAX_LINES`] budget + the tests gate. Pure (no disk I/O) so the
+/// pipeline can validate before `save`.
+pub fn validate_grown_skill(skill: &Skill, tests_passed: bool) -> Result<(), SkillError> {
+    if !SkillManifest::valid_name(&skill.manifest.name) {
+        return Err(SkillError::InvalidName(skill.manifest.name.clone()));
+    }
+    if skill.manifest.description.trim().is_empty() {
+        return Err(SkillError::Malformed {
+            path: skill.manifest.name.clone(),
+            msg: "missing description (I17 manifest gate)".into(),
+        });
+    }
+    if skill.body.trim().is_empty() {
+        return Err(SkillError::Malformed {
+            path: skill.manifest.name.clone(),
+            msg: "empty body (I17 manifest gate)".into(),
+        });
+    }
+    if !tests_passed {
+        return Err(SkillError::TestsGate {
+            name: skill.manifest.name.clone(),
+            msg: "tests gate: source run did not pass".into(),
+        });
+    }
+    let lines = skill.to_skill_md().lines().count();
+    if lines > SKILL_MAX_LINES {
+        return Err(SkillError::TooLong {
+            name: skill.manifest.name.clone(),
+            lines,
+            max: SKILL_MAX_LINES,
+        });
+    }
+    Ok(())
 }
 
 fn slugify(name: &str) -> String {
@@ -1075,5 +1147,57 @@ mod tests {
         .unwrap();
         assert_eq!(second.manifest.version, "1.0.1");
         assert_ne!(second.body, first.body);
+    }
+
+    // --- P64.8 validated distillation --------------------------------------
+
+    #[test]
+    fn p64_tests_gate_refuses_failed_runs_before_disk() {
+        let dir = tmpdir();
+        let store = SkillStore::new(&dir);
+        let err = grow_from_task_checked(&store, "Flaky task", "solution…", "a", "1.0.0", false)
+            .unwrap_err();
+        assert!(matches!(err, SkillError::TestsGate { .. }));
+        // Nothing was written.
+        assert!(!dir.join("flaky-task").exists());
+    }
+
+    #[test]
+    fn p64_over_budget_candidate_refused_before_save() {
+        let dir = tmpdir();
+        let store = SkillStore::new(&dir);
+        let big = "line\n".repeat(SKILL_MAX_LINES + 10);
+        let err =
+            grow_from_task_checked(&store, "Big task", &big, "a", "1.0.0", true).unwrap_err();
+        assert!(matches!(err, SkillError::TooLong { .. }));
+        assert!(!dir.join("big-task").exists());
+    }
+
+    #[test]
+    fn p64_validate_grown_skill_covers_manifest_gate() {
+        let mut s = sample_skill();
+        assert!(validate_grown_skill(&s, true).is_ok());
+        assert!(matches!(
+            validate_grown_skill(&s, false),
+            Err(SkillError::TestsGate { .. })
+        ));
+        s.manifest.description.clear();
+        assert!(matches!(
+            validate_grown_skill(&s, true),
+            Err(SkillError::Malformed { .. })
+        ));
+    }
+
+    #[test]
+    fn p64_checked_growth_roundtrips_through_retrieval() {
+        // candidate → manifest + tests → stored → retrieved (I17 pipeline).
+        let dir = tmpdir();
+        let store = SkillStore::new(&dir);
+        let grown =
+            grow_from_task_checked(&store, "Cache headers", "set etag…", "a", "2.0.0", true)
+                .unwrap();
+        let retrieved = store.load(&grown.manifest.name).unwrap();
+        assert_eq!(retrieved, grown);
+        assert_eq!(retrieved.manifest.version, "2.0.0");
     }
 }

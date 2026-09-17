@@ -64,6 +64,86 @@ pub struct ConcurrencyGovernor {
 pub enum GovernorError {
     #[error("Governor queue capacity exceeded ({0})")]
     QueueFull(usize),
+    #[error("subagent depth {depth} exceeds max_depth {max_depth} (no recursive spawn)")]
+    DepthExceeded { depth: u32, max_depth: u32 },
+    #[error("subagent concurrent limit exceeded ({active} active of {max_concurrent})")]
+    ConcurrentLimitExceeded { active: usize, max_concurrent: usize },
+    #[error("subagent total-per-run limit exceeded ({total} of {max_total})")]
+    TotalLimitExceeded { total: u32, max_total: u32 },
+}
+
+// ---------------------------------------------------------------------------
+// P64.4 — Subagent admission (ARCH/17 §17.6.4, SPEC B3/I14 boundary)
+// ---------------------------------------------------------------------------
+//
+// The canonical limits live in `everyaios-blueprint::subagent::SubAgentLimits`
+// (`max_depth 2 · max_concurrent 3 · max_total 6`); the constants below mirror
+// them for the fleet-governor seam so `admit_task` wiring enforces the same
+// ceiling without a second policy. `DELEGATE_BLOCKED_TOOLS` mirrors
+// `everyaios-blueprint::subagent::DELEGATE_BLOCKED_TOOLS` for the same reason:
+// sub-agents inherit denies, never escalated grants.
+
+/// P64.4 — max sub-agent depth (root parent = 0; child = 1; grandchild = 2).
+pub const P64_MAX_DEPTH: u32 = 2;
+/// P64.4 — max simultaneously-running sub-agents.
+pub const P64_MAX_CONCURRENT: usize = 3;
+/// P64.4 — max total sub-agent spawns per run.
+pub const P64_MAX_TOTAL: u32 = 6;
+
+/// P64.4 — tools a parent always withholds from sub-agents. Mirrors
+/// `everyaios-blueprint::subagent::DELEGATE_BLOCKED_TOOLS`.
+pub const DELEGATE_BLOCKED_TOOLS: [&str; 5] =
+    ["delegate", "clarify", "memory", "send_message", "cronjob"];
+
+/// P64.4 — task/todo bookkeeping is default-deny for children unless the
+/// parent explicitly grants it. Mirrors
+/// `everyaios-blueprint::subagent::DEFAULT_DENY_TASK_TOOLS`.
+pub const DEFAULT_DENY_TASK_TOOLS: [&str; 2] = ["task", "todo"];
+
+/// P64.4 — the effective toolset for a sub-agent: parent grants minus
+/// explicit denies minus [`DELEGATE_BLOCKED_TOOLS`]. Sorted + deduped so the
+/// prompt-cache body stays byte-stable.
+pub fn effective_subagent_tools(granted: &[String], denied: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = granted
+        .iter()
+        .filter(|t| !denied.iter().any(|d| d == *t))
+        .filter(|t| !DELEGATE_BLOCKED_TOOLS.contains(&t.as_str()))
+        .cloned()
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// P64.4 — pure admission check for the Subagent trigger path. Fails closed:
+/// depth, concurrency, and total are all enforced before any worktree is
+/// provisioned. Returns the effective (deny-stripped) toolset on success.
+pub fn check_subagent_admission(
+    depth: u32,
+    active: usize,
+    total: u32,
+    granted_tools: &[String],
+    denied_tools: &[String],
+) -> Result<Vec<String>, GovernorError> {
+    if depth > P64_MAX_DEPTH {
+        return Err(GovernorError::DepthExceeded {
+            depth,
+            max_depth: P64_MAX_DEPTH,
+        });
+    }
+    if active >= P64_MAX_CONCURRENT {
+        return Err(GovernorError::ConcurrentLimitExceeded {
+            active,
+            max_concurrent: P64_MAX_CONCURRENT,
+        });
+    }
+    if total >= P64_MAX_TOTAL {
+        return Err(GovernorError::TotalLimitExceeded {
+            total,
+            max_total: P64_MAX_TOTAL,
+        });
+    }
+    Ok(effective_subagent_tools(granted_tools, denied_tools))
 }
 
 impl ConcurrencyGovernor {
@@ -153,6 +233,27 @@ impl ConcurrencyGovernor {
     pub fn active_counts(&self) -> (usize, usize, usize) {
         (self.active_mutation, self.active_readonly, self.queue.len())
     }
+
+    /// P64.4 — admit a sub-agent task on the Subagent trigger path.
+    ///
+    /// Wiring only: enforces the P64 depth/concurrency/total ceiling via
+    /// [`check_subagent_admission`] first, then delegates to [`Self::admit_task`]
+    /// for the normal fleet slot accounting. The returned toolset is the
+    /// deny-stripped effective set the child may hold.
+    pub fn admit_subagent_task(
+        &mut self,
+        task: SubagentTask,
+        depth: u32,
+        total_spawned: u32,
+        granted_tools: &[String],
+        denied_tools: &[String],
+    ) -> Result<(FleetTaskStatus, Vec<String>), GovernorError> {
+        let active_subagents = self.active_mutation + self.active_readonly;
+        let effective =
+            check_subagent_admission(depth, active_subagents, total_spawned, granted_tools, denied_tools)?;
+        let status = self.admit_task(task)?;
+        Ok((status, effective))
+    }
 }
 
 #[cfg(test)]
@@ -189,5 +290,93 @@ mod tests {
         let next = gov.complete_task(FleetTaskKind::Mutation).unwrap();
         assert_eq!(next.status, FleetTaskStatus::Running);
         assert_eq!(gov.active_counts(), (2, 0, 0));
+    }
+
+    #[test]
+    fn p64_subagent_limits_mirror_blueprint() {
+        // Canonical contract: max_depth 2 / max_concurrent 3 / max_total 6.
+        assert_eq!(P64_MAX_DEPTH, 2);
+        assert_eq!(P64_MAX_CONCURRENT, 3);
+        assert_eq!(P64_MAX_TOTAL, 6);
+        assert_eq!(
+            DELEGATE_BLOCKED_TOOLS,
+            ["delegate", "clarify", "memory", "send_message", "cronjob"]
+        );
+        // everyaios-blueprint is the canonical owner — the mirror must match.
+        assert_eq!(
+            P64_MAX_DEPTH,
+            everyaios_blueprint::subagent::SubAgentLimits::default().max_depth
+        );
+        assert_eq!(
+            P64_MAX_CONCURRENT as u32,
+            everyaios_blueprint::subagent::SubAgentLimits::default().max_concurrent
+        );
+        assert_eq!(
+            P64_MAX_TOTAL,
+            everyaios_blueprint::subagent::SubAgentLimits::default().max_total
+        );
+    }
+
+    #[test]
+    fn p64_effective_tools_strip_blocked_and_denies() {
+        let granted = vec![
+            "read".to_string(),
+            "delegate".to_string(),
+            "memory".to_string(),
+            "write".to_string(),
+        ];
+        let denied = vec!["write".to_string()];
+        let eff = effective_subagent_tools(&granted, &denied);
+        assert_eq!(eff, vec!["read".to_string()]);
+    }
+
+    #[test]
+    fn p64_admission_fails_closed_on_depth_concurrency_total() {
+        // Depth exceeded.
+        assert!(matches!(
+            check_subagent_admission(3, 0, 0, &[], &[]),
+            Err(GovernorError::DepthExceeded { .. })
+        ));
+        // Concurrency exceeded (3 active of 3).
+        assert!(matches!(
+            check_subagent_admission(1, 3, 0, &[], &[]),
+            Err(GovernorError::ConcurrentLimitExceeded { .. })
+        ));
+        // Total exceeded (6 of 6).
+        assert!(matches!(
+            check_subagent_admission(1, 0, 6, &[], &[]),
+            Err(GovernorError::TotalLimitExceeded { .. })
+        ));
+        // Happy path at the ceiling edge.
+        assert!(check_subagent_admission(2, 2, 5, &[], &[]).is_ok());
+    }
+
+    #[test]
+    fn p64_admit_subagent_task_wires_through_admit_task() {
+        let mut gov = ConcurrencyGovernor::new(GovernorConfig {
+            max_concurrent_mutation: 8,
+            max_concurrent_readonly: 8,
+            max_queue_capacity: 10,
+        });
+        let mk = |id: &str| SubagentTask {
+            task_id: id.into(),
+            parent_run_id: "p".into(),
+            role: "coder".into(),
+            runtime: "native".into(),
+            kind: FleetTaskKind::Mutation,
+            status: FleetTaskStatus::Admitted,
+            priority: 1,
+        };
+        let granted = vec!["read".to_string(), "delegate".to_string()];
+        let (status, eff) =
+            gov.admit_subagent_task(mk("s1"), 1, 0, &granted, &[]).unwrap();
+        assert_eq!(status, FleetTaskStatus::Running);
+        assert_eq!(eff, vec!["read".to_string()]);
+        // Depth 3 is refused before any fleet slot is consumed.
+        let before = gov.active_counts();
+        assert!(gov
+            .admit_subagent_task(mk("deep"), 3, 1, &granted, &[])
+            .is_err());
+        assert_eq!(gov.active_counts(), before);
     }
 }

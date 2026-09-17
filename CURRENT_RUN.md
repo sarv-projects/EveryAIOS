@@ -12,7 +12,14 @@
 
 ## 1. Active Goal
 
-**(Current, 2026-09-17 — README complete rewrite + full "Switzerland of AI" removal + expanded 2026 multi-tool comparison matrix)**:
+**(Current, 2026-09-17 — Tier-1 P64 Native Agent Plane wiring implemented, verified, committed)**:
+- Scope: P64.3 repomap inject (below CACHE_BOUNDARY, segs 1-7 byte-stable) · P64.4 subagent worktree runtime (limits 2/3/6, blocked tools, 3-file blackboards) · P64.5 edit ladder (exact fail-closed → structural splice → fuzzy, Guard-2 ticketed) · P64.6 shadow preflight (risk-gated, PID-tracked, 50KB caps) · P64.7 checkpoint/rollback (kernel auto-checkpoint + fenced restore + timeline UI) · P64.8 skill distill gate (500-line + tests gate) · P64.9 shared-plane façades (16 routes over same 51-tool methods).
+- Files: 16 modified + 3 new — crates (blueprint checkpoint/lib/skill_store; core execution/governor/lib/tools/worktrees; mcp lib), coordinator (chat/context-trace/plan/prompt/tools + new p64-lane.test.ts), ui (message-bubble/session-timeline + new lib/checkpoints.ts + turn-checkpoint.tsx).
+- Verified: check-doc-sync exit 0 (166 caps, 1429 = 1221 done + 208 open, kernel clear) · ipc-parity exit 0 · ui tsc exit 0 · cargo check touched crates clean · cargo test lib 64 + 175 + 697 pass · security-gate PASS · coordinator p64-lane 21 pass.
+- Gotchas: panels/activity-panel.tsx does not exist — UI built on chat/session-timeline.tsx; ARCH/14, ARCH/15, ARCH/11-PROMPT-ANATOMY, ARCH/03-SECURITY-ROUTING, ARCH/05-BROWSER-ENGINE do not exist (contracts taken from ARCH/17 + SPEC only); shell keeps one snapshot per file per session so timeline restores same file set per turn (copy states this); TODO P64.3-P64.9 checkboxes intentionally left open pending live-consumer proof + doc-sync header update.
+- Next: Tier-2 P65/P66 Settings center → Tier-3 terminal → Tier-4 swarm/CUA → Tier-5 packaged matrix (P50.5.8/P66.9).
+
+**(Previous, 2026-09-17 — README complete rewrite + full "Switzerland of AI" removal + expanded 2026 multi-tool comparison matrix)**:
 
 **COMPLETED THIS SESSION:**
 1. **README.md — Complete Human-Friendly Rewrite & 2026 Multi-Tool Matrix** (`fa2a491`, `ba83ab2`, `532a8bb`):

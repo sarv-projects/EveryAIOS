@@ -8,6 +8,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { checkSpawn } from "./chief";
 import { evaluateGuard, useTicket, type GuardOperation } from "./guard";
 
 export type ToolRequest = (method: string, params: unknown) => Promise<unknown>;
@@ -518,4 +519,416 @@ function operationOf(toolId: string): GuardOperation {
   }
   if (id.includes("web")) return "web_action";
   return "write";
+}
+
+/**
+ * P64.4 — sub-agent orchestration contract, coordinator side (Tier-1 lane).
+ *
+ * Mirrors the native `SubAgentSpec` / `SubAgentResult` / `SubAgentLimits`
+ * shape: fresh-context spawn (spec only, never the parent transcript),
+ * worktree isolation under `.everyaios/worktrees/task-<id>`, inherited
+ * denies that are never escalated, depth <= 2, and a summary-only return
+ * (no transcript field exists by construction). Limits are enforced through
+ * the shared `checkSpawn` gate; rejections carry the specific reason and
+ * never queue silently. No new orchestration engine is introduced — this is
+ * a thin validation + dispatch facade over the native runtime RPC.
+ */
+
+/** Tools a parent always withholds from children (inherited denies). */
+export const DELEGATE_BLOCKED_TOOLS: readonly string[] = [
+  "delegate",
+  "clarify",
+  "memory",
+  "send_message",
+  "cronjob",
+] as const;
+
+/** Task-ledger tools are default-deny for children unless explicitly granted. */
+export const SUBAGENT_DEFAULT_DENY_TASK_TOOLS: readonly string[] = ["task", "todo"] as const;
+
+export const SUBAGENT_MAX_DEPTH = 2;
+export const SUBAGENT_MAX_CONCURRENT = 3;
+export const SUBAGENT_MAX_TOTAL = 6;
+
+/** Coordinator mirror of the native spawn shape (worktree-bound). */
+export interface SubAgentSpecShape {
+  spec: { taskId: string; goal: string };
+  model: string;
+  workspace: string;
+  parentId: string | null;
+  tools: string[];
+  blockedTools: string[];
+  depth: number;
+}
+
+/** Summary-only return: summary + status + artifacts, never a transcript. */
+export interface SubAgentResultShape {
+  task_id: string;
+  summary: string;
+  status: string;
+  artifacts: string[];
+}
+
+export interface BuildSubAgentSpecOptions {
+  taskId: string;
+  goal: string;
+  model?: string;
+  parentId?: string | null;
+  /** Parent-granted tool ids (narrowed below). */
+  tools?: string[];
+  /** Extra denies beyond the canonical blocked set. */
+  blockedTools?: string[];
+  /** Assigned by the spawner (parent depth + 1; root = 0). */
+  depth?: number;
+}
+
+function sanitizeTaskId(taskId: string): string {
+  const clean = taskId.trim().replace(/[^a-zA-Z0-9-_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  if (clean.length === 0) throw new Error("subagent taskId is empty after sanitization — fail-closed");
+  return clean.slice(0, 64);
+}
+
+/**
+ * Build a worktree-bound spawn spec. Fail-closed: empty goal, bad depth,
+ * or an unsafe task id throws before any ticket or spawn is attempted.
+ * Tool lists are returned stably sorted for prompt-cache stability.
+ */
+export function buildSubAgentSpec(opts: BuildSubAgentSpecOptions): SubAgentSpecShape {  const taskId = sanitizeTaskId(opts.taskId);
+  const goal = opts.goal.trim();
+  if (goal.length === 0) throw new Error("subagent goal is empty — fail-closed");
+  const depth = opts.depth ?? 0;
+  if (!Number.isInteger(depth) || depth < 0 || depth > SUBAGENT_MAX_DEPTH) {
+    throw new Error(`subagent depth ${String(depth)} outside 0..${SUBAGENT_MAX_DEPTH} — fail-closed`);
+  }
+  const model = (opts.model ?? "inbuilt").trim() || "inbuilt";
+  const tools = [...(opts.tools ?? [])].sort();
+  const blocked = [...DELEGATE_BLOCKED_TOOLS, ...(opts.blockedTools ?? [])];
+  const blockedTools = [...new Set(blocked)].sort();
+  return {
+    spec: { taskId, goal },
+    model,
+    workspace: `.everyaios/worktrees/task-${taskId}`,
+    parentId: opts.parentId ?? null,
+    tools,
+    blockedTools,
+    depth,
+  };
+}
+
+/**
+ * Narrowed child tool set: parent grants minus explicit denies minus the
+ * canonical blocked set, with task-ledger tools default-deny unless the
+ * parent explicitly granted them. Sorted and deduped (stable ids).
+ */export function deriveEffectiveSubAgentTools(
+  parentGrants: string[],
+  parentDenies: string[],
+  explicitGrants: string[],
+): string[] {
+  const denies = new Set(parentDenies);
+  const explicit = new Set(explicitGrants);
+  const out = parentGrants.filter(
+    (t) =>
+      !denies.has(t) &&
+      !(DELEGATE_BLOCKED_TOOLS as readonly string[]).includes(t) &&
+      (!(SUBAGENT_DEFAULT_DENY_TASK_TOOLS as readonly string[]).includes(t) || explicit.has(t)),
+  );
+  return [...new Set(out)].sort();
+}
+
+/**
+ * Normalize either first-class `subagent` arg shape into spec options:
+ * the registry shape (`agentId`/`task`/`worktreeBranch`/`sharedCapabilities`)
+ * or the planner shape (`objective`/`isolation`/`scope`). Fail-closed on an
+ * empty objective. The returned tools are the narrowed effective set.
+ */
+export function subAgentSpecFromToolArgs(
+  args: Record<string, unknown>,
+  defaults: { parentId?: string | null; depth?: number; parentGrants?: string[] } = {},
+): BuildSubAgentSpecOptions {
+  const goalRaw =
+    (typeof args.task === "string" && args.task) ||
+    (typeof args.objective === "string" && args.objective) ||
+    (typeof args.goal === "string" && args.goal) ||
+    "";
+  const goal = goalRaw.trim();
+  if (goal.length === 0) {
+    throw new Error("subagent objective is empty — fail-closed (ask for scope first)");
+  }
+  const taskIdRaw =
+    (typeof args.taskId === "string" && args.taskId) ||
+    (typeof args.worktreeBranch === "string" && args.worktreeBranch) ||
+    goal.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) ||
+    "task";
+  const model =
+    (typeof args.agentId === "string" && args.agentId) ||
+    (typeof args.model === "string" && args.model) ||
+    "inbuilt";
+  const shared =
+    Array.isArray(args.sharedCapabilities)
+      ? args.sharedCapabilities.filter((t): t is string => typeof t === "string")
+      : Array.isArray(args.scope)
+        ? args.scope.filter((t): t is string => typeof t === "string")
+        : typeof args.scope === "string" && args.scope.length > 0
+          ? [args.scope]
+          : [];
+  const grants = defaults.parentGrants ?? shared;
+  const tools = deriveEffectiveSubAgentTools(grants, [], grants);
+  const opts: BuildSubAgentSpecOptions = {
+    taskId: taskIdRaw,
+    goal,
+    model,
+    tools,
+  };
+  if ((defaults.parentId ?? null) !== null) opts.parentId = defaults.parentId as string;
+  if (defaults.depth !== undefined) opts.depth = defaults.depth;
+  return opts;
+}
+
+/** Minimal spawn counts for the shared gate. */
+export interface SubAgentSpawnCounts {
+  depth: number;
+  active: number;
+  total: number;
+}
+
+/**
+ * Enforce max_depth 2 / max_concurrent 3 / max_total 6 through the shared
+ * `checkSpawn` gate (concurrency + depth) plus an explicit total cap the
+ * shared gate tracks as chain budget. Returns the refusal reason; never
+ * queues silently.
+ */
+export function checkSubAgentSpawn(
+  counts: SubAgentSpawnCounts,
+): { allowed: true } | { allowed: false; reason: string } {
+  const verdict = checkSpawn(
+    {
+      depth: counts.depth,
+      active: counts.active,
+      stepsUsed: 0,
+      parentPermissions: new Set<string>(),
+      denies: new Set<string>(),
+      grants: new Set<string>(),
+    },
+    {
+      maxDepth: SUBAGENT_MAX_DEPTH,
+      maxConcurrency: SUBAGENT_MAX_CONCURRENT,
+      maxStepsPerSubagent: 200,
+      chainBudget: Number.MAX_SAFE_INTEGER,
+    },
+  );
+  if (!verdict.allowed) return verdict;
+  if (counts.active >= SUBAGENT_MAX_CONCURRENT) {
+    return {
+      allowed: false,
+      reason: `concurrency ${counts.active} ≥ max ${SUBAGENT_MAX_CONCURRENT}`,
+    };
+  }
+  if (counts.total >= SUBAGENT_MAX_TOTAL) {
+    return { allowed: false, reason: `total ${counts.total} ≥ max ${SUBAGENT_MAX_TOTAL}` };
+  }
+  return { allowed: true };
+}
+
+/** In-process spawn accounting (active + total per run). */
+export class SubAgentSpawnTracker {
+  private activeCount = 0;
+  private totalCount = 0;
+
+  get active(): number {
+    return this.activeCount;
+  }
+
+  get total(): number {
+    return this.totalCount;
+  }
+
+  async canSpawn(depth: number): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+    return checkSubAgentSpawn({ depth, active: this.activeCount, total: this.totalCount });
+  }
+  /** Reserve a slot (throws fail-closed when a cap refuses). */
+  async begin(depth: number): Promise<void> {
+    const verdict = await this.canSpawn(depth);
+    if (!verdict.allowed) {
+      throw new Error(`subagent spawn refused: ${verdict.reason}`);
+    }
+    this.activeCount += 1;
+    this.totalCount += 1;
+  }
+
+  release(): void {
+    if (this.activeCount > 0) this.activeCount -= 1;
+  }
+}
+
+/** Shared default tracker for the coordinator's subagent tool path. */
+export const subAgentTracker = new SubAgentSpawnTracker();
+
+/** Keep only the summary-only fields (drop any transcript-shaped extra). */
+export function toSummaryOnlyResult(raw: Record<string, unknown>): SubAgentResultShape {  const taskId = typeof raw.task_id === "string" ? raw.task_id : typeof raw.taskId === "string" ? raw.taskId : "unknown";
+  const summary = typeof raw.summary === "string" ? raw.summary : "";
+  const status = typeof raw.status === "string" ? raw.status : "done";
+  const artifacts = Array.isArray(raw.artifacts) ? raw.artifacts.filter((a): a is string => typeof a === "string") : [];
+  return { task_id: taskId, summary, status, artifacts };
+}
+
+async function waitForTicketApproval(
+  request: ToolRequest,
+  ticketId: string,
+  sleep: (ms: number) => Promise<void>,
+  notify?: (ticketId: string, state: string) => void,
+): Promise<string> {
+  const started = Date.now();
+  while (Date.now() - started < ASK_TIMEOUT_MS) {
+    await sleep(ASK_POLL_MS);
+    const status = (await request("guard/ticket_status", { ticketId })) as {
+      state?: string;
+    };
+    const state = (status.state ?? "unknown").toLowerCase();
+    if (state === "approved") {
+      notify?.(ticketId, state);
+      return "approved";
+    }
+    if (state === "rejected" || state === "revoked" || state === "expired" || state === "unknown") {
+      return state;
+    }
+  }
+  return "timeout";
+}
+
+/**
+ * Dispatch one sub-agent spawn through the Guard-2 ticket flow
+ * (evaluate → useTicket → spawn RPC) and return the summary-only result.
+ * The native spawn binds when the `subagent/spawn` handler lands; a missing
+ * handler fails closed with an actionable error (never a fabricated success).
+ * Callers hold a tracker slot across this call (begin → finally release).
+ */
+export async function dispatchSubAgent(
+  request: ToolRequest,
+  spec: SubAgentSpecShape,
+  ctx: { sessionId: string; agentId?: string } = { sessionId: "default" },
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<SubAgentResultShape> {
+  if (spec.depth > SUBAGENT_MAX_DEPTH) {
+    throw new Error(`subagent depth ${spec.depth} exceeds max ${SUBAGENT_MAX_DEPTH} — fail-closed`);
+  }
+  for (const blocked of DELEGATE_BLOCKED_TOOLS) {
+    if (spec.tools.includes(blocked)) {
+      throw new Error(`subagent tools grant blocked tool "${blocked}" — fail-closed`);
+    }
+  }
+  const args = {
+    spec: spec.spec,
+    model: spec.model,
+    workspace: spec.workspace,
+    parentId: spec.parentId,
+    tools: spec.tools,
+    blockedTools: spec.blockedTools,
+    depth: spec.depth,
+  };
+  const argsHash = canonicalArgsHash(args);
+  const gated = await evaluateGuard(request, {
+    sessionId: ctx.sessionId,
+    ...(ctx.agentId !== undefined ? { agentId: ctx.agentId } : { agentId: "agent" }),
+    toolId: "subagent",
+    operation: "write",
+    argsHash,
+  });
+  if (gated.action === "block") {
+    throw new Error(gated.reason || "subagent spawn blocked");
+  }
+  if (gated.action === "ask") {
+    const state = await waitForTicketApproval(request, gated.ticketId, sleep);
+    if (state !== "approved") {
+      throw new Error(`subagent ticket ${state}`);
+    }
+  }
+  await useTicket(request, gated.ticketId, argsHash);
+  let raw: unknown;
+  try {
+    raw = await request("subagent/spawn", { ...args, ticketId: gated.ticketId, argsHash });
+  } catch {
+    throw new Error("subagent spawn unavailable — native runtime not wired (no silent fallback)");
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("subagent spawn returned no result — fail-closed");
+  }
+  return toSummaryOnlyResult(raw as Record<string, unknown>);
+}
+
+/**
+ * P64.5 — unified native edit shape, coordinator side (Tier-1 lane).
+ *
+ * Single-occurrence exact edit, fail-closed on ambiguity: the target must
+ * match exactly one contiguous block of the file. Every mutation rides the
+ * existing Guard-2 ticket flow (`ToolExecutor.executeTool` →
+ * evaluate → useTicket → tool/commit); this module never applies an edit
+ * itself and never bypasses the ticket. No new edit engine is introduced —
+ * reads and writes reuse the registered `file_ops` handlers.
+ */
+
+/** One exact edit request: replace a single `target` block with `replacement`. */
+export interface ExactEditParams {
+  path: string;
+  target: string;
+  replacement: string;
+}
+
+/** Count non-overlapping occurrences of `target` in `content`. */
+export function countOccurrences(content: string, target: string): number {
+  if (target.length === 0) return 0;
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const idx = content.indexOf(target, from);
+    if (idx === -1) return count;
+    count += 1;
+    from = idx + target.length;
+  }
+}
+
+/**
+ * Fail-closed single-match gate: throws when the target matches zero times
+ * or more than once (the caller must supply more context — never guess).
+ */
+export function assertSingleMatch(content: string, target: string): void {
+  if (target.length === 0) {
+    throw new Error("edit target is empty — fail-closed (supply the block to replace)");
+  }
+  const n = countOccurrences(content, target);
+  if (n === 0) {
+    throw new Error("edit target has no match — fail-closed (refusing to guess)");
+  }
+  if (n > 1) {
+    throw new Error(
+      `edit target is ambiguous (${n} matches) — fail-closed (supply more surrounding context)`,
+    );
+  }
+}
+
+/**
+ * Read → single-match gate → ticketed write. Reads the file through the
+ * executor, refuses on zero/ambiguous matches before any ticket is consumed
+ * for the write, then commits the spliced content via the standard
+ * `file_ops.write` Guard-2 path. Returns the commit payload.
+ */
+export async function applyExactEdit(
+  executor: ToolExecutor,
+  params: ExactEditParams,
+  ctx: { sessionId: string; agentId?: string } = { sessionId: "default" },
+): Promise<unknown> {
+  const path = params.path.trim();
+  if (path.length === 0) throw new Error("edit path is empty — fail-closed");
+  if (params.target.length === 0) {
+    throw new Error("edit target is empty — fail-closed (supply the block to replace)");
+  }
+  const read = (await executor.executeTool("file_ops.read", { path }, ctx)) as unknown;
+  const content =
+    typeof read === "string"
+      ? read
+      : typeof (read as { content?: unknown })?.content === "string"
+        ? String((read as { content: unknown }).content)
+        : JSON.stringify(read ?? "");
+  assertSingleMatch(content, params.target);
+  const next = content.replace(params.target, params.replacement);
+  return executor.executeTool("file_ops.write", { path, content: next }, ctx);
 }

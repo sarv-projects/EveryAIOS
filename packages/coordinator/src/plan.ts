@@ -89,6 +89,15 @@ export interface PlanExecutionParams {
   tasks: PlanTask[];
   provider?: string;
   model?: string;
+  /**
+   * P64.8 — test-gated skill-distillation trigger. When true and the DAG
+   * succeeds fully (every task done, no error, multi-task run), the executor
+   * best-effort calls the native `grow_from_task` seam via RPC so a solved
+   * run can become a versioned skill. Default off: nothing becomes
+   * executable before validation, and the coordinator never writes the
+   * skills directory directly (only the native store does).
+   */
+  enableSkillDistill?: boolean;
   /** Native host callback used to publish the durable execution id before
    * lifecycle events are emitted. This is process-local and never serialized
    * over the sidecar wire. */
@@ -345,6 +354,25 @@ export async function runPlanExecution(
         verification = report;
       } catch {
         /* eval/verify is best-effort — missing handler never blocks plan_done */
+      }
+      // P64.8 — validated skill distillation trigger: only on a fully
+      // successful multi-task DAG, only when the test gate is open, and only
+      // through the native seam (never a direct skills-dir write from TS).
+      if (
+        params.enableSkillDistill === true &&
+        tasks.length > 1 &&
+        tasksDone === tasks.length
+      ) {
+        try {
+          await request("skill/grow", {
+            taskName: planId,
+            solution: tasks.map((t) => `${t.id}: ${t.goal}`).join("\n"),
+            author: sessionId,
+            version: "0.1.0",
+          });
+        } catch {
+          /* distillation is best-effort — never blocks plan_done */
+        }
       }
       emitPlan({
         type: "plan_done",
