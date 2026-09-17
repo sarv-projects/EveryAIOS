@@ -35,7 +35,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use everyaios_core::terminal::{
     detect_available_profiles, CommandRecord, CommandTracker, DetectedProfile, Platform, PtyFrame,
-    PtyHost, SpawnOpts, TerminalBackend, TerminalConfig, TerminalOrigin,
+    PtyHost, SpawnOpts, TerminalBackend, TerminalConfig, TerminalOrigin, TerminalPlaneObserver,
 };
 use everyaios_core::Config;
 
@@ -743,27 +743,11 @@ pub fn terminal_kill(state: State<'_, AppState>, pty_id: String) -> Result<bool,
 /// the integration quality, and the shell's live cwd.
 #[tauri::command]
 pub fn terminal_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let rows: Vec<serde_json::Value> = state
-        .terminal
-        .sessions()
-        .into_iter()
-        .map(|s| {
-            let exit = state.terminal.exit_code(&s.pty_id).ok().flatten();
-            serde_json::json!({
-                "ptyId": s.pty_id,
-                "profileId": s.profile_id,
-                "backend": backend_label(s.backend),
-                "origin": origin_label(s.origin),
-                "label": s.label,
-                "integration": s.integration,
-                "cwd": s.cwd,
-                "pid": s.pid,
-                "running": exit.is_none(),
-                "exitCode": exit,
-            })
-        })
-        .collect();
-    Ok(serde_json::json!({ "count": rows.len(), "ptys": rows }))
+    // P54.5 — served from the shared plane read model. The agent-facing
+    // `terminal/status` RPC arm serializes the *same* struct, so a session row
+    // the model is told about cannot describe a different shell than the tab
+    // strip draws.
+    serde_json::to_value(state.terminal.plane_status()).map_err(|e| e.to_string())
 }
 
 /// P67 — the shell's structured command history for one PTY. This is the data
@@ -776,32 +760,24 @@ pub fn terminal_commands(
     pty_id: String,
     limit: Option<usize>,
 ) -> Result<serde_json::Value, String> {
-    let tracker = state
+    // P54.5 — shared read model (same rows the relay's `terminal/commands`
+    // serves). `no such pty` is a caller bug and stays an error.
+    let commands = state
         .terminal
-        .tracker(&pty_id)
-        .ok_or_else(|| format!("terminal_commands: no such pty: {pty_id}"))?;
-    let t = tracker.lock().map_err(|e| e.to_string())?;
-    let limit = limit.unwrap_or(50).min(200);
-    let rows: Vec<serde_json::Value> = t
-        .recent(limit)
-        .into_iter()
-        .map(|r| {
-            serde_json::json!({
-                "command": r.command,
-                "cwd": r.cwd,
-                "exitCode": r.exit_code,
-                "output": r.output,
-                "trusted": r.trusted,
-                "failed": r.failed(),
-            })
-        })
-        .collect();
-    Ok(serde_json::json!({
+        .commands(&pty_id, limit.unwrap_or(50))
+        .map_err(|e| format!("terminal_commands: {e}"))?;
+    let cwd = state
+        .terminal
+        .session(&pty_id)
+        .map(|s| s.cwd)
+        .unwrap_or_default();
+    serde_json::to_value(serde_json::json!({
         "ptyId": pty_id,
-        "cwd": t.cwd(),
-        "count": t.len(),
-        "commands": rows,
+        "cwd": cwd,
+        "count": commands.len(),
+        "commands": commands,
     }))
+    .map_err(|e| e.to_string())
 }
 
 /// P67 — the last-command context block, exactly as it should be shown to a
@@ -813,12 +789,10 @@ pub fn terminal_last_command_context(
     pty_id: String,
     max_chars: Option<usize>,
 ) -> Result<Option<String>, String> {
-    let tracker = state
+    state
         .terminal
-        .tracker(&pty_id)
-        .ok_or_else(|| format!("terminal_last_command_context: no such pty: {pty_id}"))?;
-    let t = tracker.lock().map_err(|e| e.to_string())?;
-    Ok(t.context_block(max_chars.unwrap_or(6000).min(64_000)))
+        .last_command(&pty_id, max_chars.unwrap_or(6000))
+        .map_err(|e| format!("terminal_last_command_context: {e}"))
 }
 
 /// P67 — recent command history as a compact block (terminal-history context,
@@ -830,10 +804,8 @@ pub fn terminal_history_context(
     limit: Option<usize>,
     max_chars: Option<usize>,
 ) -> Result<Option<String>, String> {
-    let tracker = state
+    state
         .terminal
-        .tracker(&pty_id)
-        .ok_or_else(|| format!("terminal_history_context: no such pty: {pty_id}"))?;
-    let t = tracker.lock().map_err(|e| e.to_string())?;
-    Ok(t.history_block(limit.unwrap_or(10), max_chars.unwrap_or(4000).min(64_000)))
+        .history(&pty_id, limit.unwrap_or(10), max_chars.unwrap_or(4000))
+        .map_err(|e| format!("terminal_history_context: {e}"))
 }

@@ -165,6 +165,15 @@ fn connect_chat_relay(
         Arc::clone(&state.terminal),
         app.clone(),
     )));
+    // P54.5 — the read-only half of the same seam, over the *same* host object,
+    // so `terminal/status` and the Shell view can never describe different
+    // shells. Attaching it here (before the relay is published) means no turn
+    // can observe "no plane" because it raced boot.
+    // Coerce the value (not the `Arc::clone` argument) so this is an unsize
+    // coercion of the shared handle rather than a second host.
+    let plane_host: Arc<everyaios_core::terminal::PtyHost> = Arc::clone(&state.terminal);
+    let terminal_plane: Arc<dyn everyaios_core::terminal::TerminalPlaneObserver> = plane_host;
+    relay.attach_terminal_plane(terminal_plane);
     // P48.3 — the inbuilt agent's computer-use path (E9). Attached here, before
     // the relay is published, so no agent turn can race ahead of the executor.
     // Best-effort: a headless / no-display host has no platform backend, so

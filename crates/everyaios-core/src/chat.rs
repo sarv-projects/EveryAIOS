@@ -407,6 +407,13 @@ pub struct ChatRelay<W, R> {
     /// a store built per call so tests can re-seat it (the default home is the
     /// developer's real `~/.everyaios/skills/`), matching `scheduler`.
     skill_store: Arc<Mutex<everyaios_blueprint::SkillStore>>,
+    /// P54.5 — read-only view of the one PTY plane, behind `terminal/*`. The
+    /// host attaches the same `PtyHost` the Shell view uses, so the agent's
+    /// picture of its own shell is the user's picture of it. Absent on a host
+    /// with no PTY host, where the arm answers honestly instead of inventing
+    /// sessions. Carries no run capability by construction — see
+    /// [`crate::terminal::TerminalPlaneObserver`].
+    terminal_plane: Arc<Mutex<Option<Arc<dyn crate::terminal::TerminalPlaneObserver>>>>,
     /// P49 V1-local Work Gateway projection and event journal.
     work_gateway: Arc<Mutex<crate::work_gateway::WorkGateway>>,
     /// P49.7 capability grants; secrets remain exclusively in the vault.
@@ -531,6 +538,87 @@ fn subagent_rpc(
     }
 }
 
+/// The `terminal/*` methods the coordinator drives.
+///
+/// **Read-only on purpose.** The agent's *privileged* shell path is the
+/// ticketed `script.run` tool (`tool/exec` → `tool/commit` → Guard-2 →
+/// `TerminalExecutor::run`). Adding a run method here would be a second,
+/// unticketed execution path for a privileged effect, which is what the
+/// no-bypass invariant forbids — so this arm only ever *observes*.
+///
+/// What the coordinator cannot otherwise see is the plane's state: whether a
+/// shell exists on this host, which sessions are live with what provenance and
+/// cwd, and what the shell itself reported about the commands it ran. That is
+/// exactly the agent's own situational awareness, and it is served from the
+/// same [`crate::terminal::TerminalPlaneObserver`] row builders the Shell view
+/// reads, so the two cannot drift.
+///
+/// No plane attached is not an error: `terminal/status` answers
+/// `attached: false` rather than an empty list that reads as "a shell with
+/// nothing running". The per-session reads do refuse, because a session id on
+/// a host with no PTY host is a caller bug, not an empty result.
+fn terminal_rpc(
+    method: &str,
+    params: &serde_json::Value,
+    plane: Option<&dyn crate::terminal::TerminalPlaneObserver>,
+) -> Result<serde_json::Value, String> {
+    let param_usize = |key: &str, default: usize| -> usize {
+        params
+            .get(key)
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(default)
+    };
+    let pty_id = || -> Result<&str, String> {
+        params
+            .get("ptyId")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| format!("{method} requires ptyId"))
+    };
+    match method {
+        "terminal/status" => {
+            let status = match plane {
+                Some(p) => p.plane_status(),
+                None => crate::terminal::detached_plane_status(),
+            };
+            serde_json::to_value(status).map_err(|e| e.to_string())
+        }
+        "terminal/commands" => {
+            let id = pty_id()?;
+            let plane = plane.ok_or(NO_TERMINAL_PLANE)?;
+            let rows = plane.commands(id, param_usize("limit", 50))?;
+            let cwd = plane.session(id).map(|s| s.cwd).unwrap_or_default();
+            serde_json::to_value(serde_json::json!({
+                "ptyId": id,
+                "cwd": cwd,
+                "count": rows.len(),
+                "commands": rows,
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "terminal/last_command" => {
+            let id = pty_id()?;
+            let plane = plane.ok_or(NO_TERMINAL_PLANE)?;
+            let block = plane.last_command(id, param_usize("maxChars", 6000))?;
+            Ok(serde_json::json!({ "ptyId": id, "block": block }))
+        }
+        "terminal/history" => {
+            let id = pty_id()?;
+            let plane = plane.ok_or(NO_TERMINAL_PLANE)?;
+            let block =
+                plane.history(id, param_usize("limit", 10), param_usize("maxChars", 4000))?;
+            Ok(serde_json::json!({ "ptyId": id, "block": block }))
+        }
+        other => Err(format!("method not found: {other}")),
+    }
+}
+
+/// The refusal a per-session `terminal/*` read gets on a host with no PTY host.
+/// Worded so the coordinator can surface it as a fact about the host rather
+/// than retrying it as a transient failure.
+const NO_TERMINAL_PLANE: &str = "terminal plane not attached — this host has no shell";
+
 /// P64.3 — repo-map façade defaults. The coordinator applies its own token
 /// budget on top of the returned rows, so this bound is only about how much of
 /// the tree is walked.
@@ -620,6 +708,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             skill_store: Arc::new(Mutex::new(everyaios_blueprint::SkillStore::new(
                 skills_root(),
             ))),
+            terminal_plane: Arc::new(Mutex::new(None)),
             work_gateway: Arc::new(Mutex::new(
                 crate::work_gateway::WorkGateway::open_default()
                     .unwrap_or_else(|_| crate::work_gateway::WorkGateway::new()),
@@ -698,6 +787,19 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     pub fn attach_terminal(&self, terminal: Arc<dyn crate::tools::TerminalExecutor>) {
         if let Ok(mut tools) = self.tools.lock() {
             tools.attach_terminal(terminal);
+        }
+    }
+
+    /// P54.5 — attach the **read-only** view of that same plane for `terminal/*`.
+    ///
+    /// This is the observation half of the seam, not a second execution path:
+    /// the observer cannot run anything, so the only way to *cause* a shell
+    /// effect from the sidecar stays the ticketed `script.run` tool. The host
+    /// passes the same `PtyHost` object it gave `attach_terminal`, so a session
+    /// the agent spawned is the session the coordinator can see.
+    pub fn attach_terminal_plane(&self, plane: Arc<dyn crate::terminal::TerminalPlaneObserver>) {
+        if let Ok(mut slot) = self.terminal_plane.lock() {
+            *slot = Some(plane);
         }
     }
 
@@ -889,6 +991,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let executions = Arc::clone(&self.executions);
         let subagents = Arc::clone(&self.subagents);
         let skill_store = Arc::clone(&self.skill_store);
+        let terminal_plane = Arc::clone(&self.terminal_plane);
         let work_gateway = Arc::clone(&self.work_gateway);
         let capabilities = Arc::clone(&self.capabilities);
         let egress = Arc::clone(&self.egress);
@@ -1439,6 +1542,24 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                             svc.workspace().to_path_buf()
                         };
                         match codeintel_rpc(method, &params, &workspace) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
+                    }
+                    // P54.5 — the read-only view of the one PTY plane. The
+                    // privileged shell path is `script.run` on `tool/exec` →
+                    // `tool/commit` (Guard-2 ticketed); this arm deliberately
+                    // has no run method, so it cannot become a second path to a
+                    // privileged effect.
+                    method if method.starts_with("terminal/") => {
+                        let slot = terminal_plane.lock().unwrap_or_else(|e| e.into_inner());
+                        let plane: Option<&dyn crate::terminal::TerminalPlaneObserver> =
+                            slot.as_deref();
+                        match terminal_rpc(method, &params, plane) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
@@ -3472,6 +3593,230 @@ mod tests {
         // P64.6 — the preflight receipt records its verdict.
         assert!(pre.get("error").is_none(), "preflight: {pre}");
         assert_eq!(pre["result"]["passed"], serde_json::json!(true));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A stand-in plane for the *arm* tests.
+    ///
+    /// The arm's job is to carry the observer's rows onto the wire and to be
+    /// honest about a host with no plane, so a deterministic observer is the
+    /// right instrument — the real `PtyHost` read models are covered against a
+    /// real spawned shell in `terminal::tests`.
+    struct FakePlane;
+
+    impl crate::terminal::TerminalPlaneObserver for FakePlane {
+        fn plane_status(&self) -> crate::terminal::TerminalPlaneStatus {
+            crate::terminal::TerminalPlaneStatus {
+                attached: true,
+                count: 1,
+                ptys: vec![crate::terminal::TerminalSessionView {
+                    pty_id: "pty-1".into(),
+                    profile_id: "bash".into(),
+                    backend: crate::terminal::TerminalBackend::Local,
+                    origin: crate::terminal::TerminalOrigin::Agent,
+                    label: Some("script.run".into()),
+                    integration: Some("Rich"),
+                    cwd: "/w".into(),
+                    pid: Some(42),
+                    running: true,
+                    exit_code: None,
+                }],
+            }
+        }
+
+        fn session(&self, pty_id: &str) -> Option<crate::terminal::TerminalSessionView> {
+            self.plane_status()
+                .ptys
+                .into_iter()
+                .find(|s| s.pty_id == pty_id)
+        }
+
+        fn commands(
+            &self,
+            pty_id: &str,
+            _limit: usize,
+        ) -> Result<Vec<crate::terminal::TerminalCommandView>, String> {
+            if pty_id != "pty-1" {
+                return Err(format!("no such pty: {pty_id}"));
+            }
+            Ok(vec![crate::terminal::TerminalCommandView {
+                command: "cargo test -p everyaios-core".into(),
+                cwd: "/w".into(),
+                exit_code: Some(0),
+                output: "2593 passed".into(),
+                trusted: true,
+                failed: false,
+            }])
+        }
+
+        fn last_command(&self, pty_id: &str, _max_chars: usize) -> Result<Option<String>, String> {
+            if pty_id != "pty-1" {
+                return Err(format!("no such pty: {pty_id}"));
+            }
+            Ok(Some("$ cargo test -p everyaios-core\nexit 0".into()))
+        }
+
+        fn history(
+            &self,
+            _pty_id: &str,
+            _limit: usize,
+            _max_chars: usize,
+        ) -> Result<Option<String>, String> {
+            Ok(None)
+        }
+    }
+
+    /// P54.5 — the `terminal/*` arm driven end to end over real JSON-RPC frames.
+    ///
+    /// Asserted on the replies the coordinator actually receives, not on the
+    /// helper: an unmounted arm answers `method not found`, which the
+    /// coordinator's best-effort catches would swallow into "the agent has no
+    /// shell state", which is how this seam would ship silently broken.
+    #[cfg(unix)]
+    #[test]
+    fn relay_dispatches_terminal_plane_requests() {
+        let (a, b) = pair();
+        let side = std::thread::spawn(move || {
+            let mut s = b;
+            let mut call = |id: &str, method: &str, params: serde_json::Value| {
+                let v = serde_json::json!({
+                    "jsonrpc": "2.0", "id": id, "method": method, "params": params,
+                });
+                let _ = frame::write_frame(&mut s, &serde_json::to_vec(&v).unwrap());
+                loop {
+                    match frame::decode(&mut s) {
+                        Ok(Some(payload)) => {
+                            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&payload) {
+                                if v.get("id").and_then(|i| i.as_str()) == Some(id) {
+                                    return v;
+                                }
+                            }
+                        }
+                        _ => panic!("relay closed the link before acking {method}"),
+                    }
+                }
+            };
+            let status = call("t1", "terminal/status", serde_json::json!({}));
+            let commands = call(
+                "t2",
+                "terminal/commands",
+                serde_json::json!({ "ptyId": "pty-1", "limit": 50 }),
+            );
+            let last = call(
+                "t3",
+                "terminal/last_command",
+                serde_json::json!({ "ptyId": "pty-1", "maxChars": 6000 }),
+            );
+            // A session that is not on the plane is a caller bug and must be
+            // refused rather than answered with an empty record list.
+            let unknown = call(
+                "t4",
+                "terminal/commands",
+                serde_json::json!({ "ptyId": "pty-nope" }),
+            );
+            // A ptyId-less read cannot be guessed at either.
+            let missing = call("t5", "terminal/last_command", serde_json::json!({}));
+            (status, commands, last, unknown, missing)
+        });
+
+        let (dir, vault) = temp_vault("terminal-plane");
+        let vault = Arc::new(Mutex::new(vault));
+        let relay = ChatRelay::new(link_from(a), vault, |_| {});
+        relay.attach_terminal_plane(Arc::new(FakePlane));
+        relay.spawn();
+
+        let (status, commands, last, unknown, missing) = side.join().unwrap();
+
+        assert!(status.get("error").is_none(), "terminal/status: {status}");
+        assert_eq!(status["result"]["attached"], serde_json::json!(true));
+        assert_eq!(status["result"]["count"], serde_json::json!(1));
+        let row = &status["result"]["ptys"][0];
+        assert_eq!(row["ptyId"], serde_json::json!("pty-1"));
+        // Provenance and cwd travel with the row: this is what lets the
+        // coordinator tell an agent session from the user's own shell.
+        assert_eq!(row["origin"], serde_json::json!("agent"));
+        assert_eq!(row["backend"], serde_json::json!("local"));
+        assert_eq!(row["integration"], serde_json::json!("Rich"));
+        assert_eq!(row["cwd"], serde_json::json!("/w"));
+
+        assert!(
+            commands.get("error").is_none(),
+            "terminal/commands: {commands}"
+        );
+        assert_eq!(commands["result"]["count"], serde_json::json!(1));
+        assert_eq!(commands["result"]["cwd"], serde_json::json!("/w"));
+        let rec = &commands["result"]["commands"][0];
+        assert_eq!(rec["exitCode"], serde_json::json!(0));
+        assert_eq!(rec["trusted"], serde_json::json!(true));
+        assert_eq!(rec["failed"], serde_json::json!(false));
+
+        assert!(last.get("error").is_none(), "terminal/last_command: {last}");
+        assert_eq!(
+            last["result"]["block"],
+            serde_json::json!("$ cargo test -p everyaios-core\nexit 0")
+        );
+
+        assert!(
+            unknown.get("error").is_some(),
+            "unknown pty must be refused"
+        );
+        assert!(missing.get("error").is_some(), "ptyId is required");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A host with no PTY host must say so, and must not hand back an empty
+    /// session list that reads as "a shell with nothing running" — nor pretend
+    /// a named session exists.
+    #[cfg(unix)]
+    #[test]
+    fn relay_reports_a_detached_terminal_plane_honestly() {
+        let (a, b) = pair();
+        let side = std::thread::spawn(move || {
+            let mut s = b;
+            let mut call = |id: &str, method: &str, params: serde_json::Value| {
+                let v = serde_json::json!({
+                    "jsonrpc": "2.0", "id": id, "method": method, "params": params,
+                });
+                let _ = frame::write_frame(&mut s, &serde_json::to_vec(&v).unwrap());
+                loop {
+                    match frame::decode(&mut s) {
+                        Ok(Some(payload)) => {
+                            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&payload) {
+                                if v.get("id").and_then(|i| i.as_str()) == Some(id) {
+                                    return v;
+                                }
+                            }
+                        }
+                        _ => panic!("relay closed the link before acking {method}"),
+                    }
+                }
+            };
+            let status = call("d1", "terminal/status", serde_json::json!({}));
+            let commands = call(
+                "d2",
+                "terminal/commands",
+                serde_json::json!({ "ptyId": "pty-1" }),
+            );
+            (status, commands)
+        });
+
+        let (dir, vault) = temp_vault("terminal-detached");
+        let vault = Arc::new(Mutex::new(vault));
+        // No `attach_terminal_plane` — the headless posture.
+        let relay = ChatRelay::new(link_from(a), vault, |_| {});
+        relay.spawn();
+
+        let (status, commands) = side.join().unwrap();
+        assert!(status.get("error").is_none(), "terminal/status: {status}");
+        assert_eq!(status["result"]["attached"], serde_json::json!(false));
+        assert_eq!(status["result"]["count"], serde_json::json!(0));
+        assert_eq!(status["result"]["ptys"], serde_json::json!([]));
+        assert!(
+            commands.get("error").is_some(),
+            "a session read on a host with no shell must be refused"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
