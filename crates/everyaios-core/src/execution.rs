@@ -687,6 +687,33 @@ impl ExecutionKernel {
                 let receipt = self.record_verified_edit(id, strategy, path, ticket, audit_seq)?;
                 Ok(receipt)
             }
+            // P64.6 — run the shadow preflight: decide, typecheck in the shadow
+            // tree, then record the receipt. Was reachable only as a recorder
+            // (`execution/record_preflight`) with nothing deciding or running.
+            "execution/preflight" => {
+                let id = params
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/preflight requires id")?;
+                let files = params
+                    .get("filesChanged")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(1) as usize;
+                let structural = params
+                    .get("structural")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let destructive = params
+                    .get("destructive")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                self.run_preflight(id, files, structural, destructive, &root)
+            }
             // P64.6 — record a shadow-preflight outcome on a Work.
             "execution/record_preflight" => {
                 let id = params
@@ -905,6 +932,67 @@ impl ExecutionKernel {
         self.attach_verification(id, receipt.clone())?;
         Ok(receipt)
     }
+
+    /// P64.6 — risk-gated shadow preflight (SPEC I15, TODO P64.6).
+    ///
+    /// Decides whether the edit earns a preflight, then typechecks it in the
+    /// shadow tree **before** anything lands. A small `local-write` is not
+    /// preflighted — it verifies after, per the contract.
+    ///
+    /// Honest failure mode: when the risk gate says yes but **no** check command
+    /// can be discovered, the reply is `verified: false` and **nothing is
+    /// recorded**. A preflight that could not run must never leave a passing
+    /// receipt behind, because the receipt is what the rollback path trusts.
+    pub fn run_preflight(
+        &mut self,
+        id: &str,
+        files_changed: usize,
+        is_structural: bool,
+        is_destructive: bool,
+        root: &std::path::Path,
+    ) -> Result<Value, String> {
+        let decision = decide_shadow_preflight(files_changed, is_structural, is_destructive);
+        if !decision.needs_preflight {
+            return Ok(json!({
+                "id": id,
+                "needsPreflight": false,
+                "verified": false,
+                "reason": decision.reason,
+                "checks": [],
+            }));
+        }
+        let checks = discover_shadow_checks(root);
+        if checks.is_empty() {
+            return Ok(json!({
+                "id": id,
+                "needsPreflight": true,
+                "verified": false,
+                "passed": false,
+                "reason": format!(
+                    "{} — but no typecheck command was discovered in {}",
+                    decision.reason,
+                    root.display()
+                ),
+                "checks": [],
+            }));
+        }
+        let results = run_shadow_checks(root, &checks);
+        let passed = results.len() == checks.len() && results.iter().all(|r| r.success);
+        let mut output = String::new();
+        for (check, result) in checks.iter().zip(results.iter()) {
+            output.push_str(&format!("$ {}\n{}\n", check.label, result.preview));
+        }
+        let receipt = self.record_preflight(id, passed, &output)?;
+        Ok(json!({
+            "id": id,
+            "needsPreflight": true,
+            "verified": true,
+            "passed": passed,
+            "reason": decision.reason,
+            "checks": results,
+            "receipt": receipt,
+        }))
+    }
 }
 
 /// P64.6 — risk-gated shadow-preflight decision (SPEC I15).
@@ -1012,6 +1100,100 @@ pub struct ShadowCheckOutput {
     pub preview: String,
     pub truncated: bool,
     pub total_bytes: usize,
+}
+
+/// P64.6 — at most one Rust and one Node check per preflight. The point is a
+/// fast "did this edit break the build", not a full CI matrix.
+pub const SHADOW_CHECK_MAX: usize = 2;
+
+/// P64.6 — one configured shadow check.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ShadowCheck {
+    /// Human label, e.g. `cargo check --quiet`.
+    pub label: String,
+    pub program: String,
+    pub args: Vec<String>,
+}
+
+/// P64.6 — discover the project's own typecheck command from its manifests.
+///
+/// Deliberately an allow-list of the well-known typecheck entries rather than a
+/// general "run this shell string" surface: this executes *before* a write
+/// lands, so it must never run something the project did not declare. Returns an
+/// empty list when nothing is discoverable — the caller reports that as
+/// **unverified**, never as a pass.
+pub fn discover_shadow_checks(root: &std::path::Path) -> Vec<ShadowCheck> {
+    let mut checks = Vec::new();
+    if root.join("Cargo.toml").is_file() {
+        checks.push(ShadowCheck {
+            label: "cargo check --quiet".to_string(),
+            program: "cargo".to_string(),
+            args: vec!["check".to_string(), "--quiet".to_string()],
+        });
+    }
+    if let Ok(source) = std::fs::read_to_string(root.join("package.json")) {
+        if let Ok(pkg) = serde_json::from_str::<Value>(&source) {
+            let declared = ["typecheck", "type-check", "check"]
+                .iter()
+                .find(|name| {
+                    pkg.get("scripts")
+                        .and_then(|s| s.get(**name))
+                        .is_some_and(|v| v.is_string())
+                })
+                .copied();
+            if let Some(script) = declared {
+                // Match the package manager the lockfile actually declares, so
+                // the check runs the same way the project does.
+                let pm = if root.join("pnpm-lock.yaml").is_file() {
+                    "pnpm"
+                } else if root.join("yarn.lock").is_file() {
+                    "yarn"
+                } else if root.join("bun.lockb").is_file() || root.join("bun.lock").is_file() {
+                    "bun"
+                } else {
+                    "npm"
+                };
+                checks.push(ShadowCheck {
+                    label: format!("{pm} run {script}"),
+                    program: pm.to_string(),
+                    args: vec!["run".to_string(), script.to_string()],
+                });
+            }
+        }
+    }
+    checks.truncate(SHADOW_CHECK_MAX);
+    checks
+}
+
+/// P64.6 — run the checks in order, stopping at the first failure: once the
+/// typecheck is broken the later results are noise, and the 50 KB cap is per
+/// check. A check that cannot even spawn is reported as a failure, never as a
+/// silent pass.
+pub fn run_shadow_checks(root: &std::path::Path, checks: &[ShadowCheck]) -> Vec<ShadowCheckOutput> {
+    let mut results = Vec::new();
+    for check in checks {
+        let args: Vec<&str> = check.args.iter().map(String::as_str).collect();
+        match run_shadow_command(&check.program, &args, root) {
+            Ok(result) => {
+                let failed = !result.success;
+                results.push(result);
+                if failed {
+                    break;
+                }
+            }
+            Err(err) => {
+                results.push(ShadowCheckOutput {
+                    program: check.label.clone(),
+                    success: false,
+                    preview: err,
+                    truncated: false,
+                    total_bytes: 0,
+                });
+                break;
+            }
+        }
+    }
+    results
 }
 
 /// P64.7 — per-step checkpoint metadata (SPEC I16). The blueprint snapshot
@@ -1589,6 +1771,100 @@ mod tests {
             .handle("execution/record_edit", &json!({"id": ex.id}))
             .unwrap_err();
         assert!(v.contains("strategy") || v.contains("path") || v.contains("ticket"));
+
+        // P64.6 — the gate, the discovery and the honest "could not verify".
+        // A small local write is not preflighted at all.
+        let small = k
+            .run_preflight(
+                &ex.id,
+                1,
+                false,
+                false,
+                std::path::Path::new("/nonexistent"),
+            )
+            .unwrap();
+        assert_eq!(small["needsPreflight"], false);
+        // A structural edit earns one, but an empty project has no check to run:
+        // that is `verified: false`, never a pass.
+        let empty = k
+            .run_preflight(&ex.id, 1, true, false, std::path::Path::new("/nonexistent"))
+            .unwrap();
+        assert_eq!(empty["needsPreflight"], true);
+        assert_eq!(empty["verified"], false);
+        assert_eq!(empty["passed"], false);
+        // Discovered from the manifest, and shaped as a real command.
+        let dir = std::env::temp_dir().join(format!("eaios-preflight-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+        let discovered = discover_shadow_checks(&dir);
+        assert_eq!(discovered.len(), 1);
+        assert_eq!(discovered[0].program, "cargo");
+        assert_eq!(discovered[0].args, vec!["check", "--quiet"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P64.6 — a preflight really runs the discovered command, and a failing one
+    /// really fails. Uses `true`/`false` as the check so the assertion is about
+    /// the runner and the verdict, not about how long cargo takes.
+    #[cfg(unix)]
+    #[test]
+    fn p64_shadow_preflight_runs_and_fails_closed() {
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Chat,
+            "s",
+            "risky edit",
+            None,
+            String::new(),
+            String::new(),
+            Vec::new(),
+        );
+        let dir = std::env::temp_dir().join(format!("eaios-preflight-run-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let check = |program: &str| ShadowCheck {
+            label: program.to_string(),
+            program: program.to_string(),
+            args: Vec::new(),
+        };
+
+        let ok = run_shadow_checks(&dir, &[check("true")]);
+        assert_eq!(ok.len(), 1);
+        assert!(ok[0].success);
+
+        let bad = run_shadow_checks(&dir, &[check("false"), check("true")]);
+        assert_eq!(
+            bad.len(),
+            1,
+            "a failure stops the run, later checks are noise"
+        );
+        assert!(!bad[0].success);
+
+        // A missing binary is an honest failure, not a silent pass.
+        let missing = run_shadow_checks(&dir, &[check("definitely-not-a-binary-xyz")]);
+        assert_eq!(missing.len(), 1);
+        assert!(!missing[0].success);
+        assert!(missing[0].preview.contains("spawn failed"));
+
+        // The acceptance gate itself: a crate with a manifest but no source
+        // cannot typecheck, so the multi-file gate must catch it *before* the
+        // edit lands and leave a failing receipt behind. (If cargo is absent the
+        // spawn fails, which is also a failure — never a silent pass.)
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"broken\"\n").unwrap();
+        let recorded = k
+            .run_preflight(&ex.id, 3, false, false, &dir)
+            .expect("preflight runs");
+        assert_eq!(recorded["needsPreflight"], true);
+        assert_eq!(recorded["verified"], true);
+        assert_eq!(
+            recorded["passed"], false,
+            "a tree that cannot typecheck fails"
+        );
+        assert_eq!(recorded["receipt"]["kind"], "shadow_preflight");
+        assert_eq!(recorded["receipt"]["passed"], false);
+        assert_eq!(recorded["checks"].as_array().unwrap().len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

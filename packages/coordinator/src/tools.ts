@@ -18,6 +18,29 @@ export type ToolDecision =
   | { action: "ask"; ticketId: string; argsHash: string; readOnly?: boolean }
   | { action: "block"; reason: string };
 
+/**
+ * P64.6 — the shadow-preflight verdict. `verified: false` means *no evidence*
+ * (the preflight could not run), which is deliberately distinct from a failed
+ * check: conflating the two would let an unrunnable preflight read as a pass.
+ */
+export interface ShadowPreflightResult {
+  needsPreflight: boolean
+  verified: boolean
+  passed: boolean
+  reason: string
+}
+
+/**
+ * P64.6 — does this verdict require the caller to refuse the edit?
+ *
+ * Only a preflight that actually ran and actually failed blocks. An edit that
+ * did not need a preflight proceeds, and an unverifiable one is reported to the
+ * caller as such rather than being silently upgraded into either answer.
+ */
+export function preflightBlocks(result: ShadowPreflightResult): boolean {
+  return result.needsPreflight && result.verified && !result.passed
+}
+
 export interface ToolCommitResult {
   ok: boolean;
   result?: unknown;
@@ -425,6 +448,62 @@ export class ToolExecutor {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * P64.6 — request a risk-gated shadow preflight for a risky edit (SPEC I15).
+   *
+   * Rust owns both the policy (the multi-file / structural / destructive gate)
+   * and the execution (discovering the project's own typecheck command, running
+   * it in the shadow tree, capping the output, attaching the receipt). This
+   * method only carries the request and reports back the verdict, so the gate
+   * cannot be argued with from here.
+   *
+   * Note the distinction the caller must respect: `verified: false` means the
+   * preflight **could not run** (no execution bound, transport failure, or no
+   * check command discovered) and is not evidence of anything. Only
+   * `verified: true` carries a verdict.
+   */
+  async runShadowPreflight(input: {
+    root: string
+    filesChanged: number
+    structural?: boolean
+    destructive?: boolean
+  }): Promise<ShadowPreflightResult> {
+    const id = this.executionId
+    if (id === undefined) {
+      return { needsPreflight: false, verified: false, passed: false, reason: "no execution bound" }
+    }
+    try {
+      const raw = (await this.request("execution/preflight", {
+        id,
+        root: input.root,
+        filesChanged: input.filesChanged,
+        structural: input.structural === true,
+        destructive: input.destructive === true,
+      })) as Partial<ShadowPreflightResult> | null
+      if (raw === null || typeof raw !== "object") {
+        return {
+          needsPreflight: false,
+          verified: false,
+          passed: false,
+          reason: "preflight returned no result",
+        }
+      }
+      return {
+        needsPreflight: raw.needsPreflight === true,
+        verified: raw.verified === true,
+        passed: raw.passed === true,
+        reason: typeof raw.reason === "string" ? raw.reason : "",
+      }
+    } catch (e) {
+      return {
+        needsPreflight: false,
+        verified: false,
+        passed: false,
+        reason: e instanceof Error ? e.message : String(e),
+      }
     }
   }
 
