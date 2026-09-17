@@ -22,10 +22,12 @@ import {
   countOccurrences,
   deriveEffectiveSubAgentTools,
   dispatchSubAgent,
+  preflightBlocks,
   subAgentSpecFromToolArgs,
   SubAgentSpawnTracker,
   toSummaryOnlyResult,
   ToolExecutor,
+  type ShadowPreflightResult,
   type SubAgentSpecShape,
 } from "./tools";
 import {
@@ -464,5 +466,75 @@ describe("P64.8 — skill-distillation trigger (test-gated)", () => {
       request,
     );
     expect(calls.some((c) => c.method === "skill/grow")).toBe(false);
+  });
+});
+
+describe("P64.6 — shadow preflight seam (risk-gated typecheck before commit)", () => {
+    test("carries the gate inputs to Rust and reports the verdict", async () => {
+      const seen: Array<{ method: string; params: unknown }> = [];
+      const ex = new ToolExecutor(async (method, params) => {
+        seen.push({ method, params });
+        return {
+          needsPreflight: true,
+          verified: true,
+          passed: false,
+          reason: "structural edit preflights",
+        };
+      });
+      ex.setExecutionId("ex-9");
+      const out = await ex.runShadowPreflight({
+        root: "/repo/.everyaios/worktrees/task-1",
+        filesChanged: 4,
+        structural: true,
+      });
+      expect(seen[0]?.method).toBe("execution/preflight");
+      const params = seen[0]?.params as Record<string, unknown>;
+      expect(params.id).toBe("ex-9");
+      expect(params.filesChanged).toBe(4);
+      expect(params.structural).toBe(true);
+      expect(params.destructive).toBe(false);
+      // The verdict belongs to Rust; the coordinator only reports it.
+      expect(out).toEqual({
+        needsPreflight: true,
+        verified: true,
+        passed: false,
+        reason: "structural edit preflights",
+      });
+    });
+
+    test("with no execution bound it reports no-evidence, not a pass", async () => {
+      const ex = new ToolExecutor(async () => ({}));
+      const out = await ex.runShadowPreflight({ root: "/repo", filesChanged: 3 });
+      expect(out.verified).toBe(false);
+      expect(out.passed).toBe(false);
+    });
+
+    test("a transport failure is no-evidence, and never blocks an edit", async () => {
+      const ex = new ToolExecutor(async () => {
+        throw new Error("sidecar gone");
+      });
+      ex.setExecutionId("ex-1");
+      const out = await ex.runShadowPreflight({
+        root: "/repo",
+        filesChanged: 3,
+        destructive: true,
+      });
+      expect(out.verified).toBe(false);
+      expect(preflightBlocks(out)).toBe(false);
+    });
+
+    test("only a preflight that ran and failed blocks the edit", () => {
+      const failed: ShadowPreflightResult = {
+        needsPreflight: true,
+        verified: true,
+        passed: false,
+        reason: "cargo check failed",
+      };
+      expect(preflightBlocks(failed)).toBe(true);
+      // A small local-write never preflights.
+      expect(preflightBlocks({ ...failed, needsPreflight: false })).toBe(false);
+      // Unrunnable is not a failure — it must not be turned into a refusal.
+      expect(preflightBlocks({ ...failed, verified: false, passed: false })).toBe(false);
+      expect(preflightBlocks({ ...failed, passed: true })).toBe(false);
   });
 });
