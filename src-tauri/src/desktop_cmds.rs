@@ -5,13 +5,20 @@
 //! host wires `policy::PermissionGate` to the ticket store and `AuditSink` to
 //! the Merkle audit chain, exactly like every other effect in the product."
 //!
-//! **human-gesture path** (`desktop_act` / see / read). The agent catalog
-//! already lists `desktop.windows` / `desktop.read` / `desktop.act` in
-//! `ToolService` (P48.3), but the autonomous agent tool `attach_desktop` is
-//! not wired into the agent loop — a live agent turn gets `desktop session not
-//! attached`. The human Settings/Computer-use surfaces use the explicit
-//! `desktop_attach` Tauri probe instead; wiring the agent tool into the loop
-//! (plus the remaining P57/P59 seams) is still open.
+//! **Both paths are wired**: the human-gesture commands (`desktop_act` /
+//! see / read / the escalation pair) and the inbuilt agent's loop tool
+//! (`desktop.windows` / `desktop.read` / `desktop.act` in `ToolService`,
+//! P48.3), which reaches the same engine through [`DesktopEngineBackend`] — the
+//! `everyaios_core::DesktopBackend` seam `attach_desktop` binds.
+//!
+//! There is **one** engine, one live policy and one Guard-2 preflight; the two
+//! paths differ only in the provenance they declare. The human commands use
+//! `Engine::act` (human gesture); the agent backend uses
+//! `Engine::act_with(.., ActProvenance::Agent)`, so an agent-initiated action
+//! is filed under the agent authority class instead of being recorded as the
+//! user's own click. Risky classes still reach this host's `PermissionGate`,
+//! which is deny-by-default — so an agent's risky act fails closed until the
+//! Guard-2 card surface lands (P57/P59).
 //!
 //! Gating model (fail-closed, per the spec's dual-guard + honesty invariant):
 //! each human `act` is routed through the engine's own Guard-2 preflight. The
@@ -120,10 +127,28 @@ impl everyaios_computeruse::policy::PermissionGate for FailClosedGate {
     }
 }
 
+/// The authority class one desktop act is recorded under.
+///
+/// Pure, so the mapping is pinned by a test: the whole point of threading
+/// provenance through the engine is that an **agent** act never lands on the
+/// Merkle chain as a human gesture.
+fn auth_kind_for(provenance: everyaios_computeruse::ActProvenance) -> crate::control::AuthKind {
+    match provenance {
+        everyaios_computeruse::ActProvenance::HumanGesture => {
+            crate::control::AuthKind::HumanGesture
+        }
+        everyaios_computeruse::ActProvenance::Agent => crate::control::AuthKind::AgentTicket,
+        everyaios_computeruse::ActProvenance::Automation => {
+            crate::control::AuthKind::AutomationTicket
+        }
+    }
+}
+
 /// Bridges the engine's Guard-2 `AuditSink` to the same Merkle chain every
-/// other effect uses (`control::record_mutation`, human-gesture provenance).
-/// `record_mutation` itself injects `authorization: human_gesture`. The shared
-/// `Arc` inner lets the single engine instance (and a clone passed to the
+/// other effect uses (`control::record_mutation`), choosing the authority class
+/// from the provenance the engine reports. `record_mutation` itself injects
+/// `authorization`, so the value is Rust-derived and never payload-derived. The
+/// shared `Arc` inner lets the single engine instance (and a clone passed to the
 /// engine) both see the app handle installed at attach time.
 #[derive(Clone)]
 struct AuditSinkToChain {
@@ -139,16 +164,21 @@ impl Default for AuditSinkToChain {
 }
 
 impl everyaios_computeruse::policy::AuditSink for AuditSinkToChain {
-    fn write(&self, kind: &str, payload: serde_json::Value) {
+    fn write(
+        &self,
+        kind: &str,
+        payload: serde_json::Value,
+        provenance: everyaios_computeruse::ActProvenance,
+    ) {
         let app = self.app.lock().ok().and_then(|a| a.clone());
         if let Some(app) = app {
             let state = app.state::<AppState>();
-            crate::control::record_mutation(
-                &state,
-                crate::control::AuthKind::HumanGesture,
-                kind,
-                payload,
-            );
+            // The engine tells us who acted; the authority class is derived
+            // here in Rust and never read from a payload, so nothing a machine
+            // produces can manufacture a human gesture (the anti-impersonation
+            // invariant in `control::AuthKind`).
+            let authorization = auth_kind_for(provenance);
+            crate::control::record_mutation(&state, authorization, kind, payload);
         }
     }
 }
@@ -156,7 +186,7 @@ impl everyaios_computeruse::policy::AuditSink for AuditSinkToChain {
 /// Get-or-lazily-attach the engine, caching a shared handle to the audit sink
 /// so the Guard-2 bridge can reach `record_mutation` on later calls.
 fn get_or_attach(
-    state: &State<'_, AppState>,
+    state: &AppState,
     app: &tauri::AppHandle,
 ) -> Result<Arc<everyaios_computeruse::DesktopEngine>, String> {
     {
@@ -193,7 +223,31 @@ fn get_or_attach(
     }
 }
 
-fn window_of(id: u64) -> everyaios_computeruse::WindowInfo {
+/// The engine's **own** `WindowInfo` for a window id.
+///
+/// The previous helper fabricated an empty `WindowInfo` (`app: ""`), and that
+/// silently broke every non-launch act: `AppPolicy::evaluate` gates on the
+/// **subject app**, `""` is never allow-listed, so a routine act on an
+/// allow-listed app fell through to `Confirm(Routine)` and the host's
+/// fail-closed gate denied it. Human Computer-use clicks were dead on arrival,
+/// and an agent act had no chance either. Resolving the id against the engine's
+/// live window list restores the real app name (and bounds) the policy has to
+/// match.
+///
+/// If the window no longer exists we fall back to an id-only `WindowInfo`, which
+/// then fails the allow-list honestly instead of acting on a stale guess.
+fn resolve_window(
+    engine: &everyaios_computeruse::DesktopEngine,
+    id: u64,
+) -> everyaios_computeruse::WindowInfo {
+    engine
+        .list_windows()
+        .ok()
+        .and_then(|windows| windows.into_iter().find(|w| w.id == id))
+        .unwrap_or_else(|| window_by_id_only(id))
+}
+
+fn window_by_id_only(id: u64) -> everyaios_computeruse::WindowInfo {
     everyaios_computeruse::WindowInfo {
         id,
         title: String::new(),
@@ -204,6 +258,45 @@ fn window_of(id: u64) -> everyaios_computeruse::WindowInfo {
         height: 0,
         has_a11y_tree: false,
     }
+}
+
+/// Serialize the engine's window list into the `DesktopBackend` wire shape the
+/// tool registry serves (`{id, title, app}` — see `ToolFamily::Desktop`).
+fn windows_json(windows: &[everyaios_computeruse::WindowInfo]) -> serde_json::Value {
+    serde_json::json!(windows
+        .iter()
+        .map(|w| serde_json::json!({
+            "id": w.id, "title": w.title, "app": w.app,
+            "x": w.x, "y": w.y, "width": w.width, "height": w.height,
+        }))
+        .collect::<Vec<_>>())
+}
+
+/// Serialize an a11y read into the `DesktopBackend` snapshot shape
+/// (`{windowId, tree:[{role, name, indexPath}], hasTree}`).
+fn snapshot_json(window_id: u64, read: &everyaios_computeruse::ReadResult) -> serde_json::Value {
+    let tree = read
+        .tree
+        .as_ref()
+        .map(|root| {
+            root.flatten()
+                .into_iter()
+                .map(|n| {
+                    serde_json::json!({
+                        "indexPath": n.index_path,
+                        "role": n.role,
+                        "name": n.name,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    serde_json::json!({
+        "windowId": window_id,
+        "tree": tree,
+        "hasTree": read.tree.is_some(),
+        "dpiScale": read.dpi_scale,
+    })
 }
 
 /// Flatten a11y tree → `[index] role: name` lines (the "text read" of desktop).
@@ -286,6 +379,10 @@ pub fn desktop_attach(
     app: tauri::AppHandle,
 ) -> Result<serde_json::Value, String> {
     let _ = get_or_attach(&state, &app);
+    // P48.3 — a user-triggered attach on a host that was headless at boot (or
+    // whose platform backend only became available later) must reach the agent
+    // loop too, not just the Settings surfaces.
+    let _ = publish_desktop_backend(&state, &app);
     desktop_status(state)
 }
 
@@ -320,7 +417,7 @@ pub fn desktop_read(
 ) -> Result<serde_json::Value, String> {
     let engine = get_or_attach(&state, &app)?;
     let read = engine
-        .read(&window_of(window_id))
+        .read(&resolve_window(&engine, window_id))
         .map_err(|e| e.to_string())?;
     let text = read.tree.as_ref().map(render_tree).unwrap_or_default();
     Ok(serde_json::json!({
@@ -340,7 +437,7 @@ pub fn desktop_see(
 ) -> Result<serde_json::Value, String> {
     let engine = get_or_attach(&state, &app)?;
     let result = engine
-        .see(&window_of(window_id))
+        .see(&resolve_window(&engine, window_id))
         .map_err(|e| e.to_string())?;
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&result.png);
@@ -411,7 +508,7 @@ pub fn desktop_act(
     let engine = get_or_attach(&state, &app)?;
     let act = parse_act(&kind, x, y, name, text)?;
     let outcome = engine
-        .act(&window_of(window_id), &act, None)
+        .act(&resolve_window(&engine, window_id), &act, None)
         .map_err(|e| e.to_string())?;
 
     // Every executed-or-declined act is audited with human_gesture provenance.
@@ -450,7 +547,7 @@ pub fn desktop_escalation(
 ) -> Result<serde_json::Value, String> {
     let engine = get_or_attach(&state, &app)?;
     let act = parse_act(&kind, x, y, name, text)?;
-    serde_json::to_value(engine.escalation_for(&window_of(window_id), &act))
+    serde_json::to_value(engine.escalation_for(&resolve_window(&engine, window_id), &act))
         .map_err(|e| e.to_string())
 }
 
@@ -477,7 +574,12 @@ pub fn desktop_act_escalating(
     let act = parse_act(&kind, x, y, name, text)?;
     let snapshot = engine.foreground_snapshot();
     let outcome = engine
-        .act_escalating(&window_of(window_id), &act, None, gesture_approved)
+        .act_escalating(
+            &resolve_window(&engine, window_id),
+            &act,
+            None,
+            gesture_approved,
+        )
         .map_err(|e| e.to_string())?;
     crate::control::record_mutation(
         &state,
@@ -668,6 +770,126 @@ pub fn desktop_policy_set_interaction(
     }))
 }
 
+// ==== P48.3 — the inbuilt agent's computer-use path =========================
+
+/// The `everyaios_core::tools::DesktopBackend` seam the loop's `desktop.*`
+/// tools dispatch to.
+///
+/// It shares the **one** engine and the **same** Guard-2 preflight as the human
+/// commands — allow-list, safe zones, hard denies, kill switch, rate limit,
+/// foreground/background contract, audit — so there is no second policy and no
+/// bypass. The single difference is the provenance it declares: an
+/// agent-initiated act is recorded under the agent authority class rather than
+/// as the user's own gesture.
+///
+/// Risky classes still reach this host's `PermissionGate`, which is
+/// deny-by-default while the Guard-2 card surface is unbuilt — so an agent's
+/// risky act fails closed instead of executing.
+struct DesktopEngineBackend {
+    engine: Arc<everyaios_computeruse::DesktopEngine>,
+}
+
+/// Parse a wire act for the **agent** path, refusing what this tool's schema
+/// cannot express.
+///
+/// `desktop.act`'s schema carries no raw x/y (`additionalProperties: false`), so
+/// a coordinate act has nowhere to come from — and defaulting a missing point to
+/// the origin would blind-click (0,0) on the user's desktop. Refuse instead, and
+/// point the model at the name-addressed form.
+///
+/// Pure: no engine, no policy, no side effect — callers do the work.
+fn agent_act_kind(
+    kind: &str,
+    target: Option<&str>,
+    text: Option<&str>,
+) -> Result<everyaios_computeruse::ActKind, String> {
+    if matches!(kind, "click" | "scroll") {
+        return Err(format!(
+            "desktop.act '{kind}' needs a coordinate, which this tool does not carry — \
+             use 'clickByName' with the control's accessible name"
+        ));
+    }
+    parse_act(
+        kind,
+        None,
+        None,
+        target.map(str::to_string),
+        text.map(str::to_string),
+    )
+}
+
+impl everyaios_core::tools::DesktopBackend for DesktopEngineBackend {
+    fn list_windows(&self) -> Result<serde_json::Value, String> {
+        let windows = self.engine.list_windows().map_err(|e| e.to_string())?;
+        Ok(windows_json(&windows))
+    }
+
+    fn read(&self, window_id: u64) -> Result<serde_json::Value, String> {
+        let window = resolve_window(&self.engine, window_id);
+        let read = self.engine.read(&window).map_err(|e| e.to_string())?;
+        Ok(snapshot_json(window_id, &read))
+    }
+
+    fn act(
+        &self,
+        kind: &str,
+        window_id: Option<u64>,
+        target: Option<&str>,
+        text: Option<&str>,
+    ) -> Result<serde_json::Value, String> {
+        let act = agent_act_kind(kind, target, text)?;
+        let id = window_id.unwrap_or(0);
+        let window = resolve_window(&self.engine, id);
+        let outcome = self
+            .engine
+            .act_with(
+                &window,
+                &act,
+                None,
+                everyaios_computeruse::ActProvenance::Agent,
+            )
+            .map_err(|e| e.to_string())?;
+        if let Some(err) = outcome.error {
+            return Err(format!("desktop.act declined: {err}"));
+        }
+        if !outcome.ok {
+            return Err(format!("desktop.act did not complete: {}", act.describe()));
+        }
+        Ok(serde_json::json!({
+            "kind": kind,
+            "windowId": id,
+            "target": target,
+            "text": text,
+            "ok": true,
+        }))
+    }
+}
+
+/// Publish the live engine as the agent's `DesktopBackend` on the chat relay.
+///
+/// Best-effort by design: on a headless / no-display host the engine never
+/// attaches and this returns the honest reason — nothing is published, and the
+/// `desktop.*` tools keep fail-closing with `desktop session not attached`
+/// rather than pretending. An `Err` is **not** a boot failure; a headless host
+/// is a legitimate state.
+///
+/// Called at boot (before the relay is published to `AppState`, so no agent
+/// turn can race ahead of the executor) and again from `desktop_attach` so a
+/// later attach reaches the agent loop too.
+pub fn publish_desktop_backend(state: &AppState, app: &tauri::AppHandle) -> Result<(), String> {
+    let engine = get_or_attach(state, app)?;
+    let relay = state.chat_relay.lock().map_err(|e| e.to_string())?;
+    match relay.as_ref() {
+        Some(relay) => {
+            relay.attach_desktop(Arc::new(DesktopEngineBackend { engine }));
+            Ok(())
+        }
+        // The relay is not connected yet (early boot ordering). Let the caller
+        // know rather than reporting a success it did not achieve.
+        None => Err("chat relay not connected yet".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod policy_tests {
     use super::*;
@@ -676,17 +898,100 @@ mod policy_tests {
     /// would silently blank the Settings section.
     #[test]
     fn policy_json_exposes_the_contract_fields() {
-        let mut p = everyaios_computeruse::AppPolicy::default();
-        p.allow_paths.push("/usr/bin/gedit".into());
-        p.interaction_mode = everyaios_computeruse::InteractionMode::Foreground;
+        let p = everyaios_computeruse::AppPolicy {
+            allow_paths: vec!["/usr/bin/gedit".into()],
+            interaction_mode: everyaios_computeruse::InteractionMode::Foreground,
+            ..Default::default()
+        };
         let j = policy_json(&p);
         assert_eq!(j["interactionDefault"], "foreground");
         assert_eq!(j["allowsRaisingWindows"], true);
         assert_eq!(j["allowPaths"][0], "/usr/bin/gedit");
         assert_eq!(j["strict"], false);
-        let mut bg = everyaios_computeruse::AppPolicy::default();
-        bg.strict = true;
+        let bg = everyaios_computeruse::AppPolicy {
+            strict: true,
+            ..Default::default()
+        };
         assert_eq!(policy_json(&bg)["allowsRaisingWindows"], false);
+    }
+
+    /// The whole point of threading provenance through the engine: an agent act
+    /// must never be recorded as the user's own gesture.
+    #[test]
+    fn provenance_maps_to_the_right_authority_class() {
+        use everyaios_computeruse::ActProvenance;
+        assert_eq!(
+            auth_kind_for(ActProvenance::HumanGesture),
+            crate::control::AuthKind::HumanGesture
+        );
+        assert_eq!(
+            auth_kind_for(ActProvenance::Agent),
+            crate::control::AuthKind::AgentTicket
+        );
+        assert_eq!(
+            auth_kind_for(ActProvenance::Automation),
+            crate::control::AuthKind::AutomationTicket
+        );
+        // The vocabulary is distinct — a rename that collapsed two of these
+        // would silently re-label agent actions as human ones.
+        assert_ne!(
+            auth_kind_for(ActProvenance::Agent).as_str(),
+            auth_kind_for(ActProvenance::HumanGesture).as_str()
+        );
+    }
+
+    /// A coordinate act cannot be expressed by `desktop.act`'s schema, and
+    /// guessing the origin would blind-click (0,0) on the user's desktop.
+    #[test]
+    fn agent_act_refuses_coordinate_acts_it_cannot_express() {
+        let err = agent_act_kind("click", Some("Save"), None).unwrap_err();
+        assert!(err.contains("needs a coordinate"), "got: {err}");
+        assert!(err.contains("clickByName"), "got: {err}");
+        let err = agent_act_kind("scroll", None, None).unwrap_err();
+        assert!(err.contains("needs a coordinate"), "got: {err}");
+        // …and the name-addressed forms still parse.
+        assert!(matches!(
+            agent_act_kind("clickByName", Some("Save"), None).unwrap(),
+            everyaios_computeruse::ActKind::ClickByName { .. }
+        ));
+        assert!(matches!(
+            agent_act_kind("type", None, Some("hello")).unwrap(),
+            everyaios_computeruse::ActKind::Type { .. }
+        ));
+        // A missing required name is an honest error, not a default.
+        assert!(agent_act_kind("clickByName", None, None).is_err());
+        assert!(agent_act_kind("teleport", None, None).is_err());
+    }
+
+    /// The tool registry serves `desktop.windows` this exact shape; a field
+    /// rename here would silently blank the agent's window list.
+    #[test]
+    fn window_json_carries_the_contract_fields() {
+        let w = everyaios_computeruse::WindowInfo {
+            id: 7,
+            title: "Notes".into(),
+            app: "notepad".into(),
+            x: 1,
+            y: 2,
+            width: 300,
+            height: 400,
+            has_a11y_tree: true,
+        };
+        let v = windows_json(&[w]);
+        assert_eq!(v[0]["id"], 7);
+        assert_eq!(v[0]["title"], "Notes");
+        assert_eq!(v[0]["app"], "notepad");
+        assert_eq!(v[0]["width"], 300);
+    }
+
+    /// A window that no longer exists must resolve to an id-only info (which
+    /// then fails the allow-list), never to some other window's app name.
+    #[test]
+    fn missing_window_falls_back_to_id_only_never_a_borrowed_app() {
+        let w = window_by_id_only(42);
+        assert_eq!(w.id, 42);
+        assert!(w.app.is_empty());
+        assert!(!w.has_a11y_tree);
     }
 
     #[test]

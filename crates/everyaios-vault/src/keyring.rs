@@ -584,6 +584,50 @@ impl<'a> KeyRing<'a> {
             }
         }
 
+        self.highest_priority_credential(provider)
+    }
+
+    /// **P44.4 — reveal a provider's key for a metadata probe.**
+    ///
+    /// A capability probe (`GET {base}/models`) needs the provider's credential
+    /// but is **not a turn**, and the differences from [`KeyRing::select`] are
+    /// deliberate:
+    ///
+    /// - **No model to filter on.** A probe asks the provider what models exist,
+    ///   so a key carrying a `model_filter` must not be skipped just because
+    ///   there is no requested model — filtering a metadata call would make
+    ///   exactly the providers with the most careful key setup unprobeable.
+    /// - **No affinity write.** `select` pins `(provider, model, session)`; a
+    ///   probe has no session and must not seed that map.
+    /// - **No health or budget movement.** The probe does not report success,
+    ///   failure, cooldown or usage, so a metadata call can never cool a key
+    ///   down, spend a daily cap, or make an unauthenticated rejection look like
+    ///   a credential problem.
+    /// - **Still respects a suspension.** A suspended key is the user's explicit
+    ///   "do not use this", which is an instruction, not a rate-limit decision.
+    ///
+    /// Returned as [`zeroize::Zeroizing`] so it is scrubbed on drop. It is never
+    /// serialized, logged, or returned through any public DTO.
+    pub fn reveal_for_metadata_probe(
+        &self,
+        provider: &str,
+    ) -> Result<zeroize::Zeroizing<String>, KeyRingError> {
+        self.highest_priority_credential(provider)
+    }
+
+    /// The highest-priority non-suspended credential for a provider, with empty
+    /// values excluded (an empty value is a row that cannot authenticate).
+    ///
+    /// Shared by the two paths that must work **without** a rate-limit decision
+    /// — child-process handover ([`KeyRing::reveal_for_spawn`], whose owner does
+    /// its own retry/cooldown) and the metadata probe
+    /// ([`KeyRing::reveal_for_metadata_probe`], which is not a turn at all).
+    /// Neither writes affinity. Same convention as `RoutingPolicy::Priority`:
+    /// a lower number wins.
+    fn highest_priority_credential(
+        &self,
+        provider: &str,
+    ) -> Result<zeroize::Zeroizing<String>, KeyRingError> {
         let mut stmt = self
             .conn
             .prepare(KEY_SELECT_SQL)
@@ -597,7 +641,6 @@ impl<'a> KeyRing<'a> {
         }
         // A suspended key is the user's explicit "do not use this".
         pool.retain(|k| k.status != KeyStatus::Suspended && !k.value.is_empty());
-        // Same convention as `RoutingPolicy::Priority`: lower number wins.
         pool.sort_by_key(|k| k.priority);
         let mut pick = pool
             .into_iter()
@@ -932,6 +975,92 @@ mod tests {
     fn reveal_for_spawn_errors_when_the_provider_has_no_keys() {
         let ring = ring();
         assert!(ring.reveal_for_spawn("nobody", "m", "s").is_err());
+    }
+
+    // ---- P44.4 metadata-probe credential ---------------------------------
+
+    #[test]
+    fn reveal_for_metadata_probe_returns_the_key_without_moving_health() {
+        let ring = ring();
+        let _ = ring.add_key(spec("probe-a", "k", "sk-probe")).unwrap();
+        assert_eq!(
+            ring.reveal_for_metadata_probe("probe-a").unwrap().as_str(),
+            "sk-probe"
+        );
+        // A probe is not a turn: no success, no failure, no cooldown, and it
+        // must not have pinned affinity for a session that does not exist.
+        let info = ring.list("probe-a").unwrap();
+        assert_eq!(info[0].success_count, 0);
+        assert_eq!(info[0].fail_count, 0);
+        assert!(!info[0].in_cooldown);
+    }
+
+    #[test]
+    fn reveal_for_metadata_probe_ignores_a_model_filter() {
+        let ring = ring();
+        let mut filtered = spec("probe-b", "filtered", "sk-filtered");
+        filtered.model_filter = vec!["gpt-4o".into()];
+        let _ = ring.add_key(filtered).unwrap();
+
+        // `select` cannot use this key without a model…
+        assert!(ring
+            .select("probe-b", "", "s", RoutingPolicy::Priority)
+            .is_err());
+        // …but a probe has no model to filter on, so it still gets the key.
+        // Skipping it would make the most carefully-configured providers the
+        // only ones that can never be observed.
+        assert_eq!(
+            ring.reveal_for_metadata_probe("probe-b").unwrap().as_str(),
+            "sk-filtered"
+        );
+    }
+
+    #[test]
+    fn reveal_for_metadata_probe_works_when_the_broker_policy_refuses_every_key() {
+        // A probe is not a rate-limit decision: the endpoint's reachability is
+        // still worth knowing while a key is budget-capped or cooling down.
+        let ring = ring();
+        let mut capped = spec("probe-c", "capped", "sk-capped");
+        capped.daily_token_cap = Some(0);
+        let _ = ring.add_key(capped).unwrap();
+        assert!(ring
+            .select("probe-c", "m", "s", RoutingPolicy::Priority)
+            .is_err());
+        assert_eq!(
+            ring.reveal_for_metadata_probe("probe-c").unwrap().as_str(),
+            "sk-capped"
+        );
+    }
+
+    #[test]
+    fn reveal_for_metadata_probe_prefers_the_lowest_priority_number() {
+        let ring = ring();
+        let mut second = spec("probe-d", "second", "sk-second");
+        second.priority = 200;
+        let mut first = spec("probe-d", "first", "sk-first");
+        first.priority = 10;
+        let _ = ring.add_key(second).unwrap();
+        let _ = ring.add_key(first).unwrap();
+        assert_eq!(
+            ring.reveal_for_metadata_probe("probe-d").unwrap().as_str(),
+            "sk-first"
+        );
+    }
+
+    #[test]
+    fn reveal_for_metadata_probe_never_returns_a_suspended_key() {
+        let ring = ring();
+        let _ = ring.add_key(spec("probe-e", "k", "sk-e")).unwrap();
+        ring.set_status("probe-e", "k", KeyStatus::Suspended)
+            .unwrap();
+        // Suspension is the user's instruction, not a rate-limit state.
+        assert!(ring.reveal_for_metadata_probe("probe-e").is_err());
+    }
+
+    #[test]
+    fn reveal_for_metadata_probe_errors_when_the_provider_has_no_keys() {
+        let ring = ring();
+        assert!(ring.reveal_for_metadata_probe("nobody-probe").is_err());
     }
 
     #[test]

@@ -162,51 +162,77 @@ pub fn probe_models_endpoint(
     }
     match req.call() {
         Ok(resp) => {
+            let status = resp.status();
             let body = resp.into_string().unwrap_or_default();
-            let models = count_models(&body);
-            EndpointProbe {
-                ok: true,
-                status: 200,
-                message: if models > 0 {
-                    format!("{models} models advertised")
-                } else {
-                    "reachable".to_string()
-                },
-                models,
-                url,
-            }
+            endpoint_probe_result(url, status, &body, None)
         }
         Err(ureq::Error::Status(code, resp)) => {
-            let detail: String = resp
-                .into_string()
-                .unwrap_or_default()
-                .chars()
-                .take(200)
-                .collect();
-            EndpointProbe {
-                ok: false,
-                status: code,
-                message: if detail.is_empty() {
-                    format!("HTTP {code}")
-                } else {
-                    format!("HTTP {code}: {detail}")
-                },
-                models: 0,
-                url,
-            }
+            let body = resp.into_string().unwrap_or_default();
+            endpoint_probe_result(url, code, &body, None)
         }
-        Err(ureq::Error::Transport(t)) => EndpointProbe {
+        Err(ureq::Error::Transport(t)) => endpoint_probe_result(url, 0, "", Some(&t.to_string())),
+    }
+}
+
+/// **Shape one probe result (P44.4)** from an already-performed request.
+///
+/// The single place a probe outcome becomes an [`EndpointProbe`], so the shell's
+/// user-key probe and the vault-mediated one (`everyaios_vault::Broker::probe_models`,
+/// which returns the raw status/body because it owns the credential) cannot
+/// disagree about what `ok` / `models` / `message` mean.
+///
+/// `error` is the transport-failure detail; `None` means the endpoint answered —
+/// with any status, including a rejection, which is a real observation rather
+/// than a failure to observe. A transport failure reports `status: 0` and
+/// `models: 0` and never borrows an HTTP code it did not receive.
+pub fn endpoint_probe_result(
+    url: String,
+    status: u16,
+    body: &str,
+    error: Option<&str>,
+) -> EndpointProbe {
+    if let Some(detail) = error {
+        return EndpointProbe {
             ok: false,
             status: 0,
-            message: format!("transport: {t}"),
+            message: format!("transport: {detail}"),
             models: 0,
             url,
+        };
+    }
+    let models = count_models(body);
+    if (200..300).contains(&status) {
+        return EndpointProbe {
+            ok: true,
+            status,
+            message: if models > 0 {
+                format!("{models} models advertised")
+            } else {
+                "reachable".to_string()
+            },
+            models,
+            url,
+        };
+    }
+    let detail: String = body.chars().take(200).collect();
+    EndpointProbe {
+        ok: false,
+        status,
+        message: if detail.is_empty() {
+            format!("HTTP {status}")
+        } else {
+            format!("HTTP {status}: {detail}")
         },
+        models: 0,
+        url,
     }
 }
 
 /// Count advertised models across the two real response shapes.
-fn count_models(body: &str) -> usize {
+///
+/// Public because the vault-mediated probe path parses the body it received
+/// instead of the body it fetched — the counting rule stays in one place.
+pub fn count_models(body: &str) -> usize {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else {
         return 0;
     };

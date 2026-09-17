@@ -97,9 +97,10 @@ pub struct VerificationReport {
     /// Observed context ceiling (if any).
     #[serde(default)]
     pub observed_context_len: Option<u64>,
-    /// Whether every hard capability the catalog *advertised* was confirmed.
-    /// `false` → the provider is `Unverified` for those capabilities and
-    /// routing must not rely on them.
+    /// Whether every hard capability the catalog *advertised* was confirmed
+    /// **and at least one capability was actually confirmed**. `false` → the
+    /// provider is `Unverified` for its advertised capabilities (or confirmed
+    /// nothing at all) and routing must not rely on them.
     pub hard_caps_verified: bool,
 }
 
@@ -172,8 +173,19 @@ pub fn verify_report(
         },
     ];
     // Fully verified only when nothing advertised sits in the Unverified
-    // bucket (Unadvertised and Verified are both fine).
-    let hard_caps_verified = !verdicts.iter().any(|v| v.verdict == Verdict::Unverified);
+    // bucket (Unadvertised and Verified are both fine) **and at least one
+    // capability was actually confirmed**. Without the second half the
+    // predicate is vacuously true for a provider that advertises no hard
+    // capability, which silently turns "the endpoint answered" into a
+    // `capabilities_verified: true` / `Healthy` card — the exact false claim
+    // this module exists to prevent. Failing closed is the safe direction:
+    // consumers read it as "may I claim verified capabilities?" → no.
+    let confirmed = verdicts
+        .iter()
+        .filter(|v| v.verdict == Verdict::Verified)
+        .count();
+    let hard_caps_verified =
+        confirmed > 0 && !verdicts.iter().any(|v| v.verdict == Verdict::Unverified);
 
     VerificationReport {
         capability_verdicts: verdicts,
@@ -299,6 +311,24 @@ mod tests {
         let report = verify_report(&advert, &observed);
         assert!(!report.is_fully_verified());
         assert!(!trusted_capabilities(&report).contains(&Capability::Tools));
+    }
+
+    /// A report that confirmed nothing is not "fully verified", even when the
+    /// catalog advertised nothing to confirm. Vacuous truth here would let a
+    /// bare reachability probe claim verified capabilities.
+    #[test]
+    fn a_report_that_confirmed_nothing_is_not_fully_verified() {
+        for advertised in [
+            advertised(false, false, false),
+            advertised(true, false, false),
+        ] {
+            let report = verify_report(&advertised, &ProbeResult::unobserved());
+            assert!(
+                !report.is_fully_verified(),
+                "unobserved probe must never report fully verified"
+            );
+            assert!(trusted_capabilities(&report).is_empty());
+        }
     }
 
     #[test]

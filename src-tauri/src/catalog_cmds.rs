@@ -21,13 +21,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use everyaios_catalog::{
-    base_registry, refresh_now, Auth, CatalogSnapshot, CatalogStore, HttpFetch, ProfileFormat,
-    ProfileModel, ProfileSource, ProfileStore, ProviderProfile, ProviderProfilesFile,
-    ProviderRegistry, RefreshDecision, RefreshOutcome, DEFAULT_REFRESH_SECS,
+    apply_observations, base_registry, endpoint_probe_result, refresh_now, Auth, CatalogSnapshot,
+    CatalogStore, EndpointProbe, HttpFetch, ObservationStore, ProfileFormat, ProfileModel,
+    ProfileSource, ProfileStore, ProviderObservation, ProviderObservationsFile, ProviderProfile,
+    ProviderProfilesFile, ProviderRegistry, RefreshDecision, RefreshOutcome, DEFAULT_REFRESH_SECS,
 };
-use everyaios_vault::{KeyRing, ProviderEndpoint, WireTransport};
+use everyaios_vault::{Broker, KeyRing, ProviderEndpoint, WireTransport};
 use serde_json::{json, Value};
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::AppState;
 
@@ -126,6 +127,40 @@ fn profile_store() -> ProfileStore {
     ProfileStore::in_dir(everyaios_core::default_data_dir())
 }
 
+/// A registry carrying **runtime truth**: the vendored identity layer with any
+/// recorded live observation replayed onto it.
+///
+/// Every surface that makes a claim about a provider's capabilities or health
+/// goes through here, so "advertised" and "observed" cannot drift apart again.
+/// A registry built with bare `base_registry()` has no observation history by
+/// construction, which is how `verifiedAt` and the routing feed stayed empty.
+pub fn observed_registry() -> ProviderRegistry {
+    observed_registry_in(&everyaios_core::default_data_dir())
+}
+
+/// The recorded provider observations, as read from disk.
+pub fn observation_file() -> ProviderObservationsFile {
+    observation_file_in(&everyaios_core::default_data_dir())
+}
+
+// The `_in` forms take the data dir explicitly so the write-back → replay path
+// is testable against a temp dir. The no-arg forms above are the production
+// entry points; nothing else may read observations from another location.
+
+fn observation_store_in(dir: &std::path::Path) -> ObservationStore {
+    ObservationStore::in_dir(dir)
+}
+
+fn observation_file_in(dir: &std::path::Path) -> ProviderObservationsFile {
+    observation_store_in(dir).load()
+}
+
+fn observed_registry_in(dir: &std::path::Path) -> ProviderRegistry {
+    let mut registry = base_registry();
+    apply_observations(&mut registry, &observation_file_in(dir));
+    registry
+}
+
 /// P56.2/P56.7 — the merged provider list.
 ///
 /// Sources are layered, lowest precedence first: the vendored registry
@@ -133,7 +168,8 @@ fn profile_store() -> ProfileStore {
 /// api, doc, env, model rows) → the shipped overlays (OpenCode Zen/Go/Free,
 /// NVIDIA NIM) → the user's own profiles. A row is never fabricated.
 pub fn provider_rows(state: &AppState) -> Vec<Value> {
-    let registry = base_registry();
+    let registry = observed_registry();
+    let observed = observation_file();
     let snapshot = state.catalog.store.load();
     let profiles = profile_store();
     let keyed: std::collections::HashSet<String> = {
@@ -152,6 +188,7 @@ pub fn provider_rows(state: &AppState) -> Vec<Value> {
     let mut rows: BTreeMap<String, Value> = BTreeMap::new();
 
     for rec in registry.all() {
+        let reach = observed.reachability(&rec.id);
         rows.insert(
             rec.id.clone(),
             json!({
@@ -174,6 +211,12 @@ pub fn provider_rows(state: &AppState) -> Vec<Value> {
                 "keyless": matches!(rec.auth, everyaios_catalog::Auth::Keyless),
                 "sessionHeaders": false,
                 "verifiedAt": rec.capabilities_verified_at.clone(),
+                // Runtime truth, kept separate from the verification stamp:
+                // "the endpoint answered" and "its capabilities are trusted"
+                // are different facts and must not be conflated in the UI.
+                "observedAt": reach.as_ref().map(|r| r.observed_at.clone()),
+                "reachable": reach.as_ref().map(|r| r.ok),
+                "observedModelCount": reach.as_ref().map(|r| r.model_count),
             }),
         );
     }
@@ -199,6 +242,9 @@ pub fn provider_rows(state: &AppState) -> Vec<Value> {
                     "keyless": false,
                     "sessionHeaders": false,
                     "verifiedAt": Value::Null,
+                    "observedAt": Value::Null,
+                    "reachable": Value::Null,
+                    "observedModelCount": Value::Null,
                 })
             });
             entry["name"] = json!(p.name);
@@ -236,6 +282,9 @@ pub fn provider_rows(state: &AppState) -> Vec<Value> {
                 "modelCount": 0,
                 "keyConfigured": false,
                 "verifiedAt": Value::Null,
+                "observedAt": Value::Null,
+                "reachable": Value::Null,
+                "observedModelCount": Value::Null,
             })
         });
         entry["name"] = json!(profile.name);
@@ -287,7 +336,7 @@ impl ResolveCtx {
         Self {
             snapshot: state.catalog.store.load(),
             profiles: profile_store().load(),
-            registry: base_registry(),
+            registry: observed_registry(),
         }
     }
 
@@ -699,9 +748,21 @@ pub fn probe_provider(state: &AppState, provider: &str, key: Option<&str>) -> Va
     // (the boot pass only resolves the connected set).
     if probe.ok {
         if let Some(ep) = endpoint {
-            register_endpoint(state, provider, ep);
+            register_endpoint(state, provider, ep.clone());
         }
     }
+    // P44.4 write-back — this is the observation, and it used to be dropped
+    // here. Recording it durably (keyed by canonical id) is what lets the
+    // registry, the routing feed and the UI report *observed* truth instead of
+    // catalog metadata: `verifiedAt` now populates from a real probe, and a
+    // failed probe lands as honest error history rather than as silence.
+    //
+    // It is a reachability observation: it records that the endpoint answered
+    // and how many models it served, and it confirms **no** hard capability —
+    // `trusted_capabilities` stays empty for it, so nothing becomes routable on
+    // the strength of "it responded".
+    record_observation(provider, &probe);
+
     json!({
         "ok": probe.ok,
         "status": probe.status,
@@ -709,6 +770,178 @@ pub fn probe_provider(state: &AppState, provider: &str, key: Option<&str>) -> Va
         "models": probe.models,
         "url": probe.url,
     })
+}
+
+/// Persist one probe result as the provider's latest observation.
+///
+/// Best-effort by design: a probe that worked but could not be written down
+/// must still return its result to the caller — the observation is an
+/// improvement to future reads, never a precondition for this one. A write
+/// failure is reported on stderr (never swallowed silently) and does not turn a
+/// successful probe into an error.
+fn record_observation(provider: &str, probe: &EndpointProbe) {
+    let dir = everyaios_core::default_data_dir();
+    // Canonicalize against the same observed registry the reads use.
+    let registry = observed_registry_in(&dir);
+    record_observation_in(&dir, &registry, provider, probe, now_ms().to_string());
+}
+
+/// The testable core of [`record_observation`]: the stamp is passed in so a
+/// test can assert an exact value instead of racing the clock, and the registry
+/// is passed in so a sweep can canonicalize against the one it already built
+/// rather than rebuilding a 200-provider registry per provider.
+fn record_observation_in(
+    dir: &std::path::Path,
+    registry: &ProviderRegistry,
+    provider: &str,
+    probe: &EndpointProbe,
+    stamp: String,
+) {
+    let obs = ProviderObservation::from_metadata_probe(stamp, probe);
+    // Canonicalize through the same registry the reads use, so `claude` and
+    // `anthropic` cannot end up as two rows with two different truths.
+    if let Err(e) = observation_store_in(dir).record_resolved(registry, provider, obs) {
+        eprintln!("provider observation not persisted for {provider}: {e}");
+    }
+}
+
+// ---- P44.4 — vault-mediated probing (the boot sweep) ----------------------
+
+/// How long one vault-mediated probe may take.
+///
+/// Bounded because the sweep is sequential: one dead endpoint must not hold the
+/// pass open. Shorter than the shell's user-key probe (20s) because nobody is
+/// waiting on this one.
+const VAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(8);
+
+/// True while a sweep is running, so two sweeps never probe the same providers
+/// concurrently (boot and unlock can race).
+static SWEEP_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Reset the in-flight flag even if the sweep thread panics — a panic must not
+/// permanently disable observation.
+struct SweepGuard;
+
+impl Drop for SweepGuard {
+    fn drop(&mut self) {
+        SWEEP_IN_FLIGHT.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// **P44.4 — probe a provider with the credential the vault already holds.**
+///
+/// The user-key path ([`probe_provider`]) needs a key in hand, which only the
+/// Settings verify flow has. This is the same observation without one: the
+/// broker resolves the credential from the ring, performs one
+/// `GET {base}/models` against **the provider's own endpoint**, and reports what
+/// was answered. The credential never enters this module.
+///
+/// `None` means **no observation**, which is not the same as a failed one: no
+/// resolvable endpoint, no usable credential (no keys, all suspended, exhausted),
+/// or an endpoint that would send the key in cleartext. Recording those as
+/// failures would turn "we could not check" into a claim about the provider —
+/// exactly the fabrication this path exists to prevent. The reason is logged.
+///
+/// The vault lock is held across the request (the same posture as the chat
+/// path, whose broker guard must outlive the call). The 8-second bound is what
+/// keeps that acceptable.
+pub fn probe_provider_vault(
+    state: &AppState,
+    provider: &str,
+    endpoint: ProviderEndpoint,
+) -> Option<EndpointProbe> {
+    let probe = {
+        let vault = state.vault.lock().ok()?;
+        Broker::new(&vault)
+            .with_endpoint(provider, endpoint)
+            .probe_models(provider, VAULT_PROBE_TIMEOUT)
+    };
+    observation_from_probe(provider, probe)
+}
+
+/// Turn a broker probe into an observation — or into **no observation**.
+///
+/// Split out from [`probe_provider_vault`] so the failure policy is testable
+/// without an `AppState`: a broker error (no keys, every key suspended or
+/// exhausted, an insecure endpoint) yields `None`, never a fabricated failed
+/// observation. "We could not check" must not become a claim about the provider.
+fn observation_from_probe(
+    provider: &str,
+    result: Result<everyaios_vault::ModelsProbe, everyaios_vault::BrokerError>,
+) -> Option<EndpointProbe> {
+    match result {
+        Ok(p) => Some(endpoint_probe_result(
+            p.url,
+            p.status,
+            &p.body,
+            p.error.as_deref(),
+        )),
+        Err(e) => {
+            eprintln!("everyaios-catalog: not observing {provider}: {e}");
+            None
+        }
+    }
+}
+
+/// The sweep body: observe every **connected** provider once.
+///
+/// Returns how many observations were recorded. Keyless providers and the
+/// user's own profiles are included by construction — `connected_ids` is the
+/// same set the chat relay gets a dial plan for, so a provider the app will
+/// actually call is a provider worth observing.
+fn sweep_connected_providers(state: &AppState) -> usize {
+    // One context for the whole pass: the registry, snapshot and profiles are
+    // read once instead of once per provider.
+    let ctx = ResolveCtx::load(state);
+    let targets: Vec<(String, ProviderEndpoint)> = ctx
+        .connected_ids(state)
+        .into_iter()
+        .filter_map(|id| ctx.endpoint(&id).map(|ep| (id, ep)))
+        .collect();
+    let mut recorded = 0;
+    let stamp = now_ms().to_string();
+    for (id, endpoint) in targets {
+        if let Some(probe) = probe_provider_vault(state, &id, endpoint) {
+            record_observation_in(
+                &everyaios_core::default_data_dir(),
+                &ctx.registry,
+                &id,
+                &probe,
+                stamp.clone(),
+            );
+            recorded += 1;
+        }
+    }
+    recorded
+}
+
+/// The **boot** hook: at most one observation pass per process.
+///
+/// `connect_chat_relay` runs again on every sidecar respawn, so without this a
+/// crash loop would re-dial every connected provider each time. An explicit
+/// unlock/setup sweep is still allowed afterwards (the connected set genuinely
+/// changed, and that pass is what observes the keyed providers).
+pub fn spawn_boot_observation_sweep(app: tauri::AppHandle) {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| spawn_observation_sweep(app));
+}
+
+/// Observe the connected set once, off the UI thread.
+///
+/// Network I/O in a background thread with a bounded per-provider timeout, and
+/// never two sweeps at once. Called at boot and again whenever the connected set
+/// materially changes (unlocking the vault brings every keyed provider into it).
+pub fn spawn_observation_sweep(app: tauri::AppHandle) {
+    if SWEEP_IN_FLIGHT.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    // (the sweep itself continues below)
+    std::thread::spawn(move || {
+        let _guard = SweepGuard;
+        let state = app.state::<AppState>();
+        let observed = sweep_connected_providers(&state);
+        eprintln!("everyaios-catalog: observed {observed} connected provider(s)");
+    });
 }
 
 /// P55.6/P56.4 — the durable provider profiles (no secrets).
@@ -917,7 +1150,11 @@ pub fn spawn_refresh_job(catalog: Arc<CatalogState>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{connected_ids_from, endpoint_action, EndpointAction};
+    use super::{
+        connected_ids_from, endpoint_action, observation_file_in, observation_from_probe,
+        observed_registry_in, record_observation_in, EndpointAction,
+    };
+    use everyaios_catalog::{endpoint_probe_result, ProviderObservation};
 
     /// P63 — the endpoint lifecycle decision. A disconnected provider retires
     /// its live endpoint; a connected one with an unspeakable transport also
@@ -970,5 +1207,208 @@ mod tests {
     #[test]
     fn an_empty_device_connects_nothing() {
         assert!(connected_ids_from(&[], &[], &[]).is_empty());
+    }
+
+    // ---- P44.4 write-back (the C1 gap): a probe must become readable truth ----
+
+    fn temp_dir(tag: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "everyaios-catalog-cmds-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        d
+    }
+
+    fn probe(ok: bool, status: u16, models: usize) -> everyaios_catalog::EndpointProbe {
+        everyaios_catalog::EndpointProbe {
+            ok,
+            status,
+            message: if ok { "ok".into() } else { "nope".into() },
+            models,
+            url: "https://api.anthropic.com/v1/models".into(),
+        }
+    }
+
+    /// The whole point of the change: a live probe is recorded durably and then
+    /// read back as the registry's observed truth — including through the
+    /// provider's alias, and surviving a rebuild from `base_registry()`.
+    #[test]
+    fn a_recorded_probe_becomes_the_registrys_observed_truth() {
+        let dir = temp_dir("writeback");
+        record_observation_in(
+            &dir,
+            &observed_registry_in(&dir),
+            "claude",
+            &probe(true, 200, 3),
+            "1700".into(),
+        );
+
+        // Durable, keyed by canonical id even though the probe named an alias.
+        let file = observation_file_in(&dir);
+        assert_eq!(file.providers.len(), 1);
+        assert!(file.providers.contains_key("anthropic"));
+        let reach = file.reachability("anthropic").expect("reachability");
+        assert!(reach.ok);
+        assert_eq!(reach.model_count, 3);
+        assert_eq!(reach.observed_at, "1700");
+
+        // Replayed onto a freshly built registry — this is what `verifiedAt`
+        // and the routing feed read.
+        let reg = observed_registry_in(&dir);
+        assert_eq!(reg.verified_at("claude"), Some("1700"));
+        assert_eq!(reg.verified_at("anthropic"), Some("1700"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A second probe replaces the first rather than accumulating, so the stamp
+    /// always describes the latest thing that actually happened.
+    #[test]
+    fn the_latest_probe_is_the_observation() {
+        let dir = temp_dir("latest");
+        let registry = observed_registry_in(&dir);
+        record_observation_in(
+            &dir,
+            &registry,
+            "anthropic",
+            &probe(true, 200, 3),
+            "1".into(),
+        );
+        record_observation_in(
+            &dir,
+            &registry,
+            "anthropic",
+            &probe(true, 200, 5),
+            "2".into(),
+        );
+        let file = observation_file_in(&dir);
+        assert_eq!(file.providers.len(), 1);
+        assert_eq!(file.get("anthropic").unwrap().model_count, 5);
+        assert_eq!(
+            observed_registry_in(&dir).verified_at("anthropic"),
+            Some("2")
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A failed probe is real history but must never become a verification.
+    #[test]
+    fn a_failed_probe_is_history_and_not_a_verification() {
+        let dir = temp_dir("failed");
+        record_observation_in(
+            &dir,
+            &observed_registry_in(&dir),
+            "anthropic",
+            &probe(false, 401, 0),
+            "9".into(),
+        );
+
+        let file = observation_file_in(&dir);
+        let reach = file.reachability("anthropic").expect("reachability");
+        assert!(!reach.ok);
+        assert_eq!(reach.status, 401);
+        assert_eq!(file.verified_count(), 0);
+        assert_eq!(file.failed_count(), 1);
+
+        // The registry is left unverified: "we tried" is not "it answered".
+        assert!(observed_registry_in(&dir)
+            .verified_at("anthropic")
+            .is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- P44.4 — the vault-mediated probe (keyed providers, no key in hand) --
+
+    /// The two halves meet here: the broker returns a status + body and never
+    /// parses it, and this module shapes the result with the catalog's own rule
+    /// — so the shell's user-key probe and the vault-mediated one cannot
+    /// disagree about what they observed.
+    #[test]
+    fn a_vault_probe_is_shaped_by_the_catalogs_own_rule() {
+        let probe = endpoint_probe_result(
+            "https://api.openai.com/v1/models".into(),
+            200,
+            r#"{"data":[{"id":"a"},{"id":"b"},{"id":"c"}]}"#,
+            None,
+        );
+        assert!(probe.ok);
+        assert_eq!(probe.status, 200);
+        assert_eq!(probe.models, 3);
+        assert_eq!(probe.message, "3 models advertised");
+
+        // The shaped result is exactly what gets persisted durably.
+        let obs = ProviderObservation::from_metadata_probe("1", &probe);
+        assert!(obs.ok);
+        assert_eq!(obs.model_count, 3);
+        assert_eq!(obs.status, 200);
+
+        // An answered rejection is an observation, not a failure to observe…
+        let rejected = endpoint_probe_result("u".into(), 401, r#"{"error":"bad key"}"#, None);
+        assert!(!rejected.ok);
+        assert_eq!(rejected.status, 401);
+        assert_eq!(rejected.models, 0);
+
+        // …and nothing answered is status 0 — no HTTP code is invented.
+        let dead = endpoint_probe_result("u".into(), 0, "", Some("connection refused"));
+        assert_eq!(dead.status, 0);
+        assert!(dead.message.contains("connection refused"));
+    }
+
+    /// The failure policy that keeps this honest: when the broker cannot probe
+    /// (no credential, suspended key, insecure endpoint) there is **no
+    /// observation** — not a failed one. A failed observation would be durably
+    /// recorded as "this provider did not answer", which is a lie about a
+    /// provider nobody asked.
+    #[test]
+    fn a_broker_error_produces_no_observation_rather_than_a_failed_one() {
+        let err = everyaios_vault::BrokerError::InsecureEndpoint("openai".into());
+        assert!(observation_from_probe("openai", Err(err)).is_none());
+
+        let no_keys = everyaios_vault::BrokerError::AllKeysExhausted("openai".into());
+        assert!(observation_from_probe("openai", Err(no_keys)).is_none());
+    }
+
+    /// …and when the broker *did* probe, the observation carries the live facts:
+    /// the endpoint's own URL, its status, and the body it returned.
+    #[test]
+    fn a_successful_broker_probe_becomes_the_observation() {
+        let probe = observation_from_probe(
+            "claude",
+            Ok(everyaios_vault::ModelsProbe {
+                ok: true,
+                status: 200,
+                url: "https://api.anthropic.com/v1/models".into(),
+                body: r#"{"models":{"claude-a":{},"claude-b":{}}}"#.into(),
+                error: None,
+            }),
+        )
+        .expect("an answered probe is an observation");
+        assert!(probe.ok);
+        assert_eq!(probe.status, 200);
+        assert_eq!(probe.models, 2);
+        assert_eq!(probe.url, "https://api.anthropic.com/v1/models");
+    }
+
+    /// The observed registry is additive: identity, aliases and transports are
+    /// the vendored layer's, never rewritten by an observation.
+    #[test]
+    fn observing_a_provider_does_not_rewrite_its_identity() {
+        let dir = temp_dir("identity");
+        record_observation_in(
+            &dir,
+            &observed_registry_in(&dir),
+            "claude",
+            &probe(true, 200, 1),
+            "3".into(),
+        );
+        let reg = observed_registry_in(&dir);
+        let rec = reg.get("anthropic").expect("record");
+        assert_eq!(rec.name, "Anthropic");
+        assert_eq!(
+            rec.transport,
+            Some(everyaios_catalog::Transport::AnthropicMessages)
+        );
+        assert!(rec.aliases.iter().any(|a| a == "claude"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

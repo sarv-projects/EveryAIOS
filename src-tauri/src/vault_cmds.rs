@@ -39,6 +39,10 @@ pub fn vault_keys_list(
 /// entered in Settings and never be used. `verifiedAt` is the activate
 /// screen's probe stamp (P56.3) — set only after a real `GET {api}/models`
 /// answered, so a green tick always has evidence behind it.
+// The argument list is the IPC contract the Settings → Keys form posts; grouping
+// it into a struct would only move the same fields behind one more type and
+// break every existing caller for no gain.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn vault_key_add(
     state: State<'_, AppState>,

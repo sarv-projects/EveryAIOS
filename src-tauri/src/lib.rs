@@ -160,6 +160,15 @@ fn connect_chat_relay(
         Arc::clone(&state.terminal),
         app.clone(),
     )));
+    // P48.3 — the inbuilt agent's computer-use path (E9). Attached here, before
+    // the relay is published, so no agent turn can race ahead of the executor.
+    // Best-effort: a headless / no-display host has no platform backend, so
+    // nothing is attached and `desktop.*` keeps fail-closing honestly with
+    // `desktop session not attached` instead of pretending to drive the GUI.
+    match desktop_cmds::publish_desktop_backend(&state, app) {
+        Ok(()) => eprintln!("everyaios-desktop: agent desktop backend attached"),
+        Err(e) => eprintln!("everyaios-desktop: agent desktop backend unavailable ({e})"),
+    }
     let policy_path = everyaios_core::default_data_dir().join("permissions.toml");
     relay.with_policy(&policy_path);
     eprintln!("everyaios-desktop: relay stage policy ok");
@@ -180,6 +189,11 @@ fn connect_chat_relay(
         relay.with_endpoint(&provider, endpoint);
     }
     eprintln!("everyaios-desktop: relay stage endpoints ok");
+    // P44.4 — observe the connected set once, off this thread: a probe is
+    // network I/O (bounded per provider) and must never delay the relay coming
+    // up. Unlocking the vault sweeps again, because that is when the keyed
+    // providers join the connected set.
+    catalog_cmds::spawn_boot_observation_sweep(app.clone());
     // P1.8 (A5): register keyless local endpoints so a sidecar
     // `provider/stream` for ollama/llamafile routes to the local runtime
     // (GBNF grammar constraint included — B5). Ollama always registers;
@@ -520,6 +534,7 @@ fn reopen_disk_vault(state: &AppState, key: &str) -> Result<String, String> {
 #[tauri::command]
 fn vault_setup(
     state: State<'_, AppState>,
+    app: AppHandle,
     passphrase: String,
 ) -> Result<serde_json::Value, String> {
     let r =
@@ -527,6 +542,9 @@ fn vault_setup(
             .map_err(|e| e.to_string())?;
     let status = reopen_disk_vault(&state, &r.key)?;
     state.vault_unlocked.store(true, Ordering::Release);
+    // P44.4 — a fresh vault is a fresh connected set: observe it now rather
+    // than waiting for the next boot.
+    catalog_cmds::spawn_observation_sweep(app);
     Ok(serde_json::json!({
         "ok": true,
         "origin": r.origin,
@@ -539,6 +557,7 @@ fn vault_setup(
 #[tauri::command]
 fn vault_unlock(
     state: State<'_, AppState>,
+    app: AppHandle,
     passphrase: String,
 ) -> Result<serde_json::Value, String> {
     let r =
@@ -546,6 +565,10 @@ fn vault_unlock(
             .map_err(|e| e.to_string())?;
     let status = reopen_disk_vault(&state, &r.key)?;
     state.vault_unlocked.store(true, Ordering::Release);
+    // P44.4 — unlocking is what makes the keyed providers part of the connected
+    // set, so this is the pass that can observe them. Off-thread and bounded;
+    // the unlock response never waits on a network call.
+    catalog_cmds::spawn_observation_sweep(app);
     Ok(serde_json::json!({
         "ok": true,
         "origin": r.origin,

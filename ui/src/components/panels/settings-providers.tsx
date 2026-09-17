@@ -251,6 +251,13 @@ function ProviderRowButton({
               <ShieldCheck className="h-2.5 w-2.5" /> verified
             </Badge>
           )}
+          {/* Recorded failure from the last probe. Shown because silence would
+              read as "fine" — a failed check is real state, not an absence. */}
+          {row.reachable === false && (
+            <Badge className="bg-amber-500/15 text-[9px] text-amber-300">
+              <AlertTriangle className="h-2.5 w-2.5" /> last check failed
+            </Badge>
+          )}
           {(row.env ?? []).slice(0, 1).map((e) => (
             <span key={e} className="font-mono text-[9px] text-muted-foreground/70">
               {e}
@@ -572,6 +579,11 @@ function ActivatePanel({
         {row.verifiedAt && (
           <Badge className="bg-sky-500/15 text-[9px] text-sky-300">
             <ShieldCheck className="h-2.5 w-2.5" /> verified {row.verifiedAt.slice(0, 10)}
+          </Badge>
+        )}
+        {row.reachable === false && (
+          <Badge className="bg-amber-500/15 text-[9px] text-amber-300">
+            <AlertTriangle className="h-2.5 w-2.5" /> last check failed
           </Badge>
         )}
         <div className="ml-auto flex items-center gap-1">
