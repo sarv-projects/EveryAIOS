@@ -1,225 +1,249 @@
 <p align="center">
-  <img src="src-tauri/icons/128x128.png" width="80" alt="EveryAIOS" />
+  <img src="src-tauri/icons/128x128.png" width="88" alt="EveryAIOS" />
 </p>
 
 <h1 align="center">EveryAIOS</h1>
-<h3 align="center">Every AI. One Space.</h3>
-
-<p align="center"><strong>Every Model. Every Agent. Every Task. One Space.</strong></p>
+<h3 align="center">Every AI. Every Agent. Every Task. One Space.</h3>
 
 <p align="center">
-  One desktop cockpit for your daily work — talk through ideas, crunch spreadsheets, edit documents, automate browsers, control your desktop, orchestrate multi-agent swarms, and build software.<br/>
-  <strong>Run your favorite external coding agents side-by-side (Claude Code, OpenAI Codex, OpenCode, Cline, Aider), or orchestrate multi-agent swarms with our Universal Chief & Harness.<br/>
-  Bring any AI model (GPT-6 Astra, Claude Fable 5.1 / Opus 5, Gemini 3.8 Flash, DeepSeek-V4.1-Flash / R1, Qwen3.8-Max, Meta Llama 4, or local offline AI via Ollama). Keep 100% of your data private.</strong>
+  <strong>The Universal Agentic Operating System & Desktop Harness ("The Switzerland of AI")</strong><br/>
+  One unified native desktop cockpit for knowledge work, financial engineering, document surgery, browser automation, desktop control, multi-agent swarms, and autonomous software development.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/architecture-v3.80%208--Module%20Universal%20Harness-blue?style=flat-square" alt="Architecture v3.80" />
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square" alt="Cross Platform" />
-  <img src="https://img.shields.io/badge/privacy-100%25%20Local--First%20%2B%20Encrypted-success?style=flat-square" alt="Privacy First" />
-  <img src="https://img.shields.io/badge/submodules-166%20Indexed%20(1220%20Verified)-green?style=flat-square" alt="166 Submodules" />
-  <img src="https://img.shields.io/badge/security-Guard--2%20%2B%20OS%20Sandbox%20%2B%20Merkle-purple?style=flat-square" alt="Security" />
-  <img src="https://img.shields.io/badge/pricing-Free%20%26%20Open%20Source-green?style=flat-square" alt="Free and Open Source" />
+  <a href="#-desktop-app-installers--coming-soon"><img src="https://img.shields.io/badge/Desktop%20App-Coming%20Soon-blueviolet?style=for-the-badge&logo=windows&logoColor=white" alt="Desktop App Coming Soon" /></a>
+  <a href="#-the-8-full-stack-modules"><img src="https://img.shields.io/badge/Architecture-8%20Full--Stack%20Modules-blue?style=for-the-badge" alt="8 Full-Stack Modules" /></a>
+  <a href="TEST-CASES.md"><img src="https://img.shields.io/badge/Quality-ISO%2FIEC%2029119%20MNC%20Grade-success?style=for-the-badge" alt="ISO 29119 Tested" /></a>
+  <a href="TEST-CASES.md#3-master-end-to-end-enterprise-testing-50-real-world-use-cases"><img src="https://img.shields.io/badge/E2E%20Testing-50%20Real%20Use%20Cases-brightgreen?style=for-the-badge" alt="50 Real Use Cases" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/architecture-v3.80%20Universal%20Harness-blue?style=flat-square" alt="Architecture v3.80" />
+  <img src="https://img.shields.io/badge/platforms-Windows%2011%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square" alt="Cross Platform" />
+  <img src="https://img.shields.io/badge/privacy-100%25%20Local--First%20%2B%20Air--Gapped-success?style=flat-square" alt="Privacy First" />
+  <img src="https://img.shields.io/badge/submodules-166%20Indexed%20(1221%20Verified)-green?style=flat-square" alt="166 Submodules" />
+  <img src="https://img.shields.io/badge/security-7--Layer%20Guard--2%20%2B%20Merkle%20Audit-purple?style=flat-square" alt="Security" />
   <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-lightgrey?style=flat-square" alt="License" />
 </p>
 
 ---
 
-> ### 🚀 Architecture v3.80 Active Development & Verification
-> **EveryAIOS is built in the open with rigorous evidence-based engineering.** The desktop app, native Rust core (22 crates), TypeScript sidecar coordinator, document engines, multi-platform OS sandboxes, and SQLCipher encrypted vault run end-to-end today. Pre-packaged installers (`.msi`, `.dmg`, `.AppImage`) are finalizing in the release pipeline. Developers can build and run directly from source right now.
->
-> 📊 **166 submodules and functions across the 8 Full-Stack Modules are synchronized in lockstep**, backed by 1,220 verified milestones, 330 zero-defect IPC commands, automated security gates (S1–S6), and failure injection resilience suites (L1–L6).
->
-> 🔗 [Detailed Feature Matrix](ARCH/09-FEATURE-MATRIX.md) &nbsp;·&nbsp; [Architecture Overview](ARCH/17-NATIVE-AGENT.md) &nbsp;·&nbsp; [Development Roadmap](TODO.md) &nbsp;·&nbsp; [Release Changelog](SPEC-CHANGELOG.md)
+> [!IMPORTANT]
+> ### 🚀 Desktop Release Status: Coming Soon!
+> **Pre-packaged, auto-updating desktop installers (`.msi` for Windows 11, `.dmg` for macOS, and `.AppImage` for Linux) are currently in final release qualification.**
+> 
+> * **Primary Target**: **Windows 11** (Native MSVC, Windows UI Automation, ConPTY, Job Objects sandboxing).
+> * **Cross-Platform**: macOS Sonoma / Sequoia (Apple Silicon & Intel) and Ubuntu 24.04 LTS.
+> * **Developer Availability**: The entire codebase is **100% open-source and operational today**. You do not need to wait for binary releases—you can build, inspect, and run EveryAIOS locally from source right now!
+> 
+> 📦 [Jump to Developer Setup](#-developer-quickstart-run-from-source-today) &nbsp;·&nbsp; 📋 [Review the Enterprise Test Suite (TEST-CASES.md)](TEST-CASES.md) &nbsp;·&nbsp; 🗺️ [Inspect Architecture (ARCH/00-INDEX.md)](ARCH/00-INDEX.md)
 
 ---
 
-## Why EveryAIOS? See the Difference
+## The Core Architectural Principle: "The Switzerland of AI"
 
-Most people today juggle **3 to 5 separate AI tools**: a chat app for questions, an IDE for code, an online spreadsheet tool, and separate browser plugins. You pay multiple \$20/month subscriptions, constantly hit message rate limits, and re-copy context all day.
+### Permanent Rejection of the Proprietary Coding Agent Trap
+Most AI companies rush to build their own closed coding models and proprietary prompting loops. This is a treadmill: competing against frontier AI labs on custom coding loops is an inefficient duplication of effort.
 
-**EveryAIOS replaces that entire mess with one app:**
-
-| Feature | **EveryAIOS** | **ChatGPT / Claude Desktop** | **Cursor / Windsurf** | **Terminal Tools (Claude Code, Aider)** |
-| :--- | :---: | :---: | :---: | :---: |
-| **All-in-One: Chat + Cowork + Coding + Swarm** | ✅ **Yes (One Cockpit)** | ⚠️ **Chat & Docs Centric**<br/>*(ChatGPT Work with Apps; Claude MCP + Cowork/Docs/Slides; no unified IDE or Excel engine)* | ⚠️ **Code Editor Only**<br/>*(Cursor Agent Mode / Composer; Windsurf Cascade flows; no Office/documents or general cowork)* | ⚠️ **Terminal Only**<br/>*(Headless CLI; no document viewers or visual interface)* |
-| **Bring Any AI Model You Want**<br/>*(GPT-6 Astra, Claude Fable 5.1 / Opus 5, Gemini 3.8 Flash, DeepSeek-V4.1-Flash / R1, Qwen3.8-Max, Llama 4, Ollama)* | ✅ **Universal Freedom**<br/>*(100+ frontier & local models via BYOK or 100% offline with Ollama/MLX/vLLM)* | ❌ **Locked Walled Garden**<br/>*(Restricted to their own models only)* | ⚠️ **Curated Cloud Selection**<br/>*(Proprietary cloud models; limited local LLM support)* | ⚠️ **Limited / Complex**<br/>*(Claude Code is Anthropic-only; Aider requires manual terminal setup)* |
-| **Host External Coding Agents**<br/>*(Claude Code, OpenAI Codex, OpenCode, Cline, Aider)* | ✅ **Run them all inside EveryAIOS**<br/>*(Native-first ACP agent hosting with zero capability degradation)* | ❌ **None**<br/>*(Cannot host external coding agents)* | ❌ **Locked to Editor Agent**<br/>*(Cannot run competing CLI agents)* | ⚠️ **Isolated CLIs**<br/>*(Separate terminal windows without unified app context)* |
-| **Multi-Agent Swarms & Fleet Isolation**<br/>*(Run 20–30 subagents concurrently without git collisions)* | ✅ **Dedicated Git Worktrees**<br/>*(Mutex `GitOperationQueue`, 3-file blackboards, concurrency governor)* | ❌ **None**<br/>*(Single turn loop)* | ❌ **None**<br/>*(Single composer/agent thread)* | ❌ **None**<br/>*(Single terminal process)* |
-| **Native Agent Tools & Dynamic Context**<br/>*(`ask`, `plan`, `todo`, `subagent`, `@Codebase`, `@Git`, `@Problems`)* | ✅ **First-Class Native Tools**<br/>*(Dynamic `@-mentions` injected below `CACHE_BOUNDARY`; 90% cost savings)* | ⚠️ **Basic Context**<br/>*(Flat attachment upload)* | ⚠️ **Editor Symbols**<br/>*(`@Files`, `@Codebase` cloud-indexed)* | ⚠️ **CLI Flags**<br/>*(Manual `/add` file lists)* |
-| **OS-Level Sandboxing & Netfloor SSRF Guard**<br/>*(Restricted tokens, bubblewrap, seatbelt, private subnet blocks)* | ✅ **Multi-Platform OS Sandboxes**<br/>*(Windows Job Objects, macOS Seatbelt, Linux bwrap; zero-I/O `netfloor`)* | ❌ **None / Cloud Only**<br/>*(Remote execution only)* | ⚠️ **None**<br/>*(Runs with full user desktop permissions)* | ⚠️ **Limited**<br/>*(Requires external container configuration)* |
-| **Real Office Spreadsheets & Documents**<br/>*(Recalculates formulas, edits Word, PowerPoint & PDFs)* | ✅ **Built-in Local Calculation Engine**<br/>*(IronCalc `.xlsx` engine, surgical OOXML `.docx`, `.pptx`, `.pdf`, 0 tokens on math)* | ❌ **Burns Message Quota**<br/>*(Guesses formulas as text or runs cloud Python; destroys formatting)* | ❌ **None** | ❌ **None** |
-| **Conversational Calendar & Background Automations**<br/>*(Encrypted calendar, natural language scheduling, tray daemon)* | ✅ **Built-in SQLCipher Calendar & Daemon**<br/>*(Natural language scheduling, 5-field cron, unattended background alerts)* | ❌ **None**<br/>*(Active chat window only)* | ❌ **None** | ❌ **None**<br/>*(Requires external system cron)* |
-| **Cognitive Failure Avoidance & Memory**<br/>*(Learns from errors, 5-tier memory, negative constraints)* | ✅ **AvoidanceStore + 5-Tier Memory**<br/>*(Injects learned negative constraints to kill error loops; taste profile)* | ⚠️ **Basic Memory**<br/>*(Unstructured text snippets; repeats errors)* | ⚠️ **Basic Memory**<br/>*(Local rules files only)* | ❌ **None**<br/>*(Amnesic across sessions)* |
-| **Autonomous Browser Use (Web Automation)**<br/>*(37 CDP tools, navigates web, fills forms, reuses logins)* | ✅ **Built-in Browser Engine**<br/>*(Multi-browser: Brave, Chrome, Edge; safe session vault reuses logins)* | ⚠️ **Limited / Slow**<br/>*(Cloud browsing only; preview is slow/costly)* | ❌ **None** | ❌ **None** |
-| **Native Computer Use (Desktop Automation)**<br/>*(Controls desktop apps, clicks UI elements, OCR, keyboard/mouse)* | ✅ **Native OS Desktop Control**<br/>*(Windows UIA/WGC, macOS AX, Linux X11; visual grounding & OCR)* | ⚠️ **Cloud CUA Beta**<br/>*(Expensive per-screenshot token streaming; macOS only)* | ❌ **None** | ❌ **None** |
-| **Deep Web Research & Free Search**<br/>*(Multi-source research with zero API keys)* | ✅ **Built-in Tiered Search Cascade**<br/>*(SearXNG + DuckDuckGo fallback, cited reports, $0 search fees)* | ⚠️ **Burns Chat Quota**<br/>*(Limited web search or requires paid Perplexity/search keys)* | ⚠️ **Basic Search**<br/>*(Short code snippets only)* | ⚠️ **Requires Search API**<br/>*(Manual Tavily/Serper setup)* |
-| **Frontier Local Performance (P45 Benchmarks)**<br/>*(Ultra-fast disk & state engine)* | ✅ **High-Throughput SQLite + WAL**<br/>*(3,546 MB/s read, 1.19M writes/s, 19ns route lookup, 401k audit/s)* | ❌ **Cloud Latency**<br/>*(Subject to network round-trips)* | ⚠️ **Varies** | ⚠️ **Varies** |
-| **Safety, 1-Click Undo & Time Travel** | ✅ **Safe Approval Cards & Shadow Git**<br/>*(Isolated Guard approval window + instant 1-click file rollback)* | ❌ **No File Rollback**<br/>*(No local file versioning)* | ⚠️ **Standard Git / Checkpoints**<br/>*(Editor-only checkpoints)* | ⚠️ **Terminal Prompts**<br/>*(CLI prompts or manual git)* |
-| **100% Private & Local-First** | ✅ **Local Encrypted Vault**<br/>*(AES-256 SQLCipher; run 100% offline air-gapped with zero telemetry)* | ❌ **Cloud-Hosted**<br/>*(All data sent to remote cloud infrastructure)* | ⚠️ **Cloud Indexing**<br/>*(Codebase indexed and processed on cloud servers)* | ⚠️ **Local CLI, Cloud APIs**<br/>*(Terminal is local, but sends files to cloud LLMs)* |
-| **Price** | 🟢 **Free & Open Source**<br/>*(Pay only pennies for raw token use or $0 offline)* | 🔴 **$20 – $200 / month**<br/>*(Single-user monthly fee)* | 🔴 **$20 / month**<br/>*(Plus overage fees for high usage)* | 🟢 **Free / Open Source**<br/>*(CLI only, pay raw token costs)* |
-
----
-
-## The 3 Pillars in One Cockpit
+**EveryAIOS takes the radically opposite, durable approach:**
+- **We build the Universal Desktop Operating System & Agent Harness.**
+- Instead of forcing you into a single proprietary agent, EveryAIOS provides an open, governed desktop operating layer that **hosts, sandboxes, manages, evaluates, and orchestrates ANY agent** via open protocols (Agent Communication Protocol / ACP stdio and Model Context Protocol / MCP).
+- Run your favorite frontier coding CLIs and external agent tools inside EveryAIOS. They retain 100% of their native loops, tools, and prompts while gaining access to EveryAIOS's native superpowers: **in-process Excel formula recalculation, surgical Word/PDF part-patching, 3-tier headless browsers, native desktop computer use, 5-tier cognitive memory, and a 7-layer cryptographic security membrane.**
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    EVERYAIOS DESKTOP COCKPIT                                     │
-├──────────────────────────────┬───────────────────────────────────┬───────────────────────────────┤
-│           1. CHAT            │             2. COWORK             │            3. CODE            │
-│  • Brainstorm & analyze      │  • Real Excel formula engine      │  • Fix bugs & build software  │
-│  • Free deep web research    │  • Word, PowerPoint, PDFs         │  • Host Claude Code, Codex,   │
-│  • 5-tier cognitive memory   │  • Autonomous Browser Use (37)    │    OpenCode, Cline, Aider     │
-│  • AvoidanceStore loop guard │  • Native Computer Use (OCR)      │  • Multi-agent swarm worktrees│
-│  • Dynamic model routing     │  • Conversational Calendar        │  • First-class `plan` & `ask` │
-│  • 90% prompt cache savings  │  • Unattended tray automations    │  • 1-Click time-travel rollback│
-└──────────────────────────────┴───────────────────────────────────┴───────────────────────────────┘
+│                                    EVERYAIOS: THE SWITZERLAND OF AI                              │
+├──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│                                     THE AGENT-NATIVE PLANE                                       │
+│          Hosted External Coding Agents & Swarms (via open ACP stdio JSON-RPC 2.0)               │
+│      [Claude Code]   [OpenAI Codex]   [OpenCode]   [Aider]   [Cline / Roo]   [Grok Build]        │
+│              • Native Prompts   • Native AST Editors   • Native Reasoning Loops                  │
+├──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│                                     THE SHARED COWORK PLANE                                      │
+│                           Native Desktop Primitives & Subsystems                                 │
+│   ┌───────────────────┬───────────────────┬───────────────────┬──────────────────────────────┐   │
+│   │  Office Engine    │  Browser & CUA    │ Cognitive Memory  │  Security Membrane           │   │
+│   │  • IronCalc XLSX  │  • Lightpanda Zig │ • 5-Tier ACT-R    │  • Zero-I/O Netfloor SSRF    │   │
+│   │  • Surgical OOXML │  • Scrapling      │ • FTS5 BM25       │  • Lexical Pathfloor Sandbox │   │
+│   │  • lopdf Reader   │  • 37 CDP Tools   │ • AvoidanceStore  │  • Guard-2 TTL Tickets       │   │
+│   │  • Zero LLM Math  │  • Native SendInput│ • Knowledge Graph│  • Append-Only Merkle Audit  │   │
+│   └───────────────────┴───────────────────┴───────────────────┴──────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1. 💬 Chat & Ideate (Intelligent, Context-Aware, and Cost-Efficient)
-* **5-Tier Local Memory:** Working memory, episodic session logs, semantic retrieval, temporal knowledge graph, and personal user taste profiles remember your project conventions across sessions with zero extra token costs.
-* **Cognitive Failure Avoidance:** The `AvoidanceStore` captures root causes from past execution failures and injects learned negative constraints into the prompt, preventing repetitive error loops.
-* **Free Deep Web Research:** Built-in tiered search cascade (SearXNG + DuckDuckGo) gathers fresh facts, cross-checks sources, and synthesizes cited reports without paid search API subscriptions.
-* **Cache-Affine Prompt Assembly:** Dynamic context is organized with byte-stable prefixes above a fixed `CACHE_BOUNDARY`, cutting your API token costs by up to 90% and making turns feel instantaneous.
-* **Dynamic Model Routing:** Automatically select the optimal model tier—routing simple queries to lightning-fast models (DeepSeek-V4.1-Flash, Claude Haiku 4.5, Gemini 3.8 Flash) and deep engineering to frontier reasoning models (Claude Fable 5.1, Claude Opus 5, GPT-6 Astra, GPT-5.6 Sol, DeepSeek-R1, Qwen3.8-Max, Llama 4).
+---
 
-### 2. 📊 Cowork (Real Documents, Autonomous Browsing, Computer Use & Automations)
-* **Real Excel Spreadsheets:** Powered by the embedded IronCalc engine, EveryAIOS recalculates formulas across `.xlsx` workbooks, updates charts, and preserves cell formatting with 0 tokens spent on math.
-* **Word, PowerPoint & PDF Processing:** Surgical byte-stable edits for `.docx`, `.pptx`, and `.pdf` files. Fill interactive forms, swap presentation slides, extract tables, redact sensitive data, and draft publication-ready documents.
-* **Autonomous Browser Use:** 37-tool browser engine navigates complex websites, logs into portals with your existing session vault, fills forms, and extracts clean data without ads or clutter.
-* **Native Computer Use:** Controls desktop software across Windows, macOS, and Linux. Takes high-resolution screenshots, locates UI controls with visual grounding and OCR, clicks buttons, and types text to automate workflows in apps without APIs.
-* **Conversational Calendar & Scheduling:** Manage your schedule with natural language ("Book project sync Friday at 3pm"), backed by encrypted SQLCipher storage and full calendar view integration.
-* **Unattended Background Automations:** Schedule recurring morning digests, repo health monitors, or data synchronizations that run reliably via the system tray daemon—even when the main app window is closed.
-* **Storage Intelligence:** Spot duplicate files using 7-stage cryptographic hashing (xxHash3 + BLAKE3), identify space hogs, and visualize disk usage with interactive treemaps.
+## Why EveryAIOS? Comprehensive Industry Comparison
 
-### 3. 💻 Autonomous Coding (Precision, Swarms & Complete Safety)
-* **Universal Agent Hosting:** Prefer Claude Code or Aider for terminal work? Rely on Cline or OpenCode for agentic tasks? Need OpenAI Codex? EveryAIOS hosts them inside the same cockpit alongside our Universal Chief & Harness without degrading their native capabilities.
-* **First-Class Native Tools:** Includes built-in `ask` (clarification dialogs with single/multi-select options), `plan` (blueprint DAG decomposition), `todo` (real-time task checklist tracking), and `subagent` (delegation to isolated worker agents).
-* **Dynamic `@-Mention` Context Resolution:** Reference `@Codebase` (Tree-sitter symbol graph + BM25 indexing), `@File`, `@Git`, `@Doc`, `@Web`, `@Problems` (live LSP compiler diagnostics), `@Memory`, or `@Terminal` directly in prompts.
-* **Multi-Agent Swarm Fleets & Worktrees:** Spin up 20–30 subagents concurrently. Each agent executes in its own dedicated Git worktree (`.everyaios/worktrees/task-<id>`) with a serialized `GitOperationQueue`, 3-file blackboards, and zero dirty-working-tree collisions.
-* **Unified Code Editing Ladder:** Changes follow an exact-match single-occurrence invariant → AST structural replacement → fuzzy fallback with shadow diff verification. If an edit is ambiguous, it halts and asks rather than guessing.
-* **1-Click Time-Travel Rollback:** Every single file change is saved in an isolated version checkpoint. If an agent's change isn't what you wanted, click **"Undo"** to instantly restore your workspace to the exact prior second.
-* **Test-Driven Verification (TDD Loop):** Proves code fixes work by running background test suites before proposing changes for user review (RED → GREEN).
+Today, knowledge workers and engineers juggle 3 to 5 fragmented tools: a chat app for questions, an IDE for code, an online spreadsheet tool, and separate browser extensions. You pay multiple \$20–\$200/month subscriptions, constantly hit message rate limits, and re-copy context all day.
+
+| Feature / Dimension | **EveryAIOS** | **ChatGPT / Claude Desktop** | **Cursor / Windsurf** | **Claude Cowork / Plugins** |
+| :--- | :---: | :---: | :---: | :---: |
+| **Architectural Model** | **Universal Desktop OS Harness**<br/>*(Switzerland of AI; runs any model or agent)* | **Proprietary Walled Garden**<br/>*(Locked to single vendor ecosystem)* | **Editor-Only Agent**<br/>*(Forked VS Code for code files only)* | **Single-Agent Cowork**<br/>*(Closed plugin ecosystem; cloud-bound)* |
+| **Model Freedom (BYOK & Offline)** | ✅ **100+ Models + 100% Offline**<br/>*(Anthropic, OpenAI, Gemini, DeepSeek, Qwen, Ollama, MLX)* | ❌ **Single Provider Only**<br/>*(Cannot bring alternate frontier models)* | ⚠️ **Curated Cloud Selection**<br/>*(Proprietary cloud models; limited local LLMs)* | ❌ **Anthropic Only**<br/>*(No OpenAI, Gemini, or local models)* |
+| **External Agent Hosting (ACP)** | ✅ **Host Any Coding Agent**<br/>*(Run external coding agents via ACP stdio)* | ❌ **None**<br/>*(Cannot host external agents)* | ❌ **Locked to Internal Agent**<br/>*(Cannot run competing agent engines)* | ❌ **None**<br/>*(Single proprietary agent)* |
+| **Multi-Agent Swarms & Fleet Isolation** | ✅ **100+ Concurrent Worktrees**<br/>*(Isolated Git worktrees; zero file collision)* | ❌ **None**<br/>*(Single turn conversation)* | ❌ **None**<br/>*(Single editor composer)* | ❌ **None**<br/>*(Single agent execution)* |
+| **Real Spreadsheet Recalculation** | ✅ **IronCalc 0.8.3 Engine**<br/>*(300+ Excel formulas; 0 tokens on arithmetic)* | ❌ **Hallucinates Math**<br/>*(Guesses numbers or runs slow cloud Python)* | ❌ **None**<br/>*(Code files only)* | ⚠️ **Basic Cloud Analysis**<br/>*(No in-process formula recalculation)* |
+| **Surgical Document Part-Patching** | ✅ **Byte-Stable OOXML**<br/>*(Patches `.docx`, `.pptx`, `.pdf`; preserves styles)* | ❌ **Re-writes Entire Files**<br/>*(Corrupts themes, macros, and styles)* | ❌ **None** | ⚠️ **Limited Formatting**<br/>*(HTML/Markdown exports)* |
+| **Tiered Browser Automation** | ✅ **Lightpanda + Cloak + CDP**<br/>*(Ultra-fast Zig headless $\to$ stealth $\to$ 37 CDP tools)* | ⚠️ **Slow Cloud Scraping**<br/>*(Cloud-rendered; high latency)* | ❌ **None** | ⚠️ **Cloud Browser**<br/>*(No local stealth fingerprinting)* |
+| **Native Desktop Computer Use (CUA)** | ✅ **Windows UIA + SendInput**<br/>*(Hybrid A11y Tree + OCR; hardware estop)* | ⚠️ **macOS Beta Only**<br/>*(Cloud screenshot streaming; high token cost)* | ❌ **None** | ⚠️ **Experimental**<br/>*(High latency per-action token spend)* |
+| **Cognitive Memory & Failure Immunity** | ✅ **ACT-R + AvoidanceStore**<br/>*(Learns from errors; kills repetitive failure loops)* | ⚠️ **Basic Memory**<br/>*(Flat text memory; repeats same errors)* | ⚠️ **Rules Files Only**<br/>*(Static `.cursorrules` text)* | ⚠️ **Session Ephemeral**<br/>*(Limited cross-session learning)* |
+| **24/7 Background Automations** | ✅ **SQLCipher Calendar & Daemon**<br/>*(5-field cron daemon runs even when app is closed)* | ❌ **None**<br/>*(Requires active browser window)* | ❌ **None** | ❌ **None**<br/>*(Active session only)* |
+| **Enterprise Security Membrane** | ✅ **7-Layer Guard-2 + Netfloor**<br/>*(Zero-I/O SSRF firewall; lexical pathfloor)* | ❌ **Cloud-Governed**<br/>*(No user-inspectable egress firewall)* | ⚠️ **Full OS Access**<br/>*(Runs with complete user privileges)* | ⚠️ **Standard Sandbox**<br/>*(No zero-I/O private subnet firewall)* |
+| **Cryptographic Audit Trail** | ✅ **Append-Only Merkle Tree**<br/>*(Tamper-evident mathematical verification)* | ❌ **Closed Cloud Logs**<br/>*(Proprietary vendor telemetry)* | ❌ **None** | ❌ **Closed Telemetry** |
+| **Cost & Licensing** | 🟢 **Free & Open Source**<br/>*(MIT / Apache-2.0; pay raw token costs or $0 offline)* | 🔴 **$20 – $200 / month**<br/>*(Per user monthly subscription)* | 🔴 **$20 / month**<br/>*(Plus usage overages)* | 🔴 **Enterprise Subscription** |
 
 ---
 
-## Bring Your Favorite Model & Hardware
+## The 8 Full-Stack Modules of EveryAIOS
 
-You are never locked into a single AI provider:
+EveryAIOS is engineered as an industrial-grade desktop operating harness across 22 Rust core crates, 11 TypeScript coordination packages, and a React 19 cockpit shell:
 
-* **Frontier Cloud & Reasoning Models:** OpenAI (GPT-6 Astra, GPT-5.6 Sol / Terra, GPT-4o), Anthropic (Claude Fable 5.1, Claude Mythos 5.1, Claude Opus 5, Claude Sonnet 5), Google (Gemini 3.8 Flash, Gemini 3.8 Live Extended Thinking, Gemini 3.1 Pro).
-* **High-Speed, Open Weights & Specialized Models:** DeepSeek (DeepSeek-V4.1-Flash MoE with 8x KV cache reduction, DeepSeek-R1, DeepSeek V4 Pro), Alibaba Qwen (Qwen3.8-Max, Qwen3.8-Flash-Next, Qwen3.8-27B, Qwen 2.5-Coder), Meta (Llama 4 Scout 109B & Maverick 400B, Muse Spark 1.3), Mistral (Mistral Large 2, Codestral), Groq LPUs (ultra-fast inference), SiliconFlow, OpenRouter, and any OpenAI-compatible endpoint.
-* **100% Private Offline Models:** Run models completely offline on your own hardware using **Ollama**, **LM Studio**, Apple Silicon **MLX**, or **vLLM / llama.cpp**. Zero data ever leaves your computer.
-* **Automatic Rate-Limit Protection:** Add backup API keys. If your primary key hits a rate limit, EveryAIOS switches to your backup key automatically so your work isn't interrupted.
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    THE 8 FULL-STACK MODULES                                      │
+├──────────────────────────────────────────────────┬───────────────────────────────────────────────┤
+│ 1. Universal Agent Hosting & Swarm Orchestrator │ 5. Work-Native Primitives (Office/Browser/CUA)│
+│ 2. Model Gateway & Encrypted Keyring Vault       │ 6. Durable Work & 5-Tier Cognitive Memory     │
+│ 3. Unified Cockpit Shell & Compaction Engine     │ 7. Executive Automations & 24/7 Calendar      │
+│ 4. Governed MCP & Capability Marketplace         │ 8. Security Guard-2 & Merkle Audit Membrane   │
+└──────────────────────────────────────────────────┴───────────────────────────────────────────────┘
+```
+
+### 1. 🤖 Module 1: Universal Agent Hosting & Swarm Orchestrator
+- **ACP Stdio Host**: Connect external frontier and open-source coding agents over the Agent Communication Protocol (JSON-RPC 2.0 stdio). Agents retain their custom reasoning loops and tools.
+- **Dynamic Chief Dispatch**: The Native Chief dynamically routes tasks to the best specialist agent, or manages multi-agent swarms.
+- **Git Worktree Swarm Isolation**: Spin up 20–30 subagents concurrently without merge collisions. Each agent is provisioned in its own dedicated worktree (`.everyaios/worktrees/task-<id>`) with a serialized `GitOperationQueue` and 3-file blackboards (`task_plan.md`, `findings.md`, `receipts/`).
+- **First-Class Interaction Tools**: Built-in `ask` (clarification dialogs with selectable options), `plan` (blueprint DAG decomposition), `todo` (real-time task checklist), and `subagent` (delegation to isolated workers).
+
+### 2. 🔑 Module 2: Model Gateway & Encrypted Keyring Vault
+- **Universal Model Freedom**: Connect to 100+ cloud models (OpenAI, Anthropic, Google Gemini, DeepSeek, Alibaba Qwen, Meta Llama) or run 100% private offline models via **Ollama**, **LM Studio**, **vLLM**, or Apple Silicon **MLX**.
+- **SQLCipher AES-256-GCM Vault**: Credentials and session states are encrypted on disk with zero plaintext leakage to logs, prompts, or UI threads.
+- **Automatic 429 Rate-Limit Failover**: Configure multi-key pools per provider. If a key encounters an HTTP 429 quota limit, EveryAIOS rotates to a backup key in `< 50ms` so your streaming session never halts.
+
+### 3. 🖥️ Module 3: Unified Cockpit Shell & Context Compaction Engine
+- **Linear/Apple-Grade Cockpit**: Built with React 19, Zustand 5, and Tailwind 4. Features 12 primary center screens and 19 interactive right-rail viewports (`office-xlsx`, `office-docx`, `office-pdf`, `code`, `diff`, `browse`, `desktop`, `terminal`, etc.).
+- **Physical Spring Motion & Zero Layout Shift (CLS = 0)**: Damped spring physics (stiffness: 450, damping: 35) with 150ms crossfades (strictly no horizontal sliding) and exact structural skeletons.
+- **Cache-Affine Prompt Assembler**: 12-segment prompt architecture with byte-stable prefix caching above `CACHE_BOUNDARY`, cutting token costs by up to 90%.
+- **Context-Mode 50KB Output Ceilings**: Automatically truncates raw tool outputs exceeding 50KB with actionable query hints and pass-by-ref hashes (`refRegistry`).
+
+### 4. 🔌 Module 4: Governed MCP & Capability Marketplace
+- **51 In-Process Governed Tools**: High-speed, zero-latency tool execution covering browser (37), office (4), memory (3), search (2), and storage (5).
+- **External Server Sandboxing**: Securely connect external stdio and SSE MCP servers with isolated process boundaries.
+- **Zero-Trust Dispatch**: Every tool call is hashed using canonical IEEE-754 serialization, policy-evaluated, and ticketed through Guard-2 before execution.
+
+### 5. 📊 Module 5: Work-Native Primitives (Office, Browser, CUA)
+- **Embedded IronCalc 0.8.3 Spreadsheet Engine**: Recalculates complex formula chains (SUM, VLOOKUP, INDEX/MATCH, circular iterations) natively in Rust with zero IPC serialization overhead and 0 tokens spent on math.
+- **Surgical OOXML Part-Patcher**: Unpacks DOCX, PPTX, and PDF archives in memory, surgically patches only modified XML nodes, and repacks with original themes, macros, and styles 100% intact.
+- **3-Tier Headless Browser Stack**:
+  - *Tier 1 (Lightpanda)*: Ultra-fast Zig headless engine (10x faster, 90% less RAM than Chromium).
+  - *Tier 2 (Scrapling & CloakBrowser)*: Stealth scraping with Canvas/WebGL fingerprinting to bypass anti-bot defenses without external paid proxies.
+  - *Tier 3 (Full Chrome CDP)*: Complete 37-tool Chrome DevTools Protocol automation with live screencasting in the right rail.
+- **Native Computer Use Agent (CUA)**: High-precision OS desktop control (Windows `SendInput`, macOS AX, Linux X11) using hybrid accessibility tree grounding, OCR fallback, and an instant hardware Emergency Stop (`Ctrl+Alt+Escape`).
+
+### 6. 🧠 Module 6: Durable Work & Cognitive 5-Tier Memory Subsystem
+- **5-Tier Cognitive Memory Hierarchy**: Combines working context, episodic session logs, semantic retrieval, temporal knowledge graphs, and user architectural taste profiles.
+- **`AvoidanceStore` Autonomous Failure Immunity**: Analyzes root causes from past execution failures and automatically injects learned negative constraints into prompts, preventing agents from getting trapped in repetitive error loops.
+- **Cryptographic Storage Deduplication**: 7-stage deduplication pipeline (xxHash3 + BLAKE3) with interactive squarified treemaps.
+
+### 7. 📅 Module 7: Executive Automations & 24/7 Calendar Daemon
+- **Local Encrypted Calendar Engine**: Backed by SQLCipher tables (`ui_calendars`, `ui_calendar_events`) with conversational natural-language booking.
+- **Unattended 24/7 System Tray Daemon**: Executes scheduled 5-field cron tasks, repo health digests, and morning briefings even when the main app window is closed.
+- **Free Deep Web Research**: Built-in tiered search cascade (SearXNG + DuckDuckGo fallback) delivering cited briefings with zero search API subscription fees.
+
+### 8. 🛡️ Module 8: Security Guard-2 & Merkle Audit Membrane
+- **Zero-I/O `netfloor` SSRF Firewall**: Kernel-level egress filtering in pure Rust memory that blocks private subnets (RFC 1918), loopback, and cloud metadata (`169.254.169.254`) before socket creation.
+- **Lexical `pathfloor` Sandbox**: Resolves canonical file paths and strictly blocks traversal escapes (`..`) outside authorized workspace boundaries.
+- **Guard-2 Authorization Tickets**: Generates cryptographic TTL-bounded tickets ($T_{\text{expire}} = 60\text{s}$) surfaced to users via visual Diff Cards before privileged side effects.
+- **Tamper-Proof Merkle Audit Trail**: Every tool call, diff, and system action is logged into an append-only cryptographic hash tree for mathematical non-repudiation.
 
 ---
 
-## Safety You Can See and Control
+## Enterprise MNC Quality Standards: 50 Real-World Production Use Cases
 
-Most AI tools either do nothing on their own, or have full unmonitored access to your computer. EveryAIOS uses a simple **Trust Ladder**:
+EveryAIOS is validated against our canonical enterprise test specification: [`desktop_app/TEST-CASES.md`](TEST-CASES.md). Engineered according to **ISO/IEC/IEEE 29119** standards, this suite includes **50 exhaustive, multi-step production use cases** across 10 enterprise domains:
 
-1. 🔍 **Exploring & Reading is Free:** Reading files, researching the web, or planning actions happens automatically without constant nagging popups.
-2. 🛡️ **Changes Require Approval:** Modifying files, running terminal commands, or sending emails presents a clear, readable **Approval Card** showing you the exact changes before they happen.
-3. 🔒 **Protected Boundaries:** Sensitive folders (like `.git`, `.ssh`, or passwords) and cloud metadata are locked down at the system level.
-4. ↩️ **Everything is Reversible:** Any file change can be rolled back with one click.
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                             50 REAL-WORLD PRODUCTION USE CASES MATRIX                           │
+├────────────────────────────────────────┬─────────────────────────────────────────────────────────┤
+│ Category 1: Financial Engineering      │ • M&A LBO model recalculation, ASC 830 FX translation,  │
+│ (E2E-UC-01 – E2E-UC-05)                │   Monte Carlo VaR, OECD Pillar Two, ABCP cash flows     │
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 2: Legal & Document Surgery   │ • 80-page MSA surgical indemnity patching, FDA Part 11, │
+│ (E2E-UC-06 – E2E-UC-10)                │   SEC S-4 prospectus audit, Board pitch deck restyle    │
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 3: Multi-Agent Swarms & Code  │ • 5-agent swarm microservices, automated bisect repair, │
+│ (E2E-UC-11 – E2E-UC-15)                │   CJS-to-ESM migration, zero-downtime PostgreSQL DB    │
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 4: Autonomous Web Navigation  │ • Multi-SaaS billing extraction, Cloudflare Turnstile   │
+│ (E2E-UC-16 – E2E-UC-20)                │   bypass, PACER docket mining, SPA shadow DOM extract   │
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 5: Desktop OS Control (CUA)   │ • Air-gapped SAP GUI invoice entry, QuickBooks recon,   │
+│ (E2E-UC-21 – E2E-UC-25)                │   AutoCAD batch export, Epic EHR data sync, estop safety│
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 6: Deep Research & Synthesis  │ • Competitive intelligence dossier, PubMed meta-analysis│
+│ (E2E-UC-26 – E2E-UC-30)                │   FOMC policy yield curve analysis, CVE security audit  │
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 7: Executive Assistance Daemon│ • 24/7 conversational calendar scheduling, 07:00 AM     │
+│ (E2E-UC-31 – E2E-UC-35)                │   briefing daemon, weekly repo digest, 50GB dataset ETL │
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 8: Cognitive Memory & Taste   │ • Architectural taste profile enforcement, error        │
+│ (E2E-UC-36 – E2E-UC-40)                │   AvoidanceStore self-healing, cross-project firewall   │
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 9: Security Membrane & Audit  │ • Zero-I/O netfloor AWS metadata block, pathfloor       │
+│ (E2E-UC-41 – E2E-UC-45)                │   shield, Guard-2 ticket replay rejection, Merkle audit │
+├────────────────────────────────────────┼─────────────────────────────────────────────────────────┤
+│ Category 10: Disaster Recovery & SCIF  │ • 100% offline SCIF development, SIGKILL crash recovery,│
+│ (E2E-UC-46 – E2E-UC-50)                │   429 key pool rotation, DoD 5220.22-M workspace shred  │
+└────────────────────────────────────────┴─────────────────────────────────────────────────────────┘
+```
+
+📖 **Read the complete test specifications**: [`desktop_app/TEST-CASES.md`](TEST-CASES.md)
 
 ---
 
-## Installation & Getting Started
+## 📦 Desktop App Installers — Coming Soon!
 
-### 📦 Desktop App Installers
-> **Pre-packaged installers for Windows (`.msi`), macOS (`.dmg`), and Linux (`.AppImage`) are coming soon in our upcoming V1 release.**
+We are putting the final touches on our signed desktop application installers:
 
-> In the meantime, you can easily run EveryAIOS from source.
+| Operating System | Format | Target Architecture | Status |
+| :--- | :---: | :---: | :---: |
+| **Windows 11 / 10** | `.msi` / `.exe` | x64 / ARM64 | 🟡 **Coming Soon (Primary Target)** |
+| **macOS (Apple Silicon)** | `.dmg` | M1 / M2 / M3 / M4 (Universal) | 🟡 **Coming Soon** |
+| **macOS (Intel)** | `.dmg` | x86_64 | 🟡 **Coming Soon** |
+| **Linux (Ubuntu / Debian)** | `.deb` / `.AppImage` | x86_64 / aarch64 | 🟡 **Coming Soon** |
 
-### 🛠️ Running from Source (Quick Setup)
+> 🔔 **Want early beta access?** Star the repository and watch releases to be notified the minute the initial installer bundles go live!
+
+---
+
+## 🛠️ Developer Quickstart (Run from Source Today)
+
+You don't have to wait for the packaged installers. The entire repository is 100% open-source and builds cleanly from source right now:
+
+### Prerequisites
+- **Rust** (`rustc` & `cargo` 1.80+): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- **Node.js** (v20+) & **pnpm**: `npm install -g pnpm`
+- **Tauri Prerequisites**: Follow the [official Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system (C++ build tools on Windows, Xcode command line tools on macOS, webkit2gtk on Linux).
+
+### 1-Minute Setup & Launch
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/sarv-projects/EveryAIOS
+git clone https://github.com/sarv-projects/EveryAIOS.git
 cd EveryAIOS/desktop_app
 
-# 2. Install dependencies
+# 2. Install workspace dependencies
 pnpm install
 
-# 3. Build the background coordinator
+# 3. Build the background coordinator sidecar
 pnpm --filter @everyaios/coordinator build
 mkdir -p src-tauri/bin && cp packages/coordinator/dist/coordinator src-tauri/bin/coordinator
 
-# 4. Start the app
-cd ui && pnpm install && cd ..
+# 4. Start the native desktop cockpit
 cd src-tauri && cargo tauri dev
 ```
-
-**Prerequisites:** Rust, Node.js (v20+), pnpm, and standard Tauri prerequisites for your OS.
-
----
-
-## Real-World Examples
-
-* 🐝 **Orchestrate a Multi-Agent Swarm:** Have the Primary Chief delegate 5 distinct subtasks (backend API, database schema, frontend UI, unit tests, documentation) to 5 concurrent subagents. Each agent works in an isolated Git worktree without merge conflicts, synchronizing via shared 3-file blackboards.
-* 📊 **Update a Complex Financial Model:** Drop in a 20-tab Excel workbook. EveryAIOS recalculates all dependent formulas using the embedded IronCalc engine, updates financial metrics, and leaves all styles and macros untouched with 0 tokens wasted on math.
-* 📅 **Natural Language Calendar & Briefings:** Tell EveryAIOS: *"Schedule a 45-minute sprint planning meeting on Thursday at 2:00 PM and set a daily 8:30 AM background automation to review PRs and pull tech news."* The event is saved to the local encrypted calendar and scheduled in the system tray.
-* 📑 **Update an Executive Slide Deck:** Drop in a 60-slide `.pptx` presentation. EveryAIOS updates key metrics, restyles charts, and preserves the master presentation theme without corrupting untouched XML elements.
-* 🌐 **Autonomous Browser Research:** Direct the agent to compare pricing across 8 SaaS vendors. It navigates paginated catalogs, logs into accounts via the zero-auth session vault, downloads price sheets, and compiles a comparison spreadsheet.
-* 🖥️ **Desktop Computer Use:** Direct the agent to extract 100 customer records from a spreadsheet and enter them into a legacy desktop accounting tool. It views the screen, locates form fields with visual grounding & OCR, clicks, and inputs data automatically.
-* 🛠️ **Fix a Failing Test Suite with TDD:** Point EveryAIOS at a repository. It analyzes compiler diagnostics with `@Problems`, isolates the failing test, implements the fix in a sandbox worktree, and runs the test suite to prove the fix works (RED → GREEN) before presenting an approval card.
-
----
-
-## Built for Real Work: The 8 Full-Stack Modules
-
-EveryAIOS is engineered from the ground up as a native desktop platform rather than a simple web wrapper. All capabilities are organized into 8 sublimated Full-Stack Modules across Rust core systems, TypeScript coordination, and React 19 UI surfaces:
-
-### Module 1: Universal Agent Harness & Swarm Orchestrator
-- **ACP External Agent Hosting:** Run leading coding CLIs (Claude Code, OpenAI Codex, OpenCode, Aider, Cline) inside the EveryAIOS cockpit without touching their internal loops or prompts.
-- **Universal Chief Dispatch:** Dynamically route tasks to the best specialist agent, or manage multi-agent swarms.
-- **Multi-Agent Swarm Fleets & Git Worktree Isolation:** Coordinate 20–30 subagents concurrently. Each subagent runs in an isolated Git worktree (`.everyaios/worktrees/task-<id>`), with a mutex `GitOperationQueue` and 3-file blackboards (`task_plan.md`, `findings.md`, `receipts/`) to prevent conflicts.
-- **First-Class Interaction Tools:** Built-in `ask` (clarification dialogs), `plan` (blueprint DAG execution with circuit breakers), `todo` (real-time task checklist), and `subagent` (delegation to isolated worker agents).
-- **Dynamic `@-Mention` Context Providers:** Type `@Codebase`, `@File`, `@Git`, `@Doc`, `@Web`, `@Problems`, `@Memory`, or `@Terminal` to resolve live workspace context into the prompt below `CACHE_BOUNDARY`.
-- **Unified Edit Ladder & Rollback:** Exact-matching single-occurrence invariant → AST structural replacement → fuzzy fallback with shadow diff verification, backed by 1-click time-travel rollback.
-
-### Module 2: Model Gateway & Encrypted Keyring Vault
-- **Universal Model Freedom:** OpenAI (GPT-6 Astra, GPT-5.6 Sol, GPT-4o), Anthropic (Claude Fable 5.1, Opus 5, Sonnet 5), Google (Gemini 3.8 Flash, Gemini 3.1 Pro), DeepSeek (DeepSeek-V4.1-Flash, DeepSeek-R1), Alibaba Qwen (Qwen3.8-Max, Qwen 2.5-Coder), Meta (Llama 4), and any OpenAI-compatible endpoint.
-- **100% Private Offline Runtimes:** Native first-class integration with **Ollama**, **LM Studio**, **vLLM / llama.cpp**, and Apple Silicon **MLX**. Keep all prompts, files, and inference completely local.
-- **SQLCipher Encrypted Keyring & Failover:** Zero credentials exposed to LLM context. Configure multi-key pools per provider with automatic 429 rate-limit failover.
-
-### Module 3: Unified Cockpit Shell & Context Compaction Engine
-- **12 Center Screens & 19 Viewports:** Linear/Apple-grade React 19 + Zustand 5 cockpit shell covering Home, Chat, Activity, Projects, Files, Automations, Memory, Guard, Connectors, Agents, Analytics, and Settings.
-- **Cache-Affine Prompt Assembler:** 12-segment prompt architecture with byte-stable prefix caching above `CACHE_BOUNDARY` (saving up to 90% in token costs).
-- **Context-Mode 50KB Output Ceilings:** Automatically truncates raw tool outputs exceeding 50KB with actionable query hints, preventing context window exhaustion.
-
-### Module 4: Governed MCP & Capability Marketplace
-- **51 Governed In-Process MCP Tools:** High-performance, zero-latency tool execution spanning browser (37), office (4), memory (3), search (2), and storage (5).
-- **External MCP Server Hosting:** Securely connect external stdio and SSE MCP servers with isolated transport sandboxing.
-- **Zero-Trust Tool Dispatch:** Every tool call is hashed, evaluated against policy, and ticketed through Guard-2 before execution.
-
-### Module 5: Work-Native Primitives (Office, Browser, CUA)
-- **Real Excel Spreadsheets:** Powered by IronCalc 0.8.3, EveryAIOS recalculates formulas, handles dynamic cell dependencies, updates charts, and preserves formatting across `.xlsx` files with 0 tokens spent on arithmetic.
-- **Surgical OOXML Document Patcher:** Modifies `.docx`, `.pptx`, and `.pdf` files at the raw XML/byte level, preventing formatting corruption of unedited parts.
-- **Autonomous Browser Use:** 37 native CDP tools navigating web pages, clicking elements, filling forms, handling SPAs, and reusing authenticated logins via the session vault.
-- **Native Computer Use & Desktop Automation:** OS desktop control across Windows (UIA / WGC), macOS (AX), and Linux (X11 / AT-SPI) with visual grounding, OCR, and real-time supervisory controls.
-
-### Module 6: Durable Work & Cognitive 5-Tier Memory Subsystem
-- **5-Tier Memory Hierarchy:** Combines working context, episodic session logs, semantic retrieval, temporal knowledge graphs, and user taste profiles.
-- **`AvoidanceStore` Error Immunity:** Captures error signatures and root causes from failed tool executions, injecting learned negative constraints to kill error loops.
-- **Closed-Loop Skill Distillation:** Automatically extracts successful multi-step problem-solving patterns into reusable skills.
-- **Storage Intelligence & 7-Stage Deduplication:** Cryptographic deduplication (xxHash3 + BLAKE3) with interactive squarified treemaps and safe proposal cards.
-
-### Module 7: Executive Automations & 24/7 Calendar Daemon
-- **Encrypted Local Calendar Engine:** Backed by SQLCipher tables (`ui_calendars`, `ui_calendar_events`) with complete CRUD IPC commands and full UI views.
-- **Natural Language Scheduling:** Conversational meeting booking and reminder creation ("Schedule code review Thursday at 2pm").
-- **Unattended System Tray Daemon:** Run 5-field cron schedules, interval checks, and background automations even when the main app window is closed, with self-healing resume.
-- **Free Deep Web Research:** Tiered search cascade (SearXNG + DuckDuckGo fallback) delivering cited briefings without paid search API subscriptions.
-
-### Module 8: Security Guard-2 & Merkle Audit Membrane
-- **Platform-Native OS Sandboxing:** Windows Job Objects & Restricted Tokens, macOS Seatbelt profiles, Linux Bubblewrap unprivileged namespaces.
-- **Zero-I/O `netfloor` SSRF Guard:** Enforces kernel-level egress filtering blocking private subnets (RFC1918), link-local addresses, and cloud instance metadata (`169.254.169.254`).
-- **Lexical `pathfloor` Sealing:** Strictly forbids agents from accessing or modifying sensitive host paths (`.git/`, `.ssh/`, `.env`, credentials).
-- **TTL-Bounded Guard-2 Tickets:** Cryptographic authorization tickets generated from canonical argument hashes for every side effect.
-- **Tamper-Proof Merkle Audit Chain:** Every executed tool, diff, and system action is logged into an append-only cryptographic hash tree for non-repudiation.
-- **Automated Verification Gates:** Continuous verification covering S1–S6 security gates and L1–L6 failure injection suites with zero mock data persistence to disk.
 
 ---
 
@@ -228,101 +252,63 @@ EveryAIOS is engineered from the ground up as a native desktop platform rather t
 <details>
 <summary><strong>Is EveryAIOS really free and open source?</strong></summary>
 <br/>
-Yes! EveryAIOS is 100% free and open-source under the MIT and Apache-2.0 licenses. There are no paywalls, no recurring monthly fees to us, and no locked features. You only pay your AI provider directly for the raw tokens you use (often pennies), or run local models like Ollama completely free.
+Yes! EveryAIOS is 100% free and open-source under the MIT and Apache-2.0 licenses. There are no paywalls, no monthly subscription fees, and no artificial feature tiering. You only pay your AI model provider directly for the raw tokens you consume (fractions of a cent), or run local models like Ollama for 100% free offline compute.
 </details>
 
 <details>
-<summary><strong>How is this different from paying $20/month for ChatGPT Plus or Claude Pro?</strong></summary>
+<summary><strong>How does EveryAIOS differ from paying $20/mo for ChatGPT Plus or Claude Pro?</strong></summary>
 <br/>
-ChatGPT Plus and Claude Pro are single-provider web subscriptions:
-1. <strong>Single Model Lock-in:</strong> They restrict you to their own model family. With EveryAIOS, you can use Claude Fable 5.1 / Opus 5 for writing and architecture, DeepSeek-V4.1-Flash or Qwen3.8-Max for fast economical coding, GPT-6 Astra for hard math and autonomous tasks, or Ollama for private offline work—all in the same session.
-2. <strong>Strict Hourly Limits:</strong> Hit your limit on Claude or ChatGPT, and you are locked out for hours. EveryAIOS lets you add backup keys and switch models instantly, so your work never stops.
-3. <strong>No Real Office Math:</strong> Web chatbots cannot run real Excel spreadsheets or preserve your formulas. EveryAIOS has a built-in local calculation engine.
-4. <strong>Privacy:</strong> Cloud chats store your conversations on their servers. EveryAIOS stores everything in an encrypted vault directly on your computer.
+Single-vendor subscriptions trap you in a walled garden:
+1. <strong>Single Model Lock-in:</strong> They restrict you to their own model family. In EveryAIOS, you can use Claude for writing and architecture, DeepSeek or Qwen for lightning-fast coding, GPT-6 for math, and local Ollama for air-gapped private files—all in the same session.
+2. <strong>Hourly Rate Limits:</strong> When you hit a rate limit on ChatGPT or Claude Pro, you are locked out for hours. EveryAIOS supports multi-key pools with automatic 429 failover, so your work never stops.
+3. <strong>Real Spreadsheet & Document Math:</strong> Web chatbots cannot run real Excel spreadsheets; they hallucinate calculations or re-serialize corrupt files. EveryAIOS has an embedded in-process IronCalc engine.
+4. <strong>100% Local Privacy:</strong> Cloud web chats store your prompts and files on remote servers. EveryAIOS stores all data in an encrypted SQLCipher vault on your own drive.
 </details>
 
 <details>
-<summary><strong>Can I use EveryAIOS completely offline without the internet?</strong></summary>
+<summary><strong>Can I run EveryAIOS completely offline without an internet connection?</strong></summary>
 <br/>
-Yes! You can connect EveryAIOS to local runtimes such as <strong>Ollama</strong>, <strong>LM Studio</strong>, <strong>vLLM / llama.cpp</strong>, or Apple Silicon <strong>MLX</strong>. When using local models, all inference, memory indexing, and document processing happen entirely on your computer with zero network traffic.
+Yes! Connect EveryAIOS to local runtimes such as <strong>Ollama</strong>, <strong>LM Studio</strong>, <strong>vLLM / llama.cpp</strong>, or Apple Silicon <strong>MLX</strong>. When using local models, all inference, cognitive memory indexing, and document processing happen entirely on your computer with zero network traffic.
 </details>
 
 <details>
 <summary><strong>How does Multi-Agent Swarm Orchestration with Git Worktrees work?</strong></summary>
 <br/>
-EveryAIOS allows the Primary Chief to spawn 20–30 subagents concurrently:
-1. <strong>Worktree Isolation:</strong> Each subagent is provisioned in its own dedicated Git worktree (`.everyaios/worktrees/task-<id>`). Agents can edit files, run builds, and execute tests simultaneously without dirtying your main working tree or causing file conflicts.
-2. <strong>Serialized Git Operations:</strong> A mutex-protected `GitOperationQueue` serializes branch creation and commits, automatically clearing stale `.git/index.lock` files to prevent concurrency deadlocks.
-3. <strong>Shared Blackboards:</strong> Agents communicate asynchronously through 3 structured files (`task_plan.md`, `findings.md`, and `receipts/`), maintaining clear contract boundaries and clean handoffs.
+EveryAIOS allows the Native Chief to spawn 20–30 subagents concurrently:
+1. <strong>Worktree Isolation:</strong> Each subagent is provisioned in its own dedicated Git worktree (`.everyaios/worktrees/task-<id>`). Agents edit files, run builds, and execute tests simultaneously without dirtying your main working tree or causing file conflicts.
+2. <strong>Serialized Git Operations:</strong> A mutex-protected `GitOperationQueue` serializes branch creation and commits, automatically clearing stale `.git/index.lock` files to prevent deadlocks.
+3. <strong>Shared Blackboards:</strong> Agents communicate asynchronously through 3 structured files (`task_plan.md`, `findings.md`, and `receipts/`), maintaining clear contract boundaries.
 </details>
 
 <details>
-<summary><strong>What is the OS Sandboxing model (Windows, macOS, Linux)?</strong></summary>
+<summary><strong>How does the AvoidanceStore prevent repetitive AI mistakes?</strong></summary>
 <br/>
-EveryAIOS implements platform-native sandbox backends in Rust (`everyaios-guard`):
-1. <strong>Windows:</strong> Process Job Objects enforce CPU and memory ceilings, while Restricted Security Tokens strip administrative tokens and write access to sensitive system paths.
-2. <strong>macOS:</strong> Seatbelt (`sandbox-exec`) sandbox profiles restrict filesystem access and unauthorized network binds.
-3. <strong>Linux:</strong> Bubblewrap (`bwrap`) establishes unprivileged user namespaces with minimal read-only bind mounts.
-4. <strong>Netfloor SSRF Protection:</strong> Enforces zero-I/O egress filtering that blocks private subnets (RFC1918), link-local addresses, and cloud metadata (`169.254.169.254`).
-</details>
-
-<details>
-<summary><strong>How does the Avoidance Store prevent repetitive AI mistakes?</strong></summary>
-<br/>
-When an agent encounters a tool error or execution failure, the `AvoidanceStore` (`everyaios-memory`) analyzes the error signature and records the root-cause negative constraint. During subsequent turns, these constraints are injected into the prompt context below `CACHE_BOUNDARY`, preventing the agent from repeating the same failed approach in an endless loop.
-</details>
-
-<details>
-<summary><strong>How do Conversational Calendar and Background Automations work?</strong></summary>
-<br/>
-EveryAIOS includes a local SQLite calendar engine stored securely in the SQLCipher vault:
-1. <strong>Conversational Scheduling:</strong> Type natural language instructions to create, update, or search calendar events and reminders.
-2. <strong>Background Tray Daemon:</strong> A lightweight system tray daemon keeps running even when the main app window is closed, executing scheduled 5-field cron tasks, periodic research briefings, and system health monitors.
-</details>
-
-<details>
-<summary><strong>Can I bring my existing Claude Code, OpenAI Codex, Google Antigravity, Cline, or Aider setup?</strong></summary>
-<br/>
-Yes! EveryAIOS natively supports the open Agent Client Protocol (ACP). If you already love using Claude Code in your terminal, Google Antigravity or Cline for agentic coding, OpenAI Codex, or Aider for git commits, you can connect them directly into EveryAIOS. They preserve their native loops and tools while gaining access to EveryAIOS's local Excel engine, autonomous browser actions, computer use, and shared memory automatically.
-</details>
-
-<details>
-<summary><strong>What is the "Two-Plane" architecture and how does it superpower external agents?</strong></summary>
-<br/>
-EveryAIOS respects the tools you already love through a strict two-plane design:
-1. <strong>The Agent-Native Plane:</strong> External coding agents (Claude Code, OpenAI Codex, Google Antigravity, Cline, Aider, OpenCode) retain 100% of their native prompts, reasoning loops, and tools. We never degrade or rewrite an agent's native capabilities.
-2. <strong>The Shared Cowork Plane:</strong> EveryAIOS augments those agents with capabilities they lack on their own: built-in local Excel formula recalculation, Word/PowerPoint/PDF editing, 37-action autonomous browser use, native desktop computer use, background cron scheduling, and shared 5-tier cognitive memory.
+When an agent encounters a tool error or execution failure, the `AvoidanceStore` (`everyaios-memory`) analyzes the error signature and records the root-cause negative constraint. During subsequent turns, these constraints are injected into the prompt context below `CACHE_BOUNDARY`, preventing the agent from repeating the same failed approach.
 </details>
 
 <details>
 <summary><strong>Where are my API keys stored?</strong></summary>
 <br/>
-Your API keys are stored locally on your device in an encrypted SQLCipher database using AES-256 encryption. They never leave your machine except in direct, encrypted HTTPS requests to the official provider endpoints (e.g., `api.anthropic.com` or `api.openai.com`). Keys are never sent to any third-party relay or proxy.
-</details>
-
-<details>
-<summary><strong>How do Browser Use and Computer Use work in EveryAIOS?</strong></summary>
-<br/>
-EveryAIOS includes both a <strong>built-in 37-action browser engine</strong> and a <strong>native desktop computer use agent</strong>:
-1. <strong>Autonomous Browser Use:</strong> The agent navigates websites, clicks elements using semantic accessibility trees, fills forms, performs multi-source research, and safely reuses your logged-in web sessions without exposing passwords.
-2. <strong>Native Computer Use:</strong> On Windows, macOS, and Linux, the agent captures high-resolution screen snapshots, uses vision AI and OCR to recognize UI controls, and interacts via mouse and keyboard to operate desktop applications that have no APIs.
-3. <strong>Safety & Control:</strong> You watch every move live on screen and can pause, inspect, or stop the agent with a single keystroke or click.
+Your API keys are stored locally on your device in an encrypted SQLCipher database using AES-256 encryption. They never leave your machine except in direct, encrypted HTTPS requests to official provider endpoints (e.g., `api.anthropic.com` or `api.openai.com`). Keys are never sent to any third-party relay, proxy, or telemetry service.
 </details>
 
 ---
 
-## Architecture & Technical Documentation
+## Technical Specifications & Architecture Index
 
-For engineers, researchers, and contributors who want to explore our technical architecture and implementation specifications:
+For engineers, researchers, and contributors exploring our internal architecture:
 
 * [`DESKTOP-APP-SPEC.md`](DESKTOP-APP-SPEC.md) — The normative product contract, schemas, and security invariants.
-* [`ARCH/17-NATIVE-AGENT.md`](ARCH/17-NATIVE-AGENT.md) — The Two-Plane Architecture, capability resolution policy, tool schema catalog, and Settings Control Center.
-* [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) — Complete 166-capability implementation matrix across layers A through K.
-* [`TODO.md`](TODO.md) — Master implementation census (1,428 items = 1,220 completed + 208 open) and active development queue.
-* [`SPEC-CHANGELOG.md`](SPEC-CHANGELOG.md) — Historical architectural decisions, release logs, and verification evidence (v3.80).
+* [`TEST-CASES.md`](TEST-CASES.md) — Canonical ISO/IEC/IEEE 29119 enterprise master test specification (8 dimensions, 50 real-world use cases).
+* [`ARCH/00-INDEX.md`](ARCH/00-INDEX.md) — Complete architecture index and module map.
+* [`ARCH/01-SYSTEM-ARCHITECTURE.md`](ARCH/01-SYSTEM-ARCHITECTURE.md) — Core system architecture (Rust core + Bun coordinator sidecar).
+* [`ARCH/02-MODULE-LAYOUT.md`](ARCH/02-MODULE-LAYOUT.md) — Ownership matrix for all 22 Rust crates and 11 TypeScript packages.
+* [`ARCH/09-FEATURE-MATRIX.md`](ARCH/09-FEATURE-MATRIX.md) — Complete 166-submodule implementation matrix across layers A through K.
+* [`TODO.md`](TODO.md) — Master implementation census (1,429 items = 1,221 completed + 208 open).
+* [`SPEC-CHANGELOG.md`](SPEC-CHANGELOG.md) — Historical architectural decisions, release logs, and verification evidence.
 
 ---
 
 ## License
 
-EveryAIOS is open source and dual-licensed under the **[MIT License](LICENSE-MIT)** and the **[Apache License, Version 2.0](LICENSE-APACHE)**.
+EveryAIOS is free, open source, and dual-licensed under the **[MIT License](LICENSE-MIT)** and the **[Apache License, Version 2.0](LICENSE-APACHE)**.

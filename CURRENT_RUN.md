@@ -39,6 +39,7 @@
 ## 2. Where We Stopped (Latest Progress)
 - **Completed Deliverables**:
   - `desktop_app/TEST-CASES.md`: Full 83KB specification with all 8 modules, 8 cross-module integration suites, and 50 E2E production use cases.
+  - `desktop_app/README.md`: Upgraded with high-impact visual architecture diagrams, "Coming Soon" installer release statuses (Windows 11, macOS, Linux), deep-dive of the 8 Full-Stack Modules, and direct references to `TEST-CASES.md`.
   - `.agents/skills/`: All 10 skills rewritten and verified.
   - `.agents/agents/`: All 9 agent definitions rewritten and verified.
   - `desktop_app/SPEC-CHANGELOG.md`: Added release entry for 2026-09-17.
