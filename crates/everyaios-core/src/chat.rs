@@ -403,6 +403,10 @@ pub struct ChatRelay<W, R> {
     /// P64.4 — sub-agent spawn accounting (depth/concurrency/total). The LLM
     /// execution stays in the coordinator; this is the policy seam.
     subagents: Arc<Mutex<everyaios_blueprint::SubAgentRuntime>>,
+    /// P64.8 — the distilled-skill store `skill/*` serves. A field rather than
+    /// a store built per call so tests can re-seat it (the default home is the
+    /// developer's real `~/.everyaios/skills/`), matching `scheduler`.
+    skill_store: Arc<Mutex<everyaios_blueprint::SkillStore>>,
     /// P49 V1-local Work Gateway projection and event journal.
     work_gateway: Arc<Mutex<crate::work_gateway::WorkGateway>>,
     /// P49.7 capability grants; secrets remain exclusively in the vault.
@@ -432,7 +436,11 @@ fn skills_root() -> std::path::PathBuf {
 /// own verify gate passed, but that claim is **not** trusted here:
 /// `grow_from_task` runs the real gate (tests verdict, 500-line budget,
 /// manifest validation) before anything reaches disk.
-fn skill_rpc(method: &str, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+fn skill_rpc(
+    method: &str,
+    params: &serde_json::Value,
+    store: &everyaios_blueprint::SkillStore,
+) -> Result<serde_json::Value, String> {
     match method {
         "skill/grow" => {
             let task_name = params
@@ -451,9 +459,8 @@ fn skill_rpc(method: &str, params: &serde_json::Value) -> Result<serde_json::Val
                 .get("version")
                 .and_then(|v| v.as_str())
                 .unwrap_or("0.1.0");
-            let store = everyaios_blueprint::SkillStore::new(skills_root());
             let skill =
-                everyaios_blueprint::grow_from_task(&store, task_name, solution, author, version)
+                everyaios_blueprint::grow_from_task(store, task_name, solution, author, version)
                     .map_err(|e| e.to_string())?;
             Ok(serde_json::json!({
                 "ok": true,
@@ -609,6 +616,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
             subagents: Arc::new(Mutex::new(everyaios_blueprint::SubAgentRuntime::new(
                 everyaios_blueprint::SubAgentLimits::default(),
+            ))),
+            skill_store: Arc::new(Mutex::new(everyaios_blueprint::SkillStore::new(
+                skills_root(),
             ))),
             work_gateway: Arc::new(Mutex::new(
                 crate::work_gateway::WorkGateway::open_default()
@@ -878,6 +888,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let evals = Arc::clone(&self.evals);
         let executions = Arc::clone(&self.executions);
         let subagents = Arc::clone(&self.subagents);
+        let skill_store = Arc::clone(&self.skill_store);
         let work_gateway = Arc::clone(&self.work_gateway);
         let capabilities = Arc::clone(&self.capabilities);
         let egress = Arc::clone(&self.egress);
@@ -1392,14 +1403,17 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     // P64.8 — skill distillation. Was `method not found`, so the
                     // coordinator's "best-effort" catch swallowed it and nothing
                     // was ever distilled.
-                    method if method.starts_with("skill/") => match skill_rpc(method, &params) {
-                        Ok(out) => {
-                            let _ = writer.reply(id, out);
+                    method if method.starts_with("skill/") => {
+                        let store = skill_store.lock().unwrap_or_else(|e| e.into_inner());
+                        match skill_rpc(method, &params, &store) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
                         }
-                        Err(e) => {
-                            let _ = writer.reply_error(id, &e);
-                        }
-                    },
+                    }
                     // P64.4 — sub-agent spawn admission. Was `method not found`,
                     // which made `dispatchSubAgent` throw "native runtime not
                     // wired" on every delegation.
@@ -2499,9 +2513,17 @@ mod tests {
     /// unknown request must be a refusal, never a no-op that reads as success.
     #[test]
     fn skill_rpc_refuses_a_grow_without_a_task_name() {
-        assert!(super::skill_rpc("skill/grow", &serde_json::json!({})).is_err());
-        assert!(super::skill_rpc("skill/grow", &serde_json::json!({ "taskName": "   " })).is_err());
-        assert!(super::skill_rpc("skill/nope", &serde_json::json!({})).is_err());
+        let (dir, _vault) = temp_vault("skill-rpc");
+        let store = everyaios_blueprint::SkillStore::new(dir.join("skills"));
+        assert!(super::skill_rpc("skill/grow", &serde_json::json!({}), &store).is_err());
+        assert!(super::skill_rpc(
+            "skill/grow",
+            &serde_json::json!({ "taskName": "   " }),
+            &store
+        )
+        .is_err());
+        assert!(super::skill_rpc("skill/nope", &serde_json::json!({}), &store).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// P64.4 — the spawn seam must actually enforce the shared limits, and must
@@ -3277,5 +3299,180 @@ mod tests {
         assert_eq!(up_ack["result"]["ok"], serde_json::json!(true));
         let due_ack = &acks[1];
         assert_eq!(due_ack["result"]["due"], serde_json::json!(["j1"]));
+    }
+
+    /// P64.3/P64.4/P64.5/P64.8 — the *native plane* seams driven end to end.
+    ///
+    /// The lane's earlier tests called the RPC helpers directly, which cannot
+    /// distinguish "the arm is mounted" from "the helper works" — exactly how
+    /// `codeintel/repomap`, `subagent/spawn` and `skill/grow` sat unhandled
+    /// behind a catch-all while every helper-level test stayed green. This test
+    /// pushes real JSON-RPC frames through `ChatRelay::spawn()` and asserts on
+    /// the replies the coordinator actually receives, so a missing arm fails
+    /// here rather than silently in production.
+    #[cfg(unix)]
+    #[test]
+    fn relay_dispatches_native_plane_requests() {
+        let (a, b) = pair();
+        // The client half is interactive: `execution/record_edit` and
+        // `execution/record_preflight` can only target an execution that
+        // really exists, so the id is read back from the `begin` ack first.
+        let side = std::thread::spawn(move || {
+            let mut s = b;
+            let mut call = |id: &str, method: &str, params: serde_json::Value| {
+                let v = serde_json::json!({
+                    "jsonrpc": "2.0", "id": id, "method": method, "params": params,
+                });
+                let _ = frame::write_frame(&mut s, &serde_json::to_vec(&v).unwrap());
+                loop {
+                    match frame::decode(&mut s) {
+                        Ok(Some(payload)) => {
+                            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&payload) {
+                                if v.get("id").and_then(|i| i.as_str()) == Some(id) {
+                                    return v;
+                                }
+                            }
+                        }
+                        _ => panic!("relay closed the link before acking {method}"),
+                    }
+                }
+            };
+
+            let repomap = call(
+                "r1",
+                "codeintel/repomap",
+                serde_json::json!({ "maxFiles": 50 }),
+            );
+            let grown = call(
+                "g1",
+                "skill/grow",
+                serde_json::json!({
+                    "taskName": "Frame Dispatch Probe",
+                    "solution": "1. Do the thing.\n2. Verify it.",
+                    "author": "test",
+                    "version": "0.1.0",
+                }),
+            );
+            let spawned = call(
+                "s1",
+                "subagent/spawn",
+                serde_json::json!({
+                    "spec": { "id": "t-frame", "goal": "probe", "context": [], "acceptance": [] },
+                    "model": "m",
+                    "workspace": ".everyaios/worktrees/task-t-frame",
+                    "parentId": null,
+                    "tools": ["todo"],
+                    "blockedTools": [],
+                    "depth": 1,
+                }),
+            );
+            let began = call(
+                "b1",
+                "execution/begin",
+                serde_json::json!({ "trigger": "chat", "sessionId": "s-frame", "objective": "probe" }),
+            );
+            let ex_id = began["result"]["id"]
+                .as_str()
+                .expect("begin returns the execution id")
+                .to_string();
+
+            // Guard-2 gate: a receipt without a ticket is refused, and a
+            // receipt for an unknown execution is refused too.
+            let no_ticket = call(
+                "e0",
+                "execution/record_edit",
+                serde_json::json!({ "id": ex_id, "strategy": "exact", "path": "src/a.rs", "ticketId": "", "auditSeq": 1 }),
+            );
+            let unknown = call(
+                "e1",
+                "execution/record_edit",
+                serde_json::json!({ "id": "nosuch", "strategy": "exact", "path": "src/a.rs", "ticketId": "guard-ticket-1", "auditSeq": 2 }),
+            );
+            let edit = call(
+                "e2",
+                "execution/record_edit",
+                serde_json::json!({ "id": ex_id, "strategy": "exact", "path": "src/a.rs", "ticketId": "guard-ticket-1", "auditSeq": 7 }),
+            );
+            let pre = call(
+                "p1",
+                "execution/record_preflight",
+                serde_json::json!({ "id": ex_id, "passed": true, "output": "tsc clean" }),
+            );
+            (
+                repomap, grown, spawned, began, no_ticket, unknown, edit, pre,
+            )
+        });
+
+        let (dir, vault) = temp_vault("native-plane");
+        let vault = Arc::new(Mutex::new(vault));
+        let mut relay = ChatRelay::new(link_from(a), vault, |_| {});
+        // Isolation: the defaults are the developer's real data dir and
+        // `~/.everyaios/skills`. Point both at the temp tree so the assertions
+        // are about the dispatch, and no frame can write to the real home.
+        relay.skill_store = Arc::new(Mutex::new(everyaios_blueprint::SkillStore::new(
+            dir.join("skills"),
+        )));
+        let workspace = dir.join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::write(workspace.join("m.rs"), "fn alpha() {}\n").unwrap();
+        {
+            let mut svc = ToolService::new_with_egress(
+                Arc::clone(&relay.guard),
+                workspace,
+                Arc::clone(&relay.egress),
+            );
+            svc.attach_capability_broker(Arc::clone(&relay.capabilities));
+            relay.tools = Arc::new(Mutex::new(svc));
+        }
+        relay.spawn();
+
+        let (repomap, grown, spawned, began, no_ticket, unknown, edit, pre) = side.join().unwrap();
+
+        // P64.3 — a real map over the temp workspace, in the wire shape the
+        // coordinator reads. `method not found` used to arrive as this.
+        assert!(repomap.get("error").is_none(), "repomap: {repomap}");
+        let tags = repomap["result"]["tags"].as_array().expect("tags array");
+        assert!(
+            tags.iter()
+                .any(|t| t["symbol"] == serde_json::json!("alpha")),
+            "repo map did not surface the workspace symbol: {repomap}"
+        );
+
+        // P64.8 — distillation really reached the (temp) store.
+        assert!(grown.get("error").is_none(), "skill/grow: {grown}");
+        assert_eq!(grown["result"]["ok"], serde_json::json!(true));
+        assert!(dir
+            .join("skills")
+            .join("frame-dispatch-probe")
+            .join("SKILL.md")
+            .exists());
+
+        // P64.4 — an admission reported as running, never a fabricated done.
+        assert!(spawned.get("error").is_none(), "subagent/spawn: {spawned}");
+        assert_eq!(spawned["result"]["task_id"], serde_json::json!("t-frame"));
+        assert_eq!(spawned["result"]["status"], serde_json::json!("running"));
+
+        // P64.5 — receipts attach only behind a real Guard-2 ticket.
+        assert!(began["result"]["id"].is_string(), "begin: {began}");
+        assert!(
+            no_ticket.get("error").is_some(),
+            "ticketless edit must fail"
+        );
+        assert!(
+            unknown.get("error").is_some(),
+            "unknown execution must fail"
+        );
+        assert!(edit.get("error").is_none(), "verified edit: {edit}");
+        assert_eq!(edit["result"]["strategy"], serde_json::json!("exact"));
+        assert_eq!(
+            edit["result"]["ticketId"],
+            serde_json::json!("guard-ticket-1")
+        );
+
+        // P64.6 — the preflight receipt records its verdict.
+        assert!(pre.get("error").is_none(), "preflight: {pre}");
+        assert_eq!(pre["result"]["passed"], serde_json::json!(true));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
