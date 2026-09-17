@@ -1641,6 +1641,86 @@ had surfaced. **Compiled ≠ correct, and uncompiled is not evidence.**
 
 ---
 
+## 2V. Implementation wave 17 (2026-09-17) — P64.6 gets a runner, and a reader's
+## guide to which AA numbers are load-bearing
+
+### 2V.1 P64.6 — the gate ran nothing
+The last Tier-1 gap had the same shape as waves 14–15: `decide_shadow_preflight`,
+`run_shadow_command`, `spawn_shadow_command_tracked` and `record_preflight` all
+existed, and **only the recorder was reachable**. Nothing decided a preflight was
+due; nothing ran a check.
+
+`execution/preflight` now does all three. The check source is the project's own
+declared typecheck, discovered from its manifests:
+
+| Manifest | Discovered check |
+|---|---|
+| `Cargo.toml` | `cargo check --quiet` |
+| `package.json` with `typecheck` / `type-check` / `check` | `<pm> run <script>`, `pm` from the lockfile (pnpm / yarn / bun / npm) |
+
+An **allow-list, not a shell string** — this executes before a write lands, so it
+must never run something the project did not declare. Two honest failure modes
+are preserved rather than flattened into a pass:
+
+- gate fires + **no** discoverable check → `verified:false`, and **nothing is
+  recorded**. An unrunnable preflight must not leave a receipt the rollback path
+  would trust.
+- a check that cannot spawn counts as a **failure**, never a silent pass.
+
+`p64_shadow_preflight_runs_and_fails_closed` exercises the gate's own acceptance
+case: a tree with a manifest but no source genuinely fails `cargo check`, and the
+preflight records `passed:false`. (Verified separately that `cargo check` in that
+stub really does fail, so the test is not vacuously passing on a spawn error.)
+
+**Residual, and it is the honest boundary:** the coordinator has no *multi-file /
+structural apply* path, so no production call site passes a candidate yet, and
+the preflight runs against whatever root it is given. Applying the candidate to
+the shadow worktree **before** checking — so the check sees the proposed change
+rather than the pre-existing tree — is what remains. `TODO.md` P64.6 is marked
+`[PARTIAL 2026-09-17]` with that boundary written into the row, and its checkbox
+stays open; `check-doc-sync` still reads 1429 = 1221 + 208.
+
+### 2V.2 Which contrast numbers load-bearing
+After §2U.4's resolution there are no sub-AA pairs left in the suite. The values
+that matter, and why each one is where it is:
+
+| Token | Light | Dark | The constraint that fixed it |
+|---|---|---|---|
+| brand | `221 83% 53%` (unchanged) | `217 91% 67%` | light already 4.82:1 on canvas; dark had to **brighten** (3.80→4.87 on the dark card) |
+| brand-foreground | white | **dark ink** | once the dark accent is bright, white on it can only reach 2.84:1; ink gives 6.11:1 |
+| warning | `41 96% 30%` | `41 96% 55%` | 2.96→4.94 on white |
+| success | `142 76% 28%` | `142 71% 42%` | 3.35→5.18 on white |
+| danger | `0 72% 49%` | `0 72% 69%` | 4.43→5.06 on canvas |
+
+`sky` / `emerald` / `amber` accents are retuned the same way in both themes;
+`violet` needed no light change. The test asserts every accent in both themes
+**and** label-on-fill for each, so the two directions cannot drift apart.
+
+### Evidence (wave 17)
+| Gate | Result |
+|---|---|
+| `everyaios-core` `cargo test --lib` | **701 passed / 0 failed** (25 `p64_*`) |
+| `crates` `cargo test --workspace` | **2593 passed / 0 failed / 23 ignored** |
+| `crates` clippy `-D warnings` · `fmt --check` | **exit 0 · 0 diffs** |
+| `packages/coordinator` `tsc` · `bun test` | **0 errors · 378 pass / 3 fail / 1 error** |
+| `ui` `tsc` · `bun test` | **0 errors · 338 pass** |
+| retired palette in `ui/src` | **0** (only the alias table) |
+| `check-doc-sync.mjs` | **exit 0 — 1429 = 1221 + 208** |
+
+The coordinator's 3 failures / 1 error are the **same pre-existing ones** as the
+recorded baseline (two P64.3 ordering tests that pass in isolation, plus the
+`opencode`-dependent harness); the count moved 374 → 378 for exactly the 4 new
+P64.6 tests.
+
+### The pattern, one more time
+This is now the **fourth** "mechanism exists, no caller" defect, after the
+orphaned `settings_cmds.rs`, the unwired preflight/checkpoint functions and the
+unhandled `codeintel`/`skill`/`subagent` methods. Three of the four had a green
+tracker row. **A symbol appearing in a grep is not reachability, and a helper
+under test is not a mounted capability.**
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
