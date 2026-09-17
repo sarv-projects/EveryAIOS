@@ -464,7 +464,9 @@
   background: radial-gradient(ellipse at center, hsl(19 100% 48% / 0.03) 0%, transparent 70%);
 }
 
-/* Top-edge gradient accent (orange → transparent) for highlighted panels */
+/* Top-edge gradient accent (brand → transparent) for highlighted panels.
+   P66.5: the legacy orange utility names now resolve to `--brand` (cool blue)
+   via the semantic alias block above, so this renders blue, not orange. */
 .accent-top-gradient {
   position: relative;
 }
@@ -600,7 +602,7 @@
   transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Agent switch pulse — orange pulse on avatar */
+/* Agent switch pulse — brand pulse on avatar (P66.5: alias-resolved, not orange) */
 @utility agent-switch-pulse {
   animation: agent-switch-pulse 200ms ease-out;
 }
@@ -665,7 +667,7 @@ button:active:not(:disabled),
    ==========================================================================*/
 
 /* WCAG 2.1 AA — visible focus ring on every interactive element. Keyboard
-   users get a 2px orange ring with a 2px offset; mouse users keep the ring
+   users get a 2px brand ring with a 2px offset; mouse users keep the ring
    only while their input modality is keyboard (pointer-fine hides it). */
 :focus-visible {
   outline: 2px solid hsl(var(--ring));
