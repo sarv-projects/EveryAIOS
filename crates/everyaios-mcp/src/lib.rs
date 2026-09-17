@@ -1138,10 +1138,10 @@ mod tests {
                 assert_eq!(f.risk, "high", "{:?}", f.name);
             }
         }
-        assert!(find_facade("office.edit").unwrap().read_only == false);
-        assert!(find_facade("office.open").unwrap().read_only == true);
-        assert!(find_facade("computer_use.act").unwrap().destructive == true);
-        assert!(find_facade("browser.extract").unwrap().read_only == true);
+        assert!(!find_facade("office.edit").unwrap().read_only);
+        assert!(find_facade("office.open").unwrap().read_only);
+        assert!(find_facade("computer_use.act").unwrap().destructive);
+        assert!(find_facade("browser.extract").unwrap().read_only);
     }
 
     #[test]
