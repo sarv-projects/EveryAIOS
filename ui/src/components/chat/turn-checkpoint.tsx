@@ -338,7 +338,7 @@ export function TurnCheckpoint({
                     Later changes to these files are lost. This cannot be undone automatically.
                   </p>
                   {guardNote && (
-                    <p className="mt-1 flex items-start gap-1 text-[10px] text-amber-200" role="alert">
+                    <p className="mt-1 flex items-start gap-1 text-[10px] text-warning" role="alert">
                       <ShieldAlert className="mt-px h-3 w-3 shrink-0" aria-hidden />
                       {guardNote}
                     </p>
@@ -381,7 +381,7 @@ export function TurnCheckpoint({
                       ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-100/90'
                       : result.restored.length === 0
                         ? 'border-rose-500/30 bg-rose-500/5 text-rose-100/90'
-                        : 'border-amber-500/30 bg-amber-500/5 text-amber-100/90',
+                        : 'border-warning/30 bg-warning/5 text-warning/90',
                   )}
                 >
                   {result.failed.length === 0 ? (
@@ -412,7 +412,7 @@ export function TurnCheckpoint({
                     <button
                       type="button"
                       onClick={() => void openGuardWindow()}
-                      className="mt-1 inline-flex h-6 items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 text-[10px] text-amber-100 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="mt-1 inline-flex h-6 items-center gap-1 rounded border border-warning/40 bg-warning/10 px-2 text-[10px] text-warning transition-colors hover:bg-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       <ShieldAlert className="h-2.5 w-2.5" aria-hidden />
                       Open Guard to approve

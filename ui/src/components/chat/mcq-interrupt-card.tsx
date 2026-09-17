@@ -75,14 +75,14 @@ function McqOptions({
             className={cn(
               'flex w-full items-start gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
               isSel
-                ? 'border-orange-500/60 bg-orange-500/10'
-                : 'border-border bg-background/40 hover:border-orange-500/30 hover:bg-accent/40'
+                ? 'border-brand/60 bg-brand/10'
+                : 'border-border bg-background/40 hover:border-brand/30 hover:bg-accent/40'
             )}
           >
             <span
               className={cn(
                 'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border font-mono text-[9px]',
-                isSel ? 'border-orange-500 bg-orange-500 text-white' : 'border-muted-foreground/40 text-muted-foreground'
+                isSel ? 'border-brand bg-brand text-white' : 'border-muted-foreground/40 text-muted-foreground'
               )}
             >
               {letter}
@@ -135,7 +135,7 @@ function BudgetBar({ used, cap }: { used: number; cap: number }) {
       </div>
       <Progress
         value={pct}
-        className="h-1.5 bg-muted/40 [&>[data-slot=progress-indicator]]:bg-orange-500"
+        className="h-1.5 bg-muted/40 [&>[data-slot=progress-indicator]]:bg-brand"
       />
       <p className="font-mono text-[10px] text-muted-foreground">
         {pct.toFixed(0)}% of session budget used
@@ -168,10 +168,10 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
     })()
 
   return (
-    <Card className="enter-approval gap-0 overflow-hidden border-orange-500/40 bg-orange-500/5 p-0">
+    <Card className="enter-approval gap-0 overflow-hidden border-brand/40 bg-brand/5 p-0">
       {/* header */}
-      <div className="flex items-start gap-2.5 border-b border-orange-500/20 px-3 py-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-orange-500/15 text-orange-400">
+      <div className="flex items-start gap-2.5 border-b border-brand/20 px-3 py-2.5">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand/15 text-brand">
           <ShieldAlert className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -184,7 +184,7 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
               className={cn(
                 'text-[9px]',
                 tier === 'needs-you'
-                  ? 'border-orange-500/40 bg-orange-500/10 text-orange-300'
+                  ? 'border-brand/40 bg-brand/10 text-brand'
                   : 'border-border bg-background/40 text-muted-foreground',
               )}
             >
@@ -198,7 +198,7 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
                   'text-[9px]',
                   mcq.urgency === 'high'
                     ? 'live-dot border-rose-500/50 bg-rose-500/10 text-rose-400'
-                    : 'border-amber-500/50 bg-amber-500/10 text-amber-400'
+                    : 'border-warning/50 bg-warning/10 text-warning'
                 )}
               >
                 {mcq.urgency === 'high' ? 'High priority' : 'Medium priority'}
@@ -260,12 +260,12 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
       {/* actions — for kind === 'mcq' the confirm submits the SELECTED option
           (skip/retry/escalate/takeover → planRespond); otherwise the classic
           Approve/Reject pair for Guard-2 permission tickets. */}
-      <div className="flex items-center gap-1.5 border-t border-orange-500/20 bg-zinc-950/30 px-3 py-2">
+      <div className="flex items-center gap-1.5 border-t border-brand/20 bg-zinc-950/30 px-3 py-2">
         {mcq.kind === 'autonomy' ? (
           <>
             <Button
               size="sm"
-              className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600"
+              className="h-7 gap-1.5 bg-brand px-3 text-[11px] text-white hover:bg-brand-hover"
               onClick={() =>
                 respondMcq(mcq.id, selected ?? mcq.options?.[0]?.value ?? 'do-once')
               }
@@ -287,7 +287,7 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
           <>
             <Button
               size="sm"
-              className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600"
+              className="h-7 gap-1.5 bg-brand px-3 text-[11px] text-white hover:bg-brand-hover"
               onClick={() =>
                 respondMcq(mcq.id, selected ?? mcq.options?.[0]?.value ?? 'skip')
               }
@@ -311,7 +311,7 @@ export default function McqInterruptCard({ mcq }: { mcq: MCQInterrupt }) {
               size="sm"
               disabled={!gateOpen}
               title={gateOpen ? 'Approve and run' : `Type “${word}” to enable this`}
-              className="h-7 gap-1.5 bg-orange-500 px-3 text-[11px] text-white hover:bg-orange-600 disabled:opacity-40"
+              className="h-7 gap-1.5 bg-brand px-3 text-[11px] text-white hover:bg-brand-hover disabled:opacity-40"
               onClick={() => respondMcq(mcq.id, 'approve')}
             >
               <Check className="h-3 w-3" />

@@ -227,12 +227,12 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
                   Key: from the EveryAIOS vault (read in Rust at spawn)
                 </div>
               ) : state.configured ? (
-                <div className="text-amber-200/80">
+                <div className="text-warning/80">
                   No vault key for this provider \u2014 the agent will use whatever it has.
                 </div>
               ) : null}
               {state.unexpressed.length > 0 && (
-                <div className="text-amber-200/80">
+                <div className="text-warning/80">
                   Not expressible by env for this agent: {state.unexpressed.join(', ')}
                 </div>
               )}
@@ -243,7 +243,7 @@ function AgentBackendPanel({ agentId }: { agentId: string }) {
           )}
 
           {state.refusal && (
-            <div className="mt-2 text-[10px] text-amber-200/80">{state.refusal}</div>
+            <div className="mt-2 text-[10px] text-warning/80">{state.refusal}</div>
           )}
 
           <input
@@ -418,7 +418,7 @@ function readinessTone(state: AgentReadiness): string {
     case 'ready':
       return 'bg-emerald-500/15 text-emerald-300'
     case 'degraded':
-      return 'bg-amber-500/15 text-amber-300'
+      return 'bg-warning/15 text-warning'
     case 'unverified':
       return 'bg-sky-500/15 text-sky-300'
     case 'unavailable':
@@ -678,7 +678,7 @@ function AgentCard({
         </span>
         <span className="text-muted-foreground/30">|</span>
         <Terminal className="h-3 w-3" />
-        <span className={cn(agent.headless ? 'text-emerald-300' : 'text-yellow-300')}>
+        <span className={cn(agent.headless ? 'text-emerald-300' : 'text-warning')}>
           {agent.headless ? 'headless' : 'needs UI'}
         </span>
         <span className="text-muted-foreground/30">|</span>
@@ -688,7 +688,7 @@ function AgentCard({
             agent.sandbox === 'strict'
               ? 'text-emerald-300'
               : agent.sandbox === 'soft'
-                ? 'text-yellow-300'
+                ? 'text-warning'
                 : 'text-rose-300',
           )}
         >
@@ -877,11 +877,11 @@ function AgentsTab() {
       }
     >
       {occupancyUnknown && (
-        <div className="mb-3 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
+        <div className="mb-3 rounded-md border border-dashed border-warning/40 bg-warning/5 px-3 py-2 text-[11px] leading-relaxed text-warning/90">
           Runtime inventory unavailable — the shell has not reported which agent CLIs are installed.
           The list below is the shipped catalog of installable runtimes, not occupancy; every
           external row reads <span className="font-mono">not installed</span> until discovery
-          confirms it. Use <span className="text-amber-100">Discover more</span>.
+          confirms it. Use <span className="text-warning">Discover more</span>.
         </div>
       )}
       {/* EveryAIOS Native first, full width, with its own disclosure: the

@@ -142,9 +142,9 @@ export default function OfficePdfView() {
           ) : (
             <Badge
               variant="outline"
-              className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+              className="gap-1 border-brand/40 bg-brand/10 text-[10px] text-brand"
             >
-              <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-brand" />
               demo
             </Badge>
           )}
@@ -168,7 +168,7 @@ export default function OfficePdfView() {
           }}
           className={cn(
             'h-6 gap-1 px-2 text-[10px]',
-            overlayOpen && 'bg-orange-500 text-white hover:bg-orange-600'
+            overlayOpen && 'bg-brand text-white hover:bg-brand-hover'
           )}
           title="Ask the chat about this PDF — the document text is injected as context"
         >
@@ -244,7 +244,7 @@ export default function OfficePdfView() {
       )}
 
       {locked && (
-        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-[10px] text-amber-300">
+        <div className="border-b border-warning/30 bg-warning/10 px-3 py-1 font-mono text-[10px] text-warning">
           Read-only while the agent is running — pause to take over
         </div>
       )}
@@ -277,7 +277,7 @@ export default function OfficePdfView() {
                 className={cn(
                   'block w-full rounded border p-1 text-left transition-colors',
                   page === n
-                    ? 'border-orange-500/60 bg-orange-500/10'
+                    ? 'border-brand/60 bg-brand/10'
                     : 'border-border bg-zinc-950/40 hover:border-muted-foreground',
                 )}
               >
@@ -308,7 +308,7 @@ export default function OfficePdfView() {
             ) : (
               <div className="w-full max-w-3xl space-y-2">
                 {pixelsUnavailable && (
-                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 font-mono text-[10px] text-amber-300">
+                  <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-1.5 font-mono text-[10px] text-warning">
                     Pixel render unavailable — showing extracted text instead.
                   </div>
                 )}
@@ -353,8 +353,8 @@ export default function OfficePdfView() {
                     className={cn(
                       'relative rounded border px-2 py-1',
                       f.highlight
-                        ? 'border-orange-500 bg-yellow-300/40'
-                        : 'border-yellow-400 bg-yellow-200/60'
+                        ? 'border-brand bg-warning/40'
+                        : 'border-warning bg-warning/60'
                     )}
                     style={{ marginTop: '8px' }}
                   >
@@ -363,7 +363,7 @@ export default function OfficePdfView() {
                       <span className="flex-1 border-b border-dotted border-zinc-400 font-mono">
                         {f.value}
                         {f.highlight && (
-                          <span className="caret-blink ml-0.5 inline-block h-3 w-0.5 bg-orange-500 align-middle" />
+                          <span className="caret-blink ml-0.5 inline-block h-3 w-0.5 bg-brand align-middle" />
                         )}
                       </span>
                     </div>
@@ -394,7 +394,7 @@ export default function OfficePdfView() {
               </div>
             </div>
 
-            <div className="absolute right-2 top-2 rounded bg-orange-500/90 px-1.5 py-0.5 font-mono text-[8px] text-black">
+            <div className="absolute right-2 top-2 rounded bg-brand/90 px-1.5 py-0.5 font-mono text-[8px] text-black">
               ANNOTATION · §4.1
             </div>
           </div>

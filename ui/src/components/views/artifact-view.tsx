@@ -129,7 +129,7 @@ export default function ArtifactView() {
     <div className="flex h-full min-h-0 flex-col bg-background">
       {/* Toolbar: device frames · port dropdown · screenshot selector · stop */}
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <MonitorSmartphone className="h-3.5 w-3.5 text-orange-400" />
+        <MonitorSmartphone className="h-3.5 w-3.5 text-brand" />
         <span className="text-xs font-medium text-foreground">Artifact preview</span>
         {artifactServer?.status === 'serving' && (
           <Badge
@@ -174,7 +174,7 @@ export default function ArtifactView() {
                 onClick={() => setDevice(d)}
                 className={cn(
                   'rounded px-1.5 py-1 text-[9px] text-muted-foreground transition-colors',
-                  device.id === d.id && 'bg-orange-500/15 text-orange-300'
+                  device.id === d.id && 'bg-brand/15 text-brand'
                 )}
               >
                 {d.label}
@@ -230,7 +230,7 @@ export default function ArtifactView() {
                 className={cn(
                   'size-1.5 rounded-full',
                   a.state === 'complete' && 'bg-emerald-400',
-                  a.state === 'running' && 'animate-pulse bg-orange-400',
+                  a.state === 'running' && 'animate-pulse bg-brand',
                   a.state === 'failed' && 'bg-rose-400',
                   (a.state === 'pending' || a.state === 'aborted') && 'bg-muted-foreground/40'
                 )}

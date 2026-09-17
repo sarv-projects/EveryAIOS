@@ -20,7 +20,7 @@ const NATIVE = {
   id: 'everyaios-native',
   name: 'EveryAIOS Native',
   mark: 'E',
-  accent: 'bg-orange-500 text-black',
+  accent: 'bg-brand text-black',
   status: 'installed' as const,
   capabilities: [],
 }

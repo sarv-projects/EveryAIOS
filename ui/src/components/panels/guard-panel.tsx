@@ -68,7 +68,7 @@ type Cell = 'allow' | 'ask' | 'block' | 'off'
 
 const CELL_TONE: Record<Cell, string> = {
   allow: 'bg-emerald-500/70 text-emerald-50',
-  ask: 'bg-orange-500/70 text-orange-50',
+  ask: 'bg-brand/70 text-brand',
   block: 'bg-red-500/70 text-red-50',
   off: 'bg-zinc-700/40 text-zinc-400',
 }
@@ -92,9 +92,9 @@ const demoActivityRows: RecentAction[] = [
 
 const ACTION_TONE = {
   ok: { icon: Check, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-  warn: { icon: AlertTriangle, color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+  warn: { icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10' },
   err: { icon: X, color: 'text-red-400', bg: 'bg-red-500/10' },
-  pending: { icon: AlertTriangle, color: 'text-orange-400', bg: 'bg-orange-500/10' },
+  pending: { icon: AlertTriangle, color: 'text-brand', bg: 'bg-brand/10' },
 } as const
 
 export default function GuardPanel() {
@@ -198,12 +198,12 @@ export default function GuardPanel() {
       <header className="border-b border-border px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-orange-400" />
+            <ShieldCheck className="h-4 w-4 text-brand" />
             <h2 className="text-sm font-semibold text-foreground">
               {powerMode ? 'Guard' : 'Safety'}
             </h2>
             {powerMode && (
-              <Badge className="bg-orange-500/15 text-[9px] text-orange-300">
+              <Badge className="bg-brand/15 text-[9px] text-brand">
                 Trust Ladder
               </Badge>
             )}
@@ -243,12 +243,12 @@ export default function GuardPanel() {
 
           {/* Live pending approvals (Guard-2) */}
           {tickets.length > 0 && (
-            <section className="rounded-lg border border-orange-500/40 bg-orange-500/5 p-4">
+            <section className="rounded-lg border border-brand/40 bg-brand/5 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-medium text-foreground">
                   Pending approvals
                 </span>
-                <Badge className="bg-orange-500/20 px-1.5 text-[9px] text-orange-300">
+                <Badge className="bg-brand/20 px-1.5 text-[9px] text-brand">
                   {tickets.length} live
                 </Badge>
               </div>
@@ -282,7 +282,7 @@ export default function GuardPanel() {
                         {/* P52.x — TTL chip + Extend (nonce rotates; old card dies). */}
                         <TicketTtl ticketId={t.ticketId} expiresAtMs={t.expiresAtMs} />
                         {t.decision?.networkDestinations && t.decision.networkDestinations.length > 0 && (
-                          <div className="mt-1 font-mono text-[10px] text-amber-400/90">
+                          <div className="mt-1 font-mono text-[10px] text-warning/90">
                             data leaving device: {t.decision.networkDestinations.join(' · ')}
                           </div>
                         )}
@@ -574,7 +574,7 @@ export default function GuardPanel() {
             <section className={cn('rounded-lg border border-dashed border-border bg-card p-4', !powerMode && 'hidden')}>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-medium text-foreground">Trust Level</span>
-                <span className="font-mono text-sm font-semibold text-orange-300">{trustMeter(policy).score}/100</span>
+                <span className="font-mono text-sm font-semibold text-brand">{trustMeter(policy).score}/100</span>
               </div>
               <div className="flex gap-1">
                 {TRUST_LEVELS.map((lvl, i) => {
@@ -586,7 +586,7 @@ export default function GuardPanel() {
                       className={cn(
                         'score-roll flex-1 rounded-md border px-3 py-2 text-center transition-colors',
                         isCurrent
-                          ? 'border-orange-500 bg-orange-500/15'
+                          ? 'border-brand bg-brand/15'
                           : reached
                             ? 'border-emerald-500/40 bg-emerald-500/10'
                             : 'border-border bg-background/40',
@@ -595,13 +595,13 @@ export default function GuardPanel() {
                       <div
                         className={cn(
                           'text-xs font-medium',
-                          isCurrent ? 'text-orange-300' : reached ? 'text-emerald-300' : 'text-muted-foreground',
+                          isCurrent ? 'text-brand' : reached ? 'text-emerald-300' : 'text-muted-foreground',
                         )}
                       >
                         {lvl}
                       </div>
                       {isCurrent && (
-                        <div className="mt-0.5 text-[9px] uppercase tracking-wide text-orange-400">current</div>
+                        <div className="mt-0.5 text-[9px] uppercase tracking-wide text-brand">current</div>
                       )}
                     </div>
                   )
@@ -609,7 +609,7 @@ export default function GuardPanel() {
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-orange-500 to-orange-400"
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-brand to-brand"
                   style={{ width: `${trustMeter(policy).score}%` }}
                 />
               </div>
@@ -626,7 +626,7 @@ export default function GuardPanel() {
           <section className={cn('rounded-lg border border-border bg-card p-4', !powerMode && 'hidden')}>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-medium text-foreground">Trust Level</span>
-              <span className="font-mono text-sm font-semibold text-orange-300">{trustMeter(null).score}/100</span>
+              <span className="font-mono text-sm font-semibold text-brand">{trustMeter(null).score}/100</span>
             </div>
             <div className="flex gap-1">
               {TRUST_LEVELS.map((lvl, i) => {
@@ -638,7 +638,7 @@ export default function GuardPanel() {
                     className={cn(
                       'score-roll flex-1 rounded-md border px-3 py-2 text-center transition-colors',
                       isCurrent
-                        ? 'border-orange-500 bg-orange-500/15'
+                        ? 'border-brand bg-brand/15'
                         : reached
                           ? 'border-emerald-500/40 bg-emerald-500/10'
                           : 'border-border bg-background/40',
@@ -647,13 +647,13 @@ export default function GuardPanel() {
                     <div
                       className={cn(
                         'text-xs font-medium',
-                        isCurrent ? 'text-orange-300' : reached ? 'text-emerald-300' : 'text-muted-foreground',
+                        isCurrent ? 'text-brand' : reached ? 'text-emerald-300' : 'text-muted-foreground',
                       )}
                     >
                       {lvl}
                     </div>
                     {isCurrent && (
-                      <div className="mt-0.5 text-[9px] uppercase tracking-wide text-orange-400">current</div>
+                      <div className="mt-0.5 text-[9px] uppercase tracking-wide text-brand">current</div>
                     )}
                   </div>
                 )
@@ -661,7 +661,7 @@ export default function GuardPanel() {
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-orange-500 to-orange-400"
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-brand to-brand"
                 style={{ width: `${trustMeter(null).score}%` }}
               />
             </div>
@@ -714,7 +714,7 @@ export default function GuardPanel() {
                       <div className="flex shrink-0 gap-1">
                         <Button
                           size="sm"
-                          className="h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400"
+                          className="h-6 bg-brand px-2 text-[10px] text-black hover:bg-brand"
                           disabled={busy !== null}
                           onClick={() => void respond('activity-row', 'approve')}
                           title="Decide in the dedicated guard window"
@@ -774,7 +774,7 @@ export default function GuardPanel() {
           {/* Vault status */}
           <section className="grid gap-3 sm:grid-cols-2">
             <VaultCard
-              icon={<KeyRound className="h-4 w-4 text-orange-400" />}
+              icon={<KeyRound className="h-4 w-4 text-brand" />}
               title="Key-ring"
               stats={inTauri() ? '—' : '7 keys'}
               sub={inTauri() ? 'Live key count is unavailable here' : 'preview fixture'}
@@ -786,7 +786,7 @@ export default function GuardPanel() {
               }}
             />
             <VaultCard
-              icon={<Vault className="h-4 w-4 text-orange-400" />}
+              icon={<Vault className="h-4 w-4 text-brand" />}
               title="Session Vault"
               stats={inTauri() ? '—' : '12 sessions'}
               sub={inTauri() ? 'Live session count is shown in the work list' : 'preview fixture'}
@@ -827,7 +827,7 @@ function TicketTtl({
   const urgent = left < 60
   return (
     <div className="mt-1 flex items-center gap-2 font-mono text-[10px]">
-      <span className={urgent ? 'text-amber-300' : 'text-muted-foreground'}>
+      <span className={urgent ? 'text-warning' : 'text-muted-foreground'}>
         {left > 0 ? `Expires in ${left}s` : 'Expired'}
       </span>
       {left > 0 && (
@@ -902,7 +902,7 @@ function VaultCard({
         <Button
           size="sm"
           variant="outline"
-          className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10"
+          className="h-7 border-brand/40 text-[10px] text-brand hover:bg-brand/10"
           onClick={onCta}
         >
           {cta}

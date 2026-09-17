@@ -371,10 +371,10 @@ export default function OfficeXlsxView() {
                 'gap-1 text-[10px]',
                 inTauri()
                   ? 'border-border text-muted-foreground'
-                  : 'border-orange-500/40 bg-orange-500/10 text-orange-300',
+                  : 'border-brand/40 bg-brand/10 text-brand',
               )}
             >
-              {!inTauri() && <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />}
+              {!inTauri() && <span className="live-dot h-1.5 w-1.5 rounded-full bg-brand" />}
               {inTauri() ? 'no file open' : 'preview'}
             </Badge>
           )}
@@ -417,7 +417,7 @@ export default function OfficeXlsxView() {
       <OfficeFileSwitcher view="office-xlsx" current={payload?.path} onOpen={open} />
 
       {locked && (
-        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-[10px] text-amber-300">
+        <div className="border-b border-warning/30 bg-warning/10 px-3 py-1 font-mono text-[10px] text-warning">
           Read-only while the agent is running — pause to take over
         </div>
       )}
@@ -441,11 +441,11 @@ export default function OfficeXlsxView() {
       {/* Formula bar — click a cell to select; Recalc runs the truth engine */}
       <div className="flex items-center gap-2 border-b border-border bg-zinc-900/50 px-3 py-1.5">
         <div className="flex items-center gap-1 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-          <span className="font-medium text-orange-300">{selRef}</span>
+          <span className="font-medium text-brand">{selRef}</span>
           <span className="text-muted-foreground/40">│</span>
         </div>
-        <div className="flex flex-1 items-center gap-1.5 rounded border border-orange-500/40 bg-zinc-950 px-2 py-0.5 font-mono text-xs">
-          <Sigma className="h-3 w-3 shrink-0 text-orange-400" />
+        <div className="flex flex-1 items-center gap-1.5 rounded border border-brand/40 bg-zinc-950 px-2 py-0.5 font-mono text-xs">
+          <Sigma className="h-3 w-3 shrink-0 text-brand" />
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -523,11 +523,11 @@ export default function OfficeXlsxView() {
 
       {/* Guard-2 approval card for an "ask" verdict (same ticket as Cockpit) */}
       {proposal && (
-        <div className="flex items-center gap-2 border-b border-orange-500/40 bg-orange-500/5 px-3 py-1.5">
-          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+        <div className="flex items-center gap-2 border-b border-brand/40 bg-brand/5 px-3 py-1.5">
+          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-brand" />
           <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
-            Set <span className="text-orange-300">{proposal.address}</span> to{' '}
-            <span className="text-orange-300">{proposal.value}</span>
+            Set <span className="text-brand">{proposal.address}</span> to{' '}
+            <span className="text-brand">{proposal.value}</span>
             {' — approval ' + proposal.ticketId.slice(0, 8)}
           </span>
           <Button
@@ -566,7 +566,7 @@ export default function OfficeXlsxView() {
               onChange={(e) => setBulkRange(e.target.value)}
               placeholder="B7:B12"
               disabled={!payload}
-              className="w-20 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-orange-500/60 focus:outline-none"
+              className="w-20 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-brand/60 focus:outline-none"
             />
           </div>
 
@@ -577,7 +577,7 @@ export default function OfficeXlsxView() {
               onChange={(e) => setFillValue(e.target.value)}
               placeholder="42"
               disabled={!payload}
-              className="w-16 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-orange-500/60 focus:outline-none"
+              className="w-16 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-brand/60 focus:outline-none"
             />
             <Button size="sm" disabled={!payload || committing || locked} className="h-6 gap-1 px-2 text-[10px]" onClick={runFill}>
               Fill
@@ -618,14 +618,14 @@ export default function OfficeXlsxView() {
               value={shiftAt}
               onChange={(e) => setShiftAt(e.target.value)}
               disabled={!payload}
-              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
+              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-brand/60 focus:outline-none"
             />
             <span className="font-mono text-[10px] text-muted-foreground">×</span>
             <input
               value={shiftCount}
               onChange={(e) => setShiftCount(e.target.value)}
               disabled={!payload}
-              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
+              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-brand/60 focus:outline-none"
             />
             <Button size="sm" variant="outline" disabled={!payload || committing || locked} className="h-6 gap-1 px-2 text-[10px]" onClick={runShift}>
               Shift
@@ -639,14 +639,14 @@ export default function OfficeXlsxView() {
               onChange={(e) => setPivotSource(e.target.value)}
               placeholder="A1:D20"
               disabled={!payload}
-              className="w-20 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-orange-500/60 focus:outline-none"
+              className="w-20 rounded border border-border bg-zinc-950 px-2 py-0.5 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:border-brand/60 focus:outline-none"
             />
             <span className="font-mono text-[10px] text-muted-foreground">by</span>
             <input
               value={pivotGroup}
               onChange={(e) => setPivotGroup(e.target.value)}
               disabled={!payload}
-              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
+              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-brand/60 focus:outline-none"
             />
             <select
               value={pivotFn}
@@ -663,7 +663,7 @@ export default function OfficeXlsxView() {
               value={pivotAgg}
               onChange={(e) => setPivotAgg(e.target.value)}
               disabled={!payload}
-              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-orange-500/60 focus:outline-none"
+              className="w-8 rounded border border-border bg-zinc-950 px-1 py-0.5 text-center font-mono text-[11px] text-foreground focus:border-brand/60 focus:outline-none"
             />
             <Button size="sm" variant="outline" disabled={!payload} className="h-6 gap-1 px-2 text-[10px]" onClick={() => void runPivot()}>
               Run
@@ -688,10 +688,10 @@ export default function OfficeXlsxView() {
 
       {/* Guard-2 approval card for a bulk batch "ask" verdict */}
       {batchProposal && (
-        <div className="flex items-center gap-2 border-b border-orange-500/40 bg-orange-500/5 px-3 py-1.5">
-          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+        <div className="flex items-center gap-2 border-b border-brand/40 bg-brand/5 px-3 py-1.5">
+          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-brand" />
           <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
-            <span className="text-orange-300">{batchProposal.summary}</span>
+            <span className="text-brand">{batchProposal.summary}</span>
             {' — approval ' + batchProposal.ticketId.slice(0, 8)}
           </span>
           <Button
@@ -765,8 +765,8 @@ export default function OfficeXlsxView() {
                         key={c}
                         onClick={() => selectCell(r1, ci + 1)}
                         className={cn(
-                          'min-w-[88px] cursor-cell border px-2 py-0.5 text-foreground transition-colors hover:bg-orange-500/5',
-                          isSel && 'ring-1 ring-inset ring-orange-500',
+                          'min-w-[88px] cursor-cell border px-2 py-0.5 text-foreground transition-colors hover:bg-brand/5',
+                          isSel && 'ring-1 ring-inset ring-brand',
                           changed && 'cell-flash bg-emerald-500/10 text-emerald-300',
                         )}
                       >
@@ -802,7 +802,7 @@ export default function OfficeXlsxView() {
                     delay: 0.15 + i * 0.12,
                     ease: [0.16, 1, 0.3, 1],
                   }}
-                  className="w-3 origin-bottom rounded-t bg-gradient-to-t from-orange-600 to-orange-400"
+                  className="w-3 origin-bottom rounded-t bg-gradient-to-t from-brand-hover to-brand"
                 />
               ))}
             </div>

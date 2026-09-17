@@ -250,7 +250,7 @@ export default function LocalServerView() {
     <div className="fade-up flex h-full flex-col gap-4 overflow-y-auto p-4">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ServerCog className="h-4 w-4 text-orange-400" />
+          <ServerCog className="h-4 w-4 text-brand" />
           <h3 className="text-sm font-semibold text-foreground">Local Servers</h3>
           <span className="rounded border border-border/60 bg-background/40 px-1.5 py-0.5 text-[9px] text-muted-foreground">
             P52.3 unified surface
@@ -323,7 +323,7 @@ export default function LocalServerView() {
           ].map((ep) => (
             <div key={ep.label} className="flex items-center gap-2">
               <span className="w-16 shrink-0 text-xs text-slate-400">{ep.label}</span>
-              <code className="flex-1 truncate rounded bg-slate-900/60 px-2 py-1 font-mono text-[11px] text-orange-300">
+              <code className="flex-1 truncate rounded bg-slate-900/60 px-2 py-1 font-mono text-[11px] text-brand">
                 {ep.url}
               </code>
               <Button size="icon" variant="ghost" className="size-6" onClick={() => copy(ep.url, ep.label)}>
@@ -348,9 +348,9 @@ export default function LocalServerView() {
         </div>
 
         {/* VS Code / Cursor integration hint */}
-        <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 text-xs text-slate-300">
+        <div className="rounded-lg border border-brand/20 bg-brand/5 p-3 text-xs text-slate-300">
           <div className="flex items-center gap-1.5">
-            <ToggleRight className="h-3.5 w-3.5 text-orange-400" />
+            <ToggleRight className="h-3.5 w-3.5 text-brand" />
             <span className="font-medium">VS Code / Cursor integration</span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
@@ -379,7 +379,7 @@ export default function LocalServerView() {
         </div>
 
         {localError && (
-          <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11px] text-amber-300">
+          <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-[11px] text-warning">
             {localError}
           </div>
         )}
@@ -411,7 +411,7 @@ export default function LocalServerView() {
                               fitMap[m.id] === 'fits'
                                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
                                 : fitMap[m.id] === 'may_be_slow'
-                                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                                  ? 'border-warning/30 bg-warning/10 text-warning'
                                   : 'border-red-500/30 bg-red-500/10 text-red-400',
                             )}
                           >
@@ -457,7 +457,7 @@ export default function LocalServerView() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className={cn('size-6', advOpen === m.id && 'text-orange-300')}
+                      className={cn('size-6', advOpen === m.id && 'text-brand')}
                       onClick={() => setAdvOpen(advOpen === m.id ? null : m.id)}
                       title="P52.4 — llama.cpp launch flags (gpu layers · KV cache · ctx)"
                     >

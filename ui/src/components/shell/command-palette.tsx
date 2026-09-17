@@ -483,7 +483,7 @@ export function CommandPalette() {
                       isSelected ? 'bg-accent text-foreground' : 'hover:bg-accent/60'
                     )}
                   >
-                    <Icon className={cn('h-4 w-4 shrink-0', isSelected ? 'text-orange-500' : 'text-muted-foreground')} />
+                    <Icon className={cn('h-4 w-4 shrink-0', isSelected ? 'text-brand' : 'text-muted-foreground')} />
                     <div className="flex-1 text-left min-w-0">
                       <div className="truncate">{item.label}</div>
                       {item.hint && (
@@ -496,7 +496,7 @@ export function CommandPalette() {
                       </kbd>
                     )}
                     {isSelected && (
-                      <CornerDownLeft className="h-3 w-3 text-orange-500" />
+                      <CornerDownLeft className="h-3 w-3 text-brand" />
                     )}
                   </button>
                 )

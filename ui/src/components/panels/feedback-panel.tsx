@@ -74,7 +74,7 @@ export function FeedbackSection() {
             key={k}
             size="sm"
             variant={kind === k ? 'default' : 'outline'}
-            className={`h-7 gap-1 text-[10px] ${kind === k ? 'bg-orange-500 text-black hover:bg-orange-400' : ''}`}
+            className={`h-7 gap-1 text-[10px] ${kind === k ? 'bg-brand text-black hover:bg-brand' : ''}`}
             onClick={() => setKind(k)}
           >
             <Icon className="h-3 w-3" />
@@ -106,7 +106,7 @@ export function FeedbackSection() {
         className="text-xs"
       />
       <div className="flex items-center gap-2">
-        <Button size="sm" className="h-7 gap-1 bg-orange-500 text-black hover:bg-orange-400" onClick={() => void submit()}>
+        <Button size="sm" className="h-7 gap-1 bg-brand text-black hover:bg-brand" onClick={() => void submit()}>
           <Send className="h-3 w-3" />
           Submit
         </Button>

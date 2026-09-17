@@ -77,7 +77,7 @@ export default function HomeLaunchpad() {
                   key={t.id}
                   type="button"
                   onClick={() => startTask(t.prompt)}
-                  className="rounded-lg border border-border bg-card/40 p-3 transition-colors hover:border-orange-500/40 hover:bg-accent/40"
+                  className="rounded-lg border border-border bg-card/40 p-3 transition-colors hover:border-brand/40 hover:bg-accent/40"
                 >
                   <span className="text-base leading-none">{t.emoji}</span>
                   <span className="mt-1.5 block text-[12px] font-medium text-foreground">
@@ -97,7 +97,7 @@ export default function HomeLaunchpad() {
                 key={t.id}
                 type="button"
                 onClick={() => startTask(t.prompt)}
-                className="rounded-full border border-border bg-card/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:border-orange-500/40 hover:text-foreground"
+                className="rounded-full border border-border bg-card/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:border-brand/40 hover:text-foreground"
               >
                 {t.emoji} {t.label}
               </button>
@@ -108,8 +108,8 @@ export default function HomeLaunchpad() {
         {/* P32.10 — one-shot nudge after a day with nothing started. */}
         {nudge && (
           <div className={cn(col, 'mt-4')}>
-            <div className="flex items-start gap-2 rounded-lg border border-orange-500/40 bg-orange-500/5 px-3 py-2">
-              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-400" />
+            <div className="flex items-start gap-2 rounded-lg border border-brand/40 bg-brand/5 px-3 py-2">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
               <div className="min-w-0 flex-1">
                 <p className="text-[12px] text-foreground">
                   Nothing has run yet — want me to start with this?
@@ -124,7 +124,7 @@ export default function HomeLaunchpad() {
                   startTask(FIRST_TASKS[0]!.prompt)
                   setNudge(false)
                 }}
-                className="shrink-0 rounded-md bg-orange-500 px-2 py-1 text-[10px] font-medium text-black hover:bg-orange-400"
+                className="shrink-0 rounded-md bg-brand px-2 py-1 text-[10px] font-medium text-black hover:bg-brand"
               >
                 Start
               </button>
@@ -159,11 +159,11 @@ export default function HomeLaunchpad() {
                       <Circle
                         className={cn(
                           'mt-0.5 h-3.5 w-3.5',
-                          s.status === 'action-required' && 'text-orange-400',
+                          s.status === 'action-required' && 'text-brand',
                           s.status === 'running' && 'text-blue-400',
                           s.status === 'scheduled' && 'text-violet-400',
                           s.status === 'cancelled' && 'text-zinc-400',
-                          s.status === 'budget_exceeded' && 'text-amber-400',
+                          s.status === 'budget_exceeded' && 'text-warning',
                         )}
                       />
                     )}
@@ -214,9 +214,9 @@ function Section({ title, items, onPick }: { title: string; items: Session[]; on
               <button
                 type="button"
                 onClick={() => onPick(s.id)}
-                className="flex w-full items-start gap-2 rounded-md border border-border/50 bg-background/30 px-3 py-2 text-left hover:border-orange-500/30"
+                className="flex w-full items-start gap-2 rounded-md border border-border/50 bg-background/30 px-3 py-2 text-left hover:border-brand/30"
               >
-                <Sparkles className="mt-0.5 h-3.5 w-3.5 text-orange-400" />
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 text-brand" />
                 <span>
                   <span className="block text-[13px]">{s.title}</span>
                   <span className="block text-[11px] text-muted-foreground">{statusLine(s)}</span>
@@ -294,9 +294,9 @@ export function ProjectsPanel() {
                 <button
                   type="button"
                   onClick={() => inFolder[0] && setActiveSession(inFolder[0].id)}
-                  className="flex w-full items-center gap-2 rounded-md border border-border/50 bg-background/30 px-3 py-2 text-left hover:border-orange-500/30"
+                  className="flex w-full items-center gap-2 rounded-md border border-border/50 bg-background/30 px-3 py-2 text-left hover:border-brand/30"
                 >
-                  <Folder className="h-4 w-4 shrink-0 text-orange-400" />
+                  <Folder className="h-4 w-4 shrink-0 text-brand" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-mono text-[12px]">{f}</span>
                     <span className="text-[10px] text-muted-foreground">{inFolder.length} work item{inFolder.length === 1 ? '' : 's'}</span>

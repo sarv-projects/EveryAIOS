@@ -110,7 +110,7 @@ function FitDot({ est }: { est?: FitEstimate | null }) {
     tone.key === 'ok'
       ? 'bg-emerald-400'
       : tone.key === 'warn'
-        ? 'bg-amber-400'
+        ? 'bg-warning'
         : 'bg-red-400'
   const split = `${est.fileGb.toFixed(1)} GiB file + ${(est.kvGb * 1000).toFixed(0)} MB KV ≈ ${est.totalGb.toFixed(2)} GiB total`
   return (
@@ -170,7 +170,7 @@ function DownloadRow({
         {(row.phase === 'cancelled' || row.phase === 'error') && (
           <Button
             size="sm"
-            className="h-6 shrink-0 bg-orange-500 px-2 text-[10px] text-white hover:bg-orange-600"
+            className="h-6 shrink-0 bg-brand px-2 text-[10px] text-white hover:bg-brand-hover"
             onClick={() => onResume(row.repo, row.filename)}
           >
             <Play className="mr-1 h-3 w-3" />
@@ -545,7 +545,7 @@ export default function LocalModelsPanel() {
             className={cn(
               'flex-1 rounded px-2 py-1 text-[11px] font-medium',
               tab === id
-                ? 'bg-orange-500/15 text-orange-300'
+                ? 'bg-brand/15 text-brand'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
@@ -555,7 +555,7 @@ export default function LocalModelsPanel() {
       </div>
 
       {!canDownload && tab !== 'hardware' && (
-        <div className="mb-2 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11px] text-amber-300">
+        <div className="mb-2 rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-[11px] text-warning">
           Model downloads are a Tauri-shell capability — this browser preview lists the Hub but
           cannot fetch weights.
         </div>
@@ -569,7 +569,7 @@ export default function LocalModelsPanel() {
       {tab === 'discover' && (
         <div className="flex min-h-0 flex-1 flex-col">
           {installed.length === 0 && registry.length === 0 && firstCard && (
-            <div className="mb-3 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+            <div className="mb-3 rounded-lg border border-brand/30 bg-brand/5 p-3">
               <div className="text-[12px] font-semibold text-foreground">Your first model</div>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
                 Live from Hugging Face Hub (current Hub sort). Nothing is named in source — this
@@ -585,7 +585,7 @@ export default function LocalModelsPanel() {
                 </div>
                 <Button
                   size="sm"
-                  className="h-7 shrink-0 bg-orange-500 px-2 text-[10px] text-white hover:bg-orange-600"
+                  className="h-7 shrink-0 bg-brand px-2 text-[10px] text-white hover:bg-brand-hover"
                   disabled={busyFile !== null}
                   onClick={() => {
                     void listHubFiles(firstCard.id)
@@ -631,7 +631,7 @@ export default function LocalModelsPanel() {
                 className={cn(
                   'rounded-md border px-2 py-1 text-[10px]',
                   sort === id
-                    ? 'border-orange-500/50 bg-orange-500/10 text-orange-300'
+                    ? 'border-brand/50 bg-brand/10 text-brand'
                     : 'border-border text-muted-foreground',
                 )}
               >
@@ -666,7 +666,7 @@ export default function LocalModelsPanel() {
                     </div>
                     <Button
                       size="sm"
-                      className="h-6 shrink-0 bg-orange-500 px-2 text-[10px] text-white hover:bg-orange-600"
+                      className="h-6 shrink-0 bg-brand px-2 text-[10px] text-white hover:bg-brand-hover"
                       onClick={() => resume(repo, filename)}
                     >
                       <Play className="mr-1 h-3 w-3" />
@@ -696,7 +696,7 @@ export default function LocalModelsPanel() {
                     onClick={() => setSelected(m)}
                     className={cn(
                       'flex w-full flex-col gap-0.5 border-b border-border/40 px-2.5 py-2 text-left',
-                      active ? 'bg-orange-500/10' : 'hover:bg-accent/40',
+                      active ? 'bg-brand/10' : 'hover:bg-accent/40',
                     )}
                   >
                     <span className="truncate text-[11px] font-semibold text-foreground">{m.id}</span>
@@ -756,7 +756,7 @@ export default function LocalModelsPanel() {
                         </div>
                         <Button
                           size="sm"
-                          className="h-7 shrink-0 bg-orange-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
+                          className="h-7 shrink-0 bg-brand px-2.5 text-[10px] text-white hover:bg-brand-hover"
                           disabled={busyFile !== null}
                           onClick={() => download(selected.id, chosen)}
                         >
@@ -790,7 +790,7 @@ export default function LocalModelsPanel() {
                                 className={cn(
                                   'flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[9px]',
                                   chosen?.path === f.path
-                                    ? 'border-orange-500/60 bg-orange-500/10 text-orange-300'
+                                    ? 'border-brand/60 bg-brand/10 text-brand'
                                     : 'border-border/50 text-muted-foreground hover:text-foreground',
                                 )}
                               >
@@ -811,7 +811,7 @@ export default function LocalModelsPanel() {
                             <span className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
                               <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
                               fits
-                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-warning" />
                               slow
                               <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />
                               won't fit
@@ -820,7 +820,7 @@ export default function LocalModelsPanel() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-6 border-orange-500/40 px-2 text-[10px] text-orange-300 hover:bg-orange-500/10"
+                              className="h-6 border-brand/40 px-2 text-[10px] text-brand hover:bg-brand/10"
                               disabled={busyFile !== null || pickingBest}
                               onClick={() => void autoPick()}
                               title="Let the native picker choose the best build for this machine (prefers a Q4_K_M build, CPU fallback). Download still needs your confirm."
@@ -843,7 +843,7 @@ export default function LocalModelsPanel() {
                     )}
                   </div>
                   {!canDownload && (
-                    <div className="mt-2 text-[10px] text-amber-300">
+                    <div className="mt-2 text-[10px] text-warning">
                       The downloader needs the Tauri shell — in this preview the Hub is live but
                       fetching weights is not.
                     </div>
@@ -868,8 +868,8 @@ export default function LocalModelsPanel() {
       {tab === 'mine' && (
         <div className="space-y-2">
           {selectedForRemoval.size > 0 && (
-            <div className="flex items-center justify-between gap-2 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-2">
-              <span className="text-[11px] text-orange-200">
+            <div className="flex items-center justify-between gap-2 rounded-md border border-brand/40 bg-brand/10 px-3 py-2">
+              <span className="text-[11px] text-brand">
                 {selectedForRemoval.size} selected · frees{' '}
                 {formatBytes(
                   registry
@@ -903,7 +903,7 @@ export default function LocalModelsPanel() {
               <div className="mt-2">
                 <Button
                   size="sm"
-                  className="h-7 bg-orange-500 text-[10px] text-white hover:bg-orange-600"
+                  className="h-7 bg-brand text-[10px] text-white hover:bg-brand-hover"
                   onClick={() => setTab('discover')}
                 >
                   Open Discover
@@ -929,7 +929,7 @@ export default function LocalModelsPanel() {
                 }
                 className={`flex size-4 shrink-0 items-center justify-center rounded border ${
                   selectedForRemoval.has(row.id)
-                    ? 'border-orange-500 bg-orange-500 text-white'
+                    ? 'border-brand bg-brand text-white'
                     : 'border-border bg-background text-transparent'
                 }`}
               >
@@ -950,7 +950,7 @@ export default function LocalModelsPanel() {
               <div className="flex shrink-0 items-center gap-1">
                 <Button
                   size="sm"
-                  className="h-6 bg-orange-500 px-2 text-[10px] text-white hover:bg-orange-600"
+                  className="h-6 bg-brand px-2 text-[10px] text-white hover:bg-brand-hover"
                   onClick={() => serve(row.id)}
                   title="Bind to a managed llamafile runtime (requires a llamafile binary)"
                 >
@@ -977,7 +977,7 @@ export default function LocalModelsPanel() {
                 setLocalRuntime(row.runtime, row.contextWindow)
                 notify(`Using ${row.name} (${row.runtime})`)
               }}
-              className="flex w-full items-center justify-between rounded-md border border-border/60 bg-background/40 px-3 py-2 text-left hover:border-orange-500/40"
+              className="flex w-full items-center justify-between rounded-md border border-border/60 bg-background/40 px-3 py-2 text-left hover:border-brand/40"
             >
               <div>
                 <div className="flex items-center gap-1.5">
@@ -991,14 +991,14 @@ export default function LocalModelsPanel() {
                     {row.fits ? 'fits' : 'too big'}
                   </Badge>
                   {row.warnCtx && (
-                    <Badge className="bg-amber-500/20 px-1 text-[8px] text-amber-300">&lt;15K ctx</Badge>
+                    <Badge className="bg-warning/20 px-1 text-[8px] text-warning">&lt;15K ctx</Badge>
                   )}
                 </div>
                 <div className="font-mono text-[10px] text-muted-foreground">
                   {row.runtime} · {formatBytes(row.sizeBytes)} · ctx {row.contextWindow.toLocaleString()}
                 </div>
               </div>
-              <Cpu className="h-3.5 w-3.5 text-orange-400" />
+              <Cpu className="h-3.5 w-3.5 text-brand" />
             </button>
           ))}
         </div>
@@ -1017,7 +1017,7 @@ export default function LocalModelsPanel() {
             load is the Rust gallery-dir loader seam (parser landed; loader wiring remains).
           </div>
           {!canDownload && (
-            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11px] text-amber-300">
+            <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-[11px] text-warning">
               Parsing is a native command — this browser preview keeps the sample but cannot
               call it.
             </div>
@@ -1026,13 +1026,13 @@ export default function LocalModelsPanel() {
             value={galleryYaml}
             onChange={(e) => setGalleryYaml(e.target.value)}
             spellCheck={false}
-            className="h-28 w-full resize-y rounded-md border border-border/60 bg-background/40 p-2 font-mono text-[10px] text-foreground focus:border-orange-500/60 focus:outline-none"
+            className="h-28 w-full resize-y rounded-md border border-border/60 bg-background/40 p-2 font-mono text-[10px] text-foreground focus:border-brand/60 focus:outline-none"
             placeholder="Paste a LocalAI-style index.yaml…"
           />
           <div className="flex items-center gap-1.5">
             <Button
               size="sm"
-              className="h-7 bg-orange-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
+              className="h-7 bg-brand px-2.5 text-[10px] text-white hover:bg-brand-hover"
               disabled={!canDownload || galleryBusy || !galleryYaml.trim()}
               onClick={() => void parseGallery()}
             >
@@ -1085,7 +1085,7 @@ export default function LocalModelsPanel() {
                       </Badge>
                     )}
                     {entry.preload && (
-                      <Badge className="bg-amber-500/15 px-1 text-[8px] text-amber-300">
+                      <Badge className="bg-warning/15 px-1 text-[8px] text-warning">
                         preload
                       </Badge>
                     )}
@@ -1120,14 +1120,14 @@ export default function LocalModelsPanel() {
         <div className="space-y-3">
           <div className="rounded-lg border border-border/60 bg-background/40 p-3">
             <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold">
-              <Cpu className="h-3.5 w-3.5 text-orange-400" />
+              <Cpu className="h-3.5 w-3.5 text-brand" />
               CPU
             </div>
             <div className="font-mono text-[11px]">{cpuCores(hw) || '—'} cores</div>
           </div>
           <div className="rounded-lg border border-border/60 bg-background/40 p-3">
             <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold">
-              <Gauge className="h-3.5 w-3.5 text-orange-400" />
+              <Gauge className="h-3.5 w-3.5 text-brand" />
               Memory
             </div>
             <div className="font-mono text-[11px]">RAM {formatBytes(ram)}</div>
@@ -1149,7 +1149,7 @@ export default function LocalModelsPanel() {
           </div>
           <div className="rounded-lg border border-border/60 bg-background/40 p-3">
             <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold">
-              <HardDrive className="h-3.5 w-3.5 text-orange-400" />
+              <HardDrive className="h-3.5 w-3.5 text-brand" />
               Resource monitor
             </div>
             <div className="font-mono text-[11px] text-muted-foreground">

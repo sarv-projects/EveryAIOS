@@ -74,9 +74,9 @@ export default function OfficeDocxView() {
           ) : (
             <Badge
               variant="outline"
-              className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+              className="gap-1 border-brand/40 bg-brand/10 text-[10px] text-brand"
             >
-              <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-brand" />
               {inTauri() ? 'no file open' : 'preview'}
             </Badge>
           )}
@@ -88,7 +88,7 @@ export default function OfficeDocxView() {
           aria-pressed={trackChanges}
           className={`rounded border px-2 py-0.5 text-[10px] transition-colors ${
             trackChanges
-              ? 'border-orange-500/40 bg-orange-500/10 text-orange-300'
+              ? 'border-brand/40 bg-brand/10 text-brand'
               : 'border-border text-muted-foreground'
           }`}
         >
@@ -102,7 +102,7 @@ export default function OfficeDocxView() {
       <OfficeOpenBar onOpen={open} livePath={payload?.path} />
       <OfficeFileSwitcher view="office-docx" current={payload?.path} onOpen={open} />
       {locked && (
-        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-[10px] text-amber-300">
+        <div className="border-b border-warning/30 bg-warning/10 px-3 py-1 font-mono text-[10px] text-warning">
           Read-only while the agent is running — takeover (pause) to edit
         </div>
       )}
@@ -162,7 +162,7 @@ export default function OfficeDocxView() {
               {payload.blocks.map((b) => (
                 <li key={b.address}>
                   <button
-                    className={`w-full truncate text-left ${selected === b.address ? 'text-orange-300' : 'text-muted-foreground'}`}
+                    className={`w-full truncate text-left ${selected === b.address ? 'text-brand' : 'text-muted-foreground'}`}
                     disabled={locked}
                     onClick={() => {
                       setSelected(b.address)
@@ -188,7 +188,7 @@ export default function OfficeDocxView() {
               />
             )}
             {trackChanges && tracks.length > 0 && (
-              <div className="mt-3 space-y-1 text-[10px] text-orange-300">
+              <div className="mt-3 space-y-1 text-[10px] text-brand">
                 {tracks.map((t, i) => (
                   <div key={i}>{t.kind} · {t.author}: {t.text}</div>
                 ))}
@@ -209,7 +209,7 @@ export default function OfficeDocxView() {
               Prepared by EveryAIOS Agent · 2026-09-30
             </div>
 
-            <h2 className="pt-2 text-lg font-semibold text-orange-300">1. Overview</h2>
+            <h2 className="pt-2 text-lg font-semibold text-brand">1. Overview</h2>
             <p className="text-sm leading-relaxed text-foreground/90">
               The third quarter of 2026 marked a strong inflection for the business, with
               revenue acceleration driven by enterprise expansion across the EMEA and APAC
@@ -217,38 +217,38 @@ export default function OfficeDocxView() {
               velocity increased materially.
             </p>
 
-            <h2 className="pt-2 text-lg font-semibold text-orange-300">
+            <h2 className="pt-2 text-lg font-semibold text-brand">
               2. Financial Highlights
             </h2>
             <ul className="space-y-1.5 text-sm text-foreground/90">
               <li className="flex gap-2">
-                <span className="text-orange-400">▸</span>
+                <span className="text-brand">▸</span>
                 <span>Revenue reached $1.8M, up 20% quarter-over-quarter.</span>
               </li>
               <li className="flex gap-2">
-                <span className="text-orange-400">▸</span>
+                <span className="text-brand">▸</span>
                 <span>Gross margin improved to 66% (from 61% in Q2).</span>
               </li>
               <li className="flex gap-2">
-                <span className="text-orange-400">▸</span>
+                <span className="text-brand">▸</span>
                 <span>Enterprise deal count grew 35% YoY.</span>
               </li>
             </ul>
 
-            <h2 className="pt-2 text-lg font-semibold text-orange-300">
+            <h2 className="pt-2 text-lg font-semibold text-brand">
               3. Key Drivers · §3.2
             </h2>
             <div
               className={
                 trackChanges
-                  ? 'rounded border-l-2 border-orange-500 bg-orange-500/5 px-3 py-2'
+                  ? 'rounded border-l-2 border-brand bg-brand/5 px-3 py-2'
                   : 'rounded px-3 py-2'
               }
             >
-              <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-orange-300">
+              <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-brand">
                 <span>{trackChanges ? 'Agent editing · typing' : 'Inserted text'}</span>
                 {trackChanges && (
-                  <Badge variant="outline" className="border-orange-500/40 bg-orange-500/10 text-[9px] text-orange-300">
+                  <Badge variant="outline" className="border-brand/40 bg-brand/10 text-[9px] text-brand">
                     modified
                   </Badge>
                 )}
@@ -262,11 +262,11 @@ export default function OfficeDocxView() {
                 >
                   Revenue grew 20% QoQ, reaching $1.8M driven by enterprise deals.
                 </span>
-                <span className="caret-blink ml-0.5 inline-block h-4 w-0.5 bg-orange-400 align-middle" />
+                <span className="caret-blink ml-0.5 inline-block h-4 w-0.5 bg-brand align-middle" />
               </p>
             </div>
 
-            <h2 className="pt-2 text-lg font-semibold text-orange-300">
+            <h2 className="pt-2 text-lg font-semibold text-brand">
               4. Outlook · Q4 2026
             </h2>
             <p className="text-sm leading-relaxed text-muted-foreground">
@@ -283,9 +283,9 @@ export default function OfficeDocxView() {
         <span>{payload ? `Words: ${payload.text.split(/\s+/).length}` : inTauri() ? 'Words: —' : 'Words: 847'}</span>
         <Badge
           variant="outline"
-          className="gap-1 border-orange-500/40 text-[9px] text-orange-300"
+          className="gap-1 border-brand/40 text-[9px] text-brand"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+          <span className="h-1.5 w-1.5 rounded-full bg-brand" />
           {payload ? 'Modified' : inTauri() ? 'No document' : 'Preview'}
         </Badge>
       </footer>

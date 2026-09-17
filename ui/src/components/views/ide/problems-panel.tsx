@@ -59,7 +59,7 @@ export function ProblemsPanel({
       <div className="flex h-7 shrink-0 items-center gap-3 border-b border-border px-3 font-mono text-[10px] text-muted-foreground">
         <span className="font-semibold uppercase tracking-wider">Problems</span>
         <span className="text-rose-400">{errors} errors</span>
-        <span className="text-amber-400">{warnings} warnings</span>
+        <span className="text-warning">{warnings} warnings</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-1.5">
         {loading && <div className="p-2"><SkeletonBlock lines={3} /></div>}
@@ -78,7 +78,7 @@ export function ProblemsPanel({
             {r.severity === 1 ? (
               <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-rose-400" />
             ) : r.severity === 2 ? (
-              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
             ) : (
               <Info className="mt-0.5 h-3 w-3 shrink-0 text-sky-400" />
             )}

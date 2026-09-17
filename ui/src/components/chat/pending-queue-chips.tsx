@@ -43,12 +43,12 @@ const Chip = memo(function Chip({ turn, first }: { turn: QueuedTurn; first: bool
       className={cn(
         'group/q flex items-center gap-1.5 rounded-md border px-2 py-1',
         first
-          ? 'border-orange-500/30 bg-orange-500/5'
+          ? 'border-brand/30 bg-brand/5'
           : 'border-border bg-background/40',
       )}
     >
       {first ? (
-        <Clock3 className="h-3 w-3 shrink-0 text-orange-300" />
+        <Clock3 className="h-3 w-3 shrink-0 text-brand" />
       ) : (
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
       )}
@@ -94,7 +94,7 @@ const Chip = memo(function Chip({ turn, first }: { turn: QueuedTurn; first: bool
       <button
         type="button"
         onClick={fireNow}
-        className="shrink-0 rounded p-0.5 text-muted-foreground/50 hover:text-orange-300"
+        className="shrink-0 rounded p-0.5 text-muted-foreground/50 hover:text-brand"
         title="Send now (skip the queue)"
       >
         <ArrowUp className="h-2.5 w-2.5" />
@@ -136,7 +136,7 @@ export default function PendingQueueChips() {
         <Clock3 className="h-2.5 w-2.5" />
         In queue · {queue.length}
         {paused && (
-          <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1 text-[8px] text-amber-300">
+          <span className="rounded border border-warning/30 bg-warning/10 px-1 text-[8px] text-warning">
             paused
           </span>
         )}

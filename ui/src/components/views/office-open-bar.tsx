@@ -155,7 +155,7 @@ export function OfficeOpenBar({ onOpen, livePath }: Props) {
       )}
     </div>
     {hint && (
-      <div className="px-3 pb-1.5 font-mono text-[9px] text-amber-300">{hint}</div>
+      <div className="px-3 pb-1.5 font-mono text-[9px] text-warning">{hint}</div>
     )}
     </div>
   )

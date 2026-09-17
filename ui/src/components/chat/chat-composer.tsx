@@ -82,7 +82,7 @@ function HintRow({ item, onSelect }: { item: HintItem; onSelect: (command: strin
       className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-accent/60"
     >
       {Icon && <Icon className="h-3 w-3 text-muted-foreground" />}
-      <span className={cn('font-mono text-[11px]', item.color ?? 'text-orange-300')}>{item.cmd}</span>
+      <span className={cn('font-mono text-[11px]', item.color ?? 'text-brand')}>{item.cmd}</span>
       <span className="ml-auto truncate text-[10px] text-muted-foreground">{item.desc}</span>
     </button>
   )
@@ -210,7 +210,7 @@ function IconBtn({ icon: Icon, label, onClick, hidden, active, disabled, title }
       variant="ghost"
       className={cn(
         'h-7 w-7 text-muted-foreground hover:text-foreground',
-        active && 'bg-orange-500/15 text-orange-500',
+        active && 'bg-brand/15 text-brand',
         hidden && 'hidden sm:inline-flex',
         disabled && 'cursor-not-allowed opacity-40 hover:text-muted-foreground'
       )}
@@ -267,7 +267,7 @@ export default function ChatComposer({ budget, centered }: Props) {
     ctxPct >= 90
       ? 'border-red-500/40 bg-red-500/10 text-red-400'
       : ctxPct >= 75
-        ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
+        ? 'border-warning/40 bg-warning/10 text-warning'
         : 'border-border bg-background/40 text-muted-foreground'
 
   const hint = useMemo(() => {
@@ -335,14 +335,14 @@ export default function ChatComposer({ budget, centered }: Props) {
       return {
         title: 'Slash commands',
         items: fuzzyRank(q, enabled, (c) => c.cmd)
-          .map((c) => ({ ...c, color: 'text-orange-300' })),
+          .map((c) => ({ ...c, color: 'text-brand' })),
       }
     }
     if (hint.kind === 'macro')
       return {
         title: 'Macros',
         items: fuzzyRank(q, MACROS, (c) => c.cmd)
-          .map((c) => ({ ...c, color: 'text-orange-300' })),
+          .map((c) => ({ ...c, color: 'text-brand' })),
       }
     return {
       title: 'Mention',
@@ -632,7 +632,7 @@ export default function ChatComposer({ budget, centered }: Props) {
 
       {/* The chat bar is the field. Controls live in a one-line footer, not a stack above. */}
       {attachment && (
-        <div className="mx-2 mt-2 flex items-center gap-1.5 rounded-md border border-orange-500/30 bg-orange-500/5 px-2 py-1 font-mono text-[10px] text-orange-200">
+        <div className="mx-2 mt-2 flex items-center gap-1.5 rounded-md border border-brand/30 bg-brand/5 px-2 py-1 font-mono text-[10px] text-brand">
           <FileText className="h-3 w-3 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{attachment.title} · {(attachment.content.length / 1024).toFixed(1)} KB attached</span>
           <button
@@ -727,7 +727,7 @@ export default function ChatComposer({ budget, centered }: Props) {
               'h-8 w-8 shrink-0 rounded-md text-white transition-colors',
               agentBusy
                 ? 'bg-emerald-500 hover:bg-emerald-600'
-                : 'bg-orange-500 hover:bg-orange-600',
+                : 'bg-brand hover:bg-brand-hover',
               'disabled:opacity-40',
             )}
             disabled={!canSend}
@@ -755,7 +755,7 @@ export default function ChatComposer({ budget, centered }: Props) {
           <CircleDollarSign className="h-3 w-3 text-emerald-400" />
           <span className="text-foreground">${spent.toFixed(2)}</span>
           {ctxPct >= 75 && (
-            <span className={cn('ml-1', ctxTone.includes('red') ? 'text-red-400' : 'text-amber-400')}>
+            <span className={cn('ml-1', ctxTone.includes('red') ? 'text-red-400' : 'text-warning')}>
               {ctxPct}% ctx
             </span>
           )}
@@ -772,7 +772,7 @@ export default function ChatComposer({ budget, centered }: Props) {
       </div>
 
       {localRuntime && (localCtxWindow ?? ctxWindow) <= 20_000 && (
-        <div className="border-t border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-300">
+        <div className="border-t border-warning/30 bg-warning/10 px-2 py-0.5 font-mono text-[10px] text-warning">
           Local {localRuntime} · {(localCtxWindow ?? ctxWindow).toLocaleString()} tok context
         </div>
       )}

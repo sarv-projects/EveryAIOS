@@ -28,13 +28,13 @@ export function PrivacySection() {
       <Row label="Audit retention" desc="Stored preference — applied by the retention job">
         <div className="flex w-56 items-center gap-3">
           <Slider value={[audit]} min={7} max={365} step={1} onValueChange={(v) => setAudit(v[0])} />
-          <span className="w-16 font-mono text-xs text-orange-300">{audit}d</span>
+          <span className="w-16 font-mono text-xs text-brand">{audit}d</span>
         </div>
       </Row>
       <Row label="Memory retention" desc="Stored preference — applied by the retention job">
         <div className="flex w-56 items-center gap-3">
           <Slider value={[memory]} min={7} max={365} step={1} onValueChange={(v) => setMemory(v[0])} />
-          <span className="w-16 font-mono text-xs text-orange-300">{memory}d</span>
+          <span className="w-16 font-mono text-xs text-brand">{memory}d</span>
         </div>
       </Row>
       <Row label="Local-only mode" desc="Connector/model blocking is not built — switches nothing yet">
@@ -205,7 +205,7 @@ export function AboutSection() {
   return (
     <SectionShell title="About" desc="Version, license and links">
       <div className="rounded-lg border border-border bg-background/30 p-4">
-        <div className="font-mono text-base font-semibold text-orange-300">EveryAIOS</div>
+        <div className="font-mono text-base font-semibold text-brand">EveryAIOS</div>
         <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
           v{appVersion()}
         </div>
@@ -236,7 +236,7 @@ export function AboutSection() {
           </div>
           {updater.phase === 'available' && (
             <div className="mt-2 rounded-md border border-border bg-background/50 p-2 text-xs">
-              <span className="font-mono text-orange-300">v{updater.version}</span> available
+              <span className="font-mono text-brand">v{updater.version}</span> available
               {updater.notes && (
                 <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-muted-foreground">{updater.notes}</p>
               )}
@@ -482,7 +482,7 @@ export function DoctorSection() {
 
   const glyph = (s: string) => (s === 'ok' ? '✓' : s === 'warn' ? '⚠' : '✕')
   const tone = (s: string) =>
-    s === 'ok' ? 'text-emerald-400' : s === 'warn' ? 'text-amber-400' : 'text-red-400'
+    s === 'ok' ? 'text-emerald-400' : s === 'warn' ? 'text-warning' : 'text-red-400'
 
   return (
     <SectionShell title="Doctor" desc="Per-subsystem readiness — a broken component is diagnosed, not a support ticket (everyaios doctor)">
@@ -516,7 +516,7 @@ export function DoctorSection() {
                 <span className="flex-1 text-[11px] text-muted-foreground">{c.detail}</span>
               </div>
               {c.hint && (
-                <div className="ml-6 mt-0.5 text-[10px] text-amber-300/80">↳ {c.hint}</div>
+                <div className="ml-6 mt-0.5 text-[10px] text-warning/80">↳ {c.hint}</div>
               )}
             </li>
           ))}

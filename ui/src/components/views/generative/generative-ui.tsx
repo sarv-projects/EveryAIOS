@@ -58,7 +58,7 @@ export function DescriptorRenderer({ d, className }: { d: Descriptor; className?
           <ul className="space-y-0.5">
             {d.items.map((item, i) => (
               <li key={i} className="flex items-start gap-1.5 text-[11px] text-foreground/80">
-                <span className="mt-1 size-1 shrink-0 rounded-full bg-orange-400" />
+                <span className="mt-1 size-1 shrink-0 rounded-full bg-brand" />
                 <span>{item}</span>
               </li>
             ))}
@@ -224,7 +224,7 @@ export function ArtifactCard({
                 className={cn(
                   'rounded border px-1.5 py-0.5 font-mono text-[9px] transition-colors',
                   v.id === currentId
-                    ? 'border-orange-500/50 bg-orange-500/10 text-orange-300'
+                    ? 'border-brand/50 bg-brand/10 text-brand'
                     : 'border-border bg-background/40 text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -237,7 +237,7 @@ export function ArtifactCard({
           {!live && (
             <Button
               size="sm"
-              className="h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400"
+              className="h-6 bg-brand px-2 text-[10px] text-black hover:bg-brand"
               onClick={() => setLive(true)}
             >
               {makeLiveLabel}

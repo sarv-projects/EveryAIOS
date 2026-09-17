@@ -258,12 +258,12 @@ export default function DesktopView() {
     <div className="flex h-full w-full flex-col">
       <header className="border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <MonitorSmartphone className="h-4 w-4 text-orange-400" />
+          <MonitorSmartphone className="h-4 w-4 text-brand" />
           <h2 className="text-sm font-semibold text-foreground">Computer use</h2>
           {status && (
             <Badge
               variant="outline"
-              className={cn('text-[9px]', status.attached ? 'text-emerald-300' : 'text-amber-300')}
+              className={cn('text-[9px]', status.attached ? 'text-emerald-300' : 'text-warning')}
             >
               {status.attached ? 'engine attached' : 'not attached'}
             </Badge>
@@ -317,7 +317,7 @@ export default function DesktopView() {
             )}
           </AnimatePresence>
           {status && !status.attached && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-[11px] text-amber-300">
+            <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-[11px] text-warning">
               <ShieldAlert className="mb-1 h-3.5 w-3.5" />
               Desktop engine not attached{status.reason ? ` — ${status.reason}` : ''}. It attaches
               lazily on first use and honest-fails on headless / no-display.
@@ -371,7 +371,7 @@ export default function DesktopView() {
                     onClick={() => void selectWindow(w.id)}
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md border px-3 py-1.5 text-left transition-colors',
-                      selected === w.id ? 'border-orange-500/50 bg-orange-500/5' : 'border-border bg-card hover:bg-accent/40',
+                      selected === w.id ? 'border-brand/50 bg-brand/5' : 'border-border bg-card hover:bg-accent/40',
                     )}
                   >
                     <span className="font-mono text-[10px] text-muted-foreground">#{w.id}</span>
@@ -420,12 +420,12 @@ export default function DesktopView() {
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3"
+                    className="rounded-lg border border-warning/50 bg-warning/10 p-3"
                   >
-                    <div className="flex items-center gap-2 text-[11px] font-semibold text-amber-300">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold text-warning">
                       <ShieldAlert className="h-3.5 w-3.5" /> Foreground escalation required
                     </div>
-                    <p className="mt-1.5 text-[11px] text-amber-200/90">{escalation.reason}</p>
+                    <p className="mt-1.5 text-[11px] text-warning/90">{escalation.reason}</p>
                     <div className="mt-2 grid gap-1 font-mono text-[10px] text-muted-foreground">
                       <span>target · {escalation.target}</span>
                       <span>requires · explicit human gesture</span>
@@ -435,7 +435,7 @@ export default function DesktopView() {
                       <Button
                         size="sm"
                         variant="default"
-                        className="h-7 bg-amber-500 text-black hover:bg-amber-400"
+                        className="h-7 bg-warning text-black hover:bg-warning"
                         disabled={busy}
                         onClick={() => void approveEscalation()}
                       >
@@ -458,7 +458,7 @@ export default function DesktopView() {
                   disabled={!inTauri()}
                   className="h-8 flex-1 text-xs"
                 />
-                <Button size="sm" variant="default" className="bg-orange-500 text-black hover:bg-orange-400" disabled={busy || loading || !inTauri() || !typeText.trim()} onClick={() => void typeInto()}>
+                <Button size="sm" variant="default" className="bg-brand text-black hover:bg-brand" disabled={busy || loading || !inTauri() || !typeText.trim()} onClick={() => void typeInto()}>
                   <Keyboard className="h-3 w-3" /> Type
                 </Button>
               </div>

@@ -111,7 +111,7 @@ export function OfficeRibbon({
               tab === t.id
                 ? 'border-border bg-zinc-800 text-foreground'
                 : 'border-transparent text-muted-foreground hover:bg-zinc-800/40 hover:text-foreground',
-              t.copilot && 'text-orange-300',
+              t.copilot && 'text-brand',
             )}
           >
             {t.copilot && <Sparkles className="mr-1 inline h-2.5 w-2.5" />}
@@ -119,7 +119,7 @@ export function OfficeRibbon({
           </button>
         ))}
         <div className="ml-auto flex items-center gap-1 pb-0.5 pr-1">
-          <span className="rounded bg-orange-500/15 px-1.5 py-0.5 font-mono text-[9px] text-orange-300">
+          <span className="rounded bg-brand/15 px-1.5 py-0.5 font-mono text-[9px] text-brand">
             {app} · ribbon
           </span>
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
@@ -153,7 +153,7 @@ export function OfficeRibbon({
           <button
             onClick={() => onAction?.('ask')}
             disabled={!onAction}
-            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-orange-500/40 bg-orange-500/15 px-2.5 py-1 text-[10px] text-orange-300 transition-colors hover:bg-orange-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-brand/40 bg-brand/15 px-2.5 py-1 text-[10px] text-brand transition-colors hover:bg-brand/25 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Sparkles className="h-3 w-3" />
             Ask Copilot

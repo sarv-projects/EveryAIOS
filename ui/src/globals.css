@@ -45,13 +45,64 @@
   --color-surface-1: hsl(var(--surface-1));
   --color-surface-2: hsl(var(--surface-2));
   --color-surface-3: hsl(var(--surface-3));
-  /* Keep legacy utility names on the spec's semantic palette. */
+  /* Keep legacy utility names on the spec's semantic palette (P66.5).
+
+     The whole `orange-*` family is the legacy *brand* accent — it was only
+     ever used for accent chips, buttons, focus borders and live dots — so it
+     resolves to `--brand`. Because `--brand` is the user-selectable accent,
+     every viewport that still says `orange-*` inherits the active accent
+     choice instead of pinning the retired palette.
+
+     `amber-*` / `yellow-*` were only ever used for caution, permission and
+     degraded states, so they resolve to `--warning`. Mapping them to the
+     brand would have turned a warning into an accent and lost the meaning,
+     which is why the two families are separated here.
+
+     The full shade ranges are covered — not just the shades in use today — so
+     a new `text-warning` cannot silently reintroduce the old palette. */
+  --color-orange-50: hsl(var(--brand));
+  --color-orange-100: hsl(var(--brand));
+  --color-orange-200: hsl(var(--brand));
+  --color-orange-300: hsl(var(--brand));
+  --color-orange-400: hsl(var(--brand));
   --color-orange-500: hsl(var(--brand));
   --color-orange-600: hsl(var(--brand-hover));
+  --color-orange-700: hsl(var(--brand-hover));
+  --color-orange-800: hsl(var(--brand-hover));
+  --color-orange-900: hsl(var(--brand-hover));
+  --color-amber-50: hsl(var(--warning));
+  --color-amber-100: hsl(var(--warning));
+  --color-amber-200: hsl(var(--warning));
+  --color-amber-300: hsl(var(--warning));
+  --color-amber-400: hsl(var(--warning));
+  --color-amber-500: hsl(var(--warning));
+  --color-amber-600: hsl(var(--warning));
+  --color-amber-700: hsl(var(--warning));
+  --color-amber-800: hsl(var(--warning));
+  --color-amber-900: hsl(var(--warning));
+  --color-yellow-50: hsl(var(--warning));
+  --color-yellow-100: hsl(var(--warning));
+  --color-yellow-200: hsl(var(--warning));
+  --color-yellow-300: hsl(var(--warning));
+  --color-yellow-400: hsl(var(--warning));
+  --color-yellow-500: hsl(var(--warning));
+  --color-yellow-600: hsl(var(--warning));
+  --color-yellow-700: hsl(var(--warning));
+  --color-yellow-800: hsl(var(--warning));
+  --color-yellow-900: hsl(var(--warning));
   --color-blue-500: hsl(var(--info));
   --color-emerald-500: hsl(var(--success));
-  --color-amber-500: hsl(var(--warning));
   --color-red-500: hsl(var(--danger));
+
+  /* First-class semantic utilities, so source can say what it means:
+     `bg-brand`, `text-warning`, `border-success`, … These are the names the
+     `orange-*` / `amber-*` / `yellow-*` aliases above forward to. */
+  --color-brand: hsl(var(--brand));
+  --color-brand-hover: hsl(var(--brand-hover));
+  --color-warning: hsl(var(--warning));
+  --color-success: hsl(var(--success));
+  --color-danger: hsl(var(--danger));
+  --color-info: hsl(var(--info));
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -145,6 +196,14 @@
   --accent: 60 4% 20%;
   --accent-foreground: 48 14% 93%;
   --destructive: 0 72% 60%;
+  /* P66.5 — the semantic status tokens were defined in `:root` only, so dark
+     mode rendered them at light-canvas lightness: `text-warning` (→
+     `--warning`) and `text-emerald-500` (→ `--success`) sat near 3-4:1 on the
+     #1A1917 surface. These lift them for the dark canvas. */
+  --success: 142 71% 45%;
+  --warning: 41 96% 55%;
+  --danger: 0 72% 60%;
+  --info: 217 91% 60%;
   --border: 60 4% 20%;
   --input: 60 4% 20%;
   --ring: 217 91% 60%;

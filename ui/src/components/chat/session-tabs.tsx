@@ -27,11 +27,11 @@ function tabOrder(sessions: Session[]): Session[] {
 function statusDot(status: Session['status']): string {
   switch (status) {
     case 'running':
-      return 'bg-orange-500 live-dot'
+      return 'bg-brand live-dot'
     case 'action-required':
-      return 'bg-amber-400'
+      return 'bg-warning'
     case 'paused':
-      return 'bg-yellow-400'
+      return 'bg-warning'
     case 'scheduled':
       return 'bg-sky-400'
     case 'failed':
@@ -41,7 +41,7 @@ function statusDot(status: Session['status']): string {
     case 'cancelled':
       return 'bg-zinc-400'
     case 'budget_exceeded':
-      return 'bg-amber-400'
+      return 'bg-warning'
     default:
       return 'bg-zinc-500'
   }
@@ -77,14 +77,14 @@ export function SessionTabs() {
             className={cn(
               'group flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors',
               active
-                ? 'border-orange-500/50 bg-orange-500/10 text-foreground'
+                ? 'border-brand/50 bg-brand/10 text-foreground'
                 : 'border-transparent text-muted-foreground hover:border-border hover:bg-accent/50 hover:text-foreground',
             )}
             title={s.folder ? `${s.title} · ${s.folder}` : s.title}
           >
             <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', statusDot(s.status))} />
             <span className="truncate">{s.title || 'New work'}</span>
-            {s.pinned && <span className="text-[9px] text-orange-400" title="Pinned">★</span>}
+            {s.pinned && <span className="text-[9px] text-brand" title="Pinned">★</span>}
             <button
               type="button"
               onClick={(e) => {

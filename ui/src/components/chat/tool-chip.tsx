@@ -19,7 +19,7 @@ function previewArgs(args?: Record<string, unknown>): string {
 function riskTone(risk?: string): string {
   const r = (risk ?? '').toLowerCase()
   if (r === 'high' || r === 'destructive') return 'border-rose-500/40 bg-rose-500/10 text-rose-300'
-  if (r === 'medium' || r === 'external-write') return 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+  if (r === 'medium' || r === 'external-write') return 'border-warning/40 bg-warning/10 text-warning'
   if (r === 'low' || r === 'read') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
   return 'border-border bg-background/40 text-muted-foreground'
 }
@@ -58,7 +58,7 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
       className={cn(
         'overflow-hidden rounded-lg border bg-background/40',
         rec.status === 'failed' && 'border-rose-500/40',
-        rec.status === 'running' && 'border-orange-500/30',
+        rec.status === 'running' && 'border-brand/30',
         rec.status === 'done' && 'border-border',
       )}
     >
@@ -68,7 +68,7 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
         onClick={() => setOpen((v) => !v)}
       >
         {rec.status === 'running' ? (
-          <Loader2 className="h-3 w-3 shrink-0 animate-spin text-orange-400" />
+          <Loader2 className="h-3 w-3 shrink-0 animate-spin text-brand" />
         ) : rec.status === 'failed' ? (
           <X className="h-3 w-3 shrink-0 text-rose-400" />
         ) : (
@@ -91,7 +91,7 @@ const ToolChip = memo(function ToolChip({ rec }: { rec: ToolCallRecord }) {
         )}
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {rec.status === 'running' && (
-            <span className="font-mono text-[9px] text-orange-300/80">{rec.progress ?? 'working…'}</span>
+            <span className="font-mono text-[9px] text-brand/80">{rec.progress ?? 'working…'}</span>
           )}
           {duration && rec.status === 'running' && (
             <span className="font-mono text-[9px] text-muted-foreground/60">{duration}</span>

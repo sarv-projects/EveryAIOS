@@ -69,7 +69,7 @@ export default function VaultGate({ children }: { children: React.ReactNode }) {
   if (gate === 'loading') {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
-        <Loader2 className="h-5 w-5 animate-spin text-orange-400" />
+        <Loader2 className="h-5 w-5 animate-spin text-brand" />
       </div>
     )
   }
@@ -81,9 +81,9 @@ export default function VaultGate({ children }: { children: React.ReactNode }) {
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
         <div className="mb-4 flex items-center gap-2">
           {setup ? (
-            <KeyRound className="h-5 w-5 text-orange-400" />
+            <KeyRound className="h-5 w-5 text-brand" />
           ) : (
-            <Lock className="h-5 w-5 text-orange-400" />
+            <Lock className="h-5 w-5 text-brand" />
           )}
           <h1 className="text-sm font-medium text-foreground">
             {setup ? 'Create your vault passphrase' : 'Unlock EveryAIOS'}
@@ -119,7 +119,7 @@ export default function VaultGate({ children }: { children: React.ReactNode }) {
         )}
         {error && <p className="mb-3 text-[11px] text-red-400">{error}</p>}
         <Button
-          className="h-8 w-full bg-orange-500 text-xs text-black hover:bg-orange-400"
+          className="h-8 w-full bg-brand text-xs text-black hover:bg-brand"
           disabled={busy}
           onClick={() => void submit()}
         >

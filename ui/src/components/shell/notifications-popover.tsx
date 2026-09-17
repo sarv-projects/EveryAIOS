@@ -46,9 +46,9 @@ const KIND_META: Record<
 > = {
   info: { icon: Info, tone: 'text-sky-300', ring: 'ring-sky-500/20', label: 'Info' },
   success: { icon: CheckCircle2, tone: 'text-emerald-300', ring: 'ring-emerald-500/20', label: 'Success' },
-  warning: { icon: AlertTriangle, tone: 'text-amber-300', ring: 'ring-amber-500/20', label: 'Warning' },
+  warning: { icon: AlertTriangle, tone: 'text-warning', ring: 'ring-warning/20', label: 'Warning' },
   error: { icon: AlertTriangle, tone: 'text-rose-300', ring: 'ring-rose-500/20', label: 'Error' },
-  cost: { icon: DollarSign, tone: 'text-orange-300', ring: 'ring-orange-500/20', label: 'Cost' },
+  cost: { icon: DollarSign, tone: 'text-brand', ring: 'ring-brand/20', label: 'Cost' },
   guard: { icon: ShieldAlert, tone: 'text-violet-300', ring: 'ring-violet-500/20', label: 'Guard' },
   agent: { icon: Cpu, tone: 'text-blue-300', ring: 'ring-blue-500/20', label: 'Agent' },
   git: { icon: GitBranch, tone: 'text-emerald-300', ring: 'ring-emerald-500/20', label: 'Git' },
@@ -234,9 +234,9 @@ export function NotificationsPopover() {
         onClick={() => setOpen((v) => !v)}
         title="Notifications"
       >
-        <Bell className={cn('h-3.5 w-3.5', open ? 'text-orange-300' : 'text-muted-foreground')} />
+        <Bell className={cn('h-3.5 w-3.5', open ? 'text-brand' : 'text-muted-foreground')} />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-orange-500 px-1 font-mono text-[8px] font-bold text-white">
+          <span className="absolute top-1 right-1.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-brand px-1 font-mono text-[8px] font-bold text-white">
             {unreadCount}
           </span>
         )}
@@ -247,10 +247,10 @@ export function NotificationsPopover() {
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
             <div className="flex items-center gap-1.5">
-              <Bell className="h-3.5 w-3.5 text-orange-400" />
+              <Bell className="h-3.5 w-3.5 text-brand" />
               <span className="text-xs font-semibold text-foreground">Activity</span>
               {unreadCount > 0 && (
-                <Badge className="bg-orange-500/15 px-1.5 py-0 text-[9px] text-orange-300">
+                <Badge className="bg-brand/15 px-1.5 py-0 text-[9px] text-brand">
                   {unreadCount} new
                 </Badge>
               )}
@@ -281,7 +281,7 @@ export function NotificationsPopover() {
                     onClick={() => markRead(n.id)}
                     className={cn(
                       'group flex w-full items-start gap-2.5 border-b border-border/30 px-3 py-2.5 text-left transition-colors hover:bg-accent/40',
-                      n.unread && 'bg-orange-500/5',
+                      n.unread && 'bg-brand/5',
                     )}
                   >
                     <span
@@ -312,8 +312,8 @@ export function NotificationsPopover() {
                           </span>
                         )}
                         {n.unread && (
-                          <span className="flex items-center gap-0.5 text-[9px] text-orange-300">
-                            <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                          <span className="flex items-center gap-0.5 text-[9px] text-brand">
+                            <span className="h-1.5 w-1.5 rounded-full bg-brand" />
                             new
                           </span>
                         )}
@@ -334,9 +334,9 @@ export function NotificationsPopover() {
                 st.setSettingsSection('notifications')
                 setOpen(false)
               }}
-              className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-orange-300"
+              className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-brand"
             >
-              <Zap className="h-3 w-3 text-orange-400" />
+              <Zap className="h-3 w-3 text-brand" />
               {inTauri() ? 'Notification settings · live event stream' : 'Notification settings'}
             </button>
             <button
@@ -345,7 +345,7 @@ export function NotificationsPopover() {
                 useAppStore.getState().setCenterScreen('activity')
                 setOpen(false)
               }}
-              className="font-mono text-[10px] text-orange-300 transition-colors hover:text-orange-200"
+              className="font-mono text-[10px] text-brand transition-colors hover:text-brand"
             >
               View all activity →
             </button>

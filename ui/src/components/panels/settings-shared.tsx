@@ -56,7 +56,7 @@ export function LinkChip({ icon, label, href }: { icon: React.ReactNode; label: 
     <button
       type="button"
       onClick={() => window.open(href, '_blank', 'noopener')}
-      className="flex items-center gap-1.5 rounded-md border border-border bg-background/40 px-2.5 py-1 text-xs text-foreground/80 hover:border-orange-500/40 hover:bg-orange-500/10 hover:text-orange-300"
+      className="flex items-center gap-1.5 rounded-md border border-border bg-background/40 px-2.5 py-1 text-xs text-foreground/80 hover:border-brand/40 hover:bg-brand/10 hover:text-brand"
     >
       {icon}
       {label}

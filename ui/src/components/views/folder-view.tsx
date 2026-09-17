@@ -126,7 +126,7 @@ export default function FolderView() {
             ) : (
               <ChevronRight className="h-3 w-3 text-muted-foreground" />
             )}
-            {open ? <FolderOpen className="h-4 w-4 text-orange-400" /> : <Folder className="h-4 w-4 text-orange-400" />}
+            {open ? <FolderOpen className="h-4 w-4 text-brand" /> : <Folder className="h-4 w-4 text-brand" />}
             <span className="flex-1 truncate text-foreground">{e.name}</span>
           </button>
           {open && (
@@ -206,7 +206,7 @@ function FileIcon({ name }: { name: string }) {
   const c = 'h-4 w-4 shrink-0'
   if (ext === 'xlsx' || ext === 'csv') return <FileSpreadsheet className={cn(c, 'text-emerald-400')} />
   if (ext === 'docx') return <FileText className={cn(c, 'text-blue-400')} />
-  if (ext === 'pptx') return <Presentation className={cn(c, 'text-orange-400')} />
+  if (ext === 'pptx') return <Presentation className={cn(c, 'text-brand')} />
   if (ext === 'pdf') return <FileText className={cn(c, 'text-red-400')} />
   return <File className={cn(c, 'text-muted-foreground')} />
 }

@@ -135,7 +135,7 @@ export function ScmPanel({ cwd }: { cwd: string | null }) {
           <div className="space-y-0.5">
             {status.rows.map((r) => (
               <div key={r.path} className="flex items-center gap-2 rounded px-1.5 py-0.5 text-[11px] hover:bg-accent/40">
-                <span className={cn('w-5 shrink-0 font-mono text-[10px]', r.code.trim() === '??' ? 'text-sky-400' : r.code.startsWith('M') ? 'text-amber-400' : 'text-emerald-400')}>
+                <span className={cn('w-5 shrink-0 font-mono text-[10px]', r.code.trim() === '??' ? 'text-sky-400' : r.code.startsWith('M') ? 'text-warning' : 'text-emerald-400')}>
                   {r.code.trim()}
                 </span>
                 <span className="truncate text-foreground">{r.path}</span>
@@ -170,7 +170,7 @@ export function ScmPanel({ cwd }: { cwd: string | null }) {
             </div>
             {log.commits.map((c) => (
               <div key={c.hash} className="flex items-center gap-2 rounded px-1.5 py-0.5 font-mono text-[10px] hover:bg-accent/40">
-                <span className="text-orange-400/70">{c.hash.slice(0, 7)}</span>
+                <span className="text-brand/70">{c.hash.slice(0, 7)}</span>
                 <span className="truncate text-muted-foreground">{c.message}</span>
               </div>
             ))}

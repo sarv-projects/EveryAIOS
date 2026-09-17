@@ -106,12 +106,12 @@ function RereadState({ envelope }: { envelope: RereadEnvelope | null }) {
       {envelope.appliedLive === true ? (
         <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-300">applied live</span>
       ) : envelope.appliedLive === false ? (
-        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-300">applies on next turn</span>
+        <span className="rounded bg-warning/15 px-1.5 py-0.5 text-warning">applies on next turn</span>
       ) : (
         <span className="text-muted-foreground/70">live-apply: unknown</span>
       )}
       {envelope.restartRequired === true && (
-        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-300">restart required</span>
+        <span className="rounded bg-warning/15 px-1.5 py-0.5 text-warning">restart required</span>
       )}
       {envelope.health ? (
         <span className="text-muted-foreground">health: {envelope.health}</span>
@@ -156,7 +156,7 @@ function CatalogStatusBar({
 }) {
   if (!live || !status) {
     return (
-      <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-200/90">
+      <p className="rounded-md border border-warning/30 bg-warning/5 px-2 py-1.5 text-[10px] text-warning/90">
         Preview mode — the live models.dev catalog needs the Tauri shell. Rows
         below are common-provider hints, never a claim about this machine.
       </p>
@@ -175,7 +175,7 @@ function CatalogStatusBar({
         </span>
         <span>fetched {fmtWhen(status.fetchedAt)}</span>
         {stale ? (
-          <Badge className="bg-amber-500/15 text-[9px] text-amber-300">
+          <Badge className="bg-warning/15 text-[9px] text-warning">
             {status.hasSnapshot ? 'stale' : 'no snapshot'}
           </Badge>
         ) : (
@@ -239,7 +239,7 @@ function CatalogStatusBar({
 function SourceBadge({ row }: { row: CatalogProviderRow }) {
   const tone =
     row.source === 'overlay'
-      ? 'bg-orange-500/15 text-orange-300'
+      ? 'bg-brand/15 text-brand'
       : row.profileSource
         ? 'bg-sky-500/15 text-sky-300'
         : row.source === 'preview'
@@ -267,7 +267,7 @@ function ProviderRowButton({
       className={cn(
         'flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
         active
-          ? 'border-orange-500/50 bg-orange-500/10'
+          ? 'border-brand/50 bg-brand/10'
           : 'border-border/50 bg-background/30 hover:border-border hover:bg-background/60',
       )}
     >
@@ -308,7 +308,7 @@ function ProviderRowButton({
           {/* Recorded failure from the last probe. Shown because silence would
               read as "fine" — a failed check is real state, not an absence. */}
           {row.reachable === false && (
-            <Badge className="bg-amber-500/15 text-[9px] text-amber-300">
+            <Badge className="bg-warning/15 text-[9px] text-warning">
               <AlertTriangle className="h-2.5 w-2.5" /> last check failed
             </Badge>
           )}
@@ -454,7 +454,7 @@ function ModelTable({
                 <td className="px-2 py-1 text-right font-mono text-emerald-300/90">
                   {formatPerM(m.priceInput, m.free)}
                 </td>
-                <td className="px-2 py-1 text-right font-mono text-orange-300/90">
+                <td className="px-2 py-1 text-right font-mono text-brand/90">
                   {formatPerM(m.priceOutput, m.free)}
                 </td>
                 <td className="px-2 py-1">
@@ -475,7 +475,7 @@ function ModelTable({
                       </span>
                     )}
                     {m.fromProfile && (
-                      <span className="rounded bg-orange-500/15 px-1 text-[9px] text-orange-300">
+                      <span className="rounded bg-brand/15 px-1 text-[9px] text-brand">
                         profile
                       </span>
                     )}
@@ -642,7 +642,7 @@ function ActivatePanel({
           </Badge>
         )}
         {row.reachable === false && (
-          <Badge className="bg-amber-500/15 text-[9px] text-amber-300">
+          <Badge className="bg-warning/15 text-[9px] text-warning">
             <AlertTriangle className="h-2.5 w-2.5" /> last check failed
           </Badge>
         )}
@@ -789,7 +789,7 @@ function ActivatePanel({
               key={k.opaqueHandle}
               className="flex items-center gap-2 rounded-md border border-border/50 bg-background/30 px-2 py-1.5"
             >
-              <KeyRound className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+              <KeyRound className="h-3.5 w-3.5 shrink-0 text-brand" />
               <span className="font-mono text-[10px] text-foreground">
                 {k.provider} / {k.keyId}
               </span>
@@ -920,7 +920,7 @@ function CustomInferenceForm({ onSaved }: { onSaved: () => Promise<void> }) {
   return (
     <div className="space-y-2 rounded-md border border-border/50 bg-background/20 p-3">
       <div className="flex items-center gap-1.5 text-xs font-medium">
-        <Plus className="h-3.5 w-3.5 text-orange-400" />
+        <Plus className="h-3.5 w-3.5 text-brand" />
         Custom inference provider
       </div>
       <p className="text-[10px] text-muted-foreground">
@@ -998,7 +998,7 @@ function CustomInferenceForm({ onSaved }: { onSaved: () => Promise<void> }) {
         </label>
         <Button
           size="sm"
-          className="ml-auto h-7 bg-orange-500 text-black hover:bg-orange-400"
+          className="ml-auto h-7 bg-brand text-black hover:bg-brand"
           disabled={busy}
           onClick={() => void save()}
         >
@@ -1147,7 +1147,7 @@ export default function ProvidersSection() {
           No provider matches “{query}” — the full list lives on{' '}
           <button
             type="button"
-            className="text-orange-300 underline-offset-2 hover:underline"
+            className="text-brand underline-offset-2 hover:underline"
             onClick={() => window.open('https://models.dev/providers/', '_blank', 'noopener')}
           >
             models.dev

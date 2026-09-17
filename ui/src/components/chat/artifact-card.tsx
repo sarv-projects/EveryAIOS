@@ -27,10 +27,10 @@ const TYPE_ACCENT: Record<Artifact['type'], string> = {
   webapp: 'text-emerald-400',
   xlsx: 'text-emerald-400',
   docx: 'text-sky-300',
-  pptx: 'text-orange-400',
+  pptx: 'text-brand',
   pdf: 'text-rose-400',
   code: 'text-violet-300',
-  markdown: 'text-amber-300',
+  markdown: 'text-warning',
   image: 'text-fuchsia-300',
 }
 
@@ -67,7 +67,7 @@ function Preview({ artifact }: { artifact: Artifact }) {
               key={i}
               className={cn(
                 'h-4 bg-card px-1 font-mono text-[8px] leading-4',
-                i === 5 && 'bg-orange-500/10 text-orange-300'
+                i === 5 && 'bg-brand/10 text-brand'
               )}
             >
               {i === 5 ? '1.8M' : ''}
@@ -87,13 +87,13 @@ function Preview({ artifact }: { artifact: Artifact }) {
     case 'pptx':
       return (
         <div className="aspect-video w-full rounded border border-border bg-zinc-900/60 p-2">
-          <div className="h-1.5 w-2/3 rounded-full bg-orange-400/80" />
+          <div className="h-1.5 w-2/3 rounded-full bg-brand/80" />
           <div className="mt-1 h-1 w-1/2 rounded-full bg-muted-foreground/30" />
           <div className="mt-3 flex h-8 items-end gap-1">
             {[3, 5, 7, 5, 3].map((h, i) => (
               <div
                 key={i}
-                className="flex-1 rounded-t bg-gradient-to-t from-orange-600/70 to-orange-400/70"
+                className="flex-1 rounded-t bg-gradient-to-t from-brand-hover/70 to-brand/70"
                 style={{ height: `${h * 12}%` }}
               />
             ))}
@@ -107,7 +107,7 @@ function Preview({ artifact }: { artifact: Artifact }) {
           <div className="h-0.5 w-full rounded-full bg-zinc-400/60" />
           <div className="h-0.5 w-11/12 rounded-full bg-zinc-400/60" />
           <div className="h-0.5 w-10/12 rounded-full bg-zinc-400/60" />
-          <div className="mt-1 inline-block rounded-sm bg-yellow-200 px-2 py-0.5 font-mono text-[8px] text-zinc-900">
+          <div className="mt-1 inline-block rounded-sm bg-warning px-2 py-0.5 font-mono text-[8px] text-zinc-900">
             $1.80M
           </div>
         </div>
@@ -139,14 +139,14 @@ function Preview({ artifact }: { artifact: Artifact }) {
       )
     case 'image':
       return (
-        <div className="aspect-video w-full rounded bg-gradient-to-br from-fuchsia-500/40 via-orange-500/30 to-amber-500/40" />
+        <div className="aspect-video w-full rounded bg-gradient-to-br from-fuchsia-500/40 via-brand/30 to-warning/40" />
       )
     case 'webapp':
       return (
         <div className="relative aspect-video w-full overflow-hidden rounded border border-border bg-zinc-950">
           <div className="absolute inset-x-0 top-0 flex h-4 items-center gap-1 border-b border-border/60 px-1.5">
             <span className="size-1 rounded-full bg-red-400/70" />
-            <span className="size-1 rounded-full bg-amber-400/70" />
+            <span className="size-1 rounded-full bg-warning/70" />
             <span className="size-1 rounded-full bg-emerald-400/70" />
           </div>
           <div className="flex h-full items-center justify-center pt-3 text-[9px] text-emerald-300/80">
@@ -189,7 +189,7 @@ export default function ArtifactCard({ artifact }: Props) {
   return (
     <Card
       onClick={() => openArtifact()}
-      className="group cursor-pointer gap-0 overflow-hidden border-border bg-card/60 p-0 transition-colors hover:border-orange-500/40"
+      className="group cursor-pointer gap-0 overflow-hidden border-border bg-card/60 p-0 transition-colors hover:border-brand/40"
     >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -199,9 +199,9 @@ export default function ArtifactCard({ artifact }: Props) {
         {isLive && (
           <Badge
             variant="outline"
-            className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+            className="gap-1 border-brand/40 bg-brand/10 text-[10px] text-brand"
           >
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+            <span className="live-dot h-1.5 w-1.5 rounded-full bg-brand" />
             Live
           </Badge>
         )}
@@ -294,7 +294,7 @@ export default function ArtifactCard({ artifact }: Props) {
           <Button
             size="sm"
             variant="ghost"
-            className="ml-auto h-7 gap-1 px-2 text-[11px] text-orange-300 hover:text-orange-200"
+            className="ml-auto h-7 gap-1 px-2 text-[11px] text-brand hover:text-brand"
             onClick={(e) => {
               e.stopPropagation()
               openArtifact()
@@ -335,7 +335,7 @@ function ActionChecklist({
         className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
       >
         {running ? (
-          <Loader2 className="h-3 w-3 animate-spin text-orange-400" />
+          <Loader2 className="h-3 w-3 animate-spin text-brand" />
         ) : failed > 0 ? (
           <X className="h-3 w-3 text-rose-400" />
         ) : (
@@ -359,7 +359,7 @@ function ActionChecklist({
                 className={cn(
                   'flex size-3.5 shrink-0 items-center justify-center rounded-full border',
                   a.state === 'complete' && 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400',
-                  a.state === 'running' && 'border-orange-500/40 bg-orange-500/10 text-orange-300',
+                  a.state === 'running' && 'border-brand/40 bg-brand/10 text-brand',
                   a.state === 'failed' && 'border-rose-500/40 bg-rose-500/10 text-rose-400',
                   a.state === 'aborted' && 'border-muted-foreground/40 text-muted-foreground',
                   a.state === 'pending' && 'border-muted-foreground/30 text-muted-foreground/50'

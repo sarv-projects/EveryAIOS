@@ -55,7 +55,7 @@ export default function GenerativeView() {
               onClick={() => setTab(t)}
               className={
                 tab === t
-                  ? 'rounded border border-orange-500/50 bg-orange-500/10 px-2 py-0.5 text-[9px] text-orange-300'
+                  ? 'rounded border border-brand/50 bg-brand/10 px-2 py-0.5 text-[9px] text-brand'
                   : 'rounded border border-border bg-background/40 px-2 py-0.5 text-[9px] text-muted-foreground hover:text-foreground'
               }
             >

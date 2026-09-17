@@ -69,7 +69,7 @@ const STATUS_META: Record<
   running: {
     label: 'Running',
     icon: Loader2,
-    cls: 'text-orange-400 border-orange-500/30 bg-orange-500/5',
+    cls: 'text-brand border-brand/30 bg-brand/5',
   },
   done: {
     label: 'Done',
@@ -84,7 +84,7 @@ const STATUS_META: Record<
   blocked: {
     label: 'Blocked',
     icon: Clock,
-    cls: 'text-amber-400 border-amber-500/30',
+    cls: 'text-warning border-warning/30',
   },
 }
 

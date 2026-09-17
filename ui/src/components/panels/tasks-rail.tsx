@@ -34,10 +34,10 @@ import { staggerStyle } from '@/lib/stagger'
 
 const STATUS_STYLE: Record<TaskStatus, string> = {
   queued: 'bg-muted text-muted-foreground',
-  running: 'bg-amber-500/15 text-amber-600',
+  running: 'bg-warning/15 text-warning',
   succeeded: 'bg-emerald-500/15 text-emerald-600',
   failed: 'bg-red-500/15 text-red-600',
-  timed_out: 'bg-orange-500/15 text-orange-600',
+  timed_out: 'bg-brand/15 text-brand-hover',
   cancelled: 'bg-muted text-muted-foreground',
   lost: 'bg-red-500/20 text-red-700',
 }
@@ -119,7 +119,7 @@ export default function TasksRail() {
     <div className="flex h-full flex-col gap-3">
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
-          <CircleDot className="h-4 w-4 text-amber-500" />
+          <CircleDot className="h-4 w-4 text-warning" />
           <h3 className="text-sm font-medium">Detached tasks</h3>
           <span className="text-xs text-muted-foreground">
             {tasks.filter((t) => t.status === 'running').length} running
@@ -134,7 +134,7 @@ export default function TasksRail() {
               onClick={() => setFilter(f)}
               className={cn(
                 'h-6 px-2 text-xs',
-                filter === f && 'bg-amber-500/10 text-amber-600',
+                filter === f && 'bg-warning/10 text-warning',
               )}
             >
               {f}
@@ -193,7 +193,7 @@ export default function TasksRail() {
                       {t.retry_generation > 0 && (
                         <>
                           <span>·</span>
-                          <span className="text-amber-600">gen {t.retry_generation}</span>
+                          <span className="text-warning">gen {t.retry_generation}</span>
                         </>
                       )}
                     </div>
@@ -213,7 +213,7 @@ export default function TasksRail() {
                       </div>
                     ) : null}
                     {blocked && (
-                      <div className="mt-1 text-[11px] text-orange-600">
+                      <div className="mt-1 text-[11px] text-brand-hover">
                         delivery blocked · retry {blocked.retries} — run itself{' '}
                         {taskStatusLabel(t.status).toLowerCase()}, not failed
                       </div>
