@@ -1024,6 +1024,64 @@ No Rust toolchain and no `tsc`. Every "IMPLEMENTED" claim above is a **static re
 
 ---
 
+## 2M. Implementation wave 10 (2026-09-17) — P65 reconciliation + a latent provenance trap
+
+Same method as §2L: read the code, do not trust the tracker row.
+
+| Item | TODO.md says | What the code shows |
+|---|---|---|
+| **P65.5** Installed & Marketplace | `[NOT DONE]` | **Accurate, and honestly self-labelled.** `settings_extensions_list` exists and builds `InstalledExtension` rows, but the source says `// InstalledExtension read model (P65.5 surface is contract-only here)`. Contract-only = not done, and the code says so rather than implying otherwise. |
+| **P65.6** Backend-authoritative persistence | `[NOT DONE]` | **PARTIAL.** The exact envelope `{ state, health, appliedLive, restartRequired, lastError? }` exists (`SettingsMutationResult`), failures normalize through `failed_mutation`, and writes are atomic (`atomic_write_json`). But it is wired to only the two settings mutations (`:510` model, `:1289` schedule) — the **rollout to every mutation** is the open half. |
+| **P65.7** Security & ownership verification | `[NOT DONE]` | **PARTIAL — with a latent trap, see below.** Every funnel mutation *is* audited: `settings_mutate` calls `record_mutation(...)` on success. |
+| **P65.8** E2E acceptance pass | `[NOT DONE]` | **Accurate.** Requires a live packaged run; impossible here. |
+
+### ⚠️ LATENT — the settings funnel hardcodes `AuthKind::HumanGesture`
+`settings_mutate` is one line of provenance:
+
+```rust
+match op() {
+    Ok(envelope) => {
+        record_mutation(state, AuthKind::HumanGesture, audit_kind, audit_payload);
+        envelope
+    }
+    Err(e) => failed_mutation(fail_state, "failed", e),
+}
+```
+
+**Today this is correct**, and I checked rather than assumed: the only callers of `settings_*`
+are `ui/src/lib/settings.ts`, i.e. human UI gestures — and that fact is independently
+confirmed by the ipc-parity ghost count dropping 71 → 60 exactly when that file landed.
+
+**But it is the same defect class §2D already fixed once**, and its doc explains why it
+matters: *"the only sink hardcoded `AuthKind::HumanGesture`, so wiring the agent tool would
+have filed agent-initiated desktop actions as human gestures (a confused-deputy audit lie)."*
+Here the sink hardcodes the same value. The moment any agent or automation path is wired to a
+settings mutation, its effect will be **audited as a human gesture** — and audit provenance is
+what the Guard-2 and receipt chain rest on, so a false `human_gesture` is worse than no receipt.
+
+`AuthKind` is an enum with an `AgentTicket` / `AutomationTicket` member already, so the fix is
+to **thread provenance in** exactly as §2D did for `everyaios-desktop` (`ActProvenance` through
+`AuditSink`/`DesktopGuard`/`DesktopEngine::act`) — not to guess a different constant today.
+**Deliberately not changed here:** there is no agent caller yet, so picking a value would be
+inventing the answer, and the correct shape is the threaded parameter §2D established.
+Recorded so the wire-up is done provenance-first rather than provenance-after, which §2D
+records as the sequencing that actually mattered.
+
+### Evidence actually executed
+- Direct reads: `settings_mutate` (the full fn), `SettingsMutationResult` use sites, the
+  `InstalledExtension` builder + its `contract-only` comment, `settings_extensions_list`. `[V]`
+- Caller confirmation for the provenance claim: `settings_*` is invoked only from
+  `ui/src/lib/settings.ts` (no Rust caller, no coordinator caller), corroborated by the
+  ipc-parity ghost delta. `[V]`
+- `node scripts/check-doc-sync.mjs` → exit 0 · `node scripts/ipc-parity.mjs` → exit 0 ·
+  registered 341 · broken 0 · ghosts 60. `[V]`
+
+### NOT VERIFIED
+Static reading only — no `cargo test`, no `tsc`. The `HumanGesture` behaviour is read from
+source, not observed in a trace. `[UNVERIFIED]`
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
