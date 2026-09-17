@@ -32,14 +32,14 @@ import {
 } from '@/lib/audit'
 
 const ACTOR_COLOR: Record<string, string> = {
-  agent: 'bg-orange-500/15 text-orange-300',
+  agent: 'bg-brand/15 text-brand',
   user: 'bg-sky-500/15 text-sky-300',
   system: 'bg-zinc-500/20 text-muted-foreground',
 }
 
 const STATUS_DOT: Record<string, string> = {
   ok: 'bg-emerald-500',
-  warn: 'bg-yellow-500',
+  warn: 'bg-warning',
   err: 'bg-red-500',
 }
 
@@ -180,7 +180,7 @@ export default function AuditView() {
     <div className="flex h-full w-full flex-col">
       <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-orange-400" />
+          <ShieldCheck className="h-4 w-4 text-brand" />
           <h2 className="text-sm font-semibold text-foreground">Audit &amp; Replay</h2>
           <Badge variant="secondary" className="text-[10px]">
             append-only · NDJSON
@@ -222,7 +222,7 @@ export default function AuditView() {
               className={cn(
                 'shrink-0 rounded-md border px-2 py-0.5 font-mono text-[10px] transition-colors',
                 activeDoc === s.document_id
-                  ? 'border-orange-500 bg-orange-500/15 text-orange-300'
+                  ? 'border-brand bg-brand/15 text-brand'
                   : 'border-border text-muted-foreground hover:text-foreground',
               )}
             >
@@ -260,7 +260,7 @@ export default function AuditView() {
                     key={i}
                     className={cn(
                       'border-t border-border/50 hover:bg-accent/40',
-                      i === pos && 'bg-orange-500/5',
+                      i === pos && 'bg-brand/5',
                     )}
                   >
                     <td className="px-3 py-1.5 text-muted-foreground">{r.t}</td>
@@ -281,7 +281,7 @@ export default function AuditView() {
                         className={cn(
                           'inline-flex items-center gap-1',
                           r.status === 'ok' && 'text-emerald-300',
-                          r.status === 'warn' && 'text-yellow-300',
+                          r.status === 'warn' && 'text-warning',
                           r.status === 'err' && 'text-red-300',
                         )}
                       >
@@ -313,7 +313,7 @@ export default function AuditView() {
             </button>
             <button
               onClick={() => setPlaying(!playing)}
-              className="rounded-full bg-orange-500 p-2 text-black hover:bg-orange-400"
+              className="rounded-full bg-brand p-2 text-black hover:bg-brand"
             >
               {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </button>
@@ -332,14 +332,14 @@ export default function AuditView() {
             max={maxPos}
             value={Math.min(pos, maxPos)}
             onChange={(e) => setPos(Number(e.target.value))}
-            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-orange-500"
+            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-brand"
             style={{
               background: `linear-gradient(to right, hsl(25 95% 53%) ${(pos / Math.max(maxPos, 1)) * 100}%, hsl(240 6% 24%) ${(pos / Math.max(maxPos, 1)) * 100}%)`,
             }}
           />
           <div className="mb-3 mt-1 flex justify-between font-mono text-[9px] text-muted-foreground">
             <span>{events[0] ? fmtTs(events[0].ts_ms) : '--'}</span>
-            <span className="text-orange-300">▸ {currentEv ? fmtTs(currentEv.ts_ms) : '--'}</span>
+            <span className="text-brand">▸ {currentEv ? fmtTs(currentEv.ts_ms) : '--'}</span>
             <span>{events[maxPos] ? fmtTs(events[maxPos].ts_ms) : '--'}</span>
           </div>
 
@@ -370,7 +370,7 @@ export default function AuditView() {
                   className={cn(
                     'rounded border px-1.5 py-0.5 font-mono text-[9px] transition-colors',
                     currentStep === step
-                      ? 'border-orange-500 bg-orange-500/15 text-orange-300'
+                      ? 'border-brand bg-brand/15 text-brand'
                       : 'border-border text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -401,7 +401,7 @@ export default function AuditView() {
             className={cn(
               'flex items-center gap-1.5 rounded-md border px-3 py-1 text-xs font-medium transition-colors',
               watching
-                ? 'border-orange-500 bg-orange-500/15 text-orange-300'
+                ? 'border-brand bg-brand/15 text-brand'
                 : 'border-border bg-zinc-900 text-muted-foreground hover:text-foreground',
             )}
           >

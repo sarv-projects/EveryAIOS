@@ -112,10 +112,10 @@ export default function NowDoingStrip({
       transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
       className="group flex w-full items-center gap-2 overflow-hidden border-b border-border bg-zinc-950/40 px-3 py-1.5 text-left transition-colors hover:bg-zinc-900/60"
     >
-      <Activity className="breathe h-3.5 w-3.5 shrink-0 text-orange-400/80 group-hover:text-orange-300" aria-hidden />
+      <Activity className="breathe h-3.5 w-3.5 shrink-0 text-brand/80 group-hover:text-brand" aria-hidden />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {!agentPaused ? (
-          <span className="live-dot h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
+          <span className="live-dot h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
         ) : (
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/60" />
         )}

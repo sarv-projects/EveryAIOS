@@ -88,7 +88,7 @@ export default function KanbanView() {
   return (
     <div className="scroll-thin h-full overflow-x-auto p-3">
       <div className="mb-2 flex items-center gap-2">
-        <GitBranch className="h-3.5 w-3.5 text-orange-400" />
+        <GitBranch className="h-3.5 w-3.5 text-brand" />
         <span className="text-xs font-medium text-foreground">Parallel sub-agents</span>
         <Badge variant="secondary" className="text-[9px]">worktree-per-branch</Badge>
         <span className="ml-auto font-mono text-[10px] text-muted-foreground">{cards.length} tasks</span>
@@ -129,7 +129,7 @@ export default function KanbanView() {
                         <div
                           className={cn(
                             'h-full rounded-full',
-                            c.status === 'done' ? 'bg-emerald-500' : 'bg-orange-500',
+                            c.status === 'done' ? 'bg-emerald-500' : 'bg-brand',
                           )}
                           style={{ width: `${c.progress}%` }}
                         />

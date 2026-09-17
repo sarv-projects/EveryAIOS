@@ -99,7 +99,7 @@ export function AppearanceSection() {
             { id: 'sky', label: 'Sky', color: 'bg-sky-500' },
             { id: 'emerald', label: 'Emerald', color: 'bg-emerald-500' },
             { id: 'violet', label: 'Violet', color: 'bg-violet-500' },
-            { id: 'amber', label: 'Amber', color: 'bg-amber-500' },
+            { id: 'amber', label: 'Amber', color: 'bg-warning' },
           ] as const).map((a) => (
             <button
               key={a.id}

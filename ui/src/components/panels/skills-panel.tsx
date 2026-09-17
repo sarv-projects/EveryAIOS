@@ -11,7 +11,7 @@ import { skillsCatalog, skillsInstall, skillsUninstall, type SkillRowView } from
 
 const PERM_TONE: Record<string, string> = {
   'fs.read': 'bg-emerald-500/15 text-emerald-300',
-  'fs.write': 'bg-orange-500/15 text-orange-300',
+  'fs.write': 'bg-brand/15 text-brand',
   'tool.mcp': 'bg-sky-500/15 text-sky-300',
   'tool.connector': 'bg-violet-500/15 text-violet-300',
 }
@@ -85,7 +85,7 @@ export default function SkillsPanel() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
-            <Wand2 className="h-4 w-4 text-orange-300" /> Skills store
+            <Wand2 className="h-4 w-4 text-brand" /> Skills store
           </h2>
           <p className="text-sm text-muted-foreground">
             Capability-gated skills, verified against the store&apos;s signed index before install.
@@ -147,7 +147,7 @@ export default function SkillsPanel() {
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/15 text-orange-300">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand/15 text-brand">
                   <Package className="h-4 w-4" />
                 </div>
                 <div>
@@ -232,8 +232,8 @@ function FilterChip({ active, onClick, label }: { active: boolean; onClick: () =
       onClick={onClick}
       className={`rounded-full border px-2 py-0.5 font-mono text-[10px] transition-colors ${
         active
-          ? 'border-orange-500/50 bg-orange-500/15 text-orange-200'
-          : 'border-border text-muted-foreground hover:border-orange-500/30 hover:text-foreground'
+          ? 'border-brand/50 bg-brand/15 text-brand'
+          : 'border-border text-muted-foreground hover:border-brand/30 hover:text-foreground'
       }`}
     >
       {label}

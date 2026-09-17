@@ -30,7 +30,7 @@ const KINDS: { kind: ResourceKind | 'all'; label: string }[] = [
 function statusTone(status: string): string {
   if (status === 'healthy' || status === 'in_use' || status === 'started') return 'text-emerald-400 border-emerald-500/30'
   if (status === 'enabled' || status === 'installed' || status === 'inventoried') return 'text-sky-400 border-sky-500/30'
-  if (status === 'updating' || status === 'rolling_back') return 'text-amber-400 border-amber-500/30'
+  if (status === 'updating' || status === 'rolling_back') return 'text-warning border-warning/30'
   if (status === 'removed') return 'text-red-400 border-red-500/30'
   return 'text-slate-400 border-slate-500/30'
 }
@@ -81,7 +81,7 @@ export function DiscoverSection() {
             ['Browsers', c?.browsers],
           ] as const).map(([label, n]) => (
             <div key={label} className="rounded-md border border-border/50 bg-background/30 p-2 text-center">
-              <div className="font-mono text-lg font-semibold text-orange-300">{n ?? 0}</div>
+              <div className="font-mono text-lg font-semibold text-brand">{n ?? 0}</div>
               <div className="text-[10px] text-muted-foreground">{label}</div>
             </div>
           ))}
@@ -95,7 +95,7 @@ export function DiscoverSection() {
               onClick={() => setFilter(k.kind)}
               className={`rounded px-2 py-0.5 text-[11px] ${
                 filter === k.kind
-                  ? 'bg-orange-500/20 text-orange-300'
+                  ? 'bg-brand/20 text-brand'
                   : 'text-muted-foreground hover:bg-accent/40'
               }`}
             >
@@ -132,7 +132,7 @@ export function DiscoverSection() {
                       {card.capabilitiesVerified ? (
                         <span className="ml-1 text-emerald-400">✓ verified</span>
                       ) : (
-                        <span className="ml-1 text-amber-400">advertised</span>
+                        <span className="ml-1 text-warning">advertised</span>
                       )}
                     </span>
                   )}

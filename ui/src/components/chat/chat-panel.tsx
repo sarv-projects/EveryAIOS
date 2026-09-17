@@ -82,15 +82,15 @@ const STATUS_META: Record<
   Session['status'],
   { label: string; cls: string; dot?: string; icon?: LucideIcon }
 > = {
-  running: { label: 'Running', cls: 'border-orange-500/40 bg-orange-500/10 text-orange-300', dot: 'bg-orange-500' },
-  'action-required': { label: 'Action needed', cls: 'border-amber-500/40 bg-amber-500/10 text-amber-300', icon: SquareDot },
+  running: { label: 'Running', cls: 'border-brand/40 bg-brand/10 text-brand', dot: 'bg-brand' },
+  'action-required': { label: 'Action needed', cls: 'border-warning/40 bg-warning/10 text-warning', icon: SquareDot },
   paused: { label: 'Paused', cls: 'border-border bg-muted text-muted-foreground' },
   completed: { label: 'Done', cls: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' },
   failed: { label: 'Failed', cls: 'border-rose-500/40 bg-rose-500/10 text-rose-300' },
   cancelled: { label: 'Cancelled', cls: 'border-border bg-muted text-muted-foreground', icon: Square },
-  budget_exceeded: { label: 'Budget reached', cls: 'border-amber-500/40 bg-amber-500/10 text-amber-300', icon: DollarSign },
+  budget_exceeded: { label: 'Budget reached', cls: 'border-warning/40 bg-warning/10 text-warning', icon: DollarSign },
   scheduled: { label: 'Scheduled', cls: 'border-sky-500/40 bg-sky-500/10 text-sky-300', icon: Clock },
-  reconnecting: { label: 'Reconnecting', cls: 'border-amber-500/40 bg-amber-500/10 text-amber-300', icon: RotateCw },
+  reconnecting: { label: 'Reconnecting', cls: 'border-warning/40 bg-warning/10 text-warning', icon: RotateCw },
   idle: { label: 'Idle', cls: 'border-border bg-muted text-muted-foreground' },
 }
 
@@ -384,8 +384,8 @@ export default function ChatPanel() {
     <div className="flex h-full w-full min-w-0 flex-col bg-background">
       <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card/40 px-3 py-2">
         {/* Agent logo — uses the selected runtime's mark + accent */}
-        <Avatar className={cn('h-6 w-6 border border-orange-500/30', agent ? '' : 'bg-orange-500/15')}>
-          <AvatarFallback className={cn('font-mono text-[9px] font-bold', agent?.accent ?? 'bg-orange-500/15 text-orange-400')}>
+        <Avatar className={cn('h-6 w-6 border border-brand/30', agent ? '' : 'bg-brand/15')}>
+          <AvatarFallback className={cn('font-mono text-[9px] font-bold', agent?.accent ?? 'bg-brand/15 text-brand')}>
             {agent ? agent.mark : <Sparkles className="h-3.5 w-3.5" />}
           </AvatarFallback>
         </Avatar>
@@ -394,14 +394,14 @@ export default function ChatPanel() {
             <h2 className="truncate text-[13px] font-semibold text-foreground">
               {activeSession?.title ?? 'New work'}
             </h2>
-            {activeSession?.pinned && <Pin className="h-3 w-3 shrink-0 text-orange-400" />}
+            {activeSession?.pinned && <Pin className="h-3 w-3 shrink-0 text-brand" />}
             {/* Agent + model chip in header */}
             {powerMode && agent && (
-              <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/40 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground transition-colors hover:border-orange-500/30 hover:bg-orange-500/5">
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/40 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground transition-colors hover:border-brand/30 hover:bg-brand/5">
                 <span className={cn('h-3.5 w-3.5 rounded text-[7px] font-bold flex items-center justify-center', agent.accent)}>{agent.mark}</span>
                 <span className="text-foreground/80">{agent.name}</span>
                 <span className="text-muted-foreground/40">·</span>
-                <span className="text-orange-300">{model?.label ?? '—'}</span>
+                <span className="text-brand">{model?.label ?? '—'}</span>
               </span>
             )}
           </div>
@@ -416,7 +416,7 @@ export default function ChatPanel() {
         {store.reconnect.show && (
           <button
             onClick={() => store.setReconnect({ show: false, lastToken: '', tokens: 0 })}
-            className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 font-mono text-[10px] text-amber-300 transition-colors hover:bg-amber-500/20"
+            className="flex items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 font-mono text-[10px] text-warning transition-colors hover:bg-warning/20"
             title="Dismiss (the stream auto-resumes from the last token when the link returns)"
           >
             <RotateCw className="h-3 w-3 animate-spin" />
@@ -425,14 +425,14 @@ export default function ChatPanel() {
         )}
         {/* Study-mode scope chip — chat answers are scoped to this document */}
         {scopedView && (
-          <div className="flex items-center gap-1 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 font-mono text-[10px] text-orange-300">
+          <div className="flex items-center gap-1 rounded-md border border-brand/40 bg-brand/10 px-2 py-0.5 font-mono text-[10px] text-brand">
             <FileText className="h-3 w-3" />
             <span className="max-w-[140px] truncate">
               Scoped to {store.scopedDoc?.title ?? (scopedView === 'office-pdf' ? 'open document' : scopedView.replace('office-', ''))}
             </span>
             <button
               onClick={() => setScopedView(undefined)}
-              className="rounded p-0.5 hover:bg-orange-500/20"
+              className="rounded p-0.5 hover:bg-brand/20"
               title="Clear scope"
             >
               <X className="h-3 w-3" />
@@ -451,7 +451,7 @@ export default function ChatPanel() {
               className={cn(
                 'rounded px-2 py-0.5 font-mono text-[10px] transition-colors',
                 (mode === 'cowork') === store.coworkMode
-                  ? 'bg-orange-500 text-black'
+                  ? 'bg-brand text-black'
                   : 'text-muted-foreground hover:text-foreground',
               )}
               title={
@@ -468,7 +468,7 @@ export default function ChatPanel() {
           <Button
             size="icon"
             variant={searchOpen ? 'secondary' : 'ghost'}
-            className={cn('h-7 w-7', searchOpen ? 'text-orange-300' : 'text-muted-foreground hover:text-foreground')}
+            className={cn('h-7 w-7', searchOpen ? 'text-brand' : 'text-muted-foreground hover:text-foreground')}
             onClick={() => setSearchOpen((v) => !v)}
             title="Search in conversation (⌘F)"
           >
@@ -601,7 +601,7 @@ export default function ChatPanel() {
       {activeSession?.goal && (
         <div
           className={cn(
-            'flex shrink-0 items-center gap-2 border-b border-orange-500/20 bg-orange-500/5 px-3 py-1.5',
+            'flex shrink-0 items-center gap-2 border-b border-brand/20 bg-brand/5 px-3 py-1.5',
             activeSession.goalAchieved && 'border-emerald-500/20 bg-emerald-500/5',
           )}
         >
@@ -612,7 +612,7 @@ export default function ChatPanel() {
               'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
               activeSession.goalAchieved
                 ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'
-                : 'border-border text-transparent hover:border-orange-500/50',
+                : 'border-border text-transparent hover:border-brand/50',
             )}
             title={activeSession.goalAchieved ? 'Mark not achieved' : 'Mark achieved'}
           >
@@ -627,7 +627,7 @@ export default function ChatPanel() {
                 'truncate text-[11px]',
                 activeSession.goalAchieved
                   ? 'text-emerald-300/80 line-through decoration-emerald-400/50'
-                  : 'text-orange-100/90',
+                  : 'text-brand/90',
               )}
             >
               {activeSession.goal}
@@ -655,7 +655,7 @@ export default function ChatPanel() {
             className="shrink-0 overflow-hidden border-b border-border bg-card/30"
           >
             <div className="flex items-center gap-2 px-3 py-1.5">
-              <Search className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+              <Search className="h-3.5 w-3.5 shrink-0 text-brand" />
               <input
                 autoFocus
                 value={query}
@@ -689,7 +689,7 @@ export default function ChatPanel() {
                   >
                     <ChevronRight className="h-3 w-3" />
                   </button>
-                  <span className="shrink-0 rounded-md border border-orange-500/30 bg-orange-500/15 px-2 py-0.5 font-mono text-[10px] font-medium text-orange-300">
+                  <span className="shrink-0 rounded-md border border-brand/30 bg-brand/15 px-2 py-0.5 font-mono text-[10px] font-medium text-brand">
                     {matchCount === 0 ? 'no matches' : `${activeMatch + 1}/${matchCount}`}
                   </span>
                 </>
@@ -793,7 +793,7 @@ export default function ChatPanel() {
                       // P52.19 — ring the active match so a jump lands visibly.
                       className={cn(
                         'rounded-xl',
-                        query.trim() && i === activeMatch && 'ring-2 ring-orange-500/40 ring-offset-2 ring-offset-background',
+                        query.trim() && i === activeMatch && 'ring-2 ring-brand/40 ring-offset-2 ring-offset-background',
                       )}
                     >
                       <MessageBubble message={m} streaming={m.id === lastMsg?.id && streaming} />
@@ -806,10 +806,10 @@ export default function ChatPanel() {
                     transition={{ duration: 0.2 }}
                     className="flex items-center gap-2 pl-1"
                   >
-                    <span className="flex items-center gap-1 rounded-full border border-orange-500/25 bg-orange-500/5 px-2.5 py-1.5">
-                      <span className="typing-dot bg-orange-400" />
-                      <span className="typing-dot bg-orange-400 [animation-delay:0.15s]" />
-                      <span className="typing-dot bg-orange-400 [animation-delay:0.3s]" />
+                    <span className="flex items-center gap-1 rounded-full border border-brand/25 bg-brand/5 px-2.5 py-1.5">
+                      <span className="typing-dot bg-brand" />
+                      <span className="typing-dot bg-brand [animation-delay:0.15s]" />
+                      <span className="typing-dot bg-brand [animation-delay:0.3s]" />
                     </span>
                     <span className="font-mono text-[9px] text-muted-foreground/70">
                       agent thinking…
@@ -877,9 +877,9 @@ function NoProviderCard() {
   }
 
   return (
-    <div className="fade-up mx-auto w-full max-w-md rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+    <div className="fade-up mx-auto w-full max-w-md rounded-xl border border-warning/30 bg-warning/5 px-4 py-3">
       <div className="flex items-center gap-2">
-        <KeyRound className="h-4 w-4 text-amber-300" />
+        <KeyRound className="h-4 w-4 text-warning" />
         <div className="text-[12px] font-semibold text-foreground">No model provider configured</div>
       </div>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
@@ -890,7 +890,7 @@ function NoProviderCard() {
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Button
           size="sm"
-          className="h-7 bg-orange-500 text-[10px] text-white hover:bg-orange-600"
+          className="h-7 bg-brand text-[10px] text-white hover:bg-brand-hover"
           onClick={() => openSetup()}
         >
           <KeyRound className="mr-1 h-3 w-3" />
@@ -944,8 +944,8 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
   }, [])
   return (
     <div className="fade-up flex flex-col items-center gap-4 px-4 py-12 text-center bg-radial-fade">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-orange-500/30 bg-orange-500/10 glow-pulse">
-        <Sparkles className="h-6 w-6 text-orange-400" />
+      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-brand/30 bg-brand/10 glow-pulse">
+        <Sparkles className="h-6 w-6 text-brand" />
       </div>
       <div className="space-y-1">
         <h3 className="text-sm font-semibold text-foreground">
@@ -968,11 +968,11 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]',
                 on
-                  ? 'border-orange-500/50 bg-orange-500/15 text-orange-200'
-                  : 'border-border bg-card/40 text-muted-foreground hover:border-orange-500/40 hover:text-foreground',
+                  ? 'border-brand/50 bg-brand/15 text-brand'
+                  : 'border-border bg-card/40 text-muted-foreground hover:border-brand/40 hover:text-foreground',
               )}
             >
-              <Folder className="h-3 w-3 text-orange-300" />
+              <Folder className="h-3 w-3 text-brand" />
               {name}
             </button>
           )
@@ -994,7 +994,7 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
               }
             })()
           }
-          className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2.5 py-1 text-[11px] text-muted-foreground hover:border-orange-500/40 hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2.5 py-1 text-[11px] text-muted-foreground hover:border-brand/40 hover:text-foreground"
         >
           <Folder className="h-3 w-3" />
           Open folder
@@ -1003,7 +1003,7 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
       )}
       {powerMode && taskFolder && (
         <div className="max-w-md rounded-md border border-border/50 bg-card/40 px-3 py-2 text-left">
-          <div className="font-mono text-[10px] text-orange-300">{taskFolder}</div>
+          <div className="font-mono text-[10px] text-brand">{taskFolder}</div>
           <p className="mt-1 text-[10px] text-muted-foreground">
             Live file inventory and AGENTS.md load when a workspace is attached.
           </p>
@@ -1033,9 +1033,9 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
               key={p.label}
               type="button"
               onClick={() => onPick(p.label)}
-              className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-card/40 px-2.5 py-1 text-[11px] text-muted-foreground transition-all hover:border-orange-500/40 hover:text-foreground hover-lift"
+              className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-card/40 px-2.5 py-1 text-[11px] text-muted-foreground transition-all hover:border-brand/40 hover:text-foreground hover-lift"
             >
-              <Icon className="h-3 w-3 text-orange-300 group-hover:text-orange-400" />
+              <Icon className="h-3 w-3 text-brand group-hover:text-brand" />
               {p.label}
               <ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
@@ -1052,12 +1052,12 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
               key={n.goal + n.cron}
               type="button"
               onClick={() => onPick(`Schedule "${n.goal}" ${n.cron}`)}
-              className="group inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/5 px-2.5 py-1 text-[11px] text-amber-200/90 transition-all hover:border-amber-500/50 hover:text-amber-100 hover-lift"
+              className="group inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/5 px-2.5 py-1 text-[11px] text-warning/90 transition-all hover:border-warning/50 hover:text-warning hover-lift"
               title={`Repeated ${n.observedAt.join(', ')} · confidence ${Math.round(n.confidence * 100)}%`}
             >
-              <Clock className="h-3 w-3 text-amber-300 group-hover:text-amber-400" />
+              <Clock className="h-3 w-3 text-warning group-hover:text-warning" />
               Make “{n.goal}” a recurring task
-              <span className="font-mono text-[10px] text-amber-300/70">
+              <span className="font-mono text-[10px] text-warning/70">
                 {n.cron}
               </span>
             </button>
@@ -1091,7 +1091,7 @@ function InlineWorkStream() {
     <div className="mx-3 mb-2 shrink-0 overflow-hidden rounded-lg border border-border/70 bg-card/40">
       <div className="flex items-center justify-between border-b border-border/60 px-2.5 py-1.5">
         <div className="flex items-center gap-1.5">
-          <Bot className="h-3 w-3 text-orange-400" />
+          <Bot className="h-3 w-3 text-brand" />
           <span className="font-mono text-[10px] font-semibold text-foreground">Cowork</span>
           {mine && (
             <span className="font-mono text-[9px] text-muted-foreground">
@@ -1123,7 +1123,7 @@ function InlineWorkStream() {
                     className={cn(
                       'h-1.5 w-1.5 shrink-0 rounded-full',
                       d.status === 'active'
-                        ? 'bg-orange-500'
+                        ? 'bg-brand'
                         : d.status === 'failed'
                           ? 'bg-rose-500'
                           : 'bg-emerald-500',
@@ -1138,7 +1138,7 @@ function InlineWorkStream() {
           </div>
         )}
         {active && (
-          <div className="mt-1.5 flex items-center gap-1 text-[9px] text-orange-400/90">
+          <div className="mt-1.5 flex items-center gap-1 text-[9px] text-brand/90">
             <Loader2 className="h-2.5 w-2.5 animate-spin" />
             <span>working…</span>
           </div>

@@ -20,10 +20,10 @@ import {
 
 const SOURCE_TONE: Record<TrajectorySource, string> = {
   persona: 'text-sky-300 border-sky-500/30 bg-sky-500/10',
-  user_document: 'text-amber-300 border-amber-500/30 bg-amber-500/10',
+  user_document: 'text-warning border-warning/30 bg-warning/10',
   memory: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
   tool_result: 'text-violet-300 border-violet-500/30 bg-violet-500/10',
-  blueprint: 'text-orange-300 border-orange-500/30 bg-orange-500/10',
+  blueprint: 'text-brand border-brand/30 bg-brand/10',
   other: 'text-zinc-300 border-zinc-500/30 bg-zinc-500/10',
 }
 
@@ -88,7 +88,7 @@ export default function TrajectoryView() {
     <div className="flex h-full w-full flex-col bg-card">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
-          <ScanSearch className="h-4 w-4 text-orange-400" />
+          <ScanSearch className="h-4 w-4 text-brand" />
           <span className="text-xs font-semibold text-foreground">Trajectory</span>
           <Badge variant="outline" className="text-[9px] text-muted-foreground">
             context injection · by source
@@ -121,7 +121,7 @@ export default function TrajectoryView() {
               className={cn(
                 'rounded-md border px-2 py-0.5 font-mono text-[10px] transition-colors',
                 s === sessionId
-                  ? 'border-orange-500/50 bg-orange-500/10 text-orange-300'
+                  ? 'border-brand/50 bg-brand/10 text-brand'
                   : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
             >

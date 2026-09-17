@@ -71,7 +71,7 @@ function LiveContextMeter() {
     ctxPct >= 90
       ? 'text-red-400'
       : ctxPct >= 75
-        ? 'text-amber-300'
+        ? 'text-warning'
         : 'text-muted-foreground/70'
   const cachePct =
     liveBudget?.cacheHitRate != null ? `${Math.round(liveBudget.cacheHitRate * 100)}%` : null
@@ -108,7 +108,7 @@ function LiveContextMeter() {
                 <span
                   className={cn(
                     'absolute inset-y-0 left-0 rounded-full',
-                    ctxPct >= 90 ? 'bg-red-500/80' : ctxPct >= 75 ? 'bg-amber-400/80' : 'bg-orange-400/70',
+                    ctxPct >= 90 ? 'bg-red-500/80' : ctxPct >= 75 ? 'bg-warning/80' : 'bg-brand/70',
                   )}
                   style={{ width: `${Math.min(100, ctxPct)}%` }}
                 />
@@ -131,7 +131,7 @@ function LiveContextMeter() {
             <span className="tabular-nums text-foreground/90">{r.value}</span>
           </div>
         ))}        {ctxPct >= 75 && (
-          <div className="mt-1 border-t border-border/60 pt-1 text-[9px] text-amber-300/90">
+          <div className="mt-1 border-t border-border/60 pt-1 text-[9px] text-warning/90">
             {ctxPct >= 90
               ? 'Context nearly full — clear this chat or fork before it stalls.'
               : 'Context is high — clear or fork soon.'}
@@ -156,7 +156,7 @@ function LiveContextMeter() {
               className={cn(
                 'rounded border px-1.5 py-0.5 text-[9px] transition-colors',
                 pills[key]
-                  ? 'border-orange-500/40 bg-orange-500/15 text-orange-200'
+                  ? 'border-brand/40 bg-brand/15 text-brand'
                   : 'border-border text-muted-foreground/50 hover:text-foreground',
               )}
               title={pills[key] ? `Hide the ${label} pill` : `Show the ${label} pill`}
@@ -256,7 +256,7 @@ export function StatusBar() {
       icon: Cpu,
       label: 'sidecar',
       value: runtimeValue,
-      color: runtime.status === 'live' ? 'text-emerald-400' : 'text-amber-300',
+      color: runtime.status === 'live' ? 'text-emerald-400' : 'text-warning',
       tooltip: runtime.detail ?? 'Coordinator readiness is reported by the native runtime probe.',
     },
     {
@@ -334,7 +334,7 @@ export function StatusBar() {
         <div className="flex items-center gap-1.5 px-3">
           <span className={cn(
             'h-1.5 w-1.5 rounded-full',
-            preview ? 'bg-amber-400' : activePaused ? 'bg-yellow-400' : busy ? 'bg-orange-500 live-dot' : 'bg-emerald-400'
+            preview ? 'bg-warning' : activePaused ? 'bg-warning' : busy ? 'bg-brand live-dot' : 'bg-emerald-400'
           )} />
           <span className="text-muted-foreground">
             {preview ? 'Development preview' : activePaused ? '⏸ Paused' : busy ? 'Processing…' : runtimeValue}
@@ -348,12 +348,12 @@ export function StatusBar() {
         )}
         {preview ? (
           <span className="flex items-center gap-1.5 px-3 text-muted-foreground/70">
-            <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />
+            <AlertTriangle className="h-2.5 w-2.5 text-warning" />
             Plain-browser preview — not connected to the shell
           </span>
         ) : (
           <span className="flex items-center gap-1.5 px-3 text-muted-foreground/70">
-            <ShieldCheck className={cn('h-2.5 w-2.5', runtime.status === 'live' ? 'text-emerald-400' : 'text-amber-400')} />
+            <ShieldCheck className={cn('h-2.5 w-2.5', runtime.status === 'live' ? 'text-emerald-400' : 'text-warning')} />
             {runtime.status === 'live' ? 'Privacy depends on selected provider' : 'Privacy status unavailable'}
           </span>
         )}
@@ -364,7 +364,7 @@ export function StatusBar() {
         <button
           type="button"
           onClick={() => setCockpitOpen(!cockpitOpen)}
-          className="flex items-center gap-1 px-1 text-muted-foreground/70 hover:text-orange-300"
+          className="flex items-center gap-1 px-1 text-muted-foreground/70 hover:text-brand"
           title="Cockpit — live agent cards and interrupts"
           aria-label="Toggle cockpit slide-over"
         >
@@ -382,11 +382,11 @@ export function StatusBar() {
       <div className="flex items-center gap-1.5 px-2 border-r border-border/60 h-full">
         <span className={cn(
           'h-1.5 w-1.5 rounded-full',
-          agentPaused || activePaused ? 'bg-yellow-400' : 'bg-orange-500 live-dot'
+          agentPaused || activePaused ? 'bg-warning' : 'bg-brand live-dot'
         )} />
         <span className={cn(
           'text-muted-foreground',
-          agentPaused || activePaused ? '' : 'text-orange-400'
+          agentPaused || activePaused ? '' : 'text-brand'
         )}>
           {agentPaused || activePaused ? 'paused' : 'live'}
         </span>
@@ -404,7 +404,7 @@ export function StatusBar() {
           <button
             type="button"
             onClick={() => clearMonitorBadge()}
-            className="ml-1 inline-flex items-center gap-0.5 rounded-full border border-orange-500/40 bg-orange-500/15 px-1.5 py-0 text-[9px] text-orange-200"
+            className="ml-1 inline-flex items-center gap-0.5 rounded-full border border-brand/40 bg-brand/15 px-1.5 py-0 text-[9px] text-brand"
             title={monitorBadge.last ?? 'Monitor'}
           >
             <Bell className="h-2.5 w-2.5" />
@@ -431,7 +431,7 @@ export function StatusBar() {
                   {modelLabel}
                 </span>
                 {autoRoute && (
-                  <span className="text-orange-400/60">auto</span>
+                  <span className="text-brand/60">auto</span>
                 )}
               </div>
             </TooltipTrigger>
@@ -483,7 +483,7 @@ export function StatusBar() {
 
       {/* Right cluster — guard + version */}
       <div className="flex items-center gap-2 px-2 border-l border-border/60 h-full">
-        <div className={cn('flex items-center gap-1', runtime.status === 'live' ? 'text-emerald-400' : 'text-amber-300')}>
+        <div className={cn('flex items-center gap-1', runtime.status === 'live' ? 'text-emerald-400' : 'text-warning')}>
           <ShieldCheck className="h-2.5 w-2.5" />
           <span>guard · {runtime.status === 'live' ? 'available' : 'unknown'}</span>
         </div>
@@ -495,7 +495,7 @@ export function StatusBar() {
         <button
           type="button"
           onClick={() => setCockpitOpen(!cockpitOpen)}
-          className="flex items-center gap-1 text-muted-foreground/70 hover:text-orange-300"
+          className="flex items-center gap-1 text-muted-foreground/70 hover:text-brand"
           title="Cockpit — live agent cards and interrupts"
           aria-label="Toggle cockpit slide-over"
         >

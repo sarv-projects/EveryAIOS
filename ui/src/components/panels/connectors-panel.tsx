@@ -57,7 +57,7 @@ import { inTauri } from '@/lib/tauri'
 const PREVIEW_STATS = [
   { label: 'Connected', value: '5', tone: 'text-emerald-300' },
   { label: 'Available', value: '12', tone: 'text-foreground' },
-  { label: 'Tools', value: '94', tone: 'text-orange-300' },
+  { label: 'Tools', value: '94', tone: 'text-brand' },
   { label: 'MCP servers', value: '3', tone: 'text-sky-300' },
 ]
 
@@ -65,7 +65,7 @@ const KIND_TONE: Record<string, string> = {
   read: 'bg-emerald-500/15 text-emerald-300',
   edit: 'bg-primary/15 text-primary',
   delete: 'bg-red-500/15 text-red-300',
-  move: 'bg-amber-500/15 text-amber-300',
+  move: 'bg-warning/15 text-warning',
   search: 'bg-sky-500/15 text-sky-300',
   execute: 'bg-violet-500/15 text-violet-300',
   think: 'bg-zinc-500/15 text-zinc-300',
@@ -100,12 +100,12 @@ function ListSkeleton({ label }: { label: string }) {
 }
 
 const LOGO_COLORS = [
-  'bg-orange-500/80',
+  'bg-brand/80',
   'bg-emerald-500/80',
   'bg-sky-500/80',
   'bg-purple-500/80',
   'bg-pink-500/80',
-  'bg-yellow-500/80',
+  'bg-warning/80',
   'bg-red-500/80',
   'bg-cyan-500/80',
   'bg-indigo-500/80',
@@ -378,7 +378,7 @@ export default function ConnectorsPanel() {
             Qwen device
           </Button>
         </div>
-        {deviceHint && <p className="mt-2 font-mono text-[10px] text-amber-300">{deviceHint}</p>}
+        {deviceHint && <p className="mt-2 font-mono text-[10px] text-warning">{deviceHint}</p>}
         {oauthAccts.length > 0 && (
           <ul className="mt-2 space-y-1">
             {oauthAccts.map((a) => (
@@ -399,7 +399,7 @@ export default function ConnectorsPanel() {
           ? [
               { label: 'Connected', value: String(oauthAccts.length + mcpList.filter((s) => s.status === 'connected').length), tone: oauthAccts.length + mcpList.filter((s) => s.status === 'connected').length > 0 ? 'text-emerald-300' : 'text-zinc-500' },
               { label: 'Available', value: String(store.length), tone: 'text-foreground' },
-              { label: 'Tools', value: external.total > 0 ? String(external.total) : catalog ? String(catalog.total) : '—', tone: 'text-orange-300' },
+              { label: 'Tools', value: external.total > 0 ? String(external.total) : catalog ? String(catalog.total) : '—', tone: 'text-brand' },
               { label: 'MCP servers', value: String(mcpList.length), tone: 'text-sky-300' },
             ].map((s) => (
               <div key={s.label} className="rounded-lg border border-border bg-card p-3">
@@ -453,7 +453,7 @@ export default function ConnectorsPanel() {
             <>
               <section>
                 <div className="mb-2 flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-orange-400" />
+                  <Zap className="h-3.5 w-3.5 text-brand" />
                   <span className="text-xs font-medium text-foreground">Native connectors</span>
                   <Badge variant="secondary" className="text-[9px]">OAuth tokens in local vault</Badge>
                 </div>
@@ -548,7 +548,7 @@ export default function ConnectorsPanel() {
                                 <span
                                   className={cn(
                                     'mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full',
-                                    s.direction === 'write' ? 'bg-amber-400' : 'bg-emerald-400/70',
+                                    s.direction === 'write' ? 'bg-warning' : 'bg-emerald-400/70',
                                   )}
                                 />
                                 <div className="min-w-0">
@@ -557,7 +557,7 @@ export default function ConnectorsPanel() {
                                   </span>
                                   <span className="text-muted-foreground"> · {s.purpose}</span>
                                   {!s.required && (
-                                    <span className="text-amber-500/90"> · opt-in</span>
+                                    <span className="text-warning/90"> · opt-in</span>
                                   )}
                                 </div>
                               </div>
@@ -579,13 +579,13 @@ export default function ConnectorsPanel() {
           ) : (
             <section className="rounded-lg border border-border bg-card p-3">
               <div className="mb-3 flex items-center gap-1.5">
-                <Server className="h-3.5 w-3.5 text-orange-400" />
+                <Server className="h-3.5 w-3.5 text-brand" />
                 <span className="text-xs font-medium text-foreground">MCP servers</span>
                 <Badge variant="secondary" className="text-[9px]">model-context-protocol</Badge>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="ml-auto h-6 border-orange-500/40 px-2 text-[9px] text-orange-300 hover:bg-orange-500/10"
+                  className="ml-auto h-6 border-brand/40 px-2 text-[9px] text-brand hover:bg-brand/10"
                   onClick={() => setAttachOpen((v) => !v)}
                 >
                   <Plus className="h-3 w-3" />
@@ -599,24 +599,24 @@ export default function ConnectorsPanel() {
                     value={attachName}
                     onChange={(e) => setAttachName(e.target.value)}
                     placeholder="Server name (e.g. My Postgres MCP)"
-                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-orange-500/50"
+                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-brand/50"
                   />
                   <input
                     value={attachCmd}
                     onChange={(e) => setAttachCmd(e.target.value)}
                     placeholder="Command (e.g. npx)"
-                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-orange-500/50"
+                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-brand/50"
                   />
                   <input
                     value={attachArgs}
                     onChange={(e) => setAttachArgs(e.target.value)}
                     placeholder="Args (space-separated, e.g. -y @modelcontextprotocol/server-filesystem ~)"
-                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-orange-500/50"
+                    className="w-full rounded border border-border bg-background/60 px-2 py-1 text-[11px] text-foreground outline-none focus:border-brand/50"
                   />
                   <div className="flex justify-end gap-1.5">
                     <Button
                       size="sm"
-                      className="h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400"
+                      className="h-6 bg-brand px-2 text-[10px] text-black hover:bg-brand"
                       disabled={attachBusy}
                       onClick={() => void attachMcp()}
                     >
@@ -630,7 +630,7 @@ export default function ConnectorsPanel() {
               )}
 
               {external.external > 0 && !external.agentVisible && (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[10px] text-amber-300/90">
+                <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 font-mono text-[10px] text-warning/90">
                   {external.external} external tools are discovered but the agent runtime is not
                   attached, so nothing can call them yet — they register on the next runtime attach.
                 </div>
@@ -647,7 +647,7 @@ export default function ConnectorsPanel() {
                       <span
                         className={cn(
                           'flex size-8 shrink-0 items-center justify-center rounded-md font-mono text-[11px] font-semibold',
-                          'bg-orange-500/15 text-orange-300',
+                          'bg-brand/15 text-brand',
                         )}
                       >
                         {s.name.slice(0, 2).toUpperCase()}
@@ -695,7 +695,7 @@ export default function ConnectorsPanel() {
                             )}
                           </div>
                         ) : (
-                          <div className="mt-0.5 font-mono text-[9px] text-amber-300/80">
+                          <div className="mt-0.5 font-mono text-[9px] text-warning/80">
                             no handshake on record — re-attach to discover tools
                           </div>
                         )}
@@ -729,7 +729,7 @@ export default function ConnectorsPanel() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10"
+                          className="h-7 border-brand/40 text-[10px] text-brand hover:bg-brand/10"
                           onClick={() => notify(`Connect ${s.name} — use the attach form above`)}
                         >
                           Connect
@@ -872,7 +872,7 @@ function StoreSection({
     <>
       <section>
         <div className="mb-2 flex items-center gap-1.5">
-          <Plug className="h-3.5 w-3.5 text-orange-400" />
+          <Plug className="h-3.5 w-3.5 text-brand" />
           <span className="text-xs font-medium text-foreground">Connect Store</span>
           <Badge variant="secondary" className="text-[9px]">
             click → sign in → use
@@ -936,7 +936,7 @@ function StoreSection({
                         <span
                           className={cn(
                             'mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full',
-                            e.canMutate ? 'bg-amber-400' : 'bg-emerald-400/70',
+                            e.canMutate ? 'bg-warning' : 'bg-emerald-400/70',
                           )}
                         />
                         <span className="text-muted-foreground/70">{s}</span>
@@ -996,7 +996,7 @@ function ToolCatalogSection({ catalog }: { catalog: McpCatalog | null }) {
           { label: 'read-only', value: catalog.read_only },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border border-border bg-card p-2.5">
-            <div className="font-mono text-base font-semibold text-orange-300">{s.value}</div>
+            <div className="font-mono text-base font-semibold text-brand">{s.value}</div>
             <div className="text-[10px] text-muted-foreground">{s.label}</div>
           </div>
         ))}
@@ -1005,7 +1005,7 @@ function ToolCatalogSection({ catalog }: { catalog: McpCatalog | null }) {
       {/* Tool list (the real registry) */}
       <section>
         <div className="mb-2 flex items-center gap-1.5">
-          <Wrench className="h-3.5 w-3.5 text-orange-400" />
+          <Wrench className="h-3.5 w-3.5 text-brand" />
           <span className="text-xs font-medium text-foreground">
             Registered agent tools
           </span>
@@ -1040,7 +1040,7 @@ function ToolCatalogSection({ catalog }: { catalog: McpCatalog | null }) {
                 </Badge>
               )}
               {t.open_world && (
-                <Badge variant="secondary" className="shrink-0 text-[8px] text-amber-300">
+                <Badge variant="secondary" className="shrink-0 text-[8px] text-warning">
                   open
                 </Badge>
               )}
@@ -1068,7 +1068,7 @@ function ConnectorCard({
   return (
     <div
       className={cn(
-        'rounded-lg border bg-card p-4 transition-colors hover:border-orange-500/30',
+        'rounded-lg border bg-card p-4 transition-colors hover:border-brand/30',
         connected ? 'border-border' : 'border-border/60',
       )}
     >
@@ -1117,7 +1117,7 @@ function ConnectorCard({
           <Button
             size="sm"
             variant="outline"
-            className="h-7 border-orange-500/40 text-[10px] text-orange-300 hover:bg-orange-500/10"
+            className="h-7 border-brand/40 text-[10px] text-brand hover:bg-brand/10"
             onClick={onConnect}
           >
             Connect

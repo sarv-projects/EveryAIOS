@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils'
 
 const STATUS_STYLE: Record<CapabilityStatus, { label: string; cls: string; dot: string }> = {
   live: { label: 'Live', cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400' },
-  partial: { label: 'Partial', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-300', dot: 'bg-amber-400' },
+  partial: { label: 'Partial', cls: 'border-warning/30 bg-warning/10 text-warning', dot: 'bg-warning' },
   unavailable: { label: 'Unavailable', cls: 'border-red-500/30 bg-red-500/10 text-red-300', dot: 'bg-red-400' },
   'v1-planned': { label: 'V1 planned', cls: 'border-sky-500/30 bg-sky-500/10 text-sky-300', dot: 'bg-sky-400' },
   'post-v1': { label: 'Post-v1', cls: 'border-border/60 bg-muted/40 text-muted-foreground', dot: 'bg-muted-foreground/60' },
@@ -89,7 +89,7 @@ export default function CapabilityMatrixPanel() {
     <div className="space-y-2">
       <div className="rounded-lg border border-border/60 bg-background/40 p-3 text-[11px] text-muted-foreground">
         Every advertised capability maps to exactly one status from live runtime facts — never a
-        static claim. A row marked <span className="text-amber-300">Partial</span> needs setup
+        static claim. A row marked <span className="text-warning">Partial</span> needs setup
         (a key, an attach, a download);{' '}
         <span className="text-sky-300">V1 planned</span> is a confirmed v1 deliverable whose stack
         is not wired yet; <span className="text-muted-foreground">Post-v1</span> is deliberately

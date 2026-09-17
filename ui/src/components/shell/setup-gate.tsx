@@ -164,7 +164,7 @@ export function SetupGate() {
                 Your model is configured. The next message goes to a real provider through the
                 Guard-2 ticket path — no demo, no seeded reply.
               </p>
-              <Button className="mt-2 h-8 w-full bg-orange-500 text-xs text-black hover:bg-orange-400" onClick={startChatting}>
+              <Button className="mt-2 h-8 w-full bg-brand text-xs text-black hover:bg-brand" onClick={startChatting}>
                 <Sparkles className="mr-1 h-3.5 w-3.5" />
                 Start chatting
               </Button>
@@ -172,7 +172,7 @@ export function SetupGate() {
           ) : mode === 'choose' ? (
             <>
               <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-orange-400" />
+                <KeyRound className="h-5 w-5 text-brand" />
                 <h2 className="text-sm font-semibold">Set up your first model</h2>
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
@@ -183,12 +183,12 @@ export function SetupGate() {
                 <button
                   type="button"
                   onClick={() => setMode('cloud')}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-3 text-left text-xs transition-colors hover:border-orange-500/40 hover:bg-accent"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-3 text-left text-xs transition-colors hover:border-brand/40 hover:bg-accent"
                 >
                   <span className="flex items-center justify-between">
                     <span>
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
-                        <KeyRound className="h-3.5 w-3.5 text-orange-300" />
+                        <KeyRound className="h-3.5 w-3.5 text-brand" />
                         Cloud provider (bring your own key)
                       </span>
                       <span className="mt-0.5 block text-muted-foreground">
@@ -202,12 +202,12 @@ export function SetupGate() {
                 <button
                   type="button"
                   onClick={() => setMode('local')}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-3 text-left text-xs transition-colors hover:border-orange-500/40 hover:bg-accent"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-3 text-left text-xs transition-colors hover:border-brand/40 hover:bg-accent"
                 >
                   <span className="flex items-center justify-between">
                     <span>
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
-                        <Cpu className="h-3.5 w-3.5 text-orange-300" />
+                        <Cpu className="h-3.5 w-3.5 text-brand" />
                         Local model (fully offline)
                       </span>
                       <span className="mt-0.5 block text-muted-foreground">
@@ -235,7 +235,7 @@ export function SetupGate() {
           ) : mode === 'cloud' ? (
             <>
               <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-orange-400" />
+                <KeyRound className="h-5 w-5 text-brand" />
                 <h2 className="text-sm font-semibold">Add a provider key</h2>
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -247,7 +247,7 @@ export function SetupGate() {
                     className={cn(
                       'rounded border px-2 py-1 font-mono text-[10px]',
                       provider === p
-                        ? 'border-orange-500/60 bg-orange-500/10 text-orange-300'
+                        ? 'border-brand/60 bg-brand/10 text-brand'
                         : 'border-border/60 text-muted-foreground hover:text-foreground',
                     )}
                   >
@@ -280,7 +280,7 @@ export function SetupGate() {
                   Back
                 </Button>
                 <Button
-                  className="h-8 bg-orange-500 text-xs text-black hover:bg-orange-400"
+                  className="h-8 bg-brand text-xs text-black hover:bg-brand"
                   disabled={busy}
                   onClick={() => void saveKey()}
                 >
@@ -292,7 +292,7 @@ export function SetupGate() {
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <Cpu className="h-5 w-5 text-orange-400" />
+                <Cpu className="h-5 w-5 text-brand" />
                 <h2 className="text-sm font-semibold">Local model</h2>
               </div>
               {runtimes.length > 0 ? (
@@ -305,7 +305,7 @@ export function SetupGate() {
                       key={`${row.runtime}:${row.name}`}
                       type="button"
                       onClick={() => useLocal(row)}
-                      className="w-full rounded-md border border-border/60 bg-background/40 px-3 py-2 text-left text-xs hover:border-orange-500/40"
+                      className="w-full rounded-md border border-border/60 bg-background/40 px-3 py-2 text-left text-xs hover:border-brand/40"
                     >
                       <span className="flex items-center justify-between">
                         <span className="font-medium text-foreground">{row.name}</span>
@@ -332,11 +332,11 @@ export function SetupGate() {
                     : 'No Ollama/llamafile runtimes detected yet.'}
                 </p>
               )}
-              {probeError && <p className="text-[11px] text-amber-300">{probeError}</p>}
+              {probeError && <p className="text-[11px] text-warning">{probeError}</p>}
               {error && <p className="text-[11px] text-red-400">{error}</p>}
               <div className="space-y-1.5">
                 <Button
-                  className="h-8 w-full bg-orange-500 text-xs text-black hover:bg-orange-400"
+                  className="h-8 w-full bg-brand text-xs text-black hover:bg-brand"
                   disabled={connecting}
                   onClick={() => void connectOllama()}
                 >

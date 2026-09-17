@@ -46,7 +46,7 @@ const STORES = [
 const SOURCE_TONE: Record<MemoryItem['source'], string> = {
   manual: 'bg-zinc-500/15 text-zinc-300',
   learned: 'bg-sky-500/15 text-sky-300',
-  suggested: 'bg-orange-500/15 text-orange-300',
+  suggested: 'bg-brand/15 text-brand',
 }
 
 // Mock episodic store — time-stamped experiences (C2).
@@ -264,7 +264,7 @@ export default function MemoryPanel() {
       <header className="border-b border-border px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-orange-400" />
+            <Brain className="h-4 w-4 text-brand" />
             <h2 className="text-sm font-semibold text-foreground">Memory</h2>
             <Badge variant="secondary" className="text-[9px]">
               {shownItems.length} items
@@ -282,7 +282,7 @@ export default function MemoryPanel() {
           </div>
           <Button
             size="sm"
-            className="h-8 bg-orange-500 text-black hover:bg-orange-400"
+            className="h-8 bg-brand text-black hover:bg-brand"
             onClick={() => setAdding(true)}
           >
             <Plus className="h-3.5 w-3.5" />
@@ -318,7 +318,7 @@ export default function MemoryPanel() {
                   className={cn(
                     'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors',
                     isActive
-                      ? 'bg-orange-500/15 text-orange-300'
+                      ? 'bg-brand/15 text-brand'
                       : 'text-foreground/70 hover:bg-accent hover:text-foreground',
                   )}
                 >
@@ -344,7 +344,7 @@ export default function MemoryPanel() {
                   aria-pressed={tab === s.id}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground/70 hover:bg-accent hover:text-foreground"
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0 text-orange-400/80" />
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-brand/80" />
                   <div className="min-w-0 flex-1 text-left">
                     <div className="truncate">{s.name}</div>
                     <div className="font-mono text-[9px] text-muted-foreground">{storeSub(s.id)}</div>
@@ -402,7 +402,7 @@ export default function MemoryPanel() {
           {tab === 'knowledge' && (
           <>
             {adding && (
-              <section className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+              <section className="rounded-lg border border-brand/30 bg-brand/5 p-3">
                 <div className="mb-2 text-xs font-medium text-foreground">
                   {editingId ? 'Edit knowledge' : 'Add knowledge'}
                   {inTauri() && (
@@ -428,7 +428,7 @@ export default function MemoryPanel() {
                     autoFocus
                     className="h-8 flex-1 rounded-md border border-border bg-background px-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring/40"
                   />
-                  <Button size="sm" className="h-8 bg-orange-500 text-black hover:bg-orange-400" onClick={() => void submitAdd()}>
+                  <Button size="sm" className="h-8 bg-brand text-black hover:bg-brand" onClick={() => void submitAdd()}>
                     Save
                   </Button>
                   <Button size="sm" variant="outline" className="h-8" onClick={() => { setAdding(false); setAddText(''); setEditingId(null) }}>
@@ -440,9 +440,9 @@ export default function MemoryPanel() {
             {suggestions.length > 0 && (
               <section>
                 <div className="mb-2 flex items-center gap-1.5">
-                  <Lightbulb className="h-3.5 w-3.5 text-orange-400" />
+                  <Lightbulb className="h-3.5 w-3.5 text-brand" />
                   <span className="text-xs font-medium text-foreground">Suggestions</span>
-                  <Badge className="bg-orange-500/15 text-[9px] text-orange-300">{suggestions.length} new</Badge>
+                  <Badge className="bg-brand/15 text-[9px] text-brand">{suggestions.length} new</Badge>
                 </div>
                 <div className="space-y-2">
                   {suggestions.map((s) => (
@@ -521,7 +521,7 @@ function EpisodicTab({
     <div className="rounded-lg border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-1.5">
-          <Brain className="h-3.5 w-3.5 text-orange-400" />
+          <Brain className="h-3.5 w-3.5 text-brand" />
           <span className="text-xs font-medium text-foreground">Episodic memory</span>
         </div>
         <span className="font-mono text-[10px] text-muted-foreground">
@@ -540,7 +540,7 @@ function EpisodicTab({
       <ul className="divide-y divide-border/50">
         {rows.map((e) => (
           <li key={e.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/40">
-            <CircleDot className="h-3 w-3 shrink-0 text-orange-400" />
+            <CircleDot className="h-3 w-3 shrink-0 text-brand" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-medium text-foreground">{e.title}</div>
               <div className="truncate text-[10px] text-muted-foreground">{e.detail}</div>
@@ -717,7 +717,7 @@ function GraphTab({
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-1.5">
-          <GitBranch className="h-3.5 w-3.5 text-orange-400" />
+          <GitBranch className="h-3.5 w-3.5 text-brand" />
           <span className="text-xs font-medium text-foreground">Knowledge graph</span>
           {liveGraph && (
             <Badge variant="outline" className="text-[9px] text-emerald-300">
@@ -769,8 +769,8 @@ function GraphTab({
               className={cn(
                 'absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border px-2 py-1 text-[9px] transition-all',
                 active
-                  ? 'border-orange-500/60 bg-orange-500/15 text-orange-300 shadow-[0_0_8px_rgba(249,115,22,0.25)]'
-                  : 'border-border bg-background/60 text-muted-foreground hover:border-orange-500/30 hover:text-foreground',
+                  ? 'border-brand/60 bg-brand/15 text-brand shadow-[0_0_8px_rgba(249,115,22,0.25)]'
+                  : 'border-border bg-background/60 text-muted-foreground hover:border-brand/30 hover:text-foreground',
               )}
               style={{ left: `${p.x}%`, top: `${p.y}%` }}
             >
@@ -802,17 +802,17 @@ function SkillsTab({ skills }: { skills: SkillRowView[] }) {
         <div
           key={s.id}
           className={cn(
-            'rounded-lg border bg-card p-3.5 transition-colors hover:border-orange-500/30',
-            s.status === 'suggested' ? 'border-dashed border-orange-500/40' : 'border-border',
+            'rounded-lg border bg-card p-3.5 transition-colors hover:border-brand/30',
+            s.status === 'suggested' ? 'border-dashed border-brand/40' : 'border-border',
           )}
         >
           <div className="flex items-start justify-between gap-2">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-orange-500/15 text-orange-400">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand/15 text-brand">
               <Flame className="h-3.5 w-3.5" />
             </div>
             <Badge
               variant={s.status === 'suggested' ? 'outline' : 'secondary'}
-              className={cn('text-[9px]', s.status === 'suggested' && 'text-orange-300')}
+              className={cn('text-[9px]', s.status === 'suggested' && 'text-brand')}
             >
               {s.status}
             </Badge>
@@ -836,11 +836,11 @@ function SuggestionCard({
   onDismiss: () => void
 }) {
   return (
-    <div className="rounded-lg border border-dashed border-orange-500/40 bg-orange-500/[0.04] p-3">
+    <div className="rounded-lg border border-dashed border-brand/40 bg-brand/[0.04] p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Lightbulb className="h-3.5 w-3.5 text-orange-400" />
+            <Lightbulb className="h-3.5 w-3.5 text-brand" />
             <h3 className="text-sm font-medium text-foreground">
               {item.title}
             </h3>
@@ -891,7 +891,7 @@ function KnowledgeCard({
   return (
     <div
       className={cn(
-        'rounded-lg border bg-card p-3 transition-colors hover:border-orange-500/30',
+        'rounded-lg border bg-card p-3 transition-colors hover:border-brand/30',
         item.enabled ? 'border-border' : 'border-border/50 opacity-60',
       )}
     >

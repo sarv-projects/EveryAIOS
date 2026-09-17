@@ -110,7 +110,7 @@ function LifecycleBadge({ state }: { state: AgentLifecycleState }) {
       )
     case 'inspect':
       return (
-        <Badge className="border-amber-500/30 bg-amber-500/15 px-1 text-[8px] font-mono text-amber-300">
+        <Badge className="border-warning/30 bg-warning/15 px-1 text-[8px] font-mono text-warning">
           inspect
         </Badge>
       )
@@ -819,11 +819,11 @@ export default function AgentModelPicker({ compact }: Props) {
                   Runtimes
                 </div>
                 {occupancyUnknown && (
-                  <div className="mb-1.5 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-[10px] leading-relaxed text-amber-200/90">
+                  <div className="mb-1.5 rounded-md border border-dashed border-warning/40 bg-warning/5 px-2 py-1.5 text-[10px] leading-relaxed text-warning/90">
                     Runtime inventory unavailable — the shell has not reported which agent CLIs are
                     on this machine, so no external runtime is listed. EveryAIOS Native is always
                     available. Re-run discovery from{' '}
-                    <span className="text-amber-100">Settings → Agent runtimes</span>.
+                    <span className="text-warning">Settings → Agent runtimes</span>.
                   </div>
                 )}
                 {agentList.map((a) => {
@@ -885,7 +885,7 @@ export default function AgentModelPicker({ compact }: Props) {
                               a.governance.class === 'GovernedMediated'
                                 ? 'text-emerald-400/90'
                                 : a.governance.class === 'SelfContained'
-                                  ? 'text-amber-400/90'
+                                  ? 'text-warning/90'
                                   : 'text-red-400/90',
                             )}
                             title={a.governance.note}
@@ -1030,7 +1030,7 @@ export default function AgentModelPicker({ compact }: Props) {
                         Session Capability Loadout
                       </span>
                       {anyBusy && (
-                        <Badge className="bg-amber-500/15 px-1 text-[7px] text-amber-300">
+                        <Badge className="bg-warning/15 px-1 text-[7px] text-warning">
                           applies next turn
                         </Badge>
                       )}
@@ -1074,7 +1074,7 @@ export default function AgentModelPicker({ compact }: Props) {
                                   {cap.name}
                                 </span>
                                 {cap.requiresApproval && (
-                                  <Badge className="bg-amber-500/10 px-0.5 text-[6px] text-amber-300">
+                                  <Badge className="bg-warning/10 px-0.5 text-[6px] text-warning">
                                     ticketed
                                   </Badge>
                                 )}
@@ -1383,7 +1383,7 @@ export default function AgentModelPicker({ compact }: Props) {
                             <div
                               className={cn(
                                 'font-mono text-[8px]',
-                                costDelta > 0 ? 'text-amber-400/90' : 'text-emerald-400/90',
+                                costDelta > 0 ? 'text-warning/90' : 'text-emerald-400/90',
                               )}
                             >
                               {costDelta > 0 ? '+' : '−'}${(Math.abs(costDelta)).toFixed(0)}/1M in vs {activeModel?.label}
@@ -1466,7 +1466,7 @@ export default function AgentModelPicker({ compact }: Props) {
                                   {row.fits ? 'fits' : 'too big'}
                                 </Badge>
                                 {row.warnCtx && (
-                                  <Badge className="bg-amber-500/20 px-1 text-[8px] text-amber-300">
+                                  <Badge className="bg-warning/20 px-1 text-[8px] text-warning">
                                     &lt;15K ctx
                                   </Badge>
                                 )}
@@ -1482,7 +1482,7 @@ export default function AgentModelPicker({ compact }: Props) {
                   </>
                 )}
                     {localErr && localRows.length === 0 && (
-                      <p className="px-1 pb-1 text-[9px] text-amber-300">
+                      <p className="px-1 pb-1 text-[9px] text-warning">
                         Local probe failed: {localErr}
                       </p>
                     )}
@@ -1532,14 +1532,14 @@ export default function AgentModelPicker({ compact }: Props) {
                           <span className="text-sky-300">#{i + 1}</span>
                           <span className="flex-1 truncate text-foreground/80">{r.id}</span>
                           <span className="text-muted-foreground/60">{r.score.toFixed(2)}</span>
-                          <span className={cn('truncate', r.health === 'healthy' ? 'text-emerald-400/80' : 'text-amber-400/80')}>
+                          <span className={cn('truncate', r.health === 'healthy' ? 'text-emerald-400/80' : 'text-warning/80')}>
                             {r.health}
                           </span>
                         </div>
                       ))
                     ) : (
                       <div className="space-y-1">
-                        <div className="font-mono text-[9px] text-amber-300/90">
+                        <div className="font-mono text-[9px] text-warning/90">
                           No usable route yet
                         </div>
                         {routeFeed.excluded.slice(0, 3).map((e) => (

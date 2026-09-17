@@ -91,10 +91,10 @@ export default function AutomationEditor({ automation, onClose, onSaved }: Props
   }
 
   return (
-    <div className="fade-up mt-4 rounded-lg border border-orange-500/30 bg-card shadow-inset-soft">
+    <div className="fade-up mt-4 rounded-lg border border-brand/30 bg-card shadow-inset-soft">
       <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-orange-400" />
+          <Activity className="h-4 w-4 text-brand" />
           <h3 className="text-sm font-semibold text-foreground">
             {automation.name}
           </h3>
@@ -190,7 +190,7 @@ export default function AutomationEditor({ automation, onClose, onSaved }: Props
             </Button>
             <Button
               size="sm"
-              className="h-8 bg-orange-500 text-black hover:bg-orange-400"
+              className="h-8 bg-brand text-black hover:bg-brand"
               disabled={saving}
               onClick={save}
             >

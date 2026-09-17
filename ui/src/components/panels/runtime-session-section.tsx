@@ -159,7 +159,7 @@ export function RuntimeSessionSection() {
         {/* PTY (P49.10) */}
         <div className="rounded-lg border border-border/50 bg-background/30 p-3">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
-            <Terminal className="h-3.5 w-3.5 text-orange-400" /> Persistent PTY
+            <Terminal className="h-3.5 w-3.5 text-brand" /> Persistent PTY
             {runId && <Badge variant="outline" className="ml-auto font-mono text-[9px]">run {runId}</Badge>}
           </div>
           <div className="flex flex-wrap items-center gap-2">

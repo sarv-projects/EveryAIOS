@@ -116,7 +116,7 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
           >
             <header className="flex items-center justify-between border-b border-border px-3 py-2">
               <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-orange-400" />
+                <Activity className="h-4 w-4 text-brand" />
                 <span className="text-sm font-semibold text-foreground">Cockpit</span>
                 {state?.quiet && (
                   <Badge variant="secondary" className="text-[9px]">quiet</Badge>
@@ -140,17 +140,17 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden border-b border-border bg-yellow-500/5"
+                  className="overflow-hidden border-b border-border bg-warning/5"
                 >
                   <div className="p-3">
-                    <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-yellow-300">
+                    <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-warning">
                       <Bell className="h-3 w-3" /> Interrupts ({interrupts.length})
                     </div>
                     <div className="space-y-2">
                       {interrupts.map((it, i) => (
                         <div
                           key={i}
-                          className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-2 text-xs"
+                          className="rounded-md border border-warning/30 bg-warning/5 p-2 text-xs"
                         >
                           <div className="mb-1 font-mono text-[10px] text-muted-foreground">
                             {it.agent_id} · {it.kind}
@@ -182,7 +182,7 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
               <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Agents ({agents.length})
                 {agents.length > 1 && (
-                  <span className="ml-1 text-orange-400">· running in parallel</span>
+                  <span className="ml-1 text-brand">· running in parallel</span>
                 )}
               </div>
               {agents.length === 0 ? (
@@ -194,11 +194,11 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
                   {agents.map((a) => {
                     const paused = !!pausedSessions[a.agent_id]
                     const statusColor = paused
-                      ? 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10'
+                      ? 'text-warning border-warning/30 bg-warning/10'
                       : a.status === 'Running'
-                        ? 'text-orange-300 border-orange-500/30 bg-orange-500/10'
+                        ? 'text-brand border-brand/30 bg-brand/10'
                         : a.status === 'Waiting'
-                          ? 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10'
+                          ? 'text-warning border-warning/30 bg-warning/10'
                           : a.status === 'Done'
                             ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10'
                             : 'text-muted-foreground border-border'
@@ -207,7 +207,7 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
                         key={a.agent_id}
                         className={cn(
                           'rounded-lg border bg-muted/20 p-2.5',
-                          paused ? 'border-yellow-500/40' : 'border-border'
+                          paused ? 'border-warning/40' : 'border-border'
                         )}
                       >
                         <div className="mb-1.5 flex items-center justify-between">
@@ -221,7 +221,7 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
                         </div>
                         {a.last_tool && (
                           <div className="mb-2 flex items-center gap-1 text-[11px] text-foreground/80">
-                            <Zap className="h-3 w-3 text-orange-400" />
+                            <Zap className="h-3 w-3 text-brand" />
                             <span className="font-mono">{a.last_tool}</span>
                             <span className="text-muted-foreground">— {a.last_summary}</span>
                           </div>
@@ -245,7 +245,7 @@ export function CockpitSlideover({ open, onClose }: { open: boolean; onClose: ()
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-7 text-[10px] text-yellow-300 hover:bg-yellow-500/10"
+                              className="h-7 text-[10px] text-warning hover:bg-warning/10"
                               onClick={() => setSessionPaused(a.agent_id, true)}
                             >
                               <Pause className="mr-1 h-3 w-3" /> Pause

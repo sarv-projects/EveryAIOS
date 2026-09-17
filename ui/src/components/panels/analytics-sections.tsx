@@ -38,9 +38,9 @@ const MODELS = [
 
 const STATUS_TONE: Record<string, string> = {
   running: 'bg-emerald-500/15 text-emerald-300',
-  'action-required': 'bg-orange-500/15 text-orange-300',
+  'action-required': 'bg-brand/15 text-brand',
   completed: 'bg-zinc-500/15 text-zinc-300',
-  paused: 'bg-yellow-500/15 text-yellow-300',
+  paused: 'bg-warning/15 text-warning',
   failed: 'bg-red-500/15 text-red-300',
   scheduled: 'bg-sky-500/15 text-sky-300',
 }
@@ -113,7 +113,7 @@ export function SessionsTable() {
         isLive ? (
           <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">live</Badge>
         ) : showPreview ? (
-          <Badge className="bg-orange-500/15 text-[9px] text-orange-300">preview</Badge>
+          <Badge className="bg-brand/15 text-[9px] text-brand">preview</Badge>
         ) : (
           <Badge variant="outline" className="text-[9px] text-muted-foreground">unavailable</Badge>
         )
@@ -143,7 +143,7 @@ export function SessionsTable() {
                   <TableCell className="py-1.5 text-right font-mono text-[11px] text-foreground/70">
                     {(s.tokensIn + s.tokensOut).toLocaleString()}
                   </TableCell>
-                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-orange-300">
+                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-brand">
                     ${s.cost.toFixed(2)}
                   </TableCell>
                   <TableCell className="py-1.5">
@@ -157,7 +157,7 @@ export function SessionsTable() {
                   <TableCell className="py-1.5 text-xs text-foreground">{s.title}</TableCell>
                   <TableCell className="py-1.5 font-mono text-[11px] text-muted-foreground">{s.agent}</TableCell>
                   <TableCell className="py-1.5 text-right font-mono text-[11px] text-foreground/70">{s.tokens}</TableCell>
-                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-orange-300">{s.cost}</TableCell>
+                  <TableCell className="py-1.5 text-right font-mono text-[11px] text-brand">{s.cost}</TableCell>
                   <TableCell className="py-1.5">
                     <Badge className={cn('text-[9px]', STATUS_TONE[s.status])}>{s.status}</Badge>
                   </TableCell>
@@ -185,10 +185,10 @@ export function ModelLeaderboard() {
             <span className="w-5 font-mono text-xs text-muted-foreground">#{i + 1}</span>
             <span className="flex-1 truncate text-xs text-foreground">{m.name}</span>
             <div className="h-1.5 w-24 overflow-hidden rounded-full bg-zinc-800">
-              <div className="h-full rounded-full bg-orange-500" style={{ width: `${m.usage}%` }} />
+              <div className="h-full rounded-full bg-brand" style={{ width: `${m.usage}%` }} />
             </div>
             <span className="w-10 text-right font-mono text-[10px] text-muted-foreground">{m.usage}%</span>
-            <span className="w-16 text-right font-mono text-[11px] text-orange-300">{m.costPer1k}</span>
+            <span className="w-16 text-right font-mono text-[11px] text-brand">{m.costPer1k}</span>
           </li>
         ))}
       </ul>
@@ -232,20 +232,20 @@ export function AgentBreakdown() {
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <div className="h-1 w-20 overflow-hidden rounded-full bg-zinc-800">
-                    <div className="h-full rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
+                    <div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
                   </div>
                   <span className="font-mono text-[10px] text-muted-foreground">{pct.toFixed(0)}%</span>
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <div className="font-mono text-[11px] text-orange-300">{s.cost}</div>
+                <div className="font-mono text-[11px] text-brand">{s.cost}</div>
                 <div className="font-mono text-[9px] text-muted-foreground">{s.tokens} tok · {s.avgLatency}</div>
                 <div className={cn(
                   'mt-0.5 inline-block rounded px-1 font-mono text-[8px]',
                   s.successRate >= 95
                     ? 'bg-emerald-500/15 text-emerald-300'
                     : s.successRate >= 85
-                      ? 'bg-yellow-500/15 text-yellow-300'
+                      ? 'bg-warning/15 text-warning'
                       : 'bg-red-500/15 text-red-300',
                 )}>
                   {s.successRate}% ok

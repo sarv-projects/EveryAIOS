@@ -35,7 +35,7 @@ function stateBadge(job: SchedulerJob) {
     return <Badge className="bg-sky-500/15 text-[9px] text-sky-300">running</Badge>
   }
   if (s === 'paused') {
-    return <Badge className="bg-amber-500/15 text-[9px] text-amber-300">paused</Badge>
+    return <Badge className="bg-warning/15 text-[9px] text-warning">paused</Badge>
   }
   if (s === 'failed') {
     return <Badge className="bg-red-500/15 text-[9px] text-red-300">retrying</Badge>
@@ -159,7 +159,7 @@ export default function SchedulesSection() {
       }
     >
       {!inTauri() && (
-        <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-200/90">
+        <p className="rounded-md border border-warning/30 bg-warning/5 px-2 py-1.5 text-[10px] text-warning/90">
           Preview mode — demo schedules below. Run-now and toggles need the desktop shell.
         </p>
       )}

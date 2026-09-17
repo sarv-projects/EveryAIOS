@@ -116,19 +116,19 @@ const typeIcon: Record<TimelineEvent['type'], React.ElementType> = {
 
 const typeAccent: Record<TimelineEvent['type'], string> = {
   message: 'text-blue-400',
-  tool_call: 'text-orange-400',
+  tool_call: 'text-brand',
   file_edit: 'text-emerald-400',
   browser_nav: 'text-sky-400',
-  shell_cmd: 'text-amber-400',
+  shell_cmd: 'text-warning',
   model_switch: 'text-violet-400',
   checkpoint: 'text-emerald-400',
-  cost_milestone: 'text-orange-400',
+  cost_milestone: 'text-brand',
 }
 
 const statusRing: Record<string, string> = {
   done: 'bg-emerald-500',
-  active: 'bg-orange-500 live-dot',
-  pending: 'bg-amber-500',
+  active: 'bg-brand live-dot',
+  pending: 'bg-warning',
   error: 'bg-red-500',
 }
 
@@ -211,7 +211,7 @@ export function SessionTimeline() {
       {/* Header */}
       <div className="shrink-0 px-4 py-3 border-b border-border bg-sidebar/40">
         <div className="flex items-center gap-2 mb-1">
-          <Activity className="h-4 w-4 text-orange-500" />
+          <Activity className="h-4 w-4 text-brand" />
           <span className="text-sm font-semibold">Session Timeline</span>
           {agent && (
             <span className={cn('ml-auto h-5 w-5 rounded text-[7px] font-bold flex items-center justify-center', agent.accent)}>{agent.mark}</span>
@@ -223,13 +223,13 @@ export function SessionTimeline() {
           {totalTokens != null && (
             <>
               <span className="text-muted-foreground">·</span>
-              <span className="text-orange-400/80">{totalTokens.toLocaleString()} tokens</span>
+              <span className="text-brand/80">{totalTokens.toLocaleString()} tokens</span>
             </>
           )}
           {totalCost != null && (
             <>
               <span className="text-muted-foreground">·</span>
-              <span className="text-orange-400/80">${totalCost.toFixed(2)}</span>
+              <span className="text-brand/80">${totalCost.toFixed(2)}</span>
             </>
           )}
         </div>
@@ -353,7 +353,7 @@ export function SessionTimeline() {
                 {/* Icon node */}
                 <div className={cn(
                   'relative z-10 shrink-0 h-6 w-6 rounded-full flex items-center justify-center',
-                  isActive ? 'bg-orange-500/20 ring-1 ring-orange-500/40' : 'bg-background ring-1 ring-border'
+                  isActive ? 'bg-brand/20 ring-1 ring-brand/40' : 'bg-background ring-1 ring-border'
                 )}>
                   {isActive ? (
                     <Loader2 className={cn('h-3 w-3 animate-spin', accent)} />
@@ -368,11 +368,11 @@ export function SessionTimeline() {
                 {/* Content */}
                 <div className="flex-1 min-w-0 pt-0.5">
                   <div className="flex items-center gap-2">
-                    <span className={cn('text-xs font-medium', isActive && 'text-orange-400')}>
+                    <span className={cn('text-xs font-medium', isActive && 'text-brand')}>
                       {event.title}
                     </span>
                     {event.type === 'cost_milestone' && (
-                      <Badge variant="outline" className="h-4 text-[9px] font-mono border-orange-500/30 text-orange-400">
+                      <Badge variant="outline" className="h-4 text-[9px] font-mono border-brand/30 text-brand">
                         cost
                       </Badge>
                     )}
@@ -395,7 +395,7 @@ export function SessionTimeline() {
                       {event.meta.cost !== undefined && event.meta.cost > 0 && (
                         <>
                           <span>·</span>
-                          <span className="text-orange-400/60">${event.meta.cost.toFixed(2)}</span>
+                          <span className="text-brand/60">${event.meta.cost.toFixed(2)}</span>
                         </>
                       )}
                       {event.meta.duration !== undefined && (
@@ -424,7 +424,7 @@ export function SessionTimeline() {
               <span className="text-muted-foreground">{totalTokens.toLocaleString()} tokens</span>
             )}
             {totalCost != null && (
-              <span className="text-orange-400/80">${totalCost.toFixed(2)}</span>
+              <span className="text-brand/80">${totalCost.toFixed(2)}</span>
             )}
           </div>
         )}

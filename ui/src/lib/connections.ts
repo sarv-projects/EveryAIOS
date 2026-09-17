@@ -65,7 +65,7 @@ export function connectionTone(state: ConnectionViewState): string {
     case 'Discovered':
       return 'bg-zinc-500/15 text-zinc-300'
     case 'Degraded':
-      return 'bg-amber-500/15 text-amber-300'
+      return 'bg-warning/15 text-warning'
     case 'Disconnected':
     default:
       return 'bg-zinc-500/10 text-muted-foreground'

@@ -53,7 +53,7 @@ function CodeBlock({ children, className, ...props }: React.ComponentProps<'code
     return (
       <code
         className={cn(
-          'rounded bg-zinc-800/70 px-1 py-0.5 font-mono text-[11px] text-orange-300',
+          'rounded bg-zinc-800/70 px-1 py-0.5 font-mono text-[11px] text-brand',
           className
         )}
         {...props}
@@ -132,7 +132,7 @@ const mdComponents = {
   ),
   a: ({ children, ...props }: React.ComponentProps<'a'>) => (
     <a
-      className="text-orange-300 underline-offset-2 hover:underline"
+      className="text-brand underline-offset-2 hover:underline"
       target="_blank"
       rel="noreferrer"
       {...props}
@@ -401,7 +401,7 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
             onClick={retrySafer}
             disabled={busy}
             title={`Repeat this ask with tighter limits (autonomy → ${safer})`}
-            className="inline-flex h-5 items-center gap-1 rounded bg-amber-500/20 px-1.5 text-[10px] text-amber-200 transition-colors hover:bg-amber-500/30 disabled:opacity-50"
+            className="inline-flex h-5 items-center gap-1 rounded bg-warning/20 px-1.5 text-[10px] text-warning transition-colors hover:bg-warning/30 disabled:opacity-50"
           >
             <ShieldAlert className="h-2.5 w-2.5" />
             Try again safer
@@ -422,7 +422,7 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
           <button
             onClick={undo}
             title="Roll back whatever this turn applied"
-            className="inline-flex h-5 items-center gap-1 rounded bg-orange-500/20 px-1.5 text-[10px] text-orange-200 transition-colors hover:bg-orange-500/30"
+            className="inline-flex h-5 items-center gap-1 rounded bg-brand/20 px-1.5 text-[10px] text-brand transition-colors hover:bg-brand/30"
           >
             <RotateCw className="h-2.5 w-2.5 scale-x-[-1]" />
             Undo
@@ -588,14 +588,14 @@ function UserEditInline({
             onDone()
           }
         }}
-        className="max-h-48 w-full resize-y rounded-md border border-border bg-background/60 px-2 py-1.5 text-[12px] leading-relaxed text-foreground focus:border-orange-500/50 focus:outline-none"
+        className="max-h-48 w-full resize-y rounded-md border border-border bg-background/60 px-2 py-1.5 text-[12px] leading-relaxed text-foreground focus:border-brand/50 focus:outline-none"
         rows={Math.min(6, Math.max(2, message.content.split('\n').length))}
       />
       <div className="mt-1 flex items-center gap-1.5">
         <button
           type="button"
           onClick={save}
-          className="rounded bg-orange-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-orange-600"
+          className="rounded bg-brand px-2 py-0.5 text-[10px] font-medium text-white hover:bg-brand-hover"
         >
           Edit & re-ask
         </button>
@@ -683,7 +683,7 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
         </Avatar>
         <div className="flex max-w-[78%] flex-col items-end gap-1">
           {editing ? (
-            <div className="w-full rounded-2xl rounded-tr-sm border border-orange-500/30 bg-secondary px-2 py-2">
+            <div className="w-full rounded-2xl rounded-tr-sm border border-brand/30 bg-secondary px-2 py-2">
               <UserEditInline
                 sessionId={sessionId}
                 message={message}
@@ -721,8 +721,8 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
   // assistant
   return (
     <div className="group/msg fade-up flex gap-2.5">
-      <Avatar className="h-6 w-6 shrink-0 border border-orange-500/30 bg-orange-500/15">
-        <AvatarFallback className="bg-transparent text-orange-400">
+      <Avatar className="h-6 w-6 shrink-0 border border-brand/30 bg-brand/15">
+        <AvatarFallback className="bg-transparent text-brand">
           <Sparkles className="h-3.5 w-3.5" />
         </AvatarFallback>
       </Avatar>
@@ -737,7 +737,7 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
               {message.content}
             </ReactMarkdown>
             {streaming && (
-              <span className="caret-blink ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-sm bg-orange-400" />
+              <span className="caret-blink ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-sm bg-brand" />
             )}
           </div>
 
@@ -785,7 +785,7 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
             </span>
           )}
           {message.pinned && (
-            <span className="font-mono text-[9px] text-orange-300/70">pinned</span>
+            <span className="font-mono text-[9px] text-brand/70">pinned</span>
           )}
           <AssistantActions message={message} />
         </div>

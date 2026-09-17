@@ -52,7 +52,7 @@ function WindowControls() {
     return (
       <div className="flex items-center gap-1.5" aria-hidden>
         <span className="h-3 w-3 rounded-full bg-red-500/90" />
-        <span className="h-3 w-3 rounded-full bg-yellow-500/90" />
+        <span className="h-3 w-3 rounded-full bg-warning/90" />
         <span className="h-3 w-3 rounded-full bg-emerald-500/90" />
       </div>
     )
@@ -73,7 +73,7 @@ function WindowControls() {
   return (
     <div className="flex items-center gap-1.5">
       <button type="button" aria-label="Minimize window" title="Minimize" onClick={act('minimize')} className={`${btn} bg-red-500/90`} />
-      <button type="button" aria-label="Maximize window" title="Maximize" onClick={act('toggleMaximize')} className={`${btn} bg-yellow-500/90`} />
+      <button type="button" aria-label="Maximize window" title="Maximize" onClick={act('toggleMaximize')} className={`${btn} bg-warning/90`} />
       <button type="button" aria-label="Close window" title="Close" onClick={act('close')} className={`${btn} bg-emerald-500/90`} />
     </div>
   )
@@ -82,7 +82,7 @@ function WindowControls() {
 const statusColor: Record<string, string> = {
   idle: 'bg-zinc-500',
   running: 'bg-blue-500',
-  'action-required': 'bg-orange-500',
+  'action-required': 'bg-brand',
   completed: 'bg-emerald-500',
   failed: 'bg-red-500',
   paused: 'bg-zinc-400',
@@ -127,8 +127,8 @@ export function TitleBar() {
       </div>
 
       <div className="flex items-center gap-1.5 pl-2 pr-2 border-l border-border/60">
-        <div className="grid h-5 w-5 place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30">
-          <Sparkles className="h-3 w-3 text-orange-500" />
+        <div className="grid h-5 w-5 place-items-center rounded-md bg-brand/15 ring-1 ring-brand/30">
+          <Sparkles className="h-3 w-3 text-brand" />
         </div>
         <span className="text-xs font-semibold tracking-tight">
           EveryAIOS
@@ -200,7 +200,7 @@ export function TitleBar() {
               className={cn(
                 'no-drag flex h-6 items-center gap-1 rounded-md border px-2 font-mono text-[10.5px] transition-colors',
                 powerMode
-                  ? 'border-orange-500/40 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+                  ? 'border-brand/40 bg-brand/10 text-brand hover:bg-brand/20'
                   : 'border-border bg-background/40 text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
             >
@@ -244,8 +244,8 @@ export function TitleBar() {
 
         {powerMode && (
           <>
-            <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-orange-500/30 bg-orange-500/10 text-[10.5px] font-mono">
-              <span className="text-orange-300">${spent.toFixed(2)}</span>
+            <div className="no-drag flex items-center gap-1 px-2 h-6 rounded-md border border-brand/30 bg-brand/10 text-[10.5px] font-mono">
+              <span className="text-brand">${spent.toFixed(2)}</span>
               <span className="text-muted-foreground/60">/</span>
               <span className="text-muted-foreground">${cap.toFixed(2)}</span>
             </div>
@@ -301,7 +301,7 @@ export function TitleBar() {
                 setCenterScreen('settings')
                 setSettingsSection('general')
               }}
-              className="no-drag rounded-full hover:ring-2 hover:ring-orange-500/40 transition-shadow"
+              className="no-drag rounded-full hover:ring-2 hover:ring-brand/40 transition-shadow"
               aria-label="Open settings"
               title="Settings"
             >

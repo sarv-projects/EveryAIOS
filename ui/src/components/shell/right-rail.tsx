@@ -231,16 +231,16 @@ export function ActivityRail() {
                 className={cn(
                   'group relative grid h-9 w-9 place-items-center rounded-md transition-all',
                   isActive
-                    ? 'bg-orange-500/15 text-orange-500 ring-1 ring-orange-500/30'
+                    ? 'bg-brand/15 text-brand ring-1 ring-brand/30'
                     : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
               >
                 <Icon className="h-4 w-4" />
                 {showLive && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-orange-500 live-dot ring-2 ring-sidebar" />
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-brand live-dot ring-2 ring-sidebar" />
                 )}
                 {isActive && (
-                  <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-orange-500" />
+                  <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-brand" />
                 )}
               </button>
             </TooltipTrigger>
@@ -248,8 +248,8 @@ export function ActivityRail() {
               {item.label}
               <span className="ml-2 text-muted-foreground text-[10px] font-mono">{item.shortcut}</span>
               {showLive && (
-                <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-orange-400">
-                  <span className="h-1 w-1 rounded-full bg-orange-500 live-dot" /> Live
+                <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-brand">
+                  <span className="h-1 w-1 rounded-full bg-brand live-dot" /> Live
                 </span>
               )}
               {occupancyAgent && (
@@ -280,7 +280,7 @@ export function ActivityRail() {
                 className={cn(
                   'group relative grid h-9 w-9 place-items-center rounded-md transition-all',
                   activeView.startsWith('office-') && !railCollapsed
-                    ? 'bg-orange-500/15 text-orange-500 ring-1 ring-orange-500/30'
+                    ? 'bg-brand/15 text-brand ring-1 ring-brand/30'
                     : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
               >
@@ -307,7 +307,7 @@ export function ActivityRail() {
                 }}
                 className={cn(
                   'w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-accent transition-colors',
-                  activeView === doc.id && 'bg-accent text-orange-500'
+                  activeView === doc.id && 'bg-accent text-brand'
                 )}
               >
                 <span className="text-[10px] font-mono text-muted-foreground w-12">{doc.type}</span>
@@ -317,7 +317,7 @@ export function ActivityRail() {
                 {/* P50.3.7 — the dot means a real file is open, never a demo
                     filename. Kind label alone = nothing attached yet. */}
                 {officePaths[doc.id] && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-orange-500 live-dot" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-brand live-dot" />
                 )}
               </button>
             ))}
@@ -369,13 +369,13 @@ export function ActivityRail() {
                 className={cn(
                   'group relative grid h-9 w-9 place-items-center rounded-md transition-all',
                   isActive
-                    ? 'bg-orange-500/15 text-orange-500 ring-1 ring-orange-500/30'
+                    ? 'bg-brand/15 text-brand ring-1 ring-brand/30'
                     : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
               >
                 <Icon className="h-4 w-4" />
                 {showLive && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-orange-500 live-dot ring-2 ring-sidebar" />
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-brand live-dot ring-2 ring-sidebar" />
                 )}
               </button>
             </TooltipTrigger>
@@ -729,14 +729,14 @@ export function RightViewport() {
                       : 'border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                   )}
                 >
-                  <Icon className={cn('h-3 w-3 shrink-0', isActive && 'text-orange-500')} />
+                  <Icon className={cn('h-3 w-3 shrink-0', isActive && 'text-brand')} />
                   {tabLive && (
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500 live-dot" title={tabTitle} />
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand live-dot" title={tabTitle} />
                   )}
                   <span
                     className={cn(
                       'max-w-[130px] truncate',
-                      isDragTarget && 'rounded bg-orange-500/20 ring-1 ring-orange-500/50',
+                      isDragTarget && 'rounded bg-brand/20 ring-1 ring-brand/50',
                       dragIndex === idx && 'opacity-40'
                     )}
                   >
@@ -804,8 +804,8 @@ export function RightViewport() {
             className={cn(
               'absolute left-0 top-0 z-20 h-full w-1 cursor-col-resize transition-colors',
               isResizing
-                ? 'bg-orange-500/80'
-                : 'bg-transparent hover:bg-orange-500/40',
+                ? 'bg-brand/80'
+                : 'bg-transparent hover:bg-brand/40',
             )}
             title="Drag to resize · double-click to reset"
           >

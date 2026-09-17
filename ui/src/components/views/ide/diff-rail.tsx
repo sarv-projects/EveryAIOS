@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils'
 function VerdictIcon({ passed }: { passed: boolean | null }) {
   if (passed === true) return <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400" />
   if (passed === false) return <XCircle className="h-3 w-3 shrink-0 text-rose-400" />
-  return <HelpCircle className="h-3 w-3 shrink-0 text-amber-400" />
+  return <HelpCircle className="h-3 w-3 shrink-0 text-warning" />
 }
 
 function VerificationRow({ v }: { v: VerificationRecord }) {
@@ -35,7 +35,7 @@ function VerificationRow({ v }: { v: VerificationRecord }) {
           <span
             className={cn(
               'text-[9px]',
-              v.passed === true ? 'text-emerald-400' : v.passed === false ? 'text-rose-400' : 'text-amber-400',
+              v.passed === true ? 'text-emerald-400' : v.passed === false ? 'text-rose-400' : 'text-warning',
             )}
           >
             {v.passed === true ? 'verified' : v.passed === false ? 'failed' : 'ambiguous'}
@@ -137,7 +137,7 @@ export function DiffRail() {
         <div className="space-y-1">
           {undos.map((u, i) => (
             <div key={i} className="flex items-center gap-2 rounded border border-[#333] bg-[#252526] px-2 py-1 font-mono text-[10px]">
-              <FileDiff className="h-3 w-3 shrink-0 text-orange-400" />
+              <FileDiff className="h-3 w-3 shrink-0 text-brand" />
               <span className="truncate text-[#d4d4d4]">{u.path}</span>
               <span className="ml-auto shrink-0 text-[#666]">
                 {u.beforeBytes !== undefined && u.beforeBytes !== null ? `${u.beforeBytes} B` : ''}

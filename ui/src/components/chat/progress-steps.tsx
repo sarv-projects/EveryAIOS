@@ -54,7 +54,7 @@ function StatusDot({ status }: { status: ProgressStep['status'] }) {
     )
   if (status === 'active')
     return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500/15 text-orange-400">
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/15 text-brand">
         <Loader2 className="h-3 w-3 animate-spin" />
       </span>
     )
@@ -107,7 +107,7 @@ export default function ProgressSteps({ steps }: Props) {
                 className={cn(
                   'group flex-1 rounded-md px-2 py-1 text-left transition-colors',
                   'hover:bg-accent/60',
-                  step.status === 'active' && 'bg-orange-500/5',
+                  step.status === 'active' && 'bg-brand/5',
                   step.status === 'failed' && 'step-shake bg-rose-500/5'
                 )}
               >
@@ -115,7 +115,7 @@ export default function ProgressSteps({ steps }: Props) {
                   <span
                     className={cn(
                       'text-muted-foreground',
-                      step.status === 'active' && 'text-orange-300'
+                      step.status === 'active' && 'text-brand'
                     )}
                   >
                     <StepTypeIcon type={step.type} />

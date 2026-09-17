@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 const META = {
   preview: {
     label: 'Development Preview — no real files, accounts, providers, or tasks',
-    className: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
+    className: 'border-warning/40 bg-warning/10 text-warning',
     icon: AlertTriangle,
   },
   booting: {
@@ -17,12 +17,12 @@ const META = {
   },
   'vault-setup': {
     label: 'Vault setup required',
-    className: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
+    className: 'border-warning/40 bg-warning/10 text-warning',
     icon: LockKeyhole,
   },
   'vault-locked': {
     label: 'Vault locked',
-    className: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
+    className: 'border-warning/40 bg-warning/10 text-warning',
     icon: LockKeyhole,
   },
   'sidecar-offline': {

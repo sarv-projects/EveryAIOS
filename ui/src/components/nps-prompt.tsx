@@ -48,7 +48,7 @@ export default function NpsPrompt() {
               key={n}
               onClick={() => void submit(n)}
               aria-label={`Score ${n} of 10`}
-              className="flex size-5 items-center justify-center rounded text-[10px] text-muted-foreground transition-colors hover:bg-orange-500/20 hover:text-orange-300"
+              className="flex size-5 items-center justify-center rounded text-[10px] text-muted-foreground transition-colors hover:bg-brand/20 hover:text-brand"
             >
               {n}
             </button>
@@ -60,10 +60,10 @@ export default function NpsPrompt() {
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Anything you'd improve? (optional, stored locally)"
-            className="w-full rounded border border-border bg-background/40 px-2 py-1 text-[11px] text-foreground placeholder:text-muted-foreground/50 focus:border-orange-500/50 focus:outline-none"
+            className="w-full rounded border border-border bg-background/40 px-2 py-1 text-[11px] text-foreground placeholder:text-muted-foreground/50 focus:border-brand/50 focus:outline-none"
           />
           <button
-            className="w-full rounded bg-orange-500 py-1 text-[11px] font-medium text-black hover:bg-orange-400"
+            className="w-full rounded bg-brand py-1 text-[11px] font-medium text-black hover:bg-brand"
             onClick={() => submit(score)}
           >
             Save

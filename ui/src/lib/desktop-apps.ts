@@ -58,9 +58,9 @@ export interface BackgroundInputView {
 
 const READINESS: Record<DesktopReadinessState, { label: string; tone: string; glyph: string }> = {
   ready: { label: 'Ready', tone: 'text-emerald-300', glyph: '●' },
-  permission_required: { label: 'Permission required', tone: 'text-amber-300', glyph: '⚠' },
-  driver_missing: { label: 'Driver missing', tone: 'text-amber-300', glyph: '⚠' },
-  app_unsupported: { label: 'App unsupported', tone: 'text-amber-300', glyph: '⚠' },
+  permission_required: { label: 'Permission required', tone: 'text-warning', glyph: '⚠' },
+  driver_missing: { label: 'Driver missing', tone: 'text-warning', glyph: '⚠' },
+  app_unsupported: { label: 'App unsupported', tone: 'text-warning', glyph: '⚠' },
   policy_blocked: { label: 'Blocked by policy', tone: 'text-red-300', glyph: '✕' },
 }
 
@@ -165,7 +165,7 @@ export function backgroundInputView(
   }
   return {
     label: 'Unavailable on this host',
-    tone: 'text-amber-300',
+    tone: 'text-warning',
     glyph: '⚠',
     detail: 'The Background coordinate-click path is unavailable here; coordinate clicks will refuse rather than move your pointer. Use a named accessibility action or switch to Foreground.',
   }

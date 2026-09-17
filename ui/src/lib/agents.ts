@@ -295,7 +295,7 @@ export const MODELS: AgentModel[] = [
     available: true,
     strengths: ['code', 'fast'],
     recommendedFor: 'Fill-in-the-middle',
-    tone: 'bg-amber-500/20 text-amber-300',
+    tone: 'bg-warning/20 text-warning',
   },
   // Meta / local via Ollama
   {

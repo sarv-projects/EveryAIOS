@@ -155,7 +155,7 @@ export function IdeWorkbench() {
             title="EveryAIOS"
             className={cn(
               'grid h-11 w-11 place-items-center rounded-md',
-              activity === 'everyaios' ? 'text-orange-400' : 'text-[#858585] hover:text-orange-300'
+              activity === 'everyaios' ? 'text-brand' : 'text-[#858585] hover:text-brand'
             )}
           >
             <Sparkles className="h-5 w-5" strokeWidth={1.5} />

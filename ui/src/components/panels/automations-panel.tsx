@@ -204,7 +204,7 @@ function SchedulerHealth({ jobs }: { jobs: SchedulerJob[] }) {
       <div className="rounded-lg border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <div className="flex items-center gap-1.5">
-            <Stethoscope className="h-3.5 w-3.5 text-orange-400" />
+            <Stethoscope className="h-3.5 w-3.5 text-brand" />
             <span className="text-xs font-medium">Cron health (doctor)</span>
           </div>
           <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => void runDoctor()}>
@@ -234,7 +234,7 @@ function SchedulerHealth({ jobs }: { jobs: SchedulerJob[] }) {
       <div className="rounded-lg border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <div className="flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 text-orange-400" />
+            <AlertTriangle className="h-3.5 w-3.5 text-brand" />
             <span className="text-xs font-medium">Incidents</span>
             {unacked.length > 0 && (
               <Badge variant="outline" className="border-red-500/40 bg-red-500/10 text-[9px] text-red-300">
@@ -280,7 +280,7 @@ function SchedulerHealth({ jobs }: { jobs: SchedulerJob[] }) {
 
       <div className="rounded-lg border border-border bg-card">
         <div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
-          <NotebookPen className="h-3.5 w-3.5 text-orange-400" />
+          <NotebookPen className="h-3.5 w-3.5 text-brand" />
           <span className="text-xs font-medium">Job notepad</span>
         </div>
         <div className="space-y-2 p-3">
@@ -460,7 +460,7 @@ export default function AutomationsPanel() {
       <header className="border-b border-border px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-orange-400" />
+            <Zap className="h-4 w-4 text-brand" />
             <h2 className="text-sm font-semibold text-foreground">Automations</h2>
             <Badge variant="secondary" className="text-[9px]">
               {automations.filter((a) => a.enabled).length} active
@@ -468,7 +468,7 @@ export default function AutomationsPanel() {
           </div>
           <Button
             size="sm"
-            className="h-8 bg-orange-500 text-black hover:bg-orange-400"
+            className="h-8 bg-brand text-black hover:bg-brand"
             onClick={() => {
               setTab('templates')
               notify('Pick a template or describe an automation below')
@@ -520,10 +520,10 @@ export default function AutomationsPanel() {
               {TEMPLATES.map((t) => (
                 <div
                   key={t.name}
-                  className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-orange-500/40 hover-lift"
+                  className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-brand/40 hover-lift"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-orange-500/15 text-orange-400">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand/15 text-brand">
                       <LayoutTemplate className="h-4 w-4" />
                     </div>
                     <Badge variant="secondary" className="font-mono text-[9px]">{inTauri() ? 'new' : `${t.runs} preview runs`}</Badge>
@@ -536,7 +536,7 @@ export default function AutomationsPanel() {
                     </span>
                     <Button
                       size="sm"
-                      className="h-7 gap-1 bg-orange-500 px-2.5 text-[10px] text-white hover:bg-orange-600"
+                      className="h-7 gap-1 bg-brand px-2.5 text-[10px] text-white hover:bg-brand-hover"
                       onClick={() => useTemplate(t)}
                     >
                       <Plus className="h-3 w-3" />
@@ -550,7 +550,7 @@ export default function AutomationsPanel() {
             <div className="rounded-lg border border-border bg-card">
               <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
                 <div className="flex items-center gap-1.5">
-                  <History className="h-3.5 w-3.5 text-orange-400" />
+                  <History className="h-3.5 w-3.5 text-brand" />
                   <span className="text-xs font-medium text-foreground">Recent runs</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -615,7 +615,7 @@ export default function AutomationsPanel() {
                           )}
                         </td>
                         <td className="hidden px-3 py-1.5 text-muted-foreground sm:table-cell">{r.detail}</td>
-                        <td className="hidden px-3 py-1.5 text-orange-300/80 md:table-cell">{r.cost}</td>
+                        <td className="hidden px-3 py-1.5 text-brand/80 md:table-cell">{r.cost}</td>
                         <td className="hidden px-3 py-1.5 text-muted-foreground md:table-cell">{r.dur}</td>
                       </tr>
                     ))}
@@ -658,9 +658,9 @@ export default function AutomationsPanel() {
                   key={a.id}
                   onClick={() => setSelectedId(a.id)}
                   className={cn(
-                    'group cursor-pointer rounded-lg border bg-card p-4 transition-colors hover:border-orange-500/50',
+                    'group cursor-pointer rounded-lg border bg-card p-4 transition-colors hover:border-brand/50',
                     selectedId === a.id
-                      ? 'border-orange-500/50'
+                      ? 'border-brand/50'
                       : 'border-border',
                     !a.enabled && 'opacity-70',
                   )}
@@ -668,12 +668,12 @@ export default function AutomationsPanel() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <Icon className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                        <Icon className="h-3.5 w-3.5 shrink-0 text-brand" />
                         <h3 className="truncate text-sm font-medium text-foreground">
                           {a.name}
                         </h3>
                         {paused && (
-                          <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-[9px] text-amber-300">
+                          <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[9px] text-warning">
                             Paused
                           </Badge>
                         )}
@@ -712,7 +712,7 @@ export default function AutomationsPanel() {
                           e.stopPropagation()
                           paused ? resumeJob(a.id) : pauseJob(a.id)
                         }}
-                        className="flex size-6 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-amber-500/40 hover:text-amber-300"
+                        className="flex size-6 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-warning/40 hover:text-warning"
                         aria-label={paused ? 'Resume' : 'Pause'}
                         title={paused ? 'Resume' : 'Pause'}
                       >
@@ -774,7 +774,7 @@ export default function AutomationsPanel() {
 
       {/* Natural-language composer */}
       <footer className="border-t border-border bg-card p-3">
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-background/40 px-3 py-2 focus-within:border-orange-500/50">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-background/40 px-3 py-2 focus-within:border-brand/50">
           <span className="font-mono text-[10px] text-muted-foreground">
             NL
           </span>
@@ -786,7 +786,7 @@ export default function AutomationsPanel() {
           />
           <button
             onClick={createFromNl}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-orange-500 text-black hover:bg-orange-400"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-brand text-black hover:bg-brand"
             aria-label="Create automation from description"
           >
             <Play className="h-3 w-3" />

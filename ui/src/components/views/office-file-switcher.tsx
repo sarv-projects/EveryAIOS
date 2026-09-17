@@ -40,7 +40,7 @@ export default function OfficeFileSwitcher({
             className={cn(
               'group flex h-6 shrink-0 items-center gap-1 rounded border px-2 font-mono text-[10px] transition-colors',
               active
-                ? 'border-orange-500/50 bg-orange-500/10 text-foreground'
+                ? 'border-brand/50 bg-brand/10 text-foreground'
                 : 'border-border bg-zinc-950/40 text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground',
             )}
           >

@@ -58,7 +58,7 @@ export default function OfficePptxView() {
     <div className="flex h-full w-full flex-col bg-zinc-900">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
-          <Presentation className="h-4 w-4 text-orange-400" />
+          <Presentation className="h-4 w-4 text-brand" />
           <span className="max-w-[240px] truncate font-mono text-xs font-medium text-foreground">
             {payload?.path ?? (inTauri() ? 'No presentation open' : 'quarterly-deck.pptx')}
           </span>
@@ -69,9 +69,9 @@ export default function OfficePptxView() {
           ) : (
             <Badge
               variant="outline"
-              className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300"
+              className="gap-1 border-brand/40 bg-brand/10 text-[10px] text-brand"
             >
-              <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-brand" />
               {inTauri() ? 'no file open' : 'preview'}
             </Badge>
           )}
@@ -93,7 +93,7 @@ export default function OfficePptxView() {
       <OfficeFileSwitcher view="office-pptx" current={payload?.path} onOpen={open} />
 
       {locked && (
-        <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-[10px] text-amber-300">
+        <div className="border-b border-warning/30 bg-warning/10 px-3 py-1 font-mono text-[10px] text-warning">
           Read-only while the agent is running — pause to take over
         </div>
       )}
@@ -124,8 +124,8 @@ export default function OfficePptxView() {
             )}
             {payload && payload.slides[current] && (
               <div className="flex h-full flex-col p-8">
-                <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />
-                <Badge variant="secondary" className="mb-3 w-fit bg-orange-500/15 text-[9px] text-orange-300">
+                <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-brand to-brand" />
+                <Badge variant="secondary" className="mb-3 w-fit bg-brand/15 text-[9px] text-brand">
                   {payload.slides[current].part}
                 </Badge>
                 <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground/80">
@@ -133,7 +133,7 @@ export default function OfficePptxView() {
                 </pre>
               </div>
             )}
-            {!payload && !inTauri() && <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-orange-500 to-orange-300" />}
+            {!payload && !inTauri() && <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-brand to-brand" />}
             {!payload && inTauri() && (
               <div className="flex h-full items-center justify-center p-8 text-center text-xs text-muted-foreground">
                 Open a real presentation to view slides and speaker notes.
@@ -143,14 +143,14 @@ export default function OfficePptxView() {
             <div className="flex h-full flex-col p-8">
               <Badge
                 variant="secondary"
-                className="mb-3 w-fit bg-orange-500/15 text-[9px] text-orange-300"
+                className="mb-3 w-fit bg-brand/15 text-[9px] text-brand"
               >
                 Q3 FY26 · Board Review
               </Badge>
               <h2 className="mb-2 text-3xl font-bold tracking-tight text-foreground">
                 Q3 2026 Results
               </h2>
-              <p className="mb-4 font-mono text-sm text-orange-300">
+              <p className="mb-4 font-mono text-sm text-brand">
                 Revenue: $1.8M <span className="text-emerald-400">(+20% QoQ)</span>
               </p>
 
@@ -162,7 +162,7 @@ export default function OfficePptxView() {
                   >
                     <div className="flex h-16 w-full items-end justify-center">
                       <div
-                        className="w-3 rounded-t bg-gradient-to-t from-orange-600 to-orange-400"
+                        className="w-3 rounded-t bg-gradient-to-t from-brand-hover to-brand"
                         style={{ height: `${h}%` }}
                       />
                     </div>
@@ -174,7 +174,7 @@ export default function OfficePptxView() {
               </div>
 
               <div className="absolute right-4 top-4 flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
-                <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" />
+                <span className="live-dot h-1.5 w-1.5 rounded-full bg-brand" />
                 Agent editing
               </div>
             </div>
@@ -202,7 +202,7 @@ export default function OfficePptxView() {
                   )
                   st.setCenterScreen('chat')
                 }}
-                className="rounded border border-dashed border-border px-2 py-1 font-mono text-[10px] text-orange-300 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded border border-dashed border-border px-2 py-1 font-mono text-[10px] text-brand hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Ask agent to edit this slide
               </button>
@@ -243,7 +243,7 @@ export default function OfficePptxView() {
 
         <aside className="hidden w-56 shrink-0 border-l border-border bg-card lg:block">
           <div className="flex items-center gap-1.5 border-b border-border px-3 py-2 text-xs font-medium">
-            <StickyNote className="h-3.5 w-3.5 text-orange-400" />
+            <StickyNote className="h-3.5 w-3.5 text-brand" />
             Speaker notes
           </div>
           {/* P2.11 — live speaker notes from pptx_notes when a deck is open;
@@ -257,7 +257,7 @@ export default function OfficePptxView() {
               <p>Speaker notes unavailable until a real presentation is open.</p>
             ) : (
               <>
-                <div className="mb-1 text-[9px] uppercase tracking-wide text-orange-300">
+                <div className="mb-1 text-[9px] uppercase tracking-wide text-brand">
                   P4.7b · guizang SPEAKER_NOTES
                 </div>
                 <p className="text-foreground/80">
@@ -283,12 +283,12 @@ export default function OfficePptxView() {
               className={cn(
                 'shrink-0 rounded border p-1 transition-colors',
                 i === current
-                  ? 'border-orange-500 bg-orange-500/10'
+                  ? 'border-brand bg-brand/10'
                   : 'border-border bg-zinc-950/40 hover:border-muted-foreground'
               )}
             >
               <div className="flex aspect-video w-16 flex-col justify-center gap-0.5 rounded bg-gradient-to-br from-zinc-800 to-zinc-900 px-1 py-0.5">
-                <div className="h-0.5 w-3/4 rounded bg-orange-400/60" />
+                <div className="h-0.5 w-3/4 rounded bg-brand/60" />
                 <div className="h-0.5 w-1/2 rounded bg-emerald-400/40" />
                 <div className="mt-1 flex gap-0.5">
                   {[0, 1, 2, 3].map((b) => (
@@ -303,7 +303,7 @@ export default function OfficePptxView() {
               <div
                 className={cn(
                   'mt-1 font-mono text-[9px]',
-                  i === current ? 'text-orange-300' : 'text-muted-foreground'
+                  i === current ? 'text-brand' : 'text-muted-foreground'
                 )}
               >
                 {i + 1}
@@ -320,7 +320,7 @@ export default function OfficePptxView() {
               )
               st.setCenterScreen('chat')
             }}
-            className="flex shrink-0 items-center justify-center rounded border border-dashed border-border px-3 text-orange-300 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex shrink-0 items-center justify-center rounded border border-dashed border-border px-3 text-brand hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
             +
           </button>

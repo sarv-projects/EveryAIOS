@@ -88,7 +88,7 @@ export function UxMetricsSection() {
         ].map(([k, v]) => (
           <div key={k} className="rounded-md border border-border/50 bg-background/30 px-3 py-2.5">
             <div className="text-[10px] text-muted-foreground">{k}</div>
-            <div className="font-mono text-xs text-orange-300">{v}</div>
+            <div className="font-mono text-xs text-brand">{v}</div>
           </div>
         ))}
       </div>

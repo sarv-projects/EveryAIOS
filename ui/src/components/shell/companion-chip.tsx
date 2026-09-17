@@ -23,7 +23,7 @@ export type CompanionMood = 'neutral' | 'cheerful' | 'focused' | 'resting'
 
 const MOOD_STYLE: Record<CompanionMood, { dot: string; label: string }> = {
   cheerful: { dot: 'bg-emerald-400', label: 'cheerful' },
-  focused: { dot: 'bg-orange-400', label: 'focused' },
+  focused: { dot: 'bg-brand', label: 'focused' },
   resting: { dot: 'bg-sky-400', label: 'resting' },
   neutral: { dot: 'bg-zinc-400', label: 'neutral' },
 }

@@ -97,7 +97,7 @@ export function CenterColumn() {
                 <button
                   type="button"
                   onClick={() => setCenterScreen('home')}
-                  className="text-orange-300 underline-offset-2 hover:underline"
+                  className="text-brand underline-offset-2 hover:underline"
                 >
                   back home
                 </button>

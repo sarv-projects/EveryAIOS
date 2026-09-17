@@ -63,7 +63,7 @@ export default function ChatOverlay({ title, context, onClose }: ChatOverlayProp
       >
         {/* header */}
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <BookOpen className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+          <BookOpen className="h-3.5 w-3.5 shrink-0 text-brand" />
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
             Ask about {title}
           </span>
@@ -100,7 +100,7 @@ export default function ChatOverlay({ title, context, onClose }: ChatOverlayProp
                 className={cn(
                   'max-w-[85%] rounded-md border px-2.5 py-1.5 text-[11px] leading-relaxed',
                   t.role === 'user'
-                    ? 'self-end border-orange-500/30 bg-orange-500/10 text-foreground'
+                    ? 'self-end border-brand/30 bg-brand/10 text-foreground'
                     : 'self-start border-border bg-zinc-900/60 text-muted-foreground',
                 )}
               >
@@ -120,7 +120,7 @@ export default function ChatOverlay({ title, context, onClose }: ChatOverlayProp
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void send()}
             placeholder={`Ask about ${title}…`}
-            className="min-w-0 flex-1 rounded border border-border bg-zinc-950 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-orange-500/60 focus:outline-none"
+            className="min-w-0 flex-1 rounded border border-border bg-zinc-950 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-brand/60 focus:outline-none"
           />
           <Button
             size="sm"

@@ -59,7 +59,7 @@ import { Row, SectionShell } from './settings-shared'
 
 function Honest({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-md border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-[10px] leading-relaxed text-amber-200/90">
+    <p className="rounded-md border border-warning/30 bg-warning/8 px-3 py-2 text-[10px] leading-relaxed text-warning/90">
       {children}
     </p>
   )
@@ -83,17 +83,17 @@ function RadioCard({
       className={cn(
         'flex w-full items-start gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
         selected
-          ? 'border-orange-500/60 bg-orange-500/10'
+          ? 'border-brand/60 bg-brand/10'
           : 'border-border/50 bg-background/30 hover:border-border hover:bg-accent/40',
       )}
     >
       <span
         className={cn(
           'mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full border',
-          selected ? 'border-orange-400' : 'border-muted-foreground/40',
+          selected ? 'border-brand' : 'border-muted-foreground/40',
         )}
       >
-        {selected && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
+        {selected && <span className="h-1.5 w-1.5 rounded-full bg-brand" />}
       </span>
       <span className="min-w-0">
         <span className="block text-xs font-medium text-foreground">{title}</span>
@@ -155,7 +155,7 @@ export function NotificationsSection() {
         ].map(([label, id]) => (
           <div key={id} className="flex items-center justify-between rounded-md border border-border/50 bg-background/30 px-3 py-2">
             <span className="flex items-center gap-2 text-xs">
-              <Bell className="h-3.5 w-3.5 text-orange-400" />
+              <Bell className="h-3.5 w-3.5 text-brand" />
               {label}
             </span>
             <div className="flex gap-1">
@@ -292,7 +292,7 @@ export function MobileSection() {
             Install the phone app, sign in with the same vault, then scan. No founder server.
           </p>
           <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" className="h-7 bg-orange-500 text-black hover:bg-orange-400" disabled title="Post-v1 (H18) — remote pairing backend not wired">
+            <Button size="sm" className="h-7 bg-brand text-black hover:bg-brand" disabled title="Post-v1 (H18) — remote pairing backend not wired">
               <Smartphone className="h-3.5 w-3.5" /> Install mobile
             </Button>
             <Button size="sm" variant="outline" className="h-7 text-[10px]" disabled title="Post-v1 (H18) — pairing backend not wired">
@@ -698,7 +698,7 @@ export function IndexingSection() {
       <Row label="Docs for AI Q&A" desc="URL or local upload as extra context">
         <Button
           size="sm"
-          className="h-7 bg-orange-500 text-black hover:bg-orange-400"
+          className="h-7 bg-brand text-black hover:bg-brand"
           disabled
           title="Document ingestion for retrieval lands with the P20 index — not wired yet"
         >
@@ -743,7 +743,7 @@ export function MarketplaceSection() {
             onClick={() => setCat(c)}
             className={cn(
               'rounded-md border px-2 py-1 text-[10px]',
-              cat === c ? 'border-orange-500 bg-orange-500/15 text-orange-300' : 'border-border text-muted-foreground hover:text-foreground',
+              cat === c ? 'border-brand bg-brand/15 text-brand' : 'border-border text-muted-foreground hover:text-foreground',
             )}
           >
             {c}
@@ -762,7 +762,7 @@ export function MarketplaceSection() {
             <p className="mt-1 text-[10px] text-muted-foreground">{p.desc}</p>
             <Button
               size="sm"
-              className="mt-2 h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400"
+              className="mt-2 h-6 bg-brand px-2 text-[10px] text-black hover:bg-brand"
               disabled
               title="Marketplace fetch is not wired — skill_store loads local SKILL.md files (see Skills)"
             >
@@ -870,7 +870,7 @@ export function SubagentsSection() {
             </div>
             <div className="mt-1.5 flex gap-2">
               {editing === r.agentId ? <>
-                <Button size="sm" className="h-6 bg-orange-500 px-2 text-[10px] text-black" onClick={() => void (async () => { try { const { chiefSubagentSetNote, chiefSubagents } = await import('@/lib/acp'); await chiefSubagentSetNote(r.agentId, draft); setRows(await chiefSubagents()); setEditing(null) } catch (e) { notify(e instanceof Error ? e.message : 'Save failed', 'error') } })()}>Save</Button>
+                <Button size="sm" className="h-6 bg-brand px-2 text-[10px] text-black" onClick={() => void (async () => { try { const { chiefSubagentSetNote, chiefSubagents } = await import('@/lib/acp'); await chiefSubagentSetNote(r.agentId, draft); setRows(await chiefSubagents()); setEditing(null) } catch (e) { notify(e instanceof Error ? e.message : 'Save failed', 'error') } })()}>Save</Button>
                 <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setEditing(null)}>Cancel</Button>
               </> : <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => { setEditing(r.agentId); setDraft(r.customized ? r.whenToUse : '') }}>Edit when-to-use</Button>}
             </div>
@@ -973,7 +973,7 @@ export function ExpertsSection() {
                   <span className="text-[10px] text-muted-foreground">{r.enabled ? 'In delegation mix' : 'Excluded from delegation mix'}</span>
                   {editing === r.agentId ? (
                     <>
-                      <Button size="sm" className="h-6 bg-orange-500 px-2 text-[10px] text-black hover:bg-orange-400" onClick={() => saveNote(r.agentId)}>Save</Button>
+                      <Button size="sm" className="h-6 bg-brand px-2 text-[10px] text-black hover:bg-brand" onClick={() => saveNote(r.agentId)}>Save</Button>
                       <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setEditing(null)}>Cancel</Button>
                       {r.customized && (
                         <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => { setDraft(''); setEditing(r.agentId); }} title="Clear the override back to the shipped default">Reset</Button>
@@ -1043,7 +1043,7 @@ export function ExpertsSection() {
           </Button>
           <Button
             size="sm"
-            className="h-7 bg-orange-500 text-[10px] text-black hover:bg-orange-400"
+            className="h-7 bg-brand text-[10px] text-black hover:bg-brand"
             onClick={() => useAppStore.getState().setCenterScreen('agents')}
           >
             + New
@@ -1155,7 +1155,7 @@ export function HooksSection() {
       action={
         <Button
           size="sm"
-          className="h-7 bg-orange-500 text-black hover:bg-orange-400"
+          className="h-7 bg-brand text-black hover:bg-brand"
           disabled
           title="Hook execution lands with the I6 runner — the event/command form above is the staged surface"
         >
@@ -1195,7 +1195,7 @@ export function WorktreeSection() {
       <Row label="Disk cap">
         <div className="flex w-56 items-center gap-3">
           <Slider value={[cap]} min={1} max={200} step={1} onValueChange={(v) => setCap(v[0])} />
-          <span className="w-12 font-mono text-xs text-orange-300">{cap} GB</span>
+          <span className="w-12 font-mono text-xs text-brand">{cap} GB</span>
         </div>
       </Row>
       <Honest>Isolated worktree-per-agent is P20 / P7.8. This cap is a preference, not an enforcer yet.</Honest>
@@ -1474,7 +1474,7 @@ export function ComputerUseSection() {
             {status?.attached && <span className="text-[10px] text-muted-foreground">Live native capability report</span>}
           </div>
           {status && !status.attached && status.reason && (
-            <p className="font-mono text-[10px] text-amber-300/80">{status.reason}</p>
+            <p className="font-mono text-[10px] text-warning/80">{status.reason}</p>
           )}
 
           {/* P57.3/.4 — the interaction default the engine enforces. */}
@@ -1571,7 +1571,7 @@ export function ComputerUseSection() {
                             {pathTail(a.path)} · {sourceLabel(a.source)}
                           </div>
                           {a.hardDenied && (
-                            <div className="truncate text-[10px] text-amber-300/80">{a.hardDenied}</div>
+                            <div className="truncate text-[10px] text-warning/80">{a.hardDenied}</div>
                           )}
                         </div>
                         {block ? (
@@ -1734,7 +1734,7 @@ export function SearchEnginesSection() {
             </span>
           )}
           {config && config.endpoints.length === 0 && (
-            <span className="font-mono text-[10px] text-amber-300/80">none configured</span>
+            <span className="font-mono text-[10px] text-warning/80">none configured</span>
           )}
         </div>
       </Row>
@@ -1769,7 +1769,7 @@ export function SearchEnginesSection() {
         </ul>
       )}
       {feedError && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-mono text-[10px] text-amber-300/90">
+        <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 font-mono text-[10px] text-warning/90">
           instance feed: {feedError}
         </div>
       )}
@@ -1865,7 +1865,7 @@ export function GeneralExtras() {
       <Row label="Archive idle sessions after">
         <div className="flex w-56 items-center gap-3">
           <Slider value={[archive]} min={7} max={365} step={1} onValueChange={(v) => setArchive(v[0])} />
-          <span className="w-12 font-mono text-xs text-orange-300">{archive}d</span>
+          <span className="w-12 font-mono text-xs text-brand">{archive}d</span>
         </div>
       </Row>
       <Row label="Open markdown with">

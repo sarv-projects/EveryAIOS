@@ -57,8 +57,8 @@ function fmtTime(ts: string | number): string {
  * typed mirror (work.ts describeWorkEvent), never a shape guess. */
 function iconFor(tone: WorkEventDescription['tone']): React.ReactNode {
   switch (tone) {
-    case 'step': return <Zap className="h-3.5 w-3.5 text-orange-400" />
-    case 'tool': return <Wrench className="h-3.5 w-3.5 text-amber-400" />
+    case 'step': return <Zap className="h-3.5 w-3.5 text-brand" />
+    case 'tool': return <Wrench className="h-3.5 w-3.5 text-warning" />
     case 'file': return <FileDown className="h-3.5 w-3.5 text-emerald-400" />
     case 'approval': return <ShieldCheck className="h-3.5 w-3.5 text-violet-400" />
     case 'thought': return <Brain className="h-3.5 w-3.5 text-sky-400" />
@@ -93,7 +93,7 @@ function buildEvents(
       out.push({
         id: `${m.id}-msg`,
         t: fmtTime(m.timestamp),
-        icon: <Zap className="h-3.5 w-3.5 text-orange-400" />,
+        icon: <Zap className="h-3.5 w-3.5 text-brand" />,
         kind: 'message',
         label: first,
         status: 'done',
@@ -103,7 +103,7 @@ function buildEvents(
         out.push({
           id: `${m.id}-tool-${t.id}`,
           t: fmtTime(m.timestamp),
-          icon: <Zap className="h-3.5 w-3.5 text-orange-400" />,
+          icon: <Zap className="h-3.5 w-3.5 text-brand" />,
           kind: 'tool',
           label: t.toolId,
           status: t.status === 'running' ? 'active' : 'done',
@@ -167,7 +167,7 @@ export default function ProgressView() {
               className={cn(
                 'rounded-full px-2 py-0.5 text-[10px] transition-colors',
                 filter === f
-                  ? 'bg-orange-500 text-black'
+                  ? 'bg-brand text-black'
                   : 'bg-accent text-muted-foreground hover:text-foreground'
               )}
             >
@@ -220,19 +220,19 @@ export default function ProgressView() {
                     className={cn(
                       'absolute left-[22px] top-1 z-10 h-3 w-3 rounded-full border-2 border-background',
                       e.status === 'active'
-                        ? 'bg-orange-500'
+                        ? 'bg-brand'
                         : 'bg-emerald-500'
                     )}
                   >
                     {e.status === 'active' && (
-                      <span className="live-dot absolute inset-0 rounded-full bg-orange-500" />
+                      <span className="live-dot absolute inset-0 rounded-full bg-brand" />
                     )}
                   </div>
                   <div
                     className={cn(
                       'rounded-md border bg-card px-3 py-2',
                       e.status === 'active'
-                        ? 'border-orange-500/40'
+                        ? 'border-brand/40'
                         : 'border-border'
                     )}
                   >
@@ -257,7 +257,7 @@ export default function ProgressView() {
                       {e.status === 'done' ? (
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                       ) : (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-500" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
                       )}
                     </button>
                     {isOpen && e.detail && (

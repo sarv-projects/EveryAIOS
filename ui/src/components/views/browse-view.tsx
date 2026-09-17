@@ -299,7 +299,7 @@ export default function BrowseView() {
   return (
     <div className="flex h-full w-full flex-col">
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <Globe className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+        <Globe className="h-3.5 w-3.5 shrink-0 text-brand" />
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
@@ -355,8 +355,8 @@ export default function BrowseView() {
           ))}
         </div>
         {status.attached ? (
-          <Badge variant="outline" className="gap-1 border-orange-500/40 bg-orange-500/10 text-[10px] text-orange-300">
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-orange-500" /> CDP attached
+          <Badge variant="outline" className="gap-1 border-brand/40 bg-brand/10 text-[10px] text-brand">
+            <span className="live-dot h-1.5 w-1.5 rounded-full bg-brand" /> CDP attached
             {status.engine ? ` · ${status.engine}` : ''}
           </Badge>
         ) : (
@@ -401,7 +401,7 @@ export default function BrowseView() {
               disabled={!inputRef.trim()}
               aria-label="Pin ref to composer"
               title="Pin this element to the composer as an instruction"
-              className="flex items-center gap-1 rounded border border-orange-500/40 px-1.5 py-0.5 text-[10px] text-orange-300 hover:bg-orange-500/10 disabled:opacity-40"
+              className="flex items-center gap-1 rounded border border-brand/40 px-1.5 py-0.5 text-[10px] text-brand hover:bg-brand/10 disabled:opacity-40"
             >
               <Pin className="h-3 w-3" /> Pin
             </button>
@@ -509,7 +509,7 @@ export default function BrowseView() {
                   onClick={() => void clickRef(m[1])}
                   disabled={actBusy || loading}
                   title={`Click ${m[1]}`}
-                  className="block w-full text-left hover:bg-orange-500/10 disabled:opacity-60"
+                  className="block w-full text-left hover:bg-brand/10 disabled:opacity-60"
                 >
                   {line || ' '}
                 </button>

@@ -15,7 +15,7 @@ import { usageSnapshot, sessionTotals } from '@/lib/spend'
 import { ChartCard, ModelLeaderboard, SessionsTable, AgentBreakdown } from './analytics-sections'
 
 const KPIS = [
-  { label: 'Total spent', value: '$5.42', icon: DollarSign, tone: 'text-orange-300' },
+  { label: 'Total spent', value: '$5.42', icon: DollarSign, tone: 'text-brand' },
   { label: 'Tokens used', value: '1.2M', icon: Cpu, tone: 'text-sky-300' },
   { label: 'Sessions', value: '12', icon: Layers, tone: 'text-foreground' },
   { label: 'Avg cost/session', value: '$0.45', icon: Timer, tone: 'text-emerald-300' },
@@ -99,7 +99,7 @@ export default function AnalyticsPanel() {
 
   const kpis = live
     ? [
-        { label: 'Total spent', value: `$${live.spent.toFixed(2)}`, icon: DollarSign, tone: 'text-orange-300' },
+        { label: 'Total spent', value: `$${live.spent.toFixed(2)}`, icon: DollarSign, tone: 'text-brand' },
         { label: 'Tokens used', value: live.tokens >= 1_000_000 ? `${(live.tokens / 1_000_000).toFixed(1)}M` : `${Math.round(live.tokens / 1000)}K`, icon: Cpu, tone: 'text-sky-300' },
         { label: 'Sessions', value: String(live.sessions), icon: Layers, tone: 'text-foreground' },
         { label: 'Avg cost/session', value: live.sessions > 0 ? `$${(live.spent / live.sessions).toFixed(2)}` : '—', icon: Timer, tone: 'text-emerald-300' },
@@ -110,7 +110,7 @@ export default function AnalyticsPanel() {
     <div className="flex h-full w-full flex-col">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-orange-400" />
+          <BarChart3 className="h-4 w-4 text-brand" />
           <h2 className="text-sm font-semibold text-foreground">Analytics</h2>
           <Badge variant="secondary" className="text-[9px]">token &amp; cost</Badge>
           {inTauri() ? (
@@ -120,7 +120,7 @@ export default function AnalyticsPanel() {
               <Badge className="bg-rose-500/15 text-[9px] text-rose-300">ledger unavailable</Badge>
             ) : null
           ) : (
-            <Badge className="bg-orange-500/15 text-[9px] text-orange-300">sample data</Badge>
+            <Badge className="bg-brand/15 text-[9px] text-brand">sample data</Badge>
           )}
         </div>
       </header>
@@ -154,7 +154,7 @@ export default function AnalyticsPanel() {
           <ChartCard
             title="Daily spend"
             subtitle="sample data · design preview"
-            right={<span className="font-mono text-xs text-orange-300">$5.42 total</span>}
+            right={<span className="font-mono text-xs text-brand">$5.42 total</span>}
           >
             <div className="chart-crossfade h-44 w-full">
               <ResponsiveContainer width="100%" height="100%">

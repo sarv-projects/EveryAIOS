@@ -198,7 +198,7 @@ export default function AgentBuilderPanel() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-6">
       <div className="mb-5 flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-orange-400" />
+        <Sparkles className="h-4 w-4 text-brand" />
         <h2 className="text-lg font-semibold text-foreground">Custom Agent Builder</h2>
       </div>
 
@@ -211,7 +211,7 @@ export default function AgentBuilderPanel() {
               onClick={() => setStep(s.n)}
               className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
                 step === s.n
-                  ? 'bg-orange-500/15 text-orange-500 ring-1 ring-orange-500/30'
+                  ? 'bg-brand/15 text-brand ring-1 ring-brand/30'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -235,8 +235,8 @@ export default function AgentBuilderPanel() {
                   onClick={() => startFromTemplate(t.id)}
                   className={`rounded-lg border p-3 text-left transition-colors ${
                     templateId === t.id
-                      ? 'border-orange-500/50 bg-orange-500/10'
-                      : 'border-border bg-card hover:border-orange-500/30'
+                      ? 'border-brand/50 bg-brand/10'
+                      : 'border-border bg-card hover:border-brand/30'
                   }`}
                 >
                   <div className="text-xl">{t.emoji}</div>
@@ -256,7 +256,7 @@ export default function AgentBuilderPanel() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Budget Analyst"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-orange-500/50"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand/50"
             />
             {/* P32.2 — the name-your-agent ownership moment (Wharton: naming
                 drives ownership). Suggested names are one tap away so the
@@ -271,7 +271,7 @@ export default function AgentBuilderPanel() {
                     key={n}
                     type="button"
                     onClick={() => setName(n)}
-                    className="rounded-full border border-border bg-background/50 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-orange-500/40 hover:text-foreground"
+                    className="rounded-full border border-border bg-background/50 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-brand/40 hover:text-foreground"
                   >
                     {n}
                   </button>
@@ -279,13 +279,13 @@ export default function AgentBuilderPanel() {
               </div>
             </div>
             <div className="mt-1 text-[11px] text-muted-foreground">
-              id: <code className="text-orange-400">{slug(name || 'agent')}</code>
+              id: <code className="text-brand">{slug(name || 'agent')}</code>
             </div>
           </div>
           <div className="flex justify-end">
             <button
               onClick={() => setStep(2)}
-              className="rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
+              className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-hover"
             >
               Next — Brain
             </button>
@@ -309,7 +309,7 @@ export default function AgentBuilderPanel() {
                   type="radio"
                   checked={engineKind === k}
                   onChange={() => setEngineKind(k)}
-                  className="accent-orange-500"
+                  className="accent-brand"
                 />
                 {label}
               </label>
@@ -319,7 +319,7 @@ export default function AgentBuilderPanel() {
                 value={acpCli}
                 onChange={(e) => setAcpCli(e.target.value)}
                 placeholder="claude-code"
-                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-orange-500/50"
+                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand/50"
               />
             )}
           </div>
@@ -332,13 +332,13 @@ export default function AgentBuilderPanel() {
                 value={provider}
                 onChange={(e) => setProvider(e.target.value)}
                 placeholder="provider (optional)"
-                className="w-1/2 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-orange-500/50"
+                className="w-1/2 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand/50"
               />
               <input
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 placeholder="model (optional)"
-                className="w-1/2 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-orange-500/50"
+                className="w-1/2 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand/50"
               />
             </div>
           </div>
@@ -348,7 +348,7 @@ export default function AgentBuilderPanel() {
             </button>
             <button
               onClick={() => setStep(3)}
-              className="rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
+              className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-hover"
             >
               Next — Capabilities
             </button>
@@ -367,7 +367,7 @@ export default function AgentBuilderPanel() {
             </button>
             <button
               onClick={() => setStep(4)}
-              className="rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
+              className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-hover"
             >
               Next — Workflows
             </button>
@@ -388,7 +388,7 @@ export default function AgentBuilderPanel() {
               value={blueprints}
               onChange={(e) => setBlueprints(e.target.value)}
               placeholder="blueprint-id (comma separated)"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-orange-500/50"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-brand/50"
             />
           </div>
           <div className="flex justify-between">
@@ -397,7 +397,7 @@ export default function AgentBuilderPanel() {
             </button>
             <button
               onClick={saveAgent}
-              className="rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
+              className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-hover"
             >
               {saved ? <span className="flex items-center gap-1"><Check className="h-3.5 w-3.5" /> Saved</span> : 'Save agent'}
             </button>
@@ -406,7 +406,7 @@ export default function AgentBuilderPanel() {
       )}
 
       {saved && bundle && (
-        <div className="mt-4 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+        <div className="mt-4 rounded-lg border border-brand/30 bg-brand/5 p-3">
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium text-foreground">
               {bundle.emoji} {bundle.name} saved to registry
@@ -431,7 +431,7 @@ export default function AgentBuilderPanel() {
           <pre className="mt-2 max-h-40 overflow-auto rounded bg-background/60 p-2 text-[11px] leading-snug text-muted-foreground scroll-thin">
             {bundleToToml(bundle)}
           </pre>
-          <button onClick={() => setCenterScreen('chat')} className="mt-2 text-xs text-orange-500 hover:underline">
+          <button onClick={() => setCenterScreen('chat')} className="mt-2 text-xs text-brand hover:underline">
             Start chatting with {bundle.name} →
           </button>
         </div>
@@ -450,7 +450,7 @@ export default function AgentBuilderPanel() {
               setSaved(false)
               setBundle(null)
             }}
-            className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-400"
+            className="flex items-center gap-1 text-xs text-brand hover:text-brand"
           >
             <Plus className="h-3 w-3" /> New
           </button>
@@ -564,14 +564,14 @@ function IdListField({ label, value, onChange, placeholder }: { label: string; v
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="mb-1 flex items-center gap-2 text-xs font-medium text-foreground">
-        <Plus className="h-3 w-3 text-orange-400" />
+        <Plus className="h-3 w-3 text-brand" />
         {label}
       </div>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-orange-500/50"
+        className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-brand/50"
       />
       <div className="mt-1 text-[11px] text-muted-foreground">Comma-separated ids — saved into the bundle.</div>
     </div>

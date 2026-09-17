@@ -156,14 +156,14 @@ export default function DiffView() {
   return (
     <div className="flex h-full w-full flex-col">
       <header className="flex items-center gap-2 border-b border-border px-4 py-2">
-        <GitCompareArrows className="h-3.5 w-3.5 text-orange-400" />
+        <GitCompareArrows className="h-3.5 w-3.5 text-brand" />
         <span className="text-xs font-medium text-foreground">Pending patches</span>
         <Badge variant="outline" className="text-[9px]">{visible.length}</Badge>
         <button
           onClick={() => setLastTurnOnly((v) => !v)}
           className={cn(
             'ml-2 rounded px-1.5 py-0.5 text-[10px] transition-colors',
-            lastTurnOnly ? 'bg-orange-500/15 text-orange-300' : 'text-muted-foreground hover:bg-accent/40',
+            lastTurnOnly ? 'bg-brand/15 text-brand' : 'text-muted-foreground hover:bg-accent/40',
           )}
           title="P52.17 — narrow to the active session's patches"
         >
@@ -182,7 +182,7 @@ export default function DiffView() {
               className={cn(
                 'mb-1 flex w-full flex-col gap-0.5 rounded-md border px-2 py-1.5 text-left text-xs transition-colors',
                 selected === u.path
-                  ? 'border-orange-500/50 bg-orange-500/10'
+                  ? 'border-brand/50 bg-brand/10'
                   : 'border-border bg-background/40 hover:bg-accent/40',
               )}
             >

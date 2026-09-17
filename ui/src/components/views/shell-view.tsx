@@ -711,7 +711,7 @@ export default function ShellView() {
               }
               className={cn(
                 'flex items-center gap-1 rounded border border-border px-2 py-0.5 font-mono text-[10px]',
-                interactive ? 'text-emerald-500' : 'text-amber-500',
+                interactive ? 'text-emerald-500' : 'text-warning',
               )}
             >
               {interactive ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -822,7 +822,7 @@ export default function ShellView() {
               {blocked.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-amber-500">
+                  <DropdownMenuLabel className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-warning">
                     <ShieldAlert className="h-3 w-3" /> Unsafe until confirmed
                   </DropdownMenuLabel>
                   {blocked.map((p) => (
@@ -836,7 +836,7 @@ export default function ShellView() {
                           void terminalProfiles().then(setRegistry)
                         })
                       }}
-                      className="flex items-center justify-between gap-2 text-[12px] text-amber-500"
+                      className="flex items-center justify-between gap-2 text-[12px] text-warning"
                     >
                       <span className="truncate">{p.profileName}</span>
                       <span className="shrink-0 text-[10px]">Confirm…</span>

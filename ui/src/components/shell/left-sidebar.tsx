@@ -35,14 +35,14 @@ const statusMeta: Record<
 > = {
   idle: { color: 'text-zinc-500', ring: 'bg-zinc-500', Icon: Circle, label: 'Idle' },
   running: { color: 'text-blue-400', ring: 'bg-blue-500', Icon: Circle, label: 'Running' },
-  'action-required': { color: 'text-orange-400', ring: 'bg-orange-500', Icon: AlertCircle, label: 'Waiting for approval' },
+  'action-required': { color: 'text-brand', ring: 'bg-brand', Icon: AlertCircle, label: 'Waiting for approval' },
   completed: { color: 'text-emerald-400', ring: 'bg-emerald-500', Icon: CheckCircle2, label: 'Completed' },
   failed: { color: 'text-red-400', ring: 'bg-red-500', Icon: AlertCircle, label: 'Failed' },
   cancelled: { color: 'text-zinc-400', ring: 'bg-zinc-400', Icon: Circle, label: 'Cancelled' },
-  budget_exceeded: { color: 'text-amber-400', ring: 'bg-amber-500', Icon: AlertCircle, label: 'Budget reached' },
+  budget_exceeded: { color: 'text-warning', ring: 'bg-warning', Icon: AlertCircle, label: 'Budget reached' },
   paused: { color: 'text-zinc-400', ring: 'bg-zinc-400', Icon: Pause, label: 'Paused' },
   scheduled: { color: 'text-violet-400', ring: 'bg-violet-500', Icon: Star, label: 'Scheduled' },
-  reconnecting: { color: 'text-amber-400', ring: 'bg-amber-500', Icon: RefreshCw, label: 'Reconnecting' },
+  reconnecting: { color: 'text-warning', ring: 'bg-warning', Icon: RefreshCw, label: 'Reconnecting' },
 }
 
 function NavItem({
@@ -74,13 +74,13 @@ function NavItem({
               : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
           )}
         >
-          <Icon className={cn('h-4 w-4 shrink-0', active && 'text-orange-500')} />
+          <Icon className={cn('h-4 w-4 shrink-0', active && 'text-brand')} />
           {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
           {!collapsed && badge && (
             <span className="font-mono text-[10px] text-muted-foreground/70">{badge}</span>
           )}
           {active && !collapsed && (
-            <span className="absolute bottom-1.5 left-0 top-1.5 w-0.5 rounded-r bg-orange-500" />
+            <span className="absolute bottom-1.5 left-0 top-1.5 w-0.5 rounded-r bg-brand" />
           )}
         </button>
       </TooltipTrigger>
@@ -206,8 +206,8 @@ export function LeftSidebar() {
     >
       <div className={cn('border-b border-border p-2', collapsed && 'px-1')}>
         {collapsed ? (
-          <div className="mx-auto grid h-8 w-8 place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30">
-            <Sparkles className="h-4 w-4 text-orange-500" />
+          <div className="mx-auto grid h-8 w-8 place-items-center rounded-md bg-brand/15 ring-1 ring-brand/30">
+            <Sparkles className="h-4 w-4 text-brand" />
           </div>
         ) : (
           <button
@@ -216,8 +216,8 @@ export function LeftSidebar() {
             className="flex h-8 w-full items-center gap-2 rounded-md px-2 hover:bg-accent"
             aria-label="Go home"
           >
-            <div className="grid h-5 w-5 place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30">
-              <Sparkles className="h-3 w-3 text-orange-500" />
+            <div className="grid h-5 w-5 place-items-center rounded-md bg-brand/15 ring-1 ring-brand/30">
+              <Sparkles className="h-3 w-3 text-brand" />
             </div>
             <span className="flex-1 text-left text-[12.5px] font-semibold">EveryAIOS</span>
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -241,9 +241,9 @@ export function LeftSidebar() {
                 <button
                   type="button"
                   onClick={newSession}
-                  className="mx-auto grid h-8 w-8 place-items-center rounded-md bg-orange-500/15 ring-1 ring-orange-500/30 hover:bg-orange-500/25"
+                  className="mx-auto grid h-8 w-8 place-items-center rounded-md bg-brand/15 ring-1 ring-brand/30 hover:bg-brand/25"
                 >
-                  <Plus className="h-4 w-4 text-orange-500" />
+                  <Plus className="h-4 w-4 text-brand" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right">New work (⌘N)</TooltipContent>
@@ -261,13 +261,13 @@ export function LeftSidebar() {
                 }}
                 placeholder="Filter work (Enter for ⌘K)"
                 title="Type to filter the list below · Enter opens full search"
-                className="h-7 w-full rounded-md border border-border bg-background/60 pl-7 pr-2 text-[12px] placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-orange-500/40"
+                className="h-7 w-full rounded-md border border-border bg-background/60 pl-7 pr-2 text-[12px] placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-brand/40"
               />
             </div>
             <button
               type="button"
               onClick={newSession}
-              className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md bg-orange-500 text-[12px] text-white hover:bg-orange-600"
+              className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md bg-brand text-[12px] text-white hover:bg-brand-hover"
             >
               <Plus className="h-3.5 w-3.5" /> New work
             </button>

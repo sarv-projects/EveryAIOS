@@ -46,7 +46,7 @@ type Cell = MatrixCell['decision']
 
 const CELL_TONE: Record<Cell, string> = {
   allow: 'bg-emerald-500/70 text-emerald-50',
-  ask: 'bg-orange-500/70 text-orange-50',
+  ask: 'bg-brand/70 text-brand',
   block: 'bg-red-500/70 text-red-50',
   off: 'bg-zinc-700/40 text-zinc-400',
 }
@@ -399,7 +399,7 @@ export function UsageSection() {
         </div>
       )}
       <Row label="Total spent" desc="Sum of per-key cost in the ledger">
-        <span className="font-mono text-xs text-orange-300">
+        <span className="font-mono text-xs text-brand">
           {loading ? '…' : spent != null ? `$${spent.toFixed(4)}` : '—'}
         </span>
       </Row>

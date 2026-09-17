@@ -110,7 +110,7 @@ export default function StorageView() {
     <div className="flex h-full w-full flex-col">
       <header className="border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <HardDrive className="h-4 w-4 text-orange-400" />
+          <HardDrive className="h-4 w-4 text-brand" />
           <h2 className="text-sm font-semibold text-foreground">Storage</h2>
           <div className="flex flex-wrap gap-1">
             <Badge variant="secondary" className="text-[9px]">treemap</Badge>
@@ -118,7 +118,7 @@ export default function StorageView() {
             <Badge variant="secondary" className="text-[9px]">large-file finder</Badge>
           </div>
           {health?.battery && (
-            <Badge variant="outline" className="ml-auto text-[9px] text-amber-300">
+            <Badge variant="outline" className="ml-auto text-[9px] text-warning">
               <Battery className="h-3 w-3" /> on battery — heavy scans deferred
             </Badge>
           )}
@@ -140,7 +140,7 @@ export default function StorageView() {
           <DreamDiaryCard />
 
           {deferred && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-[11px] text-amber-300">
+            <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-[11px] text-warning">
               <Battery className="mb-1 h-3.5 w-3.5" />
               Heavy scans are suppressed while the device is on battery (J16).
               Drive health remains live.
@@ -155,7 +155,7 @@ export default function StorageView() {
               </div>
               <div className="hover-lift rounded-lg border border-border bg-card p-3">
                 <div className="text-[10px] text-muted-foreground">Used</div>
-                <div className="font-mono text-lg font-semibold text-orange-300">
+                <div className="font-mono text-lg font-semibold text-brand">
                   {bytes(health.usedBytes)}
                 </div>
               </div>
@@ -176,7 +176,7 @@ export default function StorageView() {
 
           <div>
             <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
-              <FileSearch className="h-3.5 w-3.5 text-orange-400" />
+              <FileSearch className="h-3.5 w-3.5 text-brand" />
               Squarified Treemap
               {treemap.length > 0 && (
                 <span className="font-mono text-[10px] text-muted-foreground">
@@ -206,7 +206,7 @@ export default function StorageView() {
 
           <div>
             <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
-              <Copy className="h-3.5 w-3.5 text-yellow-400" />
+              <Copy className="h-3.5 w-3.5 text-warning" />
               Duplicate Groups
               <Badge variant="outline" className="ml-1 text-[9px]">
                 {dups.length} groups · {bytes(reclaimable)} reclaimable
@@ -221,7 +221,7 @@ export default function StorageView() {
                 dups.map((d, gi) => (
                   <div key={gi} className="rounded-lg border border-border bg-card p-3">
                     <div className="flex items-center gap-2">
-                      <Copy className="h-3.5 w-3.5 text-yellow-400" />
+                      <Copy className="h-3.5 w-3.5 text-warning" />
                       <span className="flex-1 truncate font-mono text-xs text-foreground">
                         {d.files[0]?.split('/').pop() ?? 'group'}
                       </span>
@@ -236,7 +236,7 @@ export default function StorageView() {
                           <span className="text-zinc-600">{i + 1}.</span>
                           <span className="truncate">{f}</span>
                           {i === d.files.length - 1 && (
-                            <span className="ml-auto text-orange-300">keep</span>
+                            <span className="ml-auto text-brand">keep</span>
                           )}
                         </div>
                       ))}
@@ -249,7 +249,7 @@ export default function StorageView() {
 
           <div>
             <div className="mb-2 flex items-center gap-1.5 text-xs font-medium">
-              <AlertTriangle className="h-3.5 w-3.5 text-orange-400" />
+              <AlertTriangle className="h-3.5 w-3.5 text-brand" />
               Large File Finder
             </div>
             <div className="space-y-1">
@@ -263,24 +263,24 @@ export default function StorageView() {
                     key={f.path}
                     className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5"
                   >
-                    <AlertTriangle className="h-3 w-3 text-orange-400" />
+                    <AlertTriangle className="h-3 w-3 text-brand" />
                     <span className="flex-1 truncate font-mono text-xs text-foreground">{f.name}</span>
                     <span className="truncate font-mono text-[10px] text-muted-foreground">{f.path}</span>
-                    <span className="font-mono text-[10px] text-orange-300">{bytes(f.size)}</span>
+                    <span className="font-mono text-[10px] text-brand">{bytes(f.size)}</span>
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          <div className="rounded-lg border border-orange-500/40 bg-orange-500/5 p-3">
-            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-orange-300">
+          <div className="rounded-lg border border-brand/40 bg-brand/5 p-3">
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-brand">
               <Trash2 className="h-3.5 w-3.5" />
               Cleanup Plan · Guard-2
             </div>
             <p className="mb-3 text-[11px] text-muted-foreground">
               {dups.length > 0 ? (
-                <>Plan removes <span className="text-orange-300">{dups.length} duplicate group(s)</span>, reclaiming{' '}
+                <>Plan removes <span className="text-brand">{dups.length} duplicate group(s)</span>, reclaiming{' '}
                   <span className="text-emerald-300">{bytes(reclaimable)}</span>. All changes are reversible via revision log.</>
               ) : (
                 <>No cleanup candidates. The storage engine only ever proposes — deletion always goes through a Guard-2 ticket.</>
@@ -290,7 +290,7 @@ export default function StorageView() {
               <Button
                 size="sm"
                 variant="default"
-                className="bg-orange-500 text-black hover:bg-orange-400"
+                className="bg-brand text-black hover:bg-brand"
                 disabled={proposing}
                 onClick={() => void reviewCleanup()}
               >
@@ -310,14 +310,14 @@ export default function StorageView() {
             </div>
 
             {proposals.length > 0 && (
-              <div className="mt-3 space-y-1.5 border-t border-orange-500/30 pt-3">
+              <div className="mt-3 space-y-1.5 border-t border-brand/30 pt-3">
                 {proposals.map((p, i) => (
                   <div
                     key={i}
                     className="rounded-md border border-border bg-card px-3 py-2"
                   >
                     <div className="flex items-center gap-2">
-                      <Trash2 className="h-3 w-3 text-orange-400" />
+                      <Trash2 className="h-3 w-3 text-brand" />
                       <span className="flex-1 truncate text-[11px] text-foreground">
                         {p.goal ?? p.summary ?? `Proposal ${i + 1}`}
                       </span>
