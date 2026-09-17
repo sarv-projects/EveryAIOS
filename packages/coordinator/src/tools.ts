@@ -352,6 +352,13 @@ export class ToolExecutor {
   private loop = new LoopGuard();
   private rounds = 0;
   private pending = new Map<string, (state: string) => void>();
+  // NB: explicit `| undefined` unions, not optional `?` properties — this
+  // package compiles with `exactOptionalPropertyTypes`, under which an
+  // optional property may be omitted but never assigned `undefined`.
+  /** P51.14/P64.5 — the live execution this executor's effects belong to. */
+  private executionId: string | undefined;
+  /** P64.5 — the Guard-2 ticket that authorised the last committed effect. */
+  private lastCommitTicketId: string | undefined;
 
   constructor(
     private request: ToolRequest,
@@ -369,6 +376,55 @@ export class ToolExecutor {
     if (w) {
       this.pending.delete(ticketId);
       w(state);
+    }
+  }
+
+  /**
+   * P64.5/P64.7 — bind the execution id opened by `execution/begin` so
+   * verified-edit receipts land on the right Work timeline. Optional: without
+   * it the executor still runs, it simply records no execution receipt
+   * (headless and unit-test runs never call `execution/begin`).
+   */
+  setExecutionId(id: string | undefined): void {
+    this.executionId = id !== undefined && id.length > 0 ? id : undefined;
+  }
+
+  /** The Guard-2 ticket that authorised the most recent committed tool call. */
+  get lastTicketId(): string | undefined {
+    return this.lastCommitTicketId;
+  }
+
+
+  /**
+   * P64.5 — attach a verified-edit receipt (strategy + path + Guard-2 ticket)
+   * to the bound execution (SPEC I14 edit-ladder provenance).
+   *
+   * Best-effort by design: the kernel is optional, and a receipt failure must
+   * never invalidate an edit that already landed. A receipt without a real
+   * ticket is skipped rather than fabricated — the kernel refuses an empty
+   * ticket, and inventing one would be fake provenance.
+   *
+   * Returns whether the receipt was actually recorded.
+   */
+  async recordVerifiedEdit(
+    strategy: "exact" | "structured" | "fuzzy",
+    path: string,
+    ticketId: string | undefined,
+  ): Promise<boolean> {
+    const id = this.executionId;
+    if (id === undefined) return false;
+    if (ticketId === undefined || ticketId.length === 0) return false;
+    try {
+      await this.request("execution/record_edit", {
+        id,
+        strategy,
+        path,
+        ticketId,
+        auditSeq: 0,
+      });
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -466,6 +522,10 @@ export class ToolExecutor {
     if (!committed.ok) {
       throw new Error(String(committed.error ?? "tool failed"));
     }
+    // P64.5 — remember the Guard-2 ticket that authorised this effect so a
+    // verified-edit receipt can cite it (never invent one: the kernel rejects
+    // an empty ticket, and a fabricated id would be fake provenance).
+    this.lastCommitTicketId = ticketId;
     const payload =
       committed.content ?? committed.result ?? committed;
     return sanitizeUnknown(payload);
@@ -930,5 +990,11 @@ export async function applyExactEdit(
         : JSON.stringify(read ?? "");
   assertSingleMatch(content, params.target);
   const next = content.replace(params.target, params.replacement);
-  return executor.executeTool("file_ops.write", { path, content: next }, ctx);
+  const written = await executor.executeTool("file_ops.write", { path, content: next }, ctx);
+  // P64.5 — the edit ladder's outcome belongs on the Work timeline. The
+  // strategy is `exact` because this path only ever applies a single-occurrence
+  // match; an absent or failed receipt returns false and is never allowed to
+  // undo an edit that already landed.
+  await executor.recordVerifiedEdit("exact", path, executor.lastTicketId);
+  return written;
 }

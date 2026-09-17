@@ -622,6 +622,9 @@ async function runInbuiltTurn(
   }, { batchIntervalMs });
 
   const toolExecutor = request ? new ToolExecutor(request, params.workId) : undefined;
+  // P64.5 — bind the execution opened above so verified-edit receipts attach
+  // to this attempt's Work timeline. Absent in headless runs by design.
+  if (toolExecutor && executionId !== undefined) toolExecutor.setExecutionId(executionId);
   let openaiTools: OpenAIFunctionTool[] | undefined;
   let catalogIndex: string[] = [];
   const riskById = new Map<string, string>();

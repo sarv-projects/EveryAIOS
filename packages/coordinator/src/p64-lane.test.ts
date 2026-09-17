@@ -6,7 +6,9 @@
  *   segments 1-7 byte-stable;
  * - P64.4 sub-agent worktree shape, inherited denies, shared-gate limits,
  *   and summary-only dispatch through the Guard-2 ticket flow;
- * - P64.5 single-occurrence fail-closed edit (read, gate, ticketed write);
+ * - P64.5 single-occurrence fail-closed edit (read, gate, ticketed write) plus
+ *   the verified-edit receipt (strategy + path + Guard-2 ticket) recorded on
+ *   the bound execution, never fabricated when no ticket exists;
  * - P64.8 skill-distillation trigger on a fully successful multi-task DAG
  *   (test-gated; the skills directory is never written from TS).
  */
@@ -307,6 +309,84 @@ describe("P64.5 — single-occurrence fail-closed edit", () => {
       applyExactEdit(ex, { path: "f.txt", target: "X", replacement: "Y" }, { sessionId: "s" }),
     ).rejects.toThrow(/ambiguous/);
     expect(commits).not.toContain("file_ops.write");
+  });
+});
+
+describe("P64.5 — verified-edit receipt provenance", () => {
+  /**
+   * A harness whose `tool/commit` serves the read content and reports a
+   * committed write. `ticket` absent models a Guard that authorises without
+   * issuing a ticket — the case that must never fabricate provenance.
+   */
+  function editHarness(content: string, opts: { ticket?: string } = {}) {
+    const edits: Array<Record<string, unknown>> = [];
+    const request = async (method: string, params: unknown) => {
+      const p = (params ?? {}) as Record<string, unknown>;
+      if (method === "guard/evaluate") {
+        return opts.ticket === undefined ? { action: "allow" } : { action: "allow", ticketId: opts.ticket };
+      }
+      if (method === "guard/use") return { consumed: true };
+      if (method === "tool/exec") {
+        return opts.ticket === undefined
+          ? { action: "allow", argsHash: "h" }
+          : { action: "allow", ticketId: opts.ticket, argsHash: "h" };
+      }
+      if (method === "tool/commit") {
+        if (p.toolId === "file_ops.read") return { ok: true, content };
+        return { ok: true, content: { written: true } };
+      }
+      if (method === "execution/record_edit") {
+        edits.push(p);
+        return { kind: "verified_edit" };
+      }
+      return {};
+    };
+    return { request, edits };
+  }
+
+  test("a landed exact edit records strategy + path + the write's Guard-2 ticket", async () => {
+    const { request, edits } = editHarness("line one\nTARGET\nline three\n", { ticket: "tkt-9" });
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex:1");
+    await applyExactEdit(ex, { path: "f.txt", target: "TARGET", replacement: "NEXT" }, { sessionId: "s" });
+    expect(edits).toHaveLength(1);
+    expect(edits[0]!.id).toBe("ex:1");
+    expect(edits[0]!.strategy).toBe("exact");
+    expect(edits[0]!.path).toBe("f.txt");
+    expect(edits[0]!.ticketId).toBe("tkt-9");
+  });
+
+  test("a Guard that issues no ticket records no receipt", async () => {
+    const { request, edits } = editHarness("TARGET\n");
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex:1");
+    const ok = await ex.recordVerifiedEdit("exact", "f.txt", undefined);
+    expect(ok).toBe(false);
+    expect(edits).toHaveLength(0);
+  });
+
+  test("an unbound executor records nothing and never blocks the edit", async () => {
+    const { request, edits } = editHarness("TARGET\n", { ticket: "tkt-9" });
+    const ex = new ToolExecutor(request);
+    const written = await applyExactEdit(
+      ex,
+      { path: "f.txt", target: "TARGET", replacement: "NEXT" },
+      { sessionId: "s" },
+    );
+    expect(edits).toHaveLength(0);
+    expect(written).toBeDefined();
+  });
+
+  test("a refused receipt does not fail an edit that already landed", async () => {
+    const { request } = editHarness("TARGET\n", { ticket: "tkt-9" });
+    const failing = async (method: string, params: unknown) => {
+      if (method === "execution/record_edit") throw new Error("unknown execution ex:gone");
+      return request(method, params);
+    };
+    const ex = new ToolExecutor(failing);
+    ex.setExecutionId("ex:gone");
+    const ok = await ex.recordVerifiedEdit("exact", "f.txt", "tkt-9");
+    expect(ok).toBe(false);
   });
 });
 
