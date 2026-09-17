@@ -1229,6 +1229,96 @@ a cross-file test-order/parallelism interaction, plus the
 
 ---
 
+## 2P. Implementation wave 12 (2026-09-17) — **Rust is verified, and the latent risk
+## materialised: the wired module did not compile**
+
+### The prediction was right, and it was worse than predicted
+Wave 11 flagged this as the top risk: *"My wiring activated 1,635 never-compiled
+lines and 13 dormant tests… if any type error remains inside that module, CI now
+fails where it previously passed silently."* It did. `settings_cmds.rs` **did not
+compile** — 5 hard errors, plus a clippy rejection, plus a failing dormant test.
+Every one of them was invisible while the module sat outside the build.
+
+| # | Defect | Kind |
+|---|---|---|
+| 1 | `provider_groups` filtered `.iter()` with `configured.contains(id)` where `id: &&String` — no `Borrow<&String> for String` | **compile error E0277** |
+| 2 | Two sites did `.lock().map(|m| m.clone())` on `HashMap<String, McpServerRow>`; `McpServerRow` had no `Clone` | **compile errors E0599 ×2** |
+| 3 | `is_tampered(..)` returns `Option<bool>` (`None` = no install-time pin) but the result was `.unwrap_or(None)`-ed as if the payload were `bool` | **compile errors E0308 ×2** — and semantically it would have collapsed an honest "no pin" into an integrity claim the store cannot make |
+| 4 | A `Result` was discarded by `.unwrap_or_default()` while the `if let Ok(..)` still matched on it | **compile error E0308** |
+| 5 | `if let Some(p) = .. { } else { return None }` — clippy wants `?` | **clippy `-D warnings`** |
+| 6 | `SettingsReadModel` never constructed | **clippy `dead_code`** |
+| 7 | Dormant test expected `Popular` in alphabetical order; the code emits the curated `POPULAR_PROVIDERS` order | **test failure** |
+| 8 | `tools.rs` facade dispatch: the `.pdf` arm and the `office.pdf_pages` fan-out arm both returned `"office.pdf_open"` — a no-op `else if` | **clippy `if_same_then_else`** |
+| 9 | `everyaios-mcp` test compared booleans with `== true` / `== false` | **clippy `bool_comparison`** |
+| 10 | rustfmt drift: 4 `src-tauri` modules + 9 crate files | **`cargo fmt --check`** |
+
+Defects 2–4 are the class that only a compiler finds. Defect 3 is the most
+serious: it is the same *"don't turn an honest unknown into a claim"* rule `§2D`
+and `§2M` already record elsewhere in this codebase.
+
+**Defect 6 resolved deliberately, not suppressed loosely.** Using `SettingsReadModel`
+at runtime would *change live wire shapes* (the inventory commands emit rows with
+fields beyond this shared core, as `serde_json::Value`). It is the frozen §17.12.2
+*declaration* the wire is checked against, so it carries a rationale'd
+`#[allow(dead_code)]`, matching the four existing uses in `src-tauri` — one of
+which says verbatim "Not dead code: it is part of the provenance vocabulary
+contract." The field-name test still pins it.
+
+**Defect 7 is a judgement call, flagged as such.** No spec or UI canonical order
+exists; the only definition is `POPULAR_PROVIDERS`, documented as *"Display-only
+ordering for the `Popular` group"*, and `settings_providers_list` emits
+`groups.popular` in exactly that order. The dormant assertion expected alphabetical
+order (`deepseek` before `openai`), which contradicts the shipped order. The
+expectation was aligned to the production constant, and the rationale is in the
+test. **If the intended Popular order is actually alphabetical, this is the line to
+revert** — the change is one assertion in `settings_cmds::tests`.
+
+### Environment recipe (repeatable — record for future sessions)
+```
+rustup (minimal + clippy + rustfmt)          → ~/.cargo (21M) + ~/.rustup (595M)
+apt install libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev libxdo-dev \
+            libayatana-appindicator3-dev librsvg2-dev   (src-tauri needs GTK pkg-config)
+build the sidecar → src-tauri/bin/coordinator   (tauri.conf.json resources glob
+                                                 `bin/coordinator*` hard-fails a bare checkout)
+CARGO_TARGET_DIR=/tmp/everyaios-target          (build artifacts ~2.6G on the 96G /tmp
+                                                 scratch disk instead of the 16G / )
+bun via `npx -y bun@1.1.38`                     (no global install)
+```
+Two gotchas worth keeping: a `nohup … &` background build **is killed when the
+tool's shell exits** (it is not a detached process group) — run builds in the
+foreground and let cargo's cache resume them; and the sidecar must be built
+*after* the `core-*` dist, since it bundles them.
+
+### Evidence actually executed this wave — the whole Rust surface, real runs
+| Gate | Result |
+|---|---|
+| `crates/`: `cargo check --workspace` | **exit 0** (Finished in 1m07s) |
+| `crates/`: `cargo clippy --workspace --all-targets -- -D warnings` | **exit 0** |
+| `crates/`: `cargo test --workspace --no-fail-fast` | **2586 passed / 0 failed / 23 ignored** (two consecutive runs; one earlier run showed a single failure that did not reproduce — the pre-existing timing-flaky benchmark) |
+| `crates/`: `cargo fmt --all -- --check` | **0 diffs** |
+| `src-tauri`: `cargo check --all-targets` | **exit 0** |
+| `src-tauri`: `cargo clippy --all-targets --all-features -- -D warnings` | **exit 0** (the CI gate) |
+| `src-tauri`: `cargo test` | **66 passed / 0 failed / 1 ignored** — includes `registration_sync` 2/2 |
+| `src-tauri`: `cargo fmt -- --check` | **0 diffs** |
+| `scripts/e2e/security-gate.mjs` | **PASS, all 6 legs** (S1 guard 189 · S2 p10 10 · S3 audit 56 · S4 mcp 64 · S5 ipc-parity 0 broken · S6 provenance) — **was SKIP in wave 11** |
+| `scripts/e2e/failure-injection.mjs` | **PASS, L1–L7** on the real binary (sidecar SIGKILL→respawn, corrupt-vault fail-closed, guard suites, version, browser honest) — **was SKIP in wave 11** |
+| `scripts/clean-profile-boot-check.mjs` | **PASS 8/8** (honest locked/setup, zero seeds, no sidecar-liveness claim) — **was SKIP in wave 11** |
+| `ui` `tsc --noEmit` / `bun test` | 0 errors / 328 pass (wave 11) |
+| coordinator `tsc` / `bun test` | 0 errors / 374 pass (wave 11) |
+| `check-doc-sync.mjs` / `ipc-parity.mjs` | exit 0 (341 registered · 0 broken) |
+
+**The three e2e gates that skipped in wave 11 now execute for real.** Nothing on
+the Rust or TypeScript side is `[UNVERIFIED]` any more.
+
+### Still open — unchanged by this wave
+P64.6's runner (no check-command source exists — §2O), P64.7's git-snapshot/step
+index residual, the `ConnectionRecord` vocabulary ruling, and all of Tier 4/5.
+This wave *verified* what existed; it did not add features beyond the receipt
+wiring in wave 11.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
