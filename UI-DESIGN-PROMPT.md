@@ -33,11 +33,26 @@ Everything below is what a power user sees; the casual differences are called ou
 | Ink (secondary) | `#5A6675` | secondary text |
 | Ink (tertiary) | `#8A94A3` | timestamps, meta |
 | **Brand (selection + actions)** | `#2563EB` | CTAs, active indicators, brand mark, focus ring |
-| Success | `#16A34A` | completed, connected |
+| Success | `#117E39` | completed, connected |
 | Running/Live | `#0EA5E9` | streaming, active jobs |
-| Warning/Ask | `#CA8A04` | approval needed |
-| Error | `#DC2626` | Guard-1 blocks, failures |
+| Warning/Ask | `#966703` | approval needed |
+| Error | `#D72323` | Guard-1 blocks, failures |
 | Border | `#DCE3EC` | cool hairline |
+
+> **P66.5 contrast pass (2026-09-17).** `Success`, `Warning/Ask` and `Error` were
+darkened above because the previous values (`#16A34A` / `#CA8A04` / `#DC2626`)
+did not clear WCAG 2.2 AA as the small text they carry: measured **3.35:1**,
+**2.96:1** and **4.43:1** respectively against a white card, worst-case. The
+hues are unchanged and the roles are unchanged — only lightness moved. Now
+5.18 / 4.94 / 5.06 on white and 4.79 / 4.57 / 4.68 on the canvas.
+>
+> **`Brand` is unchanged at `#2563EB`** (4.82:1 on canvas — already AA), because
+> dark mode needs the *opposite* adjustment: AA for text on a dark card requires
+a **brighter** accent, not a darker one. The dark accent is therefore `#5E99F7`
+> and, being bright, its **label flips to the dark ink** — a white label on it
+> could only reach 2.84:1. Selectable `sky` / `emerald` / `amber` accents were
+> retuned the same way; `violet` needed no light change. Measured by
+> `ui/src/lib/design-tokens.test.ts`, which fails if any of this regresses.
 
 Dark mode is a user toggle (`Sun/Moon` in the title bar) — the same semantic roles on a `#0F141B` surface base. Brand is a **semantic accent token**, not a fixed hue, so Settings can offer selectable accent themes (cool blue default) without redefining status meanings. Orange is **not** the brand or selection state; it may remain only where an existing status meaning explicitly requires it.
 

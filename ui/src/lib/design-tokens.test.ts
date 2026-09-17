@@ -78,8 +78,16 @@ const NON_TEXT_STEP = 3.0 // WCAG AA, large text / UI components
 /** The surfaces a token can be drawn on, per theme. */
 const LIGHT_SURFACES = ['--surface-0', '--surface-1', '--surface-2'] as const
 
-/** Tokens used as text glyphs somewhere in `ui/src`. */
-const TEXT_TOKENS = ['--foreground', '--muted-foreground', '--brand', '--warning'] as const
+/** Tokens used as text glyphs somewhere in `ui/src` (status chips, labels, glyphs). */
+const TEXT_TOKENS = [
+  '--foreground',
+  '--muted-foreground',
+  '--brand',
+  '--warning',
+  '--success',
+  '--danger',
+  '--info',
+] as const
 
 describe('P66.5 — semantic token contrast (WCAG 2.2 AA)', () => {
   test('body text meets AA on every light surface', () => {
@@ -110,43 +118,96 @@ describe('P66.5 — semantic token contrast (WCAG 2.2 AA)', () => {
     }
   })
 
-  test('a button label stays legible on the accent fill', () => {
-    const light = ratio(root['--brand-foreground'], root['--brand'])
-    expect(light, `brand-foreground on brand = ${light.toFixed(2)}:1`).toBeGreaterThanOrEqual(
-      LIGHT_STEP,
-    )
+  test('every semantic text token meets AA on every light surface', () => {
+    for (const surface of LIGHT_SURFACES) {
+      for (const token of TEXT_TOKENS) {
+        const r = ratio(root[token], root[surface])
+        expect(r, `${token} on ${surface} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(LIGHT_STEP)
+      }
+    }
   })
 
-  test('every semantic text token stays clear of its surface (non-text floor)', () => {
-    // The floor that must never regress, in either theme, for every token the
-    // UI draws as a glyph. `--warning` light is a recorded exception below.
+  test('every semantic text token meets AA on every dark surface', () => {
     for (const surface of LIGHT_SURFACES) {
-      for (const token of ['--foreground', '--muted-foreground', '--brand'] as const) {
-        const light = ratio(root[token], root[surface])
-        expect(light, `${token} on ${surface} = ${light.toFixed(2)}:1`).toBeGreaterThanOrEqual(
-          NON_TEXT_STEP,
-        )
-      }
       for (const token of TEXT_TOKENS) {
-        const night = ratio(dark[token], dark[surface])
-        expect(night, `dark ${token} on ${surface} = ${night.toFixed(2)}:1`).toBeGreaterThanOrEqual(
-          NON_TEXT_STEP,
+        const r = ratio(dark[token], dark[surface])
+        expect(r, `dark ${token} on ${surface} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+          LIGHT_STEP,
         )
       }
     }
   })
 
-  test('every selectable accent keeps the brand text step on light surfaces', () => {
-    // Not every preset clears AA as small text on a light surface; the ones that
-    // do are held here so a future palette edit cannot quietly undo them.
-    for (const accent of ['violet']) {
-      const themed = { ...root, ...block(`[data-accent="${accent}"]`) }
-      for (const surface of LIGHT_SURFACES) {
-        const r = ratio(themed['--brand'], themed[surface])
-        expect(r, `accent ${accent}: --brand on ${surface} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(
-          LIGHT_STEP,
-        )
+  test('a button label stays legible on the accent fill, in both themes', () => {
+    const light = ratio(root['--brand-foreground'], root['--brand'])
+    expect(light, `brand-foreground on brand = ${light.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+      LIGHT_STEP,
+    )
+    const night = ratio(dark['--brand-foreground'], dark['--brand'])
+    expect(night, `dark brand-foreground on brand = ${night.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+      LIGHT_STEP,
+    )
+  })
+
+  test('every selectable accent is legible as text, in both themes', () => {
+    for (const accent of ['sky', 'emerald', 'violet', 'amber']) {
+      const light = { ...root, ...block(`[data-accent="${accent}"]`) }
+      const night = {
+        ...root,
+        ...block('.dark'),
+        ...block(`.dark[data-accent="${accent}"], [data-accent="${accent}"] .dark`),
       }
+      for (const surface of LIGHT_SURFACES) {
+        const l = ratio(light['--brand'], light[surface])
+        expect(
+          l,
+          `accent ${accent}: --brand on ${surface} = ${l.toFixed(2)}:1`,
+        ).toBeGreaterThanOrEqual(LIGHT_STEP)
+        const d = ratio(night['--brand'], night[surface])
+        expect(
+          d,
+          `accent ${accent} dark: --brand on ${surface} = ${d.toFixed(2)}:1`,
+        ).toBeGreaterThanOrEqual(LIGHT_STEP)
+      }
+    }
+  })
+
+  test('every selectable accent keeps its own label legible', () => {
+    // The label flips to the dark ink in dark mode, because the dark accent is
+    // deliberately bright. Both halves are asserted so neither can drift alone.
+    for (const accent of ['sky', 'emerald', 'violet', 'amber']) {
+      const light = { ...root, ...block(`[data-accent="${accent}"]`) }
+      const night = {
+        ...root,
+        ...block('.dark'),
+        ...block(`.dark[data-accent="${accent}"], [data-accent="${accent}"] .dark`),
+      }
+      const l = ratio(light['--brand-foreground'], light['--brand'])
+      expect(l, `accent ${accent}: label on fill = ${l.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+        LIGHT_STEP,
+      )
+      const d = ratio(night['--brand-foreground'], night['--brand'])
+      expect(d, `accent ${accent} dark: label on fill = ${d.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+        LIGHT_STEP,
+      )
+    }
+  })
+
+  test('the accent fill stays distinguishable from every surface (non-text, 3:1)', () => {
+    // The other direction: darkening an accent for text legibility must not push
+    // the accent so dark that a filled button stops reading as a control against
+    // the canvas it sits on.
+    for (const surface of LIGHT_SURFACES) {
+      const light = ratio(root['--brand'], root[surface])
+      expect(light, `light --brand vs ${surface} = ${light.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+        NON_TEXT_STEP,
+      )
+    }
+    for (const surface of LIGHT_SURFACES) {
+      const night = ratio(dark['--brand'], dark[surface])
+      expect(night, `dark --brand vs ${surface} = ${night.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+        NON_TEXT_STEP,
+      )
     }
   })
 
@@ -162,56 +223,6 @@ describe('P66.5 — semantic token contrast (WCAG 2.2 AA)', () => {
       expect(darkL!, `${token} dark value is not lifted (${darkL} vs ${lightL})`).toBeGreaterThan(
         lightL!,
       )
-    }
-  })
-
-  test('known AA gaps are recorded, and cannot go stale silently', () => {
-    // These four pairs are BELOW the AA step for normal text, and it is worth
-    // being precise about why, because it is not a coding mistake:
-    //
-    //   UI-DESIGN-PROMPT §2.1 pins `Brand #2563EB` and `Warning/Ask #CA8A04`.
-    //   #2563EB is 4.82:1 on the canvas (passes); #CA8A04 is 2.96:1 on a white
-    //   card (fails) — the spec'd warning hue is simply too light to carry 10px
-    //   text. Same story for the bright `sky` / `amber` accent presets, and for
-    //   white-on-accent in dark mode (the dark brand is pinned bright).
-    //
-    // So each is asserted to sit in its measured band: below AA and above its
-    // own floor. If a palette change closes a gap, the upper bound fails and the
-    // note above has to be updated in the same commit. Nothing is claimed to
-    // pass that does not pass.
-    const gaps: Array<[string, number, number]> = [
-      // label, floor, measured-not-yet-AA
-      ['--warning on --surface-0', 2.5, ratio(root['--warning'], root['--surface-0'])],
-      ['--warning on --surface-1', 2.5, ratio(root['--warning'], root['--surface-1'])],
-      [
-        'dark --brand-foreground on --brand',
-        3.0,
-        ratio(dark['--brand-foreground'], dark['--brand']),
-      ],
-      [
-        'accent sky: --brand on --surface-0',
-        2.2,
-        ratio({ ...root, ...block('[data-accent="sky"]') }['--brand'], root['--surface-0']),
-      ],
-      [
-        'accent emerald: --brand on --surface-0',
-        3.0,
-        ratio({ ...root, ...block('[data-accent="emerald"]') }['--brand'], root['--surface-0']),
-      ],
-      [
-        'accent amber: --brand on --surface-0',
-        2.2,
-        ratio({ ...root, ...block('[data-accent="amber"]') }['--brand'], root['--surface-0']),
-      ],
-    ]
-    for (const [label, floor, measured] of gaps) {
-      expect(measured, `${label} = ${measured.toFixed(2)}:1 — below its own floor`).toBeGreaterThanOrEqual(
-        floor,
-      )
-      expect(
-        measured,
-        `${label} now reaches AA (${measured.toFixed(2)}:1) — remove it from this list`,
-      ).toBeLessThan(LIGHT_STEP)
     }
   })
 })
