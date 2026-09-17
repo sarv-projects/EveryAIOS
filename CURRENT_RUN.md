@@ -199,7 +199,7 @@
 
 ### Coordinator tool contract (`packages/coordinator/src/tools.ts`)
 - The sidecar's tool path is propose-then-commit (`tool/exec` → optional `tool/commit`), never auto-consuming an approval ticket, with a loop breaker on repeated identical tool+args hashes.
-- First-class native tools (`ask`, `plan`, `todo`, `subagent`) are merged with the catalog without duplication, sorted by id for prompt-cache byte stability, and capped at `MAX_ACTIVE_TOOLS = 20` per turn.
+- First-class native tools (`ask`, `plan`, `todo`, `subagent`) are merged with the catalog without duplication, sorted by id for prompt-cache byte stability, and capped at `MAX_ACTIVE_TOOLS = 20` per turn. **Superseded in part by §2Y (2026-09-17, P54.5):** the cap is still 20, but the loop's own tools (`LOOP_PINNED_TOOL_IDS` — the four first-class tools plus `script.run`, `file_ops.read`/`list`/`write`/`replace`, `search.query`) are now **mounted every turn** rather than left to the scorer, which is what had left the agent without a shell for ordinary requests.
 - `subagent` carries an explicit shared-capability grant list (`shared:office`, `shared:browser`, `shared:desktop`, `shared:calendar`), which is the intended way to hand a scoped cowork capability to a delegated agent rather than granting blanket access.
 
 ### Chief dispatch (`packages/coordinator/src/chat.ts`)

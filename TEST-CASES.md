@@ -39,6 +39,11 @@ Testing is organized into **8 orthogonal dimensions**:
 | `M1-CHS-01` | L4: Chaos | External agent SIGKILL recovery | Subagent running long build | Send `kill -9` to subagent process; verify coordinator state cleanup | Subagent marked `Crashed`; parent receives structured error; worktree unmounted |
 | `M1-SEC-01` | L5: Security | Child process environment sanitization | Secret keys in vault | Spawn external agent; inspect `/proc/<pid>/environ` or Windows process environment block | Zero API keys or host credentials present in child environment |
 | `M1-UIX-01` | L6: UI/UX | Two-pane runtime configuration & provenance | Cockpit open | Navigate to Agents screen; toggle external agent; inspect path provenance | Disclosed provenance (`managed`, `windows_path`, `wsl`); CLS = 0; spring transition |
+| `M1-UNT-03` | L1: Unit | **Loop-pinned tool mounting invariant (agent shell reachability)** | ~70-id tool registry registered | Assemble a turn for an ordinary request (`"fix the failing test in the parser"`) and inspect `ProviderRequest.tools` | `script.run`, `file_ops.read`/`list`/`write`/`replace`, `search.query`, `ask`, `plan`, `todo`, `subagent` are all mounted; total `≤ MAX_ACTIVE_TOOLS` (20); ids sorted (`sortToolsStable`) so the tools body stays cache-stable. Guards the measured defect where the 20-cap silently excluded the agent's shell |
+| `M1-CNT-03` | L2: Contract | **Plane observation is read-only; the only shell-effect path is ticketed** | PTY host attached | Drive `terminal/status`, `terminal/commands`, `terminal/last_command`, `terminal/history` through the relay; then attempt `terminal/run` | Reads return the same row shapes the Shell view reads (`TerminalSessionView`/`TerminalCommandView`); `terminal/run` does not exist (`method not found`); `script.run` reaches the plane only via `tool/exec` → `tool/commit` with a consumed Guard-2 ticket |
+| `M1-CHS-02` | L4: Chaos | **Detached / unverified plane honesty** | (a) Host with no PTY host; (b) a live session with shell integration off | (a) Call `terminal/status` and `terminal/commands` on a host with no plane; (b) read `terminal/last_command` for the integration-off session | (a) `attached: false` — never `count: 0` rendered as “a shell with nothing running”; a named session is refused as a caller bug; (b) `block: null` — absence of evidence, never an empty success |
+| `M1-SEC-02` | L5: Security | **No second, unticketed executor for a privileged effect** | Plane attached | Enumerate the relay's `terminal/*` surface; attempt to execute a shell command on every arm without a Guard-2 ticket | No arm accepts a command; `TerminalPlaneObserver` cannot run anything by construction; a ticketless shell effect is unreachable from the sidecar |
+| `M1-UIX-02` | L6: UI/UX | **Agent shell provenance is unmistakable** | Agent `script.run` executed | Inspect the Shell-view tab created by the agent run | Labelled **read-only** tab with `agent` provenance chip and live cwd; not mistakable for the user's own interactive tab; `terminal_run` cannot mint a human session |
 
 ---
 
@@ -117,7 +122,7 @@ Testing is organized into **8 orthogonal dimensions**:
 ---
 
 ### Module 7: Local Filesystem, Git Worktrees & Development Sandbox
-*Backend: `crates/everyaios-core/src/worktree.rs`, `crates/everyaios-codeintel`, `crates/everyaios-script` | Frontend: Files center screen, Diff & Terminal Viewports*
+*Backend: `crates/everyaios-core/src/worktrees.rs`, `crates/everyaios-core/src/git_queue.rs`, `crates/everyaios-codeintel`, `crates/everyaios-script` (rquickjs — `forge.run_js`/`run_code`, distinct from `script.run`, which is the ticketed shell on the PTY plane) | Frontend: Files center screen, Diff & Terminal Viewports*
 
 | Test ID | Level & Type | Objective | Preconditions | Execution Steps & Verification | Expected Outcome |
 | :--- | :--- | :--- | :--- | :--- | :--- |
