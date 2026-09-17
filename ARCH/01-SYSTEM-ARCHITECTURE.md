@@ -1,7 +1,7 @@
 # 01 — System Architecture: The 8 Full-Stack Modules
 
 > **Status:** Architecture Reference.
-> **Core Architectural Principle:** EveryAIOS is the **Universal Agentic OS & Desktop Harness ("Switzerland of AI")**. It rejects the proprietary coding agent trap and does not compete with Claude Code, OpenAI Codex, or OpenCode. Instead, EveryAIOS provides the durable desktop operating layer, sandboxed Git worktrees, native Office primitives, tiered browsers, computer use, cognitive memory, and 7-layer Guard-2 security that supercharges any model or agent.
+> **Core Architectural Principle:** EveryAIOS is the **Universal Agentic OS & Desktop Harness**. It rejects the proprietary coding agent trap and does not compete with Claude Code, OpenAI Codex, or OpenCode. Instead, EveryAIOS provides the durable desktop operating layer, sandboxed Git worktrees, native Office primitives, tiered browsers, computer use, cognitive memory, and 7-layer Guard-2 security that supercharges any model or agent.
 
 ---
 

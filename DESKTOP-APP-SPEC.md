@@ -78,7 +78,7 @@ That is the whole product in one sentence: **a local, user-owned operating layer
 
 ## ⛭ THE FINAL APP — The 8 Full-Stack Modules & Universal Agentic OS
 
-> **Capstone Vision.** EveryAIOS is the **Universal Agentic OS & Desktop Harness ("Switzerland of AI")**. It rejects the proprietary coding agent trap and does not compete with Claude Code, OpenAI Codex, or OpenCode by building custom coding loops. Instead, EveryAIOS provides the durable desktop operating layer, sandboxed Git worktrees, native Office primitives (IronCalc 0.8.3), tiered browsers, computer use, cognitive memory, and 7-layer Guard-2 security that supercharges any model or agent.
+> **Capstone Vision.** EveryAIOS is the **Universal Agentic OS & Desktop Harness**. It rejects the proprietary coding agent trap and does not compete with Claude Code, OpenAI Codex, or OpenCode by building custom coding loops. Instead, EveryAIOS provides the durable desktop operating layer, sandboxed Git worktrees, native Office primitives (IronCalc 0.8.3), tiered browsers, computer use, cognitive memory, and 7-layer Guard-2 security that supercharges any model or agent.
 
 **The final app in one sentence:** a single local-first, BYOK, open-source desktop workspace where chat, browser, files, documents, code, automations, agents, and connected accounts share durable work context. Every side-effecting operation crosses the effect-authorization model, executor, event log, and progress timeline. Agent and automation effects require an authorization ticket; human-initiated UI effects require trusted native user-gesture provenance; both use the same observation, verification, receipt, and audit path.
 
@@ -88,7 +88,7 @@ On September 16, 2026, Anthropic merged **Chat + Cowork** and launched **Claude 
 
 | Dimension / Capability | Anthropic Claude Cowork (Sep 2026) | EveryAIOS (Universal Harness OS) | EveryAIOS Strategic Advantage |
 | :--- | :--- | :--- | :--- |
-| **Model Freedom** | Locked strictly to Anthropic Claude models. | **100% Vendor-Neutral ("Switzerland of AI")**: Any model via models.dev, BYOK, OpenCode Zen/Go/Free, local GGUF/Ollama. | Zero lock-in; immunity to provider outages; run best-in-class models per task. |
+| **Model Freedom** | Locked strictly to Anthropic Claude models. | **100% Vendor-Neutral**: Any model via models.dev, BYOK, OpenCode Zen/Go/Free, local GGUF/Ollama. | Zero lock-in; immunity to provider outages; run best-in-class models per task. |
 | **Agent Autonomy & Choice** | Single closed Anthropic agent loop. | **Universal Agent Harness**: Host Claude Code, Codex CLI, OpenCode, Grok Build, Cline, Aider via ACP/stdio. | Users bring their existing subscriptions and specialized tools. |
 | **Data Privacy & Execution** | Cloud VM execution. Files, docs, and prompts reside on Anthropic cloud servers. | **100% Local-First & Sovereign**: SQLCipher encrypted vault, local sandboxing, secrets never leave the host. | Enterprise compliance, IP protection, offline operability. |
 | **Spreadsheet Engine (XLSX)** | Text/code generation; cannot recalculate formula DAGs natively in-process. | **Embedded IronCalc 0.8.3 Engine**: Microsecond native formula recalculation DAG (300+ Excel functions) + surgical OOXML cell patcher. | Real financial modeling without corrupting macros, charts, or formulas. |
