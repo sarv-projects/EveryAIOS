@@ -862,6 +862,13 @@ pub struct FileUndo {
 }
 
 impl ToolService {
+    /// The workspace root every tool path is floored against. Exposed so the
+    /// P64.3 repo-map façade maps the *same* tree the edit tools operate on,
+    /// rather than inventing a root of its own.
+    pub fn workspace(&self) -> &std::path::Path {
+        &self.workspace
+    }
+
     pub fn new(guard: Arc<Mutex<GuardService>>, workspace: PathBuf) -> Self {
         Self::new_with_egress(
             guard,

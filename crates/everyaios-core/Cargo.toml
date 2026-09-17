@@ -21,6 +21,7 @@ everyaios-eval = { path = "../everyaios-eval" }
 everyaios-office = { path = "../everyaios-office" }
 everyaios-search = { path = "../everyaios-search" }
 everyaios-catalog = { path = "../everyaios-catalog" }
+everyaios-codeintel = { path = "../everyaios-codeintel" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }

@@ -5,22 +5,11 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use everyaios_codeintel::repomap::{build_repo_map, page_rank, TagKind};
+use everyaios_codeintel::repomap::{ranked_tags, RankedTag, TagKind};
 use serde::Serialize;
 use tauri::State;
 
 use crate::AppState;
-
-/// One ranked repo-map row (UI-displayable).
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RepoMapRow {
-    pub symbol: String,
-    pub kind: String,
-    pub file: String,
-    pub line: u32,
-    pub rank: f64,
-}
 
 /// P11.5.9 — build a repo map for a directory: tags + PageRank over the
 /// symbol graph + budget-fit ordering. Deterministic (sorted edges, stable
@@ -31,36 +20,13 @@ pub fn repomap_build(
     _state: State<'_, AppState>,
     dir: String,
     max_files: Option<usize>,
-) -> Result<Vec<RepoMapRow>, String> {
+) -> Result<Vec<RankedTag>, String> {
     let max_files = max_files.unwrap_or(200).min(2000);
-    let files = read_source_files(Path::new(&dir), max_files)?;
-    let map = build_repo_map(&files);
-    let ranks = page_rank(&map, 32);
-
-    let mut rows: Vec<RepoMapRow> = map
-        .tags
-        .iter()
-        .map(|t| RepoMapRow {
-            symbol: t.symbol.clone(),
-            kind: match t.kind {
-                TagKind::Function => "fn",
-                TagKind::Type => "type",
-                TagKind::Const => "const",
-                TagKind::Module => "mod",
-            }
-            .into(),
-            file: t.file.clone(),
-            line: t.line,
-            rank: ranks.get(&t.symbol).copied().unwrap_or(0.0),
-        })
-        .collect();
-    rows.sort_by(|a, b| {
-        b.rank
-            .partial_cmp(&a.rank)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.symbol.cmp(&b.symbol))
-    });
-    Ok(rows)
+    // One implementation, two façades: the walk + PageRank + stable sort lives
+    // in `everyaios-codeintel::repomap`, and the coordinator's
+    // `codeintel/repomap` method calls the same function, so the UI command and
+    // the agent-facing method cannot drift apart.
+    Ok(ranked_tags(Path::new(&dir), max_files))
 }
 
 /// One outline entry (DeepWiki `file_outline` pattern — open Rust reference).
@@ -131,7 +97,10 @@ pub fn ai_markers_scan(
 ) -> Result<Vec<everyaios_core::ai_marker::AutoSubmitPayload>, String> {
     let p = Path::new(&path);
     let files: Vec<String> = if p.is_dir() {
-        read_source_files(p, 50)?
+        // The shared walker (`everyaios-codeintel`) rather than a local copy,
+        // so the marker scan, the UI command, and the coordinator's repo-map
+        // method all walk a tree the same way.
+        everyaios_codeintel::repomap::read_source_files(p, 50)
             .into_iter()
             .map(|(f, _)| f)
             .collect()
@@ -149,50 +118,6 @@ pub fn ai_markers_scan(
                 file: f.clone(),
                 marker: m,
             });
-        }
-    }
-    Ok(out)
-}
-
-/// Walk a directory for source files (bounded, deterministic order).
-fn read_source_files(dir: &Path, max_files: usize) -> Result<Vec<(String, String)>, String> {
-    const EXTS: [&str; 14] = [
-        "rs", "ts", "tsx", "js", "jsx", "py", "go", "java", "c", "cpp", "h", "hpp", "md", "toml",
-    ];
-    let mut files: Vec<String> = Vec::new();
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for entry in rd.flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                if !p.ends_with("node_modules")
-                    && !p.ends_with("target")
-                    && !p.ends_with(".git")
-                    && !p.ends_with("dist")
-                {
-                    stack.push(p);
-                }
-            } else if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                if EXTS.contains(&ext) {
-                    files.push(p.to_string_lossy().into_owned());
-                }
-            }
-            if files.len() >= max_files {
-                break;
-            }
-        }
-        if files.len() >= max_files {
-            break;
-        }
-    }
-    files.sort();
-    let mut out = Vec::with_capacity(files.len());
-    for f in files {
-        if let Ok(content) = std::fs::read_to_string(&f) {
-            out.push((f.clone(), content));
         }
     }
     Ok(out)
