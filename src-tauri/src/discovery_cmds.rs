@@ -14,8 +14,8 @@
 use std::path::{Path, PathBuf};
 
 use everyaios_catalog::{
-    base_registry, DiscoveryInventory, Health, ManagedResource, ResourceCard, ResourceKind,
-    RouteRequirements, RoutingFeed,
+    apply_observation_health, DiscoveryInventory, Health, ManagedResource, ResourceCard,
+    ResourceKind, RouteRequirements, RoutingFeed,
 };
 use everyaios_vault::KeyRing;
 use tauri::State;
@@ -26,7 +26,9 @@ use crate::AppState;
 /// classes from their live collectors (best-effort, honest empties).
 #[tauri::command]
 pub fn discovery_inventory() -> Result<serde_json::Value, String> {
-    let reg = base_registry();
+    // The observed registry, so a card's `capabilities_verified` reflects what
+    // a live probe actually confirmed rather than catalog metadata alone.
+    let reg = crate::catalog_cmds::observed_registry();
     let mut inv = DiscoveryInventory::from_registry(&reg, 1);
 
     let data_dir = everyaios_core::default_data_dir();
@@ -45,8 +47,11 @@ pub fn discovery_inventory() -> Result<serde_json::Value, String> {
 }
 
 /// P44.8 — the provider-level route decision for a set of requirements. Loads
-/// the registry into a fresh feed and ranks; health is Unknown until live
-/// observations are wired (honest — the decision reports the health it has).
+/// the observed registry into a fresh feed and ranks; health comes from the
+/// recorded P44.4 observations, so a provider whose last probe never connected
+/// is `Down` (and a provider that answered with a rejection is `Degraded`, not
+/// `Down` — it is reachable). A provider with no observation stays `Unknown`,
+/// never a guessed value.
 ///
 /// P50.3.6 — the decision is **vault-credential gated**: only providers the
 /// vault currently holds a key for may rank. A provider whose auth needs a
@@ -59,14 +64,15 @@ pub fn routing_feed_decide(
     requires_structured_output: Option<bool>,
     requires_codex: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let reg = base_registry();
+    let reg = crate::catalog_cmds::observed_registry();
     let mut feed = RoutingFeed::new();
     feed.load_registry(&reg);
-    // Mark every provider Unknown-by-default so the decision is meaningful in
-    // the absence of live pings; a real observation feed overrides per-id.
+    // Unknown-by-default so the decision is meaningful in the absence of live
+    // pings, then overridden per-id by whatever was actually observed.
     for p in reg.all() {
         feed.set_health(&p.id, Health::Unknown);
     }
+    apply_observation_health(&mut feed, &crate::catalog_cmds::observation_file());
     // P50.3.6 — the live vault key set drives routability. Locked/empty vault
     // ⇒ empty set ⇒ every keyed provider excluded with the reason below;
     // keyless/local providers (no vault key needed) still rank.

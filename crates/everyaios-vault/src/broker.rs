@@ -14,6 +14,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
+use std::time::Duration;
 
 use crate::keyring::{
     KeyRing, KeyRingError, KeyStatus, RoutingPolicy, SelectedKey, MAX_429_SWITCHES,
@@ -100,6 +101,54 @@ impl ProviderEndpoint {
             WireTransport::AnthropicMessages => format!("{base}/messages"),
         }
     }
+
+    /// The **model-listing** URL for this provider (P44.4 probe).
+    ///
+    /// Every dialect the broker speaks exposes its listing at `{base}/models`
+    /// (OpenAI-compatible and Anthropic alike), so this is deliberately not a
+    /// per-transport branch — and it is derived from the provider's own base
+    /// URL, which is the only address a probe can reach.
+    pub fn models_url(&self) -> String {
+        format!("{}/models", self.base_url.trim().trim_end_matches('/'))
+    }
+}
+
+/// P44.4 — the outcome of a broker-performed metadata probe.
+///
+/// Carries **no credential** — only what the endpoint answered. The body is
+/// returned unparsed on purpose: model-listing shape is model-catalog business
+/// (`everyaios-catalog`), and teaching this crate to parse it would put catalog
+/// knowledge inside the security boundary for no benefit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelsProbe {
+    /// Did the endpoint answer with a success status?
+    pub ok: bool,
+    /// HTTP status; `0` = transport failure (nothing was answered).
+    pub status: u16,
+    /// The URL that was probed.
+    pub url: String,
+    /// The response body (empty when nothing was answered).
+    pub body: String,
+    /// Transport-failure detail — `None` when the endpoint answered.
+    pub error: Option<String>,
+}
+
+/// Is this URL safe to send a credential to?
+///
+/// `https` anywhere, or plain `http` to loopback only (a local runtime or a
+/// local proxy — where the credential never touches a network). Anything else
+/// is refused: a `http://` provider base URL would put the user's key on the
+/// wire in cleartext. Same floor the shell's own health probe enforces, and
+/// deliberately checked here too, because this is the call that attaches the
+/// credential.
+pub fn credential_safe_url(url: &str) -> bool {
+    let url = url.trim();
+    if url.starts_with("https://") {
+        return true;
+    }
+    ["http://127.0.0.1", "http://localhost", "http://[::1]"]
+        .iter()
+        .any(|p| url.starts_with(p))
 }
 
 /// Incremental native function-call fragment (`choices[0].delta.tool_calls`).
@@ -213,6 +262,111 @@ impl<'a> Broker<'a> {
             .cloned()
             .ok_or_else(|| BrokerError::UnknownProvider(provider.to_string()))?;
         Ok(format!("{base}/chat/completions"))
+    }
+
+    /// **P44.4 — probe a provider's model listing with the vault-held
+    /// credential.**
+    ///
+    /// This exists so the *observation* path never needs the plaintext key: the
+    /// credential is resolved by the ring, attached to one `GET {base}/models`,
+    /// and scrubbed — the caller receives only [`ModelsProbe`] (status, body,
+    /// URL). It is the vault-mediated twin of the shell's user-key probe
+    /// (`everyaios_catalog::probe_models_endpoint`), for the case where no key
+    /// is in hand because the key already lives in the vault.
+    ///
+    /// **Scope constraints, all deliberate:**
+    ///
+    /// - **The URL is the provider's own endpoint.** There is no URL parameter:
+    ///   the target comes from the resolved [`ProviderEndpoint`] (or the legacy
+    ///   default base URL), so a caller cannot point the credential elsewhere.
+    /// - **`https` or loopback only** ([`credential_safe_url`]). A cleartext
+    ///   remote endpoint is refused rather than handed the key.
+    /// - **Not a turn.** It does not touch the session budget, the usage ledger,
+    ///   or key health — no `report_success`, no `report_failure`, no cooldown,
+    ///   no cost. A metadata call must not be able to cool a key down, spend a
+    ///   daily cap, or `401`-suspend a credential. The credential comes from
+    ///   [`KeyRing::reveal_for_metadata_probe`], which likewise skips affinity
+    ///   and model filters.
+    /// - **Keyless providers send no auth header at all** — the same rule the
+    ///   chat path follows for local runtimes and the free overlays.
+    pub fn probe_models(
+        &self,
+        provider: &str,
+        timeout: Duration,
+    ) -> Result<ModelsProbe, BrokerError> {
+        let url = self.models_url(provider)?;
+        if !credential_safe_url(&url) {
+            return Err(BrokerError::InsecureEndpoint(provider.to_string()));
+        }
+        let endpoint = self.endpoints.get(provider).cloned();
+        let keyless = endpoint.as_ref().map(|e| e.keyless).unwrap_or(false);
+        let key = if keyless {
+            None
+        } else {
+            Some(self.ring.reveal_for_metadata_probe(provider)?)
+        };
+
+        let agent = ureq::AgentBuilder::new().timeout(timeout).build();
+        let mut req = agent.get(&url).set("Accept", "application/json").set(
+            "User-Agent",
+            &format!("EveryAIOS/{}", env!("CARGO_PKG_VERSION")),
+        );
+        if let Some(ep) = endpoint.as_ref() {
+            for (name, value) in &ep.headers {
+                req = req.set(name, value);
+            }
+        }
+        if let Some(secret) = key.as_ref() {
+            let (name, value) = authorization(provider, secret.as_bytes());
+            req = req.set(name, value.as_str());
+        }
+
+        Ok(match req.call() {
+            Ok(resp) => {
+                let status = resp.status();
+                ModelsProbe {
+                    ok: (200..300).contains(&status),
+                    status,
+                    url,
+                    body: resp.into_string().unwrap_or_default(),
+                    error: None,
+                }
+            }
+            // An answered error: the endpoint is reachable, so the status and
+            // body (a 401/403/429 explains itself) are the honest observation.
+            Err(ureq::Error::Status(status, resp)) => ModelsProbe {
+                ok: false,
+                status,
+                url,
+                body: resp.into_string().unwrap_or_default(),
+                error: None,
+            },
+            // Nothing was answered at all — status 0 means "no response", never
+            // a fabricated HTTP code.
+            Err(ureq::Error::Transport(t)) => ModelsProbe {
+                ok: false,
+                status: 0,
+                url,
+                body: String::new(),
+                error: Some(t.to_string()),
+            },
+        })
+    }
+
+    /// The `GET {base}/models` URL for a provider, from its own resolved
+    /// endpoint (falling back to the legacy default base URL).
+    pub fn models_url(&self, provider: &str) -> Result<String, BrokerError> {
+        if let Some(ep) = self.endpoints.get(provider) {
+            if !ep.base_url.trim().is_empty() {
+                return Ok(ep.models_url());
+            }
+        }
+        let base = self
+            .base_urls
+            .get(provider)
+            .cloned()
+            .ok_or_else(|| BrokerError::UnknownProvider(provider.to_string()))?;
+        Ok(format!("{}/models", base.trim().trim_end_matches('/')))
     }
 
     /// The dialect for a provider (`OpenaiChat` when nothing is registered).
@@ -1433,6 +1587,9 @@ pub enum BrokerError {
     RateLimited { retry_after_secs: Option<u64> },
     #[error("transport error: {0}")]
     Transport(String),
+    /// P44.4 — the provider's endpoint would send the credential in cleartext.
+    #[error("refusing to probe '{0}': its endpoint is neither https nor loopback")]
+    InsecureEndpoint(String),
     #[error("all keys for provider '{0}' exhausted after 429 failover")]
     AllKeysExhausted(String),
     #[error("session '{session}' stopped: ${limit:.2} limit (spent ${spent:.2})")]
@@ -1480,6 +1637,198 @@ mod tests {
             daily_token_cap: None,
             daily_cost_cap: None,
         }
+    }
+
+    // ---- P44.4 — the vault-mediated metadata probe -------------------------
+
+    #[test]
+    fn credential_safe_url_allows_https_and_loopback_only() {
+        assert!(credential_safe_url("https://api.openai.com/v1/models"));
+        assert!(credential_safe_url("http://127.0.0.1:8080/v1/models"));
+        assert!(credential_safe_url("http://localhost:8000/models"));
+        assert!(credential_safe_url("http://[::1]:11434/v1/models"));
+        // Cleartext to a remote host would put the user's key on the wire.
+        assert!(!credential_safe_url("http://api.example.com/v1/models"));
+        assert!(!credential_safe_url("ftp://example.com/x"));
+        assert!(!credential_safe_url(""));
+    }
+
+    #[test]
+    fn models_url_prefers_the_resolved_endpoint_then_the_default() {
+        let vault = vault();
+        assert_eq!(
+            Broker::new(vault).models_url("openai").unwrap(),
+            "https://api.openai.com/v1/models"
+        );
+        // A registered endpoint wins, and a trailing slash cannot double up.
+        let broker = Broker::new(vault).with_endpoint(
+            "openai",
+            ProviderEndpoint::openai("https://proxy.example.com/v1/"),
+        );
+        assert_eq!(
+            broker.models_url("openai").unwrap(),
+            "https://proxy.example.com/v1/models"
+        );
+        assert!(matches!(
+            broker.models_url("definitely-not-a-provider").unwrap_err(),
+            BrokerError::UnknownProvider(_)
+        ));
+    }
+
+    /// The point of this path: the credential comes from the vault, is attached
+    /// by the broker, and never reaches the caller.
+    #[test]
+    fn probe_models_attaches_the_vault_key_and_returns_the_body() {
+        let server = mock_server(|req| {
+            assert!(
+                req.starts_with("GET /models"),
+                "the probe must GET /models: {req}"
+            );
+            assert!(
+                req.to_lowercase()
+                    .contains("authorization: bearer sk-probe"),
+                "the vault-held key must be attached: {req}"
+            );
+            (200, r#"{"data":[{"id":"m1"},{"id":"m2"}]}"#.to_string())
+        });
+        let vault = vault();
+        let _ = KeyRing::new(vault)
+            .add_key(spec("probe-live", "k", "sk-probe"))
+            .unwrap();
+        let broker = Broker::new(vault)
+            .with_endpoint("probe-live", ProviderEndpoint::openai(server.clone()));
+        let probe = broker
+            .probe_models("probe-live", Duration::from_secs(5))
+            .unwrap();
+        assert!(probe.ok, "{probe:?}");
+        assert_eq!(probe.status, 200);
+        assert_eq!(probe.url, format!("{server}/models"));
+        assert!(probe.body.contains("m1"));
+        assert!(probe.error.is_none());
+        // The body is returned unparsed — model-listing shape is the catalog
+        // crate's business, and this crate must not learn it.
+        assert!(probe.body.contains("m2"));
+    }
+
+    /// An answered rejection is a real observation, and it must NOT be treated
+    /// as a credential failure: a metadata call cannot suspend or cool down the
+    /// user's key.
+    #[test]
+    fn probe_models_records_a_rejection_without_moving_key_health() {
+        let server = mock_server(|_| (401, r#"{"error":"invalid api key"}"#.to_string()));
+        let vault = vault();
+        let ring = KeyRing::new(vault);
+        let _ = ring.add_key(spec("probe-401", "k", "sk-bad")).unwrap();
+        let broker =
+            Broker::new(vault).with_endpoint("probe-401", ProviderEndpoint::openai(server));
+        let probe = broker
+            .probe_models("probe-401", Duration::from_secs(5))
+            .unwrap();
+        assert!(!probe.ok);
+        assert_eq!(probe.status, 401);
+        assert!(
+            probe.error.is_none(),
+            "the endpoint answered, so this is not a transport failure"
+        );
+
+        let info = ring.list("probe-401").unwrap();
+        assert_eq!(
+            info[0].fail_count, 0,
+            "a probe must not mark a credential failed"
+        );
+        assert!(!info[0].in_cooldown);
+        assert_eq!(info[0].last_used_at, 0, "a probe is not usage");
+    }
+
+    #[test]
+    fn probe_models_reports_a_transport_failure_as_status_zero() {
+        // Bind and drop, so the port is closed well before the probe dials it.
+        let base = {
+            let l = TcpListener::bind("127.0.0.1:0").unwrap();
+            let a = l.local_addr().unwrap();
+            drop(l);
+            format!("http://{a}")
+        };
+        let vault = vault();
+        let _ = KeyRing::new(vault)
+            .add_key(spec("probe-dead", "k", "sk-dead"))
+            .unwrap();
+        let broker = Broker::new(vault).with_endpoint("probe-dead", ProviderEndpoint::openai(base));
+        let probe = broker
+            .probe_models("probe-dead", Duration::from_millis(800))
+            .unwrap();
+        assert!(!probe.ok);
+        assert_eq!(
+            probe.status, 0,
+            "nothing answered, so no HTTP code is invented"
+        );
+        assert!(probe.error.is_some());
+        assert!(probe.body.is_empty());
+    }
+
+    #[test]
+    fn probe_models_refuses_a_cleartext_remote_endpoint() {
+        let vault = vault();
+        let _ = KeyRing::new(vault)
+            .add_key(spec("probe-http", "k", "sk-http"))
+            .unwrap();
+        let broker = Broker::new(vault).with_endpoint(
+            "probe-http",
+            ProviderEndpoint::openai("http://api.example.com/v1"),
+        );
+        let err = broker
+            .probe_models("probe-http", Duration::from_secs(5))
+            .unwrap_err();
+        assert!(matches!(err, BrokerError::InsecureEndpoint(_)), "{err:?}");
+    }
+
+    /// A keyless provider is probed with no credential at all — and it must
+    /// work with zero keys in the vault, which is the local-runtime case.
+    #[test]
+    fn probe_models_sends_no_auth_header_for_a_keyless_endpoint() {
+        let server = mock_server(|req| {
+            assert!(
+                !req.to_lowercase().contains("authorization"),
+                "a keyless probe must send no credential: {req}"
+            );
+            assert!(!req.to_lowercase().contains("x-api-key"));
+            (200, r#"{"data":[{"id":"local-1"}]}"#.to_string())
+        });
+        let vault = vault();
+        let mut ep = ProviderEndpoint::openai(server);
+        ep.keyless = true;
+        let broker = Broker::new(vault).with_endpoint("probe-keyless", ep);
+        let probe = broker
+            .probe_models("probe-keyless", Duration::from_secs(5))
+            .unwrap();
+        assert!(probe.ok, "{probe:?}");
+        assert!(probe.body.contains("local-1"));
+    }
+
+    /// Anthropic's dialect authenticates with `x-api-key`, exactly as the
+    /// chat path does — the probe must not invent a second convention.
+    #[test]
+    fn probe_models_uses_the_anthropic_header_convention() {
+        let server = mock_server(|req| {
+            assert!(
+                req.to_lowercase().contains("x-api-key: sk-ant"),
+                "anthropic keys ride x-api-key: {req}"
+            );
+            assert!(!req.to_lowercase().contains("authorization"));
+            (200, r#"{"models":{"claude-a":{}}}"#.to_string())
+        });
+        let vault = vault();
+        let _ = KeyRing::new(vault)
+            .add_key(spec("anthropic", "k", "sk-ant"))
+            .unwrap();
+        let mut ep = ProviderEndpoint::anthropic(server);
+        ep.headers = vec![("anthropic-version".into(), "2023-06-01".into())];
+        let broker = Broker::new(vault).with_endpoint("anthropic", ep);
+        let probe = broker
+            .probe_models("anthropic", Duration::from_secs(5))
+            .unwrap();
+        assert!(probe.ok, "{probe:?}");
+        assert!(probe.body.contains("claude-a"));
     }
 
     /// Find the first byte offset of `needle` in `haystack`.

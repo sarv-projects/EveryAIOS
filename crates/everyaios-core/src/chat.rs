@@ -548,6 +548,22 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         }
     }
 
+    /// P48.3 — attach the live desktop engine as the `desktop.*` executor.
+    ///
+    /// The host calls this at boot when a platform backend attaches, and again
+    /// after a user-triggered `desktop_attach`. Until it is attached, every
+    /// desktop tool fails closed with `desktop session not attached` — the
+    /// honest headless / no-display posture, never a silent substitute.
+    ///
+    /// The backend is expected to declare **agent** provenance for its acts, so
+    /// an agent-initiated desktop action is audited as an agent action rather
+    /// than as the user's own gesture.
+    pub fn attach_desktop(&self, desktop: Arc<dyn crate::tools::DesktopBackend>) {
+        if let Ok(mut tools) = self.tools.lock() {
+            tools.attach_desktop(desktop);
+        }
+    }
+
     /// The Stage-0 plan service handle (the coordinator steps per-plan
     /// circuit breakers via `plan/*`; trips surface as chat interrupts).
     pub fn plan(&self) -> Arc<Mutex<PlanService>> {

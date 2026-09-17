@@ -12,6 +12,7 @@ pub mod gallery;
 pub mod gateway;
 pub mod live;
 pub mod model;
+pub mod observations;
 pub mod policy;
 pub mod pricing;
 pub mod probe;
@@ -28,7 +29,10 @@ pub use catalog::ModelCatalog;
 pub use discovery::{
     DiscoveryInventory, ManagedResource, ResourceCard, ResourceCounts, ResourceKind,
 };
-pub use fetch::{probe_models_endpoint, refresh_now, EndpointProbe, HttpFetch, RefreshOutcome};
+pub use fetch::{
+    count_models, endpoint_probe_result, probe_models_endpoint, refresh_now, EndpointProbe,
+    HttpFetch, RefreshOutcome,
+};
 pub use gateway::{GatewayError, GatewayRouter, RouteResult, TaskHint};
 pub use live::{
     apply_refresh, free_model_ids, is_free_model_id, is_stale, logo_url, refresh_interval_secs,
@@ -37,6 +41,10 @@ pub use live::{
     LOGO_URL_PREFIX, MAX_REFRESH_SECS, MIN_REFRESH_SECS, MODELS_DEV_API_URL,
 };
 pub use model::ModelEntry;
+pub use observations::{
+    apply_observation_health, apply_observations, health_of, ObservationStore, ProbePolicy,
+    ProviderObservation, ProviderObservationsFile, Reachability,
+};
 pub use pricing::{cost_for, split_input, CostBreakdown};
 pub use probe::{
     trusted_capabilities, AdvertisedHardCaps, Capability, CapabilityVerdict, ProbeResult, Verdict,

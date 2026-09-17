@@ -178,16 +178,51 @@ impl PermissionGate for DenyAllGate {
     }
 }
 
+/// Who initiated a desktop act.
+///
+/// The desktop engine is **one shared instance** (one platform backend, one
+/// live policy applied from Settings), so provenance cannot live on the engine —
+/// it is a property of the *caller*. The user's own click and the inbuilt
+/// agent's tool call reach the same `act_with`; only this value distinguishes
+/// them, and it is what prevents an agent-initiated desktop action from being
+/// filed as a **human gesture** on the Merkle chain (the audit-lie class this
+/// crate must not create).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActProvenance {
+    /// The user's own gesture in the UI (Settings / Computer-use commands).
+    #[default]
+    HumanGesture,
+    /// An inbuilt-agent tool call. The tool path already authorized the turn;
+    /// the host files this under its agent authority class.
+    Agent,
+    /// Scheduler/automation-initiated (reserved — rides the `AutomationAudit`
+    /// seam, spec §4.3).
+    Automation,
+}
+
+impl ActProvenance {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ActProvenance::HumanGesture => "human_gesture",
+            ActProvenance::Agent => "agent",
+            ActProvenance::Automation => "automation",
+        }
+    }
+}
+
 /// An audit sink — the host backs it with `everyaios-audit::AuditWriter`
 /// (Merkle chain); a no-op sink exists for tests/unsupervised use.
 pub trait AuditSink: Send + Sync {
-    fn write(&self, kind: &str, payload: serde_json::Value);
+    /// Record one Guard-2 desktop decision. `provenance` says who initiated the
+    /// act, so the host files it under the correct authority class instead of
+    /// assuming a human gesture.
+    fn write(&self, kind: &str, payload: serde_json::Value, provenance: ActProvenance);
 }
 
 /// No-op audit (tests only — production must pass a real sink).
 pub struct NoopSink;
 impl AuditSink for NoopSink {
-    fn write(&self, _kind: &str, _payload: serde_json::Value) {}
+    fn write(&self, _kind: &str, _payload: serde_json::Value, _provenance: ActProvenance) {}
 }
 
 /// P57.3/P57.4 — how the driver is allowed to touch the desktop by default.
@@ -540,11 +575,27 @@ impl DesktopGuard {
 
     /// Full pre-action gate: kill switch → rate limit → policy → human gate →
     /// audit. Returns the decision; on Allow the caller executes.
+    ///
+    /// This is the **human-gesture** form — the user's own UI action. An
+    /// agent-initiated act must use [`DesktopGuard::preflight_with`] so the audit
+    /// row carries the right provenance.
     pub fn preflight(
         &self,
         app: &str,
         act: &ActKind,
         key: Option<&str>,
+    ) -> Result<GateDecision, String> {
+        self.preflight_with(app, act, key, ActProvenance::HumanGesture)
+    }
+
+    /// [`DesktopGuard::preflight`] with explicit provenance. The gate logic is
+    /// identical; only the audit row's authority class differs.
+    pub fn preflight_with(
+        &self,
+        app: &str,
+        act: &ActKind,
+        key: Option<&str>,
+        provenance: ActProvenance,
     ) -> Result<GateDecision, String> {
         self.kill.check()?;
         self.limiter
@@ -555,23 +606,24 @@ impl DesktopGuard {
             GateDecision::Confirm(class) => self.gate.request(act, class),
             other => other,
         };
-        self.audit(app, act, &final_decision);
+        self.audit(app, act, &final_decision, provenance);
         Ok(final_decision)
     }
 
-    fn audit(&self, app: &str, act: &ActKind, decision: &GateDecision) {
+    fn audit(&self, app: &str, act: &ActKind, decision: &GateDecision, provenance: ActProvenance) {
         let payload = serde_json::json!({
             "surface": "desktop",
             "app": app,
             "act": act.describe(),
             "interaction": self.policy().interaction_mode.as_str(),
             "decision": decision.as_str(),
+            "provenance": provenance.as_str(),
             "class": match decision {
                 GateDecision::Confirm(c) => format!("{c:?}"),
                 _ => "routine".to_string(),
             },
         });
-        self.sink.write("desktop.guard2", payload);
+        self.sink.write("desktop.guard2", payload, provenance);
     }
 }
 

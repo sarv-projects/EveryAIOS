@@ -157,6 +157,16 @@ impl RoutingFeed {
         self.bump();
     }
 
+    /// The health currently recorded for a provider.
+    ///
+    /// Defaults to `Unknown` when nothing has been observed — never a guessed
+    /// value. Keyed by provider id, so callers replaying observations should
+    /// key them by canonical id (`claude` and `anthropic` are the same provider
+    /// and must not hold two health values).
+    pub fn health_of(&self, provider_id: &str) -> Health {
+        self.health.get(provider_id).copied().unwrap_or_default()
+    }
+
     /// Replace the vault-credential set (P50.3.6). Ids (or their aliases)
     /// present here may rank; a keyed provider absent here is excluded with
     /// an honest "add a key" reason. Bumps the generation like any health

@@ -39,7 +39,8 @@ pub use apps::{annotate_inventory, installed_apps, search_apps, AppSource, Insta
 pub use launch::{is_secret_env_name, prepare_child, resolve_target};
 pub use ocr::{locate_phrase, OcrEngine, VisionHit};
 pub use policy::{
-    AppPolicy, ConfirmClass, DesktopGuard, GateDecision, InteractionMode, PermissionGate,
+    ActProvenance, AppPolicy, AuditSink, ConfirmClass, DesktopGuard, GateDecision, InteractionMode,
+    PermissionGate,
 };
 pub use readiness::{derive as derive_readiness, Readiness, ReadinessState};
 pub use router::{route, Layer, RouteDecision};
@@ -192,7 +193,26 @@ impl DesktopEngine {
 
     /// Run one action through the full Guard-2 gate; on `Allow` it executes.
     /// Returns the gate decision + the execution outcome.
+    /// The **human-gesture** act path — the user's own UI action.
+    ///
+    /// An agent-initiated act must call [`DesktopEngine::act_with`] with
+    /// [`ActProvenance::Agent`] so its audit row is not filed as a human gesture.
     pub fn act(&self, window: &WindowInfo, act: &ActKind, key: Option<&str>) -> Result<ActOutcome> {
+        self.act_with(window, act, key, ActProvenance::HumanGesture)
+    }
+
+    /// [`DesktopEngine::act`] with explicit provenance.
+    ///
+    /// The gate logic, background contract, launch validation, rate limit and
+    /// kill switch are identical for every caller — provenance changes only the
+    /// authority class recorded on the audit row.
+    pub fn act_with(
+        &self,
+        window: &WindowInfo,
+        act: &ActKind,
+        key: Option<&str>,
+        provenance: ActProvenance,
+    ) -> Result<ActOutcome> {
         let mode = self.guard.policy().interaction_mode;
         // P57.1 — a launch must name one exact, absolute program before any
         // policy or platform work: a relative path would resolve against this
@@ -229,7 +249,7 @@ impl DesktopEngine {
         let subject = act.launch_target().unwrap_or(window.app.as_str());
         let decision = self
             .guard
-            .preflight(subject, act, key)
+            .preflight_with(subject, act, key, provenance)
             .map_err(DesktopError::Guard)?;
         if decision != GateDecision::Allow {
             return Ok(ActOutcome {
@@ -359,7 +379,7 @@ impl DesktopEngine {
         locator: &Locator,
         key: Option<&str>,
     ) -> Result<ActOutcome> {
-        let mut outcome = self.act(window, act, key)?;
+        let mut outcome = self.act_with(window, act, key, ActProvenance::HumanGesture)?;
         if outcome.ok {
             let obs = EngineObserver {
                 engine: self,

@@ -211,6 +211,22 @@ export interface CatalogProviderRow {
   keyless?: boolean
   sessionHeaders?: boolean
   verifiedAt?: string | null
+  /**
+   * P44.4 — when a live probe last *observed* this provider.
+   *
+   * Distinct from `verifiedAt` on purpose: a probe observes that the endpoint
+   * answered (and how many models it served) and confirms no hard capability.
+   * A provider can be observed and still have no verified capabilities.
+   */
+  observedAt?: string | null
+  /**
+   * Did the last observation reach the endpoint? `true` = it answered.
+   * `false` = the check failed — including an answered rejection (401/429),
+   * where the endpoint is reachable but refused us.
+   */
+  reachable?: boolean | null
+  /** Models the last observation saw (absent = unknown, never a guess). */
+  observedModelCount?: number | null
 }
 
 /** One row of the P56.7 model table. */
