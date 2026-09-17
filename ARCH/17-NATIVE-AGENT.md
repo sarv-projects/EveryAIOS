@@ -498,10 +498,18 @@ type ConnectionRecord = {
 };
 
 type ScheduleSettings = {
-  id: string; trigger: 'cron'|'interval'|'event'|'webhook'; target: string;
+  id: string; name: string; trigger: 'cron'|'interval'|'event'|'webhook'; target: string;
   chiefAgentId: string; capabilityScope: string[]; autonomy: string; budget: string;
   networkPolicy: string; timezone: string; enabled: boolean; configHash: string;
+  nextRunAt?: number; lastRunAt?: number; runs: number;
+  state: 'idle'|'running'|'paused'|'failed'|'disabled';
 };
+// `name` and `runs` are display-only and were added to match the owning
+// scheduler job: the Settings surface must not render an opaque id where the
+// Automations center shows a name, and the run counter is already on the wire
+// from the same `Job`. `id` remains the durable identity. As with
+// RuntimeLocation (§17.12.4) and the loadout (§17.12.5), this block is the
+// baseline the implementation extends — not a ceiling.
 
 type InstalledExtension = {
   id: string; kind: 'skill'|'plugin'|'mcp'|'acp'|'hook'|'tool'; version: string;

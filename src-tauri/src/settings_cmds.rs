@@ -205,6 +205,12 @@ pub struct ConnectionRecord {
 #[serde(rename_all = "camelCase")]
 pub struct ScheduleSettings {
     pub id: String,
+    /// Human label owned by the scheduler job. Display only — the durable
+    /// identity is [`ScheduleSettings::id`]. Present because the Settings
+    /// surface must not show an opaque id where the Automations center shows
+    /// a name (§17.12.2 is a baseline; §17.12.4/.5 set the precedent that the
+    /// read models carry the fields the owning surface needs).
+    pub name: String,
     /// `cron | interval | event | webhook`.
     pub trigger: String,
     /// The session/Work this schedule reawakens (frozen manifest per run).
@@ -221,6 +227,8 @@ pub struct ScheduleSettings {
     pub next_run_at: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_run_at: Option<u64>,
+    /// Completed-run counter as the scheduler reports it (display only).
+    pub runs: u64,
     /// `idle | running | paused | failed | disabled`.
     pub state: String,
 }
@@ -1203,6 +1211,11 @@ fn schedule_settings_for(state: &AppState, job: &Value) -> ScheduleSettings {
     let canonical = serde_json::to_string(job).unwrap_or_default();
     ScheduleSettings {
         id: id.clone(),
+        name: job
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         trigger: schedule_trigger_kind(&trigger).to_string(),
         target: job.get("sessionId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         chief_agent_id: chief,
@@ -1224,6 +1237,7 @@ fn schedule_settings_for(state: &AppState, job: &Value) -> ScheduleSettings {
         config_hash: config_hash_of(&canonical),
         next_run_at: job.get("nextRunAt").and_then(|v| v.as_u64()),
         last_run_at: job.get("lastRunAt").and_then(|v| v.as_u64()),
+        runs: job.get("runs").and_then(|v| v.as_u64()).unwrap_or(0),
         state: schedule_state(enabled, run_state).to_string(),
     }
 }

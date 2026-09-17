@@ -19,7 +19,6 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { inTauri } from '@/lib/tauri'
 import {
-  schedulerEnable,
   schedulerList,
   schedulerPause,
   schedulerResume,
@@ -27,6 +26,7 @@ import {
   triggerLabel,
   type SchedulerJob,
 } from '@/lib/scheduler'
+import { settingsScheduleSetEnabled } from '@/lib/settings'
 import { Row, SectionShell } from './settings-shared'
 
 function stateBadge(job: SchedulerJob) {
@@ -106,8 +106,17 @@ export default function SchedulesSection() {
     const next = !job.enabled
     setBusyId(job.id)
     try {
-      await schedulerEnable(job.id, next)
-      setJobs((prev) => (prev ?? []).map((j) => (j.id === job.id ? { ...j, enabled: next } : j)))
+      // P65.4 / §17.12.3 — the enable flag goes through the one mutation
+      // funnel, not a direct scheduler write. The envelope is authoritative:
+      // **discard-optimistic-on-mismatch** means we re-read rather than patch
+      // our own guess, and a refusal is surfaced with the shell's real reason.
+      const envelope = await settingsScheduleSetEnabled(job.id, next)
+      if (envelope.lastError) {
+        notify(`Updating schedule failed: ${envelope.lastError}`, 'error')
+      } else if (envelope.restartRequired) {
+        notify(`Schedule ${next ? 'enabled' : 'disabled'} — restart required to apply`)
+      }
+      await load()
     } catch (e) {
       notify(`Updating schedule failed: ${e instanceof Error ? e.message : String(e)}`, 'error')
     } finally {

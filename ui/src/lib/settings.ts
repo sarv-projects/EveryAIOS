@@ -151,6 +151,8 @@ export type ScheduleState = 'idle' | 'running' | 'paused' | 'failed' | 'disabled
 
 export interface ScheduleSettings {
   id: string
+  /** Human label owned by the scheduler job. Display only — `id` is identity. */
+  name: string
   trigger: ScheduleTrigger
   /** The session/Work this schedule reawakens (frozen manifest per run). */
   target: string
@@ -164,6 +166,8 @@ export interface ScheduleSettings {
   configHash: string
   nextRunAt?: number
   lastRunAt?: number
+  /** Completed-run counter as the scheduler reports it (display only). */
+  runs: number
   state: ScheduleState
 }
 
