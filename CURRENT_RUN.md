@@ -1791,6 +1791,43 @@ support that decision, and now it can.
 
 ---
 
+## 2X. Tier-3 reconnaissance (2026-09-17) — the ring buffer was already built, and
+## the TODO row was wrong in the optimistic direction
+
+Every "unbuilt" claim in this session so far has been a mechanism that existed
+with no caller. Tier 3 is the mirror case: **P68.8's ring-buffer replay is built
+*and* wired**, and the TODO asserted otherwise.
+
+| Piece | Reality |
+|---|---|
+| Retention | `terminal.rs` per-session ring, `DEFAULT_SCROLLBACK_BYTES = 256 KiB` — **4× the contract's 64 KiB**, clamped so config cannot starve replay or grow unbounded |
+| Replay API | cursor-based `replay(pty_id, from_seq)` → `seq` / `dropped` / `capacity` |
+| IPC | `terminal_replay` — registered **and UI-invoked** (so never a ghost) |
+| UI | `shell-view.tsx` `replayInto()` decodes through the same path as a live frame (xterm keeps owning VT interpretation), retries while the reattach re-render creates the tab's xterm, and is honest in **both** degenerate cases — lost bytes are labelled truncated with a count, and nothing-retained says so instead of rendering an empty-but-plausible pane |
+
+The TODO row said *"reattach still announces that output produced while the view
+was closed is not replayed"*. That message is the runtime's honest fallback for
+an **empty** buffer, not evidence that replay is missing. Corrected in the row,
+both census lines, and `P54.4`/`P54.5` — no checkbox flipped, so the arithmetic
+is untouched (`1429 = 1221 + 208`, doc-sync re-run green).
+
+### What is genuinely missing in Tier 3
+- **Splits (P68.8 / P54.4).** No split primitive exists on **either** plane: no
+  `splitDirection` / `paneSplit` / `SplitPane` anywhere in `ui/src`, and no split
+  state in the terminal host. `shell-view.tsx` is one xterm per tab. Real feature
+  work, not a wiring gap — and it is **visual** work with **no display on this
+  host** to verify it against, so it belongs in a pass that can be seen, not
+  bolted on and asserted from `tsc` alone.
+- **The coordinator → PTY seam (P54.5).** Measured, not assumed: there is **no
+  `script.run` tool** in `packages/coordinator/src` at all, and **no `terminal/*`
+  RPC arm** in the relay. So the missing piece is the whole seam (tool + arm +
+  provenance routing), not a rewiring of an existing tool that merely points at
+  the wrong target.
+
+Both remain open with that measured boundary written into their rows.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
