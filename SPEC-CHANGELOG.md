@@ -18,6 +18,35 @@ Each entry records the date or release marker, change category, affected section
 
 ---
 
+## 2026-09-17 — Enterprise MNC Master Test Cases Specification & Agent Skills Alignment
+
+**Category:** testing + architecture specification; no capability rows added. **Affected:** new `desktop_app/TEST-CASES.md`, `.agents/skills/` (all 10 domain skills aligned), `.agents/agents/` (all 9 agent definitions aligned to 8 Full-Stack Modules and Switzerland of AI universal harness), `desktop_app/SPEC-CHANGELOG.md`. Capability identity remains **166**; live TODO count remains **1429 total = 1221 done + 208 open**.
+
+**Decisions & Implementation.**
+1. **Enterprise MNC Master Test Cases Specification (`TEST-CASES.md`):**
+   - Codified complete testing regimen adhering to ISO/IEC/IEEE 29119 and IEEE 829 standards.
+   - Structured across **8 orthogonal testing dimensions**: (1) Unit & Algorithmic Correctness, (2) Subsystem & IPC Contract Parity, (3) Boundary, Stress & Resource Constraints, (4) Fault Injection, Chaos & Crash Recovery, (5) Security, Penetration & Sandbox Escapes, (6) UI/UX Craft & Accessibility (WCAG 2.2 AA), (7) Cross-Module Integration Suites, and (8) End-to-End Real-World Scenarios.
+   - Module-by-module testing matrix for all 8 Full-Stack Modules.
+   - 8 cross-module integration suites (`INT-01` through `INT-08`).
+   - **50 exhaustive, multi-step real-world end-to-end use case specifications (`E2E-UC-01` through `E2E-UC-50`)** spanning 10 mission-critical enterprise categories:
+     - Cat 1: Financial Engineering & IronCalc XLSX (M&A LBO, ASC 830 translation, Monte Carlo VaR, OECD Pillar Two, ABCP waterfall).
+     - Cat 2: Legal, Regulatory & OOXML Document Surgery (80-page MSA surgical indemnity patching, FDA 21 CFR Part 11, S-4 prospectus, Board pitch deck PPTX, commercial lease AcroForm signing).
+     - Cat 3: Multi-Agent Software Engineering & Git Worktrees (5-agent swarm microservice split, automated bisect TDD repair, CJS-to-ESM, zero-downtime PostgreSQL migration, cross-platform MSVC hardening).
+     - Cat 4: Autonomous Web Navigation & Stealth Scraping (multi-SaaS billing consolidation, Cloudflare Turnstile bypass, PACER docket mining, SPA shadow DOM extraction, travel booking).
+     - Cat 5: Desktop Operating System Control & Legacy Software (SAP GUI invoice entry, QuickBooks Desktop 2021 reconciliation, AutoCAD batch export, Epic EHR data sync, multi-monitor high-DPI estop).
+     - Cat 6: Deep Web Research & Academic Synthesis (competitive intelligence dossier, PubMed GLP-1 meta-analysis, FOMC policy yield curve analysis, CVE supply-chain audit, OSINT beneficial ownership).
+     - Cat 7: Executive Assistance & 24/7 Calendar Daemon (multi-party conflict resolution, 07:00 AM executive brief daemon, weekly monorepo digest, academic deadline watcher, 50GB dataset ETL).
+     - Cat 8: Cognitive Memory & AvoidanceStore Failure Immunity (architectural taste enforcement, AvoidanceStore self-healing, multi-project context firewall, knowledge graph discovery, skill distillation).
+     - Cat 9: Security Membrane, SSRF Netfloor & Merkle Audit (zero-I/O netfloor AWS metadata block, lexical pathfloor SSH shield, Guard-2 ticket replay refusal, J6 ASCII smuggling neutralization, Merkle tamper detection).
+     - Cat 10: Disaster Recovery, Air-Gapped Offline & Vault Privacy (100% offline SCIF development, high-speed SIGKILL crash resilience, 429 provider pool rotation, SQLCipher key rotation, DoD 5220.22-M secure workspace wipe).
+2. **Agent Skills & Personas Alignment (`.agents/`):**
+   - Updated all 10 domain skills (`architecture`, `ai-systems`, `typescript-tauri`, `rust-systems`, `office-documents`, `browser-computer-use`, `security`, `testing-verification`, `performance`, `ui-ux`) to reflect the 8 Full-Stack Modules and Switzerland of AI positioning.
+   - Updated all 9 agent persona definitions (`everyaios-lead.ts`, `everyaios-architect.ts`, `everyaios-verifier.ts`, `everyaios-code-tester.ts`, etc.) to enforce the 8-dimensional test framework and strict vendor-neutral protocol.
+
+**Verification.** `node scripts/check-doc-sync.mjs` passed (166 capabilities in sync, kernel gate clear); `node scripts/ipc-parity.mjs` passed (321 commands registered); `tsc --noEmit` clean (0 type errors).
+
+---
+
 ## v3.80 — 2026-09-15 — One terminal plane: shell integration, provenance, and the Copilot-style terminal follow
 
 **Category:** architecture + implementation; no capability rows added. **Affected:** new `crates/everyaios-core/src/shell_integration.rs`, `crates/everyaios-core/src/terminal.rs`, `src-tauri/src/terminal_cmds.rs`, `src-tauri/src/commands.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/state.rs`, **deleted** `src-tauri/src/shell_cmds.rs` and `ui/src/lib/shell.ts`, `ui/src/lib/terminal.ts`, `ui/src/components/views/shell-view.tsx`, `ui/src/components/views/ide/ide-workbench.tsx`, `ui/src/components/views/ide/explorer-panel.tsx`, `ui/src/components/chat/chat-composer.tsx`, `ARCH/12-UI-SPEC.md` §4.4, `TODO.md` P54/P68, and shell architecture version metadata. Capability identity remains **166**; the live TODO count becomes **1428 = 1214 done + 214 open** (six P68 items landed done, two added open).
