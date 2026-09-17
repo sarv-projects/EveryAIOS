@@ -1,7 +1,7 @@
 # Enterprise MNC Master Test Cases Specification: EveryAIOS
 
 > **Standard**: ISO/IEC/IEEE 29119 Software Testing Standard & IEEE 829 Test Documentation  
-> **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness ("The Switzerland of AI")  
+> **Target System**: EveryAIOS — Universal Agentic OS & Desktop Harness  
 > **Release Target**: Windows 11 Desktop (Primary) / macOS Sonoma / Ubuntu 24.04 LTS  
 > **Document Status**: Canonical Enterprise Master Test Specification  
 

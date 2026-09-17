@@ -6,7 +6,7 @@
 <h3 align="center">Every AI. Every Agent. Every Task. One Space.</h3>
 
 <p align="center">
-  <strong>The Universal Agentic Operating System & Desktop Harness ("The Switzerland of AI")</strong><br/>
+  <strong>The Universal Agentic Operating System & Desktop Harness</strong><br/>
   One unified native desktop cockpit for knowledge work, financial engineering, document surgery, browser automation, desktop control, multi-agent swarms, and autonomous software development.
 </p>
 
@@ -40,7 +40,7 @@
 
 ---
 
-## The Core Architectural Principle: "The Switzerland of AI"
+## The Core Architectural Principle: Universal Agent Interoperability
 
 ### Permanent Rejection of the Proprietary Coding Agent Trap
 Most AI companies rush to build their own closed coding models and proprietary prompting loops. This is a treadmill: competing against frontier AI labs on custom coding loops is an inefficient duplication of effort.
@@ -52,7 +52,7 @@ Most AI companies rush to build their own closed coding models and proprietary p
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    EVERYAIOS: THE SWITZERLAND OF AI                              │
+│                               EVERYAIOS: UNIVERSAL AGENT HARNESS                                 │
 ├──────────────────────────────────────────────────────────────────────────────────────────────────┤
 │                                     THE AGENT-NATIVE PLANE                                       │
 │          Hosted External Coding Agents & Swarms (via open ACP stdio JSON-RPC 2.0)               │
@@ -79,7 +79,7 @@ Today, knowledge workers and engineers juggle 3 to 5 fragmented tools: a chat ap
 
 | Feature / Dimension | **EveryAIOS** | **ChatGPT / Claude Desktop** | **Cursor / Windsurf** | **Claude Cowork / Plugins** |
 | :--- | :---: | :---: | :---: | :---: |
-| **Architectural Model** | **Universal Desktop OS Harness**<br/>*(Switzerland of AI; runs any model or agent)* | **Proprietary Walled Garden**<br/>*(Locked to single vendor ecosystem)* | **Editor-Only Agent**<br/>*(Forked VS Code for code files only)* | **Single-Agent Cowork**<br/>*(Closed plugin ecosystem; cloud-bound)* |
+| **Architectural Model** | **Universal Desktop OS Harness**<br/>*(Vendor-neutral; runs any model or agent)* | **Proprietary Walled Garden**<br/>*(Locked to single vendor ecosystem)* | **Editor-Only Agent**<br/>*(Forked VS Code for code files only)* | **Single-Agent Cowork**<br/>*(Closed plugin ecosystem; cloud-bound)* |
 | **Model Freedom (BYOK & Offline)** | ✅ **100+ Models + 100% Offline**<br/>*(Anthropic, OpenAI, Gemini, DeepSeek, Qwen, Ollama, MLX)* | ❌ **Single Provider Only**<br/>*(Cannot bring alternate frontier models)* | ⚠️ **Curated Cloud Selection**<br/>*(Proprietary cloud models; limited local LLMs)* | ❌ **Anthropic Only**<br/>*(No OpenAI, Gemini, or local models)* |
 | **External Agent Hosting (ACP)** | ✅ **Host Any Coding Agent**<br/>*(Run external coding agents via ACP stdio)* | ❌ **None**<br/>*(Cannot host external agents)* | ❌ **Locked to Internal Agent**<br/>*(Cannot run competing agent engines)* | ❌ **None**<br/>*(Single proprietary agent)* |
 | **Multi-Agent Swarms & Fleet Isolation** | ✅ **100+ Concurrent Worktrees**<br/>*(Isolated Git worktrees; zero file collision)* | ❌ **None**<br/>*(Single turn conversation)* | ❌ **None**<br/>*(Single editor composer)* | ❌ **None**<br/>*(Single agent execution)* |

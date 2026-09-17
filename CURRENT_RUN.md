@@ -12,7 +12,10 @@
 
 ## 1. Active Goal
 
-**(Current, 2026-09-17 — Enterprise MNC Master Test Cases Specification & Agent Skills Alignment)**:
+**(Current, 2026-09-17 — Enterprise MNC Master Test Cases Specification, Agent Skills Alignment & README Professionalization)**:
+- **Removal of "Switzerland of AI" from Public Surfaces (`desktop_app/README.md`, `desktop_app/TEST-CASES.md`)**:
+  - Completely excised all instances of the colloquial phrase "Switzerland of AI" from `desktop_app/README.md` and `desktop_app/TEST-CASES.md`.
+  - Replaced with clear, professional, vendor-neutral engineering terminology: "The Universal Agentic Operating System & Desktop Harness", "Universal Agent Interoperability", "Universal Agent Harness", and "Vendor-neutral".
 - **Enterprise MNC Master Test Cases Specification (`desktop_app/TEST-CASES.md`)**:
   - Authored comprehensive ISO/IEC/IEEE 29119 & IEEE 829 compliant master test specification (83,869 bytes).
   - Codified across **8 orthogonal testing dimensions**: (1) Unit & Algorithmic Correctness, (2) Subsystem & IPC Contract Parity, (3) Boundary, Stress & Resource Constraints, (4) Fault Injection, Chaos & Crash Recovery, (5) Security, Penetration & Sandbox Escapes, (6) UI/UX Craft & Accessibility (WCAG 2.2 AA), (7) Cross-Module Integration Suites, and (8) End-to-End Real-World Scenarios.
@@ -30,7 +33,7 @@
     9. Security Membrane, SSRF Netfloor & Merkle Audit (`E2E-UC-41` to `45`)
     10. Disaster Recovery, Air-Gapped Offline & Vault Privacy (`E2E-UC-46` to `50`)
 - **Agent Skills & Personas Alignment (`.agents/`)**:
-  - Aligned all 10 domain skills in `.agents/skills/` (`architecture`, `ai-systems`, `typescript-tauri`, `rust-systems`, `office-documents`, `browser-computer-use`, `security`, `testing-verification`, `performance`, `ui-ux`) with the 8 Full-Stack Modules, Universal Harness ("Switzerland of AI"), and strict vendor-neutral protocol.
+  - Aligned all 10 domain skills in `.agents/skills/` (`architecture`, `ai-systems`, `typescript-tauri`, `rust-systems`, `office-documents`, `browser-computer-use`, `security`, `testing-verification`, `performance`, `ui-ux`) with the 8 Full-Stack Modules, Universal Harness, and strict vendor-neutral protocol.
   - Aligned all 9 agent persona definitions in `.agents/agents/` (`everyaios-lead.ts`, `everyaios-architect.ts`, `everyaios-verifier.ts`, `everyaios-code-tester.ts`, `everyaios-security-reviewer.ts`, `everyaios-security-tester.ts`, `everyaios-ui-craft.ts`, `everyaios-user-tester.ts`, `everyaios-performance-reviewer.ts`).
   - Enforced strict **Vendor-Neutral Rule** (scrubbed all mentions of AI tool or agent brand names from codebase descriptions and prompts).
 
@@ -38,14 +41,15 @@
 
 ## 2. Where We Stopped (Latest Progress)
 - **Completed Deliverables**:
-  - `desktop_app/TEST-CASES.md`: Full 83KB specification with all 8 modules, 8 cross-module integration suites, and 50 E2E production use cases.
-  - `desktop_app/README.md`: Upgraded with high-impact visual architecture diagrams, "Coming Soon" installer release statuses (Windows 11, macOS, Linux), deep-dive of the 8 Full-Stack Modules, and direct references to `TEST-CASES.md`.
+  - `desktop_app/README.md`: Completely scrubbed of all "Switzerland of AI" phrases; fully upgraded with high-impact visual architecture diagrams, "Coming Soon" installer release statuses (Windows 11, macOS, Linux), deep-dive of the 8 Full-Stack Modules, and direct references to `TEST-CASES.md`.
+  - `desktop_app/TEST-CASES.md`: Full 83KB specification with all 8 modules, 8 cross-module integration suites, and 50 E2E production use cases. Cleaned header.
   - `.agents/skills/`: All 10 skills rewritten and verified.
   - `.agents/agents/`: All 9 agent definitions rewritten and verified.
   - `desktop_app/SPEC-CHANGELOG.md`: Added release entry for 2026-09-17.
 - **Verification Evidence (All Passed)**:
   - `node scripts/check-doc-sync.mjs` → **exit 0** (166 capabilities in sync, 1429 checkboxes intact, kernel gate clear).
   - `node scripts/ipc-parity.mjs` → **exit 0** (321 commands registered).
+  - `Select-String -Path README.md -Pattern "Switzerland"` → **0 matches**.
   - `ui/node_modules/.bin/tsc --noEmit -p tsconfig.json` → **exit 0** (0 type errors).
   - `clean-profile-boot-check.mjs` → PASS / SKIP as expected without pre-built debug binary.
 - **Current session reconnaissance (read-only, re-measured 2026-09-16):** `desktop_app` only. True scale measured with `git ls-files`: **1,346 tracked files / 366,004 lines** (`rs` 490 files/185,969 lines · `ts` 425/62,625 · `tsx` 144/40,932 · `md` 136/24,283 · `json` 40/24,348 · `mjs` 14/2,081 · `css` 1/712), plus 21 ARCH docs (00–17 + DIAGRAMS + 2 ADR), 93 RESEARCH docs, 47 `src-tauri` files, 141 UI component files, 331 `#[tauri::command]` functions, 2,764 Rust `#[test]` fns, 27 Rust integration-test files, and 134 TS/TSX test files. (Previous entry said 1,331/361,083 and "310 test files" — superseded by this measurement.)
