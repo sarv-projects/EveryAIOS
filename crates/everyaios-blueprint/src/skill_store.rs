@@ -1167,8 +1167,7 @@ mod tests {
         let dir = tmpdir();
         let store = SkillStore::new(&dir);
         let big = "line\n".repeat(SKILL_MAX_LINES + 10);
-        let err =
-            grow_from_task_checked(&store, "Big task", &big, "a", "1.0.0", true).unwrap_err();
+        let err = grow_from_task_checked(&store, "Big task", &big, "a", "1.0.0", true).unwrap_err();
         assert!(matches!(err, SkillError::TooLong { .. }));
         assert!(!dir.join("big-task").exists());
     }

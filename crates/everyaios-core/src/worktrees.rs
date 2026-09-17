@@ -68,9 +68,9 @@ pub fn validate_task_id(task_id: &str) -> Result<(), WorktreeError> {
     if task_id.starts_with('.') || task_id.ends_with('/') || task_id.contains("//") {
         return Err(WorktreeError::InvalidTaskId(task_id.to_string()));
     }
-    let ok = task_id.chars().all(|c| {
-        c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/')
-    });
+    let ok = task_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'));
     if !ok {
         return Err(WorktreeError::InvalidTaskId(task_id.to_string()));
     }
@@ -256,7 +256,10 @@ impl WorktreeManager {
             return Err(WorktreeError::InvalidTaskId(receipt_id.to_string()));
         }
         let bytes = serde_json::to_vec_pretty(payload).map_err(|e| {
-            WorktreeError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+            WorktreeError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                e.to_string(),
+            ))
         })?;
         if bytes.len() > MAX_RECEIPT_BYTES {
             return Err(WorktreeError::PayloadTooLarge {
@@ -332,7 +335,17 @@ mod tests {
     fn p64_task_id_validation_fails_closed() {
         assert!(validate_task_id("task-1").is_ok());
         assert!(validate_task_id("scope/task-1").is_ok());
-        for bad in ["", "../escape", "..", "/abs", "a\\b", "a//b", ".hidden", "has space", "semi;colon"] {
+        for bad in [
+            "",
+            "../escape",
+            "..",
+            "/abs",
+            "a\\b",
+            "a//b",
+            ".hidden",
+            "has space",
+            "semi;colon",
+        ] {
             assert!(validate_task_id(bad).is_err(), "must refuse {bad:?}");
         }
     }

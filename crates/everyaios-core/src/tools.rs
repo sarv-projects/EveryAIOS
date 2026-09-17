@@ -1428,9 +1428,7 @@ impl ToolService {
                 };
                 self.dispatch_file_ops("file_ops.write", &mapped)
             }
-            "artifact.retrieve" | "work.status" => {
-                self.dispatch_file_ops("file_ops.read", args)
-            }
+            "artifact.retrieve" | "work.status" => self.dispatch_file_ops("file_ops.read", args),
             _ => json!({"ok": false, "error": format!("façade has no route yet: {facade}")}),
         }
     }
@@ -2540,7 +2538,9 @@ impl EditShapeSource for LexicalShapeSource {
                 .unwrap_or(t)
                 .strip_prefix("async ")
                 .unwrap_or(t);
-            for kw in ["fn ", "struct ", "enum ", "const ", "static ", "class ", "def "] {
+            for kw in [
+                "fn ", "struct ", "enum ", "const ", "static ", "class ", "def ",
+            ] {
                 if let Some(rest) = t.strip_prefix(kw) {
                     let sym: String = rest
                         .chars()
@@ -2643,7 +2643,11 @@ pub fn apply_fuzzy_edit(
     if old.is_empty() {
         return Err(EditError::EmptyOld);
     }
-    let want: Vec<String> = old.lines().map(norm_line).filter(|l| !l.is_empty()).collect();
+    let want: Vec<String> = old
+        .lines()
+        .map(norm_line)
+        .filter(|l| !l.is_empty())
+        .collect();
     if want.is_empty() {
         return Err(EditError::EmptyOld);
     }
@@ -2779,14 +2783,24 @@ pub const FACADE_ROUTES: &[FacadeRoute] = &[
         description: "Open a document for reading (docx/xlsx/pptx/pdf)",
         read_only: true,
         destructive: false,
-        targets: &["office.docx_open", "office.xlsx_open", "office.pptx_open", "office.pdf_open"],
+        targets: &[
+            "office.docx_open",
+            "office.xlsx_open",
+            "office.pptx_open",
+            "office.pdf_open",
+        ],
     },
     FacadeRoute {
         facade: "office.inspect",
         description: "Inspect document structure (outline, sheets, pages)",
         read_only: true,
         destructive: false,
-        targets: &["office.docx_open", "office.xlsx_open", "office.pdf_open", "office.pdf_pages"],
+        targets: &[
+            "office.docx_open",
+            "office.xlsx_open",
+            "office.pdf_open",
+            "office.pdf_pages",
+        ],
     },
     FacadeRoute {
         facade: "office.edit",
@@ -3948,8 +3962,12 @@ mod tests {
         let content = "fn  alpha( )  {\n    let x = 1;\n}\n";
         // Exact misses on whitespace, fuzzy (normalized) hits once.
         assert!(apply_exact_once(content, "fn alpha() {", "fn beta() {").is_err());
-        let (out, strategy) =
-            apply_fuzzy_edit(content, "fn alpha() {\nlet x = 1;", "fn beta() {\nlet x = 2;").unwrap();
+        let (out, strategy) = apply_fuzzy_edit(
+            content,
+            "fn alpha() {\nlet x = 1;",
+            "fn beta() {\nlet x = 2;",
+        )
+        .unwrap();
         assert_eq!(strategy, EditStrategy::Fuzzy);
         assert!(out.contains("fn beta()"));
         // Zero / ambiguous fuzzy matches fail closed.
@@ -3997,7 +4015,10 @@ mod tests {
         let out = s.dispatch(&spec, &json!({"path": "e.txt", "old": "XX", "new": "YY"}));
         assert_eq!(out["ok"], true, "{out}");
         assert_eq!(out["strategy"], "exact");
-        assert_eq!(fs::read_to_string(dir.join("e.txt")).unwrap(), "hello YY world");
+        assert_eq!(
+            fs::read_to_string(dir.join("e.txt")).unwrap(),
+            "hello YY world"
+        );
         // Ambiguous edit refuses with `refused:true` (fail closed).
         fs::write(dir.join("amb.txt"), "XX and XX").unwrap();
         let out2 = s.dispatch(&spec, &json!({"path": "amb.txt", "old": "XX", "new": "YY"}));
@@ -4023,7 +4044,9 @@ mod tests {
         // Registry serves façades alongside natives with matching hints.
         let reg = ToolRegistry::new();
         for r in FACADE_ROUTES {
-            let t = reg.get(r.facade).unwrap_or_else(|| panic!("façade missing: {}", r.facade));
+            let t = reg
+                .get(r.facade)
+                .unwrap_or_else(|| panic!("façade missing: {}", r.facade));
             assert_eq!(t.read_only, r.read_only, "{}", r.facade);
             assert_eq!(t.family, ToolFamily::Facade, "{}", r.facade);
         }

@@ -863,20 +863,29 @@ pub fn validate_facades() -> Result<(), String> {
             return Err(format!("duplicate façade {:?}", f.name));
         }
         if f.destructive && f.read_only {
-            return Err(format!("façade {:?} cannot be destructive + readOnly", f.name));
+            return Err(format!(
+                "façade {:?} cannot be destructive + readOnly",
+                f.name
+            ));
         }
         if f.fans_out_to.is_empty() {
             return Err(format!("façade {:?} fans out to nothing", f.name));
         }
         for t in f.fans_out_to {
             if find_inbuilt_tool(t).is_none() {
-                return Err(format!("façade {:?} fans out to unknown tool {t:?}", f.name));
+                return Err(format!(
+                    "façade {:?} fans out to unknown tool {t:?}",
+                    f.name
+                ));
             }
         }
         // Destructive façades must be high-risk + mutating (same Guard path
         // as the native tool they wrap).
         if f.destructive && (f.read_only || f.risk != "high") {
-            return Err(format!("façade {:?} destructive must be mutating high-risk", f.name));
+            return Err(format!(
+                "façade {:?} destructive must be mutating high-risk",
+                f.name
+            ));
         }
     }
     Ok(())
@@ -1156,8 +1165,17 @@ mod tests {
             }
         }
         // Spot-check the ARCH/17 §17.5 fan-outs.
-        assert!(find_facade("browser.research").unwrap().fans_out_to.contains(&"search_web"));
-        assert!(find_facade("workspace.map").unwrap().fans_out_to.contains(&"disk_scan"));
-        assert!(find_facade("office.edit").unwrap().fans_out_to.contains(&"office_edit"));
+        assert!(find_facade("browser.research")
+            .unwrap()
+            .fans_out_to
+            .contains(&"search_web"));
+        assert!(find_facade("workspace.map")
+            .unwrap()
+            .fans_out_to
+            .contains(&"disk_scan"));
+        assert!(find_facade("office.edit")
+            .unwrap()
+            .fans_out_to
+            .contains(&"office_edit"));
     }
 }

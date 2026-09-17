@@ -633,10 +633,7 @@ impl ExecutionKernel {
                     .get("parentId")
                     .and_then(Value::as_str)
                     .map(str::to_string);
-                let depth = params
-                    .get("depth")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0) as u32;
+                let depth = params.get("depth").and_then(Value::as_u64).unwrap_or(0) as u32;
                 let granted: Vec<String> = params
                     .get("tools")
                     .and_then(Value::as_array)
@@ -657,18 +654,14 @@ impl ExecutionKernel {
                             .collect()
                     })
                     .unwrap_or_default();
-                let task_id = params
-                    .get("taskId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
+                let task_id = params.get("taskId").and_then(Value::as_str).unwrap_or("");
                 let policy = params
                     .get("policySnapshot")
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_string();
-                let ex = self.begin_subagent(
-                    session, objective, parent, depth, &granted, &denied, policy,
-                )?;
+                let ex = self
+                    .begin_subagent(session, objective, parent, depth, &granted, &denied, policy)?;
                 let provision = plan_subagent_worktree(task_id, &ex.id)
                     .map(|p| serde_json::to_value(p).unwrap_or(Value::Null))
                     .unwrap_or(Value::Null);
@@ -688,18 +681,9 @@ impl ExecutionKernel {
                     .get("strategy")
                     .and_then(Value::as_str)
                     .unwrap_or("exact");
-                let path = params
-                    .get("path")
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
-                let ticket = params
-                    .get("ticketId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
-                let audit_seq = params
-                    .get("auditSeq")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0);
+                let path = params.get("path").and_then(Value::as_str).unwrap_or("");
+                let ticket = params.get("ticketId").and_then(Value::as_str).unwrap_or("");
+                let audit_seq = params.get("auditSeq").and_then(Value::as_u64).unwrap_or(0);
                 let receipt = self.record_verified_edit(id, strategy, path, ticket, audit_seq)?;
                 Ok(receipt)
             }
@@ -713,10 +697,7 @@ impl ExecutionKernel {
                     .get("passed")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
-                let output = params
-                    .get("output")
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
+                let output = params.get("output").and_then(Value::as_str).unwrap_or("");
                 let receipt = self.record_preflight(id, passed, output)?;
                 Ok(receipt)
             }
@@ -831,7 +812,9 @@ pub fn truncate_to_50k(output: &str) -> (String, bool, usize) {
         end -= 1;
     }
     let mut preview = output[..end].to_string();
-    preview.push_str(&format!("\n… [truncated {total} → {end} bytes; full output in ref handle]"));
+    preview.push_str(&format!(
+        "\n… [truncated {total} → {end} bytes; full output in ref handle]"
+    ));
     (preview, true, total)
 }
 
@@ -1499,7 +1482,11 @@ mod tests {
     #[test]
     fn p64_begin_subagent_strips_blocked_tools_and_caps_depth() {
         let mut k = ExecutionKernel::new();
-        let granted = vec!["read".to_string(), "delegate".to_string(), "memory".to_string()];
+        let granted = vec![
+            "read".to_string(),
+            "delegate".to_string(),
+            "memory".to_string(),
+        ];
         let ex = k
             .begin_subagent("s", "do sub work", None, 1, &granted, &[], "pol".into())
             .unwrap();
@@ -1558,7 +1545,8 @@ mod tests {
         let dir = std::env::temp_dir();
         #[cfg(unix)]
         {
-            let (pid, mut child) = spawn_shadow_command_tracked("echo", &["pid-check"], &dir).unwrap();
+            let (pid, mut child) =
+                spawn_shadow_command_tracked("echo", &["pid-check"], &dir).unwrap();
             assert!(pid > 0);
             let _ = child.wait();
         }
@@ -1588,8 +1576,12 @@ mod tests {
         assert!(k
             .record_verified_edit(&ex.id, "nope", "a.txt", "t1", 7)
             .is_err());
-        assert!(k.record_verified_edit(&ex.id, "exact", "", "t1", 7).is_err());
-        assert!(k.record_verified_edit(&ex.id, "exact", "a.txt", "", 7).is_err());
+        assert!(k
+            .record_verified_edit(&ex.id, "exact", "", "t1", 7)
+            .is_err());
+        assert!(k
+            .record_verified_edit(&ex.id, "exact", "a.txt", "", 7)
+            .is_err());
         let p = k.record_preflight(&ex.id, true, "ok").unwrap();
         assert_eq!(p["passed"], true);
         // IPC arms reachable without unwrap on missing fields.
