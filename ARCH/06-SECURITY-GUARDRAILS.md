@@ -3,6 +3,7 @@
 > **The user requirement, verbatim:** *"guardrails are very, very important. research on that."* Synthesized from: v2.0 §P8 (Trust Ladder + dual-guard, built in core-tools), doc 03 §8, ZeroClaw security-first (doc 30 §1), BrowserOS ownership + guards/effects pipeline (doc 33 §4.3, §6.3), Hermes prompt-injection scan + FTS5 trust scoring (doc 16), ECC AgentShield + plan-before-build (doc 09), OpenFang WASM metering (doc 09), microsandbox (doc 23), cyber-agent red-team corpus (doc 26 — use their attack patterns as our test suite).
 
 **v3.39:** a `ManagedResource` may be discovered, installed, and healthy without permission to mutate anything. Start/health is process lifecycle. **Every real effect still requires a ticket.** Installing an MCP server is not executing a tool.
+> **Full-Stack Module:** Module 8 — Security Guard-2 & Merkle Audit Membrane (`crates/everyaios-guard`, `crates/everyaios-audit`, `netfloor`, `pathfloor`).
 > **Plane (ARCH/17 §17.1):** Guard, tickets, vault, pathfloor/netfloor and the Merkle audit are the **execution kernel beneath both planes**. The boundary does not change with the caller: a Native tool call and an external agent's mediated effect pass the same permit → execute → verify → record path, and carry the same provenance requirement (machine/agent ticket vs. human gesture from the guard window).
 
 ## 6.1 Defense in depth (every path, every layer)

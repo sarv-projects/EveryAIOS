@@ -1,15 +1,11 @@
 # ARCH/16 — Porting the async chat loop to Rust (ConversationEngine `run()` + `runChatStream`)
 
-> **Status:** SCOPE (code-verified 2026-08-29). Not implemented. This is the honest
-> engineering plan for the last large TS slice alive in the sidecar — the streaming
-> agent loop every chat turn travels through. It is deliberately *not* the 542 LOC of
-> `engine.ts` alone; the verified reality is that the loop is the product of
-> `engine.ts` × the coordinator's `runChatStream` orchestration in `chat.ts`, all of
-> whose I/O deps already have Rust homes. The plan below is the minimal true port and
-> the safest migration path, with the leaky bits called out (prompt assembly, context
-> audit invariant, AG-UI).
-
-> **Ordering (v3.75):** `17-NATIVE-AGENT.md` freezes the Native agent plane **before** this port. The four unwired seams (first-class-tool merge, context-provider mention resolution, repo-map injection, sub-agent execution side) plus the edit ladder, checkpoint/rollback, and validated skill distillation are TODO **P64** and must be correct in the sidecar first — porting a loop whose seams are wrong would move the defect into Rust and cost the A9/`P30.8` parity checks twice. This document remains the plan of record for the port itself.
+> **Status: DE-PRIORITIZED / FROZEN (2026-09-17 Architecture Freeze).**
+> Under the 8 Full-Stack Module architecture, EveryAIOS is finalized as the **Universal Agent Harness and Desktop Cowork OS ("Switzerland of AI")**.
+> The async multi-turn streaming conversation loop in `packages/coordinator/src/chat.ts` is robust, battle-tested, and fully operational.
+> Heavy compute, cryptographic verification, security guardrails, SQLCipher persistence, and document calculations are already executed in pure Rust (`crates/everyaios-engine`, `crates/everyaios-guard`, `crates/everyaios-vault`, `crates/everyaios-office`).
+> Rewriting the entire TypeScript chat loop in Rust (~3,400 LOC) is an unnecessary rewrite treadmill and is permanently de-prioritized.
+> This document is preserved for architectural completeness and potential future sub-component optimizations.
 
 ## 1. Why this is the last meaningful port slice
 

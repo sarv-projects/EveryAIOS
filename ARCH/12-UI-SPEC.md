@@ -1,5 +1,6 @@
 # 12 — UI/UX Specification: Desktop Layout & Interaction Design
 
+> **Full-Stack Module:** Module 3 — Unified Cockpit Shell & Context Compaction Engine (React 19 + Zustand 5 + Tailwind 4, 12 Center Screens & 19 Viewports).
 > **Version:** UI-spec rev 3.10 (2026-09-15 — Windows-first runtime/picker/cowork audit, P66). **Numbering note:** the `3.x` in this header is the **UI-spec document revision**, a separate series from the workspace/shell version in `ui/src/lib/version.ts` (currently **v3.78** — the value `scripts/check-doc-sync.mjs` verifies). A `3.x` here is therefore *not* a stale shell version and never should be read as one.
 > **Reference:** Claude Desktop Views / Cursor activity bar / ChatGPT Work / Devin Desktop (2026 work-cockpit pattern — doc 67 §6); Devin Cloud UI (doc 46) for viewers only  
 > **Principle:** ONE project, ONE durable Work, ONE session, ONE effect-authorization model, ONE timeline. Chat + live progress stay in the center; the **right activity rail** selects the active lens while the viewport supports multiple open, reorderable tabs. Only one view is rendered at a time inside that viewport; the product is not split into separate Chat/Cowork/Code applications.

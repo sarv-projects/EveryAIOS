@@ -2,6 +2,7 @@
 
 > **The user requirement, verbatim:** *"for BYOK, under each provider, add an option that multiple keys under each provider can be added. Each acts as a fallback — as soon as one rate-limits, switch. Technically users can have multiple accounts without ever changing keys."*
 > This doc is the design. Patterns sourced from: LiteLLM key management (web, 2026), OpenRouter multi-BYOK (web), pi + `pi-keyrouter` (doc 19 §1), Reasonix cost discipline (doc 05 §6), BrowserOS OAuth token store (doc 33 §7.4), vault/CES (doc 19 §7, v2.0 §P8).
+> **Full-Stack Module:** Module 2 — Model Gateway & Encrypted Keyring Vault (`crates/everyaios-vault`, `crates/everyaios-catalog`).
 > **Plane (ARCH/17 §17.1):** the vault/BYOK broker is **shared execution-kernel infrastructure**, not a plane of its own. Key pools, 429 failover and key affinity are consumed by the Native agent plane's routing; they are never pushed into an external agent. An external ACP agent keeps its own model/account, and EveryAIOS copies **no** subscription credential — a native agent receives only the spawn-env the user explicitly configured.
 
 ## 3.1 The model: provider → key pool → routing
