@@ -425,6 +425,127 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     expect(names).toContain("plan");
   });
 
+  /**
+   * P54.5 — the agent's own shell state, read over the read-only `terminal/*`
+   * arm.
+   *
+   * `script.run` runs one command and returns, so without this the agent has no
+   * idea it already has a shell, where it is, or what its last command exited
+   * with — and re-runs work instead. Asserted on the system prompt the provider
+   * actually receives, and below CACHE_BOUNDARY so segments 1-7 stay identical.
+   */
+  test("P54.5: the agent's own shell state is injected below the cache boundary", async () => {
+    const { events, emit } = collector();
+    let systemPrompt = "";
+    const seen: string[] = [];
+    const request = async (method: string) => {
+      seen.push(method);
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "tool/list") {
+        return {
+          tools: [
+            { id: "script.run", family: "script", description: "Run a shell command line in the terminal plane", readOnly: false, operation: "terminal_shell", risk: "high", argsSchema: {} },
+          ],
+        };
+      }
+      if (method === "terminal/status") {
+        return {
+          attached: true,
+          count: 2,
+          ptys: [
+            { ptyId: "pty-human", profileId: "bash", backend: "local", origin: "human", label: null, integration: "Rich", cwd: "/home", pid: 7, running: true, exitCode: null },
+            { ptyId: "pty-1", profileId: "bash", backend: "local", origin: "agent", label: "script.run", integration: "Rich", cwd: "/w", pid: 42, running: true, exitCode: null },
+          ],
+        };
+      }
+      if (method === "terminal/last_command") {
+        return { block: "$ cargo test -p everyaios-core\nexit 0" };
+      }
+      return {};
+    };
+    const bridge: ProviderBridge = {
+      async *streamChat(req) {
+        systemPrompt = req.messages[0]!.content ?? "";
+        yield { type: "text", text: "ok" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+
+    expect(seen).toContain("terminal/status");
+    // The last command is read from the *agent* session, not the user's tab.
+    expect(seen).toContain("terminal/last_command");
+    expect(systemPrompt).toContain("<terminal_plane>");
+    expect(systemPrompt).toContain("agent_sessions=1");
+    expect(systemPrompt).toContain("cwd /w");
+    expect(systemPrompt).toContain("exit 0");
+    expect(systemPrompt.indexOf(CACHE_BOUNDARY)).toBeLessThan(
+      systemPrompt.indexOf("<terminal_plane>"),
+    );
+    expect(events.some((e) => e.type === "error")).toBe(false);
+  });
+
+  /**
+   * The honest degenerate case: a host with no PTY host contributes **nothing**
+   * to the prompt. An empty `<terminal_plane>` block would tell the model it has
+   * a shell with nothing running, which is a different (and false) statement.
+   */
+  test("P54.5: no terminal plane injects no block and does not fail the turn", async () => {
+    const { events, emit } = collector();
+    let systemPrompt = "";
+    const request = async (method: string) => {
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "tool/list") {
+        return {
+          tools: [
+            { id: "script.run", family: "script", description: "Run a shell command line", readOnly: false, operation: "terminal_shell", risk: "high", argsSchema: {} },
+          ],
+        };
+      }
+      if (method === "terminal/status") return { attached: false, count: 0, ptys: [] };
+      return {};
+    };
+    const bridge: ProviderBridge = {
+      async *streamChat(req) {
+        systemPrompt = req.messages[0]!.content ?? "";
+        yield { type: "text", text: "ok" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+
+    expect(systemPrompt).not.toContain("<terminal_plane>");
+    expect(events.some((e) => e.type === "error")).toBe(false);
+  });
+
+  test("P54.5: a detached plane read that throws is best-effort, never fatal", async () => {
+    const { events, emit } = collector();
+    let systemPrompt = "";
+    const request = async (method: string) => {
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "tool/list") {
+        return {
+          tools: [
+            { id: "script.run", family: "script", description: "Run a shell command line", readOnly: false, operation: "terminal_shell", risk: "high", argsSchema: {} },
+          ],
+        };
+      }
+      if (method === "terminal/status") throw new Error("method not found: terminal/status");
+      return {};
+    };
+    const bridge: ProviderBridge = {
+      async *streamChat(req) {
+        systemPrompt = req.messages[0]!.content ?? "";
+        yield { type: "text", text: "ok" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+
+    expect(systemPrompt).not.toContain("<terminal_plane>");
+    expect(events.some((e) => e.type === "error")).toBe(false);
+  });
+
   test("mobile credit hooks are stripped from the desktop loop", async () => {
     // A-10/C-3/C-4: creditAware / shouldContinueStreaming are mobile-credit
     // concepts. The desktop loop must never USE them — the check strips

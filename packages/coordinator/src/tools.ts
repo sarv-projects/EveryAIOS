@@ -79,6 +79,32 @@ export interface OpenAIFunctionTool {
 export const MAX_ACTIVE_TOOLS = 20;
 
 /**
+ * P54.5 — one live PTY session, as `terminal/status` reports it. Mirrors the
+ * Rust `TerminalSessionView` (camelCase on the wire); the coordinator does not
+ * invent its own shape for the plane.
+ */
+export interface TerminalSessionView {
+  ptyId: string;
+  profileId: string;
+  backend: 'local' | 'wsl' | 'remote';
+  /** `human` is a user tab; `agent`/`task` are read-only. */
+  origin: 'human' | 'agent' | 'task';
+  label: string | null;
+  integration: 'Rich' | 'Basic' | null;
+  cwd: string;
+  pid: number | null;
+  running: boolean;
+  exitCode: number | null;
+}
+
+/** The one PTY plane's live state (`terminal/status`). */
+export interface TerminalPlaneStatus {
+  attached: boolean;
+  count: number;
+  ptys: TerminalSessionView[];
+}
+
+/**
  * P64.1 / B11 — First-class Native Tools: ask, plan, todo, subagent.
  * These are first-class native workflows integrated directly into the turn loop.
  */
@@ -211,9 +237,50 @@ export function sortToolsStable(tools: ListedTool[]): ListedTool[] {
 }
 
 /**
+ * P64.10 / P54.5 — the turn loop's own instrument panel, mounted on *every*
+ * turn.
+ *
+ * `resolveActiveTools` scores the catalog against the user's words and keeps
+ * the top `cap`. With the 51-tool MCP catalog plus the native extras the cap
+ * always bites, so what the model received was a keyword-scored subset of the
+ * registry — and that silently decided which capabilities the agent even
+ * *had*. Measured consequence: `script.run` scored only when the user's text
+ * happened to contain "script"/"js"/"eval", so for an ordinary request like
+ * "fix the failing test" the shell was **not mounted at all**. The executor,
+ * the Guard-2 path and the PTY host were all present and correct; the agent
+ * simply never saw a shell. The same held for the four first-class coordinator
+ * tools (`ask`/`plan`/`todo`/`subagent`), which §17.4.1 calls part of the turn
+ * loop, and for the file tools every edit turn needs.
+ *
+ * So: execute, read, write, locate and delegate are pinned; the remaining
+ * slots are still chosen by score, and capability indexing keeps doing its job
+ * for the other ~60 tools. Selection stays deterministic and
+ * `sortToolsStable`-ordered, so prompt-cache byte stability is unaffected.
+ *
+ * Pinning never invents a tool: an id the host does not register is simply
+ * absent. A pinned id with no handler is still a bug, not a placeholder.
+ */
+export const LOOP_PINNED_TOOL_IDS: readonly string[] = [
+  // The loop's own instruments (P64.1 first-class tools).
+  'ask',
+  'plan',
+  'todo',
+  'subagent',
+  // Execute, read, write, locate.
+  'script.run',
+  'file_ops.read',
+  'file_ops.list',
+  'file_ops.write',
+  'file_ops.replace',
+  'search.query',
+];
+
+/**
  * H2 capability index: pick at most `cap` tools for this turn from the
  * full registry. Scoring is deterministic (id order as a tie-break) so the
  * same query+catalog always yields the same subset.
+ *
+ * [`LOOP_PINNED_TOOL_IDS`] are always included; the remaining slots are scored.
  */
 export function resolveActiveTools(
   catalog: ListedTool[],
@@ -225,12 +292,30 @@ export function resolveActiveTools(
   if (sorted.length <= cap && !(opts?.previouslyUsed && opts.previouslyUsed.length > 0)) {
     return sorted;
   }
+  // Pinned first, in priority order, then sorted-id order within a class so
+  // the subset is reproducible. A cap smaller than the pinned set keeps the
+  // leading ids rather than dropping the shell to satisfy a caller's budget —
+  // the caller asked for fewer tools, not for an agent with no terminal.
+  //
+  // Priority is by what the *loop* is already holding:
+  //   1. `previouslyUsed` — the model called it this turn and is mid-loop on
+  //      it. Dropping one mid-turn breaks the loop it was selected for, so it
+  //      outranks the policy pins.
+  //   2. `LOOP_PINNED_TOOL_IDS` — the instruments every turn needs.
+  //   3. everything else, by score.
   const used = new Set(opts?.previouslyUsed ?? []);
+  const pinnedIds = new Set(LOOP_PINNED_TOOL_IDS);
+  const pinned = [
+    ...sorted.filter((t) => used.has(t.id)),
+    ...sorted.filter((t) => !used.has(t.id) && pinnedIds.has(t.id)),
+  ].slice(0, cap);
+  const taken = new Set(pinned.map((t) => t.id));
+  const remaining = sorted.filter((t) => !taken.has(t.id));
   const tokens = query
     .toLowerCase()
     .split(/[^a-z0-9_.]+/i)
     .filter((t) => t.length >= 3);
-  const scored = sorted.map((t) => {
+  const scored = remaining.map((t) => {
     let score = 0;
     if (used.has(t.id)) score += 1000;
     const hay = `${t.id} ${t.family} ${t.description}`.toLowerCase();
@@ -254,7 +339,8 @@ export function resolveActiveTools(
     return { t, score };
   });
   scored.sort((a, b) => b.score - a.score || (a.t.id < b.t.id ? -1 : a.t.id > b.t.id ? 1 : 0));
-  return sortToolsStable(scored.slice(0, cap).map((s) => s.t));
+  const budget = Math.max(0, cap - pinned.length);
+  return sortToolsStable([...pinned, ...scored.slice(0, budget).map((s) => s.t)]);
 }
 
 /**
@@ -512,6 +598,34 @@ export class ToolExecutor {
       tools?: ListedTool[];
     };
     return out.tools ?? [];
+  }
+
+  /**
+   * P54.5 — read-only view of the one PTY plane (`terminal/status`).
+   *
+   * The agent's *privileged* shell path is the ticketed `script.run` tool; this
+   * only observes. `attached: false` is the honest answer on a host with no PTY
+   * host, and must not be rendered as "a shell with nothing running".
+   */
+  async terminalPlaneStatus(): Promise<TerminalPlaneStatus> {
+    const out = (await this.request("terminal/status", {})) as Partial<TerminalPlaneStatus>;
+    return {
+      attached: out?.attached === true,
+      count: typeof out?.count === "number" ? out.count : 0,
+      ptys: Array.isArray(out?.ptys) ? out.ptys : [],
+    };
+  }
+
+  /**
+   * P54.5 — what the shell itself reported about the last command in a session.
+   * `null` means the shell has not reported a trusted record yet — an absence of
+   * evidence, never an empty success.
+   */
+  async terminalLastCommand(ptyId: string, maxChars = 6000): Promise<string | null> {
+    const out = (await this.request("terminal/last_command", { ptyId, maxChars })) as {
+      block?: string | null;
+    };
+    return typeof out?.block === "string" && out.block.length > 0 ? out.block : null;
   }
 
   /**

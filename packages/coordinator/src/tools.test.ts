@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   canonicalArgsHash,
+  FIRST_CLASS_NATIVE_TOOLS,
   listedToolsToOpenAI,
+  LOOP_PINNED_TOOL_IDS,
   MAX_ACTIVE_TOOLS,
   resolveActiveTools,
   sanitizeToolResult,
@@ -100,6 +102,63 @@ describe("resolveActiveTools / capability index", () => {
       cap: 2,
     });
     expect(active.map((t) => t.id)).toEqual(["file_ops.read", "z_last"]);
+  });
+
+  /**
+   * P54.5 — the regression that mattered: with the real ~70-tool registry the
+   * 20-cap always bites, and `script.run` only scored when the user's words
+   * happened to contain "script"/"js"/"eval". So for an ordinary request the
+   * shell was not mounted at all — the executor, the Guard-2 path and the PTY
+   * host were all correct and the agent still had no terminal.
+   */
+  test("the loop's own tools are mounted even when the query never names them", () => {
+    const registry: ListedTool[] = [
+      ...Array.from({ length: 60 }, (_, i) => ({
+        id: `browser.tool_${String(i).padStart(2, "0")}`,
+        family: "browser",
+        description: "Browser primitive",
+        readOnly: true,
+        operation: "web_action",
+        risk: "low",
+        argsSchema: {},
+      })),
+      { id: "script.run", family: "script", description: "Run a shell command line in the terminal plane", readOnly: false, operation: "terminal_shell", risk: "high", argsSchema: {} },
+      { id: "file_ops.read", family: "fileops", description: "Read a UTF-8 file", readOnly: true, operation: "write", risk: "low", argsSchema: {} },
+      { id: "file_ops.write", family: "fileops", description: "Write a file", readOnly: false, operation: "write", risk: "medium", argsSchema: {} },
+      { id: "file_ops.replace", family: "fileops", description: "Replace one occurrence", readOnly: false, operation: "write", risk: "medium", argsSchema: {} },
+      { id: "file_ops.list", family: "fileops", description: "List a directory", readOnly: true, operation: "write", risk: "low", argsSchema: {} },
+      { id: "search.query", family: "search", description: "Web search", readOnly: true, operation: "external_network", risk: "medium", argsSchema: {} },
+      ...FIRST_CLASS_NATIVE_TOOLS,
+    ];
+
+    const active = resolveActiveTools(registry, "fix the flaky test in the parser");
+    const ids = active.map((t) => t.id);
+
+    // The shell — the whole point.
+    expect(ids).toContain("script.run");
+    // The file loop and the four first-class coordinator tools (§17.4.1).
+    for (const id of ["file_ops.read", "file_ops.list", "file_ops.write", "file_ops.replace", "search.query", "ask", "plan", "todo", "subagent"]) {
+      expect(ids).toContain(id);
+    }
+    // ...and the cap still holds, still id-sorted (cache-stable).
+    expect(active.length).toBeLessThanOrEqual(MAX_ACTIVE_TOOLS);
+    expect(ids).toEqual([...ids].sort());
+    // Scoring still does its job: keyword-matched tools ride along.
+    expect(active.length).toBe(MAX_ACTIVE_TOOLS);
+  });
+
+  test("pinning never invents a tool the host does not register", () => {
+    const active = resolveActiveTools(
+      [{ id: "browser.read", family: "browser", description: "Read", readOnly: true, operation: "web_action", risk: "low", argsSchema: {} }],
+      "anything",
+    );
+    expect(active.map((t) => t.id)).toEqual(["browser.read"]);
+  });
+
+  test("a cap below the pinned set keeps the shell rather than emptying the panel", () => {
+    const ids = resolveActiveTools(catalog, "hello", { cap: 1 }).map((t) => t.id);
+    expect(ids).toEqual(["file_ops.read"]);
+    expect(resolveActiveTools(catalog, "hello", { cap: 0 })).toEqual([]);
   });
 
   test("listedToolsToOpenAI is id-sorted (cache-stable)", () => {
