@@ -422,16 +422,16 @@ mod tests {
         assert_eq!(cp.blueprint.id, "bp-step");
         assert_eq!(cp.version, 1);
         // Non-git step records honest None.
-        let row2 = b
-            .checkpoint_step_to(&dir, "ex:3", 2, None, 9)
-            .unwrap();
+        let row2 = b.checkpoint_step_to(&dir, "ex:3", 2, None, 9).unwrap();
         assert_eq!(row2.git_sha, None);
         // Restore picker lists in step order.
         let rows = Blueprint::list_step_checkpoints(&dir, "ex:3").unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!((rows[0].step, rows[1].step), (1, 2));
         // Other works are filtered out; missing dir is empty, not an error.
-        assert!(Blueprint::list_step_checkpoints(&dir, "ex:9").unwrap().is_empty());
+        assert!(Blueprint::list_step_checkpoints(&dir, "ex:9")
+            .unwrap()
+            .is_empty());
         assert!(Blueprint::list_step_checkpoints(&dir.join("nope"), "ex:3")
             .unwrap()
             .is_empty());

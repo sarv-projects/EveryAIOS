@@ -67,7 +67,10 @@ pub enum GovernorError {
     #[error("subagent depth {depth} exceeds max_depth {max_depth} (no recursive spawn)")]
     DepthExceeded { depth: u32, max_depth: u32 },
     #[error("subagent concurrent limit exceeded ({active} active of {max_concurrent})")]
-    ConcurrentLimitExceeded { active: usize, max_concurrent: usize },
+    ConcurrentLimitExceeded {
+        active: usize,
+        max_concurrent: usize,
+    },
     #[error("subagent total-per-run limit exceeded ({total} of {max_total})")]
     TotalLimitExceeded { total: u32, max_total: u32 },
 }
@@ -249,8 +252,13 @@ impl ConcurrencyGovernor {
         denied_tools: &[String],
     ) -> Result<(FleetTaskStatus, Vec<String>), GovernorError> {
         let active_subagents = self.active_mutation + self.active_readonly;
-        let effective =
-            check_subagent_admission(depth, active_subagents, total_spawned, granted_tools, denied_tools)?;
+        let effective = check_subagent_admission(
+            depth,
+            active_subagents,
+            total_spawned,
+            granted_tools,
+            denied_tools,
+        )?;
         let status = self.admit_task(task)?;
         Ok((status, effective))
     }
@@ -368,8 +376,9 @@ mod tests {
             priority: 1,
         };
         let granted = vec!["read".to_string(), "delegate".to_string()];
-        let (status, eff) =
-            gov.admit_subagent_task(mk("s1"), 1, 0, &granted, &[]).unwrap();
+        let (status, eff) = gov
+            .admit_subagent_task(mk("s1"), 1, 0, &granted, &[])
+            .unwrap();
         assert_eq!(status, FleetTaskStatus::Running);
         assert_eq!(eff, vec!["read".to_string()]);
         // Depth 3 is refused before any fleet slot is consumed.

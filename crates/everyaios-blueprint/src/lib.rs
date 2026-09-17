@@ -56,7 +56,9 @@ pub use change_set::{
     Change, ChangeSet, ChangeState, CommittedChange, EffectClass, ImportEntry, ImportError,
     RecoveryReport, ReviewedImport,
 };
-pub use checkpoint::{BlueprintRegistry, Checkpoint, CheckpointError, RegistryError, StepCheckpoint};
+pub use checkpoint::{
+    BlueprintRegistry, Checkpoint, CheckpointError, RegistryError, StepCheckpoint,
+};
 pub use crystallize::{
     compile_to_script, decrystallize_check, signature as workflow_signature, CompiledSkill, Drift,
     ScriptLanguage, SkillRegistry, StepClass, Workflow, WorkflowDetector, WorkflowStep,

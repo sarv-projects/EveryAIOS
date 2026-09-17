@@ -95,8 +95,8 @@ pub mod wsl;
 pub use git_queue::{GitOperationQueue, GitQueueError};
 pub use governor::{
     check_subagent_admission, effective_subagent_tools, ConcurrencyGovernor, FleetTaskKind,
-    FleetTaskStatus, GovernorConfig, SubagentTask, DELEGATE_BLOCKED_TOOLS,
-    DEFAULT_DENY_TASK_TOOLS, P64_MAX_CONCURRENT, P64_MAX_DEPTH, P64_MAX_TOTAL,
+    FleetTaskStatus, GovernorConfig, SubagentTask, DEFAULT_DENY_TASK_TOOLS, DELEGATE_BLOCKED_TOOLS,
+    P64_MAX_CONCURRENT, P64_MAX_DEPTH, P64_MAX_TOTAL,
 };
 pub use worktrees::{
     validate_task_id, WorktreeError, WorktreeLease, WorktreeManager, BLACKBOARD_FINDINGS,
@@ -127,9 +127,8 @@ pub use execution::{
     decide_shadow_preflight, plan_subagent_worktree, run_shadow_command,
     should_restore_without_replay, spawn_shadow_command_tracked, truncate_to_50k, ExecutionKernel,
     ExecutionPhase, ExecutionTrigger, ForkLineage, PendingApproval, PreflightDecision,
-    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest,
-    ShadowCheckOutput, StepCheckpointMeta, SubagentProvision, Work, P64_MAX_OUTPUT_BYTES,
-    P64_MAX_SUBAGENT_DEPTH,
+    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest, ShadowCheckOutput,
+    StepCheckpointMeta, SubagentProvision, Work, P64_MAX_OUTPUT_BYTES, P64_MAX_SUBAGENT_DEPTH,
 };
 pub use export::{
     render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
@@ -176,9 +175,9 @@ pub use telemetry::{Telemetry, TelemetryEventKind, TelemetryMode, TelemetrySampl
 pub use tools::{
     apply_edit_ladder, apply_exact_once, apply_fuzzy_edit, apply_structured_edit,
     canonical_args_hash, count_occurrences, find_facade, is_facade, BrowserBackend,
-    EditShapeSource, EditStrategy, ExternalToolBackend, FACADE_ROUTES, FacadeRoute,
-    LexicalShapeSource, RegisteredTool, TerminalExecutor, TerminalRun, ToolFamily, ToolRegistry,
-    ToolService, EDIT_TOOL_ID, P64_MAX_EDIT_BYTES,
+    EditShapeSource, EditStrategy, ExternalToolBackend, FacadeRoute, LexicalShapeSource,
+    RegisteredTool, TerminalExecutor, TerminalRun, ToolFamily, ToolRegistry, ToolService,
+    EDIT_TOOL_ID, FACADE_ROUTES, P64_MAX_EDIT_BYTES,
 };
 pub use vault_key::{
     gate_mode, keyfile_path, needs_passphrase_gate, resolve_vault_key, setup_vault_passphrase,
