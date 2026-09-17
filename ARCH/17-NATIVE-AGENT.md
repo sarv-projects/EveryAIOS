@@ -110,7 +110,7 @@ Every module has exactly one plane, one owner, and one contract. New work must l
 | `everyaios-desktop` | Shared | OS computer use (Win/Linux/macOS), OCR/vision, verify | `desktop.*` |
 | `everyaios-acp` | Shared | ACP framing, agent registry/install, **agent backend matrix**, chief adapter | `acp/*` |
 | `everyaios-search` | Shared | G8 cascade, SearXNG space, deep research | `search.*` |
-| `everyaios-script` | Shared | rquickjs sandbox (heap/stack/timeout/payload caps) | `script.run` |
+| `everyaios-script` | Shared | rquickjs sandbox (heap/stack/timeout/payload caps) — backs `forge.run_js` / `run_code`, **not** `script.run`, which is a shell command on the PTY plane | — |
 | `everyaios-storage` | Shared | Walk, dedup, treemap, FTS5, USN | `storage.*` |
 | `everyaios-guard` | Kernel | Guard-1 prescan, netfloor, pathfloor, protected paths, TOCTOU, egress floor, tickets | verdicts only |
 | `everyaios-vault` | Kernel | SQLCipher keyrings, OAuth, broker, `reveal_for_spawn` | opaque handles |
@@ -173,7 +173,9 @@ understand → workspace preflight → plan → choose strategy
 **Catalog invariants**
 - `argsSchema` is JSON Schema emitted by Rust; the coordinator wraps it as an OpenAI function def (`listedToolsToOpenAI`). **Never** re-declare a tool schema in TypeScript.
 - Tool ids are stable and sorted (`sortToolsStable`) so the tools body is byte-stable for prompt cache.
-- At most **20** tools are mounted per turn (`MAX_ACTIVE_TOOLS`); selection is deterministic (`resolveActiveTools`: previously-used ⇒ +1000, id match ⇒ +40/−20, description ⇒ +8, family hints ⇒ +6).
+- At most **20** tools are mounted per turn (`MAX_ACTIVE_TOOLS`); selection is deterministic (`resolveActiveTools`).
+- **Loop-pinned tools are mounted on every turn** (`LOOP_PINNED_TOOL_IDS`): the four first-class tools (`ask`/`plan`/`todo`/`subagent`) plus `script.run`, `file_ops.read`/`list`/`write`/`replace`, `search.query`. Scoring fills only the *remaining* slots (id match ⇒ +40/−20, description ⇒ +8, family hints ⇒ +6).
+  - *Why:* the catalog (~70 ids) always exceeds the cap, so a purely scored subset silently decided which capabilities the agent *had*. Measured 2026-09-17: `script.run` scored only when the user's text contained `script`/`js`/`eval`, so an ordinary request (“fix the failing test”) mounted no shell at all — executor, Guard-2 path and PTY host all correct, agent still had no terminal. Priority order is `previouslyUsed` (the model is mid-loop on it; losing it mid-turn breaks the loop it was selected for) ⇒ pinned ⇒ scored. Pinning never invents a tool: an unregistered id is absent.
 - A tool with no handler is a **bug**, not a placeholder.
 - External MCP tools are registered as `family: external` with the server label in the description and **never shadow** a native id.
 
@@ -188,11 +190,24 @@ understand → workspace preflight → plan → choose strategy
 | `file_ops.write` | false | write | medium | `{ path, content }` |
 | `file_ops.delete` | false | delete | high | `{ path }` |
 
-**Script sandbox** (`family: script`)
+**Shell execution** (`family: script`) — v3.80: `code` is a **shell command line**, not JavaScript, and it runs on the one PTY plane (§4.5 of the product spec) on the automation profile with `Agent` provenance.
 
 | id | readOnly | operation | risk | schema |
 |---|---|---|---|---|
-| `script.run` | false | terminal_shell | high | `{ code }` |
+| `script.run` | false | terminal_shell | high | `{ code }` — shell command line |
+
+The id is historical. The rquickjs `everyaios-script` sandbox is unchanged and still backs `forge.run_js` and the automation runtime's `run_code` steps — internal deterministic workflows, not agent shell calls.
+
+**Observing the plane (read-only).** The coordinator reads the plane's *state* — never a second way to cause a shell effect — over the relay's `terminal/*` arm, served from `everyaios_core::terminal::TerminalPlaneObserver` (the same row builders the Shell view reads, so the two façades cannot drift):
+
+| method | params | returns |
+|---|---|---|
+| `terminal/status` | `{}` | `{ attached, count, ptys[] }` — `attached: false` on a host with no PTY host |
+| `terminal/commands` | `{ ptyId, limit? }` | `{ ptyId, cwd, count, commands[] }` (rows carry `trusted`) |
+| `terminal/last_command` | `{ ptyId, maxChars? }` | `{ ptyId, block \| null }` — `null` is absent evidence, not an empty success |
+| `terminal/history` | `{ ptyId, limit?, maxChars? }` | `{ ptyId, block \| null }` |
+
+There is deliberately **no run method on this arm**: a privileged effect stays the ticketed `script.run` tool (`tool/exec` → `tool/commit` → Guard-2), so an observer can never become a second, unticketed executor. A per-session read on a host with no plane is refused; `terminal/status` is not, because "no shell here" is a fact rather than an error.
 
 **Search** (`family: search`)
 

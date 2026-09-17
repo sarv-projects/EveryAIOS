@@ -1828,6 +1828,142 @@ Both remain open with that measured boundary written into their rows.
 
 ---
 
+## 2Y. Implementation wave 19 (2026-09-17) — the agent gets a terminal it can actually see
+
+**Task:** build the coordinator `script.run` tool and the `terminal/*` RPC arm so agent shell
+commands route through the persistent PTY plane (P54.5).
+
+### The row was wrong about *which* thing was missing
+
+`TODO.md` P54.5 said no `script.run` tool and no `terminal/*` arm exist. Both were literally
+true of `packages/coordinator/src` and of the relay — and both were beside the point. What
+the coordinator needed already existed as far as the *tool* goes:
+
+| Layer | State before this wave |
+|---|---|
+| `script.run` in the Rust `ToolRegistry` | **registered** — `family: script`, `operation: terminal_shell`, risk high |
+| Dispatch | **implemented** — `dispatch_script` → `TerminalExecutor::run` → the one PTY plane |
+| Guard path | **ticketed** — `tool/exec` → `tool/commit` → Guard-2 |
+| Host wiring | **attached at boot** — `relay.attach_terminal(TerminalPlaneExecutor::new(Arc::clone(&state.terminal), …))` |
+| The coordinator *selecting* it | **absent** — see below |
+| The coordinator *observing* the plane | **absent** — no arm at all |
+
+So the seam was two real gaps, not a missing executor.
+
+### (a) `script.run` was mounted only when you said the word "script"
+
+`resolveActiveTools` scores the registry against the user's text and keeps the top
+`MAX_ACTIVE_TOOLS = 20`. The registry is ~70 ids (`everyaios_mcp::all_tools()` is 51, plus
+`script.run`, `file_ops.*`, `search.query`, `office.*`, `desktop.*`, `connector.*`, plus the 4
+first-class tools), so **the cap always bites** and the model received a keyword-scored subset.
+`script.run` gained score only from `\b(script|js|eval)\b` or a description match, so:
+
+- `"fix the failing test in the parser"` → **no shell mounted at all**
+- the same for `ask`/`plan`/`todo`/`subagent`, which §17.4.1 calls part of the turn loop
+
+This is why "the agent had no terminal — watch the agent work was not a property the product
+had" (`SPEC-CHANGELOG.md`). The executor was correct; the model never saw it. And because
+`previouslyUsed` is **never passed from `chat.ts`** (`resolveActiveTools(listed, text)`), a
+tool that is not selectable in round 1 could never become sticky in a later round — so it was
+not a slow path, it was an unreachable one.
+
+**Fixed** with `LOOP_PINNED_TOOL_IDS`: the four first-class tools plus `script.run`,
+`file_ops.read`/`list`/`write`/`replace`, `search.query` are mounted every turn; scoring fills
+the remaining slots; `previouslyUsed` stays the **top** priority class (a tool the model is
+mid-loop on must not be dropped — the pre-existing test asserted exactly that and caught my
+first version of the pinning, which would have evicted it). Selection remains deterministic
+and `sortToolsStable`-ordered, so prompt-cache byte-stability is untouched. Pinning never
+invents a tool: an unregistered id is simply absent.
+
+**Also corrected a lying catalog entry.** The registry still described `script.run` as
+*"Evaluate JavaScript in the rquickjs sandbox (no host browser)"* with `code` = *"JavaScript
+source"* — but `dispatch_script` has executed `code` as a **shell command line** on the PTY
+plane since v3.80. The model was being told to send JavaScript to a tool that runs it as
+shell. Both strings now say shell; `ARCH/17` §17.4.2 and the §17.1 `everyaios-script` row were
+corrected with them (the crate still backs `forge.run_js`/`run_code` — the *id* is historical).
+
+### (b) `terminal/*` — read-only, and that is the design
+
+New `everyaios_core::terminal::TerminalPlaneObserver` over `PtyHost`
+(`plane_status`/`session`/`commands`/`last_command`/`history`), served from the relay as
+`terminal/status` · `terminal/commands` · `terminal/last_command` · `terminal/history`.
+
+**The arm deliberately has no run method.** The privileged path is the ticketed `script.run`
+tool; adding `terminal/run` would be a second, unticketed way to cause a privileged effect,
+which the no-bypass invariant forbids. So the observer *cannot* run anything by construction —
+it is the observation half of the seam, not a parallel executor.
+
+Two things fell out of doing it as a shared read model rather than a second projection:
+
+- The Shell view's four Tauri read commands (`terminal_status`, `terminal_commands`,
+  `terminal_last_command_context`, `terminal_history_context`) now serialize the **same**
+  structs the arm does. A session row the model is told about cannot describe a different
+  shell than the tab strip draws.
+- `attached: false` is a **fact** on a host with no PTY host (`detached_plane_status()`) rather
+  than `count: 0, ptys: []`, which reads as "a shell with nothing running". Per-session reads
+  do refuse there, because a session id on a host with no shell is a caller bug.
+
+`PtyHost::status()` already existed returning `Vec<(String, String, TerminalBackend)>`, so the
+observer's method is `plane_status()` — an inherent method silently wins method resolution over
+a trait method, and naming it `status()` would have returned the wrong type rather than failing
+to compile.
+
+### (c) The agent uses it
+
+The plane's live state is injected below `CACHE_BOUNDARY` as a logged `terminal_plane` block:
+whether a shell exists, its own agent/task session, its cwd, and what the **shell itself**
+reported about the last command. Without it `script.run` runs one command and returns, so the
+agent has no idea it already has a shell, where it is, or what its last command exited with —
+and re-runs work. No plane ⇒ no block (never an empty block, which would assert a shell with
+nothing in it); a throwing read is best-effort and never fails the turn.
+
+### Verified (commands actually run)
+
+- `cargo test --workspace --no-fail-fast` → **all green, 0 failed**, including the **2 new
+  frame-level relay dispatch tests** over real JSON-RPC (`relay_dispatches_terminal_plane_requests`,
+  `relay_reports_a_detached_terminal_plane_honestly`) and **2 new real-PTY read-model tests**
+  (`plane_observer_reads_a_real_session`, `plane_observer_distinguishes_empty_from_detached`,
+  the first spawning a real shell and asserting `last_command() == None` with integration off —
+  absence of evidence, not an empty success).
+- `cargo test` in `src-tauri` → **64 passed / 0 failed / 1 ignored** + `registration_sync` 2/2.
+- `cargo clippy --workspace --all-targets -- -D warnings` → clean; `cargo fmt --all -- --check` → clean (both trees).
+- coordinator `tsc --noEmit` → **0**; `src/tools.test.ts` **16 pass** (4 new: pinned-tool reachability
+  for `"fix the flaky test in the parser"`, no-invented-tools, cap-below-pins, and the pre-existing
+  `previouslyUsed` test); `src/chat.test.ts` **26 pass** (3 new: the block lands below the boundary and
+  reads the *agent* session, the detached host injects nothing, a throwing read is non-fatal).
+- `node scripts/check-doc-sync.mjs` → exit 0 (**1429 = 1221 + 208** unchanged; no checkbox flipped).
+  `node scripts/ipc-parity.mjs` → **341 registered / 0 broken / 57 ghost** — unchanged, since this
+  wave added relay RPC arms (sidecar transport), not Tauri commands.
+
+### Not verified / explicitly open
+
+- **Windows ConPTY (P68.7)** — no Windows host here. The observer itself is platform-neutral and
+  already exercised against a real PTY on Linux; the shell-integration reporting it reads is not.
+- **Splits (P68.8) remain open** — there is still no split primitive on either plane.
+- **`bun` is not installed in this checkout**, so coordinator suites ran through `npx -y bun`
+  (v1.4.2). `packages/core-*` (vitest) remain unrunnable here as before.
+- **`cwd` does not persist between `script.run` commands.** `TerminalPlaneExecutor::run` spawns a
+  fresh automation-profile session per command (`SpawnOpts { origin, integration }` carries no
+  cwd), so `cd x` in one call does not affect the next. That is defensible (each command is
+  reproducible from a clean automation shell) but it is a real behavioural limit and it is now
+  stated here rather than left to be discovered.
+
+### Commits (vendor-neutral, pushed to `origin/main`)
+
+- `df7ff10` `feat(core): serve the terminal plane over a read-only terminal/* arm (P54.5)`
+- `12b5218` `feat(coordinator): mount the loop's own tools every turn and read the shell (P54.5)`
+
+### Disk
+
+`/` had hit **100% (0 bytes free)** — `git add` itself failed with `ENOSPC`, which is also what
+broke the `src-tauri` test link. Reclaimed **~8.8 G**: `crates/target/debug/incremental` (4.3 G),
+`src-tauri/target/debug/incremental` (466 M), `crates/target/doc` + `tmp`, the `examples`/
+`acpx`/`bin` dirs, and the extensionless **linked** artifacts in both `deps/` trees (60 files,
+4.36 G — test/bin binaries, rebuildable). All `rlib`/`rmeta` were kept, so `check`/`clippy`/`fmt`
+stayed fast. `/` is now **21 G used / 8.8 G free (71%)**; `/tmp` has 73 G free.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
@@ -1880,6 +2016,7 @@ Both remain open with that measured boundary written into their rows.
 ---
 
 ## 5. File Change Ledger (Most Recent First)
+- **2026-09-17 wave 19 (P54.5 coordinator→PTY seam — see §2Y, committed `df7ff10` + `12b5218`, pushed):** `crates/everyaios-core/src/terminal.rs` (new `TerminalCommandView` / `TerminalSessionView` / `TerminalPlaneStatus` read models, `detached_plane_status()`, `TerminalPlaneObserver` trait, `impl … for PtyHost`, 2 real-PTY tests) · `crates/everyaios-core/src/chat.rs` (`terminal_plane` relay field + `attach_terminal_plane`, `terminal_rpc` façade with `NO_TERMINAL_PLANE`, the `terminal/*` arm before the `method not found` catch-all, 2 frame-level relay tests) · `crates/everyaios-core/src/tools.rs` (honest `script.run` description + `code` arg description; it said rquickjs/JavaScript) · `src-tauri/src/lib.rs` (attach the observer over the same `Arc<PtyHost>` the executor holds, before the relay is published) · `src-tauri/src/terminal_cmds.rs` (the 4 read commands now serialize the shared structs) · `packages/coordinator/src/tools.ts` (`LOOP_PINNED_TOOL_IDS` + pinning in `resolveActiveTools` with `previouslyUsed` as the top class; `TerminalPlaneStatus`/`TerminalSessionView` types; `terminalPlaneStatus`/`terminalLastCommand`) · `packages/coordinator/src/chat.ts` (plane state injected below `CACHE_BOUNDARY` as a logged block) · `packages/coordinator/src/context-trace.ts` (`terminal_plane` context source) · `packages/coordinator/src/{tools,chat}.test.ts` (7 new tests) · `desktop_app/ARCH/17-NATIVE-AGENT.md` (§17.4.1 loop-pinning rule + why; §17.4.2 shell-execution heading, corrected row, `terminal/*` read-only table; §17.1 `everyaios-script` row un-linked from `script.run`) · `desktop_app/TODO.md` (P54.5 row + P54 summary row) · `desktop_app/CURRENT_RUN.md` (§2Y + this ledger entry).
 - **2026-09-16 implementation wave 3 (this session, uncommitted — see §2E):** `crates/everyaios-vault/src/keyring.rs` (`reveal_for_metadata_probe` + shared `highest_priority_credential`, 6 tests) · `crates/everyaios-vault/src/broker.rs` (`ModelsProbe`, `Broker::probe_models`/`models_url`, `ProviderEndpoint::models_url`, `credential_safe_url`, `BrokerError::InsecureEndpoint`, 8 tests) · `crates/everyaios-vault/src/lib.rs` (exports) · `crates/everyaios-catalog/src/fetch.rs` (shared `endpoint_probe_result`, public `count_models`) · `crates/everyaios-catalog/src/lib.rs` (exports) · `src-tauri/src/catalog_cmds.rs` (`probe_provider_vault`, `observation_from_probe`, `sweep_connected_providers`, `spawn_observation_sweep`, `spawn_boot_observation_sweep`, `record_observation_in` takes the registry, 3 tests) · `src-tauri/src/lib.rs` (boot + setup/unlock sweep hooks; `AppHandle` on `vault_setup`/`vault_unlock`) · `DESKTOP-APP-SPEC.md` + `ARCH/09-FEATURE-MATRIX.md` + `TODO.md` (A11 vault-mediated probing).
 - **2026-09-16 implementation wave 2 (this session, uncommitted — see §2D):** `crates/everyaios-catalog/src/observations.rs` (**new** — durable per-provider observation store, `apply_observations`, `health_of`, `apply_observation_health`, 8 tests) · `crates/everyaios-catalog/src/{lib,probe,routing_feed}.rs` (module + exports; **vacuous `hard_caps_verified` fix** + test; `health_of` accessor) · `src-tauri/src/catalog_cmds.rs` (record observation on probe, `observed_registry`/`observation_file`, `observedAt`/`reachable`/`observedModelCount` row fields, 4 write-back tests) · `src-tauri/src/discovery_cmds.rs` (observed registry + observation-derived routing health) · `src-tauri/src/vault_cmds.rs` (rationale'd `#[allow]` for the 10-arg IPC command) · `ui/src/lib/providers.ts` + `ui/src/components/panels/settings-providers.tsx` (`observedAt`/`reachable`/`observedModelCount` + `last check failed` badge) · `DESKTOP-APP-SPEC.md` + `ARCH/09-FEATURE-MATRIX.md` + `TODO.md` (A11 landed state + remaining gap) · **computer-use autonomous path:** `crates/everyaios-desktop/src/{lib,policy}.rs` (provenance through the audit path) · `crates/everyaios-core/src/chat.rs` (`ChatRelay::attach_desktop`) · `src-tauri/src/desktop_cmds.rs` (`DesktopEngineBackend`, `publish_desktop_backend`, helper tests) · `src-tauri/src/lib.rs` (boot attach before relay publish).
 - **2026-09-16 implementation wave (this session, uncommitted — see §2C):** `crates/everyaios-vault/src/broker.rs` (incremental stream API + 2 tests) · `crates/everyaios-core/src/openai_server.rs` (tool calling + SSE pieces + 6 tests) · `crates/everyaios-core/src/lib.rs` (re-exports) · `src-tauri/src/openai_cmds.rs` (forward tools, shape `tool_calls`, override `stream`) · `crates/everyaios-core/tests/p10_bench.rs` (best-of-5) · `packages/coordinator/src/live-agent-harness.test.ts` (binary-presence skip gate) · `.github/workflows/ci.yml` (vendored `core-*` test step) · `scripts/check-doc-sync.mjs` (TODO revision stamp guard) · `TODO.md` · `DESKTOP-APP-SPEC.md` · `ARCH/09-FEATURE-MATRIX.md` · `.agents/skills/browser-computer-use/SKILL.md` · `crates/everyaios-core/src/agui.rs` + `chat.rs` (AG-UI build-state honesty) · fmt-only: `everyaios-cdp/src/{browser,lib}.rs`, `everyaios-core/src/{git_queue,governor,shell_integration,terminal,worktrees}.rs`, `everyaios-memory/src/avoid.rs`, `everyaios-vault/src/lib.rs` · clippy: `everyaios-guard/src/{ticket,netfloor}.rs`, `everyaios-desktop/src/{apps,launch}.rs`, `everyaios-desktop/tests/live_linux_e2e.rs`, `everyaios-core/src/sync_transport.rs`.
