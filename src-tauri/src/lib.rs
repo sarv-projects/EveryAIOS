@@ -42,6 +42,11 @@ mod replay_cmds;
 // P55.8 — the SearXNG endpoint config + searx.space instance feed surface.
 mod scheduler_cmds;
 mod search_cmds;
+// P65 — Settings Control Center read-models + the one mutation funnel
+// (ARCH/17 §17.12). Declared here like every other command family; the
+// registration itself lives in `commands.rs` and is checked by
+// `tests/registration_sync.rs`.
+mod settings_cmds;
 
 mod skills_cmds;
 mod state;

@@ -39,6 +39,7 @@ use crate::openai_cmds;
 use crate::replay_cmds;
 use crate::scheduler_cmds;
 use crate::search_cmds;
+use crate::settings_cmds;
 
 use crate::skills_cmds;
 use crate::storage_cmds;
@@ -419,5 +420,21 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         crate::model_cmds::model_estimate_fit,
         crate::model_cmds::model_gallery_parse,
         crate::model_cmds::model_best_pick,
+        // P65 — Settings Control Center (ARCH/17 §17.12): the read-models for
+        // providers / agents / connections / schedules / extensions, plus the
+        // single mutation funnel (`settings_default_model_set`,
+        // `settings_schedule_set_enabled`). Same registration surface as every
+        // other family — no second handler, no second registry.
+        settings_cmds::settings_providers_list,
+        settings_cmds::settings_default_model_get,
+        settings_cmds::settings_default_model_set,
+        settings_cmds::settings_agents_list,
+        settings_cmds::settings_agent_get,
+        settings_cmds::settings_agent_loadout,
+        settings_cmds::settings_connections_list,
+        settings_cmds::settings_schedules_list,
+        settings_cmds::settings_schedule_get,
+        settings_cmds::settings_schedule_set_enabled,
+        settings_cmds::settings_extensions_list,
     ]
 }

@@ -581,7 +581,133 @@ extracting, confines archive members); `everyaios-desktop`'s platform twins fail
 closed with typed, explanatory errors; `launch.rs` env scrubbing is live and
 correctly name-filtered.
 
+## 2G. Implementation wave 4 (2026-09-17) — P65 Settings reachability + typed UI seam
+
+**Scope taken:** finish the in-flight Tier-2 (P65) item — make the Settings
+Control Center backend actually reachable, and give the UI one typed seam onto
+it. This closes the defect that the prior commit (`792dbaf`) left behind.
+
+### The defect inherited at HEAD
+`792dbaf` added `src-tauri/src/settings_cmds.rs` (1,608 LOC, 11 `#[tauri::command]`
+fns, all the §17.12.2 read models + the §17.12.3 mutation funnel) but **never
+declared the module** and **never registered the commands**. `grep -r settings_cmds
+src-tauri/` returned zero matches. It was invisible to the compiler, unreachable
+from the UI, and would have **failed** `tests/registration_sync.rs` — which walks
+`src/` off the filesystem, not the module tree, so an undeclared file still counts.
+
+### Changed
+1. **Wired the module (the actual fix).**
+   - `src-tauri/src/lib.rs`: `mod settings_cmds;` (with the reason).
+   - `src-tauri/src/commands.rs`: `use crate::settings_cmds;` + all **11** commands
+     added to the single `generate_handler![...]` list. One handler, one registry —
+     no second registration surface was created.
+2. **Fixed a real contract violation found while writing the TS types.**
+   `RuntimeLocation` carried `#[serde(tag = "kind", rename_all = "snake_case")]`.
+   On an enum that renames the **variants** only, never the struct-variant fields,
+   so it was the one struct in the module emitting snake_case (`install_root`,
+   `linux_path`, `windows_launcher`) where ARCH/17 §17.12.4 mandates camelCase
+   (`installRoot`, `linuxPath`, `windowsLauncher`). Each variant now carries its own
+   `rename_all = "camelCase"` (variant-level, so it works on any serde 1.x — no
+   `rename_all_fields` version floor). Safe against the reader: `runtime_location_from_json`
+   is a **manual** JSON parser, not a `serde::from_value`, so deserialization is unaffected.
+3. **New `ui/src/lib/settings.ts`** — the typed client for all 11 commands, mirroring
+   §17.12.2 exactly (incl. the §17.12.4 `RuntimeLocation` union, the §17.12.3 mutation
+   envelope, and the §17.12.5 loadout rows). Honours two repo rules: keys cross by
+   `authRef` reference only, and **preview invents nothing** — with no shell it returns
+   empty inventories so panels render their honest empty state instead of a fabricated
+   green row.
+4. **`ui/src/globals.css`** — 3 stale comments corrected (they said "orange" for a
+   colour that has resolved to `--brand` since P66.5; comment-only, no behaviour change).
+
+### Evidence actually executed (fresh, this session)
+- Replicated `registration_sync.rs`'s exact parsing in Node: **341 defined == 341
+  registered · 0 unregistered · 0 extra** (was **341 defined / 330 registered → 11
+  unregistered → the test would have failed**). Both of that test's assertions pass. `[V]`
+- `node scripts/ipc-parity.mjs` → exit 0 · **registered 341 · broken 0 ·
+  unregisteredDefinitions 0 · deadEvents 0 · ghosts 60**. Ghosts were **71** immediately
+  after registration and fell to **60** once `settings.ts` landed — i.e. the 11 new
+  commands went from registered-with-no-caller to UI-invoked, returning the ghost set to
+  exactly its pre-existing size. That is independent evidence the UI seam is real. `[V]`
+- `node scripts/check-doc-sync.mjs` → exit 0 · 166 capabilities in sync ·
+  `1429 = 1221 done + 208 open` · both v3.80 stamps · kernel gate clear. `[V]`
+- Dependency pre-flight on the orphaned module before wiring it: all 8 cross-module
+  helpers it calls exist (`acp_cmds::{agent_installed,launch_registry,runtime_location_for}`,
+  `agent_backend_cmds::{backend_binding_view,has_managed_binding}`,
+  `catalog_cmds::provider_rows`, `guard_cmds::guard_set_policy_rules`,
+  `scheduler_cmds::scheduler_handle` — the first six are `pub(crate)`), and every
+  `AppState` field it touches exists (`vault`, `guard_service`, `catalog`, `mcp_servers`,
+  `mcp_remote_tokens`, `acp_sessions`). `[V]`
+
+### NOT VERIFIED — stated plainly, not papered over
+- **No Rust toolchain on this host** (`cargo`, `rustc`, `rustup` all absent). Therefore
+  **`cargo check`, `cargo clippy`, `cargo fmt` and `cargo test` were NOT run** on any
+  change in this wave. The Rust edits are verified **statically only** (symbol
+  existence, `AppState` field existence, registration-set balance) — never compiled.
+  Treat all Rust in §2G as `[UNVERIFIED]`.
+- **No `node_modules` and no `tsc`** (only `@tauri-apps` is installed). Therefore
+  **`ui/src/lib/settings.ts` and the `globals.css` edit were NOT type-checked.** Under
+  this repo's `strict` + `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`
+  settings, an un-run `tsc` is not evidence. Treat the TS in §2G as `[UNVERIFIED]`.
+- `bun` is absent, so the coordinator suite could not be run either.
+- Only the two Node gates above could execute; that is the whole of this wave's evidence.
+
+### Findings worth recording
+1. **P66.5 (Blue semantic theme) is already implemented, and implemented the right way.**
+   The plan describes it as "complete the removal of legacy hardcoded orange CSS utility
+   classes" across the views. Measurement says otherwise: there are **975** `orange-*`/`amber-*`
+   utility hits, but `ui/src/globals.css` already retargets them centrally —
+   `--color-orange-500: hsl(var(--brand))`, `--color-orange-600: hsl(var(--brand-hover))`,
+   `--color-amber-500: hsl(var(--warning))`, under the comment *"Keep legacy utility names on
+   the spec's semantic palette."* With `--primary: 221 83% 53%` (light) / `217 91% 60%` (dark)
+   this is **exactly** the cool-blue the plan mandates. So the classes stay in markup while
+   rendering blue — a central alias, not 975 edits. **A bulk find-and-replace here would have
+   been a regression**: `amber` is also legitimately `--warning` (e.g. `schedules-section`
+   renders "paused" as amber), so blanket-rebranding it would have destroyed real warning
+   semantics. No sweep was performed. `[V]`
+2. **The plan's file paths are stale** (verified one by one): there is no `desktop_app/`
+   directory (the repo root *is* the app); `ARCH/14-REPO-MAP.md`, `ARCH/15-BLUEPRINT-ENGINE.md`,
+   `ARCH/11-PROMPT-ANATOMY.md`, `ARCH/03-SECURITY-ROUTING.md`, `ARCH/05-BROWSER-ENGINE.md`
+   do not exist (real: `13-PROMPT-ANATOMY`, `03-BYOK-KEYRINGS`, `08-BROWSER-LAYER`, and there is
+   no repo-map or blueprint-engine doc); `.agents/skills/*` does not exist in this repo; the
+   `ui/src/components/settings/*-tab.tsx` targets do not exist (real: `components/panels/settings-*.tsx`);
+   `ui/src/components/panels/activity-panel.tsx` and `ui/src/components/viewports/terminal-viewport.tsx`
+   do not exist; `scheduler.rs` → `scheduler_service.rs`; and `everyaios-computeruse/src/lib.rs`
+   is really `crates/everyaios-desktop/src/lib.rs` (package renamed, directory not). `[V]`
+3. **The remaining Tier-2 UI drift is the panels not yet consuming this seam.** The four
+   Settings surfaces still read their own libs (`lib/providers`, `lib/scheduler`, `lib/mcp`,
+   `lib/acp`). `settings.ts` is the typed seam they should migrate onto; none was rewritten
+   in this wave, because doing so without a type-checker is not a verifiable change. `[CODE]`
+
+---
+
 ## 3. Next Exact Steps (What to do next)
+
+> ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
+>
+> Everything below requires a **Windows host** or a Windows target build. This
+> session ran on Linux with no Rust toolchain, so none of it was attempted.
+> These are **not** bugs and **not** blocked on code — they are blocked on the
+> environment. Each stays `unverified` until a real Windows acceptance record
+> exists (the readiness contract makes an unverifiable implementation worse than
+> an honest `unverified`).
+>
+> **Windows-only deliverables deferred:**
+> - `P66.6–P66.9` — real Windows acceptance runs (DOCX/XLSX/PPTX/PDF corpus, CDP
+>   browser, Computer Use) against packaged binaries.
+> - `P50.5.8` — cross-platform release matrix; the Windows and macOS legs. Only the
+>   Linux leg has any local evidence.
+> - Windows Job Objects sandbox; ConPTY; `Windows.Graphics.Capture` (WGC) capture;
+>   `ShellExecuteEx` launch + `SW_SHOWNOACTIVATE`; Windows App Paths / WSL
+>   launchability probes; NSIS/MSI installers; the auto-updater.
+> - Windows UI Automation + OCR locator ladder for Computer Use (P57/P59).
+> - `RuntimeLocation` variants `windows_path` / `windows_registry` — **typed and
+>   wired this wave** (`settings.ts`), but their probes cannot execute here, so
+>   they remain `unverified` in behaviour even though the wire contract is now correct.
+>
+> **Also environment-blocked (not Windows):** macOS Seatbelt / Accessibility-TCC /
+> `open -g` / DMG; the real Office producer corpus; live browser attach on a
+> display (L7 SKIP); provider live legs; multi-GB local model download + serve;
+> the `packages/core-*` suites (vitest absent from this checkout).
 1. **P66.6–P66.9 — Real Windows acceptance runs:** execute real DOCX/XLSX/PPTX/PDF, CDP browser, and Computer Use tests on a Windows host.
 2. **Reconnaissance remainder:** continue reading the unread tails named in §2 (`work_gateway.rs` beyond ~1500, `broker.rs` beyond ~400, `xlsx/patch.rs` test tail, `acp/client.rs` prompt loop, `provider_seed.rs`, `search/src/lib.rs`, the rest of `store.ts`, and the remaining UI components).
 3. **~~Fix the drift listed in §2 before the next feature wave~~ — DONE 2026-09-16 (§2C).** The TODO stamp is v3.80 and now guarded by `check-doc-sync.mjs` check 7; the SKILL.md crate path is fixed; the SPEC A1/A11/A8 notes are reconciled; `git status` is clean of the previously-dirty `sandbox.rs` / `p45-live-measurements.json`.

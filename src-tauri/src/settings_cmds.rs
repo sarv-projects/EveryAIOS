@@ -61,38 +61,51 @@ pub struct SettingsReadModel {
 /// display string: discovery is read-only, and `installed / discovered /
 /// launchable` stay three distinct facts (provenance + exact path + measured
 /// version only, plus `verifiedAt` where a verify probe ran).
+// N.B. the container-level `rename_all` on an enum renames the *variants*
+// only (`Managed` → `managed`); it does NOT rename the fields inside struct
+// variants. Each variant therefore carries its own `rename_all = "camelCase"`
+// so `install_root`/`linux_path`/`windows_launcher` serialize as
+// `installRoot`/`linuxPath`/`windowsLauncher` per ARCH/17 §17.12.4. Without it
+// this was the one struct in the module that emitted snake_case to the UI.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RuntimeLocation {
+    #[serde(rename_all = "camelCase")]
     Managed {
         executable: String,
         install_root: String,
         /// Measured version only; `""` = installed but version never measured.
         version: String,
     },
+    #[serde(rename_all = "camelCase")]
     WindowsPath {
         executable: String,
         source: String,
     },
+    #[serde(rename_all = "camelCase")]
     WindowsRegistry {
         executable: String,
         source: String,
     },
+    #[serde(rename_all = "camelCase")]
     UserPath {
         executable: String,
         source: String,
     },
+    #[serde(rename_all = "camelCase")]
     PackageManager {
         manager: String,
         package: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         version: Option<String>,
     },
+    #[serde(rename_all = "camelCase")]
     Wsl {
         distro: String,
         linux_path: String,
         windows_launcher: String,
     },
+    #[serde(rename_all = "camelCase")]
     Unavailable {
         reason: String,
     },
