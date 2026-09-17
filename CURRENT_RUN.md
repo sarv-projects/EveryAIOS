@@ -1721,6 +1721,76 @@ under test is not a mounted capability.**
 
 ---
 
+## 2W. Implementation wave 18 (2026-09-17) — the ghost-command list was wrong,
+## and the corrected list is triaged
+
+### 2W.1 Two bugs in the scanner, not sixty in the app
+`ipc-parity.mjs` counted a command as invoked **only** when its name was the
+*literal first argument* of `invoke(...)`. Two real call shapes were therefore
+invisible:
+
+```ts
+invoke<Record<string, InstallState>>("acp_install_status")            // ends in >>
+invoke<{ sessions?: Array<import('./store').Session> }>('session_list')  // > and ( in the type
+```
+
+The old generic pattern was `<[^>(]*>` — it cannot span a nested `>` nor a `(`
+inside the type, so it fell through and both commands were reported as ghosts
+while the UI called them on load. The generic argument list is now skipped **by
+balance**, recovering those call sites: **284 direct calls, up from 281**.
+
+A second, deliberately weaker pass records names *referenced* in the UI without a
+literal `invoke` — the vault gate builds its command in a ternary
+(`gate === 'setup' ? 'vault_setup' : 'vault_unlock'`), which the UI calls every
+time the gate opens. Weak signal, so it is reported as its own bucket rather than
+merged, which would overstate the evidence.
+
+**Corrected: 341 registered · 284 direct · 0 broken · 57 ghost.** The previously
+reported "60 ghost commands" included 3 that the UI does call.
+
+### 2W.2 The corrected list, triaged by whether *anything* calls it
+Each ghost is now checked against every Rust source except its own definition and
+the registration list, which splits it into the three responses it actually
+needs:
+
+| Bucket | Count | Meaning |
+|---|---|---|
+| **indirect** | 3 | UI calls it without a literal first argument — verify by hand (`vault_setup`, `vault_unlock`, plus one keyword-array false match: `version`) |
+| **internal** | 9 | reachable from Rust (agent/tool plane) — **not a defect** |
+| **dead** | 45 | registered, defined, called from **no plane at all** |
+
+The 9 internal ones: `catalog_status`, `agui_send`, `agui_listen`, `mcp_refresh`,
+`mcp_remote_call_commit`, `audit_compact`, `tasks_sweep`, `repomap_build`,
+`file_outline`.
+
+**The 45 dead split into two clear groups.** 24 are the entire **`work_*`
+surface** (`work_create` / `work_get` / `work_archive` / `work_locator` /
+`work_nodes` / `work_node_*` / `work_authority_*` / `work_clients` /
+`work_client_*` / `work_capabilities` / `work_capability_*` /
+`work_review_resolve` / `work_steer*` / `work_manifest_*` / `work_attachment_*`)
+— a whole P49 Work Gateway IPC plane with no caller on any plane. The other 21
+are singles: `catalog_sync_plan`, `catalog_sync_refresh`, `provider_profiles_list`,
+`core_boot_report`, `scan_text`, `probe_vault`, `mcp_remote_call`, `skills_learn`,
+`vault_key_rotate`, `acp_registry_status`, `acp_registry_install_plan`,
+`acp_install`, `scheduler_fire_webhook`, `tasks_start`, `tasks_complete`,
+`terminal_get_shell_integration`, `model_aliases_resolve`, `ai_markers_scan`,
+`provider_health_probe`.
+
+**No command was removed.** "No caller" is not "retired": the `work_*` plane may
+be a deliberate API for external clients, and deciding which of the 45 are
+missing coverage versus intentionally-not-yet-wired is a product call, not a
+dedup. What this wave fixes is the *measurement* — the previous number could not
+support that decision, and now it can.
+
+### Evidence (wave 18)
+| Gate | Result |
+|---|---|
+| `node scripts/ipc-parity.mjs` | **exit 0** · 341 registered · 284 direct · **0 broken** · 57 ghost (3 indirect / 9 internal / 45 dead) |
+| `node scripts/e2e/security-gate.mjs` | **PASS** all legs, incl. `S5 — ipc-parity: 0 broken / 0 unregistered` |
+| `p50-gates.yml` consumer | unchanged — the workflow only asserts **exit 0** |
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
