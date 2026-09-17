@@ -1,6 +1,6 @@
 # 02 — Module Layout (The 8 Full-Stack Modules)
 
-> **The 8 Full-Stack Modules Architecture:** Every module in the repository belongs to exactly one of the 8 Full-Stack Modules. EveryAIOS functions as the **Universal Agentic OS & Desktop Harness ("Switzerland of AI")**, driving external coding agents while providing native Office primitives, tiered browsers, computer use, durable worktrees, and 7-layer Guard-2 security.
+> **The 8 Full-Stack Modules Architecture:** Every module in the repository belongs to exactly one of the 8 Full-Stack Modules. EveryAIOS functions as the **Universal Agentic OS & Desktop Harness**, driving external coding agents while providing native Office primitives, tiered browsers, computer use, durable worktrees, and 7-layer Guard-2 security.
 > **Rule:** A function that appears in two contexts is one implementation with thin façades, never two competing implementations.
 
 ## 2.1 The 8 Full-Stack Modules Mapping

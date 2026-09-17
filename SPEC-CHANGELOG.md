@@ -20,7 +20,7 @@ Each entry records the date or release marker, change category, affected section
 
 ## 2026-09-17 — Enterprise MNC Master Test Cases Specification & Agent Skills Alignment
 
-**Category:** testing + architecture specification; no capability rows added. **Affected:** new `desktop_app/TEST-CASES.md`, `.agents/skills/` (all 10 domain skills aligned), `.agents/agents/` (all 9 agent definitions aligned to 8 Full-Stack Modules and Switzerland of AI universal harness), `desktop_app/SPEC-CHANGELOG.md`. Capability identity remains **166**; live TODO count remains **1429 total = 1221 done + 208 open**.
+**Category:** testing + architecture specification; no capability rows added. **Affected:** new `desktop_app/TEST-CASES.md`, `.agents/skills/` (all 10 domain skills aligned), `.agents/agents/` (all 9 agent definitions aligned to 8 Full-Stack Modules and universal harness architecture), `desktop_app/SPEC-CHANGELOG.md`. Capability identity remains **166**; live TODO count remains **1429 total = 1221 done + 208 open**.
 
 **Decisions & Implementation.**
 1. **Enterprise MNC Master Test Cases Specification (`TEST-CASES.md`):**
@@ -40,7 +40,7 @@ Each entry records the date or release marker, change category, affected section
      - Cat 9: Security Membrane, SSRF Netfloor & Merkle Audit (zero-I/O netfloor AWS metadata block, lexical pathfloor SSH shield, Guard-2 ticket replay refusal, J6 ASCII smuggling neutralization, Merkle tamper detection).
      - Cat 10: Disaster Recovery, Air-Gapped Offline & Vault Privacy (100% offline SCIF development, high-speed SIGKILL crash resilience, 429 provider pool rotation, SQLCipher key rotation, DoD 5220.22-M secure workspace wipe).
 2. **Agent Skills & Personas Alignment (`.agents/`):**
-   - Updated all 10 domain skills (`architecture`, `ai-systems`, `typescript-tauri`, `rust-systems`, `office-documents`, `browser-computer-use`, `security`, `testing-verification`, `performance`, `ui-ux`) to reflect the 8 Full-Stack Modules and Switzerland of AI positioning.
+   - Updated all 10 domain skills (`architecture`, `ai-systems`, `typescript-tauri`, `rust-systems`, `office-documents`, `browser-computer-use`, `security`, `testing-verification`, `performance`, `ui-ux`) to reflect the 8 Full-Stack Modules and universal harness architecture.
    - Updated all 9 agent persona definitions (`everyaios-lead.ts`, `everyaios-architect.ts`, `everyaios-verifier.ts`, `everyaios-code-tester.ts`, etc.) to enforce the 8-dimensional test framework and strict vendor-neutral protocol.
 
 **Verification.** `node scripts/check-doc-sync.mjs` passed (166 capabilities in sync, kernel gate clear); `node scripts/ipc-parity.mjs` passed (321 commands registered); `tsc --noEmit` clean (0 type errors).

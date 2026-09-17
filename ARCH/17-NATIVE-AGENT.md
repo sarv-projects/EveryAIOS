@@ -8,7 +8,7 @@
 
 ## 17.0 Scope, purpose, and the one rule
 
-**Purpose.** EveryAIOS operates as the **Universal Agentic OS & Desktop Harness ("Switzerland of AI")**:
+**Purpose.** EveryAIOS operates as the **Universal Agentic OS & Desktop Harness**:
 
 1. **EveryAIOS Native as Universal Chief & Swarm Harness** — an orchestrator owned by us that handles multi-model routing, task DAG planning, Git worktree isolation (`worktrees.rs`), multi-run diff fusion, subagent supervision, and Guard-2 ticket enforcement. It does NOT compete with Claude Code, OpenAI Codex, or OpenCode by building a proprietary coding prompt/loop; it hosts and coordinates them.
 2. **External Specialist Agents** (Claude Code, OpenAI Codex, OpenCode, Grok Build, Cline/Roo, Aider …) — first-class coding runtimes that execute their own proven loops, tools, models, and authentication via ACP or stdio JSON-RPC.

@@ -1,7 +1,7 @@
 # ARCH/16 — Porting the async chat loop to Rust (ConversationEngine `run()` + `runChatStream`)
 
 > **Status: DE-PRIORITIZED / FROZEN (2026-09-17 Architecture Freeze).**
-> Under the 8 Full-Stack Module architecture, EveryAIOS is finalized as the **Universal Agent Harness and Desktop Cowork OS ("Switzerland of AI")**.
+> Under the 8 Full-Stack Module architecture, EveryAIOS is finalized as the **Universal Agent Harness and Desktop Cowork OS**.
 > The async multi-turn streaming conversation loop in `packages/coordinator/src/chat.ts` is robust, battle-tested, and fully operational.
 > Heavy compute, cryptographic verification, security guardrails, SQLCipher persistence, and document calculations are already executed in pure Rust (`crates/everyaios-engine`, `crates/everyaios-guard`, `crates/everyaios-vault`, `crates/everyaios-office`).
 > Rewriting the entire TypeScript chat loop in Rust (~3,400 LOC) is an unnecessary rewrite treadmill and is permanently de-prioritized.
