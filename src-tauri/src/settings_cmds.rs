@@ -1603,6 +1603,53 @@ mod tests {
         assert_eq!(v["lastError"], "boom");
     }
 
+    /// §17.12.2 — the shared row shape serializes camelCase, and `lastError` is
+    /// **omitted** (not `null`) when absent, so the UI treats "no error" as a
+    /// missing key rather than an empty one.
+    ///
+    /// This is also what keeps `SettingsReadModel` reachable: it is the
+    /// contract-named row shape every Settings inventory reuses, but the
+    /// commands build their rows as `serde_json::Value` (provider rows arrive
+    /// that way from `catalog_cmds`), so without a use site the type is dead
+    /// code — which `clippy -D warnings` in CI would reject.
+    #[test]
+    fn settings_read_model_uses_contract_field_names() {
+        let row = SettingsReadModel {
+            id: "anthropic".to_string(),
+            kind: "provider".to_string(),
+            state: "configured".to_string(),
+            health: "ready".to_string(),
+            last_error: None,
+            config_hash: config_hash_of("x"),
+            applied_live: true,
+            restart_required: false,
+        };
+        let v = serde_json::to_value(&row).unwrap();
+        for key in [
+            "id",
+            "kind",
+            "state",
+            "health",
+            "configHash",
+            "appliedLive",
+            "restartRequired",
+        ] {
+            assert!(v.get(key).is_some(), "missing {key}");
+        }
+        assert!(
+            v.get("lastError").is_none(),
+            "an absent error must be omitted, not serialized as null"
+        );
+
+        let failed = SettingsReadModel {
+            last_error: Some("probe failed".to_string()),
+            ..row
+        };
+        let v = serde_json::to_value(&failed).unwrap();
+        assert_eq!(v["lastError"], "probe failed");
+        assert_eq!(v["appliedLive"], true);
+    }
+
     #[test]
     fn agent_settings_shape_keeps_writes_flag_false() {
         let b = BackendBindingView {

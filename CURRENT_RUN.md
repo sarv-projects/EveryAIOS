@@ -839,6 +839,75 @@ no Rust was touched in this wave. `[UNVERIFIED]`
 
 ---
 
+## 2J. Implementation wave 7 (2026-09-17) — P65.2 Agent Two-Plane + a CI-breaking defect
+
+**Item taken:** P65.2 (Tier 2). Plan target `ui/src/components/settings/agents-tab.tsx`
+does not exist; the real surface is `ui/src/components/panels/agents-models-section.tsx`.
+
+### The consequence of wave-4's wiring, and why it mattered
+The module wired in §2G had **never been compiled**, so two things were true at once:
+its contract tests had never run, and any latent defect inside it was invisible. Once
+`mod settings_cmds;` exists, the file joins the build — so a latent `dead_code` finding
+becomes a **CI failure**, because the `rust` job runs
+`cargo clippy --all-targets --all-features -- -D warnings`.
+
+### FOUND AND FIXED — `SettingsReadModel` was dead code (would fail CI)
+`SettingsReadModel` (§17.12.2's shared row shape) was **declared and never used**: its
+only other occurrence in the whole file was a doc comment. The commands build rows as
+`serde_json::Value` — necessarily, because provider rows arrive as `Value` from
+`catalog_cmds` — so nothing ever constructed the struct. `mod settings_cmds;` is private,
+so the item is not publicly reachable and rustc reports it as dead code; with `-D warnings`
+that is a hard build failure.
+
+Fixed the honest way — **not** with `#[allow(dead_code)]`: added
+`settings_read_model_uses_contract_field_names`, which constructs the type and pins the
+§17.12.2 wire names plus the `skip_serializing_if` behaviour (an absent `lastError` must be
+**omitted, not `null`**, so the UI reads a missing key rather than an empty one). The type
+is now genuinely reachable **and** a previously untested contract surface is covered.
+
+### Verified by reading — P65.2's acceptance gate does hold in the implementation
+The gate is *"External agents retain their own auth credentials; no EveryAIOS key is copied
+to external agent configuration files."*
+- `BackendBindingView.writes_to_agent_config` is **hardcoded `false`** at its one production
+  construction site (`:807`) and asserted by `agent_settings_shape_keeps_writes_flag_false`,
+  which pins `writesToAgentConfig == false` on the serialized view. `[CODE]`
+- `backend_binding_view` reports **names only** — `injected_env_names` / `unexpressed` — plus
+  a `key_present` boolean and an optional `refusal`; no value ever crosses the boundary. `[CODE]`
+- The two-plane split is real, not cosmetic: `native_caps(is_inbuilt)` returns
+  `loop/planning/routing/memory-reasoning/verification/native-tools` for the inbuilt engine
+  and `own-loop/own-tools/own-model/own-permissions` for an external agent, while
+  `shared_caps()` returns `office-facade/browser-facade/computer-use-facade/memory-api/work`.
+  That is the §17.12 "agent-native plane + shared cowork plane" model expressed in code. `[CODE]`
+- `has_managed_binding` gates `modelOwner: managed` on a *verified* binding: config present,
+  channel env-injectable, no refusal, and the key either present or unnecessary. `[CODE]`
+
+### Also recorded — 13 contract tests were dormant
+`settings_cmds.rs` ends in a `#[cfg(test)]` module with **13 tests**, each mapping to a
+contract clause: `provider_state_never_invents_connected`, `model_owner_rule`,
+`readiness_never_claims_ready_without_occupancy`,
+`runtime_location_mapping_keeps_provenance_distinct`,
+`connection_state_never_false_connected`, `mutation_envelope_uses_contract_field_names`,
+`agent_settings_shape_keeps_writes_flag_false`, `loadout_rows_apply_from_next_turn`, and
+the new one added here. **None had ever executed**, because the module was never compiled.
+They now compile. Whether they *pass* is `[UNVERIFIED]` (§2G limits) — but a dormant suite
+that starts running is strictly better than one that silently never ran.
+
+### Evidence actually executed (static only — see limits)
+- Import audit: all 5 imports in `settings_cmds.rs` used (`Serialize` 11, `json` 33,
+  `Value` 40, `State` 11, `record_mutation` 2, `AuthKind` 2, `AppState` 18 refs). `[V]`
+- Dead-code audit: all **28** private fns have ≥2 refs (definition + call) — none orphaned. `[V]`
+- Declared-type audit: all **10** `pub` types now have ≥2 code use sites beyond their
+  declaration (was 0 for `SettingsReadModel`). `[V]`
+- `node scripts/check-doc-sync.mjs` → exit 0 · `node scripts/ipc-parity.mjs` → exit 0 ·
+  registered 341 · broken 0 · ghosts 60 (unchanged). `[V]`
+
+### NOT VERIFIED
+No Rust toolchain: these audits are **static**, not a compiler run. The `dead_code` call is
+inference from use-site counts plus `mod` privacy, not a `cargo clippy` result. `[UNVERIFIED]`
+No `tsc` either — no TS was changed in this wave.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
