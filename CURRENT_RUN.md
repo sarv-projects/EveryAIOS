@@ -773,6 +773,72 @@ import was removed (no dangling references).
 
 ---
 
+## 2I. Implementation wave 6 (2026-09-17) — P65.3 Channels & Connectors Inventory
+
+**Item taken:** P65.3 (Tier 2). Plan target files `ui/src/components/settings/connectors-tab.tsx`
+do not exist; the real surfaces are `ui/src/lib/connections.ts` (new in `792dbaf`) and
+`ui/src/components/panels/connectors-panel.tsx`.
+
+### Found: TWO incompatible types named `ConnectionRecord`
+`792dbaf` added a TypeScript `ConnectionRecord` in `ui/src/lib/connections.ts` while
+`settings_cmds.rs` implements the §17.12.2 `ConnectionRecord`. They disagree on all
+three axes, so importing "`ConnectionRecord`" from either module silently gave a
+different shape — precisely the contract drift `everyaios-types` exists to remove on
+the Rust side, reintroduced on the TS side.
+
+| | `lib/connections.ts` | §17.12.2 + Rust |
+|---|---|---|
+| `state` casing | `'Connected'` | `'connected'` |
+| `kind` axis | `connector \| mcp-server \| oauth-account \| store-entry` | `remote_mcp \| oauth_connector \| native_adapter \| message_channel` |
+| field set | `name`, `detail`, `source` | `transport`, `scopes`, `enabledConsumers`, `health`, `authRef?`, `configHash` |
+| `revoked` state | absent | present |
+
+`ConnectionState` collided too (both modules exported it).
+
+### Changed — the objective defect only
+Renamed the **display projection** so one name means one shape:
+`ConnectionRecord` → **`ConnectionView`**, `ConnectionState` → **`ConnectionViewState`**
+(`ui/src/lib/connections.ts`), and updated its single importer
+(`connectors-panel.tsx`: the import and `ConnectionBadge`). A naming/ownership fix with
+no behavioural change — `connectionTone`/`connectionLabel`/the four adapters are
+byte-identical apart from their type annotations. `ConnectionRecord` and
+`ConnectionState` now belong solely to the §17.12.2 wire model in `@/lib/settings`.
+
+### Surfaced, NOT decided — the vocabulary conflict
+Which state vocabulary Settings standardises on is an owner call, because the two
+sources disagree and neither is obviously wrong:
+- the **plan prose** says `Discovered, Installed, Connected, Disconnected, Degraded`
+  (PascalCase, 5 states) — which is what the display projection implements;
+- the **normative** §17.12.2 says `discovered, installed, connected, disconnected,
+  degraded, revoked` (snake_case, 6 states).
+The extra `revoked` is substantive, not cosmetic: P65.3's own acceptance gate is
+"**Disconnected or revoked** connector immediately invalidates active tools across all
+sessions", and `ConnectionView` has no `revoked` member to express that. Recorded as
+an open decision in the module doc comment rather than silently reconciled — the same
+rule applied in §2G/§2H: fix the objective collision, surface the semantic choice.
+Also noted: the same state-vs-display split as §2H applies to the field sets
+(`name`/`detail`/`source` are display; `transport`/`scopes`/`health`/`authRef`/
+`configHash` are authority). Neither set should absorb the other.
+
+### Evidence actually executed
+- Stale-name scan across all of `ui/src`: **zero code references** to `ConnectionRecord`
+  or `ConnectionState` outside `lib/settings.ts` (remaining hits in `connections.ts`
+  are the explanatory comments). A trailing `state: ConnectionState` field inside
+  `ConnectionView` was caught by this scan and fixed — it would have been a
+  "cannot find name" error, since the type was renamed. `[V]`
+- Declaration/use balance: `ConnectionView` 1 declaration / 13 refs;
+  `ConnectionViewState` 1 declaration / 3 refs — no orphaned or dangling name. `[V]`
+- Single-importer confirmation before the rename (`grep` for `@/lib/connections` →
+  exactly one file), i.e. the blast radius was fully enumerated before editing. `[V]`
+- `node scripts/check-doc-sync.mjs` → exit 0 · `node scripts/ipc-parity.mjs` →
+  exit 0 · registered 341 · broken 0 · ghosts 60 (unchanged). `[V]`
+
+### NOT VERIFIED (environment limits unchanged from §2G)
+**No `tsc` and no `node_modules`**, so these TypeScript edits were **not type-checked**;
+no Rust was touched in this wave. `[UNVERIFIED]`
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)

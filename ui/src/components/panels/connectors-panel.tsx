@@ -37,7 +37,7 @@ import {
   mcpRowToRecord,
   oauthToRecord,
   storeEntryToRecord,
-  type ConnectionRecord,
+  type ConnectionView,
 } from '@/lib/connections'
 import {
   oauthAccounts,
@@ -73,9 +73,9 @@ const KIND_TONE: Record<string, string> = {
   other: 'bg-zinc-500/15 text-zinc-300',
 }
 
-// P65.3 — one ConnectionRecord badge. Status is never color-alone: the badge
+// P65.3 — one ConnectionView badge. Status is never color-alone: the badge
 // carries an accessible label with the plain-language reason.
-function ConnectionBadge({ record }: { record: ConnectionRecord }) {
+function ConnectionBadge({ record }: { record: ConnectionView }) {
   return (
     <Badge
       className={cn('text-[9px]', connectionTone(record.state))}
