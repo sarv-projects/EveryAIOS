@@ -39,6 +39,15 @@ use crate::AppState;
 // ---------------------------------------------------------------------------
 
 /// The shared row shape every Settings inventory reuses.
+///
+/// The inventory commands return `serde_json::Value`: each row carries fields
+/// beyond this shared core (a provider's `name`/`configured`, an agent's
+/// runtime location, and so on). This struct is therefore the frozen §17.12.2
+/// *declaration* those rows must stay compatible with, not a value the shell
+/// builds at runtime — changing it to be constructed would alter live wire
+/// shapes. Not dead code: it is the contract type the wire is checked against,
+/// and the field-name test below pins it.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsReadModel {
@@ -78,20 +87,11 @@ pub enum RuntimeLocation {
         version: String,
     },
     #[serde(rename_all = "camelCase")]
-    WindowsPath {
-        executable: String,
-        source: String,
-    },
+    WindowsPath { executable: String, source: String },
     #[serde(rename_all = "camelCase")]
-    WindowsRegistry {
-        executable: String,
-        source: String,
-    },
+    WindowsRegistry { executable: String, source: String },
     #[serde(rename_all = "camelCase")]
-    UserPath {
-        executable: String,
-        source: String,
-    },
+    UserPath { executable: String, source: String },
     #[serde(rename_all = "camelCase")]
     PackageManager {
         manager: String,
@@ -106,9 +106,7 @@ pub enum RuntimeLocation {
         windows_launcher: String,
     },
     #[serde(rename_all = "camelCase")]
-    Unavailable {
-        reason: String,
-    },
+    Unavailable { reason: String },
 }
 
 /// The P63 binding as the Settings agent detail reports it: variable **names**
@@ -382,7 +380,9 @@ fn split_provider_groups(
         .collect();
     let rest: Vec<String> = all_sorted
         .iter()
-        .filter(|id| !configured.contains(id) && !popular.iter().any(|p| p == *id))
+        // `id` is `&&String` here (iter + filter), so deref once for the
+        // `Borrow<str>` lookup; a bare `&&String` has no matching `Borrow`.
+        .filter(|id| !configured.contains(*id) && !popular.iter().any(|p| p == *id))
         .cloned()
         .collect();
     (popular, rest)
@@ -424,9 +424,7 @@ fn validate_default_model(
     }
     if let Some(models) = known_models {
         if !models.is_empty() && !models.iter().any(|m| m == model) {
-            return Err(format!(
-                "unknown model '{model}' for provider '{provider}'"
-            ));
+            return Err(format!("unknown model '{model}' for provider '{provider}'"));
         }
     }
     Ok(())
@@ -435,11 +433,10 @@ fn validate_default_model(
 fn known_models_for(state: &AppState, provider: &str) -> Option<Vec<String>> {
     let mut models: Vec<String> = Vec::new();
     if let Some(snap) = state.catalog.store.load() {
-        if let Some(p) = snap.provider(provider) {
-            models.extend(p.models.keys().cloned());
-        } else {
-            return None;
-        }
+        // A loaded snapshot that does not carry this provider means "unknown",
+        // not "no models" — `?` keeps that distinction a `None`.
+        let p = snap.provider(provider)?;
+        models.extend(p.models.keys().cloned());
     }
     let store = profile_store();
     if let Some(profile) = store.get(provider) {
@@ -458,9 +455,19 @@ pub fn settings_providers_list(state: State<'_, AppState>) -> Value {
     let mut configured_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut out: Vec<Value> = Vec::with_capacity(rows.len());
     for mut row in rows {
-        let id = row.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let key_configured = row.get("keyConfigured").and_then(|v| v.as_bool()).unwrap_or(false);
-        let keyless = row.get("keyless").and_then(|v| v.as_bool()).unwrap_or(false);
+        let id = row
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let key_configured = row
+            .get("keyConfigured")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let keyless = row
+            .get("keyless")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let has_profile = store.get(&id).map(|p| p.is_usable()).unwrap_or(false);
         let reachable = row.get("reachable").and_then(|v| v.as_bool());
         let (st, health) = provider_state(key_configured, has_profile, keyless, reachable);
@@ -469,7 +476,9 @@ pub fn settings_providers_list(state: State<'_, AppState>) -> Value {
         }
         let hash = config_hash_of(&format!(
             "{id}|{key_configured}|{has_profile}|{reachable:?}|{}",
-            row.get("verifiedAt").map(|v| v.to_string()).unwrap_or_default()
+            row.get("verifiedAt")
+                .map(|v| v.to_string())
+                .unwrap_or_default()
         ));
         if let Some(obj) = row.as_object_mut() {
             obj.insert("state".to_string(), json!(st));
@@ -531,13 +540,18 @@ pub fn settings_default_model_set(
                 }
             }
             validate_default_model(&provider, &model, &known, known_models.as_deref())?;
-            atomic_write_json(&default_model_path(), &json!({ "provider": provider, "model": model }))?;
+            atomic_write_json(
+                &default_model_path(),
+                &json!({ "provider": provider, "model": model }),
+            )?;
             // Reread: the file we just wrote is the authority.
             let reread = read_default_model();
             let ok = reread.get("provider").and_then(|v| v.as_str()) == Some(provider.as_str())
                 && reread.get("model").and_then(|v| v.as_str()) == Some(model.as_str());
             if !ok {
-                return Err("reread mismatch after persist — optimistic state discarded".to_string());
+                return Err(
+                    "reread mismatch after persist — optimistic state discarded".to_string()
+                );
             }
             Ok(SettingsMutationResult {
                 applied_live: true,
@@ -620,8 +634,7 @@ fn protocol_for(manifest: &everyaios_acp::HarnessManifest) -> &'static str {
         everyaios_acp::HarnessProtocol::Inbuilt => "inbuilt",
         // The registry's launch plane is ACP today; `ModelBackend` agents are
         // driven through the same ACP spawn seam with env injection.
-        everyaios_acp::HarnessProtocol::Acp
-        | everyaios_acp::HarnessProtocol::ModelBackend => "acp",
+        everyaios_acp::HarnessProtocol::Acp | everyaios_acp::HarnessProtocol::ModelBackend => "acp",
     }
 }
 
@@ -630,7 +643,10 @@ fn protocol_for(manifest: &everyaios_acp::HarnessManifest) -> &'static str {
 /// unless a probe produced an executable. A non-Windows `path` probe maps to
 /// `user_path` (the contract's Windows-first vocabulary).
 fn runtime_location_from_json(v: &Value) -> RuntimeLocation {
-    let kind = v.get("kind").and_then(|k| k.as_str()).unwrap_or("unavailable");
+    let kind = v
+        .get("kind")
+        .and_then(|k| k.as_str())
+        .unwrap_or("unavailable");
     let exe = v
         .get("executable")
         .and_then(|e| e.as_str())
@@ -657,23 +673,47 @@ fn runtime_location_from_json(v: &Value) -> RuntimeLocation {
                     .to_string(),
             }
         }
-        "windows_path" => RuntimeLocation::WindowsPath { executable: exe, source },
-        "windows_registry" => RuntimeLocation::WindowsRegistry { executable: exe, source },
+        "windows_path" => RuntimeLocation::WindowsPath {
+            executable: exe,
+            source,
+        },
+        "windows_registry" => RuntimeLocation::WindowsRegistry {
+            executable: exe,
+            source,
+        },
         // Non-Windows PATH discoveries and explicit user paths share the
         // `user_path` arm: an explicit, probed filesystem location.
-        "path" | "user_path" => RuntimeLocation::UserPath { executable: exe, source },
+        "path" | "user_path" => RuntimeLocation::UserPath {
+            executable: exe,
+            source,
+        },
         "package_manager" => RuntimeLocation::PackageManager {
             manager: v
                 .get("manager")
                 .and_then(|m| m.as_str())
                 .unwrap_or("npx")
                 .to_string(),
-            package: v.get("package").and_then(|p| p.as_str()).unwrap_or("").to_string(),
-            version: v.get("version").and_then(|x| x.as_str()).map(str::to_string),
+            package: v
+                .get("package")
+                .and_then(|p| p.as_str())
+                .unwrap_or("")
+                .to_string(),
+            version: v
+                .get("version")
+                .and_then(|x| x.as_str())
+                .map(str::to_string),
         },
         "wsl" => RuntimeLocation::Wsl {
-            distro: v.get("distro").and_then(|d| d.as_str()).unwrap_or("").to_string(),
-            linux_path: v.get("linuxPath").and_then(|p| p.as_str()).unwrap_or("").to_string(),
+            distro: v
+                .get("distro")
+                .and_then(|d| d.as_str())
+                .unwrap_or("")
+                .to_string(),
+            linux_path: v
+                .get("linuxPath")
+                .and_then(|p| p.as_str())
+                .unwrap_or("")
+                .to_string(),
             windows_launcher: "wsl.exe".to_string(),
         },
         _ => RuntimeLocation::Unavailable {
@@ -741,8 +781,9 @@ fn session_loadout_for(is_inbuilt: bool, ready: bool, health: &str) -> Vec<Sessi
     for cap in shared_caps() {
         // Ticketed families (computer use, connectors, browser operation)
         // require approval; read-shaped façades do not.
-        let privileged =
-            cap.contains("computer-use") || cap.contains("browser-facade") || cap.contains("office-facade");
+        let privileged = cap.contains("computer-use")
+            || cap.contains("browser-facade")
+            || cap.contains("office-facade");
         rows.push(SessionLoadoutRow {
             capability_id: cap,
             source: "everyaios-shared".to_string(),
@@ -757,46 +798,52 @@ fn session_loadout_for(is_inbuilt: bool, ready: bool, health: &str) -> Vec<Sessi
     rows
 }
 
-fn build_agent_settings(state: &AppState, manifest: &everyaios_acp::HarnessManifest) -> AgentSettings {
+fn build_agent_settings(
+    state: &AppState,
+    manifest: &everyaios_acp::HarnessManifest,
+) -> AgentSettings {
     let is_inbuilt = manifest.protocol == everyaios_acp::HarnessProtocol::Inbuilt;
     let installed = is_inbuilt || crate::acp_cmds::agent_installed(&manifest.id);
     let auth_mode = auth_mode_for(manifest).to_string();
 
     // Live ACP truth: any handle launched under this agent id, plus its
     // agent-owned config options (never the native catalog).
-    let (live_handle, live_auth_required, config_options): (bool, bool, Vec<AgentConfigOptionView>) =
-        match state.acp_sessions.lock() {
-            Ok(sessions) => {
-                let mut found = (false, false, Vec::new());
-                for h in sessions.values() {
-                    if h.agent_id == manifest.id {
-                        found.0 = true;
-                        found.1 = h.auth_required;
-                        found.2 = h
-                            .config_options
-                            .iter()
-                            .map(|o| AgentConfigOptionView {
-                                id: o.id.clone(),
-                                name: o.name.clone(),
-                                value: if o.current_value.is_null() {
-                                    None
-                                } else {
-                                    Some(o.current_value.clone())
-                                },
-                                options: if o.options.is_empty() {
-                                    None
-                                } else {
-                                    Some(o.options.iter().map(|x| x.name.clone()).collect())
-                                },
-                            })
-                            .collect();
-                        break;
-                    }
+    let (live_handle, live_auth_required, config_options): (
+        bool,
+        bool,
+        Vec<AgentConfigOptionView>,
+    ) = match state.acp_sessions.lock() {
+        Ok(sessions) => {
+            let mut found = (false, false, Vec::new());
+            for h in sessions.values() {
+                if h.agent_id == manifest.id {
+                    found.0 = true;
+                    found.1 = h.auth_required;
+                    found.2 = h
+                        .config_options
+                        .iter()
+                        .map(|o| AgentConfigOptionView {
+                            id: o.id.clone(),
+                            name: o.name.clone(),
+                            value: if o.current_value.is_null() {
+                                None
+                            } else {
+                                Some(o.current_value.clone())
+                            },
+                            options: if o.options.is_empty() {
+                                None
+                            } else {
+                                Some(o.options.iter().map(|x| x.name.clone()).collect())
+                            },
+                        })
+                        .collect();
+                    break;
                 }
-                found
             }
-            Err(_) => (false, false, Vec::new()),
-        };
+            found
+        }
+        Err(_) => (false, false, Vec::new()),
+    };
 
     // P63 binding names (never values); `writesToAgentConfig` is always false.
     let binding = crate::agent_backend_cmds::backend_binding_view(state, &manifest.id).map(|b| {
@@ -884,7 +931,10 @@ pub fn settings_agent_get(state: State<'_, AppState>, agent_id: String) -> Resul
 /// rows a run creation must snapshot. Fetched live here; frozen at Work
 /// creation so later Settings edits cannot mutate an in-flight run.
 #[tauri::command]
-pub fn settings_agent_loadout(state: State<'_, AppState>, agent_id: String) -> Result<Value, String> {
+pub fn settings_agent_loadout(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Result<Value, String> {
     let registry = crate::acp_cmds::launch_registry();
     let manifest = registry
         .get(&agent_id)
@@ -906,7 +956,11 @@ pub fn settings_agent_loadout(state: State<'_, AppState>, agent_id: String) -> R
 /// Pure connected rule: `connected` requires a live proof (live child, stored
 /// token, live account row). No proof → `disconnected`/`discovered`, never a
 /// false `connected`. A live-but-unhealthy proof degrades instead of passing.
-fn connection_state(has_live_proof: bool, ever_seen: bool, healthy: bool) -> (&'static str, &'static str) {
+fn connection_state(
+    has_live_proof: bool,
+    ever_seen: bool,
+    healthy: bool,
+) -> (&'static str, &'static str) {
     match (has_live_proof, ever_seen, healthy) {
         (true, _, true) => ("connected", "ready"),
         (true, _, false) => ("degraded", "failed"),
@@ -963,7 +1017,11 @@ pub fn settings_connections_list(state: State<'_, AppState>) -> Value {
 
     // Attached stdio servers: identity rows + live-child proof.
     {
-        let attached = state.mcp_servers.lock().map(|m| m.clone()).unwrap_or_default();
+        let attached = state
+            .mcp_servers
+            .lock()
+            .map(|m| m.clone())
+            .unwrap_or_default();
         let live: std::collections::HashSet<String> = state
             .mcp_live
             .lock()
@@ -1180,10 +1238,17 @@ fn guard_autonomy_level(state: &AppState) -> String {
 }
 
 fn schedule_settings_for(state: &AppState, job: &Value) -> ScheduleSettings {
-    let id = job.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let id = job
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let trigger = job.get("trigger").cloned().unwrap_or(Value::Null);
     let policy = job.get("policy").cloned().unwrap_or(Value::Null);
-    let enabled = job.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+    let enabled = job
+        .get("enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let run_state = job
         .get("state")
         .and_then(|s| s.get("state"))
@@ -1217,7 +1282,11 @@ fn schedule_settings_for(state: &AppState, job: &Value) -> ScheduleSettings {
             .unwrap_or("")
             .to_string(),
         trigger: schedule_trigger_kind(&trigger).to_string(),
-        target: job.get("sessionId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        target: job
+            .get("sessionId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         chief_agent_id: chief,
         capability_scope: capability_scope_for(job.get("steps").unwrap_or(&Value::Null)),
         autonomy: guard_autonomy_level(state),
@@ -1303,14 +1372,17 @@ pub fn settings_schedule_set_enabled(
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_secs())
                     .unwrap_or(0);
-                svc.set_enabled(&id, enabled, now).map_err(|e| e.to_string())?;
+                svc.set_enabled(&id, enabled, now)
+                    .map_err(|e| e.to_string())?;
             }
             // Reread authoritative state; discard optimism on mismatch.
             let jobs = scheduler_jobs(&state)?;
             let job = jobs
                 .iter()
                 .find(|j| j.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))
-                .ok_or_else(|| "schedule vanished after update — optimistic state discarded".to_string())?;
+                .ok_or_else(|| {
+                    "schedule vanished after update — optimistic state discarded".to_string()
+                })?;
             let settings = schedule_settings_for(&state, job);
             if settings.enabled != enabled {
                 return Err("reread mismatch after update — optimistic state discarded".to_string());
@@ -1347,19 +1419,17 @@ pub fn settings_extensions_list(state: State<'_, AppState>) -> Value {
                 .manifest
                 .tools
                 .iter()
-                .filter(|t| {
-                    crate::skills_cmds::RUNTIME_CAPABILITY_ALLOWLIST.contains(&t.as_str())
-                })
+                .filter(|t| crate::skills_cmds::RUNTIME_CAPABILITY_ALLOWLIST.contains(&t.as_str()))
                 .cloned()
                 .collect();
-            let tampered = store
-                .root()
-                .join(&s.manifest.name)
-                .join("SKILL.md");
+            let tampered = store.root().join(&s.manifest.name).join("SKILL.md");
+            // `is_tampered` already reports `Option<bool>`: `None` means the
+            // skill has no install-time pin, so no integrity claim can be made.
+            // Unwrapping that would collapse an honest "unknown" into a claim
+            // the store cannot support.
             let tampered = std::fs::read(&tampered)
                 .ok()
-                .and_then(|b| store.is_tampered(&s.manifest.name, &b))
-                .unwrap_or(None);
+                .and_then(|b| store.is_tampered(&s.manifest.name, &b));
             let hash = config_hash_of(&format!("skill|{}|{}", s.manifest.name, s.manifest.version));
             out.push(
                 serde_json::to_value(InstalledExtension {
@@ -1388,7 +1458,9 @@ pub fn settings_extensions_list(state: State<'_, AppState>) -> Value {
             let _ = hash;
         }
     }
-    if let Ok(attached) = state.mcp_servers.lock().map(|m| m.clone()).unwrap_or_default() {
+    // A poisoned lock yields no attached rows rather than a defaulted-empty
+    // claim; `map(..)` already returns the `Result` the `if let` matches on.
+    if let Ok(attached) = state.mcp_servers.lock().map(|m| m.clone()) {
         let mut names: Vec<String> = attached.keys().cloned().collect();
         names.sort();
         for name in names {
@@ -1434,14 +1506,20 @@ mod tests {
     #[test]
     fn provider_state_never_invents_connected() {
         // Catalog-only: discovered, never connected.
-        assert_eq!(provider_state(false, false, false, None), ("discovered", "unknown"));
+        assert_eq!(
+            provider_state(false, false, false, None),
+            ("discovered", "unknown")
+        );
         // Key but never observed: configured, not connected.
         assert_eq!(
             provider_state(true, false, false, None),
             ("configured", "permission_required")
         );
         // Observed reachable: connected.
-        assert_eq!(provider_state(true, false, false, Some(true)), ("connected", "ready"));
+        assert_eq!(
+            provider_state(true, false, false, Some(true)),
+            ("connected", "ready")
+        );
         // Failed probe on a configured provider: disconnected/failed.
         assert_eq!(
             provider_state(true, false, false, Some(false)),
@@ -1465,7 +1543,14 @@ mod tests {
         ];
         let configured: BTreeSet<String> = ["my-vps".to_string()].into_iter().collect();
         let (popular, rest) = split_provider_groups(&all, &configured);
-        assert_eq!(popular, vec!["anthropic", "deepseek", "openai"]);
+        // The Popular group follows the curated `POPULAR_PROVIDERS` display
+        // order (anthropic, openai, google, deepseek, …) because that is the
+        // order `groups.popular` is emitted to the UI in. It is deliberately
+        // *not* the alphabetical `all` order: `openai` is curated ahead of
+        // `deepseek`. This assertion previously expected alphabetical order and
+        // had never run, because the module was not part of the build.
+        assert_eq!(popular, vec!["anthropic", "openai", "deepseek"]);
+        // `rest` is everything else, preserving the caller's input order.
         assert_eq!(rest, vec!["zzz"]);
         // A configured popular id leaves the popular group.
         let configured2: BTreeSet<String> = ["anthropic".to_string()].into_iter().collect();
@@ -1498,8 +1583,14 @@ mod tests {
 
     #[test]
     fn readiness_never_claims_ready_without_occupancy() {
-        assert_eq!(agent_readiness(false, false, "api_key", false, false, true), "not_installed");
-        assert_eq!(agent_readiness(true, true, "keyless", false, false, true), "ready");
+        assert_eq!(
+            agent_readiness(false, false, "api_key", false, false, true),
+            "not_installed"
+        );
+        assert_eq!(
+            agent_readiness(true, true, "keyless", false, false, true),
+            "ready"
+        );
         assert_eq!(
             agent_readiness(true, false, "subscription", false, false, false),
             "sign_in_required"
@@ -1508,11 +1599,26 @@ mod tests {
             agent_readiness(true, false, "api_key", false, false, false),
             "api_key_required"
         );
-        assert_eq!(agent_readiness(true, false, "api_key", false, false, true), "ready");
-        assert_eq!(agent_readiness(true, false, "local_cli", false, false, false), "local_cli");
-        assert_eq!(agent_readiness(true, false, "api_key", true, true, true), "sign_in_required");
-        assert_eq!(agent_readiness(true, false, "api_key", true, false, true), "ready");
-        assert_eq!(agent_readiness(true, false, "mystery", false, false, false), "unavailable");
+        assert_eq!(
+            agent_readiness(true, false, "api_key", false, false, true),
+            "ready"
+        );
+        assert_eq!(
+            agent_readiness(true, false, "local_cli", false, false, false),
+            "local_cli"
+        );
+        assert_eq!(
+            agent_readiness(true, false, "api_key", true, true, true),
+            "sign_in_required"
+        );
+        assert_eq!(
+            agent_readiness(true, false, "api_key", true, false, true),
+            "ready"
+        );
+        assert_eq!(
+            agent_readiness(true, false, "mystery", false, false, false),
+            "unavailable"
+        );
     }
 
     #[test]
@@ -1527,7 +1633,11 @@ mod tests {
             "executable": "/data/agents/x/y", "version": "1.2.3"
         }));
         match loc {
-            RuntimeLocation::Managed { install_root, version, .. } => {
+            RuntimeLocation::Managed {
+                install_root,
+                version,
+                ..
+            } => {
                 assert_eq!(version, "1.2.3");
                 assert!(!install_root.is_empty());
             }
@@ -1548,15 +1658,27 @@ mod tests {
     fn connection_state_never_false_connected() {
         assert_eq!(connection_state(true, true, true), ("connected", "ready"));
         assert_eq!(connection_state(true, true, false), ("degraded", "failed"));
-        assert_eq!(connection_state(false, true, true), ("disconnected", "unknown"));
-        assert_eq!(connection_state(false, false, false), ("discovered", "unknown"));
+        assert_eq!(
+            connection_state(false, true, true),
+            ("disconnected", "unknown")
+        );
+        assert_eq!(
+            connection_state(false, false, false),
+            ("discovered", "unknown")
+        );
     }
 
     #[test]
     fn schedule_trigger_and_state_mapping() {
-        assert_eq!(schedule_trigger_kind(&json!({"type": "interval"})), "interval");
+        assert_eq!(
+            schedule_trigger_kind(&json!({"type": "interval"})),
+            "interval"
+        );
         assert_eq!(schedule_trigger_kind(&json!({"type": "event"})), "event");
-        assert_eq!(schedule_trigger_kind(&json!({"type": "webhook"})), "webhook");
+        assert_eq!(
+            schedule_trigger_kind(&json!({"type": "webhook"})),
+            "webhook"
+        );
         assert_eq!(schedule_trigger_kind(&json!({"type": "cron"})), "cron");
         // Window reports as the cron due-cycle it feeds.
         assert_eq!(schedule_trigger_kind(&json!({"type": "window"})), "cron");
