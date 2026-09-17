@@ -869,6 +869,8 @@ export const SETTINGS_SECTION_IDS = [
   'memory',
   // P58.3 — Settings → Computer use got its specified nav row.
   'computer',
+  // P65.4 — Settings → Schedules (compact surface over the shared scheduler).
+  'schedules',
   // P55.9 — `cloud` is kept as an accepted deep-link id; it now routes to the
   // real H33 node attach on the Sync surface (the docker-package mock is gone).
   'cloud',

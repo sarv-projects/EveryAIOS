@@ -207,6 +207,61 @@ fn key_in_vault(state: &AppState, provider: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// P65.2 — names-only binding view for the Settings agent detail (the
+/// `backendBinding` half of `AgentSettings`). Variable names and the
+/// `unexpressed` gaps only — the secret never enters this type, and
+/// `WritesToAgentConfig` is not even a field: env injection never writes an
+/// agent's own config file.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentBackendBindingView {
+    pub provider_id: String,
+    pub injected_env_names: Vec<String>,
+    pub unexpressed: Vec<String>,
+    pub key_present: bool,
+    pub refusal: Option<String>,
+}
+
+pub(crate) fn backend_binding_view(
+    state: &AppState,
+    agent_id: &str,
+) -> Option<AgentBackendBindingView> {
+    let cfg = config_for(agent_id)?;
+    let (injected, unexpressed, key_present, refusal) = inject_view(state, agent_id, &cfg);
+    Some(AgentBackendBindingView {
+        provider_id: cfg.provider,
+        injected_env_names: injected,
+        unexpressed,
+        key_present,
+        refusal,
+    })
+}
+
+/// P65.2 — is this a *verified* launch-time binding (`modelOwner: managed`)?
+/// The config must exist, the channel must be env-injectable with no refusal,
+/// and a key must either be present in the vault or unnecessary (keyless
+/// endpoint, or the binding does not ask for the vault key).
+pub(crate) fn has_managed_binding(state: &AppState, agent_id: &str) -> bool {
+    let Some(cfg) = config_for(agent_id) else {
+        return false;
+    };
+    let spec = everyaios_acp::backend_spec(agent_id);
+    if !spec.channel.is_env_injectable() {
+        return false;
+    }
+    let (injected, _, key_present, refusal) = inject_view(state, agent_id, &cfg);
+    if refusal.is_some() {
+        return false;
+    }
+    if injected.is_empty() && cfg.provider.trim().is_empty() {
+        return false;
+    }
+    let keyless = resolve_endpoint(state, &cfg.provider)
+        .map(|e| e.keyless)
+        .unwrap_or(false);
+    key_present || keyless || !cfg.use_vault_key
+}
+
 /// The env pairs a launch of `agent_id` must carry. Best-effort and
 /// secret-carrying: **only** `acp_launch` may call this, and only to build the
 /// child's environment.

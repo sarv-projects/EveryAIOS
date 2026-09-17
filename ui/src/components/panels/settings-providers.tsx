@@ -69,6 +69,60 @@ import { Row, SectionShell } from './settings-shared'
 
 const INTERVALS = [1, 2, 4, 6, 12, 24]
 
+// P65.1 — reread envelope. The backend may report how a profile write landed
+// (appliedLive / restartRequired / health / lastError). Where it does, wire
+// those facts; where it does not, show honest pending — never claim live.
+type RereadEnvelope = {
+  appliedLive?: boolean
+  restartRequired?: boolean
+  health?: string | null
+  lastError?: string | null
+}
+
+function parseRereadEnvelope(payload: unknown): RereadEnvelope | null {
+  if (!payload || typeof payload !== 'object') return null
+  const r = payload as Record<string, unknown>
+  const hasAny =
+    'appliedLive' in r || 'restartRequired' in r || 'health' in r || 'lastError' in r
+  if (!hasAny) return null
+  const out: RereadEnvelope = {}
+  if (typeof r.appliedLive === 'boolean') out.appliedLive = r.appliedLive
+  if (typeof r.restartRequired === 'boolean') out.restartRequired = r.restartRequired
+  if (typeof r.health === 'string') out.health = r.health
+  if (typeof r.lastError === 'string' || r.lastError === null) out.lastError = r.lastError as string | null
+  return out
+}
+
+function RereadState({ envelope }: { envelope: RereadEnvelope | null }) {
+  if (!envelope) {
+    return (
+      <p className="font-mono text-[9px] text-muted-foreground/70">
+        Live-apply status: pending — this backend does not report it, so it is shown as pending, not live.
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 font-mono text-[9px]">
+      {envelope.appliedLive === true ? (
+        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-300">applied live</span>
+      ) : envelope.appliedLive === false ? (
+        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-300">applies on next turn</span>
+      ) : (
+        <span className="text-muted-foreground/70">live-apply: unknown</span>
+      )}
+      {envelope.restartRequired === true && (
+        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-300">restart required</span>
+      )}
+      {envelope.health ? (
+        <span className="text-muted-foreground">health: {envelope.health}</span>
+      ) : null}
+      {envelope.lastError ? (
+        <span className="text-red-300">last error: {envelope.lastError}</span>
+      ) : null}
+    </div>
+  )
+}
+
 function fmtCount(n: number | null | undefined): string {
   if (n === null || n === undefined || n <= 0) return '—'
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n)
@@ -471,6 +525,8 @@ function ActivatePanel({
   const [models, setModels] = useState<CatalogModel[]>([])
   const [profileModels, setProfileModels] = useState<CatalogModel[]>([])
   const [loadingModels, setLoadingModels] = useState(true)
+  // P65.1 — last write's reread envelope (null = backend did not report one).
+  const [reread, setReread] = useState<RereadEnvelope | null>(null)
 
   const rowKeys = keys.filter((k) => k.provider === row.id)
 
@@ -494,6 +550,7 @@ function ActivatePanel({
   /** P56.3 — probe first, persist only on a green tick. */
   const verifyAndSave = useCallback(async () => {
     setBusy(true)
+    setReread(null)
     try {
       const p = await providerProbe(row.id, secret.trim() || undefined)
       setProbe(p)
@@ -501,7 +558,9 @@ function ActivatePanel({
         notify(`${row.name}: ${p.message}`, 'error')
         return
       }
-      await providerProfileUpsert({
+      // P65.1 — keep the structure; wire the reread envelope where the
+      // backend provides one, honest pending otherwise.
+      const saved = await providerProfileUpsert({
         id: row.id,
         name: row.name,
         format,
@@ -511,6 +570,7 @@ function ActivatePanel({
         verifiedModels: p.models,
         sessionHeaders: row.sessionHeaders ?? false,
       })
+      setReread(parseRereadEnvelope(saved))
       if (secret.trim()) {
         await invoke('vault_key_add', {
           provider: row.id,
@@ -696,7 +756,7 @@ function ActivatePanel({
           size="sm"
           className={cn(
             'h-7',
-            probe?.ok ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-orange-500 text-black hover:bg-orange-400',
+            probe?.ok ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-primary text-primary-foreground hover:bg-primary/90',
           )}
           disabled={busy}
           onClick={() => void verifyAndSave()}
@@ -715,6 +775,10 @@ function ActivatePanel({
             {probe.url ? ` · ${probe.url}` : ''}
           </span>
         )}
+      </div>
+      {/* P65.1 — reread envelope: live where reported, pending otherwise. */}
+      <div className="mt-1.5">
+        <RereadState envelope={reread} />
       </div>
 
       {/* stored keys */}

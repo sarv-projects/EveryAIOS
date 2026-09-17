@@ -1,12 +1,13 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion'
 import {
   Activity,
   Bell,
   BookOpen,
   Boxes,
+  CalendarClock,
   Cloud,
   Command,
   Compass,
@@ -88,6 +89,7 @@ import {
 import { PermissionsSection, UsageSection } from './settings-sections-security'
 import SkillsPanel from './skills-panel'
 import ConnectorsPanel from './connectors-panel'
+import SchedulesSection from './schedules-section'
 
 type SectionId = SettingsSectionId
 
@@ -149,6 +151,9 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { id: 'launch', label: 'Launch CLI', icon: Terminal, keywords: ['command line', 'shell'] },
       { id: 'runtime', label: 'Session runtime', icon: Layers, keywords: ['session', 'process', 'sidecar', 'logs'] },
+      // P65.4 — Schedules lives in Settings (compact surface over the shared
+      // scheduler lib); full editing stays in the Automations center.
+      { id: 'schedules', label: 'Schedules', icon: CalendarClock, keywords: ['cron', 'schedule', 'automation', 'task', 'run', 'interval', 'webhook'] },
       { id: 'worktree', label: 'Worktree', icon: FolderTree, keywords: ['workspace', 'folder', 'project', 'repo'] },
       { id: 'resources', label: 'Resources', icon: HardDrive, keywords: ['storage', 'disk', 'index', 'scan'] },
       // P55.9 — the dead "Cloud env" docker dropdown is gone; user-owned node
@@ -272,6 +277,8 @@ function SectionBody({ section }: { section: SectionId }) {
       return <DiscoverSection />
     case 'runtime':
       return <RuntimeSessionSection />
+    case 'schedules':
+      return <SchedulesSection />
     case 'about':
       return <AboutSection />
     default:
@@ -312,10 +319,11 @@ export default function SettingsPanel() {
   const noResults = q.trim() !== '' && groups.length === 0
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="flex h-full w-full flex-col">
       <header className="border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <SettingsIcon className="h-4 w-4 text-orange-400" />
+          <SettingsIcon className="h-4 w-4 text-primary" aria-hidden />
           <h2 className="text-sm font-semibold text-foreground">Settings</h2>
         </div>
       </header>
@@ -326,9 +334,10 @@ export default function SettingsPanel() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Ctrl+F to search"
+            aria-label="Search settings"
             className="mb-2 h-7 text-[11px]"
           />
-          <nav className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto">
+          <nav aria-label="Settings sections" className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto">
             {noResults && (
               <div className="px-2 py-6 text-center">
                 <div className="font-mono text-[10px] text-muted-foreground">
@@ -337,7 +346,7 @@ export default function SettingsPanel() {
                 <button
                   type="button"
                   onClick={() => setQ('')}
-                  className="mt-1 font-mono text-[9px] text-orange-300 underline-offset-2 hover:underline"
+                  className="mt-1 font-mono text-[9px] text-primary underline-offset-2 hover:underline"
                 >
                   clear search
                 </button>
@@ -356,14 +365,15 @@ export default function SettingsPanel() {
                       <button
                         key={n.id}
                         onClick={() => setSection(n.id)}
+                        aria-current={isActive ? 'page' : undefined}
                         className={cn(
-                          'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors',
+                          'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                           isActive
-                            ? 'bg-orange-500/15 text-orange-300'
+                            ? 'bg-primary/15 text-primary'
                             : 'text-foreground/70 hover:bg-accent hover:text-foreground',
                         )}
                       >
-                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                         <span className="truncate">{n.label}</span>
                       </button>
                     )
@@ -375,7 +385,7 @@ export default function SettingsPanel() {
         </aside>
 
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-          <div className={cn('mx-auto p-4', section === 'local' ? 'max-w-6xl' : 'max-w-4xl')}>
+          <div className={cn('mx-auto p-4 [contain-intrinsic-size:auto_48px]', section === 'local' ? 'max-w-6xl' : 'max-w-4xl')}>
             <AnimatePresence mode="wait">
               <motion.div
                 key={section}
@@ -391,5 +401,6 @@ export default function SettingsPanel() {
         </div>
       </div>
     </div>
+    </MotionConfig>
   )
 }
