@@ -1319,6 +1319,86 @@ wiring in wave 11.
 
 ---
 
+## 2Q. Implementation wave 13 (2026-09-17) — an unbounded tool loop in the engine
+
+The vendored `core-*` suites were the one CI job wave 12 had not exercised
+(`pnpm --filter './packages/core-*' run test`, added to `ci.yml` so a
+regression inside the engine can fail the workflow). Running them reproduced a
+**hard failure**: `core-engine` died with `JavaScript heap out of memory` after
+~60s at a 4GB heap — which fails the whole recursive job with
+`ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`.
+
+### Root cause: `MAX_TOOL_ROUNDS` could never actually cap the loop
+Bisected to a single test, and it was not the test. In
+`packages/core-engine/src/engine.ts` the tool loop armed its "one extra
+answering round" flag like this:
+
+```ts
+while (toolRound < maxToolRounds || extraFinalRound) {
+  extraFinalRound = false;            // cleared at the top
+  …
+  toolRound += 1;
+  if (toolRound >= maxToolRounds && previousToolResults.length > 0) {
+    extraFinalRound = true;           // …and re-armed at the bottom
+  }
+}
+```
+
+Once `toolRound` reached `maxToolRounds`, the guard stayed true on **every**
+subsequent pass, so a provider that keeps requesting tools re-armed the round
+forever. Each pass pushed another entry into `previousToolResults` and
+`trajectorySteps` until the heap was exhausted. **The cap was unreachable in
+exactly the case it exists for** — a model that loops on tool calls. In the
+real shell that is an unbounded agent loop, not just a test problem.
+
+**Fix:** the extra round is now armed at most once via a one-shot flag
+(`extraFinalRoundUsed`), so the loop terminates at `maxToolRounds` tool rounds
+plus the single answering round the code comment says is required ("without
+this flag, tools execute but fullResponse stays empty").
+
+**Test reconciled, deliberately.** The dormant assertion expected exactly
+`[0,1,2,3,4]` (5 calls) — no extra round at all. That expectation predates the
+extra-round feature and **had never passed**, because the test OOM'd before it
+could assert anything. The extra round is intentional and load-bearing, so the
+assertion now records the real sequence `[0,1,2,3,4,5]` with the reasoning
+inline. **If the intended contract is a hard 5-call ceiling, the change to
+revert is the one-shot arm, and the test's original expectation resumes.**
+
+### Evidence
+t| Gate | Result |
+|---|---|
+| `core-engine` `vitest run` (alone) | **40 passed / 4 files** in 14ms — was a 4GB OOM |
+| `pnpm --filter './packages/core-*' run test` | **exit 0** — core-domain 7 · security 18 · providers 38 · connectors 73 (+3 skipped) · memory 95 · search 61 · tools 22 · agents 4 · engine 40 · ai 121 → **~479 passed / 0 failed** |
+| `core-engine` `tsc --noEmit` | **exit 0** (the changed file typechecks) |
+| `core-ai` / `core-memory` / `core-tools` `tsc --noEmit` | clean |
+
+---
+
+## 2R. CI-job parity (2026-09-17) — every job in `ci.yml` reproduced locally
+
+With the toolchain restored, each job in `.github/workflows/ci.yml` was run on
+this host. The two remaining jobs after wave 13 were **`office-oracle`** and the
+**ui build** half of the `ui` job; both pass.
+
+| CI job | What it runs | Local result |
+|---|---|---|
+| `docs-sync` | `check-doc-sync.mjs` | **exit 0** |
+| `rust` | `cargo fmt --check` · `cargo test` · clippy `-D warnings` | **0 diffs · 2586 pass / 0 fail · exit 0** |
+| `office-oracle` | `libreoffice-writer` + `live_oracle_opens_clean` (`--ignored`) | **2 passed / 0 failed** against a real LibreOffice (docx open + open-after-patch) |
+| `ui` | `tsc --noEmit` + `node scripts/build.mjs` | **0 type errors · build exit 0** (built in 1m04s) |
+| `sidecar` | vendored `core-*` vitest · coordinator `tsc` · coordinator `bun test` | **~479 pass / 0 fail · 0 type errors · 374 pass / 3 pre-existing fails** |
+| `tauri-check` | sidecar build + `cargo check` + `cargo test --lib` | **exit 0 · 66 pass / 0 fail** (incl. `registration_sync` 2/2) |
+
+Beyond CI, the three release gates also run real: **`security-gate.mjs` PASS 6/6**,
+**`failure-injection.mjs` PASS L1–L7** on the built binary, and
+**`clean-profile-boot-check.mjs` PASS 8/8**.
+
+**Remaining unverifiable here:** only the Windows and macOS legs of the `rust` /
+`tauri-check` matrices. Those are platform-bound, not code-blocked — this host is
+Linux, and the Windows-deferred list at the top of §3 still stands.
+
+---
+
 ## 3. Next Exact Steps (What to do next)
 
 > ### ⛔ WINDOWS-DEFERRED — explicitly OUT OF SCOPE this session (marked, not attempted)
