@@ -400,6 +400,9 @@ pub struct ChatRelay<W, R> {
     evals: Arc<Mutex<EvalService>>,
     /// H3 unified execution kernel.
     executions: Arc<Mutex<ExecutionKernel>>,
+    /// P64.4 — sub-agent spawn accounting (depth/concurrency/total). The LLM
+    /// execution stays in the coordinator; this is the policy seam.
+    subagents: Arc<Mutex<everyaios_blueprint::SubAgentRuntime>>,
     /// P49 V1-local Work Gateway projection and event journal.
     work_gateway: Arc<Mutex<crate::work_gateway::WorkGateway>>,
     /// P49.7 capability grants; secrets remain exclusively in the vault.
@@ -414,6 +417,111 @@ pub struct ChatRelay<W, R> {
     on_event: Arc<Mutex<EventSink>>,
     /// P11.5.11 — AG-UI live transport: forwards `agui/event` lines to the UI.
     agui: crate::agui::AguiRelay,
+}
+
+/// The skills root every part of the app shares — the same `SkillStore`
+/// default the UI's skills commands use, so a distilled skill is immediately
+/// visible to both surfaces.
+fn skills_root() -> std::path::PathBuf {
+    everyaios_blueprint::SkillStore::default_home()
+}
+
+/// The `skill/*` methods the coordinator drives.
+///
+/// P64.8 — validated distillation. The coordinator calls this only after its
+/// own verify gate passed, but that claim is **not** trusted here:
+/// `grow_from_task` runs the real gate (tests verdict, 500-line budget,
+/// manifest validation) before anything reaches disk.
+fn skill_rpc(method: &str, params: &serde_json::Value) -> Result<serde_json::Value, String> {
+    match method {
+        "skill/grow" => {
+            let task_name = params
+                .get("taskName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if task_name.trim().is_empty() {
+                return Err("skill/grow requires taskName".to_string());
+            }
+            let solution = params
+                .get("solution")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let author = params.get("author").and_then(|v| v.as_str()).unwrap_or("");
+            let version = params
+                .get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("0.1.0");
+            let store = everyaios_blueprint::SkillStore::new(skills_root());
+            let skill =
+                everyaios_blueprint::grow_from_task(&store, task_name, solution, author, version)
+                    .map_err(|e| e.to_string())?;
+            Ok(serde_json::json!({
+                "ok": true,
+                "name": skill.manifest.name,
+                "version": skill.manifest.version,
+            }))
+        }
+        other => Err(format!("method not found: {other}")),
+    }
+}
+
+/// The `subagent/*` methods the coordinator drives.
+///
+/// P64.4 — the spawn **admission** seam. This crate owns accounting (duplicate
+/// / parent-existence / depth / concurrent / total), which is the part the
+/// contract actually pins and the part the coordinator cannot enforce alone.
+/// The LLM execution stays coordinator-side, so the reply is the *admitted*
+/// spec reported as running — deliberately not a fabricated `done` with an
+/// invented summary. Refusals arrive as errors, never as a silent acceptance.
+fn subagent_rpc(
+    method: &str,
+    params: &serde_json::Value,
+    runtime: &mut everyaios_blueprint::SubAgentRuntime,
+) -> Result<serde_json::Value, String> {
+    match method {
+        "subagent/spawn" => {
+            let raw = params
+                .get("spec")
+                .cloned()
+                .ok_or("subagent/spawn requires spec")?;
+            let task: everyaios_blueprint::TaskSpec = serde_json::from_value(raw)
+                .map_err(|e| format!("subagent/spawn requires a valid spec: {e}"))?;
+            let str_list = |key: &str| -> Vec<String> {
+                params
+                    .get(key)
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let mut spec = everyaios_blueprint::SubAgentSpec::new(
+                task,
+                params.get("model").and_then(|v| v.as_str()).unwrap_or(""),
+                params
+                    .get("workspace")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+            );
+            spec.parent_id = params
+                .get("parentId")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            spec.tools = str_list("tools");
+            spec.blocked_tools = str_list("blockedTools");
+            let task_id = spec.spec.id.clone();
+            runtime.spawn(spec).map_err(|e| e.to_string())?;
+            Ok(serde_json::json!({
+                "task_id": task_id,
+                "summary": "",
+                "status": "running",
+                "artifacts": [],
+            }))
+        }
+        other => Err(format!("method not found: {other}")),
+    }
 }
 
 /// P64.3 — repo-map façade defaults. The coordinator applies its own token
@@ -499,6 +607,9 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
             tools,
             evals: Arc::new(Mutex::new(EvalService::new())),
             executions: Arc::new(Mutex::new(ExecutionKernel::new())),
+            subagents: Arc::new(Mutex::new(everyaios_blueprint::SubAgentRuntime::new(
+                everyaios_blueprint::SubAgentLimits::default(),
+            ))),
             work_gateway: Arc::new(Mutex::new(
                 crate::work_gateway::WorkGateway::open_default()
                     .unwrap_or_else(|_| crate::work_gateway::WorkGateway::new()),
@@ -766,6 +877,7 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
         let tools = Arc::clone(&self.tools);
         let evals = Arc::clone(&self.evals);
         let executions = Arc::clone(&self.executions);
+        let subagents = Arc::clone(&self.subagents);
         let work_gateway = Arc::clone(&self.work_gateway);
         let capabilities = Arc::clone(&self.capabilities);
         let egress = Arc::clone(&self.egress);
@@ -1269,6 +1381,31 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     method if method.starts_with("work/") => {
                         let mut gw = work_gateway.lock().unwrap_or_else(|e| e.into_inner());
                         match gw.handle_rpc(method, &params) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
+                    }
+                    // P64.8 — skill distillation. Was `method not found`, so the
+                    // coordinator's "best-effort" catch swallowed it and nothing
+                    // was ever distilled.
+                    method if method.starts_with("skill/") => match skill_rpc(method, &params) {
+                        Ok(out) => {
+                            let _ = writer.reply(id, out);
+                        }
+                        Err(e) => {
+                            let _ = writer.reply_error(id, &e);
+                        }
+                    },
+                    // P64.4 — sub-agent spawn admission. Was `method not found`,
+                    // which made `dispatchSubAgent` throw "native runtime not
+                    // wired" on every delegation.
+                    method if method.starts_with("subagent/") => {
+                        let mut rt = subagents.lock().unwrap_or_else(|e| e.into_inner());
+                        match subagent_rpc(method, &params, &mut rt) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
@@ -2356,6 +2493,54 @@ mod tests {
         assert!(super::codeintel_rpc("codeintel/nope", &serde_json::json!({}), &dir).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The previous failure mode was a silent `method not found`; an empty or
+    /// unknown request must be a refusal, never a no-op that reads as success.
+    #[test]
+    fn skill_rpc_refuses_a_grow_without_a_task_name() {
+        assert!(super::skill_rpc("skill/grow", &serde_json::json!({})).is_err());
+        assert!(super::skill_rpc("skill/grow", &serde_json::json!({ "taskName": "   " })).is_err());
+        assert!(super::skill_rpc("skill/nope", &serde_json::json!({})).is_err());
+    }
+
+    /// P64.4 — the spawn seam must actually enforce the shared limits, and must
+    /// report an admission rather than a fabricated completion.
+    #[test]
+    fn subagent_rpc_admits_a_spawn_and_enforces_the_limits() {
+        let mut rt = everyaios_blueprint::SubAgentRuntime::new(
+            everyaios_blueprint::SubAgentLimits::default(),
+        );
+        let out = super::subagent_rpc(
+            "subagent/spawn",
+            &serde_json::json!({
+                "spec": { "id": "t1", "goal": "do the thing", "context": [], "acceptance": [] },
+                "model": "m",
+                "workspace": ".everyaios/worktrees/task-t1",
+                "parentId": null,
+                "tools": ["todo"],
+                "blockedTools": [],
+            }),
+            &mut rt,
+        )
+        .expect("an in-limits spawn is admitted");
+        assert_eq!(out["task_id"], "t1");
+        // The LLM execution is coordinator-side, so this is an admission.
+        assert_eq!(out["status"], "running");
+        assert_eq!(rt.total_spawned(), 1);
+
+        // A duplicate task id is refused by the runtime, not silently accepted.
+        assert!(super::subagent_rpc(
+            "subagent/spawn",
+            &serde_json::json!({
+                "spec": { "id": "t1", "goal": "again", "context": [], "acceptance": [] }
+            }),
+            &mut rt,
+        )
+        .is_err());
+        // A spec-less call is a refusal, and unknown methods stay errors.
+        assert!(super::subagent_rpc("subagent/spawn", &serde_json::json!({}), &mut rt).is_err());
+        assert!(super::subagent_rpc("subagent/nope", &serde_json::json!({}), &mut rt).is_err());
     }
 
     #[cfg(unix)]
