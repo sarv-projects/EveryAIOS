@@ -43,7 +43,8 @@ pub use lsp_runner::{LspRunner, LspRunnerError};
 pub use repo_cache::{map_hash, CachedRow, RepoMapCache};
 pub use repomap::{
     build_repo_map, build_repo_map_with, extract_tags, extract_tags_with, fit_budget, page_rank,
-    rank_tags, CompositeTagSource, LexicalTagSource, RepoMap, Tag, TagKind, TagSource,
+    rank_tags, ranked_tags, read_source_files, CompositeTagSource, LexicalTagSource, RankedTag,
+    RepoMap, Tag, TagKind, TagSource,
 };
 pub use scip::{
     parse_document, to_semantic_index, ScipDocument, ScipError, ScipOccurrence, ScipSymbol,

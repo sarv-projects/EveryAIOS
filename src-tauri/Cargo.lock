@@ -1415,6 +1415,7 @@ dependencies = [
  "everyaios-audit",
  "everyaios-blueprint",
  "everyaios-catalog",
+ "everyaios-codeintel",
  "everyaios-eval",
  "everyaios-guard",
  "everyaios-ipc",

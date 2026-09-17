@@ -416,6 +416,38 @@ pub struct ChatRelay<W, R> {
     agui: crate::agui::AguiRelay,
 }
 
+/// P64.3 — repo-map façade defaults. The coordinator applies its own token
+/// budget on top of the returned rows, so this bound is only about how much of
+/// the tree is walked.
+const REPOMAP_MAX_FILES: usize = 200;
+const REPOMAP_MAX_FILES_CAP: usize = 2000;
+
+/// The `codeintel/*` methods the coordinator drives.
+///
+/// Served from `everyaios-codeintel` — the same implementation behind the UI's
+/// `repomap_build` command — so the agent-facing and UI-facing façades cannot
+/// drift apart. `workspace` is the tool layer's floored root, so the map covers
+/// the tree the edit tools actually operate on rather than a root of its own.
+fn codeintel_rpc(
+    method: &str,
+    params: &serde_json::Value,
+    workspace: &std::path::Path,
+) -> Result<serde_json::Value, String> {
+    match method {
+        "codeintel/repomap" => {
+            let max_files = params
+                .get("maxFiles")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or(REPOMAP_MAX_FILES)
+                .min(REPOMAP_MAX_FILES_CAP);
+            let tags = everyaios_codeintel::repomap::ranked_tags(workspace, max_files);
+            Ok(serde_json::json!({ "tags": tags }))
+        }
+        other => Err(format!("method not found: {other}")),
+    }
+}
+
 impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
     pub fn new(
         link: SidecarLink<W, R>,
@@ -1237,6 +1269,25 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                     method if method.starts_with("work/") => {
                         let mut gw = work_gateway.lock().unwrap_or_else(|e| e.into_inner());
                         match gw.handle_rpc(method, &params) {
+                            Ok(out) => {
+                                let _ = writer.reply(id, out);
+                            }
+                            Err(e) => {
+                                let _ = writer.reply_error(id, &e);
+                            }
+                        }
+                    }
+                    // P64.3 — the repo-map façade the coordinator drives with
+                    // `codeintel/repomap`. While this arm was missing the
+                    // request fell through to `method not found`, and because
+                    // the coordinator treats the map as best-effort the failure
+                    // was silent: the repo map was never injected in production.
+                    method if method.starts_with("codeintel/") => {
+                        let workspace = {
+                            let svc = tools.lock().unwrap_or_else(|e| e.into_inner());
+                            svc.workspace().to_path_buf()
+                        };
+                        match codeintel_rpc(method, &params, &workspace) {
                             Ok(out) => {
                                 let _ = writer.reply(id, out);
                             }
@@ -2276,6 +2327,37 @@ fn stream_provider(
 
 #[cfg(test)]
 mod tests {
+    /// P64.3 — the coordinator reads `symbol/kind/file/line/rank` out of
+    /// `tags`; this pins that wire shape and the refusal of unknown methods.
+    /// Fully qualified because the `use super::*` glob below is unix-gated.
+    #[test]
+    fn codeintel_rpc_serves_ranked_repo_map_tags() {
+        let dir = std::env::temp_dir().join(format!("eaios-codeintel-rpc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("m.rs"), "fn alpha() {}\n").unwrap();
+
+        let out = super::codeintel_rpc("codeintel/repomap", &serde_json::json!({}), &dir)
+            .expect("codeintel/repomap is served");
+        let tags = out
+            .get("tags")
+            .and_then(|t| t.as_array())
+            .expect("tags array");
+        let first = tags.first().expect("at least one tag");
+        for key in ["symbol", "kind", "file", "line", "rank"] {
+            assert!(first.get(key).is_some(), "missing {key} in the wire row");
+        }
+        assert!(tags
+            .iter()
+            .any(|t| t.get("symbol").and_then(|s| s.as_str()) == Some("alpha")));
+
+        // The old failure mode was a silent `method not found`; an unknown
+        // method must still be an error rather than an empty tag list.
+        assert!(super::codeintel_rpc("codeintel/nope", &serde_json::json!({}), &dir).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[cfg(unix)]
     use super::*;
     #[cfg(unix)]

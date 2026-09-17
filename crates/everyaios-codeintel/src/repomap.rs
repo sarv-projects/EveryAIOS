@@ -9,6 +9,7 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -244,9 +245,154 @@ pub fn fit_budget<'a>(ranked: &[&'a Tag], max_tokens: usize) -> Vec<&'a Tag> {
     ranked[..lo].to_vec()
 }
 
+// ---------------------------------------------------------------------------
+// Directory walk + ranked rows — one implementation, two façades.
+//
+// The Tauri `repomap_build` command (UI) and the coordinator's
+// `codeintel/repomap` method both mean "the ranked repo map for a directory".
+// Previously only one half existed: the command had the walk, and the
+// coordinator method had no handler at all. Both now call in here.
+// ---------------------------------------------------------------------------
+
+/// Walk `dir` for source files.
+///
+/// The full candidate list is collected and then **sorted before truncation**,
+/// so an oversized repo truncates to the lexicographically first `max_files`
+/// rather than to whatever order `read_dir` happened to return. Truncation
+/// determinism is part of the repo-map contract; a bounded walk that cut early
+/// could not guarantee it. Only the kept files are read.
+/// Files that cannot be read are skipped rather than failing the map.
+pub fn read_source_files(dir: &Path, max_files: usize) -> Vec<(String, String)> {
+    const EXTS: [&str; 14] = [
+        "rs", "ts", "tsx", "js", "jsx", "py", "go", "java", "c", "cpp", "h", "hpp", "md", "toml",
+    ];
+    let mut files: Vec<String> = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for entry in rd.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                if !p.ends_with("node_modules")
+                    && !p.ends_with("target")
+                    && !p.ends_with(".git")
+                    && !p.ends_with("dist")
+                {
+                    stack.push(p);
+                }
+            } else if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                if EXTS.contains(&ext) {
+                    files.push(p.to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+    files.sort();
+    files.truncate(max_files);
+    let mut out = Vec::with_capacity(files.len());
+    for f in files {
+        if let Ok(content) = std::fs::read_to_string(&f) {
+            out.push((f, content));
+        }
+    }
+    out
+}
+
+/// One ranked repo-map row — the shared wire shape both façades return
+/// (`repomap_build` emits these; `codeintel/repomap` wraps them in `tags`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RankedTag {
+    pub symbol: String,
+    /// `fn | type | const | mod`.
+    pub kind: String,
+    pub file: String,
+    pub line: u32,
+    pub rank: f64,
+}
+
+/// The ranked repo map for `dir`: walk → extract tags → PageRank → stable sort
+/// (rank desc, then symbol asc). Deliberately budget-unaware — the coordinator
+/// applies its own token fit on top, so both façades see the same ranking.
+pub fn ranked_tags(dir: &Path, max_files: usize) -> Vec<RankedTag> {
+    let files = read_source_files(dir, max_files);
+    let map = build_repo_map(&files);
+    let ranks = page_rank(&map, 32);
+    let mut rows: Vec<RankedTag> = map
+        .tags
+        .iter()
+        .map(|t| RankedTag {
+            symbol: t.symbol.clone(),
+            kind: match t.kind {
+                TagKind::Function => "fn",
+                TagKind::Type => "type",
+                TagKind::Const => "const",
+                TagKind::Module => "mod",
+            }
+            .to_string(),
+            file: t.file.clone(),
+            line: t.line,
+            rank: ranks.get(&t.symbol).copied().unwrap_or(0.0),
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        b.rank
+            .partial_cmp(&a.rank)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.symbol.cmp(&b.symbol))
+    });
+    rows
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ranked_tags_walks_sorts_skips_and_is_deterministic() {
+        let dir = std::env::temp_dir().join(format!("eaios-repomap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("b.rs"), "fn beta() {}\n").unwrap();
+        std::fs::write(dir.join("a.rs"), "fn alpha() {}\n").unwrap();
+        std::fs::write(dir.join("sub/c.rs"), "struct Gamma;\n").unwrap();
+        // Ignored trees must not contribute tags.
+        std::fs::create_dir_all(dir.join("node_modules")).unwrap();
+        std::fs::write(dir.join("node_modules/d.rs"), "fn nope() {}\n").unwrap();
+        std::fs::write(dir.join("notes.txt"), "not a source extension\n").unwrap();
+
+        let rows = ranked_tags(&dir, 200);
+        let syms: Vec<&str> = rows.iter().map(|r| r.symbol.as_str()).collect();
+        assert!(syms.contains(&"alpha"), "{syms:?}");
+        assert!(syms.contains(&"beta"), "{syms:?}");
+        assert!(syms.contains(&"Gamma"), "{syms:?}");
+        assert!(!syms.contains(&"nope"), "node_modules must be skipped");
+        // Deterministic: identical input yields byte-identical output.
+        assert_eq!(rows, ranked_tags(&dir, 200));
+        // Rows are sorted by rank desc, then symbol asc (a total order).
+        for pair in rows.windows(2) {
+            let (a, b) = (&pair[0], &pair[1]);
+            assert!(
+                a.rank > b.rank || (a.rank == b.rank && a.symbol <= b.symbol),
+                "unordered: {a:?} then {b:?}"
+            );
+        }
+        // Truncation keeps the lexicographically first paths, not walk order.
+        let kept = read_source_files(&dir, 1);
+        assert_eq!(kept.len(), 1);
+        assert!(kept[0].0.ends_with("a.rs"), "kept {}", kept[0].0);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ranked_tags_on_a_missing_dir_is_empty_not_an_error() {
+        let dir = std::env::temp_dir().join("eaios-repomap-does-not-exist-xyz");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(ranked_tags(&dir, 10).is_empty());
+    }
 
     const RUST: &str =
         "fn main() { helper(); }\npub fn helper() {}\nstruct Config {}\nconst LIMIT: u32 = 5;";
