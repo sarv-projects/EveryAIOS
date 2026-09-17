@@ -56,7 +56,7 @@ pub fn mcp_catalog() -> McpCatalog {
 }
 
 /// P11.5.8 — one known/attached MCP server row for the Connectors panel.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerRow {
     pub name: String,
