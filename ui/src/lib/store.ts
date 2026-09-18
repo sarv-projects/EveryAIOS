@@ -1005,6 +1005,9 @@ interface AppState {
   desktopAttached: boolean
   desktopReason: string | null
   setDesktopAttached: (attached: boolean, reason?: string | null) => void
+  /** P59.3 — Computer use was refused because the model cannot take images. */
+  cuaVisionGate: boolean
+  setCuaVisionGate: (open: boolean) => void
 
   /** P50.4.1/4.9 — live vault-keys fact: `null` = unknown (not yet probed),
    * `false` = vault has zero provider keys. Feeds the first-run setup gate,
@@ -1673,6 +1676,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   desktopReason: null,
   setDesktopAttached: (attached, reason) =>
     set({ desktopAttached: attached, desktopReason: reason ?? null }),
+  cuaVisionGate: false,
+  setCuaVisionGate: (open) => set({ cuaVisionGate: open }),
   providerKeysConfigured: null,
   setProviderKeysConfigured: (configured) => set({ providerKeysConfigured: configured }),
   setupOpen: false,

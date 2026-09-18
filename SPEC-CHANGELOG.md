@@ -17,6 +17,22 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P59 CUA live path + P65 channels/schedules
+
+**Category:** implementation. **Flipped:** P59.1–.6, P59.9–.15, P65.3, P65.4 `[DONE]`. P59.7/P65.5–.7 stay `[PARTIAL]`. P59.8/.16 and P65.8 open. Census **1429 = 1244 done + 185 open**. Capability identity remains **166**.
+
+**Fetched:** Agent-S Worker one-act-per-observation; OpenAdapt VERIFIED only if an independent check agrees (halt ≠ success).
+
+1. Coordinator `refuseDesktopIfWrongSurface` + Rust `route_work_surface` (Office → Browse → Desktop).
+2. `desktop.act` runs `worker_step` / `apply_worker_act`; two identical fails → `cua_halt`. Screen `approveFromScreen` → `screen_untrusted`.
+3. `execution/cua_persist` refuses empty postconditions; `execution/cua_step` updates the DAG.
+4. UI: Computer use rail icon, vision-gate dialog, picker `images?` filter.
+5. P65.3 `settings_connections_list` grouped in Connectors; P65.4 schedules list + enable funnel.
+
+**Verification.** `cargo test -p everyaios-core --lib cua::` 10/0; `p59_cua_persist_refuses` 1/0; `desktop_tools_route_through_attached_backend` 1/0; coordinator `cua-route` 2/0; UI settings-groups/catalog/chat-event 23/0; tsc 0.
+
+---
+
 ## 2026-09-18 — Terminal splits, settings inventory, citations, Scout/Worker/Verifier, voice consumers
 
 **Category:** implementation. **Flipped:** P54.4, P68.8, P52.20, P60.3, P65.1, P50.4.4 `[DONE]`. P50.4.3 / P51.10 / P65.2 stay `[PARTIAL]`. P64.5/P64.6 stay `[PARTIAL]` (no live-model soak). Census **1429 = 1229 done + 200 open**. Capability identity remains **166**.

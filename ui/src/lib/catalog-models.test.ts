@@ -9,6 +9,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   catalogPickLabel,
   catalogPickerModels,
+  cuaEligibleModels,
   flattenCatalogRows,
   toCatalogPickerModel,
   usableCatalogProviders,
@@ -124,6 +125,14 @@ describe('P58.7 — picker row mapping', () => {
   test('a row without an id is skipped rather than rendered blank', () => {
     const rows = catalogPickerModels('openai', [{ id: '' }, model({ id: 'kept' })])
     expect(rows.map((r) => r.id)).toEqual(['kept'])
+  })
+
+  test('CUA eligibility is images? only (P59.10)', () => {
+    const rows = catalogPickerModels('openai', [
+      model({ id: 'gpt-text' }),
+      model({ id: 'gpt-vl', images: true }),
+    ])
+    expect(cuaEligibleModels(rows).map((r) => r.id)).toEqual(['gpt-vl'])
   })
 
   test('groups flatten in provider order', () => {

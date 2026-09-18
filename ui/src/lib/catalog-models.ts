@@ -106,6 +106,11 @@ export function flattenCatalogRows(
   return groups.flat()
 }
 
+/** P59.10 — CUA-eligible rows: catalog `images?` (or a local VL). Text-only stay valid for Browse/Office. */
+export function cuaEligibleModels(rows: CatalogPickerModel[]): CatalogPickerModel[] {
+  return rows.filter((r) => r.images === true)
+}
+
 /**
  * P58.7 — the status-bar label for a catalog pick. Returns `null` when the
  * selection is not provider-qualified (a curated pick keeps its own label),

@@ -49,6 +49,7 @@ import {
   type OAuthAccount,
 } from '@/lib/oauth'
 import { inTauri } from '@/lib/tauri'
+import { groupConnectionRecords, settingsConnectionsList, type ConnectionRecord } from '@/lib/settings'
 
 // P50.2.6 — the stats strip must never present demo numbers in the native
 // shell. Every value is derived from live state below (oauth accounts, MCP
@@ -150,6 +151,7 @@ export default function ConnectorsPanel() {
   const [storeLoading, setStoreLoading] = useState(true)
   const [storeError, setStoreError] = useState<string | null>(null)
   const [connectingId, setConnectingId] = useState<string | null>(null)
+  const [channels, setChannels] = useState<ConnectionRecord[]>([])
 
   // Connect Store — the curated "click → sign in → use" list (ARCH/15).
   useEffect(() => {
@@ -168,6 +170,20 @@ export default function ConnectorsPanel() {
         setStore([])
         setStoreError(e instanceof Error ? e.message : 'Store unavailable')
         setStoreLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let alive = true
+    settingsConnectionsList()
+      .then((env) => {
+        if (alive) setChannels(env.connections)
+      })
+      .catch(() => {
+        if (alive) setChannels([])
       })
     return () => {
       alive = false
@@ -438,6 +454,30 @@ export default function ConnectorsPanel() {
           transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
           className="space-y-4 p-4"
         >
+          {channels.length > 0 && (
+            <section className="mb-3 rounded-md border border-border/60 bg-card/40 p-2">
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Channels (live settings inventory)
+              </div>
+              {(['connected', 'degraded', 'disconnected', 'discovered', 'installed'] as const).map((st) => {
+                const rows = groupConnectionRecords(channels)[st]
+                if (rows.length === 0) return null
+                return (
+                  <div key={st} className="mb-1">
+                    <div className="font-mono text-[9px] text-muted-foreground">
+                      {st} ({rows.length})
+                    </div>
+                    {rows.map((r) => (
+                      <div key={r.id} className="flex justify-between font-mono text-[10px]">
+                        <span>{r.id}</span>
+                        <span>{r.health}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </section>
+          )}
           {tab === 'store' ? (
             <StoreSection
               store={store}

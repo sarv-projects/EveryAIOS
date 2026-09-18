@@ -840,6 +840,26 @@ export default function ChatPanel() {
           </div>
         </>
       )}
+      {store.cuaVisionGate && (
+        <div
+          role="dialog"
+          aria-labelledby="cua-vision-title"
+          className="absolute inset-x-4 bottom-24 z-20 rounded-lg border border-warning/40 bg-card p-3 shadow-lg"
+        >
+          <div id="cua-vision-title" className="text-[12px] font-semibold text-foreground">
+            Computer use needs a vision model
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Screenshot-to-model is refused for text-only models. Pick a catalog row with image
+            input, or a local VL. Cancel leaves computer use unmounted.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" className="h-7 text-[11px]" onClick={() => store.setCuaVisionGate(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

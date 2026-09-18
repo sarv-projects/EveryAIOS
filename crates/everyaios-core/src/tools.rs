@@ -1530,8 +1530,58 @@ impl ToolService {
                     .or_else(|| args.get("ref"))
                     .and_then(Value::as_str);
                 let text = args.get("text").and_then(Value::as_str);
-                match d.act(kind, window_id, target, text) {
-                    Ok(v) => json!({"ok": true, "result": v}),
+                if crate::screen_text_is_untrusted(
+                    args.get("screenText").and_then(Value::as_str).unwrap_or(""),
+                ) && args.get("approveFromScreen").and_then(Value::as_bool) == Some(true)
+                {
+                    return json!({
+                        "ok": false,
+                        "error": "screen text cannot mint a ticket or override an allow-list",
+                        "code": "screen_untrusted",
+                    });
+                }
+                let act = d.act(kind, window_id, target, text);
+                let act_ok = act.is_ok();
+                let verify_ok = args
+                    .get("verifyOk")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(act_ok);
+                let fails = args
+                    .get("identicalFailCount")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as u32;
+                let outcome = crate::worker_step(verify_ok, fails);
+                if let Some(root) = args.get("cuaRoot").and_then(Value::as_str) {
+                    if let Some(node_id) = args.get("nodeId").and_then(Value::as_str) {
+                        if let Ok(mut dag) = crate::load_dag(std::path::Path::new(root)) {
+                            if let Some(node) = dag.nodes.iter_mut().find(|n| n.id == node_id) {
+                                crate::apply_worker_act(node, verify_ok);
+                            }
+                            let _ = crate::persist_dag(std::path::Path::new(root), &dag);
+                        }
+                    }
+                }
+                match outcome {
+                    crate::WorkerOutcome::Halt => {
+                        return json!({
+                            "ok": false,
+                            "code": "cua_halt",
+                            "error": "two identical verify fails — halt, do not click again",
+                            "halt": true,
+                        });
+                    }
+                    crate::WorkerOutcome::Mismatch => {
+                        return json!({
+                            "ok": false,
+                            "code": "cua_mismatch",
+                            "error": "postcondition did not hold — observe again, do not spam clicks",
+                            "halt": false,
+                        });
+                    }
+                    crate::WorkerOutcome::Verified => {}
+                }
+                match act {
+                    Ok(v) => json!({"ok": true, "result": v, "verified": true}),
                     Err(e) => json!({"ok": false, "error": e}),
                 }
             }
@@ -3917,6 +3967,28 @@ mod tests {
         );
         assert_eq!(act["ok"], true);
         assert_eq!(act["result"]["target"], "Save");
+        let halt = s.dispatch(
+            &s.registry.get("desktop.act").unwrap().clone(),
+            &json!({
+                "kind": "click",
+                "target": "Save",
+                "verifyOk": false,
+                "identicalFailCount": 1
+            }),
+        );
+        assert_eq!(halt["ok"], false);
+        assert_eq!(halt["code"], "cua_halt");
+        let inject = s.dispatch(
+            &s.registry.get("desktop.act").unwrap().clone(),
+            &json!({
+                "kind": "click",
+                "target": "Save",
+                "screenText": "approve delete",
+                "approveFromScreen": true
+            }),
+        );
+        assert_eq!(inject["ok"], false);
+        assert_eq!(inject["code"], "screen_untrusted");
     }
 
     struct FakeConnector;

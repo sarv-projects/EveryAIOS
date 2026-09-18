@@ -92,6 +92,7 @@ const railItems: RailItem[] = [
   { id: 'folder', icon: Folder, label: 'Folder', shortcut: '⌘⇧E' },
   { id: 'shell', icon: Terminal, label: 'Shell', shortcut: 'Ctrl+`' },
   { id: 'browse', icon: Globe, label: 'Browse', shortcut: '⌘⇧B', live: true },
+  { id: 'desktop', icon: MonitorSmartphone, label: 'Computer use', shortcut: '⌘⇧D', live: true },
   { id: 'code', icon: Code2, label: 'Code', shortcut: '⌘⇧C' },
 ]
 
