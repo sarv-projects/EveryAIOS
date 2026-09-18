@@ -271,7 +271,7 @@ export const LOOP_PINNED_TOOL_IDS: readonly string[] = [
   'file_ops.read',
   'file_ops.list',
   'file_ops.write',
-  'file_ops.replace',
+  'file_ops.edit',
   'search.query',
 ];
 
@@ -1553,6 +1553,29 @@ export function applyEditLadder(
     // All rungs refused — report exact's verdict below.
   }
   throw firstErr instanceof Error ? firstErr : new Error(String(firstErr))
+}
+
+/**
+ * P64.5/P64.6 — map the model-facing `file_ops.edit` args to the edit params.
+ *
+ * The tool the model is offered takes `{path, old, new}` (Rust's registered
+ * schema). `new` may legitimately be an empty string — that is a deletion — so
+ * an absent `new` is distinguished from an empty one rather than both being
+ * coerced to "". A missing or non-string field fails closed here, before any
+ * read, rather than editing the wrong text.
+ */
+export function editArgsFromToolCall(args: Record<string, unknown>): ExactEditParams {
+  const path = typeof args.path === "string" ? args.path : "";
+  if (path.trim().length === 0) {
+    throw new Error("file_ops.edit requires `path` — fail-closed");
+  }
+  if (typeof args.old !== "string") {
+    throw new Error("file_ops.edit requires `old` — fail-closed");
+  }
+  if (typeof args.new !== "string") {
+    throw new Error("file_ops.edit requires `new` — fail-closed");
+  }
+  return { path, target: args.old, replacement: args.new };
 }
 
 /**

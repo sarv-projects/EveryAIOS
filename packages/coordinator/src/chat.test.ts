@@ -846,3 +846,163 @@ describe("extractJsonToolCalls", () => {
     expect(extractJsonToolCalls('{"city":"X"}')).toEqual([]);
   });
 });
+
+describe("P64.5/P64.6 — the model's edit call rides the ladder + shadow gate", () => {
+  /** The source the fake `file_ops.read` serves, and the target the edit hits. */
+  const SOURCE = "const alpha = 1;\nfn main() {}\nconst alpha = 2;\n";
+  const TARGET = "fn main() {}\n";
+
+  test("file_ops.edit: reads, preflights, writes the exact post-state, records the rung", async () => {
+    const { events, emit } = collector();
+    const methods: string[] = [];
+    const preflights: Record<string, unknown>[] = [];
+    const request = async (method: string, params: unknown) => {
+      methods.push(method);
+      const p = (params ?? {}) as Record<string, unknown>;
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "execution/begin") return { id: "ex:1" };
+      if (method === "execution/preflight") {
+        preflights.push(p);
+        return { needsPreflight: true, verified: true, passed: true, reason: "cargo check passed" };
+      }
+      if (method === "tool/exec") return { action: "allow", ticketId: "tkt:e1", argsHash: "h" };
+      if (method === "tool/commit") {
+        if (p.toolId === "file_ops.read") {
+          expect(p.args).toEqual({ path: "src/a.ts" });
+          return { ok: true, content: SOURCE, auditSeq: 1, ticketId: "tkt:e1" };
+        }
+        if (p.toolId === "file_ops.write") {
+          // The write must commit exactly the spliced bytes: the line inserted
+          // before `fn main`, i.e. the gate asserted the shipped bytes.
+          expect(p.args).toEqual({
+            path: "src/a.ts",
+            content: "const alpha = 1;\nconst alpha = 3;\nfn main() {}\nconst alpha = 2;\n",
+          });
+          return { ok: true, content: "wrote src/a.ts", auditSeq: 7, ticketId: "tkt:e1" };
+        }
+        throw new Error(`commit of ${String(p.toolId)} must not happen`);
+      }
+      return {};
+    };
+    let round = 0;
+    const bridge: ProviderBridge = {
+      async *streamChat(_req, signal) {
+        if (signal.aborted) return;
+        if (round === 0) {
+          round += 1;
+          yield { type: "tool_call", id: "file_ops.edit", args: { path: "src/a.ts", old: TARGET, new: "const alpha = 3;\nfn main() {}\n" } };
+          yield { type: "done" };
+          return;
+        }
+        yield { type: "text", text: "edited" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    // The live path: the gate ran with the candidate, the write stayed inside
+    // the ticketed file_ops plane, and the receipt recorded the rung + verdict.
+    expect(preflights).toHaveLength(1);
+    expect(preflights[0]).toMatchObject({
+      id: "ex:1",
+      root: ".",
+      filesChanged: 1,
+      // Adding a `const` line is deliberately NOT a structural signal
+      // (`deriveEditRisk` counts fn/class/function declarations only).
+      structural: false,
+      destructive: false,
+      candidateFiles: [
+        { path: "src/a.ts", content: "const alpha = 1;\nconst alpha = 3;\nfn main() {}\nconst alpha = 2;\n" },
+      ],
+    });
+    expect(methods).toContain("execution/record_edit");
+    expect(events.some((e) => e.type === "tool_call" && e.toolId === "file_ops.edit")).toBe(true);
+    const result = events.find((e) => e.type === "tool_result" && e.toolId === "file_ops.edit") as
+      | { result?: { strategy?: string; ok?: boolean; preflight?: { passed?: boolean } } }
+      | undefined;
+    expect(result?.result?.strategy).toBe("exact");
+    expect(result?.result?.ok).toBe(true);
+    expect(result?.result?.preflight?.passed).toBe(true);
+    expect(events.some((e) => e.type === "error")).toBe(false);
+  });
+
+  test("file_ops.edit: a failed preflight verdict refuses the edit before any write", async () => {
+    const { events, emit } = collector();
+    const commits: string[] = [];
+    const request = async (method: string, params: unknown) => {
+      const p = (params ?? {}) as Record<string, unknown>;
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "execution/begin") return { id: "ex:2" };
+      if (method === "execution/preflight") {
+        return { needsPreflight: true, verified: true, passed: false, reason: "check failed" };
+      }
+      if (method === "tool/exec") {
+        expect(p.toolId).toBe("file_ops.read"); // only the read ever gets a ticket
+        return { action: "allow", ticketId: "tkt:e2", argsHash: "h" };
+      }
+      if (method === "tool/commit") {
+        commits.push(String(p.toolId));
+        if (p.toolId === "file_ops.read") return { ok: true, content: SOURCE, auditSeq: 1, ticketId: "tkt:e2" };
+        throw new Error(`commit of ${String(p.toolId)} must not happen after a failed verdict`);
+      }
+      // Benign turn-loop RPCs (guard/evaluate, terminal/status, ...) may fire;
+      // only the commit log above is under test.
+      return {};
+    };
+    let round = 0;
+    const bridge: ProviderBridge = {
+      async *streamChat(_req, signal) {
+        if (signal.aborted) return;
+        if (round === 0) {
+          round += 1;
+          yield { type: "tool_call", id: "file_ops.edit", args: { path: "src/a.ts", old: TARGET, new: "fn main() {} // changed\n" } };
+          yield { type: "done" };
+          return;
+        }
+        yield { type: "text", text: "blocked" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    // The gate fired, refused, and no `file_ops.write` ever got a ticket.
+    expect(commits).toEqual(["file_ops.read"]);
+    const failed = events.find((e) => e.type === "error" && e.code === "tool_failed") as
+      | { message?: string }
+      | undefined;
+    expect(failed?.message).toContain("shadow preflight failed");
+  });
+
+  test("file_ops.edit: missing `old`/`new` fails closed before any read", async () => {
+    const { events, emit } = collector();
+    const methods: string[] = [];
+    const request = async (method: string) => {
+      methods.push(method);
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "execution/begin") return { id: "ex:3" };
+      if (method === "tool/exec") return { action: "allow", ticketId: "tkt:e3", argsHash: "h" };
+      if (method === "tool/commit") return { ok: true, content: "x", auditSeq: 1, ticketId: "tkt:e3" };
+      return {};
+    };
+    let round = 0;
+    const bridge: ProviderBridge = {
+      async *streamChat(_req, signal) {
+        if (signal.aborted) return;
+        if (round === 0) {
+          round += 1;
+          yield { type: "tool_call", id: "file_ops.edit", args: { path: "src/a.ts" } };
+          yield { type: "done" };
+          return;
+        }
+        yield { type: "text", text: "refused" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    // The malformed call is refused before a single ticket or RPC is spent.
+    expect(methods).not.toContain("tool/exec");
+    expect(methods).not.toContain("execution/preflight");
+    const failed = events.find((e) => e.type === "error" && e.code === "tool_failed") as
+      | { message?: string }
+      | undefined;
+    expect(failed?.message).toContain("file_ops.edit requires");
+  });
+});

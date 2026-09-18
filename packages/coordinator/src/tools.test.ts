@@ -125,7 +125,7 @@ describe("resolveActiveTools / capability index", () => {
       { id: "script.run", family: "script", description: "Run a shell command line in the terminal plane", readOnly: false, operation: "terminal_shell", risk: "high", argsSchema: {} },
       { id: "file_ops.read", family: "fileops", description: "Read a UTF-8 file", readOnly: true, operation: "write", risk: "low", argsSchema: {} },
       { id: "file_ops.write", family: "fileops", description: "Write a file", readOnly: false, operation: "write", risk: "medium", argsSchema: {} },
-      { id: "file_ops.replace", family: "fileops", description: "Replace one occurrence", readOnly: false, operation: "write", risk: "medium", argsSchema: {} },
+      { id: "file_ops.edit", family: "fileops", description: "Edit one occurrence", readOnly: false, operation: "write", risk: "medium", argsSchema: {} },
       { id: "file_ops.list", family: "fileops", description: "List a directory", readOnly: true, operation: "write", risk: "low", argsSchema: {} },
       { id: "search.query", family: "search", description: "Web search", readOnly: true, operation: "external_network", risk: "medium", argsSchema: {} },
       ...FIRST_CLASS_NATIVE_TOOLS,
@@ -137,7 +137,7 @@ describe("resolveActiveTools / capability index", () => {
     // The shell — the whole point.
     expect(ids).toContain("script.run");
     // The file loop and the four first-class coordinator tools (§17.4.1).
-    for (const id of ["file_ops.read", "file_ops.list", "file_ops.write", "file_ops.replace", "search.query", "ask", "plan", "todo", "subagent"]) {
+    for (const id of ["file_ops.read", "file_ops.list", "file_ops.write", "file_ops.edit", "search.query", "ask", "plan", "todo", "subagent"]) {
       expect(ids).toContain(id);
     }
     // ...and the cap still holds, still id-sorted (cache-stable).
