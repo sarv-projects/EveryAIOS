@@ -16,6 +16,17 @@ export function citationAnchorId(index: number): string {
   return `cite-${index}`
 }
 
+/** P51.7 — exportable dump: marked body + numbered source list. */
+export function formatCitationExport(text: string, citations: ChatCitation[]): string {
+  const body = applyCitationMarks(text, citations)
+  if (!citations.length) return body
+  const refs = [...citations]
+    .sort((a, b) => a.index - b.index)
+    .map((c) => `[^${c.index}]: ${c.title} (${c.url})`)
+    .join('\n')
+  return `${body}\n\n## Sources\n${refs}`
+}
+
 /** Replace a bare URL mention with `[^n]` when that URL is a known citation. */
 export function applyCitationMarks(text: string, citations: ChatCitation[]): string {
   if (!citations.length) return text

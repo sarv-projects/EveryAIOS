@@ -132,6 +132,12 @@ impl AttachedServer {
         Self::spawn_uncontrolled(command, args)
     }
 
+    fn resolve_or_err(command: &str, args: &[&str]) -> Result<crate::npx::ResolvedLaunch, AttachError> {
+        crate::npx::resolve_stdio_launch(command, args).map_err(|e| {
+            AttachError::Spawn(std::io::Error::other(e.to_string()))
+        })
+    }
+
     /// Spawn the child inside the native OS sandbox (Linux bubblewrap).
     ///
     /// The sandbox is `--clearenv`, so the child inherits **no** ambient
@@ -151,9 +157,10 @@ impl AttachedServer {
         // The backend refuses to bind a path that does not exist (fail-closed),
         // so the child's scratch dir has to exist before the spawn.
         std::fs::create_dir_all(scratch).map_err(AttachError::Spawn)?;
-        let mut argv = Vec::with_capacity(args.len() + 1);
-        argv.push(command.to_string());
-        argv.extend(args.iter().map(|a| (*a).to_string()));
+        let resolved = Self::resolve_or_err(command, args)?;
+        let mut argv = Vec::with_capacity(resolved.args.len() + 1);
+        argv.push(resolved.command.clone());
+        argv.extend(resolved.args.iter().cloned());
         let spec = SandboxSpec {
             role: SandboxRole::ChildExecutionSandbox,
             profile: profiles::worker(scratch),
@@ -166,7 +173,9 @@ impl AttachedServer {
         // (`python server.py` cannot even find `python`). The allow-list is the
         // documented middle path: path/loader/discovery vars only, secret-shaped
         // names refused by the backend, everything else still scrubbed.
-        let env = essential_env();
+        let mut env = essential_env();
+        env.retain(|(k, _)| k != "PATH");
+        env.push(("PATH".into(), resolved.path));
         let sandboxed = LinuxBwrapBackend
             .spawn_stdio_with_env(&spec, &argv, &env)
             .map_err(|e| AttachError::Spawn(std::io::Error::other(e.to_string())))?;
@@ -185,8 +194,10 @@ impl AttachedServer {
     /// Legacy attach path. It is intentionally explicit: the child is not
     /// covered by the native ticket/audit guarantee.
     pub fn spawn_uncontrolled(command: &str, args: &[&str]) -> Result<Self, AttachError> {
-        let mut child = Command::new(command)
-            .args(args)
+        let resolved = Self::resolve_or_err(command, args)?;
+        let mut child = Command::new(&resolved.command)
+            .args(&resolved.args)
+            .env("PATH", &resolved.path)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit()) // server logs stay visible for debug
@@ -464,6 +475,19 @@ mod tests {
             Some("my-server_2.v1".into())
         );
         assert_eq!(sanitize_attach_name("  trimmed  "), Some("trimmed".into()));
+    }
+
+    #[test]
+    fn npx_call_is_refused_before_spawn() {
+        let err = match AttachedServer::spawn("npx", &["-c", "rm -rf /"]) {
+            Err(e) => e,
+            Ok(_) => panic!("hostile npx -c must not spawn"),
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("trusted") || msg.contains("npx"),
+            "expected trusted-list refusal, got {msg}"
+        );
     }
 
     #[test]
