@@ -1174,16 +1174,74 @@ export function assertSingleMatch(content: string, target: string): void {
  */
 export interface ApplyExactEditOptions {
   /**
-   * P64.6 — the caller's own risk read for the gate. Omitted defaults to a
-   * small single-file `local-write`, which per the contract verifies *after*
-   * the commit and earns no preflight. Only a caller that can actually see the
-   * edit is structural or destructive should set these; they are an input to
+   * P64.6 — the caller's risk read for the gate. Omitted defaults to the
+   * coordinator's own derivation (`deriveEditRisk`); an explicit value can
+   * only *raise* the flags, never silence a derived one. They are an input to
    * Rust's gate, never a way to bypass it (Rust decides).
    */
   structural?: boolean
   destructive?: boolean
   /** Shadow tree the check runs in. Defaults to the workspace root (`.`). */
   root?: string
+}
+
+/**
+ * Declarations whose count is a structural signal when a splice adds or
+ * removes one. Deliberately narrow: `const`/`let`/locals are noise, and a
+ * merely multi-line edit must NOT fire the gate (a shadow typecheck costs
+ * real build time — the gate is for edits that plausibly move a type
+ * boundary, which is exactly what a typecheck catches before landing).
+ */
+const STRUCTURAL_DECL_RE =
+  /\b(?:function|class|struct|impl|enum|trait|interface|def|fn|func|type)\b/g;
+
+function countMatches(text: string, re: RegExp): number {
+  return (text.match(re) ?? []).length;
+}
+
+/**
+ * P64.6 — derive the edit's own risk from the splice, not from a model arg.
+ *
+ * The model's edit arguments never carry risk flags (a model-supplied flag
+ * would let the model lower its own gate); risk is a property of the change.
+ * For an exact single-occurrence splice the derivable signals are:
+ *
+ * - **structural** — the splice changes the number of declaration sites
+ *   (`fn`/`class`/`struct`/`interface`/`type`/…), or changes the bracket
+ *   balance (`{}` `()` `[]`). Cheap, language-agnostic proxies for "this edit
+ *   can move a type boundary". A string/comment/log-line edit derives no
+ *   risk and stays a small `local-write` that verifies after, per contract.
+ * - **destructive** — not derivable for an in-place splice (nothing is
+ *   deleted beyond the replaced block), so always `false` here; destructive
+ *   risk belongs to the overwrite/delete primitives.
+ *
+ * Conservative direction: under-deriving keeps today's behaviour (post-commit
+ * verification); over-deriving only buys a shadow check the gate then runs —
+ * never a refusal by itself. Rust still owns the decision.
+ */
+export function deriveEditRisk(params: {
+  target: string
+  replacement: string
+}): { structural: boolean; destructive: boolean; filesChanged: number } {
+  const { target, replacement } = params;
+  const declDelta =
+    countMatches(replacement, STRUCTURAL_DECL_RE) -
+    countMatches(target, STRUCTURAL_DECL_RE);
+  if (declDelta !== 0) {
+    return { structural: true, destructive: false, filesChanged: 1 };
+  }
+  const balance = (s: string): number => {
+    let b = 0;
+    for (const ch of s) {
+      if (ch === "{" || ch === "(" || ch === "[") b += 1;
+      else if (ch === "}" || ch === ")" || ch === "]") b -= 1;
+    }
+    return b;
+  };
+  if (balance(replacement) !== balance(target)) {
+    return { structural: true, destructive: false, filesChanged: 1 };
+  }
+  return { structural: false, destructive: false, filesChanged: 1 };
 }
 
 export async function applyExactEdit(
@@ -1212,11 +1270,15 @@ export async function applyExactEdit(
   // project's own declared check there, and returns the verdict. A verdict that
   // ran and failed refuses the write; `verified: false` (could not run) is
   // reported as no evidence and never blocks — see `preflightBlocks`.
+  //
+  // The risk flags are derived from the splice itself (`deriveEditRisk`), not
+  // taken from the model: an explicit caller flag can only raise the gate.
+  const derived = deriveEditRisk({ target: params.target, replacement: params.replacement });
   const preflight = await executor.runShadowPreflight({
     root: opts.root ?? ".",
-    filesChanged: 1,
-    structural: opts.structural === true,
-    destructive: opts.destructive === true,
+    filesChanged: derived.filesChanged,
+    structural: derived.structural || opts.structural === true,
+    destructive: derived.destructive || opts.destructive === true,
     candidateFiles: [{ path, content: next }],
   });
   if (preflightBlocks(preflight)) {

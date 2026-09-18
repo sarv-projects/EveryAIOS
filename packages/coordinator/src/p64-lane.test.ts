@@ -20,6 +20,7 @@ import {
   buildSubAgentSpec,
   checkSubAgentSpawn,
   countOccurrences,
+  deriveEditRisk,
   deriveEffectiveSubAgentTools,
   dispatchSubAgent,
   preflightBlocks,
@@ -655,5 +656,66 @@ describe("P64.6 — shadow preflight seam (risk-gated typecheck before commit)",
       { sessionId: "s" },
     );
     expect(calls).toContain("tool/commit");
+  });
+
+  test("deriveEditRisk: a declaration-count change is structural, a text swap is not", () => {
+    // Adds a `function` — the splice moves a declaration boundary.
+    expect(
+      deriveEditRisk({ target: "// handler\n", replacement: "function handler() {}\n" })
+        .structural,
+    ).toBe(true);
+    // Removes a declaration — same signal, opposite direction.
+    expect(deriveEditRisk({ target: "fn old() {}\n", replacement: "" }).structural).toBe(true);
+    // Renames an identifier / swaps a string — no declaration delta, no
+    // bracket delta: a small local-write that verifies after, per contract.
+    expect(
+      deriveEditRisk({ target: "const url = \"http://a\";", replacement: "const url = \"http://b\";" }),
+    ).toEqual({ structural: false, destructive: false, filesChanged: 1 });
+    // `const`/`let` are deliberately not declaration signals (locals are noise).
+    expect(deriveEditRisk({ target: "let x = 1;", replacement: "const x = 1;" }).structural).toBe(
+      false,
+    );
+  });
+
+  test("deriveEditRisk: a bracket-balance change is structural (unmatched brace)", () => {
+    expect(
+      deriveEditRisk({ target: "if (ok) { run(); }", replacement: "if (ok) { run();" }).structural,
+    ).toBe(true);
+  });
+
+  test("a production edit earns the preflight from its own shape — no caller flag", async () => {
+    // The edit changes the declaration count, so the coordinator itself must
+    // derive `structural: true` — nothing in the apply args or any
+    // model-visible schema declares it.
+    const seen: Array<{ method: string; params: unknown }> = [];
+    const { request } = editPath({
+      needsPreflight: true,
+      verified: true,
+      passed: true,
+      reason: "structural edit preflights in a shadow tree",
+    });
+    const wrapped = async (method: string, params: unknown) => {
+      seen.push({ method, params });
+      return request(method, params);
+    };
+    const ex = new ToolExecutor(wrapped);
+    ex.setExecutionId("ex-23");
+    await applyExactEdit(
+      ex,
+      // file body is "line one\nTARGET\n" — `TARGET` counts as no declaration,
+      // `function added() {}` adds one → declaration-count delta.
+      { path: "src/a.ts", target: "TARGET", replacement: "function added() {}" },
+      { sessionId: "s" },
+      { root: "/repo" }, // no structural/destructive — derived, not declared
+    );
+    const pf = seen.find((c) => c.method === "execution/preflight");
+    const params = pf?.params as Record<string, unknown>;
+    expect(params.structural).toBe(true);
+    expect(params.destructive).toBe(false);
+    expect(params.filesChanged).toBe(1);
+  });
+
+  test("deriveEditRisk: destructive is never derived from an in-place splice", () => {
+    expect(deriveEditRisk({ target: "a", replacement: "" }).destructive).toBe(false);
   });
 });
