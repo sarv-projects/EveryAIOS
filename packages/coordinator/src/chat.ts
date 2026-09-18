@@ -47,6 +47,7 @@ import {
   type OpenAIFunctionTool,
 } from "./tools";
 import { citationsFromSearchResult } from "./citations";
+import { filterModelWarmSkills, type SkillWarmRow } from "./skill-warm";
 import { refuseDesktopIfWrongSurface } from "./cua-route";
 import { applyCuaReplanIfPresent } from "./cua-replan";
 import { applyCuaSkillPromoteIfPresent } from "./cua-skill";
@@ -929,10 +930,22 @@ async function runInbuiltTurn(
             injectedBlocks.push({ source: "memory_warm_set", content: block });
             system = injectBelowBoundary(system, block);
           }
-          // P64.8 warm-set half: validated learned skills ride the same
-          // retrieval seam below the boundary (never executable before the
-          // native validation pipeline stores them).
-          const skills = plan?.learnedSkills ?? [];
+          // P51.28 / P64.8 — model catalog from skill/warm_set (Rust omits
+          // disable-model-invocation). Fall back to memory/plan.learnedSkills.
+          let skills = plan?.learnedSkills ?? [];
+          try {
+            const warm = (await request("skill/warm_set", {})) as {
+              skills?: string[];
+              rows?: SkillWarmRow[];
+            };
+            if (Array.isArray(warm?.rows) && warm.rows.length > 0) {
+              skills = filterModelWarmSkills(warm.rows);
+            } else if (Array.isArray(warm?.skills)) {
+              skills = warm.skills;
+            }
+          } catch {
+            /* skill/warm_set is best-effort — memory/plan lines still apply */
+          }
           if (skills.length > 0) {
             const block = `<skill_warm_set>\n${skills.join("\n")}\n</skill_warm_set>`;
             contextTrace.record("memory_warm_set", block);

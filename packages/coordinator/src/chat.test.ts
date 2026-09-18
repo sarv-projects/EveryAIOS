@@ -391,6 +391,44 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     expect(events.some((e) => e.type === "error")).toBe(false);
   });
 
+  test("P51.28: skill/warm_set omits disable-model-invocation from the prompt", async () => {
+    let systemPrompt = "";
+    const bridge: ProviderBridge = {
+      async *streamChat(req) {
+        systemPrompt = req.messages[0]!.content ?? "";
+        yield { type: "text", text: "ok" };
+        yield { type: "done", usage: { promptTokens: 1, completionTokens: 1 } };
+      },
+    };
+    const request = async (method: string) => {
+      if (method === "memory/plan") {
+        return { coreFacts: [], learnedSkills: ["deploy: should not win"] };
+      }
+      if (method === "skill/warm_set") {
+        return {
+          rows: [
+            { name: "notes", description: "Take notes" },
+            {
+              name: "deploy",
+              description: "Deploy the branch",
+              disableModelInvocation: true,
+              userInvocable: true,
+            },
+          ],
+        };
+      }
+      return {};
+    };
+    const { emit } = collector();
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    expect(systemPrompt).toContain("<skill_warm_set>");
+    expect(systemPrompt).toContain("notes: Take notes");
+    expect(systemPrompt).not.toContain("Deploy the branch");
+    expect(systemPrompt.indexOf(CACHE_BOUNDARY)).toBeLessThan(
+      systemPrompt.indexOf("<skill_warm_set>"),
+    );
+  });
+
   test("H2: tool_index is injected below the cache boundary; tools body is the resolved subset", async () => {
     const { emit } = collector();
     let systemPrompt = "";

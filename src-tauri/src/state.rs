@@ -81,7 +81,7 @@ pub struct AppState {
     pub terminal: Arc<PtyHost>,
     /// P11.5.8: attached user-supplied MCP servers (rows for the Connectors
     /// panel) + the live child handles (dropping the map kills the child).
-    pub mcp_servers: Mutex<std::collections::HashMap<String, McpServerRow>>,
+    pub mcp_servers: Arc<Mutex<std::collections::HashMap<String, McpServerRow>>>,
     /// Arc-shared so the agent loop's `ExternalToolBackend` (P55.11) can reach
     /// the same child that answered `tools/list` — one server per row, never a
     /// second spawn. Dropping the last reference kills the children.

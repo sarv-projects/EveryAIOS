@@ -156,6 +156,9 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         mcp_cmds::mcp_detach,
         // P51.18: no-restart refresh (prune dead children + relist).
         mcp_cmds::mcp_refresh,
+        mcp_cmds::mcp_start,
+        mcp_cmds::mcp_stop,
+        mcp_cmds::mcp_set_autostart,
         mcp_cmds::store_catalog,
         mcp_cmds::mcp_connect_start,
         mcp_cmds::mcp_remote_status,

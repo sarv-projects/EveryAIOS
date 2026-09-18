@@ -15,6 +15,16 @@ export interface SkillRowView {
   scopes_plain: string[];
   installed: boolean;
   tampered: boolean | null;
+  /** P51.28 — listed as `/name` (Crush user-invocable or Zed disable-model). */
+  user_invocable?: boolean;
+  disable_model_invocation?: boolean;
+}
+
+/** Slash names the composer may offer. Model-only skills stay out. */
+export function slashCatalog(rows: SkillRowView[]): string[] {
+  return rows
+    .filter((r) => r.installed && (r.user_invocable === true || r.disable_model_invocation === true))
+    .map((r) => r.id)
 }
 
 /** P65.5 — discovery (catalog) is not occupancy. Installed rows only occupy. */
@@ -64,6 +74,8 @@ export function demoSkills(): SkillRowView[] {
       scopes_plain: ["Write to your files (each write is approved)", "Call local + remote MCP tools"],
       installed: false,
       tampered: null,
+      user_invocable: false,
+      disable_model_invocation: false,
     },
     {
       id: "note-taker",

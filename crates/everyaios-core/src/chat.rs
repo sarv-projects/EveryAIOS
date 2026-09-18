@@ -496,6 +496,52 @@ fn skill_rpc(
                 "version": skill.manifest.version,
             }))
         }
+        // P51.28 — model catalog omits disable-model-invocation (Zed
+        // select_catalog_skills / Crush user-only skills). Slash names stay.
+        "skill/warm_set" => {
+            let skills = store.scan().map_err(|e| e.to_string())?;
+            let rows: Vec<serde_json::Value> = skills
+                .iter()
+                .map(|s| {
+                    serde_json::json!({
+                        "name": s.manifest.name,
+                        "description": s.manifest.description,
+                        "userInvocable": everyaios_blueprint::may_user_slash_invoke(&s.manifest),
+                        "disableModelInvocation": s.manifest.disable_model_invocation,
+                    })
+                })
+                .collect();
+            Ok(serde_json::json!({
+                "skills": everyaios_blueprint::model_warm_set(&skills),
+                "slash": everyaios_blueprint::user_slash_catalog(&skills),
+                "rows": rows,
+            }))
+        }
+        "skill/compose" => {
+            let stack: Vec<String> = params
+                .get("stack")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+            let invoke = if params
+                .get("userExplicit")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                everyaios_blueprint::InvokeKind::UserExplicit
+            } else {
+                everyaios_blueprint::InvokeKind::ModelAuto
+            };
+            let skills = store.scan().map_err(|e| e.to_string())?;
+            let index = everyaios_blueprint::SkillsIndexFile::from_skills(&skills);
+            let out = everyaios_blueprint::compose_stack_for(&index, &stack, &[], query, invoke);
+            serde_json::to_value(out).map_err(|e| e.to_string())
+        }
         other => Err(format!("method not found: {other}")),
     }
 }
@@ -1162,9 +1208,25 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 | "memory/load"
                         );
                         match svc.handle(method, &params) {
-                            Ok(out) => {
+                            Ok(mut out) => {
                                 if is_mutation {
                                     persist_memory(&svc);
+                                }
+                                // P51.28 — learnedSkills on memory/plan is the
+                                // model warm set (disable-model-invocation omitted).
+                                if method == "memory/plan" {
+                                    let store =
+                                        skill_store.lock().unwrap_or_else(|e| e.into_inner());
+                                    if let Ok(skills) = store.scan() {
+                                        if let Some(obj) = out.as_object_mut() {
+                                            obj.insert(
+                                                "learnedSkills".into(),
+                                                serde_json::json!(
+                                                    everyaios_blueprint::model_warm_set(&skills)
+                                                ),
+                                            );
+                                        }
+                                    }
                                 }
                                 let _ = writer.reply(id, out);
                             }
@@ -2817,6 +2879,66 @@ mod tests {
         )
         .is_err());
         assert!(super::skill_rpc("skill/nope", &serde_json::json!({}), &store).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P51.28 — skill/warm_set hides disable-model-invocation from the model
+    /// catalog and keeps it on the user slash list (Zed/Crush).
+    #[test]
+    fn skill_rpc_warm_set_omits_disabled_model_invocation() {
+        let (dir, _vault) = temp_vault("skill-warm");
+        let store = everyaios_blueprint::SkillStore::new(dir.join("skills"));
+        let notes = everyaios_blueprint::Skill {
+            manifest: everyaios_blueprint::SkillManifest {
+                name: "notes".into(),
+                description: "Take notes".into(),
+                author: "t".into(),
+                created: "2026-09-18".into(),
+                version: "1".into(),
+                ..Default::default()
+            },
+            body: "Take notes.".into(),
+        };
+        let deploy = everyaios_blueprint::Skill {
+            manifest: everyaios_blueprint::SkillManifest {
+                name: "deploy".into(),
+                description: "Deploy the branch".into(),
+                author: "t".into(),
+                created: "2026-09-18".into(),
+                version: "1".into(),
+                user_invocable: true,
+                disable_model_invocation: true,
+                ..Default::default()
+            },
+            body: "Deploy.".into(),
+        };
+        store.save(&notes, true).expect("save notes");
+        store.save(&deploy, true).expect("save deploy");
+        let warm = super::skill_rpc("skill/warm_set", &serde_json::json!({}), &store).unwrap();
+        let skills = warm["skills"].as_array().expect("skills");
+        let joined: Vec<&str> = skills.iter().filter_map(|v| v.as_str()).collect();
+        assert!(joined.iter().any(|s| s.starts_with("notes:")));
+        assert!(!joined.iter().any(|s| s.starts_with("deploy:")));
+        let slash = warm["slash"].as_array().expect("slash");
+        assert!(slash.iter().any(|v| v.as_str() == Some("deploy")));
+        let auto = super::skill_rpc(
+            "skill/compose",
+            &serde_json::json!({ "stack": ["deploy"], "query": "deploy" }),
+            &store,
+        )
+        .unwrap();
+        assert!(!auto["rejected"].as_array().unwrap().is_empty());
+        let user = super::skill_rpc(
+            "skill/compose",
+            &serde_json::json!({
+                "stack": ["deploy"],
+                "query": "deploy",
+                "userExplicit": true
+            }),
+            &store,
+        )
+        .unwrap();
+        assert!(user["rejected"].as_array().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -11,7 +11,12 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — P60.4/.8–.11 + P51.10 walkthrough)**:
+**(Current, 2026-09-18 — P51.28 skill invocation + P51.18 MCP autoStart)**:
+- Scope: Crush/Zed `disable-model-invocation` / `user-invocable` have live consumers (`skill/warm_set`, compose, Skills badges). AnythingLLM MCP Start/Stop/autoStart/lazy-start: identity survives Stop; first tools/call does not undo an explicit Stop.
+- Verified: blueprint 1/0; core skill_rpc 2/0; src-tauri p51_stop 1/0; coordinator 34/0; UI 2/0; tsc 0; ipc-parity 0 broken.
+- Not flipped: P65.8 probes, P64.5/6 soak, packaged E2E, Windows/mac, post-v1.
+
+**(Previous, 2026-09-18 — P60.4/.8–.11 + P51.10 walkthrough)**:
 - Scope: cheapest reliable combo; harness×model cases A/B/C; Chief spend warn; fabric a/b/c on the node; occupancy = picked Chief; OpenChamber Changes Walkthrough in Progress.
 - Verified: core `p60_` 16/0; coordinator combo/fabric/spend/bind 6/0; UI occupancy/walkthrough/spend 4/0; tsc 0.
 - Not flipped: P65.8 probes, P50.4.3 STT, soak, Windows/mac, post-v1.

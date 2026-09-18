@@ -61,6 +61,10 @@ pub struct SkillRowView {
     /// install-time sha-256 pin (mutated / upgraded out-of-band). `None` =
     /// not installed or no pin (user-authored skill).
     pub tampered: Option<bool>,
+    /// P51.28 — slash/picker (Crush user-invocable or Zed disable-model).
+    pub user_invocable: bool,
+    /// P51.28 — model must not auto-select.
+    pub disable_model_invocation: bool,
 }
 
 /// Verify the bundled signed index against the pinned key and return the rows.
@@ -180,19 +184,30 @@ pub fn skills_catalog(
     let store = everyaios_blueprint::SkillStore::new(skills_root());
     Ok(rows
         .into_iter()
-        .map(|r| SkillRowView {
-            id: r.id.clone(),
-            name: r.name.clone(),
-            version: r.version.clone(),
-            description: r.description.clone(),
-            permissions: r.permissions.clone(),
-            scopes_plain: r
-                .permissions
-                .iter()
-                .map(|p| plain_language_scope(p).to_string())
-                .collect(),
-            installed: installed.contains(&r.id),
-            tampered: skill_tampered(&store, &r.id),
+        .map(|r| {
+            let on_disk = store.load(&r.id).ok();
+            SkillRowView {
+                id: r.id.clone(),
+                name: r.name.clone(),
+                version: r.version.clone(),
+                description: r.description.clone(),
+                permissions: r.permissions.clone(),
+                scopes_plain: r
+                    .permissions
+                    .iter()
+                    .map(|p| plain_language_scope(p).to_string())
+                    .collect(),
+                installed: installed.contains(&r.id),
+                tampered: skill_tampered(&store, &r.id),
+                user_invocable: on_disk
+                    .as_ref()
+                    .map(|s| everyaios_blueprint::may_user_slash_invoke(&s.manifest))
+                    .unwrap_or(false),
+                disable_model_invocation: on_disk
+                    .as_ref()
+                    .map(|s| s.manifest.disable_model_invocation)
+                    .unwrap_or(false),
+            }
         })
         .collect())
 }

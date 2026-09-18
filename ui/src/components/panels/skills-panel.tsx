@@ -182,6 +182,14 @@ export default function SkillsPanel() {
                         tampered
                       </Badge>
                     )}
+                    {row.disable_model_invocation && (
+                      <Badge className="bg-amber-500/15 text-amber-300" title="Model cannot auto-select; type /name">
+                        /{row.id} only
+                      </Badge>
+                    )}
+                    {row.user_invocable && !row.disable_model_invocation && (
+                      <Badge className="bg-sky-500/15 text-sky-300">/{row.id}</Badge>
+                    )}
                   </div>
                   <span className="text-xs text-muted-foreground">v{row.version}</span>
                 </div>

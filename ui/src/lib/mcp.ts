@@ -40,6 +40,11 @@ export interface McpServerRow {
   /** P55.11 — the tool names the server actually advertised in `tools/list`.
    * Empty = no handshake on record (never a fabricated list). */
   toolNames: string[];
+  /** P51.18 — persisted spawn identity (survives Stop). */
+  command?: string;
+  args?: string[];
+  autoStart?: boolean;
+  stopped?: boolean;
 }
 
 /** P11.5.8 — the installed/user MCP servers list (replaces hardcoded rows). */
@@ -134,6 +139,44 @@ export async function mcpAttachCommit(
 export async function mcpDetach(name: string): Promise<boolean> {
   if (!inTauri()) return true;
   return nativeCall('MCP detach', () => invoke<boolean>("mcp_detach", { name }));
+}
+
+/** P51.18 — AnythingLLM Stop: kill the child, keep identity. */
+export async function mcpStop(name: string): Promise<boolean> {
+  if (!inTauri()) return true;
+  return nativeCall('MCP stop', () => invoke<boolean>("mcp_stop", { name }));
+}
+
+/** P51.18 — AnythingLLM Start: spawn from persisted command. */
+export async function mcpStart(name: string): Promise<{ name: string; alreadyRunning?: boolean }> {
+  if (!inTauri()) return { name, alreadyRunning: true };
+  return nativeCall('MCP start', () => invoke("mcp_start", { name }));
+}
+
+export async function mcpSetAutostart(name: string, autoStart: boolean): Promise<McpServerRow> {
+  if (!inTauri()) {
+    return {
+      name,
+      status: "disconnected",
+      transport: "stdio",
+      tools: 0,
+      desc: "",
+      toolNames: [],
+      autoStart,
+    };
+  }
+  return nativeCall('MCP autoStart', () =>
+    invoke<McpServerRow>("mcp_set_autostart", { name, autoStart }));
+}
+
+/** P51.18 — no-restart refresh + auto-start of eligible rows. */
+export async function mcpRefresh(): Promise<{
+  servers: McpServerRow[];
+  prunedDead: string[];
+  autoStarted?: string[];
+}> {
+  if (!inTauri()) return { servers: demoServers(), prunedDead: [] };
+  return nativeCall('MCP refresh', () => invoke("mcp_refresh"));
 }
 
 /**

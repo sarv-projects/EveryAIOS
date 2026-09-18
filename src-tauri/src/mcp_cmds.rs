@@ -55,6 +55,10 @@ pub fn mcp_catalog() -> McpCatalog {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// P11.5.8 — one known/attached MCP server row for the Connectors panel.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +73,71 @@ pub struct McpServerRow {
     /// or the server exposed no tools; it is never a fabricated count.
     #[serde(default)]
     pub tool_names: Vec<String>,
+    /// P51.18 — command line identity. Survives Stop (AnythingLLM Start/Stop
+    /// keeps the row). Empty on native/legacy rows.
+    #[serde(default)]
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// AnythingLLM `anythingllm.autoStart`. Default true: Refresh / first
+    /// tools/call may spawn. Explicit `false` requires Start.
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
+    /// Explicit Stop. Distinct from "never started": lazy-start must not
+    /// undo a user Stop.
+    #[serde(default)]
+    pub stopped: bool,
+}
+
+impl Default for McpServerRow {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            status: "disconnected".into(),
+            transport: "stdio".into(),
+            tools: 0,
+            desc: String::new(),
+            tool_names: Vec::new(),
+            command: String::new(),
+            args: Vec::new(),
+            auto_start: true,
+            stopped: false,
+        }
+    }
+}
+
+/// P51.18 — first-use / Refresh spawn. Explicit Stop and autoStart:false refuse.
+pub fn lazy_start_allowed(row: &McpServerRow) -> Result<(), String> {
+    if row.command.trim().is_empty() {
+        return Err(format!(
+            "MCP server `{}` has no persisted command — re-attach",
+            row.name
+        ));
+    }
+    if row.stopped {
+        return Err(format!(
+            "MCP server `{}` is stopped — start it from Connectors",
+            row.name
+        ));
+    }
+    if !row.auto_start {
+        return Err(format!(
+            "MCP server `{}` has autoStart false — start it from Connectors",
+            row.name
+        ));
+    }
+    Ok(())
+}
+
+/// P51.18 — explicit Start. Command identity required; autoStart/stopped ignored.
+pub fn explicit_start_allowed(row: &McpServerRow) -> Result<(), String> {
+    if row.command.trim().is_empty() {
+        return Err(format!(
+            "MCP server `{}` has no persisted command — re-attach",
+            row.name
+        ));
+    }
+    Ok(())
 }
 
 /// P50.3.4 — a remote `tools/call` waiting on its Guard-2 ticket. The request
@@ -159,6 +228,10 @@ pub fn mcp_servers(state: tauri::State<'_, crate::AppState>) -> Result<Vec<McpSe
             catalog.browser, catalog.storage
         ),
         tool_names: Vec::new(),
+        command: String::new(),
+        args: Vec::new(),
+        auto_start: false,
+        stopped: false,
     }];
     let attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
     // P50.2.6 — an attached row is "connected" only while its live child is
@@ -171,14 +244,10 @@ pub fn mcp_servers(state: tauri::State<'_, crate::AppState>) -> Result<Vec<McpSe
         } else {
             "disconnected"
         };
-        rows.push(McpServerRow {
-            name: name.clone(),
-            status: status.into(),
-            transport: info.transport.clone(),
-            tools: info.tools,
-            desc: info.desc.clone(),
-            tool_names: info.tool_names.clone(),
-        });
+        let mut row = info.clone();
+        row.name = name.clone();
+        row.status = status.into();
+        rows.push(row);
     }
     Ok(rows)
 }
@@ -317,20 +386,75 @@ pub fn handshake_attached(
 /// answered `tools/list`. The call is reached only through `tool/exec` +
 /// `tool/commit`, so it inherits the native Guard-2 ticket + audit path rather
 /// than adding a second, ungated MCP call surface.
+///
+/// P51.18 — if the child is down and lazy-start is allowed (autoStart, not
+/// user-stopped, command persisted), first `tools/call` brings it back.
 struct LoopExternal {
     live: std::sync::Arc<
         std::sync::Mutex<std::collections::HashMap<String, everyaios_mcp::attach::AttachedServer>>,
     >,
+    attached: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, McpServerRow>>>,
     server: String,
 }
 
 impl everyaios_core::ExternalToolBackend for LoopExternal {
     fn call(&self, tool_id: &str, args: &serde_json::Value) -> Result<serde_json::Value, String> {
+        {
+            let mut live = self.live.lock().map_err(|e| e.to_string())?;
+            if let Some(server) = live.get_mut(&self.server) {
+                return server.call_tool(tool_id, args).map_err(|e| e.to_string());
+            }
+        }
+        let row = {
+            let attached = self.attached.lock().map_err(|e| e.to_string())?;
+            attached
+                .get(&self.server)
+                .cloned()
+                .ok_or_else(|| format!("MCP server `{}` is no longer attached", self.server))?
+        };
+        lazy_start_allowed(&row)?;
+        let mut child = spawn_named_stdio(&self.server, &row.command, &row.args)?;
+        if let Err(e) = handshake_attached(&mut child, &self.server) {
+            child.shutdown();
+            return Err(e);
+        }
         let mut live = self.live.lock().map_err(|e| e.to_string())?;
-        let server = live
-            .get_mut(&self.server)
-            .ok_or_else(|| format!("MCP server `{}` is no longer attached", self.server))?;
-        server.call_tool(tool_id, args).map_err(|e| e.to_string())
+        live.insert(self.server.clone(), child);
+        live.get_mut(&self.server)
+            .ok_or_else(|| {
+                format!(
+                    "MCP server `{}` failed to stay live after lazy-start",
+                    self.server
+                )
+            })?
+            .call_tool(tool_id, args)
+            .map_err(|e| e.to_string())
+    }
+}
+
+fn spawn_named_stdio(
+    name: &str,
+    command: &str,
+    args: &[String],
+) -> Result<everyaios_mcp::attach::AttachedServer, String> {
+    use everyaios_mcp::attach::AttachedServer;
+    let scratch = mcp_scratch_dir(name).to_string_lossy().into_owned();
+    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    AttachedServer::spawn_with_posture(
+        everyaios_mcp::attach::SandboxPosture::preferred(),
+        &scratch,
+        "allow",
+        command,
+        &arg_refs,
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn bind_loop_external(state: &crate::AppState, name: &str) -> LoopExternal {
+    LoopExternal {
+        live: std::sync::Arc::clone(&state.mcp_live),
+        attached: std::sync::Arc::clone(&state.mcp_servers),
+        server: name.to_string(),
     }
 }
 
@@ -347,7 +471,6 @@ pub fn mcp_attach_commit(
     args: Vec<String>,
     ticket_id: String,
 ) -> Result<serde_json::Value, String> {
-    use everyaios_mcp::attach::AttachedServer;
     let name = everyaios_mcp::sanitize_attach_name(&name)
         .ok_or_else(|| "invalid MCP server name (letters/digits/-/_/., 1-64 chars)".to_string())?;
     let args_hash = call_args_hash(&["mcp.attach", &name, &command, &args.join("\u{1f}")]);
@@ -357,21 +480,12 @@ pub fn mcp_attach_commit(
             .use_ticket(&ticket_id, &args_hash)
             .map_err(|e| format!("MCP attach ticket invalid: {e}"))?;
     } // never hold the guard lock across a process spawn
-    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    // P62.2 — the live attach path uses the containment posture machinery:
-    // Confined (bwrap `--clearenv` + an essential-env allow-list) on Linux
-    // when the backend is available, or explicit Ambient only on platforms
-    // where `preferred()` cannot offer containment. A failed confined spawn
-    // fails the attach; it is never silently downgraded to ambient execution.
-    let scratch = mcp_scratch_dir(&name).to_string_lossy().into_owned();
-    let mut server = AttachedServer::spawn_with_posture(
-        everyaios_mcp::attach::SandboxPosture::preferred(),
-        &scratch,
-        "allow", // MCP servers that need the network declare it; default allow keeps stdio-only servers working
-        &command,
-        &arg_refs,
-    )
-    .map_err(|e| e.to_string())?;
+      // P62.2 — the live attach path uses the containment posture machinery:
+      // Confined (bwrap `--clearenv` + an essential-env allow-list) on Linux
+      // when the backend is available, or explicit Ambient only on platforms
+      // where `preferred()` cannot offer containment. A failed confined spawn
+      // fails the attach; it is never silently downgraded to ambient execution.
+    let mut server = spawn_named_stdio(&name, &command, &args)?;
     // P55.11 — the handshake is part of the product path, not a library extra:
     // a server that cannot answer `tools/list` is torn down and never recorded
     // as connected.
@@ -405,10 +519,7 @@ pub fn mcp_attach_commit(
                 registered = svc.attach_external_server(
                     &label,
                     &discovered_tools,
-                    std::sync::Arc::new(LoopExternal {
-                        live: std::sync::Arc::clone(&state.mcp_live),
-                        server: name.clone(),
-                    }),
+                    std::sync::Arc::new(bind_loop_external(&state, &name)),
                 );
                 agent_visible = true;
             }
@@ -424,6 +535,10 @@ pub fn mcp_attach_commit(
             tools: tools.len(),
             desc: desc.clone(),
             tool_names: tools.clone(),
+            command: command.clone(),
+            args: args.clone(),
+            auto_start: true,
+            stopped: false,
         },
     );
     drop(attached);
@@ -539,9 +654,9 @@ pub fn mcp_detach(state: tauri::State<'_, crate::AppState>, name: String) -> Res
 
 /// P51.18 — no-restart refresh: probe every live child with a non-blocking
 /// liveness check, drop the dead ones from `mcp_live` (rows stay as honestly
-/// `disconnected` identities for re-attach), and return the fresh row list.
-/// Start/Stop ride the existing flows: Stop = `mcp_detach`, Start =
-/// `mcp_attach_request` → `mcp_attach_commit` (Guard-2 ticketed).
+/// `disconnected` identities), auto-start rows that allow lazy-start, and
+/// return the fresh row list. Stop keeps identity (`mcp_stop`); Detach
+/// (`mcp_detach`) still deletes the row.
 #[tauri::command]
 pub fn mcp_refresh(state: tauri::State<'_, crate::AppState>) -> Result<serde_json::Value, String> {
     let mut pruned: Vec<String> = Vec::new();
@@ -555,10 +670,153 @@ pub fn mcp_refresh(state: tauri::State<'_, crate::AppState>) -> Result<serde_jso
             alive
         });
     }
+    let pending: Vec<String> = {
+        let attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
+        let live = state.mcp_live.lock().map_err(|e| e.to_string())?;
+        attached
+            .iter()
+            .filter(|(name, row)| !live.contains_key(*name) && lazy_start_allowed(row).is_ok())
+            .map(|(name, _)| name.clone())
+            .collect()
+    };
+    let mut auto_started: Vec<String> = Vec::new();
+    for name in pending {
+        if bring_up_stdio(&state, &name, false).is_ok() {
+            auto_started.push(name);
+        }
+    }
     let rows = mcp_servers(state.clone())?;
     Ok(serde_json::json!({
         "servers": rows,
         "prunedDead": pruned,
+        "autoStarted": auto_started,
+    }))
+}
+
+/// P51.18 — AnythingLLM Stop: kill the child, keep identity + command.
+#[tauri::command]
+pub fn mcp_stop(state: tauri::State<'_, crate::AppState>, name: String) -> Result<bool, String> {
+    if name == "EveryAIOS native (built-in)" {
+        return Err("the native catalog cannot be stopped".into());
+    }
+    let removed_live = state
+        .mcp_live
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove(&name)
+        .is_some();
+    let mut attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
+    let Some(row) = attached.get_mut(&name) else {
+        return Ok(removed_live);
+    };
+    row.stopped = true;
+    row.status = "disconnected".into();
+    drop(attached);
+    let _ = persist_attached(&state);
+    crate::control::record_mutation(
+        &state,
+        crate::control::AuthKind::HumanGesture,
+        "mcp.stop_server",
+        serde_json::json!({ "name": name, "hadLiveChild": removed_live }),
+    );
+    Ok(true)
+}
+
+/// P51.18 — AnythingLLM Start: spawn from persisted command (no new ticket;
+/// attach already approved the identity).
+#[tauri::command]
+pub fn mcp_start(
+    state: tauri::State<'_, crate::AppState>,
+    name: String,
+) -> Result<serde_json::Value, String> {
+    bring_up_stdio(&state, &name, true)
+}
+
+/// P51.18 — persist AnythingLLM autoStart on the identity row.
+#[tauri::command]
+pub fn mcp_set_autostart(
+    state: tauri::State<'_, crate::AppState>,
+    name: String,
+    auto_start: bool,
+) -> Result<McpServerRow, String> {
+    let mut attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
+    let row = attached
+        .get_mut(&name)
+        .ok_or_else(|| format!("MCP server `{name}` is not in the registry"))?;
+    row.auto_start = auto_start;
+    let out = row.clone();
+    drop(attached);
+    let _ = persist_attached(&state);
+    Ok(out)
+}
+
+fn bring_up_stdio(
+    state: &crate::AppState,
+    name: &str,
+    explicit: bool,
+) -> Result<serde_json::Value, String> {
+    {
+        let live = state.mcp_live.lock().map_err(|e| e.to_string())?;
+        if live.contains_key(name) {
+            return Ok(serde_json::json!({ "name": name, "alreadyRunning": true }));
+        }
+    }
+    let row = {
+        let attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
+        attached
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("MCP server `{name}` is not in the registry"))?
+    };
+    if explicit {
+        explicit_start_allowed(&row)?;
+    } else {
+        lazy_start_allowed(&row)?;
+    }
+    let mut server = spawn_named_stdio(name, &row.command, &row.args)?;
+    let (tools, discovered) = match handshake_attached(&mut server, name) {
+        Ok(v) => v,
+        Err(e) => {
+            server.shutdown();
+            return Err(e);
+        }
+    };
+    {
+        let mut live = state.mcp_live.lock().map_err(|e| e.to_string())?;
+        live.insert(name.to_string(), server);
+    }
+    let discovered_tools: Vec<everyaios_core::ExternalTool> =
+        discovered.external_tools().cloned().collect();
+    let label = format!("mcp:{name}");
+    let mut registered: Vec<String> = Vec::new();
+    let mut agent_visible = false;
+    if let Ok(relay) = state.chat_relay.lock() {
+        if let Some(r) = relay.as_ref() {
+            if let Ok(mut svc) = r.tools().lock() {
+                registered = svc.attach_external_server(
+                    &label,
+                    &discovered_tools,
+                    std::sync::Arc::new(bind_loop_external(state, name)),
+                );
+                agent_visible = true;
+            }
+        }
+    }
+    {
+        let mut attached = state.mcp_servers.lock().map_err(|e| e.to_string())?;
+        if let Some(row) = attached.get_mut(name) {
+            row.status = "connected".into();
+            row.stopped = false;
+            row.tools = tools.len();
+            row.tool_names = tools.clone();
+        }
+    }
+    let _ = persist_attached(state);
+    Ok(serde_json::json!({
+        "name": name,
+        "tools": tools,
+        "registered": registered,
+        "agentVisible": agent_visible,
     }))
 }
 
@@ -935,17 +1193,57 @@ mod tests {
             tools: 2,
             desc: "user-supplied: npx gmail".into(),
             tool_names: vec!["gmail_list".into(), "gmail_send".into()],
+            command: "npx".into(),
+            args: vec!["gmail".into()],
+            auto_start: true,
+            stopped: false,
         };
         let json = serde_json::to_string(&row).unwrap();
         assert!(json.contains("\"toolNames\""));
+        assert!(json.contains("\"autoStart\""));
         let back: McpServerRow = serde_json::from_str(&json).unwrap();
         assert_eq!(back.tool_names, vec!["gmail_list", "gmail_send"]);
+        assert_eq!(back.command, "npx");
+        assert!(back.auto_start);
+        assert!(!back.stopped);
 
         // A row persisted before the handshake existed has no `toolNames`.
         let legacy =
             r#"{"name":"old","status":"disconnected","transport":"stdio","tools":0,"desc":"x"}"#;
         let parsed: McpServerRow = serde_json::from_str(legacy).unwrap();
         assert!(parsed.tool_names.is_empty());
+        assert!(parsed.command.is_empty());
+        assert!(parsed.auto_start, "legacy rows default autoStart true");
+        assert!(!parsed.stopped);
+    }
+
+    #[test]
+    fn p51_stop_keeps_identity_and_lazy_start_respects_flags() {
+        let running = McpServerRow {
+            name: "gmail".into(),
+            command: "npx".into(),
+            args: vec!["-y".into(), "@x/gmail".into()],
+            auto_start: true,
+            stopped: false,
+            ..Default::default()
+        };
+        assert!(lazy_start_allowed(&running).is_ok());
+        let mut stopped = running.clone();
+        stopped.stopped = true;
+        let err = lazy_start_allowed(&stopped).unwrap_err();
+        assert!(err.contains("stopped"), "{err}");
+        assert!(explicit_start_allowed(&stopped).is_ok());
+        let mut no_auto = running.clone();
+        no_auto.auto_start = false;
+        assert!(lazy_start_allowed(&no_auto)
+            .unwrap_err()
+            .contains("autoStart"));
+        assert!(explicit_start_allowed(&no_auto).is_ok());
+        let mut legacy = running.clone();
+        legacy.command.clear();
+        assert!(explicit_start_allowed(&legacy)
+            .unwrap_err()
+            .contains("re-attach"));
     }
 
     /// The reconciled external catalog never shadows a native tool name.
