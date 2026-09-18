@@ -11,7 +11,12 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — P65.2/6/7 settings gates)**:
+**(Current, 2026-09-18 — P60.5 five-part brief)**:
+- Scope: Chief writes a complete five-part brief onto the CUA node (`execution/cua_set_brief`); incomplete briefs refuse.
+- Verified: core `p60_` 3/0; coordinator cua-brief 2/0; tsc 0.
+- Not flipped: remaining P60 engine rows, P65.8, packaged E2E, soak, Windows/mac, post-v1.
+
+**(Previous, 2026-09-18 — P65.2/6/7 settings gates)**:
 - Scope: external-agent native surface not replaced; injected-failure rollback; OAuth/extension IPC ownership matrix.
 - Verified: UI settings-groups 6/0; ui tsc 0.
 - Not flipped: P65.8 live-agent acceptance, P50 packaged E2E, P64.5/6 soak, Windows/mac, post-v1.

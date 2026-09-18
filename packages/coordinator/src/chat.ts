@@ -50,6 +50,7 @@ import { citationsFromSearchResult } from "./citations";
 import { refuseDesktopIfWrongSurface } from "./cua-route";
 import { applyCuaReplanIfPresent } from "./cua-replan";
 import { applyCuaSkillPromoteIfPresent } from "./cua-skill";
+import { applyCuaBriefIfPresent } from "./cua-brief";
 import { resolveMentions } from "./context-providers";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
 import { chiefRegistry } from "./chief";
@@ -819,6 +820,10 @@ async function runInbuiltTurn(
         const skill = await applyCuaSkillPromoteIfPresent(request, args);
         if (skill.applied) {
           emit({ type: "stage", streamId, stage: `cua:skill:${skill.name ?? "promoted"}` });
+        }
+        const brief = await applyCuaBriefIfPresent(request, args);
+        if (brief.applied) {
+          emit({ type: "stage", streamId, stage: "cua:brief" });
         }
       }
       if (toolId === "search.query") {

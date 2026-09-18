@@ -17,6 +17,16 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P60.5 five-part brief on the CUA node
+
+**Category:** implementation. **Flipped:** P60.5 `[DONE]`. Census **1429 = 1252 done + 177 open**. Capability identity remains **166**.
+
+Chief writes `{goal, constraints, inputs, postconditions, out-of-scope}` onto the node via `apply_five_part_brief` / `execution/cua_set_brief`. An incomplete brief is refused; the Worker does not inherit the transcript. Live consumer: coordinator `applyCuaBriefIfPresent` on `desktop.*`.
+
+**Verification.** core `p60_` 3/0; coordinator `cua-brief` 2/0; tsc 0.
+
+---
+
 ## 2026-09-18 — P65.2/6/7 settings ownership, rollback, IPC matrix
 
 **Category:** implementation. **Flipped:** P65.2, P65.6, P65.7 `[DONE]`. P65.8 stays open (needs real installed-agent probes). Census **1429 = 1251 done + 178 open**. Capability identity remains **166**.
