@@ -548,6 +548,7 @@ pub struct FivePartBrief {
     pub constraints: String,
     pub inputs: String,
     pub postconditions: String,
+    #[serde(alias = "outOfScope")]
     pub out_of_scope: String,
 }
 
@@ -575,6 +576,18 @@ impl FivePartBrief {
             && !self.postconditions.trim().is_empty()
             && !self.out_of_scope.trim().is_empty()
     }
+}
+
+/// P60.5 — Chief writes the brief onto the node. A transcript dump is not a brief.
+pub fn apply_five_part_brief(node: &mut CuaNode, brief: FivePartBrief) -> Result<(), String> {
+    if !brief.is_complete() {
+        return Err("five-part brief incomplete — Worker does not inherit the transcript".into());
+    }
+    if node.postconditions.is_empty() {
+        node.postconditions = vec![brief.postconditions.clone()];
+    }
+    node.brief = Some(brief);
+    Ok(())
 }
 
 /// Scout is structurally read-only: search / read / list / snapshot. Writes
@@ -749,6 +762,18 @@ mod tests {
         assert_eq!(AgentRole::parse("SCOUT"), Some(AgentRole::Scout));
         assert_eq!(AgentRole::parse("verify"), Some(AgentRole::Verifier));
         assert_eq!(AgentRole::parse("nope"), None);
+        let mut node = CuaNode {
+            id: "w".into(),
+            postconditions: vec!["file list returned".into()],
+            ..Default::default()
+        };
+        assert!(apply_five_part_brief(
+            &mut node,
+            FivePartBrief::from_parts("", "c", "i", "p", "o")
+        )
+        .is_err());
+        apply_five_part_brief(&mut node, brief.clone()).unwrap();
+        assert!(node.brief.as_ref().unwrap().is_complete());
     }
 
     #[test]

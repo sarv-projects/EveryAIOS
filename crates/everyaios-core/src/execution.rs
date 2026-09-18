@@ -852,6 +852,33 @@ impl ExecutionKernel {
                     "orchestrator": false,
                 }))
             }
+            "execution/cua_set_brief" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_set_brief requires root")?;
+                let node_id = params
+                    .get("nodeId")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_set_brief requires nodeId")?;
+                let brief: crate::FivePartBrief = serde_json::from_value(
+                    params
+                        .get("brief")
+                        .cloned()
+                        .ok_or("execution/cua_set_brief requires brief")?,
+                )
+                .map_err(|e| format!("execution/cua_set_brief: {e}"))?;
+                let dir = std::path::Path::new(root);
+                let mut dag = crate::load_dag(dir)?;
+                let node = dag
+                    .nodes
+                    .iter_mut()
+                    .find(|n| n.id == node_id)
+                    .ok_or_else(|| format!("unknown CUA node {node_id}"))?;
+                crate::apply_five_part_brief(node, brief)?;
+                crate::persist_dag(dir, &dag)?;
+                Ok(json!({ "ok": true, "nodeId": node_id, "briefComplete": true, "dag": dag }))
+            }
             // P51.10 — admit a ≤5-model fan-out and optionally reduce
             // outcomes / parse a walkthrough. Construction is the live
             // consumer of `MultiRun::new` (budget) + `collect` + `walkthrough`.
@@ -2787,6 +2814,66 @@ mod tests {
         let md = std::fs::read_to_string(skills.join("login-to-x").join("SKILL.md")).unwrap();
         assert!(md.contains("## Postconditions"));
         assert!(md.contains("inbox"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p60_cua_set_brief_refuses_incomplete_and_stores_complete() {
+        let dir = std::env::temp_dir().join(format!("exec-cua-brief-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut k = ExecutionKernel::new();
+        k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [{
+                        "id": "n1",
+                        "name": "map",
+                        "info": "",
+                        "status": "pending",
+                        "postconditions": ["list"]
+                    }]
+                }
+            }),
+        )
+        .unwrap();
+        let incomplete = k.handle(
+            "execution/cua_set_brief",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "nodeId": "n1",
+                "brief": {
+                    "goal": "map the repo",
+                    "constraints": "",
+                    "inputs": "path",
+                    "postconditions": "list",
+                    "out_of_scope": "writes"
+                }
+            }),
+        );
+        assert!(incomplete.is_err());
+        let ok = k
+            .handle(
+                "execution/cua_set_brief",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "n1",
+                    "brief": {
+                        "goal": "map the repo",
+                        "constraints": "read-only",
+                        "inputs": "workspace path",
+                        "postconditions": "file list returned",
+                        "outOfScope": "no writes"
+                    }
+                }),
+            )
+            .unwrap();
+        assert_eq!(ok["ok"], true);
+        assert_eq!(ok["dag"]["nodes"][0]["brief"]["goal"], "map the repo");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
