@@ -11,7 +11,12 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — P59.7 Manager remaining rewrite + P59.16 CUA skills)**:
+**(Current, 2026-09-18 — P65.2/6/7 settings gates)**:
+- Scope: external-agent native surface not replaced; injected-failure rollback; OAuth/extension IPC ownership matrix.
+- Verified: UI settings-groups 6/0; ui tsc 0.
+- Not flipped: P65.8 live-agent acceptance, P50 packaged E2E, P64.5/6 soak, Windows/mac, post-v1.
+
+**(Previous, 2026-09-18 — P59.7 Manager remaining rewrite + P59.16 CUA skills)**:
 - Scope: Agent-S Manager remaining-node rewrite (`execution/cua_replan`); promote fully verified CUA traces to SKILL.md (`execution/cua_promote_skill`) in the existing I2 store.
 - Verified: core `p59_` 14/0; coordinator cua-replan/cua-skill/cua-route 7/0; coordinator tsc 0.
 - Not flipped: P65.2/6/7/8 remaining gates, P50 packaged E2E, P64.5/6 soak, Windows/mac, post-v1.

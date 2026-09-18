@@ -1,5 +1,6 @@
 import { inTauri, invoke } from "./tauri";
 import { nativeCall } from './runtime';
+import { assertSettingsCommandDoesNotWriteAgentConfig } from './settings';
 
 export interface OAuthAccount {
   provider: string;
@@ -42,5 +43,6 @@ export async function oauthPollDevice(provider: string): Promise<{
 }
 
 export async function oauthRevoke(provider: string, accountId: string): Promise<void> {
+  assertSettingsCommandDoesNotWriteAgentConfig('oauth_revoke');
   return nativeCall('OAuth revoke', () => invoke("oauth_revoke", { provider, accountId }));
 }

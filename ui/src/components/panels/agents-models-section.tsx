@@ -63,7 +63,12 @@ import {
 import { refreshAgentCatalog } from '@/lib/bridge'
 import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
-import { assertNoAgentConfigWrite, settingsAgentGet, type AgentSettings } from '@/lib/settings'
+import {
+  assertNoAgentConfigWrite,
+  nativeSurfaceNotReplaced,
+  settingsAgentGet,
+  type AgentSettings,
+} from '@/lib/settings'
 import { Row, SectionShell } from './settings-shared'
 
 function formatTokens(n: number): string {
@@ -481,7 +486,7 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
             : 'What this runtime itself exposes. Model, sign-in, and routing stay in its own config — managed here only by reference.'}
         </p>
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {(live?.nativeCapabilities?.length
+          {(live && nativeSurfaceNotReplaced(live) && live.nativeCapabilities.length
             ? live.nativeCapabilities
             : agent.capabilities
           ).map((c) => (

@@ -17,6 +17,18 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P65.2/6/7 settings ownership, rollback, IPC matrix
+
+**Category:** implementation. **Flipped:** P65.2, P65.6, P65.7 `[DONE]`. P65.8 stays open (needs real installed-agent probes). Census **1429 = 1251 done + 178 open**. Capability identity remains **166**.
+
+1. `nativeSurfaceNotReplaced` — ACP/MCP `modelOwner` stays agent; shared grants cannot overwrite native capability ids. `AgentDetailCards` uses it.
+2. `chooseAfterMutation` restores the previous snapshot when `lastError` is set; Schedules enable toggle rolls back then re-reads.
+3. `SETTINGS_IPC_MATRIX` + `assertSettingsCommandDoesNotWriteAgentConfig` on `oauth_revoke` and `skills_install`.
+
+**Verification.** UI `settings-groups.test.ts` 6/0; `npx tsc --noEmit` 0.
+
+---
+
 ## 2026-09-18 — P59.7 Manager remaining rewrite + P59.16 CUA skill promote
 
 **Category:** implementation. **Flipped:** P59.7, P59.16 `[DONE]`. Census **1429 = 1248 done + 181 open**. Capability identity remains **166**.

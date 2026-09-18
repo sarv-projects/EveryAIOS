@@ -26,7 +26,11 @@ import {
   triggerLabel,
   type SchedulerJob,
 } from '@/lib/scheduler'
-import { settingsScheduleSetEnabled, settingsSchedulesList } from '@/lib/settings'
+import {
+  chooseAfterMutation,
+  settingsScheduleSetEnabled,
+  settingsSchedulesList,
+} from '@/lib/settings'
 import { Row, SectionShell } from './settings-shared'
 
 function stateBadge(job: SchedulerJob) {
@@ -107,12 +111,16 @@ export default function SchedulesSection() {
   const toggleEnabled = async (job: SchedulerJob) => {
     const next = !job.enabled
     setBusyId(job.id)
+    const previous = jobs ?? []
+    const optimistic = previous.map((j) => (j.id === job.id ? { ...j, enabled: next } : j))
+    setJobs(optimistic)
     try {
       // P65.4 / §17.12.3 — the enable flag goes through the one mutation
       // funnel, not a direct scheduler write. The envelope is authoritative:
       // **discard-optimistic-on-mismatch** means we re-read rather than patch
       // our own guess, and a refusal is surfaced with the shell's real reason.
       const envelope = await settingsScheduleSetEnabled(job.id, next)
+      setJobs(chooseAfterMutation(previous, optimistic, envelope))
       if (envelope.lastError) {
         notify(`Updating schedule failed: ${envelope.lastError}`, 'error')
       } else if (envelope.restartRequired) {

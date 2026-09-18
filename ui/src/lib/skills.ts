@@ -4,6 +4,7 @@
 
 import { inTauri, invoke } from "./tauri";
 import { bridgeCall } from './runtime';
+import { assertSettingsCommandDoesNotWriteAgentConfig } from './settings';
 
 export interface SkillRowView {
   id: string;
@@ -36,6 +37,7 @@ export async function skillsCatalog(): Promise<SkillRowView[]> {
 }
 
 export async function skillsInstall(id: string): Promise<{ installed: boolean }> {
+  assertSettingsCommandDoesNotWriteAgentConfig('skills_install');
   return bridgeCall({
     operation: 'skill install',
     live: () => invoke("skills_install", { id }),
