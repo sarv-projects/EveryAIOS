@@ -890,6 +890,49 @@ pub fn publish_desktop_backend(state: &AppState, app: &tauri::AppHandle) -> Resu
     }
 }
 
+fn cua_dir(state: &AppState, work_id: &str) -> std::path::PathBuf {
+    let base = state
+        .replay_dir
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| state.replay_dir.clone());
+    let id = if work_id.trim().is_empty() {
+        "default"
+    } else {
+        work_id.trim()
+    };
+    base.join("cua").join(id)
+}
+
+/// P59.8 — load the persisted Computer-use DAG for Progress. Missing file is
+/// an empty graph, never a fabricated plan.
+#[tauri::command]
+pub fn cua_dag_get(state: State<'_, AppState>, work_id: String) -> serde_json::Value {
+    let dir = cua_dir(&state, &work_id);
+    match everyaios_core::load_dag(&dir) {
+        Ok(dag) => serde_json::json!({ "ok": true, "dag": dag }),
+        Err(_) => serde_json::json!({ "ok": true, "dag": null, "reason": "no graph yet" }),
+    }
+}
+
+/// P59.8 — user edit of a *remaining* node (triggers a replan seq bump).
+/// Verified nodes are refused.
+#[tauri::command]
+pub fn cua_dag_edit_remaining(
+    state: State<'_, AppState>,
+    work_id: String,
+    node_id: String,
+    name: Option<String>,
+    info: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let dir = cua_dir(&state, &work_id);
+    let mut dag = everyaios_core::load_dag(&dir)?;
+    dag.apply_remaining_edit(&node_id, name, info)?;
+    everyaios_core::append_replan_log(&dir, dag.replan_seq, "user-edit-remaining")?;
+    everyaios_core::persist_dag(&dir, &dag)?;
+    Ok(serde_json::json!({ "ok": true, "replanSeq": dag.replan_seq, "dag": dag }))
+}
+
 #[cfg(test)]
 mod policy_tests {
     use super::*;

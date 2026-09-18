@@ -715,6 +715,36 @@ impl ExecutionKernel {
                 let path = crate::persist_dag(std::path::Path::new(root), &dag)?;
                 Ok(json!({ "ok": true, "path": path.display().to_string(), "nodes": dag.nodes.len() }))
             }
+            "execution/cua_get" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_get requires root")?;
+                match crate::load_dag(std::path::Path::new(root)) {
+                    Ok(dag) => Ok(json!({ "ok": true, "dag": dag })),
+                    Err(_) => Ok(json!({ "ok": true, "dag": null, "reason": "no graph yet" })),
+                }
+            }
+            "execution/cua_edit" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_edit requires root")?;
+                let node_id = params
+                    .get("nodeId")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_edit requires nodeId")?;
+                let dir = std::path::Path::new(root);
+                let mut dag = crate::load_dag(dir)?;
+                dag.apply_remaining_edit(
+                    node_id,
+                    params.get("name").and_then(Value::as_str).map(str::to_string),
+                    params.get("info").and_then(Value::as_str).map(str::to_string),
+                )?;
+                crate::append_replan_log(dir, dag.replan_seq, "user-edit-remaining")?;
+                crate::persist_dag(dir, &dag)?;
+                Ok(json!({ "ok": true, "replanSeq": dag.replan_seq, "dag": dag }))
+            }
             "execution/cua_step" => {
                 let root = params
                     .get("root")

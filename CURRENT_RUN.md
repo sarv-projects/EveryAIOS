@@ -11,7 +11,12 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — V1 remainders wave 3: P59 CUA live path + P65.3/.4; uncommitted until verified)**:
+**(Current, 2026-09-18 — P59.8 DAG Progress UI + P65.5 marketplace split)**:
+- Scope: Progress view CUA DAG (MACU layout, remaining-only edit); Skills Installed vs Marketplace.
+- Verified: cua-dag + skills-surfaces 5/0; core cua 10/0; tsc 0.
+- Not flipped: P59.7 Manager rewrite, P59.16 skills, P65.8 acceptance, remaining P51 engine rows without a seam, packaged E2E, soak, Windows/mac, post-v1.
+
+**(Previous, 2026-09-18 — V1 remainders wave 3: P59 CUA live path + P65.3/.4; committed)**:
 - Scope: two-surface router in coordinator+Rust; vision gate UI; Computer use rail; DAG persist/step; worker halt on `desktop.act`; screen-untrusted; connections/schedules settings inventories.
 - Verified: core cua 10/0, cua_persist 1/0, desktop.act halt 1/0; coordinator cua-route 2/0; UI 23/0 on touched tests; tsc 0.
 - Not flipped: P59.7 Manager rewrite, P59.8 DAG UI, P59.16 skills, P65.5–.8 remaining, packaged E2E, soak, Windows/mac, post-v1.

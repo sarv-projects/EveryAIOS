@@ -142,3 +142,20 @@ function demoWindows(): DesktopWindow[] {
     { id: 2, title: 'EveryAIOS — Chromium', app: 'Chromium', x: 200, y: 120, width: 1200, height: 800 },
   ]
 }
+
+/** P59.8 — load the persisted CUA DAG. Preview / missing file → null (never a fake plan). */
+export async function cuaDagGet(workId: string): Promise<{ ok: boolean; dag: unknown | null; reason?: string }> {
+  if (!inTauri()) return { ok: true, dag: null, reason: 'preview — no CUA graph' }
+  return nativeCall('cua dag get', () => invoke('cua_dag_get', { workId }))
+}
+
+/** P59.8 — edit a remaining DAG node (verified nodes are refused by Rust). */
+export async function cuaDagEditRemaining(
+  workId: string,
+  nodeId: string,
+  patch: { name?: string; info?: string },
+): Promise<{ ok: boolean; replanSeq?: number; dag?: unknown }> {
+  return nativeCall('cua dag edit remaining', () =>
+    invoke('cua_dag_edit_remaining', { workId, nodeId, ...patch }),
+  )
+}

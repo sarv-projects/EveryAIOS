@@ -17,6 +17,19 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P59.8 Progress DAG UI + P65.5 Installed/Marketplace split
+
+**Category:** implementation. **Flipped:** P59.8, P65.5 `[DONE]`. Census **1429 = 1246 done + 183 open**. Capability identity remains **166**.
+
+**Fetched:** MACU (arXiv:2606.01533) — DAG of subtasks, ready frontier, replan remaining only.
+
+1. Progress view renders persisted CUA DAG (`layoutCuaDag` + `cua_dag_get`). Click remaining node edits it (`cua_dag_edit_remaining`); verified nodes refuse.
+2. Skills panel splits catalog into Installed (occupancy) vs Marketplace (discovery) via `splitSkillSurfaces`.
+
+**Verification.** UI `cua-dag` + `skills-surfaces` 5/0; core `cua::` 10/0; UI tsc 0.
+
+---
+
 ## 2026-09-18 — P59 CUA live path + P65 channels/schedules
 
 **Category:** implementation. **Flipped:** P59.1–.6, P59.9–.15, P65.3, P65.4 `[DONE]`. P59.7/P65.5–.7 stay `[PARTIAL]`. P59.8/.16 and P65.8 open. Census **1429 = 1244 done + 185 open**. Capability identity remains **166**.
