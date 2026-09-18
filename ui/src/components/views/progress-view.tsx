@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   MessageSquare,
   Zap,
@@ -23,6 +23,8 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
+import { cuaDagEditRemaining, cuaDagGet } from '@/lib/desktop'
+import { dagFromWire, layoutCuaDag, type CuaDagLayout } from '@/lib/cua-dag'
 import {
   describeWorkEvent,
   presenceLabel,
@@ -123,6 +125,98 @@ function buildEvents(
   return out
 }
 
+function CuaDagBoard({ workId }: { workId: string }) {
+  const [layout, setLayout] = useState<CuaDagLayout | null>(null)
+  const [reason, setReason] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const notify = useAppStore((s) => s.notify)
+
+  const load = async () => {
+    const r = await cuaDagGet(workId)
+    if (!r.dag) {
+      setLayout(null)
+      setReason(r.reason ?? 'no graph yet')
+      return
+    }
+    const dag = dagFromWire(r.dag)
+    setLayout(dag ? layoutCuaDag(dag) : null)
+    setReason(dag ? null : 'graph was unreadable')
+  }
+
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workId])
+
+  const edit = async (id: string, editable: boolean) => {
+    if (!editable) {
+      notify('Verified steps cannot be edited — replan remaining only', 'error')
+      return
+    }
+    const next = window.prompt('Rename this remaining step')
+    if (!next || !next.trim()) return
+    setBusy(id)
+    try {
+      await cuaDagEditRemaining(workId, id, { name: next.trim() })
+      await load()
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not edit remaining step', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="border-b border-border px-4 py-2">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs font-semibold">Computer-use DAG</span>
+        {layout && (
+          <Badge variant="outline" className="text-[10px]">
+            replan {layout.replanSeq} · {layout.readyIds.length} ready
+          </Badge>
+        )}
+      </div>
+      {!layout ? (
+        <p className="text-[10px] text-muted-foreground">{reason ?? 'No CUA graph for this Work.'}</p>
+      ) : (
+        <div className="relative min-h-[72px]">
+          {layout.edges.map((e, i) => (
+            <div
+              key={`${e.from}-${e.to}-${i}`}
+              className="pointer-events-none absolute left-0 top-0 font-mono text-[8px] text-muted-foreground/50"
+            >
+              {e.from}→{e.to}
+            </div>
+          ))}
+          <div className="relative" style={{ height: Math.max(56, ...layout.nodes.map((n) => n.y + 48)) }}>
+            {layout.nodes.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                disabled={busy === n.id}
+                onClick={() => void edit(n.id, n.editable)}
+                title={n.editable ? 'Edit remaining step (triggers replan)' : 'Verified — not editable'}
+                className={cn(
+                  'absolute rounded border px-1.5 py-1 text-left font-mono text-[9px]',
+                  n.status === 'verified' && 'border-emerald-500/40 bg-emerald-500/10',
+                  n.status === 'halted' && 'border-red-500/40 bg-red-500/10',
+                  n.status === 'running' && 'border-brand/40 bg-brand/10',
+                  n.status === 'pending' && 'border-border bg-card',
+                  layout.readyIds.includes(n.id) && 'ring-1 ring-brand/50',
+                )}
+                style={{ left: n.x, top: n.y, width: 148 }}
+              >
+                <div className="truncate text-foreground">{n.name}</div>
+                <div className="text-muted-foreground">{n.status}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ProgressView() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -176,6 +270,8 @@ export default function ProgressView() {
           ))}
         </div>
       </header>
+
+      <CuaDagBoard workId={workItems[0]?.workId ?? session?.id ?? 'default'} />
 
       {workItems.length > 0 && (
         <div className="border-b border-border px-4 py-2">

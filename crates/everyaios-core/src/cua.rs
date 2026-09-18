@@ -166,6 +166,34 @@ impl ComputerUseDag {
         self.nodes.extend(remaining);
         self.replan_seq = self.replan_seq.saturating_add(1);
     }
+
+    /// P59.8 — the user may edit remaining steps only (not Verified).
+    pub fn apply_remaining_edit(
+        &mut self,
+        node_id: &str,
+        name: Option<String>,
+        info: Option<String>,
+    ) -> Result<(), String> {
+        let node = self
+            .nodes
+            .iter_mut()
+            .find(|n| n.id == node_id)
+            .ok_or_else(|| format!("unknown CUA node {node_id}"))?;
+        if node.status == CuaNodeStatus::Verified {
+            return Err("verified nodes cannot be edited — replan remaining only".into());
+        }
+        if let Some(n) = name {
+            if n.trim().is_empty() {
+                return Err("remaining node name must not be empty".into());
+            }
+            node.name = n;
+        }
+        if let Some(i) = info {
+            node.info = i;
+        }
+        self.replan_seq = self.replan_seq.saturating_add(1);
+        Ok(())
+    }
 }
 
 /// Persist the DAG next to the Work (survive restart).
@@ -420,6 +448,13 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["c"]
         );
+        assert!(dag
+            .apply_remaining_edit("a", Some("nope".into()), None)
+            .is_err());
+        dag.apply_remaining_edit("c", Some("click Save".into()), Some("then halt".into()))
+            .unwrap();
+        assert_eq!(dag.nodes.iter().find(|n| n.id == "c").unwrap().name, "click Save");
+        assert!(dag.replan_seq >= 2);
     }
 
     #[test]

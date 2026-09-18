@@ -16,6 +16,17 @@ export interface SkillRowView {
   tampered: boolean | null;
 }
 
+/** P65.5 — discovery (catalog) is not occupancy. Installed rows only occupy. */
+export function splitSkillSurfaces(rows: SkillRowView[]): {
+  installed: SkillRowView[]
+  marketplace: SkillRowView[]
+} {
+  return {
+    installed: rows.filter((r) => r.installed === true),
+    marketplace: rows.filter((r) => r.installed !== true),
+  }
+}
+
 export async function skillsCatalog(): Promise<SkillRowView[]> {
   return bridgeCall({
     operation: 'skills catalog',
@@ -40,7 +51,7 @@ export async function skillsUninstall(name: string): Promise<{ installed: boolea
   });
 }
 
-function demoSkills(): SkillRowView[] {
+export function demoSkills(): SkillRowView[] {
   return [
     {
       id: "docx-assistant",

@@ -351,6 +351,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         desktop_cmds::desktop_escalation,
         desktop_cmds::desktop_act_escalating,
         desktop_cmds::desktop_stop,
+        desktop_cmds::cua_dag_get,
+        desktop_cmds::cua_dag_edit_remaining,
         work_cmds::work_list,
         work_cmds::work_snapshot,
         work_cmds::work_events,

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
 import { fuzzyRank } from '@/lib/fuzzy'
-import { skillsCatalog, skillsInstall, skillsUninstall, type SkillRowView } from '@/lib/skills'
+import { skillsCatalog, skillsInstall, skillsUninstall, splitSkillSurfaces, type SkillRowView } from '@/lib/skills'
 import { settingsExtensionsList, type InstalledExtension } from '@/lib/settings'
 
 const PERM_TONE: Record<string, string> = {
@@ -82,7 +82,7 @@ export default function SkillsPanel() {
     }
   }
 
-  const installed = skills.filter((s) => s.installed)
+  const { installed, marketplace } = splitSkillSurfaces(skills)
 
   return (
     <div className="flex flex-col gap-5 p-6">
@@ -98,6 +98,9 @@ export default function SkillsPanel() {
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-emerald-300">
             {installed.length} installed
+          </Badge>
+          <Badge variant="outline" className="text-muted-foreground">
+            {marketplace.length} marketplace
           </Badge>
           {extensions.length > 0 && (
             <Badge variant="outline" className="text-muted-foreground">
@@ -147,8 +150,17 @@ export default function SkillsPanel() {
         </p>
       )}
 
+      {(['installed', 'marketplace'] as const).map((surface) => {
+        const rows = splitSkillSurfaces(visible)[surface]
+        if (rows.length === 0 && filter !== 'all') return null
+        return (
+      <div key={surface} className="space-y-2">
+        <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          {surface === 'installed' ? 'Installed (occupancy)' : 'Marketplace (discovery — not occupancy)'}
+          {' '}({rows.length})
+        </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {visible.map((row, i) => (
+        {rows.map((row, i) => (
           <motion.div
             key={row.id}
             className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/50 p-4"
@@ -230,6 +242,9 @@ export default function SkillsPanel() {
           </motion.div>
         ))}
       </div>
+      </div>
+        )
+      })}
     </div>
   )
 }
