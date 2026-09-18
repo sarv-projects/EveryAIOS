@@ -9,6 +9,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   tierFor,
   TIER_LABEL,
+  digestClass,
   isHighBlast,
   confirmWord,
   confirmSatisfied,
@@ -35,6 +36,20 @@ describe('tierFor — what kind of attention is this', () => {
   test('both tiers have a plain label', () => {
     expect(TIER_LABEL['needs-you']).toBe('Needs you')
     expect(TIER_LABEL.review.length).toBeGreaterThan(0)
+    expect(TIER_LABEL['review-after']).toBe('Done — review')
+  })
+})
+
+describe('digestClass — P61.12 non-blocking Done-review', () => {
+  test('auto + low-risk is review-after, never a prompt', () => {
+    expect(digestClass('low', 'auto', false)).toBe('review-after')
+    expect(digestClass('local-write', 'full', false)).toBe('review-after')
+  })
+  test('high-blast always needs you', () => {
+    expect(digestClass('low', 'auto', true)).toBe('needs-you')
+  })
+  test('ask mode still prompts', () => {
+    expect(digestClass('low', 'ask', false)).toBe('needs-you')
   })
 })
 

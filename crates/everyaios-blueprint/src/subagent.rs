@@ -114,6 +114,7 @@ pub fn derive_child_permissions(
         .iter()
         .filter(|t| !parent_denies.contains(t))
         .filter(|t| !DELEGATE_BLOCKED_TOOLS.contains(&t.as_str()))
+        .filter(|t| explicit_grants.is_empty() || explicit_grants.contains(t))
         .filter(|t| !DEFAULT_DENY_TASK_TOOLS.contains(&t.as_str()) || explicit_grants.contains(t))
         .cloned()
         .collect();
@@ -354,9 +355,28 @@ impl SubAgentRuntime {
             });
         }
         spec.depth = depth;
+        // P64.4 — children inherit denies, never escalated grants. `delegate`
+        // is stripped even if the parent listed it; `todo`/`task` stay
+        // default-deny unless this spec explicitly re-grants them.
+        let parent_grants: Vec<String> = match spec.parent_id.as_deref() {
+            None | Some(ROOT_AGENT) => spec.tools.clone(),
+            Some(p) => self
+                .active
+                .get(p)
+                .map(|s| s.tools.clone())
+                .unwrap_or_else(|| spec.tools.clone()),
+        };
+        let parent_denies = spec.blocked_tools.clone();
+        let explicit = spec.tools.clone();
+        spec.tools = derive_child_permissions(&parent_grants, &parent_denies, &explicit);
         self.active.insert(task_id, spec);
         self.total_spawned += 1;
         Ok(())
+    }
+
+    /// Granted tools after spawn-time `derive_child_permissions` (test + audit).
+    pub fn granted_tools(&self, id: &str) -> Option<&[String]> {
+        self.active.get(id).map(|s| s.tools.as_slice())
     }
 
     /// Spawn a batch (fan-out). Spawns as many as the limits allow, in order;
@@ -485,6 +505,34 @@ mod tests {
             .unwrap();
         assert_eq!(rt.depth_of("root-task"), Some(0));
         assert_eq!(rt.depth_of("child"), Some(1));
+    }
+
+    #[test]
+    fn spawn_applies_derive_child_permissions() {
+        let mut rt = SubAgentRuntime::new(SubAgentLimits::default());
+        rt.spawn(spec("parent", "m").with_tools(vec![
+            "read".into(),
+            "delegate".into(),
+            "todo".into(),
+        ]))
+        .unwrap();
+        let parent = rt.granted_tools("parent").unwrap();
+        assert!(parent.contains(&"read".to_string()));
+        assert!(
+            !parent.iter().any(|t| t == "delegate"),
+            "DELEGATE_BLOCKED_TOOLS never land on a child, including the first spawn"
+        );
+        // Root spawn: explicit == grants, so `todo` (default-deny for *children*)
+        // is kept when the spec itself lists it.
+        assert!(parent.contains(&"todo".to_string()));
+        rt.spawn(
+            spec("child", "m")
+                .with_parent("parent")
+                .with_tools(vec!["read".into()]),
+        )
+        .unwrap();
+        let child = rt.granted_tools("child").unwrap();
+        assert_eq!(child, &["read".to_string()]);
     }
 
     #[test]

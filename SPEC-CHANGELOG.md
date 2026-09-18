@@ -17,6 +17,23 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P64 batch consumer, ladder fixtures, CUA router, shared-plane MCP list
+
+**Category:** implementation. **Flipped:** P64.3 and P64.9 `[DONE]`. P64.5/P64.6 stay `[PARTIAL]` (no live-model soak). Census **1429 = 1223 done + 206 open**. Capability identity remains **166**.
+
+**Decisions & Implementation.** Fetched Aider `editblock_coder.py` (fail-closed on 0/2+ SEARCH matches; `apply_edits` is a list) and Agent-S `predict(observation) → next action`.
+
+1. **Multi-file edits in one model round share one shadow preflight.** `ConversationEngine.executeTools` hands the allowed round to the host; coordinator `executeEditAwareRound` batches consecutive `file_ops.edit` through `applyEditBatch`.
+2. **Differential ladder fixtures** at `crates/everyaios-core/tests/fixtures/p64_edit_ladder.json` — both runtimes must agree.
+3. **P64.4:** `derive_child_permissions` at spawn; `parentId: "root"` from the inbuilt tool.
+4. **P64.9:** MCP `tools/list` = `tool_list_shared_plane` (façades + external, not 51 primitives). Native names remain callable.
+5. **P59.1/2/6/7/11/12/14/15 source:** `everyaios-core::cua` + `desktop.act` refuses office/URL; vision gate on screenshot-without-image-model.
+6. **P64.7 bytes restore** is `restore_file_to_bytes` (Tauri `fs_undo_restore` consumer; git-repo test).
+7. **P61.12** `digestClass` — Guard wire still open.
+
+**Verification.** See CURRENT_RUN Active Goal. Soak skip recorded (no usable live model).
+
+---
 ## 2026-09-18 — P64.5/P64.6: the compact edit path is now reachable from a live model turn
 
 **Category:** implementation; no capability rows added, **no checkbox flipped** (P64.5 stays `[PARTIAL]`, P64.6 stays `[PARTIAL]`). **Affected:** `crates/everyaios-core/src/chat.rs` (`with_preflight_root` + the `execution/preflight` arm), `packages/coordinator/src/chat.ts` (turn-loop intercept), `packages/coordinator/src/tools.ts` (`editArgsFromToolCall`; `LOOP_PINNED_TOOL_IDS` swap), `packages/coordinator/src/tools.test.ts` + `chat.test.ts` (new cases), `ARCH/17-NATIVE-AGENT.md` + `TODO.md` (pin/doc sync). Capability identity remains **166**; live TODO count remains **1429 = 1221 done + 208 open**.

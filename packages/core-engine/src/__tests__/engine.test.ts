@@ -36,6 +36,39 @@ describe('ConversationEngine', () => {
     expect(events).toContain('done');
   });
 
+  it('hands a whole tool round to executeTools when provided', async () => {
+    const seen: string[][] = [];
+    const deps: EngineDeps = {
+      generatePrompt: async () => 'p',
+      streamProvider: async function* (_p, _s, extras) {
+        if (!extras?.previousToolResults?.length) {
+          yield { type: 'tool_call', id: 'file_ops.edit', args: { path: 'a.ts' } };
+          yield { type: 'tool_call', id: 'file_ops.edit', args: { path: 'b.ts' } };
+          yield { type: 'done' };
+          return;
+        }
+        yield { type: 'text', text: 'ok' };
+        yield { type: 'done' };
+      },
+      executeTool: async () => {
+        throw new Error('executeTool must not run when executeTools is set');
+      },
+      executeTools: async (calls) => {
+        seen.push(calls.map((c) => `${c.toolId}:${(c.args as { path?: string }).path}`));
+        return calls.map((c) => ({ ok: true, path: (c.args as { path?: string }).path }));
+      },
+      persistTurn: async () => 't',
+      extractMemory: async () => {},
+    };
+    const engine = new ConversationEngine(deps);
+    const results: unknown[] = [];
+    for await (const ev of engine.run({ text: 'edit two', surface: 'chat' })) {
+      if (ev.type === 'tool_result') results.push(ev.result);
+    }
+    expect(seen).toEqual([['file_ops.edit:a.ts', 'file_ops.edit:b.ts']]);
+    expect(results).toHaveLength(2);
+  });
+
   it('yields error on stream failure', async () => {
     const failingDeps: EngineDeps = {
       ...mockDeps,

@@ -1074,10 +1074,23 @@ impl ToolService {
 
     pub fn handle(&mut self, method: &str, params: &Value) -> Result<Value, String> {
         match method {
-            "tool/list" => Ok(json!({
-                "tools": self.registry.list(),
-                "count": self.registry.list().len(),
-            })),
+            "tool/list" => {
+                let plane = params.get("plane").and_then(Value::as_str).unwrap_or("all");
+                let listed: Vec<&RegisteredTool> = match plane {
+                    "shared" => self
+                        .registry
+                        .list()
+                        .iter()
+                        .filter(|t| t.family == ToolFamily::Facade)
+                        .collect(),
+                    _ => self.registry.list().iter().collect(),
+                };
+                Ok(json!({
+                    "tools": listed,
+                    "count": listed.len(),
+                    "plane": plane,
+                }))
+            }
             "tool/exec" => self.exec(params),
             "tool/commit" => self.commit(params),
             _ => Err(format!("method not found: {method}")),
@@ -1455,6 +1468,45 @@ impl ToolService {
     /// P48.3 — desktop computer-use as a loop tool (E9 agent path). Honest
     /// failure when no engine is attached (headless/no-display).
     fn dispatch_desktop(&self, id: &str, args: &Value) -> Value {
+        // P59.1/P59.11 — CUA is last. An office path or http(s) URL must not
+        // pixel-drive when our engines/CDP own the surface.
+        if id == "desktop.act" {
+            if let Some(target) = args
+                .get("target")
+                .or_else(|| args.get("path"))
+                .or_else(|| args.get("url"))
+                .and_then(Value::as_str)
+            {
+                match crate::route_work_surface(target) {
+                    crate::WorkSurface::Office => {
+                        return json!({
+                            "ok": false,
+                            "error": "use office engines for this file — CUA is last on the ladder",
+                            "surface": "office",
+                        });
+                    }
+                    crate::WorkSurface::Browse => {
+                        return json!({
+                            "ok": false,
+                            "error": "use inbuilt Browse CDP for this URL — CUA is last on the ladder",
+                            "surface": "browse",
+                        });
+                    }
+                    crate::WorkSurface::Desktop => {}
+                }
+            }
+            let needs_shot = args
+                .get("screenshot")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let accepts = args
+                .get("modelAcceptsImage")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if let Err(e) = crate::vision_gate(needs_shot, accepts) {
+                return json!({"ok": false, "error": e.message, "code": e.code});
+            }
+        }
         let Some(d) = &self.desktop else {
             return json!({"ok": false, "error": "desktop session not attached"});
         };
@@ -4217,5 +4269,58 @@ mod tests {
         let list = s.handle("tool/list", &json!({})).unwrap();
         let count = list["count"].as_u64().unwrap_or(0);
         assert!(count >= FACADE_ROUTES.len() as u64);
+        // P64.9 — external agents get the shared-plane façades only.
+        let shared = s.handle("tool/list", &json!({"plane": "shared"})).unwrap();
+        assert_eq!(shared["plane"], "shared");
+        assert_eq!(
+            shared["count"].as_u64().unwrap(),
+            FACADE_ROUTES.len() as u64
+        );
+    }
+
+    #[test]
+    fn p64_edit_ladder_matches_shared_fixtures() {
+        let raw = include_str!("../tests/fixtures/p64_edit_ladder.json");
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        let shape = LexicalShapeSource;
+        for case in v["cases"].as_array().unwrap() {
+            let id = case["id"].as_str().unwrap();
+            let content = case["content"].as_str().unwrap();
+            let old = case["old"].as_str().unwrap();
+            let new = case["new"].as_str().unwrap();
+            let got = apply_edit_ladder(content, old, new, &shape);
+            if case["error"].as_bool() == Some(true) {
+                assert!(got.is_err(), "{id} should refuse");
+                continue;
+            }
+            let (out, strategy) = got.unwrap();
+            assert_eq!(
+                strategy.as_str(),
+                case["strategy"].as_str().unwrap(),
+                "{id}"
+            );
+            if let Some(exp) = case["out"].as_str() {
+                assert_eq!(out, exp, "{id}");
+            }
+            if let Some(part) = case["outContains"].as_str() {
+                assert!(out.contains(part), "{id}");
+            }
+        }
+    }
+
+    #[test]
+    fn p59_desktop_act_refuses_office_and_url_targets() {
+        let dir = tempfile();
+        let mut s = svc(&dir);
+        let spec = s.registry.get("desktop.act").unwrap().clone();
+        let office = s.dispatch(&spec, &json!({"kind": "click", "target": "budget.xlsx"}));
+        assert_eq!(office["ok"], false);
+        assert_eq!(office["surface"], "office");
+        let url = s.dispatch(
+            &spec,
+            &json!({"kind": "click", "url": "https://example.com"}),
+        );
+        assert_eq!(url["ok"], false);
+        assert_eq!(url["surface"], "browse");
     }
 }

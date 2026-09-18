@@ -23,7 +23,25 @@ export interface InterruptLike {
   urgency?: 'low' | 'medium' | 'high'
 }
 
-export type InterruptTier = 'review' | 'needs-you'
+export type InterruptTier = 'review' | 'needs-you' | 'review-after'
+
+/**
+ * P61.12 — non-blocking "Done — review" class. Low-risk local writes under
+ * Auto autonomy run without a prompt and are summarised afterwards. The Guard
+ * still records the receipt; this only classifies the UI interrupt.
+ */
+export function digestClass(
+  risk: string,
+  permissionMode: string,
+  highBlast: boolean,
+): InterruptTier {
+  if (highBlast) return 'needs-you'
+  const mode = permissionMode.toLowerCase()
+  const auto = mode === 'auto' || mode === 'full' || mode === 'sandbox'
+  const low = risk === 'low' || risk === 'local-write' || risk === 'read'
+  if (auto && low) return 'review-after'
+  return 'needs-you'
+}
 
 /** Which kind of attention this interrupt is asking for. */
 export function tierFor(i: InterruptLike): InterruptTier {
@@ -33,6 +51,7 @@ export function tierFor(i: InterruptLike): InterruptTier {
 export const TIER_LABEL: Record<InterruptTier, string> = {
   review: 'Your call',
   'needs-you': 'Needs you',
+  'review-after': 'Done — review',
 }
 
 /**

@@ -55,6 +55,15 @@ export interface EngineDeps {
     extras?: StreamProviderExtras,
   ): AsyncGenerator<StreamChunk, void>;
   executeTool?(toolId: string, args: Record<string, unknown>): Promise<unknown>;
+  /**
+   * Optional whole-round executor (Aider `apply_edits` list). When present,
+   * the engine hands the allowed calls of this round as one array so a
+   * multi-file edit can share a single shadow preflight. Falls back to
+   * per-call `executeTool` when omitted.
+   */
+  executeTools?(
+    calls: Array<{ toolId: string; args: Record<string, unknown> }>,
+  ): Promise<unknown[]>;
   persistTurn(
     input: TurnInput,
     response: string,
@@ -285,12 +294,13 @@ export class ConversationEngine {
         }
 
         // No tools this round → final answer
-        if (toolCalls.length === 0 || !this.deps.executeTool) {
+        if (toolCalls.length === 0 || (!this.deps.executeTool && !this.deps.executeTools)) {
           break;
         }
 
         // 3. EXECUTE TOOLS for this round (ToolPlanner mount + PermissionGate), then re-stream
         previousToolResults = [];
+        const allowed: typeof toolCalls = [];
         for (const tc of toolCalls) {
           if (abortSignal.aborted) return;
 
@@ -310,9 +320,30 @@ export class ConversationEngine {
             });
             continue;
           }
+          allowed.push(tc);
+        }
 
+        const runOne = async (tc: (typeof toolCalls)[number]): Promise<unknown> => {
+          if (!this.deps.executeTool) throw new Error('executeTool missing');
+          return this.deps.executeTool(tc.toolId, tc.args);
+        };
+
+        let batchResults: unknown[] | undefined;
+        let batchError: string | undefined;
+        if (this.deps.executeTools && allowed.length > 0) {
           try {
-            const result = await this.deps.executeTool(tc.toolId, tc.args);
+            batchResults = await this.deps.executeTools(allowed);
+          } catch (e) {
+            batchError = e instanceof Error ? e.message : String(e);
+          }
+        }
+
+        for (let i = 0; i < allowed.length; i++) {
+          const tc = allowed[i]!;
+          if (abortSignal.aborted) return;
+          try {
+            if (batchError) throw new Error(batchError);
+            const result = batchResults ? batchResults[i] : await runOne(tc);
             previousToolResults.push({
               toolId: tc.toolId,
               args: tc.args,
@@ -337,7 +368,7 @@ export class ConversationEngine {
             trajectorySteps.push({
               type: 'tool_result',
               timestamp: Date.now(),
-              content: JSON.stringify(result).slice(0, 500),
+              content: message.slice(0, 500),
               metadata: { toolId: tc.toolId },
             });
           }

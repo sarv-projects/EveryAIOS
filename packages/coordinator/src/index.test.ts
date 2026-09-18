@@ -192,11 +192,16 @@ describe("E2E — real child process over stdin/stdout", () => {
       }
     })();
 
-    // Give the child time to boot + emit at least one heartbeat, then ALWAYS
-    // close stdin and reap the child — even if an assertion below fails, the
-    // spawned process must not linger (CI orphan prevention).
+    // Wait until a heartbeat frame arrives (or 5s). A fixed 700ms sleep
+    // flakes under full-suite load when boot itself takes most of the window.
     try {
-      await new Promise((r) => setTimeout(r, 700));
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        if (frames.some((f) => (f as { method?: string }).method === "session/heartbeat")) {
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
     } finally {
       try {
         proc.stdin!.end();
