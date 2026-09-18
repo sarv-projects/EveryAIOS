@@ -26,6 +26,7 @@ use everyaios_vault::{
     assemble_tool_calls, extract_json_tool_calls, Broker, LocalEndpoint, Vault,
     DEFAULT_SESSION_BUDGET_USD,
 };
+use serde_json::Value;
 
 use crate::eval_service::EvalService;
 use crate::execution::ExecutionKernel;
@@ -631,6 +632,47 @@ const REPOMAP_MAX_FILES_CAP: usize = 2000;
 /// `repomap_build` command — so the agent-facing and UI-facing façades cannot
 /// drift apart. `workspace` is the tool layer's floored root, so the map covers
 /// the tree the edit tools actually operate on rather than a root of its own.
+/// P64.6 — bind a shadow-preflight request's `root` to the workspace floor.
+///
+/// An **absolute** root is honoured as given (a caller may legitimately point
+/// the check at a monorepo package); an **absent or relative** root resolves
+/// against `workspace`, which is how every `file_ops` path is floored. The
+/// coordinator's default is `.` because it does not know the workspace, so
+/// without this resolution a fired preflight would stage a shadow tree of the
+/// *sidecar's* own cwd — checking a project the user never edited, and paying a
+/// `git worktree add` on the wrong repository to do it.
+///
+/// Resolution lives in the router rather than the kernel on purpose: the kernel
+/// deliberately knows no workspace (it takes a root and uses it), and this arm
+/// is the only layer holding both the kernel and the tool service that owns the
+/// floored path.
+fn with_preflight_root(params: &Value, workspace: &std::path::Path) -> Value {
+    let raw = params
+        .get("root")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    let requested = std::path::Path::new(raw);
+    // `.` (and an empty root) is how a caller that knows no workspace says "the
+    // workspace itself". Joining it would leave a stray `.` component in the
+    // path the receipt quotes, so it is answered directly.
+    let resolved = if raw.is_empty() || raw == "." {
+        workspace.to_path_buf()
+    } else if requested.is_relative() {
+        workspace.join(requested)
+    } else {
+        requested.to_path_buf()
+    };
+    let mut out = params.clone();
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert(
+            "root".to_string(),
+            Value::String(resolved.to_string_lossy().into_owned()),
+        );
+    }
+    out
+}
+
 fn codeintel_rpc(
     method: &str,
     params: &serde_json::Value,
@@ -1318,8 +1360,22 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                         }
                     }
                     method if method.starts_with("execution/") => {
+                        // P64.6 — resolve the shadow-preflight root before the
+                        // kernel sees the request. The coordinator sends `.`
+                        // (it has no workspace), and the kernel has none either,
+                        // so this arm — holding both the kernel and the tool
+                        // service — is where `.` becomes the floored workspace.
+                        let rooted: Option<Value> = if method == "execution/preflight" {
+                            let workspace = {
+                                let svc = tools.lock().unwrap_or_else(|e| e.into_inner());
+                                svc.workspace().to_path_buf()
+                            };
+                            Some(with_preflight_root(&params, &workspace))
+                        } else {
+                            None
+                        };
                         let mut svc = executions.lock().unwrap_or_else(|e| e.into_inner());
-                        let result = svc.handle(method, &params);
+                        let result = svc.handle(method, rooted.as_ref().unwrap_or(&params));
                         if let Ok(out) = &result {
                             if method == "execution/record_approval" {
                                 if let (Some(work_id), Some(ticket_id), Some(approved)) = (
@@ -2599,6 +2655,43 @@ fn stream_provider(
 
 #[cfg(test)]
 mod tests {
+    /// P64.6 — a preflight `root` that the coordinator left at `.` (it has no
+    /// workspace) must resolve to the floored workspace, while an absolute root
+    /// is honoured so a caller can still point the check at a package.
+    #[test]
+    fn preflight_root_resolves_against_the_workspace_floor() {
+        let ws = std::path::Path::new("/srv/ws");
+        let resolve = |params: serde_json::Value| {
+            super::with_preflight_root(&params, ws)
+                .get("root")
+                .and_then(|v| v.as_str())
+                .unwrap_or("<missing>")
+                .to_string()
+        };
+        // The coordinator's default — and the case that staged the wrong tree.
+        assert_eq!(resolve(serde_json::json!({ "root": "." })), "/srv/ws");
+        // An omitted root is the same statement as `.`.
+        assert_eq!(resolve(serde_json::json!({})), "/srv/ws");
+        assert_eq!(resolve(serde_json::json!({ "root": "" })), "/srv/ws");
+        // A relative sub-path floors under the workspace, like every file path.
+        assert_eq!(
+            resolve(serde_json::json!({ "root": "packages/coordinator" })),
+            "/srv/ws/packages/coordinator"
+        );
+        // An absolute root is the caller's business, not ours.
+        assert_eq!(
+            resolve(serde_json::json!({ "root": "/other/repo" })),
+            "/other/repo"
+        );
+        // Every other field survives the rewrite.
+        let out = super::with_preflight_root(
+            &serde_json::json!({ "id": "ex:1", "root": ".", "filesChanged": 2 }),
+            ws,
+        );
+        assert_eq!(out.get("id").and_then(|v| v.as_str()), Some("ex:1"));
+        assert_eq!(out.get("filesChanged").and_then(|v| v.as_u64()), Some(2));
+    }
+
     /// P64.3 — the coordinator reads `symbol/kind/file/line/rank` out of
     /// `tags`; this pins that wire shape and the refusal of unknown methods.
     /// Fully qualified because the `use super::*` glob below is unix-gated.

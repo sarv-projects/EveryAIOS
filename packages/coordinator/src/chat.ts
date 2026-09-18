@@ -39,6 +39,9 @@ import {
   subAgentSpecFromToolArgs,
   subAgentTracker,
   ToolExecutor,
+  applyExactEdit,
+  editArgsFromToolCall,
+  type ApplyExactEditOptions,
   type ListedTool,
   type OpenAIFunctionTool,
 } from "./tools";
@@ -947,6 +950,39 @@ async function runInbuiltTurn(
                   subAgentTracker.release();
                 }
               }
+              // P64.5/P64.6 — the model's edit call rides the ladder and the
+              // shadow gate. `file_ops.edit` is a `write`-tier catalog tool
+              // (same operation and risk as `file_ops.write`), so this is not a
+              // privilege change; it is the *ordering* change: the proposed
+              // post-state is preflighted through `execution/preflight` before
+              // any byte lands, instead of splicing unchecked. Rust applies the
+              // write itself — the coordinator splices only to build the
+              // candidate, so the bytes the gate inspected are the bytes
+              // `file_ops.write` commits. Without this arm the call fell
+              // through to the direct executor and the gate never saw it
+              // (the same silent-miss class P64.3 fixed for the repo map).
+              if (toolId === "file_ops.edit") {
+                if (!toolExecutor) {
+                  throw new Error("edit gate unavailable — no tool executor (no silent fallback)");
+                }
+                const result = await applyExactEdit(
+                  toolExecutor,
+                  editArgsFromToolCall(args),
+                  ctx,
+                  { root: "." },
+                );
+                emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
+                if (hooks) {
+                  await runStage("postExecute", hooks, {
+                    stage: "postExecute",
+                    streamId,
+                    toolId,
+                    result,
+                  });
+                }
+                return result;
+              }
+
               const result = await toolExecutor.executeTool(toolId, args, ctx);
               emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
               if (hooks) {
