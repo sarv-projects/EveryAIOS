@@ -274,10 +274,62 @@ export function mutationLooksLive(r: SettingsMutationResult): boolean {
   return r.appliedLive === true && !r.lastError
 }
 
+/**
+ * P65.6 — injected-failure rollback. If the envelope is not live-applied,
+ * keep the previous snapshot; never keep the optimistic next state.
+ */
+export function chooseAfterMutation<T>(
+  previous: T,
+  optimistic: T,
+  envelope: SettingsMutationResult,
+): T {
+  return mutationLooksLive(envelope) ? optimistic : previous
+}
+
 /** P65.7 — EveryAIOS never writes an external agent's own config file. */
 export function assertNoAgentConfigWrite(binding: BackendBindingView): void {
   if (binding.writesToAgentConfig) {
     throw new Error('EveryAIOS never writes an external agent config')
+  }
+}
+
+/**
+ * P65.2 — an external agent's native model/tools stay its own. Shared
+ * cowork grants are additional; they must not replace native occupancy
+ * or flip `modelOwner` to EveryAIOS-managed.
+ */
+export function nativeSurfaceNotReplaced(row: AgentSettings): boolean {
+  if (row.protocol === 'acp' || row.protocol === 'mcp') {
+    if (row.modelOwner === 'managed' || row.modelOwner === 'native') return false
+    if (row.backendBinding?.writesToAgentConfig) return false
+  }
+  const native = new Set(row.nativeCapabilities)
+  for (const cap of row.sharedCapabilities) {
+    if (native.has(cap)) return false
+  }
+  return true
+}
+
+/** P65.7 — OAuth revoke / extension install never write another agent's config. */
+export const SETTINGS_IPC_MATRIX: ReadonlyArray<{
+  family: 'providers' | 'agents' | 'connections' | 'schedules' | 'extensions'
+  command: string
+  writesAgentConfig: false
+}> = [
+  { family: 'providers', command: 'settings_default_model_set', writesAgentConfig: false },
+  { family: 'agents', command: 'settings_agent_get', writesAgentConfig: false },
+  { family: 'connections', command: 'oauth_revoke', writesAgentConfig: false },
+  { family: 'schedules', command: 'settings_schedule_set_enabled', writesAgentConfig: false },
+  { family: 'extensions', command: 'skills_install', writesAgentConfig: false },
+]
+
+export function assertSettingsCommandDoesNotWriteAgentConfig(command: string): void {
+  const row = SETTINGS_IPC_MATRIX.find((r) => r.command === command)
+  if (!row) {
+    throw new Error(`settings IPC ${command} is not on the ownership matrix`)
+  }
+  if (row.writesAgentConfig) {
+    throw new Error(`settings IPC ${command} must not write an agent config`)
   }
 }
 
