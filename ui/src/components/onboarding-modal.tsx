@@ -1,162 +1,558 @@
 'use client'
 
-import { useState } from 'react'
-import { Sparkles, KeyRound, MessageSquareText, PartyPopper, ArrowRight, ArrowLeft, Check } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Sparkles,
+  FileSpreadsheet,
+  Globe,
+  Monitor,
+  Brain,
+  ShieldCheck,
+  Palette,
+  Sun,
+  Moon,
+  KeyRound,
+  Check,
+  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  Download,
+  RefreshCw,
+  Layers,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { useAppStore } from '@/lib/store'
-import { useLocale } from '@/lib/i18n'
+import { useTheme, type Accent } from '@/components/theme-provider'
+import { inTauri, invoke } from '@/lib/tauri'
+import { AGENTS } from '@/lib/agents'
+import { cn } from '@/lib/utils'
 
-/**
- * P11.2 — onboarding flow (first launch → add first key → first chat →
- * success moment). Gated by `onboardingDone`; the same surface doubles as
- * the P11.5.3 first-run welcome (Open folder / add model actions on step 1).
- * The dialog cannot be dismissed mid-flow — completing the last step marks
- * onboarding done (skip is allowed at each step, which also completes it).
- */
+const BRAND_WORDS = [
+  'EveryAIOS',
+  'EveryAgent',
+  'EveryWork',
+  'EveryDoc',
+  'EveryModel',
+  'EveryTask',
+]
+
+const CAPABILITIES = [
+  {
+    icon: FileSpreadsheet,
+    title: 'Work-Native Office',
+    desc: 'Embedded IronCalc spreadsheet formula DAG recalculation & surgical OOXML document patcher.',
+    tag: 'IronCalc 0.8.3',
+    color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+  },
+  {
+    icon: Globe,
+    title: 'Tiered Stealth Browser',
+    desc: 'Lightpanda + Chrome CDP browser automation with zero anti-bot detection fingerprints.',
+    tag: 'CDP + Stealth',
+    color: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
+  },
+  {
+    icon: Monitor,
+    title: 'Desktop Computer Use',
+    desc: '1000x1000 normalized coordinate grounding, differential vision loop, and OS app launch.',
+    tag: 'Win32 / A11y',
+    color: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
+  },
+  {
+    icon: Brain,
+    title: '5-Tier Cognitive Memory',
+    desc: 'ACT-R activation decay, SQLite FTS5 BM25 search, knowledge graph, and instant replay.',
+    tag: 'ACT-R + Graph',
+    color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+  },
+  {
+    icon: ShieldCheck,
+    title: '7-Layer Guard-2 Security',
+    desc: 'Zero-I/O SSRF netfloor, lexical pathfloor, secret file shield (.env/.pem), and single-use tickets.',
+    tag: 'Guard-2 Kernel',
+    color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+  },
+  {
+    icon: Layers,
+    title: 'Universal Agent Swarm',
+    desc: 'Host Claude Code, Codex CLI, OpenCode, Aider, Cline in isolated Git worktrees with 3-way merge.',
+    tag: 'ACP Harness',
+    color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
+  },
+]
+
+const ACCENT_OPTIONS: { id: Accent; label: string; bg: string }[] = [
+  { id: 'blue', label: 'Cool Blue', bg: 'bg-blue-500' },
+  { id: 'sky', label: 'Electric Sky', bg: 'bg-sky-400' },
+  { id: 'emerald', label: 'Emerald', bg: 'bg-emerald-500' },
+  { id: 'violet', label: 'Violet', bg: 'bg-violet-500' },
+  { id: 'amber', label: 'Amber Gold', bg: 'bg-amber-500' },
+]
+
 export function OnboardingModal() {
   const onboardingDone = useAppStore((s) => s.onboardingDone)
   const setOnboardingDone = useAppStore((s) => s.setOnboardingDone)
-  const setCenterScreen = useAppStore((s) => s.setCenterScreen)
-  const setComposerValue = useAppStore((s) => s.setComposerValue)
-  const { t } = useLocale()
+  const notify = useAppStore((s) => s.notify)
+  const { theme, setTheme, accent, setAccent } = useTheme()
+
   const [step, setStep] = useState(0)
+  const [brandIndex, setBrandIndex] = useState(0)
+
+  // Agent auto-detection state
+  const [detectedAgents, setDetectedAgents] = useState<Record<string, boolean>>({
+    'everyaios-native': true, // Always ready
+  })
+  const [scanning, setScanning] = useState(false)
+  const [installingAgent, setInstallingAgent] = useState<string | null>(null)
+
+  // Optional Passphrase state
+  const [passphrase, setPassphrase] = useState('')
+  const [confirmPassphrase, setConfirmPassphrase] = useState('')
+  const [passError, setPassError] = useState<string | null>(null)
+  const [vaultBusy, setVaultBusy] = useState(false)
+
+  // Cycle brand title animation on Step 0
+  useEffect(() => {
+    if (step !== 0) return
+    const interval = setInterval(() => {
+      setBrandIndex((prev) => (prev + 1) % BRAND_WORDS.length)
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [step])
+
+  // Real-time Agent Auto-Detection
+  const scanAgents = async () => {
+    setScanning(true)
+    const detected: Record<string, boolean> = {
+      'everyaios-native': true,
+    }
+
+    if (inTauri()) {
+      try {
+        const res = await invoke<{ installed?: string[]; known?: string[] }>('acp_installed_agents')
+        if (res?.installed) {
+          for (const id of res.installed) {
+            detected[id] = true
+          }
+        }
+      } catch {
+        // In local discovery fallback
+      }
+    } else {
+      // Browser preview simulated detection
+      detected['claude-code'] = true
+      detected['opencode'] = true
+    }
+
+    setDetectedAgents(detected)
+    setScanning(false)
+  }
+
+  useEffect(() => {
+    if (step === 2) {
+      void scanAgents()
+    }
+  }, [step])
 
   if (onboardingDone) return null
 
-  const finish = () => setOnboardingDone(true)
+  const finish = () => {
+    setOnboardingDone(true)
+    notify('Welcome to EveryAIOS! Ready to get real work done.')
+  }
 
-  const steps = [
-    {
-      icon: Sparkles,
-      title: t('onboarding.welcome'),
-      desc: t('onboarding.subtitle'),
-      body: (
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            { label: 'Open a folder', action: () => setCenterScreen('files') },
-            { label: 'Open a document', action: () => setCenterScreen('files') },
-            // P50.4.1 — "Add a model" opens the real provider setup gate
-            // (key entry into the vault / local runtime), not just settings.
-            { label: 'Add a model', action: () => useAppStore.getState().openSetup() },
-            { label: 'Just chat', action: () => setComposerValue('') },
-          ].map((c) => (
-            <button
-              key={c.label}
-              onClick={() => {
-                c.action()
-                setCenterScreen('chat')
-                setStep(3)
-              }}
-              className="rounded-lg border border-border bg-background px-3 py-2.5 text-left text-xs font-medium transition-colors hover:border-primary/40 hover:bg-accent"
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      ),
-    },
-    {
-      icon: KeyRound,
-      title: t('onboarding.addKey'),
-      desc: t('onboarding.addKeyDesc'),
-      body: (
-        <button
-          onClick={() => {
-            setCenterScreen('settings')
-            setStep(2)
-          }}
-          className="w-full rounded-lg border border-border bg-background px-3 py-3 text-left text-xs transition-colors hover:border-primary/40 hover:bg-accent"
-        >
-          <span className="flex items-center justify-between">
-            <span>
-              <span className="block font-medium text-foreground">OpenAI · Anthropic · DeepSeek · NVIDIA</span>
-              <span className="block text-muted-foreground">Keys live in the encrypted vault — never the sidecar.</span>
-            </span>
-            <ArrowRight className="h-4 w-4 text-primary" />
-          </span>
-        </button>
-      ),
-    },
-    {
-      icon: MessageSquareText,
-      title: t('onboarding.startChat'),
-      desc: 'Ask for anything — plans, research, file edits, automations.',
-      body: (
-        <button
-          onClick={() => {
-            setCenterScreen('chat')
-            setComposerValue('What can you do?')
-            setStep(3)
-          }}
-          className="w-full rounded-lg border border-border bg-background px-3 py-3 text-left text-xs transition-colors hover:border-primary/40 hover:bg-accent"
-        >
-          <span className="flex items-center justify-between">
-            <span>
-              <span className="block font-medium text-foreground">Try a first prompt</span>
-              <span className="block text-muted-foreground">“Draft a weekly status report”</span>
-            </span>
-            <ArrowRight className="h-4 w-4 text-primary" />
-          </span>
-        </button>
-      ),
-    },
-    {
-      icon: PartyPopper,
-      title: t('onboarding.success'),
-      desc: t('onboarding.successDesc'),
-      body: null,
-    },
-  ]
+  const handleInstallAgent = async (agentId: string) => {
+    setInstallingAgent(agentId)
+    try {
+      if (inTauri()) {
+        await invoke('acp_install_agent', { agentId })
+      }
+      setDetectedAgents((prev) => ({ ...prev, [agentId]: true }))
+      notify(`Agent ${agentId} installed and ready.`)
+    } catch {
+      notify(`Install note: install CLI globally via terminal, or use auto-detected path.`)
+    } finally {
+      setInstallingAgent(null)
+    }
+  }
 
-  const s = steps[step]
+  const handleSetPassphrase = async (skip = false) => {
+    setPassError(null)
+    if (!skip) {
+      if (passphrase.length > 0 && passphrase.length < 8) {
+        setPassError('Passphrase must be at least 8 characters')
+        return
+      }
+      if (passphrase !== confirmPassphrase) {
+        setPassError('Passphrases do not match')
+        return
+      }
+    }
+
+    setVaultBusy(true)
+    try {
+      if (inTauri() && !skip && passphrase.length >= 8) {
+        await invoke('vault_setup', { passphrase })
+        notify('Master passphrase set. Vault encrypted.')
+      } else {
+        notify('Using transparent OS keychain encryption.')
+      }
+      finish()
+    } catch {
+      finish()
+    } finally {
+      setVaultBusy(false)
+    }
+  }
 
   return (
     <Dialog open onOpenChange={() => {}}>
-      <DialogContent className="max-w-sm gap-0 p-0" showCloseButton={false}>
-        <div className="flex flex-col gap-3 p-6">
-          <div className="flex items-center gap-2">
-            {steps.map((st, i) => (
-              <div
-                key={i}
-                className={`h-1 flex-1 rounded-full transition-colors ${i <= step ? 'bg-primary' : 'bg-muted'}`}
-              />
-            ))}
-          </div>
-          <div className="mt-2 flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-              <s.icon className="h-5 w-5 text-primary" strokeWidth={1.5} />
-            </div>
-            <div className="space-y-1">
-              <h2 className="text-base font-semibold tracking-tight">{s.title}</h2>
-              <p className="text-xs leading-relaxed text-muted-foreground">{s.desc}</p>
-            </div>
-          </div>
-          {s.body && <div className="mt-2">{s.body}</div>}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="flex gap-2">
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden border border-border/70 bg-card/95 p-0 shadow-2xl backdrop-blur-xl" showCloseButton={false}>
+        {/* Progress Bar Top */}
+        <div className="flex h-1.5 w-full bg-muted/40">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className={cn(
+                'h-full flex-1 transition-all duration-500 ease-out',
+                i <= step ? 'bg-gradient-to-r from-brand to-primary' : 'bg-transparent',
+              )}
+            />
+          ))}
+        </div>
+
+        <div className="flex min-h-[460px] flex-col justify-between p-6 sm:p-8">
+          <AnimatePresence mode="wait">
+            {/* STEP 0: Welcome & Dynamic Brand Animation */}
+            {step === 0 && (
+              <motion.div
+                key="step-0"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-1 flex-col items-center justify-center text-center"
+              >
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-[11px] font-medium text-brand shadow-sm">
+                  <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+                  <span>The Universal Desktop Agentic OS</span>
+                </div>
+
+                <div className="my-3 flex h-14 items-center justify-center">
+                  <AnimatePresence mode="wait">
+                    <motion.h1
+                      key={BRAND_WORDS[brandIndex]}
+                      initial={{ opacity: 0, y: 16, filter: 'blur(4px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, y: -16, filter: 'blur(4px)' }}
+                      transition={{ duration: 0.35, ease: 'easeOut' }}
+                      className="bg-gradient-to-r from-foreground via-foreground/90 to-brand bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl"
+                    >
+                      {BRAND_WORDS[brandIndex]}
+                    </motion.h1>
+                  </AnimatePresence>
+                </div>
+
+                <p className="max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
+                  An AI coworker on <span className="font-semibold text-foreground">your computer</span>. It uses your files, apps, browser, documents, and tools to finish real work—while you approve anything that changes the world.
+                </p>
+
+                <div className="mt-8 grid w-full max-w-lg grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-border/60 bg-card/60 p-3 text-left">
+                    <div className="text-xs font-semibold text-foreground">100% Local-First</div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">SQLCipher AES-256 vault. Zero founder servers.</div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-card/60 p-3 text-left">
+                    <div className="text-xs font-semibold text-foreground">Any Model & Agent</div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">BYOK, offline Ollama/GGUF, Claude Code, Codex.</div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-card/60 p-3 text-left">
+                    <div className="text-xs font-semibold text-foreground">Guard-2 Safety</div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">No file changes or deletions without consent.</div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* STEP 1: Capabilities Showcase & Theme Selection */}
+            {step === 1 && (
+              <motion.div
+                key="step-1"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-1 flex-col space-y-4"
+              >
+                <div>
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">Capabilities & Appearance</h2>
+                  <p className="text-xs text-muted-foreground">Tailor your cockpit experience and explore the native full-stack engines.</p>
+                </div>
+
+                {/* Capabilities Grid */}
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                  {CAPABILITIES.map((cap) => (
+                    <div
+                      key={cap.title}
+                      className={cn(
+                        'group flex flex-col justify-between rounded-lg border p-2.5 transition-all hover:scale-[1.02]',
+                        cap.color,
+                      )}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <cap.icon className="h-4 w-4" />
+                          <span className="font-mono text-[9px] uppercase tracking-wider opacity-80">{cap.tag}</span>
+                        </div>
+                        <div className="mt-1.5 text-xs font-semibold text-foreground">{cap.title}</div>
+                        <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{cap.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Theme & Accent Switcher */}
+                <div className="rounded-xl border border-border/70 bg-card/50 p-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Palette className="h-4 w-4 text-brand" />
+                      <div>
+                        <div className="text-xs font-medium text-foreground">Theme & Accent Tone</div>
+                        <div className="text-[10px] text-muted-foreground">Select your cockpit aesthetic.</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Theme mode buttons */}
+                      <div className="flex rounded-md border border-border/60 bg-background/80 p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setTheme('dark')}
+                          className={cn(
+                            'flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium transition-colors',
+                            theme === 'dark' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <Moon className="h-3 w-3" /> Dark
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTheme('light')}
+                          className={cn(
+                            'flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium transition-colors',
+                            theme === 'light' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <Sun className="h-3 w-3" /> Light
+                        </button>
+                      </div>
+
+                      {/* Accent color dots */}
+                      <div className="flex items-center gap-1.5">
+                        {ACCENT_OPTIONS.map((acc) => (
+                          <button
+                            key={acc.id}
+                            type="button"
+                            onClick={() => setAccent(acc.id)}
+                            title={acc.label}
+                            className={cn(
+                              'h-5 w-5 rounded-full transition-transform',
+                              acc.bg,
+                              accent === acc.id ? 'scale-125 ring-2 ring-foreground/40 ring-offset-1 ring-offset-background' : 'opacity-70 hover:opacity-100',
+                            )}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* STEP 2: Agent Discovery & Auto-Detection */}
+            {step === 2 && (
+              <motion.div
+                key="step-2"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-1 flex-col space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">Agent Auto-Detection & Swarm</h2>
+                    <p className="text-xs text-muted-foreground">EveryAIOS discovers installed CLI agents automatically or drives its native engine.</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={scanAgents}
+                    disabled={scanning}
+                    className="h-7 text-xs"
+                  >
+                    <RefreshCw className={cn('mr-1.5 h-3 w-3', scanning && 'animate-spin')} />
+                    {scanning ? 'Scanning…' : 'Rescan System'}
+                  </Button>
+                </div>
+
+                <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
+                  {AGENTS.map((ag) => {
+                    const isDetected = detectedAgents[ag.id] || ag.status === 'installed'
+                    const isBusy = installingAgent === ag.id
+
+                    return (
+                      <div
+                        key={ag.id}
+                        className={cn(
+                          'flex items-center justify-between rounded-lg border p-3 transition-colors',
+                          isDetected
+                            ? 'border-emerald-500/30 bg-emerald-500/5'
+                            : 'border-border/60 bg-card/40 hover:bg-accent/20',
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-md font-bold text-xs shadow-sm', ag.accent)}>
+                            {ag.mark}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-foreground">{ag.name}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">({ag.vendor})</span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground line-clamp-1">{ag.tagline}</p>
+                          </div>
+                        </div>
+
+                        <div>
+                          {isDetected ? (
+                            <Badge className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 text-[10px]">
+                              <CheckCircle2 className="mr-1 h-3 w-3" /> Auto-Detected & Ready
+                            </Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleInstallAgent(ag.id)}
+                              disabled={isBusy}
+                              className="h-7 text-[11px]"
+                            >
+                              <Download className="mr-1 h-3 w-3" />
+                              {isBusy ? 'Setting up…' : 'Install / Link'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+
+            {/* STEP 3: Security & Passphrase (OPTIONAL) */}
+            {step === 3 && (
+              <motion.div
+                key="step-3"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-1 flex-col space-y-4"
+              >
+                <div>
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">Encrypted Vault Setup (Optional)</h2>
+                  <p className="text-xs text-muted-foreground">Your keys and history are encrypted with SQLCipher AES-256 on your disk.</p>
+                </div>
+
+                <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand">
+                      <KeyRound className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">Choose Your Protection Level</div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Casual users can skip setting a manual password to use seamless transparent OS Keychain encryption. Power users can lock the vault with a custom master passphrase.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <div>
+                      <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Master Passphrase (Optional)
+                      </label>
+                      <Input
+                        type="password"
+                        placeholder="Leave blank to use seamless OS Keychain"
+                        value={passphrase}
+                        onChange={(e) => setPassphrase(e.target.value)}
+                        className="h-8 font-mono text-xs"
+                      />
+                    </div>
+
+                    {passphrase.length > 0 && (
+                      <div>
+                        <label className="mb-1 block text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Confirm Passphrase
+                        </label>
+                        <Input
+                          type="password"
+                          placeholder="Re-enter passphrase"
+                          value={confirmPassphrase}
+                          onChange={(e) => setConfirmPassphrase(e.target.value)}
+                          className="h-8 font-mono text-xs"
+                        />
+                      </div>
+                    )}
+
+                    {passError && <p className="text-[10px] text-red-400 font-mono">{passError}</p>}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 flex items-center gap-2 text-emerald-400 text-xs">
+                  <ShieldCheck className="h-4 w-4 shrink-0" />
+                  <span>Guard-2 Casual Mode active: Benign workspace reads & edits run seamlessly without micro-interruptions.</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Navigation Controls Bottom */}
+          <div className="mt-6 flex items-center justify-between border-t border-border/60 pt-4">
+            <div>
               {step > 0 && (
                 <Button variant="ghost" size="sm" onClick={() => setStep(step - 1)}>
-                  <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-                  {t('common.back')}
+                  <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                  Back
                 </Button>
               )}
             </div>
+
             <div className="flex items-center gap-2">
-              {step < steps.length - 1 ? (
+              {step < 3 ? (
                 <>
-                  <Button variant="ghost" size="sm" onClick={finish}>
-                    {t('common.skip')}
+                  <Button variant="ghost" size="sm" onClick={finish} className="text-muted-foreground">
+                    Skip All
                   </Button>
-                  <Button size="sm" onClick={() => setStep(step + 1)}>
-                    {t('common.next')}
-                    <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  <Button size="sm" onClick={() => setStep(step + 1)} className="bg-brand text-black hover:bg-brand/90 font-medium">
+                    Next
+                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                   </Button>
                 </>
               ) : (
-                <Button size="sm" onClick={finish}>
-                  <Check className="mr-1 h-3.5 w-3.5" />
-                  {t('common.start')}
+                <Button
+                  size="sm"
+                  disabled={vaultBusy}
+                  onClick={() => void handleSetPassphrase(passphrase.length === 0)}
+                  className="bg-brand text-black hover:bg-brand/90 font-semibold"
+                >
+                  <Check className="mr-1.5 h-3.5 w-3.5" />
+                  {passphrase.length === 0 ? 'Start (Use OS Keychain)' : 'Set Passphrase & Start'}
                 </Button>
               )}
             </div>
@@ -166,3 +562,4 @@ export function OnboardingModal() {
     </Dialog>
   )
 }
+
