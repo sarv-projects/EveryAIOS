@@ -43,7 +43,7 @@ import McqInterruptCard from './mcq-interrupt-card'
 import ProgressSteps from './progress-steps'
 import ToolChips from './tool-chip'
 import { TurnCheckpoint } from './turn-checkpoint'
-import { applyCitationMarks, citationAnchorId } from '@/lib/citations'
+import { applyCitationMarks, citationAnchorId, formatCitationExport } from '@/lib/citations'
 import { speakText, speechSynthesisAvailable, stopSpeaking } from '@/lib/voice'
 
 function CodeBlock({ children, className, ...props }: React.ComponentProps<'code'> & { inline?: boolean }) {
@@ -243,7 +243,8 @@ function TimeStamp({ ts }: { ts: string }) {
 export function messageMarkdown(m: ChatMessage): string {
   const role =
     m.role === 'user' ? '## You' : m.role === 'assistant' ? '## Assistant' : '## System'
-  const lines = [role, '', m.content]
+  const body = formatCitationExport(m.content, m.citations ?? [])
+  const lines = [role, '', body]
   if (m.error) lines.push('', `> ⛔ ${m.error.layer} error: ${m.error.detail}`)
   for (const t of m.toolCalls ?? []) {
     lines.push('', `- tool \`${t.toolId}\` — ${t.status}${t.error ? `: ${t.error}` : ''}`)

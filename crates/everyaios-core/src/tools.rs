@@ -316,13 +316,10 @@ impl ToolRegistry {
             if self.get(&t.name).is_some() {
                 continue; // native precedence — never shadow a built-in
             }
-            let (operation, risk) = if t.open_world {
-                ("external_network", "medium")
-            } else if t.read_only {
-                ("write", "low")
-            } else {
-                ("web_action", "high")
-            };
+            // P51.29 OpenWorker: third-party MCP is EXTERNAL always.
+            // A read-named MCP tool is a stranger's claim — never WRITE_LOCAL.
+            let _ = everyaios_guard::floors::mcp_floor_risk();
+            let (operation, risk) = ("external_network", "high");
             let mut entry = RegisteredTool {
                 id: t.name.clone(),
                 family: ToolFamily::External,
@@ -1199,7 +1196,10 @@ impl ToolService {
             // Reads still mint a ticket (ticket-every-effect) but auto-Allow:
             // default policy asks on GenericWrite, which would card every
             // `file_ops.read`. The executor is Rust, not the sidecar.
-            if spec.read_only {
+            // Reads still mint a ticket (ticket-every-effect) but auto-Allow
+            // for *native* read tools. P51.29: third-party MCP (External
+            // family) never auto-allows — OpenWorker MCP-EXTERNAL floor.
+            if spec.read_only && spec.family != ToolFamily::External {
                 if let GuardDecision::Ask { ticket_id } = &decision_out {
                     let id = ticket_id.clone();
                     let _ = g.approve(&id);
@@ -4062,6 +4062,10 @@ mod tests {
         // Native precedence: the shadow attempt is skipped.
         assert_eq!(names, vec!["custom.query"]);
         assert_eq!(s.registry.list().len(), before + 1);
+        let ext = s.registry.get("custom.query").unwrap();
+        assert_eq!(ext.family, ToolFamily::External);
+        assert_eq!(ext.operation, "external_network");
+        assert_eq!(ext.risk, "high");
 
         struct FakeExternal;
         impl ExternalToolBackend for FakeExternal {
@@ -4070,6 +4074,21 @@ mod tests {
             }
         }
         s.attach_external("mcp:custom", names.clone(), Arc::new(FakeExternal));
+        let pre = s
+            .handle(
+                "tool/exec",
+                &json!({
+                    "toolId": "custom.query",
+                    "sessionId": "s1",
+                    "agentId": "a1",
+                    "args": {"q": 1}
+                }),
+            )
+            .unwrap();
+        assert_eq!(
+            pre["action"], "ask",
+            "P51.29 MCP-EXTERNAL: a read-named MCP tool must not auto-allow, got {pre}"
+        );
         let out = s.dispatch(
             &s.registry.get("custom.query").unwrap().clone(),
             &json!({ "q": 1 }),
