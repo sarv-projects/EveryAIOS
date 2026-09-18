@@ -2835,7 +2835,9 @@ mod tests {
         let granted = rt.granted_tools("scout-1").unwrap();
         assert!(granted.iter().any(|t| t == "file_ops.read"));
         assert!(granted.iter().any(|t| t == "search.query"));
-        assert!(!granted.iter().any(|t| t == "file_ops.write" || t == "desktop.act"));
+        assert!(!granted
+            .iter()
+            .any(|t| t == "file_ops.write" || t == "desktop.act"));
     }
 
     #[cfg(unix)]

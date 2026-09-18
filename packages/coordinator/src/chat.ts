@@ -48,6 +48,8 @@ import {
 } from "./tools";
 import { citationsFromSearchResult } from "./citations";
 import { refuseDesktopIfWrongSurface } from "./cua-route";
+import { applyCuaReplanIfPresent } from "./cua-replan";
+import { applyCuaSkillPromoteIfPresent } from "./cua-skill";
 import { resolveMentions } from "./context-providers";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
 import { chiefRegistry } from "./chief";
@@ -809,6 +811,16 @@ async function runInbuiltTurn(
         throw new Error("tool executor unavailable");
       }
       const result = await toolExecutor.executeTool(toolId, args, ctx);
+      if (request && toolId.startsWith("desktop.")) {
+        const replan = await applyCuaReplanIfPresent(request, args, result);
+        if (replan.applied) {
+          emit({ type: "stage", streamId, stage: `cua:replan:${replan.reason ?? "planner"}` });
+        }
+        const skill = await applyCuaSkillPromoteIfPresent(request, args);
+        if (skill.applied) {
+          emit({ type: "stage", streamId, stage: `cua:skill:${skill.name ?? "promoted"}` });
+        }
+      }
       if (toolId === "search.query") {
         const citations = citationsFromSearchResult(result);
         if (citations.length > 0) {

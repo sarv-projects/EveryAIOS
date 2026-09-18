@@ -713,7 +713,9 @@ impl ExecutionKernel {
                     }
                 }
                 let path = crate::persist_dag(std::path::Path::new(root), &dag)?;
-                Ok(json!({ "ok": true, "path": path.display().to_string(), "nodes": dag.nodes.len() }))
+                Ok(
+                    json!({ "ok": true, "path": path.display().to_string(), "nodes": dag.nodes.len() }),
+                )
             }
             "execution/cua_get" => {
                 let root = params
@@ -738,8 +740,14 @@ impl ExecutionKernel {
                 let mut dag = crate::load_dag(dir)?;
                 dag.apply_remaining_edit(
                     node_id,
-                    params.get("name").and_then(Value::as_str).map(str::to_string),
-                    params.get("info").and_then(Value::as_str).map(str::to_string),
+                    params
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    params
+                        .get("info")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
                 )?;
                 crate::append_replan_log(dir, dag.replan_seq, "user-edit-remaining")?;
                 crate::persist_dag(dir, &dag)?;
@@ -780,6 +788,70 @@ impl ExecutionKernel {
                     "status": format!("{:?}", dag.nodes.iter().find(|n| n.id == node_id).map(|n| n.status)),
                 }))
             }
+            // P59.7 — Manager remaining-node rewrite. Planner JSON is injected
+            // (no LLM in this crate). Verified stay; empty postconditions and
+            // ticket/skipGuard payloads refuse. Clicks still ticket via tool/exec.
+            "execution/cua_replan" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_replan requires root")?;
+                let remaining_val = params
+                    .get("remaining")
+                    .cloned()
+                    .ok_or("execution/cua_replan requires remaining")?;
+                let reason = crate::ManagerReplanReason::parse(
+                    params
+                        .get("reason")
+                        .and_then(Value::as_str)
+                        .unwrap_or("planner"),
+                );
+                let remaining = crate::parse_remaining_nodes(&remaining_val)?;
+                let dir = std::path::Path::new(root);
+                let mut dag = crate::load_dag(dir)?;
+                let out = crate::apply_manager_replan(&mut dag, remaining)?;
+                crate::append_replan_log(dir, out.replan_seq, reason.as_str())?;
+                crate::persist_dag(dir, &dag)?;
+                Ok(json!({
+                    "ok": true,
+                    "replanSeq": out.replan_seq,
+                    "verifiedKept": out.verified_kept,
+                    "remaining": out.remaining,
+                    "reason": reason.as_str(),
+                    "dag": dag,
+                }))
+            }
+            // P59.16 — promote a fully verified CUA DAG to SKILL.md in the
+            // existing I2 store. Halted traces refuse. Not a second orchestrator.
+            "execution/cua_promote_skill" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_promote_skill requires root")?;
+                let skill_root = params
+                    .get("skillRoot")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_promote_skill requires skillRoot")?;
+                let name = params
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_promote_skill requires name")?;
+                let description = params
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .unwrap_or(name);
+                let dag = crate::load_dag(std::path::Path::new(root))?;
+                let draft = crate::cua_skill_from_verified(&dag, name, description)?;
+                let path = crate::persist_cua_skill(std::path::Path::new(skill_root), &draft)?;
+                Ok(json!({
+                    "ok": true,
+                    "name": draft.name,
+                    "path": path.display().to_string(),
+                    "postconditions": draft.postconditions,
+                    "nodes": draft.node_ids,
+                    "orchestrator": false,
+                }))
+            }
             // P51.10 — admit a ≤5-model fan-out and optionally reduce
             // outcomes / parse a walkthrough. Construction is the live
             // consumer of `MultiRun::new` (budget) + `collect` + `walkthrough`.
@@ -814,17 +886,16 @@ impl ExecutionKernel {
                             .collect()
                     })
                     .unwrap_or_default();
-                let mode = match params.get("mode").and_then(Value::as_str).unwrap_or("keep_best") {
+                let mode = match params
+                    .get("mode")
+                    .and_then(Value::as_str)
+                    .unwrap_or("keep_best")
+                {
                     "fuse" | "Fuse" => crate::multirun::FuseMode::Fuse,
                     _ => crate::multirun::FuseMode::KeepBest,
                 };
-                let run = crate::multirun::MultiRun::new(
-                    id,
-                    task_id,
-                    model_ids,
-                    worktree_ids,
-                    mode,
-                )?;
+                let run =
+                    crate::multirun::MultiRun::new(id, task_id, model_ids, worktree_ids, mode)?;
                 let collected = params.get("outcomes").and_then(Value::as_array).map(|arr| {
                     let outcomes: Vec<crate::multirun::RunOutcome> = arr
                         .iter()
@@ -2549,6 +2620,173 @@ mod tests {
             .unwrap();
         assert_eq!(halt["outcome"], "halt");
         assert_eq!(halt["ok"], false);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p59_cua_replan_rewrites_remaining_and_refuses_guard_skip() {
+        let dir = std::env::temp_dir().join(format!("exec-cua-replan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut k = ExecutionKernel::new();
+        k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [
+                        {
+                            "id": "open",
+                            "name": "open",
+                            "info": "",
+                            "depends_on": [],
+                            "status": "verified",
+                            "postconditions": ["window"]
+                        },
+                        {
+                            "id": "click",
+                            "name": "click",
+                            "info": "",
+                            "depends_on": ["open"],
+                            "status": "halted",
+                            "postconditions": ["saved"]
+                        }
+                    ]
+                }
+            }),
+        )
+        .unwrap();
+        let skip = k.handle(
+            "execution/cua_replan",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "reason": "halt",
+                "remaining": [{
+                    "id": "alt",
+                    "name": "click Save",
+                    "info": "menu",
+                    "depends_on": ["open"],
+                    "postconditions": ["saved"],
+                    "ticketId": "t-skip"
+                }]
+            }),
+        );
+        assert!(skip.is_err(), "planned click must not mint a ticket");
+        let empty = k.handle(
+            "execution/cua_replan",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "reason": "halt",
+                "remaining": [{
+                    "id": "alt",
+                    "name": "click Save",
+                    "info": "menu",
+                    "depends_on": ["open"]
+                }]
+            }),
+        );
+        assert!(empty.is_err(), "empty postconditions must refuse");
+        let ok = k
+            .handle(
+                "execution/cua_replan",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "reason": "halt",
+                    "remaining": [{
+                        "id": "alt",
+                        "name": "File > Save",
+                        "info": "menu instead of toolbar",
+                        "depends_on": ["open"],
+                        "postconditions": ["saved"]
+                    }]
+                }),
+            )
+            .unwrap();
+        assert_eq!(ok["ok"], true);
+        assert_eq!(ok["verifiedKept"], 1);
+        assert_eq!(ok["remaining"], 1);
+        assert_eq!(ok["reason"], "halt");
+        assert_eq!(ok["dag"]["nodes"][0]["id"], "open");
+        assert_eq!(ok["dag"]["nodes"][0]["status"], "verified");
+        assert_eq!(ok["dag"]["nodes"][1]["id"], "alt");
+        let log = std::fs::read_to_string(dir.join("replan_log.jsonl")).unwrap();
+        assert!(log.contains("halt"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p59_cua_promote_skill_refuses_unverified_and_writes_skill_md() {
+        let dir = std::env::temp_dir().join(format!("exec-cua-skill-{}", std::process::id()));
+        let skills = dir.join("skills");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut k = ExecutionKernel::new();
+        k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [{
+                        "id": "login",
+                        "name": "login",
+                        "info": "type then submit",
+                        "status": "pending",
+                        "postconditions": ["inbox"]
+                    }]
+                }
+            }),
+        )
+        .unwrap();
+        let refuse = k.handle(
+            "execution/cua_promote_skill",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "skillRoot": skills.to_string_lossy(),
+                "name": "login-to-x",
+                "description": "Login to X"
+            }),
+        );
+        assert!(refuse.is_err(), "pending trace must not promote");
+        k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [{
+                        "id": "login",
+                        "name": "login",
+                        "info": "type then submit",
+                        "status": "verified",
+                        "postconditions": ["inbox"]
+                    }]
+                }
+            }),
+        )
+        .unwrap();
+        let ok = k
+            .handle(
+                "execution/cua_promote_skill",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "skillRoot": skills.to_string_lossy(),
+                    "name": "login-to-x",
+                    "description": "Login to X when asked"
+                }),
+            )
+            .unwrap();
+        assert_eq!(ok["ok"], true);
+        assert_eq!(ok["orchestrator"], false);
+        assert_eq!(ok["name"], "login-to-x");
+        let md = std::fs::read_to_string(skills.join("login-to-x").join("SKILL.md")).unwrap();
+        assert!(md.contains("## Postconditions"));
+        assert!(md.contains("inbox"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
