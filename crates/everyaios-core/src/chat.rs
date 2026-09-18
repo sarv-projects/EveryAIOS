@@ -300,6 +300,16 @@ pub enum ChatWireEvent {
         #[serde(flatten)]
         metadata: ChatEventMetadata,
     },
+    /// P52.20 — numbered citations produced from live `search.query` hits.
+    Citations {
+        #[serde(rename = "streamId")]
+        stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        citations: Vec<serde_json::Value>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
+    },
 }
 
 /// Parameters for one chat turn (mirrors the coordinator's `chat/stream`).
@@ -526,6 +536,15 @@ fn subagent_rpc(
                 .map(str::to_string);
             spec.tools = str_list("tools");
             spec.blocked_tools = str_list("blockedTools");
+            // P60.3 — Scout/Verifier never inherit writes even if the parent
+            // listed them. Worker keeps the derived grant set.
+            let role = params
+                .get("role")
+                .and_then(|v| v.as_str())
+                .and_then(crate::cua::AgentRole::parse);
+            if let Some(role) = role {
+                spec.tools = crate::cua::filter_tools_for_role(role, &spec.tools);
+            }
             let task_id = spec.spec.id.clone();
             runtime.spawn(spec).map_err(|e| e.to_string())?;
             Ok(serde_json::json!({
@@ -533,6 +552,7 @@ fn subagent_rpc(
                 "summary": "",
                 "status": "running",
                 "artifacts": [],
+                "role": params.get("role").cloned().unwrap_or(serde_json::Value::Null),
             }))
         }
         other => Err(format!("method not found: {other}")),
@@ -1995,6 +2015,19 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 metadata: event_metadata(&params),
                             },
                         ),
+                        "chat/citations" => emit(
+                            &on_event,
+                            ChatWireEvent::Citations {
+                                session_id: event_session_id.clone(),
+                                citations: params
+                                    .get("citations")
+                                    .and_then(|c| c.as_array())
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                stream_id,
+                                metadata: event_metadata(&params),
+                            },
+                        ),
                         "chat/monitor" => emit(
                             &on_event,
                             ChatWireEvent::Monitor {
@@ -2777,6 +2810,32 @@ mod tests {
         // A spec-less call is a refusal, and unknown methods stay errors.
         assert!(super::subagent_rpc("subagent/spawn", &serde_json::json!({}), &mut rt).is_err());
         assert!(super::subagent_rpc("subagent/nope", &serde_json::json!({}), &mut rt).is_err());
+    }
+
+    #[test]
+    fn subagent_rpc_scout_strips_writes() {
+        let mut rt = everyaios_blueprint::SubAgentRuntime::new(
+            everyaios_blueprint::SubAgentLimits::default(),
+        );
+        let out = super::subagent_rpc(
+            "subagent/spawn",
+            &serde_json::json!({
+                "spec": { "id": "scout-1", "goal": "map", "context": [], "acceptance": [] },
+                "model": "m",
+                "workspace": ".everyaios/worktrees/task-scout-1",
+                "parentId": "root",
+                "tools": ["file_ops.read", "file_ops.write", "search.query", "desktop.act"],
+                "blockedTools": [],
+                "role": "scout",
+            }),
+            &mut rt,
+        )
+        .expect("scout spawn is admitted");
+        assert_eq!(out["role"], "scout");
+        let granted = rt.granted_tools("scout-1").unwrap();
+        assert!(granted.iter().any(|t| t == "file_ops.read"));
+        assert!(granted.iter().any(|t| t == "search.query"));
+        assert!(!granted.iter().any(|t| t == "file_ops.write" || t == "desktop.act"));
     }
 
     #[cfg(unix)]

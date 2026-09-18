@@ -49,7 +49,8 @@ export interface ChatWireEvent {
     | "memoryExtracted"
     | "planDone"
     | "monitor"
-    | "verification";
+    | "verification"
+    | "citations";
   streamId?: string;
   latencyMs?: number;
   text?: string;
@@ -100,6 +101,8 @@ export interface ChatWireEvent {
   checks?: string[];
   report?: string;
   passed?: boolean | null;
+  /** P52.20 — numbered citations from live search hits. */
+  citations?: Array<{ index: number; title: string; url: string; snippet?: string; source?: string }>;
 }
 
 /** Pause every scheduled job bound to a chat (delete-session cascade). */

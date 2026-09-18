@@ -836,6 +836,37 @@ describe("P1.4 chat loop — ConversationEngine wiring (B1 base)", () => {
     expect(methods).toContain("guard/evaluate");
     expect(events.some((e) => e.type === "tool_result")).toBe(true);
   });
+
+  test("P52.20: search.query results emit numbered citations", async () => {
+    const { events, emit } = collector();
+    const request = async (method: string) => {
+      if (method === "tool/exec") {
+        return { action: "allow", ticketId: "tkt:cite", argsHash: "h" };
+      }
+      if (method === "tool/commit") {
+        return {
+          ok: true,
+          results: [
+            { url: "https://ex.test/a", title: "A", snippet: "one", source: "searxng" },
+            { url: "https://ex.test/b", title: "B" },
+          ],
+        };
+      }
+      return {};
+    };
+    await runToolRetry(
+      { sessionId: "s1", streamId: "st-cite", toolId: "search.query", args: { query: "q" } },
+      emit,
+      request,
+    );
+    const cite = events.find((e) => e.type === "citations") as
+      | { citations?: Array<{ index: number; title: string; url: string; snippet?: string; source?: string }> }
+      | undefined;
+    expect(cite?.citations).toEqual([
+      { index: 1, title: "A", url: "https://ex.test/a", snippet: "one", source: "searxng" },
+      { index: 2, title: "B", url: "https://ex.test/b" },
+    ]);
+  });
 });
 
 describe("extractJsonToolCalls", () => {

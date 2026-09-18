@@ -49,6 +49,7 @@ use crate::terminal_cmds;
 use crate::trajectory_cmds;
 use crate::updater_cmds;
 use crate::vault_cmds;
+use crate::voice_cmds;
 use crate::work_cmds;
 
 use crate::xlsx_cmds;
@@ -436,5 +437,9 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Syn
         settings_cmds::settings_schedule_get,
         settings_cmds::settings_schedule_set_enabled,
         settings_cmds::settings_extensions_list,
+        // P50.4.3 — crate VAD / utterance pipeline (honest NoopStt).
+        voice_cmds::voice_status,
+        voice_cmds::voice_vad_classify,
+        voice_cmds::voice_process_utterance,
     ]
 }

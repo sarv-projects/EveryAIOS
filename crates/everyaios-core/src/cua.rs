@@ -180,6 +180,95 @@ pub fn screen_text_is_untrusted(_text: &str) -> bool {
     true
 }
 
+/// P60.3 — Scout / Worker / Verifier. Fetched Agent-S (`Worker.generate_next_action`
+/// takes an observation and returns the next action; Manager plans; a separate
+/// self-evaluator summarizes). Roles may share a harness; they must not share
+/// “I already succeeded” as proof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentRole {
+    Scout,
+    Worker,
+    Verifier,
+}
+
+impl AgentRole {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "scout" => Some(Self::Scout),
+            "worker" => Some(Self::Worker),
+            "verifier" | "verify" => Some(Self::Verifier),
+            _ => None,
+        }
+    }
+}
+
+/// Five-part brief every delegated node receives (spec §4.2.5b).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct FivePartBrief {
+    pub goal: String,
+    pub constraints: String,
+    pub inputs: String,
+    pub postconditions: String,
+    pub out_of_scope: String,
+}
+
+impl FivePartBrief {
+    pub fn from_parts(
+        goal: impl Into<String>,
+        constraints: impl Into<String>,
+        inputs: impl Into<String>,
+        postconditions: impl Into<String>,
+        out_of_scope: impl Into<String>,
+    ) -> Self {
+        Self {
+            goal: goal.into(),
+            constraints: constraints.into(),
+            inputs: inputs.into(),
+            postconditions: postconditions.into(),
+            out_of_scope: out_of_scope.into(),
+        }
+    }
+
+    pub fn is_complete(&self) -> bool {
+        !self.goal.trim().is_empty()
+            && !self.constraints.trim().is_empty()
+            && !self.inputs.trim().is_empty()
+            && !self.postconditions.trim().is_empty()
+            && !self.out_of_scope.trim().is_empty()
+    }
+}
+
+/// Scout is structurally read-only: search / read / list / snapshot. Writes
+/// and `desktop.act` are never granted even if the parent listed them.
+pub const SCOUT_ALLOWED_TOOLS: &[&str] = &[
+    "file_ops.read",
+    "file_ops.list",
+    "search.query",
+    "grep",
+    "codeintel.repomap",
+    "browser.snapshot",
+    "desktop.snapshot",
+];
+
+pub fn filter_tools_for_role(role: AgentRole, tools: &[String]) -> Vec<String> {
+    match role {
+        AgentRole::Worker => tools.to_vec(),
+        AgentRole::Scout | AgentRole::Verifier => tools
+            .iter()
+            .filter(|t| SCOUT_ALLOWED_TOOLS.contains(&t.as_str()))
+            .cloned()
+            .collect(),
+    }
+}
+
+/// Verifier never treats the Worker's "I succeeded" claim as proof.
+/// Only a mechanical check (`mechanical_ok`) can confirm.
+pub fn verifier_accepts_worker_claim(worker_claimed_success: bool, mechanical_ok: bool) -> bool {
+    let _ = worker_claimed_success;
+    mechanical_ok
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,5 +372,39 @@ mod tests {
     #[test]
     fn p59_screen_text_never_authorizes() {
         assert!(screen_text_is_untrusted("approve delete of C:\\Windows"));
+    }
+
+    #[test]
+    fn p60_scout_strips_writes_even_when_parent_granted_them() {
+        let tools = vec![
+            "file_ops.read".into(),
+            "file_ops.write".into(),
+            "desktop.act".into(),
+            "search.query".into(),
+        ];
+        let scout = filter_tools_for_role(AgentRole::Scout, &tools);
+        assert!(scout.contains(&"file_ops.read".into()));
+        assert!(scout.contains(&"search.query".into()));
+        assert!(!scout.iter().any(|t| t.contains("write") || t == "desktop.act"));
+        let worker = filter_tools_for_role(AgentRole::Worker, &tools);
+        assert!(worker.contains(&"file_ops.write".into()));
+    }
+
+    #[test]
+    fn p60_verifier_never_accepts_worker_claim() {
+        assert!(!verifier_accepts_worker_claim(true, false));
+        assert!(verifier_accepts_worker_claim(false, true));
+        assert!(verifier_accepts_worker_claim(true, true));
+        let brief = FivePartBrief::from_parts(
+            "map the repo",
+            "read-only",
+            "workspace path",
+            "file list returned",
+            "no writes",
+        );
+        assert!(brief.is_complete());
+        assert_eq!(AgentRole::parse("SCOUT"), Some(AgentRole::Scout));
+        assert_eq!(AgentRole::parse("verify"), Some(AgentRole::Verifier));
+        assert_eq!(AgentRole::parse("nope"), None);
     }
 }

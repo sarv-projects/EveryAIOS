@@ -42,9 +42,11 @@ import {
   applyExactEdit,
   executeEditAwareRound,
   editArgsFromToolCall,
+  dispatchMultiRun,
   type ListedTool,
   type OpenAIFunctionTool,
 } from "./tools";
+import { citationsFromSearchResult } from "./citations";
 import { resolveMentions } from "./context-providers";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
 import { chiefRegistry } from "./chief";
@@ -216,6 +218,7 @@ export type ChatEvent = (
   | { type: "verification"; streamId: string; taskId: string; checks: string[]; report: string; passed: boolean | null }
   | { type: "memory_extracted"; streamId: string; sessionId: string; facts: string[] }
   | { type: "monitor"; streamId: string; jobId: string; changed: boolean; notified: boolean; stopped: boolean; current: string; notifications: number }
+  | { type: "citations"; streamId: string; citations: Array<{ index: number; title: string; url: string; snippet?: string; source?: string }> }
   | { type: "plan_start"; streamId: string; planId: string; tasks: number }
   | { type: "plan_step"; streamId: string; planId: string; taskId: string; status: "running" | "done" | "skipped" }
   | { type: "interrupt"; streamId: string; planId: string; breakId: string; title: string; description: string; options: string[] }
@@ -732,6 +735,18 @@ async function runInbuiltTurn(
         const spec = buildSubAgentSpec(
           subAgentSpecFromToolArgs(args, { parentId: "root", depth: 0 }),
         );
+        const models = Array.isArray(args.models)
+          ? args.models.filter((m): m is string => typeof m === "string")
+          : [];
+        if (models.length > 1) {
+          await dispatchMultiRun(request, {
+            id: streamId,
+            taskId: spec.spec.taskId,
+            modelIds: models,
+            worktreeIds: models.map((_, i) => `${spec.workspace}-${i}`),
+            mode: args.fuse === true || args.mode === "fuse" ? "fuse" : "keep_best",
+          });
+        }
         await subAgentTracker.begin(spec.depth);
         try {
           const result = await dispatchSubAgent(request, spec, ctx);
@@ -774,6 +789,12 @@ async function runInbuiltTurn(
         throw new Error("tool executor unavailable");
       }
       const result = await toolExecutor.executeTool(toolId, args, ctx);
+      if (toolId === "search.query") {
+        const citations = citationsFromSearchResult(result);
+        if (citations.length > 0) {
+          emit({ type: "citations", streamId, citations });
+        }
+      }
       emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
       if (hooks) {
         await runStage("postExecute", hooks, {
@@ -1377,6 +1398,12 @@ export async function runToolRetry(
     const result = await ex.executeTool(toolId, args, ctx);
     // P39.1: oversized tool results become ref + bounded preview.
     emit({ type: "tool_result", streamId, toolId, result: budgetJson(result, refRegistry) });
+    if (toolId === "search.query") {
+      const citations = citationsFromSearchResult(result);
+      if (citations.length > 0) {
+        emit({ type: "citations", streamId, citations });
+      }
+    }
     emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

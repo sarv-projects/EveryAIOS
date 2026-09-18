@@ -43,6 +43,8 @@ import McqInterruptCard from './mcq-interrupt-card'
 import ProgressSteps from './progress-steps'
 import ToolChips from './tool-chip'
 import { TurnCheckpoint } from './turn-checkpoint'
+import { applyCitationMarks, citationAnchorId } from '@/lib/citations'
+import { speakText, speechSynthesisAvailable, stopSpeaking } from '@/lib/voice'
 
 function CodeBlock({ children, className, ...props }: React.ComponentProps<'code'> & { inline?: boolean }) {
   const [copied, setCopied] = useState(false)
@@ -454,9 +456,9 @@ function TurnErrorCard({ message }: { message: ChatMessage }) {
 }
 
 /** P52.24/P52.22 — assistant-message action bar: copy · quote-to-composer ·
- * same-history regenerate · fork · export-as-Markdown. Speak stays honest:
- * voice output is a staged v1 surface (see the mic control) — the button
- * explains, never pretends to read aloud. */
+ * same-history regenerate · fork · export-as-Markdown. Speak uses the
+ * platform speechSynthesis engine when present (P50.4.4); otherwise the
+ * button stays disabled with an honest title. */
 function AssistantActions({ message }: { message: ChatMessage }) {
   const [copied, setCopied] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
@@ -522,12 +524,19 @@ function AssistantActions({ message }: { message: ChatMessage }) {
       <button className={baseBtn} onClick={exportMd} title="Export this message as Markdown">
         <Download className="h-3 w-3" />
       </button>
-      {/* Voice output is v1-staged (H28) — the button is honest about it. */}
       <button
-        className={cn(baseBtn, 'cursor-not-allowed opacity-30 hover:bg-transparent hover:text-muted-foreground/70')}
-        title="Read aloud is a v1 deliverable — the voice stack is not wired in this build"
-        aria-disabled
-        tabIndex={-1}
+        className={cn(baseBtn, !speechSynthesisAvailable() && 'cursor-not-allowed opacity-30 hover:bg-transparent hover:text-muted-foreground/70')}
+        title={
+          speechSynthesisAvailable()
+            ? 'Read this message aloud'
+            : 'Read aloud needs a platform speech engine (speechSynthesis) — none is available here'
+        }
+        aria-disabled={!speechSynthesisAvailable()}
+        onClick={() => {
+          if (!speechSynthesisAvailable()) return
+          stopSpeaking()
+          speakText(message.content)
+        }}
       >
         <Volume2 className="h-3 w-3" />
       </button>
@@ -734,7 +743,7 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
               rehypePlugins={[rehypeKatex, rehypeHighlight]}
               components={mdComponents}
             >
-              {message.content}
+              {applyCitationMarks(message.content, message.citations ?? [])}
             </ReactMarkdown>
             {streaming && (
               <span className="caret-blink ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-sm bg-brand" />
@@ -751,6 +760,25 @@ const MessageBubble = memo(function MessageBubble({ message, streaming }: Props)
         </div>
 
         {message.error && <TurnErrorCard message={message} />}
+
+        {message.citations && message.citations.length > 0 && (
+          <ol className="mt-1 space-y-0.5 rounded-md border border-border/50 bg-background/40 px-2 py-1.5 text-[11px]">
+            {message.citations.map((c) => (
+              <li key={c.index} id={citationAnchorId(c.index)} className="flex gap-1.5">
+                <span className="font-mono text-muted-foreground">[^{c.index}]</span>
+                <a
+                  href={c.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 truncate text-brand underline-offset-2 hover:underline"
+                  title={c.snippet ?? c.url}
+                >
+                  {c.title}
+                </a>
+              </li>
+            ))}
+          </ol>
+        )}
 
         {message.toolCalls && message.toolCalls.length > 0 && (
           <ToolChips calls={message.toolCalls} />

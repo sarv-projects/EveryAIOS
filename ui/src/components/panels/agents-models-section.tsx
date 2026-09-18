@@ -63,6 +63,7 @@ import {
 import { refreshAgentCatalog } from '@/lib/bridge'
 import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
+import { settingsAgentGet, type AgentSettings } from '@/lib/settings'
 import { Row, SectionShell } from './settings-shared'
 
 function formatTokens(n: number): string {
@@ -450,6 +451,20 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
   const native = isNativeRuntime(agent.id)
   const acpOptions = useAppStore((s) => s.acpConfigOptions[agent.id])
   const readiness = agentReadiness(agent)
+  const [live, setLive] = useState<AgentSettings | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void settingsAgentGet(agent.id)
+      .then((row) => {
+        if (!cancelled) setLive(row)
+      })
+      .catch(() => {
+        if (!cancelled) setLive(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [agent.id])
   return (
     <div className="mt-2 grid gap-2 sm:grid-cols-2 [contain-intrinsic-size:auto_120px]">
       {/* Native capabilities — owned by the agent itself. */}
@@ -466,17 +481,28 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
             : 'What this runtime itself exposes. Model, sign-in, and routing stay in its own config — managed here only by reference.'}
         </p>
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {agent.capabilities.map((c) => (
+          {(live?.nativeCapabilities?.length
+            ? live.nativeCapabilities
+            : agent.capabilities
+          ).map((c) => (
             <Badge key={c} variant="secondary" className="bg-background/60 text-[8px] font-normal text-muted-foreground">
-              {CAPABILITY_LABELS[c]}
+              {CAPABILITY_LABELS[c as keyof typeof CAPABILITY_LABELS] ?? c}
             </Badge>
           ))}
         </div>
         <dl className="mt-1.5 space-y-0.5 font-mono text-[9px] text-muted-foreground">
           <div className="flex justify-between gap-2">
             <dt>readiness</dt>
-            <dd className="text-foreground/80">{readiness.state} — {readiness.reason}</dd>
+            <dd className="text-foreground/80">
+              {live?.readiness ?? `${readiness.state} — ${readiness.reason}`}
+            </dd>
           </div>
+          {live?.backendBinding && (
+            <div className="flex justify-between gap-2">
+              <dt>writesToAgentConfig</dt>
+              <dd className="text-foreground/80">{String(live.backendBinding.writesToAgentConfig)}</dd>
+            </div>
+          )}
           <div className="flex justify-between gap-2">
             <dt>launch</dt>
             <dd className="text-foreground/80">

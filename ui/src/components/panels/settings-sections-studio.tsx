@@ -188,9 +188,8 @@ export function VoiceSection() {
   return (
     <SectionShell title="Voice" desc="Mic, noise, shortcuts, and spoken replies">
       <Honest>
-        Voice is confirmed v1 scope (H15 VAD/STT + H28 TTS, promoted 2026-08-31) — the capture/read-aloud stack is
-        not wired in this build yet. These controls are the staged v1 surface (prefs persist and will drive the
-        stack); the composer mic is disabled with a truthful status rather than “coming soon”.
+        Voice capture runs the crate VAD pipeline (composer mic). No on-device STT engine is installed, so
+        a capture never invents a transcript. Read-aloud uses the platform speechSynthesis engine when present.
       </Honest>
       <div className="text-xs font-medium text-foreground">General</div>
       <Row label="Input device" desc="Microphone used for voice input">

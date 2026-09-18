@@ -65,6 +65,12 @@ export interface CapabilityContext {
   anyConnectorConnected: boolean
   /** Any local model runtime configured (Ollama/llamafile/GGUF). */
   anyLocalModelConfigured: boolean
+  /** P50.4.3 — crate VAD is reachable (Tauri `voice_status.vad`). */
+  voiceVadLive?: boolean
+  /** P50.4.3 — an on-device STT engine is actually installed. */
+  voiceSttInstalled?: boolean
+  /** P50.4.4 — platform speechSynthesis (or a local TTS engine) is present. */
+  speechSynthesisAvailable?: boolean
 }
 
 /** One matrix row: the capability, its live status, and WHY. */
@@ -74,8 +80,6 @@ export interface CapabilityRow {
   /** Honest one-line explanation of the status (surfaced in UI tooltips). */
   reason: string
 }
-
-const V1_PLANNED = new Set<CapabilityId>(['voice-input', 'voice-output'])
 
 const POST_V1 = new Set<CapabilityId>(['image-generation', 'wasm-sandbox', 'remote-handoff'])
 
@@ -102,14 +106,25 @@ export function capabilityFor(id: CapabilityId, ctx: CapabilityContext): Capabil
   if (POST_V1.has(id)) {
     return { id, status: 'post-v1', reason: `${LABEL[id]} is scoped to post-v1 (spec §8 / capabilities.yaml).` }
   }
-  // Voice is a confirmed v1 deliverable (H15/H28, flipped 2026-08-31) whose
-  // stack is not wired yet. Controls render as staged/inert — persisted prefs
-  // are kept as the future surface, but nothing pretends to capture or speak.
-  if (V1_PLANNED.has(id)) {
-    return { id, status: 'v1-planned', reason: `${LABEL[id]} is a v1 deliverable — the STT/TTS stack is not wired in this build; controls are staged, not live.` }
-  }
-
   switch (id) {
+    case 'voice-input':
+      if (!ctx.inTauri) {
+        return { id, status: 'partial', reason: 'Voice capture needs the Tauri shell (VAD is crate-side).' }
+      }
+      if (ctx.voiceSttInstalled) {
+        return { id, status: 'live', reason: 'VAD + STT engine installed.' }
+      }
+      return {
+        id,
+        status: 'partial',
+        reason: ctx.voiceVadLive
+          ? 'VAD is live. No on-device STT engine is installed — transcripts are not invented.'
+          : 'Voice pipeline is wired; STT engine not installed.',
+      }
+    case 'voice-output':
+      return ctx.speechSynthesisAvailable
+        ? { id, status: 'live', reason: 'Read-aloud uses the platform speechSynthesis engine.' }
+        : { id, status: 'partial', reason: 'Read-aloud needs a platform speech engine; no local TTS is installed.' }
     case 'browser-attach':
       if (!ctx.inTauri) {
         return { id, status: 'partial', reason: 'Browser attachment needs the Tauri shell (preview has no CDP session).' }

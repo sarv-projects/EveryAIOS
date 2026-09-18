@@ -65,6 +65,8 @@ import {
   type CatalogStatus,
   type VaultKeyRow,
 } from '@/lib/providers'
+import { settingsProvidersList } from '@/lib/settings'
+import { rowsByGroup } from '@/lib/provider-groups'
 import { Row, SectionShell } from './settings-shared'
 
 const INTERVALS = [1, 2, 4, 6, 12, 24]
@@ -1021,19 +1023,37 @@ export default function ProvidersSection() {
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showCustom, setShowCustom] = useState(false)
+  const [groupIds, setGroupIds] = useState<{
+    configured: string[]
+    popular: string[]
+    all: string[]
+  } | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const cat = await catalogProviders()
-      if (cat.live && cat.providers.length > 0) {
-        setRows(cat.providers)
-        setStatus(cat.status)
+      // P65.1 — the Control Center envelope is the inventory. Catalog rows
+      // still exist as the source the envelope composes; this screen does
+      // not keep a second list.
+      const env = await settingsProvidersList()
+      if (env.providers.length > 0) {
+        setRows(env.providers as unknown as CatalogProviderRow[])
+        setGroupIds(env.groups)
+        setStatus((env.status as CatalogStatus | null) ?? null)
         setLive(true)
       } else {
-        setRows(previewCatalogRows())
-        setStatus(null)
-        setLive(false)
+        const cat = await catalogProviders()
+        if (cat.live && cat.providers.length > 0) {
+          setRows(cat.providers)
+          setStatus(cat.status)
+          setLive(true)
+          setGroupIds(null)
+        } else {
+          setRows(previewCatalogRows())
+          setStatus(null)
+          setLive(false)
+          setGroupIds(null)
+        }
       }
       const kr = await invoke<{ keys?: VaultKeyRow[] }>('vault_keys_list', {}).catch(
         (): { keys?: VaultKeyRow[] } => ({ keys: [] }),
@@ -1054,8 +1074,13 @@ export default function ProvidersSection() {
   }, [reload])
 
   const filtered = useMemo(() => searchProviders(rows, query), [rows, query])
-  const mine = useMemo(() => configuredProviders(filtered), [filtered])
-  const rest = useMemo(() => filtered.filter((r) => !mine.includes(r)), [filtered, mine])
+  const grouped = useMemo(
+    () => rowsByGroup(filtered, groupIds, (r) => configuredProviders([r]).length > 0),
+    [filtered, groupIds],
+  )
+  const mine = grouped.configured
+  const popular = grouped.popular
+  const rest = grouped.catalog
   const active = activeId ? rows.find((r) => r.id === activeId) ?? null : null
 
   const doRefresh = async (force: boolean) => {
@@ -1183,9 +1208,25 @@ export default function ProvidersSection() {
         </div>
       )}
 
+      {popular.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Popular ({popular.length})
+          </div>
+          {popular.map((r) => (
+            <ProviderRowButton
+              key={`pop-${r.id}`}
+              row={r}
+              active={activeId === r.id}
+              onSelect={() => setActiveId(activeId === r.id ? null : r.id)}
+            />
+          ))}
+        </div>
+      )}
+
       <div className="space-y-1">
         <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          Catalog ({rest.length})
+          All ({rest.length})
         </div>
         {rest.slice(0, 400).map((r) => (
           <ProviderRowButton

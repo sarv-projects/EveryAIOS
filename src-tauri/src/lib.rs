@@ -57,6 +57,7 @@ mod terminal_cmds;
 mod trajectory_cmds;
 mod updater_cmds;
 mod vault_cmds;
+mod voice_cmds;
 mod work_cmds;
 
 pub use state::AppState;

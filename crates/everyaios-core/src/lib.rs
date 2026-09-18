@@ -120,9 +120,10 @@ pub use challenge::{
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
 pub use config::{Config, ConfigError};
 pub use cua::{
-    load_dag, persist_dag, route_work_surface, screen_text_is_untrusted, vision_gate, worker_step,
-    ComputerUseDag, CuaNode, CuaNodeStatus, VisionGateError, WorkSurface, CUA_REQUIRES_VISION,
-    IDENTICAL_FAIL_HALT,
+    filter_tools_for_role, load_dag, persist_dag, route_work_surface, screen_text_is_untrusted,
+    verifier_accepts_worker_claim, vision_gate, worker_step, AgentRole, ComputerUseDag, CuaNode,
+    CuaNodeStatus, FivePartBrief, VisionGateError, WorkSurface, CUA_REQUIRES_VISION,
+    IDENTICAL_FAIL_HALT, SCOUT_ALLOWED_TOOLS,
 };
 pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
 pub use eval_service::EvalService;

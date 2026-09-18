@@ -113,6 +113,8 @@ export interface ChatMessage {
   /** P51.7 — time-to-first-byte: ms from turn start to the first content or
    * reasoning delta. Undefined when the turn died before any token arrived. */
   ttfbMs?: number
+  /** P52.20 — numbered citations produced from live search hits. */
+  citations?: Array<{ index: number; title: string; url: string; snippet?: string; source?: string }>
 }
 
 /** P51.21 — which layer reported a failed turn, shown as the card's badge.
@@ -1266,6 +1268,11 @@ interface AppState {
   streamStep: (label: string, sessionId?: string, streamId?: string) => void
   streamToolCall: (toolId: string, args?: Record<string, unknown>, risk?: string, sessionId?: string, streamId?: string) => void
   streamToolResult: (toolId: string, result?: unknown, error?: string, sessionId?: string, streamId?: string) => void
+  streamCitations: (
+    citations: Array<{ index: number; title: string; url: string; snippet?: string; source?: string }>,
+    sessionId?: string,
+    streamId?: string,
+  ) => void
   streamToolProgress: (toolId: string, progress: string, sessionId?: string, streamId?: string) => void
   retryToolCall: (recordId: string) => Promise<void>
 
@@ -2472,6 +2479,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().clearLiveStreamId(sid)
     set({ taskSnapshot: undefined })
     get().dequeueNextTurn(sid)
+  },
+  streamCitations: (citations, sessionId?, streamId?) => {
+    const sid = streamSessionId(sessionId)
+    if (!bindStreamId(sid, streamId)) return
+    if (!citations.length) return
+    patchActiveAssistant(set, (m) => ({
+      ...m,
+      citations: [...(m.citations ?? []), ...citations],
+    }), sid)
   },
   streamToolCall: (toolId, args, risk, sessionId?, streamId?) => {
     const sid = streamSessionId(sessionId)
