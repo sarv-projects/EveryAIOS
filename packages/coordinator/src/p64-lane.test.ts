@@ -15,7 +15,12 @@
 import { describe, expect, test } from "bun:test";
 import type { StreamChunk } from "@personal-ai/core-engine";
 import {
+  applyEditLadder,
+  applyEditBatch,
   applyExactEdit,
+  applyExactOnce,
+  applyFuzzyEdit,
+  applyStructuredEdit,
   assertSingleMatch,
   buildSubAgentSpec,
   checkSubAgentSpawn,
@@ -23,6 +28,7 @@ import {
   deriveEditRisk,
   deriveEffectiveSubAgentTools,
   dispatchSubAgent,
+  lexicalSymbols,
   preflightBlocks,
   subAgentSpecFromToolArgs,
   SubAgentSpawnTracker,
@@ -742,5 +748,292 @@ describe("P64.6 — shadow preflight seam (risk-gated typecheck before commit)",
       passed: true,
       reason: "structural edit preflights in a shadow tree",
     });
+  });
+});
+
+describe("P64.5 — edit ladder rungs (exact → structured → fuzzy)", () => {
+  test("rung 1 wins on a byte-exact single occurrence", () => {
+    expect(applyEditLadder("a XX b", "XX", "YY")).toEqual({ content: "a YY b", strategy: "exact" });
+  });
+
+  test("every rung fails closed on zero and on 2+ matches", () => {
+    expect(() => applyExactOnce("hello world", "missing", "x")).toThrow(/no occurrence/);
+    expect(() => applyExactOnce("aXbXc", "X", "Y")).toThrow(/ambiguous match \(2 occurrences\)/);
+    // When every rung declines, the ladder reports rung 1's refusal — the most
+    // actionable one — rather than the last rung's.
+    expect(() => applyEditLadder("hello world", "missing", "x")).toThrow(/no occurrence/);
+    expect(() => applyEditLadder("aXbXc", "X", "Y")).toThrow(/ambiguous match \(2 occurrences\)/);
+  });
+
+  test("rung 2 locates a whitespace-only difference that rung 1 cannot see", () => {
+    const content = "fn  alpha( )  {\n    let x = 1;\n}\n";
+    expect(() => applyExactOnce(content, "fn alpha() {\nlet x = 1;", "X")).toThrow(/no occurrence/);
+    const r = applyStructuredEdit(content, "fn alpha() {\nlet x = 1;", "fn beta() {\nlet x = 2;");
+    expect(r.strategy).toBe("structured");
+    // The whole token window is replaced; everything outside it is untouched.
+    expect(r.content).toBe("fn beta() {\nlet x = 2;\n}\n");
+    // A non-whitespace difference is never papered over, and two matching
+    // windows stay ambiguous — rung 2 keeps rung 1's fail-closed gate.
+    expect(() => applyStructuredEdit(content, "fn gamma() {", "z")).toThrow(/no occurrence/);
+    expect(() => applyStructuredEdit("a b\na b\n", "a b", "c")).toThrow(
+      /ambiguous match \(2 occurrences\)/,
+    );
+  });
+
+  test("rung 2 is the strictest rung that can apply a whitespace-noisy splice", () => {
+    // The tokens match exactly, so the ladder stops at rung 2 and never reaches
+    // the tolerant rung. While rung 2 re-ran rung 1's byte comparison this case
+    // could only ever be recorded as `fuzzy`.
+    expect(applyEditLadder("fn  alpha( )  {}\n", "fn alpha() {}", "fn beta() {}")).toEqual({
+      content: "fn beta() {}\n",
+      strategy: "structured",
+    });
+  });
+
+  test("rung 3 catches what rung 2 cannot: a gap between hunks", () => {
+    const gapped = "let a = 1;\nlet b = 2;\nlet c = 3;\n";
+    // Rung 2's token match is contiguous, so this is beyond it...
+    expect(() => applyStructuredEdit(gapped, "let a = 1;\nlet c = 3;", "x")).toThrow(
+      /no occurrence/,
+    );
+    // ...and rung 3 lands it, recorded as fuzzy.
+    expect(applyEditLadder(gapped, "let a = 1;\nlet c = 3;", "let a = 9;")).toEqual({
+      content: "let a = 9;\n",
+      strategy: "fuzzy",
+    });
+  });
+
+  test("rung 3 is whitespace-insensitive but order-sensitive", () => {
+    expect(() => applyFuzzyEdit("a\nb\n", "nope", "x")).toThrow(/no occurrence/);
+    // Two identical windows → ambiguous, never a guess.
+    expect(() => applyFuzzyEdit("X\nY\nX\nY\n", "X\nY", "Z")).toThrow(
+      /ambiguous match \(2 occurrences\)/,
+    );
+    // Reordered hunks do not match: the subsequence keeps the target's order.
+    expect(() => applyFuzzyEdit("Y\nX\n", "X\nY", "Z")).toThrow(/no occurrence/);
+  });
+
+  test("rung 3 replaces the whole raw window and preserves the file's ending", () => {
+    // The untouched `B` line inside the window is consumed by the splice, and
+    // the trailing newline survives.
+    expect(applyFuzzyEdit("A\nB\nC\n", "A\nC", "X")).toEqual({ content: "X\n", strategy: "fuzzy" });
+    // Indentation noise matches; the blank line outside the window survives.
+    expect(
+      applyFuzzyEdit("header\n\nfn   a( ) {\n  let q = 1;\n}\nfooter\n", "fn a() {\nlet q = 1;", "fn b() {\nlet q = 2;"),
+    ).toEqual({
+      content: "header\n\nfn b() {\nlet q = 2;\n}\nfooter\n",
+      strategy: "fuzzy",
+    });
+  });
+
+  test("the shape probe sees pub- and async-decorated declarations", () => {
+    // A `pub` declaration must be visible, otherwise a pub-only file has an
+    // empty shape and every splice into it passes the delta check untouched.
+    expect(
+      lexicalSymbols(
+        "pub fn public_api() {}\npub struct Config {}\nasync fn worker() {}\npub async fn spawn() {}\n// fn in_a_comment() {}\n",
+      ),
+    ).toEqual(["fn public_api", "fn spawn", "fn worker", "struct Config"]);
+  });
+
+  test("a shape blowout is refused by rung 2 and falls through to rung 3", () => {
+    // Indented so rung 1 misses and rung 2 is the rung actually under test.
+    const content = "  pub fn a() {}\n  pub fn b() {}\n  pub fn c() {}\n";
+    const target = "pub fn b() {}\npub fn c() {}\n";
+    // Removing two declarations is a 3 → 1 shape change, refused directly.
+    expect(() => applyStructuredEdit(content, target, "")).toThrow(/changed symbol shape \(3 → 1\)/);
+    // Inside the ladder the refusal is not fatal: rung 3 applies the same splice
+    // without the shape check, so the probe selects the recorded strategy rather
+    // than hard-blocking the edit.
+    expect(applyEditLadder(content, target, "")).toEqual({
+      content: "  pub fn a() {}\n",
+      strategy: "fuzzy",
+    });
+  });
+});
+
+describe("P64.5/P64.6 — a multi-file batch feeds the gate's filesChanged > 1 arm", () => {
+  /** Serves one content per path and captures the gate, write, and receipt calls. */
+  function batchHarness(contents: Record<string, string>, verdict: Partial<ShadowPreflightResult>) {
+    const writes: Array<{ path: unknown; content: unknown }> = [];
+    const preflights: Array<Record<string, unknown>> = [];
+    const edits: Array<Record<string, unknown>> = [];
+    const request = async (method: string, params: unknown) => {
+      const p = (params ?? {}) as Record<string, unknown>;
+      const args = (p.args ?? {}) as Record<string, unknown>;
+      if (method === "guard/evaluate") return { action: "allow", ticketId: "tkt-b" };
+      if (method === "guard/use") return { consumed: true };
+      if (method === "tool/exec") return { action: "allow", ticketId: "tkt-b", argsHash: "h" };
+      if (method === "tool/commit") {
+        if (p.toolId === "file_ops.read") {
+          return { ok: true, content: contents[String(args.path)] ?? "" };
+        }
+        writes.push({ path: args.path, content: args.content });
+        return { ok: true, content: { written: true } };
+      }
+      if (method === "execution/preflight") {
+        preflights.push(p);
+        return verdict;
+      }
+      if (method === "execution/record_edit") {
+        edits.push(p);
+        return { kind: "verified_edit" };
+      }
+      return {};
+    };
+    return { request, writes, preflights, edits };
+  }
+
+  const TWO = [
+    { path: "a.ts", target: "const A = 1;", replacement: "const A = 10;" },
+    { path: "b.ts", target: "const B = 2;", replacement: "const B = 20;" },
+  ];
+  const TWO_CONTENTS = { "a.ts": "const A = 1;\n", "b.ts": "const B = 2;\n" };
+
+  test("one gate call covers every file, with filesChanged = N and all candidates", async () => {
+    const { request, preflights, writes, edits } = batchHarness(TWO_CONTENTS, {
+      needsPreflight: true,
+      verified: true,
+      passed: true,
+      reason: "multi-file edit preflights in a shadow tree",
+    });
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-30");
+    const out = await applyEditBatch(ex, TWO, { sessionId: "s" }, { root: "/repo" });
+    // This single call is the multi-file arm's production input: before the
+    // batch existed nothing ever sent `filesChanged > 1`.
+    expect(preflights).toHaveLength(1);
+    expect(preflights[0]!.filesChanged).toBe(2);
+    expect(preflights[0]!.structural).toBe(false);
+    expect(preflights[0]!.destructive).toBe(false);
+    expect(preflights[0]!.root).toBe("/repo");
+    // Every file's post-state is staged, not just the first one's.
+    expect(preflights[0]!.candidateFiles).toEqual([
+      { path: "a.ts", content: "const A = 10;\n" },
+      { path: "b.ts", content: "const B = 20;\n" },
+    ]);
+    expect(writes.map((w) => w.path)).toEqual(["a.ts", "b.ts"]);
+    expect(out.filesChanged).toBe(2);
+    expect(out.edits).toEqual([
+      { path: "a.ts", strategy: "exact" },
+      { path: "b.ts", strategy: "exact" },
+    ]);
+    expect(out.preflight).toEqual({
+      needsPreflight: true,
+      verified: true,
+      passed: true,
+      reason: "multi-file edit preflights in a shadow tree",
+    });
+    // Each landed file cites its own Guard-2 ticket.
+    expect(edits.map((e) => [e.path, e.strategy, e.ticketId])).toEqual([
+      ["a.ts", "exact", "tkt-b"],
+      ["b.ts", "exact", "tkt-b"],
+    ]);
+  });
+
+  test("a failing batch preflight refuses every file — nothing is written", async () => {
+    const { request, writes } = batchHarness(TWO_CONTENTS, {
+      needsPreflight: true,
+      verified: true,
+      passed: false,
+      reason: "tsc failed",
+    });
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-31");
+    await expect(
+      applyEditBatch(ex, TWO, { sessionId: "s" }, { root: "/repo" }),
+    ).rejects.toThrow(/batch edit refused: shadow preflight failed for 2 file/);
+    expect(writes).toHaveLength(0);
+  });
+
+test("a batch rides the ladder per file, so one fuzzy recovery is allowed", async () => {
+    const { request, preflights } = batchHarness(
+      { "a.ts": "const A = 1;\n", "b.ts": "fn  beta( )  {}\n" },
+      {
+        needsPreflight: true,
+        verified: true,
+        passed: true,
+        reason: "multi-file edit preflights in a shadow tree",
+      },
+    );
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-32");
+    const out = await applyEditBatch(
+      ex,
+      [
+        { path: "a.ts", target: "const A = 1;", replacement: "const A = 10;" },
+        { path: "b.ts", target: "fn beta() {}", replacement: "fn gamma() {}" },
+      ],
+      { sessionId: "s" },
+      { root: "/repo" },
+    );
+    // The second file only matched through the tolerant rung; the batch records
+    // that per file instead of flattening both onto one strategy.
+    expect(out.edits).toEqual([
+      { path: "a.ts", strategy: "exact" },
+      { path: "b.ts", strategy: "structured" },
+    ]);
+    expect(preflights[0]!.candidateFiles).toEqual([
+      { path: "a.ts", content: "const A = 10;\n" },
+      { path: "b.ts", content: "fn gamma() {}\n" },
+    ]);
+  });
+
+  test("a duplicate path is refused before any read or write", async () => {
+    const { request, writes } = batchHarness({ "a.ts": "const A = 1;\n" }, {});
+    const ex = new ToolExecutor(request);
+    await expect(
+      applyEditBatch(
+        ex,
+        [
+          { path: "a.ts", target: "const A = 1;", replacement: "x" },
+          { path: " a.ts ", target: "const A = 1;", replacement: "y" },
+        ],
+        { sessionId: "s" },
+      ),
+    ).rejects.toThrow(/lists a\.ts twice/);
+    expect(writes).toHaveLength(0);
+  });
+
+  test("an empty batch is refused fail-closed", async () => {
+    const { request } = batchHarness(TWO_CONTENTS, {});
+    const ex = new ToolExecutor(request);
+    await expect(applyEditBatch(ex, [], { sessionId: "s" })).rejects.toThrow(/no edits/);
+  });
+
+  test("a mid-batch write failure reports how many files already landed", async () => {
+    // The first write succeeds and the second fails: the error must state the
+    // partial result rather than presenting the batch as atomic.
+    const contents: Record<string, string> = TWO_CONTENTS;
+    let writes = 0;
+    const request = async (method: string, params: unknown) => {
+      const p = (params ?? {}) as Record<string, unknown>;
+      const args = (p.args ?? {}) as Record<string, unknown>;
+      if (method === "guard/evaluate") return { action: "allow", ticketId: "tkt-b" };
+      if (method === "guard/use") return { consumed: true };
+      if (method === "tool/exec") return { action: "allow", ticketId: "tkt-b", argsHash: "h" };
+      if (method === "tool/commit") {
+        if (p.toolId === "file_ops.read") {
+          return { ok: true, content: contents[String(args.path)] ?? "" };
+        }
+        writes += 1;
+        if (writes === 2) return { ok: false, error: "disk full" };
+        return { ok: true, content: { written: true } };
+      }
+      if (method === "execution/preflight") {
+        return {
+          needsPreflight: false,
+          verified: false,
+          passed: false,
+          reason: "small local-write verifies after commit",
+        };
+      }
+      return {};
+    };
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-33");
+    await expect(applyEditBatch(ex, TWO, { sessionId: "s" })).rejects.toThrow(
+      /stopped at b\.ts: 1 of 2 file\(s\) already landed \(a\.ts\) — disk full/,
+    );
   });
 });
