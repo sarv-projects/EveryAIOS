@@ -11,7 +11,13 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — V1 remainders wave 2: splits, settings inventory, citations, Scout/Worker/Verifier, voice; uncommitted until verified)**:
+**(Current, 2026-09-18 — V1 remainders wave 3: P59 CUA live path + P65.3/.4; uncommitted until verified)**:
+- Scope: two-surface router in coordinator+Rust; vision gate UI; Computer use rail; DAG persist/step; worker halt on `desktop.act`; screen-untrusted; connections/schedules settings inventories.
+- Verified: core cua 10/0, cua_persist 1/0, desktop.act halt 1/0; coordinator cua-route 2/0; UI 23/0 on touched tests; tsc 0.
+- Not flipped: P59.7 Manager rewrite, P59.8 DAG UI, P59.16 skills, P65.5–.8 remaining, packaged E2E, soak, Windows/mac, post-v1.
+- Next: P59.8 DAG viewer; P65.5 marketplace split; remaining P51 engine rows that have a seam.
+
+**(Previous, 2026-09-18 — V1 remainders wave 2: splits, settings inventory, citations, Scout/Worker/Verifier, voice; committed)**:
 - Scope: P68.8/P54.4 terminal splits (`decideSplit` live in Shell); P65.1 Settings Providers from `settings_providers_list`; P52.20 citations from `search.query`; P51.10 `execution/multirun` from `subagent` models; P60.3 Scout/Worker/Verifier on spawn; P50.4.3 VAD+NoopStt; P50.4.4 speechSynthesis read-aloud. Skip P50.4.5–4.7.
 - Files: `ui/src/lib/{terminal-split,provider-groups,citations,voice}.ts`, `ui/src/components/{views/shell-view,panels/settings-providers,chat/{chat-composer,message-bubble}}`, `packages/coordinator/src/{citations,chat,tools}.ts`, `crates/everyaios-core/src/{cua,execution,chat}.rs`, `src-tauri/src/voice_cmds.rs`.
 - Verified: core `cua::` 8/0, `p51_multirun_ipc_admits` 1/0, `subagent_rpc_scout` 1/0; src-tauri `voice_` 3/0; coordinator bun 50/0 on touched files; UI bun 30/0 on touched files; tsc 0 coordinator + UI.

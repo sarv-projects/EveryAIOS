@@ -690,6 +690,66 @@ impl ExecutionKernel {
             // P64.6 — run the shadow preflight: decide, typecheck in the shadow
             // tree, then record the receipt. Was reachable only as a recorder
             // (`execution/record_preflight`) with nothing deciding or running.
+            // P59.5 / P59.12 — persist or step the CUA DAG. Planner LLM may
+            // write remaining nodes; ready-frontier / halt live here.
+            "execution/cua_persist" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_persist requires root")?;
+                let dag: crate::ComputerUseDag = serde_json::from_value(
+                    params
+                        .get("dag")
+                        .cloned()
+                        .ok_or("execution/cua_persist requires dag")?,
+                )
+                .map_err(|e| format!("execution/cua_persist: {e}"))?;
+                for n in &dag.nodes {
+                    if !crate::node_contract_legal(n) {
+                        return Err(format!(
+                            "unverifiable node {} — postconditions required",
+                            n.id
+                        ));
+                    }
+                }
+                let path = crate::persist_dag(std::path::Path::new(root), &dag)?;
+                Ok(json!({ "ok": true, "path": path.display().to_string(), "nodes": dag.nodes.len() }))
+            }
+            "execution/cua_step" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_step requires root")?;
+                let node_id = params
+                    .get("nodeId")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_step requires nodeId")?;
+                let verify_ok = params
+                    .get("verifyOk")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let dir = std::path::Path::new(root);
+                let mut dag = crate::load_dag(dir)?;
+                let node = dag
+                    .nodes
+                    .iter_mut()
+                    .find(|n| n.id == node_id)
+                    .ok_or_else(|| format!("unknown CUA node {node_id}"))?;
+                let out = crate::apply_worker_act(node, verify_ok);
+                if out == crate::WorkerOutcome::Halt {
+                    crate::append_replan_log(dir, dag.replan_seq, "identical-fail-halt")?;
+                }
+                crate::persist_dag(dir, &dag)?;
+                Ok(json!({
+                    "ok": out == crate::WorkerOutcome::Verified,
+                    "outcome": match out {
+                        crate::WorkerOutcome::Verified => "verified",
+                        crate::WorkerOutcome::Mismatch => "mismatch",
+                        crate::WorkerOutcome::Halt => "halt",
+                    },
+                    "status": format!("{:?}", dag.nodes.iter().find(|n| n.id == node_id).map(|n| n.status)),
+                }))
+            }
             // P51.10 — admit a ≤5-model fan-out and optionally reduce
             // outcomes / parse a walkthrough. Construction is the live
             // consumer of `MultiRun::new` (budget) + `collect` + `walkthrough`.
@@ -2390,5 +2450,75 @@ mod tests {
         assert_eq!(v["collected"]["output"], "best");
         assert_eq!(v["collected"]["best_model_id"], "b");
         assert!(v["walkthrough"].as_array().unwrap().len() >= 1);
+    }
+
+    #[test]
+    fn p59_cua_persist_refuses_unverifiable_nodes_and_steps() {
+        let dir = std::env::temp_dir().join(format!("exec-cua-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut k = ExecutionKernel::new();
+        let illegal = k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [{
+                        "id": "n1",
+                        "name": "click",
+                        "info": "",
+                        "depends_on": [],
+                        "status": "pending"
+                    }]
+                }
+            }),
+        );
+        assert!(illegal.is_err(), "empty postconditions must refuse");
+        k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [{
+                        "id": "n1",
+                        "name": "click",
+                        "info": "",
+                        "depends_on": [],
+                        "status": "pending",
+                        "postconditions": ["saved"]
+                    }]
+                }
+            }),
+        )
+        .unwrap();
+        let step = k
+            .handle(
+                "execution/cua_step",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "n1",
+                    "verifyOk": false
+                }),
+            )
+            .unwrap();
+        assert_eq!(step["outcome"], "mismatch");
+        let halt = k
+            .handle(
+                "execution/cua_step",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "n1",
+                    "verifyOk": false
+                }),
+            )
+            .unwrap();
+        assert_eq!(halt["outcome"], "halt");
+        assert_eq!(halt["ok"], false);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

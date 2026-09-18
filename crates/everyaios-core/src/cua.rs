@@ -91,6 +91,38 @@ pub struct CuaNode {
     pub screenshot_ref: Option<String>,
     #[serde(default)]
     pub identical_fail_count: u32,
+    /// P59.13 — Done iff these hold. An empty list is illegal (split or escalate).
+    #[serde(default)]
+    pub preconditions: Vec<String>,
+    #[serde(default)]
+    pub postconditions: Vec<String>,
+    #[serde(default)]
+    pub timeout_s: u32,
+    #[serde(default)]
+    pub retry: u32,
+    /// P60.5 — five-part brief stored on the node, not implied from the transcript.
+    #[serde(default)]
+    pub brief: Option<FivePartBrief>,
+}
+
+impl Default for CuaNode {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            info: String::new(),
+            depends_on: Vec::new(),
+            status: CuaNodeStatus::Pending,
+            last_action: None,
+            screenshot_ref: None,
+            identical_fail_count: 0,
+            preconditions: Vec::new(),
+            postconditions: Vec::new(),
+            timeout_s: 0,
+            retry: 0,
+            brief: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,6 +204,50 @@ pub fn worker_step(verify_ok: bool, identical_fail_count: u32) -> WorkerOutcome 
         return WorkerOutcome::Halt;
     }
     WorkerOutcome::Mismatch
+}
+
+/// P59.6 / P59.14 — apply one Worker outcome onto the node. Halt is a status,
+/// never a success. OpenAdapt: do not summarize halt as VERIFIED.
+pub fn apply_worker_act(node: &mut CuaNode, verify_ok: bool) -> WorkerOutcome {
+    let out = worker_step(verify_ok, node.identical_fail_count);
+    match out {
+        WorkerOutcome::Verified => {
+            node.status = CuaNodeStatus::Verified;
+            node.identical_fail_count = 0;
+        }
+        WorkerOutcome::Mismatch => {
+            node.identical_fail_count = node.identical_fail_count.saturating_add(1);
+            node.status = CuaNodeStatus::Running;
+        }
+        WorkerOutcome::Halt => {
+            node.identical_fail_count = node.identical_fail_count.saturating_add(1);
+            node.status = CuaNodeStatus::Halted;
+        }
+    }
+    out
+}
+
+/// P59.13 — unverifiable nodes are illegal (no empty postconditions).
+pub fn node_contract_legal(node: &CuaNode) -> bool {
+    !node.postconditions.is_empty()
+}
+
+/// P59.7 — append one replan reason; never rewrite verified nodes here.
+pub fn append_replan_log(dir: &Path, seq: u32, reason: &str) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let path = dir.join("replan_log.jsonl");
+    let line = format!(
+        "{{\"seq\":{seq},\"reason\":{}}}\n",
+        serde_json::to_string(reason).unwrap_or_else(|_| "\"\"".into())
+    );
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+    f.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// P59.15 — screen text is untrusted: it cannot mint a ticket or override
@@ -311,22 +387,18 @@ mod tests {
                 CuaNode {
                     id: "a".into(),
                     name: "open".into(),
-                    info: String::new(),
-                    depends_on: vec![],
                     status: CuaNodeStatus::Verified,
-                    last_action: None,
-                    screenshot_ref: None,
-                    identical_fail_count: 0,
+                    postconditions: vec!["window open".into()],
+                    ..Default::default()
                 },
                 CuaNode {
                     id: "b".into(),
                     name: "click".into(),
-                    info: String::new(),
                     depends_on: vec!["a".into()],
                     status: CuaNodeStatus::Halted,
-                    last_action: None,
-                    screenshot_ref: None,
                     identical_fail_count: 2,
+                    postconditions: vec!["clicked".into()],
+                    ..Default::default()
                 },
             ],
             replan_seq: 0,
@@ -334,12 +406,9 @@ mod tests {
         dag.replan_remaining(vec![CuaNode {
             id: "c".into(),
             name: "retry".into(),
-            info: String::new(),
             depends_on: vec!["a".into()],
-            status: CuaNodeStatus::Pending,
-            last_action: None,
-            screenshot_ref: None,
-            identical_fail_count: 0,
+            postconditions: vec!["clicked".into()],
+            ..Default::default()
         }]);
         assert_eq!(dag.replan_seq, 1);
         assert_eq!(dag.nodes.len(), 2);
@@ -406,5 +475,34 @@ mod tests {
         assert_eq!(AgentRole::parse("SCOUT"), Some(AgentRole::Scout));
         assert_eq!(AgentRole::parse("verify"), Some(AgentRole::Verifier));
         assert_eq!(AgentRole::parse("nope"), None);
+    }
+
+    #[test]
+    fn p59_apply_worker_act_halts_and_never_marks_halt_verified() {
+        let mut n = CuaNode {
+            id: "n".into(),
+            postconditions: vec!["field equals saved".into()],
+            ..Default::default()
+        };
+        assert!(node_contract_legal(&n));
+        assert_eq!(apply_worker_act(&mut n, false), WorkerOutcome::Mismatch);
+        assert_eq!(n.status, CuaNodeStatus::Running);
+        assert_eq!(apply_worker_act(&mut n, false), WorkerOutcome::Halt);
+        assert_eq!(n.status, CuaNodeStatus::Halted);
+        assert_ne!(n.status, CuaNodeStatus::Verified);
+        let empty = CuaNode::default();
+        assert!(!node_contract_legal(&empty));
+    }
+
+    #[test]
+    fn p59_replan_log_appends() {
+        let dir = std::env::temp_dir().join(format!("cua-replan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        append_replan_log(&dir, 1, "double-fail").unwrap();
+        append_replan_log(&dir, 2, "user edit").unwrap();
+        let text = std::fs::read_to_string(dir.join("replan_log.jsonl")).unwrap();
+        assert_eq!(text.lines().count(), 2);
+        assert!(text.contains("double-fail"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

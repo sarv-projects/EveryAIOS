@@ -47,6 +47,7 @@ import {
   type OpenAIFunctionTool,
 } from "./tools";
 import { citationsFromSearchResult } from "./citations";
+import { refuseDesktopIfWrongSurface } from "./cua-route";
 import { resolveMentions } from "./context-providers";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
 import { chiefRegistry } from "./chief";
@@ -715,7 +716,26 @@ async function runInbuiltTurn(
   const dispatchOneTool = async (toolId: string, args: Record<string, unknown>) => {
     const ctx: { sessionId: string; agentId?: string } = { sessionId };
     if (params.agentId !== undefined) ctx.agentId = params.agentId;
+    const surface = refuseDesktopIfWrongSurface(toolId, args);
+    if (!surface.ok) {
+      emit({
+        type: "error",
+        streamId,
+        code: "wrong_surface",
+        message: surface.error,
+        retryable: true,
+        toolId,
+        args,
+      });
+      return { ok: false, error: surface.error, surface: surface.surface };
+    }
     emit({ type: "stage", streamId, stage: `tool:${toolId}:running` });
+    if (toolId.startsWith("desktop.") && args.dag && request) {
+      const root = typeof args.cuaRoot === "string" ? args.cuaRoot : undefined;
+      if (root) {
+        await request("execution/cua_persist", { root, dag: args.dag });
+      }
+    }
     if (hooks) {
       const hookCtx = await runStage("preExecute", hooks, {
         stage: "preExecute",

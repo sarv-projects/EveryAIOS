@@ -305,6 +305,14 @@ export function handleChatEvent(e: ChatWireEvent): void {
           unread: true,
           source: 'Spend',
         });
+      } else if (e.code === "cua_requires_vision") {
+        st.setCuaVisionGate(true);
+        st.streamFail(e.message ?? "Computer use needs a vision model", sid, {
+          layer: "agent",
+          code: e.code,
+          detail: e.message ?? "Computer use needs a vision model",
+          retryable: false,
+        }, e.streamId);
       } else if (e.code === "tool_failed" || e.toolId) {
         st.streamToolResult(e.toolId ?? "tool", undefined, e.message ?? "tool failed", sid, e.streamId);
         // P51.21 — the failure card is layer-named (Tool) and retryable.

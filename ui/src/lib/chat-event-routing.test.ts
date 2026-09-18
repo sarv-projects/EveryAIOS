@@ -129,6 +129,20 @@ describe('notification preferences (P58.9)', () => {
     restoreWindow()
   })
 
+  test('cua_requires_vision opens the vision-gate dialog (P59.3)', () => {
+    const sid = freshSession()
+    handleChatEvent({ type: 'ttft', sessionId: sid, streamId: 'stream-vl' })
+    handleChatEvent({
+      type: 'error',
+      sessionId: sid,
+      streamId: 'stream-vl',
+      code: 'cua_requires_vision',
+      message: 'Computer use needs a vision model',
+    })
+    expect(useAppStore.getState().cuaVisionGate).toBe(true)
+    useAppStore.getState().setCuaVisionGate(false)
+  })
+
   test('citations land on the live assistant message (P52.20)', () => {
     const sid = freshSession()
     handleChatEvent({ type: 'ttft', sessionId: sid, streamId: 'stream-cite' })

@@ -251,6 +251,36 @@ export interface ExtensionsEnvelope {
   extensions: InstalledExtension[]
 }
 
+/** P65.3 — group the unified inventory without a second registry. */
+export function groupConnectionRecords(rows: ConnectionRecord[]): Record<ConnectionState, ConnectionRecord[]> {
+  const empty = (): ConnectionRecord[] => []
+  const out: Record<ConnectionState, ConnectionRecord[]> = {
+    discovered: empty(),
+    installed: empty(),
+    connected: empty(),
+    disconnected: empty(),
+    degraded: empty(),
+    revoked: empty(),
+  }
+  for (const r of rows) {
+    const bucket = out[r.state] ?? out.disconnected
+    bucket.push(r)
+  }
+  return out
+}
+
+/** P65.6 — a failed envelope never reads as live-applied success. */
+export function mutationLooksLive(r: SettingsMutationResult): boolean {
+  return r.appliedLive === true && !r.lastError
+}
+
+/** P65.7 — EveryAIOS never writes an external agent's own config file. */
+export function assertNoAgentConfigWrite(binding: BackendBindingView): void {
+  if (binding.writesToAgentConfig) {
+    throw new Error('EveryAIOS never writes an external agent config')
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Commands
 // ───────────────────────────────────────────────────────────────────────────

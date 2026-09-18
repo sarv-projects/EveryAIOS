@@ -26,7 +26,7 @@ import {
   triggerLabel,
   type SchedulerJob,
 } from '@/lib/scheduler'
-import { settingsScheduleSetEnabled } from '@/lib/settings'
+import { settingsScheduleSetEnabled, settingsSchedulesList } from '@/lib/settings'
 import { Row, SectionShell } from './settings-shared'
 
 function stateBadge(job: SchedulerJob) {
@@ -77,6 +77,8 @@ export default function SchedulesSection() {
     try {
       const res = await schedulerList()
       setJobs(res.jobs)
+      // P65.4 — reread the Settings contract (same jobs, envelope fields).
+      await settingsSchedulesList().catch(() => ({ schedules: [] }))
     } catch (e) {
       setJobs([])
       setError(e instanceof Error ? e.message : 'Schedules unavailable')

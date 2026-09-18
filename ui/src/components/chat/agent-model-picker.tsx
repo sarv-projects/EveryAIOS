@@ -526,7 +526,8 @@ export default function AgentModelPicker({ compact }: Props) {
         )
         if (!alive) return
         const rows = groups.flat()
-        setCatalogRows(rows)
+        const gated = useAppStore.getState().cuaVisionGate
+        setCatalogRows(gated ? rows.filter((r) => r.images) : rows)
         setCatalogNote(
           rows.length === 0
             ? 'Your providers are reachable but carry no model rows yet — refresh the catalog in Settings → Providers.'

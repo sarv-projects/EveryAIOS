@@ -63,7 +63,7 @@ import {
 import { refreshAgentCatalog } from '@/lib/bridge'
 import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
-import { settingsAgentGet, type AgentSettings } from '@/lib/settings'
+import { assertNoAgentConfigWrite, settingsAgentGet, type AgentSettings } from '@/lib/settings'
 import { Row, SectionShell } from './settings-shared'
 
 function formatTokens(n: number): string {
@@ -500,7 +500,12 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
           {live?.backendBinding && (
             <div className="flex justify-between gap-2">
               <dt>writesToAgentConfig</dt>
-              <dd className="text-foreground/80">{String(live.backendBinding.writesToAgentConfig)}</dd>
+              <dd className="text-foreground/80">
+                {(() => {
+                  assertNoAgentConfigWrite(live.backendBinding)
+                  return String(live.backendBinding.writesToAgentConfig)
+                })()}
+              </dd>
             </div>
           )}
           <div className="flex justify-between gap-2">

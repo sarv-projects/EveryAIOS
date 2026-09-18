@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
 import { fuzzyRank } from '@/lib/fuzzy'
 import { skillsCatalog, skillsInstall, skillsUninstall, type SkillRowView } from '@/lib/skills'
+import { settingsExtensionsList, type InstalledExtension } from '@/lib/settings'
 
 const PERM_TONE: Record<string, string> = {
   'fs.read': 'bg-emerald-500/15 text-emerald-300',
@@ -25,10 +26,13 @@ export default function SkillsPanel() {
   // project scope + collision triage stay gated on the skills registry.
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'all' | 'installed' | string>('all')
+  const [extensions, setExtensions] = useState<InstalledExtension[]>([])
 
   const refresh = async () => {
     const rows = await skillsCatalog()
     setSkills(rows)
+    const ext = await settingsExtensionsList().catch(() => ({ extensions: [] as InstalledExtension[] }))
+    setExtensions(ext.extensions)
   }
 
   useEffect(() => {
@@ -95,6 +99,11 @@ export default function SkillsPanel() {
           <Badge variant="outline" className="text-emerald-300">
             {installed.length} installed
           </Badge>
+          {extensions.length > 0 && (
+            <Badge variant="outline" className="text-muted-foreground">
+              {extensions.length} settings rows
+            </Badge>
+          )}
           <Button size="sm" variant="ghost" onClick={refresh}>
             <RotateCcw className="h-3.5 w-3.5" />
           </Button>
