@@ -11,23 +11,23 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — Multi-Step Onboarding Overhaul & Local Model Engine Upgrade)**:
+**(Current, 2026-09-18 — Multi-Step Onboarding Overhaul & Dynamic Hardware-Fit Engine)**:
 - Scope:
   1. Interactive 4-Stage Onboarding Flow (`ui/src/components/onboarding-modal.tsx`):
      - Stage 0: Dynamic cycling typography animation (`EveryAIOS` → `EveryAgent` → `EveryWork` → `EveryDoc` → `EveryModel` → `EveryTask`).
      - Stage 1: Full-stack engine capability cards with smooth hover animations + Dark/Light theme toggle + semantic cool-blue accent palette picker (`blue`, `sky`, `emerald`, `violet`, `amber`).
-     - Stage 2: Real-time agent scan and auto-detection (`acp_installed_agents`) showing 🟢 *"Auto-Detected & Ready"* badges vs 1-click install.
+     - Stage 2: Real-time agent scan and auto-detection using real ACP `acpInstallStatus()` (`acp_install_status`) showing 🟢 *"Auto-Detected & Ready"* badges vs real `acpInstallRequest` / `acpInstallCommit` actions.
      - Stage 3: Optional master passphrase with transparent OS Keychain fallback (zero-homework instant start for casual users, manual master passphrase for power users).
-  2. Local Offline Models & RAM Profiling (`ui/src/components/panels/local-models-panel.tsx`, `ui/src/components/shell/setup-gate.tsx`):
-     - Hardware profiling bar displaying detected RAM, GPU, and CPU core count.
-     - 3-tier traffic-light model recommendations:
-       - 🟢 **Recommended (Fast & Smooth)**: Llama 3.2 3B / Qwen 2.5 3B (~2.2 GB RAM) - Fits all standard PCs & laptops.
-       - 🟡 **Capable (Moderate Speed)**: Qwen 2.5 7B / Llama 3.1 8B (~5.8 GB RAM) - 16GB+ RAM systems.
-       - 🔴 **Resource Intensive (Deep Reasoning)**: DeepSeek R1 32B / Llama 3.3 70B (24 GB+ RAM / Dedicated GPU).
-     - 1-click download & activate buttons for all tiers.
+  2. Dynamic Hardware Capacity Profiling & Fit Estimation (`ui/src/components/panels/local-models-panel.tsx`, `ui/src/components/shell/setup-gate.tsx`):
+     - Host Capacity Bar probing live system specs (`ram_bytes`, `cpu_cores`, `gpu`) via `getHardware()` / `local_hardware`.
+     - 100% dynamic hardware memory capacity zones based on the host's actual memory:
+       - 🟢 **Fast & Smooth Zone (<= 60% of total host RAM)**: Safe memory zone with ample headroom for OS + multi-turn KV cache.
+       - 🟡 **Capable / Moderate Zone (60% - 85% of total host RAM)**: Higher memory usage, may experience pressure on deep contexts.
+       - 🔴 **Resource Intensive Zone (> 85% of total host RAM)**: Exceeds safe host memory limit; requires dedicated GPU or high VRAM.
+     - Live per-file fit scoring via Rust `estimateFit(fileGb, ctx)` (`model_estimate_fit`) on any searched or browsed Hugging Face model.
      - Progressive disclosure toggle ("Show Advanced / Quantization Details") hiding raw GGUF, KV-cache, and tensor split parameters from casual users by default.
 - Files: `ui/src/components/onboarding-modal.tsx`, `ui/src/components/panels/local-models-panel.tsx`, `ui/src/components/shell/setup-gate.tsx`.
-- Verified: `ui/node_modules/.bin/tsc --noEmit -p tsconfig.json` 0 errors; `node scripts/check-doc-sync.mjs` exit 0 (166 caps in sync, 1429 = 1264 done + 165 open, kernel gate clear); `node scripts/ipc-parity.mjs` exit 0.
+- Verified: `ui/node_modules/.bin/tsc --noEmit -p tsconfig.json` 0 errors; `node scripts/check-doc-sync.mjs` exit 0 (166 caps in sync, 1429 = 1264 done + 165 open, kernel gate clear).
 - Next:
   1. Stage, commit, and push verified UI changes to repository.
   2. Live-model multi-turn soak for P64 edit ladder & shadow preflights.

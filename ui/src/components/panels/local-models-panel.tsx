@@ -241,47 +241,18 @@ export default function LocalModelsPanel() {
   const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
   const canDownload = downloadsAvailable()
 
-  const HARDWARE_TIERS = useMemo(() => [
-    {
-      id: 'tier-3b',
-      title: 'Recommended (Fast & Smooth)',
-      models: 'Llama 3.2 3B / Qwen 2.5 3B',
-      ramReq: '~2.2 GB RAM',
-      desc: 'Instant startup, fast token response. Fits all standard laptops & PCs (8GB+ RAM).',
-      repoId: 'unsloth/Llama-3.2-3B-Instruct-GGUF',
-      filename: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
-      status: 'fast',
-      dotColor: 'bg-emerald-400',
-      badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-      fits: ram >= 4e9,
-    },
-    {
-      id: 'tier-7b',
-      title: 'Capable (Moderate Speed)',
-      models: 'Qwen 2.5 7B / Llama 3.1 8B',
-      ramReq: '~5.8 GB RAM',
-      desc: 'Balanced reasoning and coding accuracy. Recommended for 16GB+ RAM systems.',
-      repoId: 'Qwen/Qwen2.5-7B-Instruct-GGUF',
-      filename: 'qwen2.5-7b-instruct-q4_k_m.gguf',
-      status: 'moderate',
-      dotColor: 'bg-amber-400',
-      badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-      fits: ram >= 8e9,
-    },
-    {
-      id: 'tier-32b',
-      title: 'Resource Intensive (Deep Reasoning)',
-      models: 'DeepSeek R1 32B / Llama 3.3 70B',
-      ramReq: '24 GB+ RAM / Dedicated GPU',
-      desc: 'Maximum coding intelligence. Requires high-spec workstation or dedicated VRAM.',
-      repoId: 'unsloth/DeepSeek-R1-Distill-Qwen-32B-GGUF',
-      filename: 'DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf',
-      status: 'intensive',
-      dotColor: 'bg-red-400',
-      badgeBg: 'bg-red-500/10 text-red-400 border-red-500/20',
-      fits: ram >= 24e9,
-    },
-  ], [ram])
+  const hardwareFitSummary = useMemo(() => {
+    const totalRamGb = ram > 0 ? ram / 1e9 : 8
+    const comfortableLimitGb = totalRamGb * 0.60
+    const warningLimitGb = totalRamGb * 0.85
+    return {
+      totalRamGb,
+      comfortableLimitGb,
+      warningLimitGb,
+      gpuLabel: hw?.gpu && hw.gpu !== '—' ? hw.gpu : 'Integrated / CPU-only',
+      cpuCount: cpuCores(hw) || 4,
+    }
+  }, [ram, hw])
 
   const refreshNative = useCallback(async () => {
     if (!canDownload) return
@@ -633,43 +604,55 @@ export default function LocalModelsPanel() {
               </div>
             </div>
 
-            {/* 3 Traffic Light Hardware Fit Tiers */}
+            {/* 3 Dynamic Traffic Light Hardware Capacity Zones (100% evaluated live from host specs) */}
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-              {HARDWARE_TIERS.map((t) => (
-                <div
-                  key={t.id}
-                  className={cn(
-                    'flex flex-col justify-between rounded-lg border p-2.5 transition-all',
-                    t.badgeBg,
-                  )}
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn('inline-block h-2 w-2 rounded-full', t.dotColor)} />
-                        <span className="text-[11px] font-semibold text-foreground">{t.title}</span>
-                      </div>
-                      <span className="font-mono text-[9px] opacity-80">{t.ramReq}</span>
+              <div className="flex flex-col justify-between rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-2.5 text-emerald-400">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                      <span className="text-[11px] font-semibold text-foreground">Fast &amp; Smooth Fit</span>
                     </div>
-                    <div className="mt-1 text-[11px] font-medium text-foreground">{t.models}</div>
-                    <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{t.desc}</p>
+                    <span className="font-mono text-[9px] opacity-80">&le; {hardwareFitSummary.comfortableLimitGb.toFixed(1)} GB</span>
                   </div>
-
-                  <div className="mt-2.5 pt-1 border-t border-border/30">
-                    <Button
-                      size="sm"
-                      className="h-6 w-full bg-brand text-[10px] text-black hover:bg-brand/90 font-medium"
-                      disabled={busyFile !== null || !canDownload}
-                      onClick={() => {
-                        void download(t.repoId, { path: t.filename, size: 0, type: 'file' })
-                      }}
-                    >
-                      <Download className="mr-1 h-3 w-3" />
-                      1-Click Download
-                    </Button>
-                  </div>
+                  <div className="mt-1 text-[11px] font-medium text-foreground">60% Safe Memory Zone</div>
+                  <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+                    Model files up to {hardwareFitSummary.comfortableLimitGb.toFixed(1)} GB fit comfortably in your {formatBytes(ram)} RAM with ample room for long multi-turn agent contexts.
+                  </p>
                 </div>
-              ))}
+              </div>
+
+              <div className="flex flex-col justify-between rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-amber-400">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
+                      <span className="text-[11px] font-semibold text-foreground">Capable / Moderate</span>
+                    </div>
+                    <span className="font-mono text-[9px] opacity-80">{hardwareFitSummary.comfortableLimitGb.toFixed(1)} – {hardwareFitSummary.warningLimitGb.toFixed(1)} GB</span>
+                  </div>
+                  <div className="mt-1 text-[11px] font-medium text-foreground">60% – 85% Memory Usage</div>
+                  <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+                    Model files in this range will execute, but high context length or background tasks may experience memory pressure.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-red-400">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-full bg-red-400" />
+                      <span className="text-[11px] font-semibold text-foreground">Resource Intensive</span>
+                    </div>
+                    <span className="font-mono text-[9px] opacity-80">&gt; {hardwareFitSummary.warningLimitGb.toFixed(1)} GB</span>
+                  </div>
+                  <div className="mt-1 text-[11px] font-medium text-foreground">High RAM / GPU Required</div>
+                  <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+                    Exceeds 85% of your host RAM. Will require dedicated high-VRAM GPU or more system memory to avoid swapping.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 

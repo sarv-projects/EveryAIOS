@@ -299,79 +299,8 @@ export function SetupGate() {
                 Run 100% locally on your hardware. Inference never leaves this device.
               </p>
 
-              {/* Curated 3-Tier Hardware Fit Presets */}
-              <div className="space-y-2">
-                <div className="text-[11px] font-semibold text-foreground">Recommended Local Models:</div>
+              {runtimes.length > 0 ? (
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                        <span className="text-xs font-semibold text-foreground">Llama 3.2 3B / Qwen 2.5 3B</span>
-                        <span className="font-mono text-[9px] text-emerald-400">🟢 Recommended (~2.2 GB RAM)</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">Fastest token output. Fits any standard PC or laptop.</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="h-7 bg-brand text-[10px] text-black hover:bg-brand/90 font-semibold shrink-0"
-                      onClick={() => {
-                        setLocalRuntime('llamafile', 16384)
-                        setDone(true)
-                      }}
-                    >
-                      Use
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-amber-400" />
-                        <span className="text-xs font-semibold text-foreground">Qwen 2.5 7B / Llama 3.1 8B</span>
-                        <span className="font-mono text-[9px] text-amber-400">🟡 Capable (~5.8 GB RAM)</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">Great coding and reasoning accuracy on 16GB+ RAM.</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-[10px] shrink-0"
-                      onClick={() => {
-                        setLocalRuntime('llamafile', 16384)
-                        setDone(true)
-                      }}
-                    >
-                      Use
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/5 p-2.5">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-red-400" />
-                        <span className="text-xs font-semibold text-foreground">DeepSeek R1 32B / 70B</span>
-                        <span className="font-mono text-[9px] text-red-400">🔴 Intensive (24GB+ / GPU)</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">Deep reasoning. Requires high-spec workstation or dedicated VRAM.</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-[10px] shrink-0"
-                      onClick={() => {
-                        setLocalRuntime('llamafile', 16384)
-                        setDone(true)
-                      }}
-                    >
-                      Use
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {runtimes.length > 0 && (
-                <div className="mt-2 space-y-1.5 border-t border-border/40 pt-2">
                   <p className="text-[10px] text-muted-foreground font-medium">
                     Detected existing Ollama / llamafile models on this machine:
                   </p>
@@ -400,6 +329,10 @@ export function SetupGate() {
                     </button>
                   ))}
                 </div>
+              ) : (
+                <div className="rounded-lg border border-border/60 bg-card/40 p-3 text-xs text-muted-foreground">
+                  No active local models currently detected. You can connect a running Ollama instance or download any GGUF model directly from Hugging Face Hub.
+                </div>
               )}
 
               {probeError && <p className="text-[11px] text-warning">{probeError}</p>}
@@ -407,7 +340,7 @@ export function SetupGate() {
 
               <div className="space-y-1.5 pt-1">
                 <Button
-                  className="h-8 w-full bg-brand/10 text-brand border border-brand/20 hover:bg-brand/20 text-xs font-medium"
+                  className="h-8 w-full bg-brand text-black hover:bg-brand/90 text-xs font-semibold"
                   disabled={connecting}
                   onClick={() => void connectOllama()}
                 >
@@ -424,7 +357,7 @@ export function SetupGate() {
                   onClick={startWithLocalSetup}
                 >
                   <Download className="mr-1 h-3 w-3" />
-                  Download Custom Models from Hugging Face Hub
+                  Browse &amp; Download from Hugging Face Hub
                 </Button>
               </div>
 
