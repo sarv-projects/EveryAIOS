@@ -17,6 +17,18 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — Multi-Step Onboarding Overhaul + Dynamic Hardware-Fit Engine + Secret Path Floor & MCP Hardening
+
+**Category:** implementation. Census **1429 = 1264 done + 165 open**. Capability identity remains **166**.
+
+1. `ui/src/components/onboarding-modal.tsx`: Implemented interactive 4-stage onboarding sequence with cycling brand typography animation, full-stack engine capability cards with dynamic dark/light and semantic cool-blue accent customization, real-time ACP agent scanner and auto-detection (`acpInstallStatus`) with Guard-2 ticketed installation (`acpInstallRequest` / `acpInstallCommit`), and optional master passphrase with OS keychain fallback.
+2. `ui/src/components/panels/local-models-panel.tsx` & `ui/src/components/shell/setup-gate.tsx`: Replaced static model stubs with a 100% dynamic host memory capacity analyzer probing live RAM, CPU cores, and GPU (`getHardware()` / `local_hardware`). Dynamically computes safe memory zones (🟢 Safe <= 60% RAM, 🟡 Capable 60%–85% RAM, 🔴 Resource Intensive > 85% RAM), provides live per-file fit estimation via Rust `estimateFit` (`model_estimate_fit`), and adds progressive disclosure for technical quantization parameters.
+3. `crates/everyaios-guard/src/protected_paths.rs`: Added ambient credential and secret file prefixes (`.env*`, `.ssh/`, `.aws/`, `id_rsa`, `id_ed25519`, `service_account.json`) to `PROTECTED_PREFIXES` to block accidental or malicious recursive deletion (CVE-2026-47211).
+4. `crates/everyaios-mcp/src/npx.rs`: Hardened NPX stdio launcher by rejecting argument flags starting with `-` or `_` to prevent flag injection attacks.
+
+**Verification.** UI type-check (`tsc --noEmit`) 0 errors; guard `protected_paths::tests` 190/0; mcp `npx::tests` 71/0; core `execution::tests` 746/0; `scripts/check-doc-sync.mjs` exit 0 (166 caps in sync, 1429 = 1264 done + 165 open, kernel gate clear); `scripts/ipc-parity.mjs` 0 broken; `scripts/clean-profile-boot-check.mjs` PASS.
+
+---
 ## 2026-09-18 — P51.29 MCP external floor + P51.17/30 NPX sandbox launcher + P51.7 exportable citations
 
 **Category:** implementation. Census **1429 = 1264 done + 165 open**. Capability identity remains **166**.

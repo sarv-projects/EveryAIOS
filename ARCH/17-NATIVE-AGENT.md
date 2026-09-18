@@ -559,7 +559,7 @@ type RuntimeLocation =
   | { kind: 'unavailable'; reason: string };
 ```
 
-The ACP registry is a catalog. Occupancy is proven by an install record, a resolved Windows executable, a package-manager probe, an explicit user path, or a WSL probe. The shell must return provenance, exact path, version only when measured, and `verifiedAt`; it must not conflate `%APPDATA%`, `%LOCALAPPDATA%`, `%PROGRAMDATA%`, `%ProgramFiles%`, effective `PATH`, and WSL roots. Discovery is read-only. Import/launch is a separate guarded action. A WSL path is launched only through the named distro/backend and never handed to `CreateProcess` as if it were a Windows executable.
+The ACP registry is a catalog. Occupancy is proven by an install record, a resolved Windows executable, a package-manager probe, an explicit user path, or a WSL probe. The shell must return provenance, exact path, version only when measured, and `verifiedAt`; it must not conflate `%APPDATA%`, `%LOCALAPPDATA%`, `%PROGRAMDATA%`, `%ProgramFiles%`, effective `PATH`, and WSL roots. Discovery is read-only (`acp_install_status` probes system PATH, App Paths registry, and WSL in parallel). Discovered harnesses are marked 🟢 *Auto-Detected & Ready* without redundant setup. Installation is a separate guarded action mediated via Guard-2 install tickets (`acp_install_request` → `acp_install_commit`). A WSL path is launched only through the named distro/backend and never handed to `CreateProcess` as if it were a Windows executable.
 
 ### 17.12.5 Agent picker and shared capability loadout
 
