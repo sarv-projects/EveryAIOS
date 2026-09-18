@@ -120,14 +120,15 @@ pub use challenge::{
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
 pub use config::{Config, ConfigError};
 pub use cua::{
-    append_replan_log, apply_five_part_brief, apply_manager_replan, apply_worker_act,
-    cua_skill_from_verified, cua_skill_to_blueprint, filter_tools_for_role, load_dag,
-    node_contract_legal, parse_remaining_nodes, persist_cua_skill, persist_dag,
-    remaining_payload_skips_guard, route_work_surface, screen_text_is_untrusted,
-    verifier_accepts_worker_claim, vision_gate, worker_step, AgentRole, ComputerUseDag, CuaNode,
-    CuaNodeStatus, CuaSkillDraft, FivePartBrief, ManagerReplanReason, ManagerReplanResult,
-    VisionGateError, WorkSurface, WorkerOutcome, CUA_REQUIRES_VISION, IDENTICAL_FAIL_HALT,
-    SCOUT_ALLOWED_TOOLS,
+    append_replan_log, apply_five_part_brief, apply_manager_replan, apply_mechanical_verify,
+    apply_node_stop, apply_worker_act, cua_skill_from_verified, cua_skill_to_blueprint,
+    filter_tools_for_role, load_dag, mechanical_verify, node_contract_legal, parse_remaining_nodes,
+    persist_cua_skill, persist_dag, remaining_payload_skips_guard, route_work_surface,
+    screen_text_is_untrusted, stop_is_blocked, verifier_accepts_worker_claim, vision_gate,
+    worker_step, AgentRole, ComputerUseDag, CuaNode, CuaNodeStatus, CuaSkillDraft, EvidenceKind,
+    FivePartBrief, ManagerReplanReason, ManagerReplanResult, MechanicalEvidence, MechanicalVerdict,
+    VisionGateError, WorkSurface, WorkerOutcome, CLOSE_READ_MAX, CUA_REQUIRES_VISION,
+    FAILED_RECLAIM_AFTER, IDENTICAL_FAIL_HALT, SCOUT_ALLOWED_TOOLS,
 };
 pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
 pub use eval_service::EvalService;

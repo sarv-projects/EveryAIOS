@@ -51,6 +51,8 @@ import { refuseDesktopIfWrongSurface } from "./cua-route";
 import { applyCuaReplanIfPresent } from "./cua-replan";
 import { applyCuaSkillPromoteIfPresent } from "./cua-skill";
 import { applyCuaBriefIfPresent } from "./cua-brief";
+import { applyCuaMechanicalVerifyIfPresent } from "./cua-verify";
+import { applyCuaStopIfPresent } from "./cua-stop";
 import { resolveMentions } from "./context-providers";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
 import { chiefRegistry } from "./chief";
@@ -824,6 +826,14 @@ async function runInbuiltTurn(
         const brief = await applyCuaBriefIfPresent(request, args);
         if (brief.applied) {
           emit({ type: "stage", streamId, stage: "cua:brief" });
+        }
+        const verify = await applyCuaMechanicalVerifyIfPresent(request, args, result);
+        if (verify.applied) {
+          emit({ type: "stage", streamId, stage: "cua:mechanical-verify" });
+        }
+        const stop = await applyCuaStopIfPresent(request, args);
+        if (stop.applied) {
+          emit({ type: "stage", streamId, stage: `cua:stop:${stop.reason ?? "failed"}` });
         }
       }
       if (toolId === "search.query") {

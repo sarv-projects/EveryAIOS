@@ -92,6 +92,9 @@ pub struct CuaNode {
     pub screenshot_ref: Option<String>,
     #[serde(default)]
     pub identical_fail_count: u32,
+    /// P60.7 — FAILED budget (BLOCKED does not increment this).
+    #[serde(default)]
+    pub fail_count: u32,
     /// P59.13 — Done iff these hold. An empty list is illegal (split or escalate).
     #[serde(default)]
     pub preconditions: Vec<String>,
@@ -117,6 +120,7 @@ impl Default for CuaNode {
             last_action: None,
             screenshot_ref: None,
             identical_fail_count: 0,
+            fail_count: 0,
             preconditions: Vec::new(),
             postconditions: Vec::new(),
             timeout_s: 0,
@@ -620,6 +624,157 @@ pub fn verifier_accepts_worker_claim(worker_claimed_success: bool, mechanical_ok
     mechanical_ok
 }
 
+/// P60.6 — mechanical verify first (spec §4.2.5b).
+/// Fetched OpenAdapt: VERIFIED only if an independent system-of-record read
+/// agrees. A success banner (`--break-it`) is not evidence. Disk is truth;
+/// the Worker report is not. Re-run is O(1) (file/command result). No
+/// verifier → sample, never auto-verify. Close-read only for small outputs.
+pub const CLOSE_READ_MAX: usize = 4096;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum EvidenceKind {
+    #[default]
+    None,
+    FileExists,
+    FileContains,
+    FileEquals,
+    CommandExit,
+    CloseRead,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MechanicalEvidence {
+    #[serde(default)]
+    pub kind: EvidenceKind,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub expect: Option<String>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MechanicalVerdict {
+    /// Independent check passed. The only production success.
+    Verified,
+    /// Disk/command disagrees with the Worker (OpenAdapt `--break-it`).
+    Refuted,
+    /// No verifier configured — sample; never treat as Verified.
+    Sampled,
+}
+
+/// Ignore `worker_claimed`. Read disk / injected command result.
+pub fn mechanical_verify(
+    worker_claimed_success: bool,
+    evidence: &MechanicalEvidence,
+) -> MechanicalVerdict {
+    let _ = worker_claimed_success;
+    match evidence.kind {
+        EvidenceKind::None => MechanicalVerdict::Sampled,
+        EvidenceKind::FileExists => match evidence.path.as_deref() {
+            Some(p) if Path::new(p).is_file() => MechanicalVerdict::Verified,
+            Some(_) => MechanicalVerdict::Refuted,
+            None => MechanicalVerdict::Sampled,
+        },
+        EvidenceKind::FileContains => {
+            let (Some(p), Some(exp)) = (evidence.path.as_deref(), evidence.expect.as_deref())
+            else {
+                return MechanicalVerdict::Sampled;
+            };
+            match std::fs::read_to_string(p) {
+                Ok(s) if s.contains(exp) => MechanicalVerdict::Verified,
+                Ok(_) | Err(_) => MechanicalVerdict::Refuted,
+            }
+        }
+        EvidenceKind::FileEquals => {
+            let (Some(p), Some(exp)) = (evidence.path.as_deref(), evidence.expect.as_deref())
+            else {
+                return MechanicalVerdict::Sampled;
+            };
+            match std::fs::read(p) {
+                Ok(b) if b == exp.as_bytes() => MechanicalVerdict::Verified,
+                Ok(_) | Err(_) => MechanicalVerdict::Refuted,
+            }
+        }
+        EvidenceKind::CommandExit => match evidence.exit_code {
+            Some(0) => MechanicalVerdict::Verified,
+            Some(_) => MechanicalVerdict::Refuted,
+            None => MechanicalVerdict::Sampled,
+        },
+        EvidenceKind::CloseRead => {
+            let Some(text) = evidence.text.as_deref() else {
+                return MechanicalVerdict::Sampled;
+            };
+            if text.len() > CLOSE_READ_MAX {
+                return MechanicalVerdict::Sampled;
+            }
+            let Some(exp) = evidence.expect.as_deref() else {
+                return MechanicalVerdict::Sampled;
+            };
+            if text.contains(exp) {
+                MechanicalVerdict::Verified
+            } else {
+                MechanicalVerdict::Refuted
+            }
+        }
+    }
+}
+
+/// Apply the independent verdict onto the node. Sampled does not count as
+/// success and does not burn the identical-fail budget.
+pub fn apply_mechanical_verify(
+    node: &mut CuaNode,
+    worker_claimed_success: bool,
+    evidence: &MechanicalEvidence,
+) -> MechanicalVerdict {
+    let verdict = mechanical_verify(worker_claimed_success, evidence);
+    match verdict {
+        MechanicalVerdict::Verified => {
+            let _ = apply_worker_act(node, true);
+        }
+        MechanicalVerdict::Refuted => {
+            let _ = apply_worker_act(node, false);
+        }
+        MechanicalVerdict::Sampled => {
+            // Disk did not speak. Do not mark Verified. Do not increment fails.
+        }
+    }
+    verdict
+}
+
+/// P60.7 — BLOCKED ≠ FAILED. Missing permission/info does not burn the
+/// fail budget. FAILED ×3 → Chief reclaims the node.
+pub const FAILED_RECLAIM_AFTER: u32 = 3;
+
+pub fn stop_is_blocked(reason: &str) -> bool {
+    matches!(
+        reason.trim().to_ascii_lowercase().as_str(),
+        "permission" | "missing-info" | "missing_info" | "blocked"
+    )
+}
+
+/// Returns whether the Chief must reclaim (do the work or replan).
+pub fn apply_node_stop(node: &mut CuaNode, reason: &str) -> bool {
+    if stop_is_blocked(reason) {
+        node.status = CuaNodeStatus::Blocked;
+        return false;
+    }
+    node.fail_count = node.fail_count.saturating_add(1);
+    if node.fail_count >= FAILED_RECLAIM_AFTER {
+        node.status = CuaNodeStatus::Halted;
+        true
+    } else {
+        node.status = CuaNodeStatus::Running;
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -777,6 +932,67 @@ mod tests {
     }
 
     #[test]
+    fn p60_mechanical_verify_disk_is_truth_worker_claim_is_not() {
+        let dir = std::env::temp_dir().join(format!("cua-mech-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("record.txt");
+        std::fs::write(&path, "saved:yes").unwrap();
+        let ok = MechanicalEvidence {
+            kind: EvidenceKind::FileContains,
+            path: Some(path.display().to_string()),
+            expect: Some("saved:yes".into()),
+            ..Default::default()
+        };
+        // OpenAdapt --break-it: Worker/banner claims success, disk agrees here.
+        assert_eq!(mechanical_verify(false, &ok), MechanicalVerdict::Verified);
+        let missing = MechanicalEvidence {
+            kind: EvidenceKind::FileContains,
+            path: Some(path.display().to_string()),
+            expect: Some("committed".into()),
+            ..Default::default()
+        };
+        // Banner/worker claim true; independent read refutes.
+        assert_eq!(
+            mechanical_verify(true, &missing),
+            MechanicalVerdict::Refuted
+        );
+        assert_eq!(
+            mechanical_verify(true, &MechanicalEvidence::default()),
+            MechanicalVerdict::Sampled
+        );
+        let huge = "x".repeat(CLOSE_READ_MAX + 1);
+        assert_eq!(
+            mechanical_verify(
+                true,
+                &MechanicalEvidence {
+                    kind: EvidenceKind::CloseRead,
+                    text: Some(huge),
+                    expect: Some("x".into()),
+                    ..Default::default()
+                }
+            ),
+            MechanicalVerdict::Sampled
+        );
+        let mut node = CuaNode {
+            id: "n".into(),
+            postconditions: vec!["saved:yes".into()],
+            ..Default::default()
+        };
+        assert_eq!(
+            apply_mechanical_verify(&mut node, true, &missing),
+            MechanicalVerdict::Refuted
+        );
+        assert_ne!(node.status, CuaNodeStatus::Verified);
+        assert_eq!(
+            apply_mechanical_verify(&mut node, false, &ok),
+            MechanicalVerdict::Verified
+        );
+        assert_eq!(node.status, CuaNodeStatus::Verified);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn p59_apply_worker_act_halts_and_never_marks_halt_verified() {
         let mut n = CuaNode {
             id: "n".into(),
@@ -917,5 +1133,26 @@ mod tests {
         assert!(text.contains("name: login-to-x"));
         assert!(text.contains("inbox visible"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p60_blocked_does_not_burn_fail_budget_failed_three_reclaims() {
+        let mut n = CuaNode {
+            id: "n".into(),
+            postconditions: vec!["x".into()],
+            ..Default::default()
+        };
+        assert!(!apply_node_stop(&mut n, "permission"));
+        assert_eq!(n.status, CuaNodeStatus::Blocked);
+        assert_eq!(n.fail_count, 0);
+        assert!(!apply_node_stop(&mut n, "missing-info"));
+        assert_eq!(n.fail_count, 0);
+        assert!(!apply_node_stop(&mut n, "crash"));
+        assert!(!apply_node_stop(&mut n, "crash"));
+        assert_eq!(n.status, CuaNodeStatus::Running);
+        assert_eq!(n.fail_count, 2);
+        assert!(apply_node_stop(&mut n, "crash"));
+        assert_eq!(n.status, CuaNodeStatus::Halted);
+        assert_eq!(n.fail_count, 3);
     }
 }
