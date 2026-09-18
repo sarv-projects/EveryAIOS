@@ -17,6 +17,20 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P59.7 Manager remaining rewrite + P59.16 CUA skill promote
+
+**Category:** implementation. **Flipped:** P59.7, P59.16 `[DONE]`. Census **1429 = 1248 done + 181 open**. Capability identity remains **166**.
+
+**Fetched:** Agent-S `gui_agents/s2/agents/manager.py` @ 73ea172 — `get_action_queue(failed_subtask, completed, remaining)` → `_generate_step_by_step_plan` (new plan for remainder on fail; revise remaining on completion) → `_generate_dag`. MACU: remaining only. Agent Skills spec: `name`+`description` required (https://agentskills.io/specification).
+
+1. `parse_remaining_nodes` + `apply_manager_replan` keep Verified; refuse empty postconditions and `ticketId`/`skipGuard` (planned click ≠ Guard-2 ticket).
+2. Live consumer: coordinator `applyCuaReplanIfPresent` → `execution/cua_replan` on `desktop.*` remaining JSON (halt or planner). Tests inject remaining JSON; no fake LLM.
+3. `cua_skill_from_verified` + `persist_cua_skill` write SKILL.md with postconditions into the existing I2 store. Halted traces refuse. Live: `applyCuaSkillPromoteIfPresent` → `execution/cua_promote_skill`. Skills are not the orchestrator.
+
+**Verification.** `cargo test -p everyaios-core --lib p59_` 14/0; coordinator `cua-replan`/`cua-skill`/`cua-route` 7/0; `npx tsc --noEmit` 0.
+
+---
+
 ## 2026-09-18 — P59.8 Progress DAG UI + P65.5 Installed/Marketplace split
 
 **Category:** implementation. **Flipped:** P59.8, P65.5 `[DONE]`. Census **1429 = 1246 done + 183 open**. Capability identity remains **166**.

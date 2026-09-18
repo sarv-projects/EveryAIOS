@@ -84,6 +84,7 @@ pub struct CuaNode {
     pub info: String,
     #[serde(default)]
     pub depends_on: Vec<String>,
+    #[serde(default)]
     pub status: CuaNodeStatus,
     #[serde(default)]
     pub last_action: Option<String>,
@@ -125,9 +126,10 @@ impl Default for CuaNode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum CuaNodeStatus {
+    #[default]
     Pending,
     Ready,
     Running,
@@ -258,6 +260,238 @@ pub fn apply_worker_act(node: &mut CuaNode, verify_ok: bool) -> WorkerOutcome {
 /// P59.13 — unverifiable nodes are illegal (no empty postconditions).
 pub fn node_contract_legal(node: &CuaNode) -> bool {
     !node.postconditions.is_empty()
+}
+
+/// P59.7 — why the Manager rewrote remaining nodes.
+///
+/// Fetched Agent-S `Manager.get_action_queue` (`gui_agents/s2/agents/manager.py`
+/// @ 73ea172): on `failed_subtask` generate a **new plan for the remainder**;
+/// on completion revise remaining given completed + remaining lists; then
+/// `_generate_dag`. MACU: mutate remaining only; verified stay.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ManagerReplanReason {
+    Halt,
+    Completion,
+    Planner,
+}
+
+impl ManagerReplanReason {
+    pub fn parse(raw: &str) -> Self {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "halt" | "identical-fail-halt" | "failure" | "failed" => Self::Halt,
+            "completion" | "complete" | "done" => Self::Completion,
+            _ => Self::Planner,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Halt => "halt",
+            Self::Completion => "completion",
+            Self::Planner => "planner",
+        }
+    }
+}
+
+/// A remaining-node JSON object that carries a ticket, skipGuard, or
+/// `approved: true` is trying to mint Guard-2 from the plan. Illegal.
+/// Planner writes remaining JSON; clicks still ticket through `tool/exec`.
+pub fn remaining_payload_skips_guard(value: &serde_json::Value) -> bool {
+    let Some(obj) = value.as_object() else {
+        return false;
+    };
+    if obj.get("ticketId").is_some() || obj.get("ticket_id").is_some() {
+        return true;
+    }
+    if obj.get("skipGuard").and_then(|v| v.as_bool()) == Some(true)
+        || obj.get("skip_guard").and_then(|v| v.as_bool()) == Some(true)
+        || obj.get("approved").and_then(|v| v.as_bool()) == Some(true)
+    {
+        return true;
+    }
+    false
+}
+
+/// Parse Manager remaining-node JSON. Accepts a node array, `{nodes:[…]}`,
+/// or `{remaining:[…]}`. Does not call an LLM — the planner payload is injected.
+pub fn parse_remaining_nodes(value: &serde_json::Value) -> Result<Vec<CuaNode>, String> {
+    let arr = if let Some(a) = value.as_array() {
+        a
+    } else if let Some(a) = value.get("nodes").and_then(|n| n.as_array()) {
+        a
+    } else if let Some(a) = value.get("remaining").and_then(|n| n.as_array()) {
+        a
+    } else {
+        return Err("manager remaining plan must be a JSON array of nodes".into());
+    };
+    let mut out = Vec::with_capacity(arr.len());
+    for item in arr {
+        if remaining_payload_skips_guard(item) {
+            return Err(
+                "planned click cannot skip Guard-2 — remaining nodes are proposals, not tickets"
+                    .into(),
+            );
+        }
+        let node: CuaNode =
+            serde_json::from_value(item.clone()).map_err(|e| format!("remaining node: {e}"))?;
+        validate_remaining_node(&node)?;
+        out.push(node);
+    }
+    Ok(out)
+}
+
+fn validate_remaining_node(node: &CuaNode) -> Result<(), String> {
+    if node.id.trim().is_empty() {
+        return Err("remaining node id must not be empty".into());
+    }
+    if !node_contract_legal(node) {
+        return Err(format!(
+            "unverifiable remaining node {} — postconditions required",
+            node.id
+        ));
+    }
+    if node.status == CuaNodeStatus::Verified {
+        return Err(format!(
+            "remaining node {} cannot be Verified — Manager rewrites remaining only",
+            node.id
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagerReplanResult {
+    pub replan_seq: u32,
+    pub verified_kept: usize,
+    pub remaining: usize,
+}
+
+/// Apply a Manager remaining-node rewrite. Verified nodes stay; everything
+/// else is replaced. Empty remaining is allowed (all work verified).
+pub fn apply_manager_replan(
+    dag: &mut ComputerUseDag,
+    remaining: Vec<CuaNode>,
+) -> Result<ManagerReplanResult, String> {
+    for n in &remaining {
+        validate_remaining_node(n)?;
+    }
+    let verified_kept = dag
+        .nodes
+        .iter()
+        .filter(|n| n.status == CuaNodeStatus::Verified)
+        .count();
+    dag.replan_remaining(remaining);
+    Ok(ManagerReplanResult {
+        replan_seq: dag.replan_seq,
+        verified_kept,
+        remaining: dag.nodes.len().saturating_sub(verified_kept),
+    })
+}
+
+/// P59.16 — a reusable CUA skill draft. Not an orchestrator: the DAG runtime
+/// stays in Rust. Fetched Agent Skills spec (`name`+`description` required;
+/// https://agentskills.io/specification) + spec E.6: SKILL.md + postconditions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CuaSkillDraft {
+    pub name: String,
+    pub description: String,
+    pub postconditions: Vec<String>,
+    pub node_ids: Vec<String>,
+    pub body: String,
+}
+
+/// Promote a **fully verified** DAG into a SKILL.md draft. Halted/pending
+/// traces refuse — one-off clicks are not the library until verify holds.
+pub fn cua_skill_from_verified(
+    dag: &ComputerUseDag,
+    name: &str,
+    description: &str,
+) -> Result<CuaSkillDraft, String> {
+    let slug = name
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    if slug.is_empty() || slug.len() > 64 {
+        return Err("CUA skill name must be 1–64 [a-z0-9-] characters".into());
+    }
+    if description.trim().is_empty() {
+        return Err("CUA skill description is required (Agent Skills spec)".into());
+    }
+    if dag.nodes.is_empty() {
+        return Err("no verified trace to promote".into());
+    }
+    if dag
+        .nodes
+        .iter()
+        .any(|n| n.status != CuaNodeStatus::Verified)
+    {
+        return Err("one-off traces cannot become a skill until every node is verified".into());
+    }
+    for n in &dag.nodes {
+        if !node_contract_legal(n) {
+            return Err(format!(
+                "unverifiable node {} — postconditions required",
+                n.id
+            ));
+        }
+    }
+    let postconditions: Vec<String> = dag
+        .nodes
+        .iter()
+        .flat_map(|n| n.postconditions.iter().cloned())
+        .collect();
+    let mut body = String::from(
+        "This skill is a reusable CUA procedure. It is not the orchestrator.\n\n## Steps\n",
+    );
+    for n in &dag.nodes {
+        body.push_str(&format!("- **{}** (`{}`): {}\n", n.name, n.id, n.info));
+    }
+    body.push_str("\n## Postconditions\n");
+    for p in &postconditions {
+        body.push_str(&format!("- {p}\n"));
+    }
+    Ok(CuaSkillDraft {
+        name: slug,
+        description: description.trim().to_string(),
+        postconditions,
+        node_ids: dag.nodes.iter().map(|n| n.id.clone()).collect(),
+        body,
+    })
+}
+
+pub fn cua_skill_to_blueprint(draft: &CuaSkillDraft) -> everyaios_blueprint::Skill {
+    everyaios_blueprint::Skill {
+        manifest: everyaios_blueprint::SkillManifest {
+            name: draft.name.clone(),
+            description: draft.description.clone(),
+            tools: vec!["desktop.act".into(), "desktop.snapshot".into()],
+            triggers: vec![draft.name.replace('-', " ")],
+            when_to_use: draft.postconditions.clone(),
+            scripts: Vec::new(),
+            references: Vec::new(),
+            assets: Vec::new(),
+            author: "cua-promote".into(),
+            created: "2026-09-18".into(),
+            version: "0.1.0".into(),
+            user_invocable: false,
+            disable_model_invocation: false,
+        },
+        body: draft.body.clone(),
+    }
+}
+
+/// Persist a verified CUA trace as SKILL.md in the existing I2 store.
+/// Does not create a second registry.
+pub fn persist_cua_skill(skill_root: &Path, draft: &CuaSkillDraft) -> Result<PathBuf, String> {
+    let skill = cua_skill_to_blueprint(draft);
+    everyaios_blueprint::validate_grown_skill(&skill, true).map_err(|e| e.to_string())?;
+    let store = everyaios_blueprint::SkillStore::new(skill_root);
+    store.save(&skill, false).map_err(|e| e.to_string())
 }
 
 /// P59.7 — append one replan reason; never rewrite verified nodes here.
@@ -453,7 +687,10 @@ mod tests {
             .is_err());
         dag.apply_remaining_edit("c", Some("click Save".into()), Some("then halt".into()))
             .unwrap();
-        assert_eq!(dag.nodes.iter().find(|n| n.id == "c").unwrap().name, "click Save");
+        assert_eq!(
+            dag.nodes.iter().find(|n| n.id == "c").unwrap().name,
+            "click Save"
+        );
         assert!(dag.replan_seq >= 2);
     }
 
@@ -489,7 +726,9 @@ mod tests {
         let scout = filter_tools_for_role(AgentRole::Scout, &tools);
         assert!(scout.contains(&"file_ops.read".into()));
         assert!(scout.contains(&"search.query".into()));
-        assert!(!scout.iter().any(|t| t.contains("write") || t == "desktop.act"));
+        assert!(!scout
+            .iter()
+            .any(|t| t.contains("write") || t == "desktop.act"));
         let worker = filter_tools_for_role(AgentRole::Worker, &tools);
         assert!(worker.contains(&"file_ops.write".into()));
     }
@@ -538,6 +777,120 @@ mod tests {
         let text = std::fs::read_to_string(dir.join("replan_log.jsonl")).unwrap();
         assert_eq!(text.lines().count(), 2);
         assert!(text.contains("double-fail"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p59_manager_rewrite_keeps_verified_and_refuses_illegal_remaining() {
+        let mut dag = ComputerUseDag {
+            run_id: "r".into(),
+            work_id: "w".into(),
+            nodes: vec![
+                CuaNode {
+                    id: "open".into(),
+                    name: "open app".into(),
+                    status: CuaNodeStatus::Verified,
+                    postconditions: vec!["window visible".into()],
+                    ..Default::default()
+                },
+                CuaNode {
+                    id: "click".into(),
+                    name: "click save".into(),
+                    depends_on: vec!["open".into()],
+                    status: CuaNodeStatus::Halted,
+                    identical_fail_count: 2,
+                    postconditions: vec!["saved".into()],
+                    ..Default::default()
+                },
+            ],
+            replan_seq: 0,
+        };
+        let remaining = parse_remaining_nodes(&serde_json::json!([
+            {
+                "id": "alt",
+                "name": "use File > Save",
+                "info": "menu instead of toolbar",
+                "depends_on": ["open"],
+                "postconditions": ["saved"]
+            }
+        ]))
+        .unwrap();
+        let out = apply_manager_replan(&mut dag, remaining).unwrap();
+        assert_eq!(out.verified_kept, 1);
+        assert_eq!(out.remaining, 1);
+        assert_eq!(dag.replan_seq, 1);
+        assert_eq!(dag.nodes[0].id, "open");
+        assert_eq!(dag.nodes[0].status, CuaNodeStatus::Verified);
+        assert_eq!(dag.nodes[1].id, "alt");
+        assert_eq!(dag.nodes[1].status, CuaNodeStatus::Pending);
+        assert!(parse_remaining_nodes(&serde_json::json!([{
+            "id": "bad",
+            "name": "click",
+            "info": "",
+            "postconditions": []
+        }]))
+        .is_err());
+        assert!(parse_remaining_nodes(&serde_json::json!([{
+            "id": "skip",
+            "name": "click Save",
+            "info": "approve",
+            "postconditions": ["saved"],
+            "ticketId": "t-forged"
+        }]))
+        .unwrap_err()
+        .contains("Guard-2"));
+        assert!(remaining_payload_skips_guard(&serde_json::json!({
+            "id": "c",
+            "skipGuard": true,
+            "postconditions": ["saved"]
+        })));
+        assert!(!remaining_payload_skips_guard(&serde_json::json!({
+            "id": "c",
+            "name": "click",
+            "postconditions": ["saved"]
+        })));
+        assert_eq!(
+            ManagerReplanReason::parse("identical-fail-halt"),
+            ManagerReplanReason::Halt
+        );
+        assert_eq!(
+            ManagerReplanReason::parse("completion"),
+            ManagerReplanReason::Completion
+        );
+    }
+
+    #[test]
+    fn p59_cua_skill_promotes_only_fully_verified_traces() {
+        let mut dag = ComputerUseDag {
+            run_id: "r".into(),
+            work_id: "w".into(),
+            nodes: vec![CuaNode {
+                id: "login".into(),
+                name: "login to X".into(),
+                info: "type user then submit".into(),
+                status: CuaNodeStatus::Halted,
+                postconditions: vec!["inbox visible".into()],
+                ..Default::default()
+            }],
+            replan_seq: 0,
+        };
+        assert!(cua_skill_from_verified(&dag, "login-to-x", "Login to X").is_err());
+        dag.nodes[0].status = CuaNodeStatus::Verified;
+        let draft =
+            cua_skill_from_verified(&dag, "Login to X", "Login to X when the user asks").unwrap();
+        assert_eq!(draft.name, "login-to-x");
+        assert!(draft.body.contains("## Postconditions"));
+        assert!(draft.postconditions.contains(&"inbox visible".into()));
+        let skill = cua_skill_to_blueprint(&draft);
+        assert_eq!(skill.manifest.name, "login-to-x");
+        assert!(skill.body.contains("inbox visible"));
+        let dir = std::env::temp_dir().join(format!("cua-skill-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = persist_cua_skill(&dir, &draft).unwrap();
+        assert!(path.ends_with("SKILL.md"));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("name: login-to-x"));
+        assert!(text.contains("inbox visible"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
