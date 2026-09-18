@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
-import { usageSnapshot, sessionTotals } from '@/lib/spend'
+import { usageSnapshot, sessionTotals, chiefSpendWarning } from '@/lib/spend'
 import { ChartCard, ModelLeaderboard, SessionsTable, AgentBreakdown } from './analytics-sections'
 
 const KPIS = [
@@ -51,7 +51,7 @@ const TOOLTIP_STYLE = {
 
 export default function AnalyticsPanel() {
   const notify = useAppStore((s) => s.notify)
-  const [live, setLive] = useState<{ spent: number; tokens: number; sessions: number } | null>(null)
+  const [live, setLive] = useState<{ spent: number; tokens: number; sessions: number; warnNotDelegating?: boolean } | null>(null)
   const [liveError, setLiveError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   useEffect(() => {
@@ -59,11 +59,15 @@ export default function AnalyticsPanel() {
     let active = true
     setLiveError(null)
     Promise.all([usageSnapshot(), sessionTotals()]).then(([snapshot, totals]) => {
-      if (active) setLive({
-        spent: snapshot.byKey.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
-        tokens: snapshot.total.tokensIn + snapshot.total.tokensOut,
-        sessions: totals.length,
-      })
+      if (active) {
+        const spend = snapshot.chiefSpend ?? chiefSpendWarning(0, snapshot.total.tokensIn + snapshot.total.tokensOut)
+        setLive({
+          spent: snapshot.byKey.reduce((sum, row) => sum + (row.costUsd ?? 0), 0),
+          tokens: snapshot.total.tokensIn + snapshot.total.tokensOut,
+          sessions: totals.length,
+          warnNotDelegating: spend.warnNotDelegating,
+        })
+      }
     }).catch((e) => { if (active) { setLive(null); setLiveError(e instanceof Error ? e.message : String(e)) } })
     return () => { active = false }
   }, [])
@@ -115,7 +119,12 @@ export default function AnalyticsPanel() {
           <Badge variant="secondary" className="text-[9px]">token &amp; cost</Badge>
           {inTauri() ? (
             live ? (
-              <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">live ledger</Badge>
+              <>
+                <Badge className="bg-emerald-500/15 text-[9px] text-emerald-300">live ledger</Badge>
+                {live.warnNotDelegating && (
+                  <Badge className="bg-warning/15 text-[9px] text-warning">Chief is not delegating</Badge>
+                )}
+              </>
             ) : liveError ? (
               <Badge className="bg-rose-500/15 text-[9px] text-rose-300">ledger unavailable</Badge>
             ) : null

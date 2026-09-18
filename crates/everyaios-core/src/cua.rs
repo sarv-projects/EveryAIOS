@@ -107,6 +107,9 @@ pub struct CuaNode {
     /// P60.5 — five-part brief stored on the node, not implied from the transcript.
     #[serde(default)]
     pub brief: Option<FivePartBrief>,
+    /// P60.10 — fabric letter: a=Office, b=Browse, c=Desktop CUA.
+    #[serde(default)]
+    pub fabric: Option<String>,
 }
 
 impl Default for CuaNode {
@@ -126,6 +129,7 @@ impl Default for CuaNode {
             timeout_s: 0,
             retry: 0,
             brief: None,
+            fabric: None,
         }
     }
 }
@@ -891,6 +895,129 @@ pub fn fuse_perception(layers: &PerceptionLayers) -> Result<SceneGraph, String> 
     })
 }
 
+/// P60.4 — cheapest *reliable* combo. Not “all workers cheap.”
+/// Vision needs VL/frontier. Verify fail escalates one tier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ModelTier {
+    Cheap,
+    Mid,
+    Frontier,
+    Local,
+    Vl,
+}
+
+impl ModelTier {
+    pub fn parse(raw: &str) -> Self {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "mid" => Self::Mid,
+            "frontier" => Self::Frontier,
+            "local" => Self::Local,
+            "vl" | "vision" => Self::Vl,
+            _ => Self::Cheap,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cheap => "cheap",
+            Self::Mid => "mid",
+            Self::Frontier => "frontier",
+            Self::Local => "local",
+            Self::Vl => "vl",
+        }
+    }
+}
+
+pub fn pick_combo(needs_vision: bool, verify_failed: bool, current: ModelTier) -> ModelTier {
+    let mut t = current;
+    if needs_vision && t != ModelTier::Vl && t != ModelTier::Frontier {
+        t = ModelTier::Vl;
+    }
+    if verify_failed {
+        t = match t {
+            ModelTier::Cheap | ModelTier::Local => ModelTier::Mid,
+            ModelTier::Mid | ModelTier::Vl => ModelTier::Frontier,
+            ModelTier::Frontier => ModelTier::Frontier,
+        };
+    }
+    t
+}
+
+/// P60.8 — Case A/B/C. Occupancy stays the Chief (F8); workers may differ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HarnessModelCase {
+    /// Different harness and different model from the Chief.
+    A,
+    /// Same harness and same model as the Chief.
+    B,
+    /// Same harness, different model.
+    C,
+}
+
+pub fn classify_harness_model_case(
+    chief_harness: &str,
+    chief_model: &str,
+    worker_harness: &str,
+    worker_model: &str,
+) -> HarnessModelCase {
+    let same_h = chief_harness
+        .trim()
+        .eq_ignore_ascii_case(worker_harness.trim());
+    let same_m = chief_model.trim().eq_ignore_ascii_case(worker_model.trim());
+    match (same_h, same_m) {
+        (false, _) => HarnessModelCase::A,
+        (true, true) => HarnessModelCase::B,
+        (true, false) => HarnessModelCase::C,
+    }
+}
+
+/// P60.9 — Chief share of run spend. Target < 20%; warn, do not abort.
+pub const CHIEF_SPEND_WARN: f64 = 0.20;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChiefSpend {
+    pub chief_tokens: u64,
+    pub worker_tokens: u64,
+    pub share: f64,
+    pub warn_not_delegating: bool,
+}
+
+pub fn split_chief_spend(chief_tokens: u64, worker_tokens: u64) -> ChiefSpend {
+    let total = chief_tokens.saturating_add(worker_tokens);
+    let share = if total == 0 {
+        0.0
+    } else {
+        chief_tokens as f64 / total as f64
+    };
+    ChiefSpend {
+        chief_tokens,
+        worker_tokens,
+        share,
+        warn_not_delegating: total > 0 && share > CHIEF_SPEND_WARN,
+    }
+}
+
+/// P60.10 — Office/Browse are cheap execution; Desktop CUA is vision-first
+/// perception. Letters a/b/c match spec §4.2.5b.
+pub fn fabric_letter(surface: WorkSurface) -> &'static str {
+    match surface {
+        WorkSurface::Office => "a",
+        WorkSurface::Browse => "b",
+        WorkSurface::Desktop => "c",
+    }
+}
+
+pub fn fabric_is_perception(surface: WorkSurface) -> bool {
+    surface == WorkSurface::Desktop
+}
+
+pub fn apply_fabric(node: &mut CuaNode, surface: WorkSurface) {
+    node.fabric = Some(fabric_letter(surface).into());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1326,5 +1453,62 @@ mod tests {
         };
         let g3 = fuse_perception(&fused).unwrap();
         assert!(g3.structure_augments);
+    }
+
+    #[test]
+    fn p60_pick_combo_not_all_workers_cheap_escalates_on_fail() {
+        assert_eq!(pick_combo(false, false, ModelTier::Cheap), ModelTier::Cheap);
+        assert_eq!(pick_combo(true, false, ModelTier::Cheap), ModelTier::Vl);
+        assert_eq!(pick_combo(false, true, ModelTier::Cheap), ModelTier::Mid);
+        assert_eq!(
+            pick_combo(true, true, ModelTier::Cheap),
+            ModelTier::Frontier
+        );
+        assert_eq!(
+            pick_combo(false, true, ModelTier::Frontier),
+            ModelTier::Frontier
+        );
+    }
+
+    #[test]
+    fn p60_harness_model_cases_abc() {
+        assert_eq!(
+            classify_harness_model_case("inbuilt", "llama", "acp:other", "opus"),
+            HarnessModelCase::A
+        );
+        assert_eq!(
+            classify_harness_model_case("inbuilt", "llama", "inbuilt", "llama"),
+            HarnessModelCase::B
+        );
+        assert_eq!(
+            classify_harness_model_case("inbuilt", "llama", "inbuilt", "vl"),
+            HarnessModelCase::C
+        );
+    }
+
+    #[test]
+    fn p60_chief_spend_warns_above_twenty_percent() {
+        let ok = split_chief_spend(10, 90);
+        assert!((ok.share - 0.10).abs() < 1e-9);
+        assert!(!ok.warn_not_delegating);
+        let warn = split_chief_spend(30, 70);
+        assert!(warn.warn_not_delegating);
+        assert!(!split_chief_spend(0, 0).warn_not_delegating);
+    }
+
+    #[test]
+    fn p60_fabric_office_browse_execution_desktop_perception() {
+        assert_eq!(fabric_letter(WorkSurface::Office), "a");
+        assert_eq!(fabric_letter(WorkSurface::Browse), "b");
+        assert_eq!(fabric_letter(WorkSurface::Desktop), "c");
+        assert!(!fabric_is_perception(WorkSurface::Office));
+        assert!(fabric_is_perception(WorkSurface::Desktop));
+        let mut n = CuaNode {
+            id: "n".into(),
+            postconditions: vec!["x".into()],
+            ..Default::default()
+        };
+        apply_fabric(&mut n, WorkSurface::Desktop);
+        assert_eq!(n.fabric.as_deref(), Some("c"));
     }
 }

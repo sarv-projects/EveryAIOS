@@ -849,13 +849,90 @@ impl ExecutionKernel {
                     .get("chief")
                     .and_then(Value::as_str)
                     .map(str::to_string);
-                let binding = crate::bind_runtime(harness, model, role, chief)?;
+                let binding = crate::bind_runtime(harness, model, role, chief.clone())?;
+                let case = chief.as_deref().map(|c| {
+                    crate::classify_harness_model_case(
+                        c,
+                        params
+                            .get("chiefModel")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        &binding.harness,
+                        &binding.model,
+                    )
+                });
                 Ok(json!({
                     "ok": true,
                     "binding": binding,
                     "planes": crate::RUNTIME_PLANES.len(),
+                    "case": case,
                     "governanceIsPrompt": false,
                     "orchestratorIsLlm": false,
+                }))
+            }
+            "execution/runtime_pick" => {
+                let needs_vision = params
+                    .get("needsVision")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let verify_failed = params
+                    .get("verifyFailed")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let current = crate::ModelTier::parse(
+                    params
+                        .get("tier")
+                        .and_then(Value::as_str)
+                        .unwrap_or("cheap"),
+                );
+                let picked = crate::pick_combo(needs_vision, verify_failed, current);
+                Ok(json!({
+                    "ok": true,
+                    "tier": picked.as_str(),
+                    "notAllWorkersCheap": needs_vision && picked != crate::ModelTier::Cheap,
+                }))
+            }
+            "execution/spend_split" => {
+                let chief = params
+                    .get("chiefTokens")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let worker = params
+                    .get("workerTokens")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let split = crate::split_chief_spend(chief, worker);
+                Ok(json!({ "ok": true, "spend": split }))
+            }
+            "execution/cua_fabric" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_fabric requires root")?;
+                let node_id = params
+                    .get("nodeId")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_fabric requires nodeId")?;
+                let target = params.get("target").and_then(Value::as_str).unwrap_or("");
+                let surface = crate::route_work_surface(target);
+                let dir = std::path::Path::new(root);
+                let mut dag = crate::load_dag(dir)?;
+                let node = dag
+                    .nodes
+                    .iter_mut()
+                    .find(|n| n.id == node_id)
+                    .ok_or_else(|| format!("unknown CUA node {node_id}"))?;
+                crate::apply_fabric(node, surface);
+                crate::persist_dag(dir, &dag)?;
+                Ok(json!({
+                    "ok": true,
+                    "surface": match surface {
+                        crate::WorkSurface::Office => "office",
+                        crate::WorkSurface::Browse => "browse",
+                        crate::WorkSurface::Desktop => "desktop",
+                    },
+                    "fabric": crate::fabric_letter(surface),
+                    "perception": crate::fabric_is_perception(surface),
                 }))
             }
             "execution/cua_perceive" => {
@@ -3182,5 +3259,71 @@ mod tests {
         assert_eq!(ok["scene"]["visionFirst"], true);
         assert_eq!(ok["scene"]["usable"], true);
         assert_eq!(ok["scene"]["structureLying"], true);
+    }
+
+    #[test]
+    fn p60_runtime_pick_and_spend_and_fabric() {
+        let mut k = ExecutionKernel::new();
+        let pick = k
+            .handle(
+                "execution/runtime_pick",
+                &json!({ "needsVision": true, "verifyFailed": false, "tier": "cheap" }),
+            )
+            .unwrap();
+        assert_eq!(pick["tier"], "vl");
+        assert_eq!(pick["notAllWorkersCheap"], true);
+        let spend = k
+            .handle(
+                "execution/spend_split",
+                &json!({ "chiefTokens": 30, "workerTokens": 70 }),
+            )
+            .unwrap();
+        assert_eq!(spend["spend"]["warnNotDelegating"], true);
+        let dir = std::env::temp_dir().join(format!("exec-fabric-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [{
+                        "id": "n1",
+                        "name": "act",
+                        "info": "",
+                        "status": "pending",
+                        "postconditions": ["x"]
+                    }]
+                }
+            }),
+        )
+        .unwrap();
+        let fabric = k
+            .handle(
+                "execution/cua_fabric",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "n1",
+                    "target": "Notepad"
+                }),
+            )
+            .unwrap();
+        assert_eq!(fabric["fabric"], "c");
+        assert_eq!(fabric["perception"], true);
+        let office = k
+            .handle(
+                "execution/cua_fabric",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "n1",
+                    "target": "report.xlsx"
+                }),
+            )
+            .unwrap();
+        assert_eq!(office["fabric"], "a");
+        assert_eq!(office["perception"], false);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

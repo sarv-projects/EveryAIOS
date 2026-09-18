@@ -50,7 +50,8 @@ export interface ChatWireEvent {
     | "planDone"
     | "monitor"
     | "verification"
-    | "citations";
+    | "citations"
+    | "walkthrough";
   streamId?: string;
   latencyMs?: number;
   text?: string;
@@ -103,6 +104,8 @@ export interface ChatWireEvent {
   passed?: boolean | null;
   /** P52.20 — numbered citations from live search hits. */
   citations?: Array<{ index: number; title: string; url: string; snippet?: string; source?: string }>;
+  /** P51.10 — Changes Walkthrough stops from `execution/multirun`. */
+  stops?: unknown[];
 }
 
 /** Pause every scheduled job bound to a chat (delete-session cascade). */

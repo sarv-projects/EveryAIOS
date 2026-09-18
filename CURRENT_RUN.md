@@ -11,7 +11,12 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — P60.1 five-way split + P60.2 perception fusion)**:
+**(Current, 2026-09-18 — P60.4/.8–.11 + P51.10 walkthrough)**:
+- Scope: cheapest reliable combo; harness×model cases A/B/C; Chief spend warn; fabric a/b/c on the node; occupancy = picked Chief; OpenChamber Changes Walkthrough in Progress.
+- Verified: core `p60_` 16/0; coordinator combo/fabric/spend/bind 6/0; UI occupancy/walkthrough/spend 4/0; tsc 0.
+- Not flipped: P65.8 probes, P50.4.3 STT, soak, Windows/mac, post-v1.
+
+**(Previous, 2026-09-18 — P60.1 five-way split + P60.2 perception fusion)**:
 - Scope: five distinct runtime planes (no CLI-named subagent); vision-first scene graph (structure augments, lying tree still usable).
 - Verified: core `p60_` 11/0; `subagent_rpc` 3/0; coordinator runtime-bind/cua-perceive 4/0; tsc 0.
 - Not flipped: P60.4/.8–.11, P65.8, P51.10 UI walkthrough, P50.4.3 STT engine, soak, Windows/mac, post-v1.

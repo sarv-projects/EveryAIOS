@@ -24,11 +24,31 @@ export interface SessionUsage extends UsageRecord {
   sessionId: string;
 }
 
+export interface ChiefSpendView {
+  chiefTokens: number
+  workerTokens: number
+  share: number
+  warnNotDelegating: boolean
+}
+
 export interface UsageSnapshot {
   total: UsageRecord;
   cacheHitRate: number;
   byKey: KeyUsage[];
   bySession: SessionUsage[];
+  chiefSpend?: ChiefSpendView;
+}
+
+/** P60.9 — dashboard warning only; never aborts a turn. */
+export function chiefSpendWarning(chiefTokens: number, workerTokens: number): ChiefSpendView {
+  const total = chiefTokens + workerTokens
+  const share = total === 0 ? 0 : chiefTokens / total
+  return {
+    chiefTokens,
+    workerTokens,
+    share,
+    warnNotDelegating: total > 0 && share > 0.2,
+  }
 }
 
 /** One per-session aggregate row (mirrors the vault's `SessionTotal`). */

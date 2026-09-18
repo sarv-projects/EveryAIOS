@@ -10,6 +10,7 @@ export function runtimeBindFromToolArgs(args: Record<string, unknown>): {
   model: string;
   role?: string;
   chief?: string;
+  chiefModel?: string;
 } | null {
   const model = typeof args.model === "string" ? args.model.trim() : "";
   if (!model) return null;
@@ -17,12 +18,21 @@ export function runtimeBindFromToolArgs(args: Record<string, unknown>): {
     typeof args.harness === "string" && args.harness.trim()
       ? args.harness.trim()
       : "inbuilt";
-  const out: { harness: string; model: string; role?: string; chief?: string } = {
+  const out: {
+    harness: string;
+    model: string;
+    role?: string;
+    chief?: string;
+    chiefModel?: string;
+  } = {
     harness,
     model,
   };
   if (typeof args.role === "string" && args.role.trim()) out.role = args.role.trim();
   if (typeof args.chief === "string" && args.chief.trim()) out.chief = args.chief.trim();
+  if (typeof args.chiefModel === "string" && args.chiefModel.trim()) {
+    out.chiefModel = args.chiefModel.trim();
+  }
   return out;
 }
 

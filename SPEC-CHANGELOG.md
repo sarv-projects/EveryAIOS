@@ -17,6 +17,23 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P60.4/.8–.11 runtime combo + P51.10 Changes Walkthrough
+
+**Category:** implementation. **Flipped:** P60.4, P60.8, P60.9, P60.10, P60.11, P51.10 `[DONE]`. Census **1429 = 1262 done + 167 open**. Capability identity remains **166**.
+
+**Fetched:** OpenChamber Changes Walkthrough — ordered stops that explain, not judge (https://docs.openchamber.dev/walkthrough/). Spec §4.2.5b cheapest reliable combo, Case A/B/C, Chief <20% spend warn, fabric a/b/c, occupancy = picked Chief.
+
+1. `pick_combo` / `execution/runtime_pick` — vision is not cheap; verify-fail escalates.
+2. `classify_harness_model_case` on `execution/runtime_bind`.
+3. `split_chief_spend` on `usage_snapshot.chiefSpend` + Analytics warning badge.
+4. `fabric_letter` a/b/c stored on the node via `execution/cua_fabric`.
+5. `dispatchOccupancy` ignores `DEFAULT_ROUTING`.
+6. `layoutWalkthroughStops` + Progress panel; `chat/walkthrough` from multi-run diffs.
+
+**Verification.** core `p60_` 16/0; coordinator 6/0; UI 4/0; tsc 0.
+
+---
+
 ## 2026-09-18 — P60.1 five-way split + P60.2 vision-first perception fusion
 
 **Category:** implementation. **Flipped:** P60.1, P60.2 `[DONE]`. Census **1429 = 1256 done + 173 open**. Capability identity remains **166**.

@@ -258,6 +258,9 @@ export function handleChatEvent(e: ChatWireEvent): void {
       st.streamStart(sid, e.streamId);
       st.streamCitations(e.citations ?? [], sid, e.streamId);
       break;
+    case "walkthrough":
+      st.streamWalkthrough(e.stops ?? [], sid, e.streamId);
+      break;
     case "done":
       // `fullText` is authoritative even when it is intentionally empty.
       // A falsy check here used to leave empty successful turns stuck in the

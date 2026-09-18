@@ -626,11 +626,23 @@ impl MemoryService {
                 })
             })
             .collect::<Vec<_>>();
+        let mut chief_tokens = 0u64;
+        let mut worker_tokens = 0u64;
+        for (k, r) in self.usage.keys() {
+            let n = r.tokens_in.saturating_add(r.tokens_out);
+            if k.to_ascii_lowercase().contains("chief") {
+                chief_tokens = chief_tokens.saturating_add(n);
+            } else {
+                worker_tokens = worker_tokens.saturating_add(n);
+            }
+        }
+        let spend = crate::split_chief_spend(chief_tokens, worker_tokens);
         json!({
             "total": self.usage.total(),
             "cacheHitRate": self.usage.cache_hit_rate(),
             "byKey": keys,
             "bySession": sessions,
+            "chiefSpend": spend,
         })
     }
 
