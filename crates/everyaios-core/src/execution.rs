@@ -788,6 +788,80 @@ impl ExecutionKernel {
                     "status": format!("{:?}", dag.nodes.iter().find(|n| n.id == node_id).map(|n| n.status)),
                 }))
             }
+            // P60.6 — independent mechanical verify. Worker claim is ignored.
+            "execution/cua_verify" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_verify requires root")?;
+                let node_id = params
+                    .get("nodeId")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_verify requires nodeId")?;
+                let worker_claimed = params
+                    .get("workerClaimed")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let evidence: crate::MechanicalEvidence = params
+                    .get("evidence")
+                    .cloned()
+                    .map(|v| serde_json::from_value(v).unwrap_or_default())
+                    .unwrap_or_default();
+                let dir = std::path::Path::new(root);
+                let mut dag = crate::load_dag(dir)?;
+                let node = dag
+                    .nodes
+                    .iter_mut()
+                    .find(|n| n.id == node_id)
+                    .ok_or_else(|| format!("unknown CUA node {node_id}"))?;
+                let verdict = crate::apply_mechanical_verify(node, worker_claimed, &evidence);
+                if verdict == crate::MechanicalVerdict::Refuted
+                    && node.status == crate::CuaNodeStatus::Halted
+                {
+                    crate::append_replan_log(dir, dag.replan_seq, "mechanical-refute-halt")?;
+                }
+                crate::persist_dag(dir, &dag)?;
+                Ok(json!({
+                    "ok": verdict == crate::MechanicalVerdict::Verified,
+                    "verdict": match verdict {
+                        crate::MechanicalVerdict::Verified => "verified",
+                        crate::MechanicalVerdict::Refuted => "refuted",
+                        crate::MechanicalVerdict::Sampled => "sampled",
+                    },
+                    "workerClaimIgnored": true,
+                    "status": format!("{:?}", dag.nodes.iter().find(|n| n.id == node_id).map(|n| n.status)),
+                }))
+            }
+            "execution/cua_stop" => {
+                let root = params
+                    .get("root")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_stop requires root")?;
+                let node_id = params
+                    .get("nodeId")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/cua_stop requires nodeId")?;
+                let reason = params
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .unwrap_or("failed");
+                let dir = std::path::Path::new(root);
+                let mut dag = crate::load_dag(dir)?;
+                let node = dag
+                    .nodes
+                    .iter_mut()
+                    .find(|n| n.id == node_id)
+                    .ok_or_else(|| format!("unknown CUA node {node_id}"))?;
+                let reclaim = crate::apply_node_stop(node, reason);
+                crate::persist_dag(dir, &dag)?;
+                Ok(json!({
+                    "ok": true,
+                    "blocked": crate::stop_is_blocked(reason),
+                    "reclaim": reclaim,
+                    "failCount": dag.nodes.iter().find(|n| n.id == node_id).map(|n| n.fail_count),
+                    "status": format!("{:?}", dag.nodes.iter().find(|n| n.id == node_id).map(|n| n.status)),
+                }))
+            }
             // P59.7 — Manager remaining-node rewrite. Planner JSON is injected
             // (no LLM in this crate). Verified stay; empty postconditions and
             // ticket/skipGuard payloads refuse. Clicks still ticket via tool/exec.
@@ -2874,6 +2948,142 @@ mod tests {
             .unwrap();
         assert_eq!(ok["ok"], true);
         assert_eq!(ok["dag"]["nodes"][0]["brief"]["goal"], "map the repo");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p60_cua_verify_refutes_worker_claim_when_disk_disagrees() {
+        let dir = std::env::temp_dir().join(format!("exec-cua-verify-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let record = dir.join("record.txt");
+        std::fs::write(&record, "banner-ok disk-empty").unwrap();
+        let mut k = ExecutionKernel::new();
+        k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [{
+                        "id": "save",
+                        "name": "save",
+                        "info": "",
+                        "status": "pending",
+                        "postconditions": ["committed"]
+                    }]
+                }
+            }),
+        )
+        .unwrap();
+        let refute = k
+            .handle(
+                "execution/cua_verify",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "save",
+                    "workerClaimed": true,
+                    "evidence": {
+                        "kind": "file-contains",
+                        "path": record.to_string_lossy(),
+                        "expect": "committed"
+                    }
+                }),
+            )
+            .unwrap();
+        assert_eq!(refute["verdict"], "refuted");
+        assert_eq!(refute["ok"], false);
+        assert_eq!(refute["workerClaimIgnored"], true);
+        std::fs::write(&record, "committed").unwrap();
+        let pass = k
+            .handle(
+                "execution/cua_verify",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "save",
+                    "workerClaimed": false,
+                    "evidence": {
+                        "kind": "file-contains",
+                        "path": record.to_string_lossy(),
+                        "expect": "committed"
+                    }
+                }),
+            )
+            .unwrap();
+        assert_eq!(pass["verdict"], "verified");
+        assert_eq!(pass["ok"], true);
+        let sampled = k
+            .handle(
+                "execution/cua_verify",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "save",
+                    "workerClaimed": true,
+                    "evidence": { "kind": "none" }
+                }),
+            )
+            .unwrap();
+        assert_eq!(sampled["verdict"], "sampled");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p60_cua_stop_blocked_does_not_increment_fail_count() {
+        let dir = std::env::temp_dir().join(format!("exec-cua-stop-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut k = ExecutionKernel::new();
+        k.handle(
+            "execution/cua_persist",
+            &json!({
+                "root": dir.to_string_lossy(),
+                "dag": {
+                    "run_id": "r",
+                    "work_id": "w",
+                    "replan_seq": 0,
+                    "nodes": [{
+                        "id": "n1",
+                        "name": "act",
+                        "info": "",
+                        "status": "pending",
+                        "postconditions": ["x"]
+                    }]
+                }
+            }),
+        )
+        .unwrap();
+        let blocked = k
+            .handle(
+                "execution/cua_stop",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "n1",
+                    "reason": "permission"
+                }),
+            )
+            .unwrap();
+        assert_eq!(blocked["blocked"], true);
+        assert_eq!(blocked["reclaim"], false);
+        assert_eq!(blocked["failCount"], 0);
+        for _ in 0..3 {
+            k.handle(
+                "execution/cua_stop",
+                &json!({
+                    "root": dir.to_string_lossy(),
+                    "nodeId": "n1",
+                    "reason": "failed"
+                }),
+            )
+            .unwrap();
+        }
+        let last = k
+            .handle(
+                "execution/cua_get",
+                &json!({ "root": dir.to_string_lossy() }),
+            )
+            .unwrap();
+        assert_eq!(last["dag"]["nodes"][0]["fail_count"], 3);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

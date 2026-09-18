@@ -11,7 +11,12 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — P60.5 five-part brief)**:
+**(Current, 2026-09-18 — P60.6 mechanical verify + P60.7 BLOCKED≠FAILED)**:
+- Scope: independent disk/command verify (Worker claim ignored); permission/missing-info is Blocked and does not burn fail budget; FAILED×3 reclaims.
+- Verified: core `p60_` 7/0; coordinator cua-verify/cua-stop 4/0; tsc 0.
+- Not flipped: P60.1/.2/.4/.8–.11, P65.8, packaged E2E, soak, Windows/mac, post-v1.
+
+**(Previous, 2026-09-18 — P60.5 five-part brief)**:
 - Scope: Chief writes a complete five-part brief onto the CUA node (`execution/cua_set_brief`); incomplete briefs refuse.
 - Verified: core `p60_` 3/0; coordinator cua-brief 2/0; tsc 0.
 - Not flipped: remaining P60 engine rows, P65.8, packaged E2E, soak, Windows/mac, post-v1.

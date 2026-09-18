@@ -17,6 +17,20 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P60.6 mechanical verify + P60.7 BLOCKED ≠ FAILED
+
+**Category:** implementation. **Flipped:** P60.6, P60.7 `[DONE]`. Census **1429 = 1254 done + 175 open**. Capability identity remains **166**.
+
+**Fetched:** OpenAdapt — VERIFIED only if an independent system-of-record read agrees; `quickstart --break-it` is the banner-lies case. Never summarize halt as success. Spec §4.2.5b: mechanical first; sampling if no verifier; disk is truth.
+
+1. `mechanical_verify` ignores the Worker claim; file/command evidence decides. No evidence → Sampled (not Verified). Close-read refused above 4096 bytes.
+2. Live: coordinator `applyCuaMechanicalVerifyIfPresent` → `execution/cua_verify`. `desktop.act` does not stamp Verified from `verifyOk` when evidence is present.
+3. `apply_node_stop`: permission/missing-info → Blocked (`fail_count` unchanged). FAILED ×3 → Halted (Chief reclaims). Live: `execution/cua_stop`.
+
+**Verification.** core `p60_` 7/0; coordinator `cua-verify`/`cua-stop` 4/0; tsc 0.
+
+---
+
 ## 2026-09-18 — P60.5 five-part brief on the CUA node
 
 **Category:** implementation. **Flipped:** P60.5 `[DONE]`. Census **1429 = 1252 done + 177 open**. Capability identity remains **166**.

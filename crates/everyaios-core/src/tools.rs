@@ -1551,11 +1551,17 @@ impl ToolService {
                     .and_then(Value::as_u64)
                     .unwrap_or(0) as u32;
                 let outcome = crate::worker_step(verify_ok, fails);
+                let has_evidence =
+                    args.get("verifyPath").is_some() || args.get("evidence").is_some();
                 if let Some(root) = args.get("cuaRoot").and_then(Value::as_str) {
                     if let Some(node_id) = args.get("nodeId").and_then(Value::as_str) {
                         if let Ok(mut dag) = crate::load_dag(std::path::Path::new(root)) {
                             if let Some(node) = dag.nodes.iter_mut().find(|n| n.id == node_id) {
-                                crate::apply_worker_act(node, verify_ok);
+                                // P60.6 — when independent evidence is present, do not
+                                // stamp Verified from the Worker/banner claim.
+                                if !has_evidence {
+                                    crate::apply_worker_act(node, verify_ok);
+                                }
                             }
                             let _ = crate::persist_dag(std::path::Path::new(root), &dag);
                         }
