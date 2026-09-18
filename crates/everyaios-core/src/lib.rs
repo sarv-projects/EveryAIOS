@@ -124,11 +124,12 @@ pub use everyaios_mcp::ExternalTool;
 pub use execution::Work as Execution;
 pub use execution::{
     auto_checkpoint_kernel, check_restore_fence, commit_workspace_snapshot,
-    decide_shadow_preflight, plan_subagent_worktree, run_shadow_command,
+    decide_shadow_preflight, parse_shadow_candidate, plan_subagent_worktree, run_shadow_command,
     should_restore_without_replay, spawn_shadow_command_tracked, truncate_to_50k, ExecutionKernel,
     ExecutionPhase, ExecutionTrigger, ForkLineage, PendingApproval, PreflightDecision,
-    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest, ShadowCheckOutput,
-    StepCheckpointMeta, SubagentProvision, Work, P64_MAX_OUTPUT_BYTES, P64_MAX_SUBAGENT_DEPTH,
+    ProjectedMessage, RepairClassification, RepairPlanItem, RuntimeManifest, ShadowCandidateFile,
+    ShadowCheckOutput, StepCheckpointMeta, SubagentProvision, Work, P64_MAX_OUTPUT_BYTES,
+    P64_MAX_SUBAGENT_DEPTH,
 };
 pub use export::{
     render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,

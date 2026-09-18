@@ -556,6 +556,7 @@ export class ToolExecutor {
     filesChanged: number
     structural?: boolean
     destructive?: boolean
+    candidateFiles?: Array<{ path: string; content: string }>
   }): Promise<ShadowPreflightResult> {
     const id = this.executionId
     if (id === undefined) {
@@ -568,6 +569,7 @@ export class ToolExecutor {
         filesChanged: input.filesChanged,
         structural: input.structural === true,
         destructive: input.destructive === true,
+        ...(input.candidateFiles !== undefined ? { candidateFiles: input.candidateFiles } : {}),
       })) as Partial<ShadowPreflightResult> | null
       if (raw === null || typeof raw !== "object") {
         return {
@@ -1170,10 +1172,25 @@ export function assertSingleMatch(content: string, target: string): void {
  * for the write, then commits the spliced content via the standard
  * `file_ops.write` Guard-2 path. Returns the commit payload.
  */
+export interface ApplyExactEditOptions {
+  /**
+   * P64.6 — the caller's own risk read for the gate. Omitted defaults to a
+   * small single-file `local-write`, which per the contract verifies *after*
+   * the commit and earns no preflight. Only a caller that can actually see the
+   * edit is structural or destructive should set these; they are an input to
+   * Rust's gate, never a way to bypass it (Rust decides).
+   */
+  structural?: boolean
+  destructive?: boolean
+  /** Shadow tree the check runs in. Defaults to the workspace root (`.`). */
+  root?: string
+}
+
 export async function applyExactEdit(
   executor: ToolExecutor,
   params: ExactEditParams,
   ctx: { sessionId: string; agentId?: string } = { sessionId: "default" },
+  opts: ApplyExactEditOptions = {},
 ): Promise<unknown> {
   const path = params.path.trim();
   if (path.length === 0) throw new Error("edit path is empty — fail-closed");
@@ -1189,6 +1206,22 @@ export async function applyExactEdit(
         : JSON.stringify(read ?? "");
   assertSingleMatch(content, params.target);
   const next = content.replace(params.target, params.replacement);
+  // P64.6 — the proposed post-state is fully known here, so it is the one place
+  // this path can hand a real candidate to the shadow preflight: Rust decides
+  // whether the gate fires, stages the candidate into an isolated tree, runs the
+  // project's own declared check there, and returns the verdict. A verdict that
+  // ran and failed refuses the write; `verified: false` (could not run) is
+  // reported as no evidence and never blocks — see `preflightBlocks`.
+  const preflight = await executor.runShadowPreflight({
+    root: opts.root ?? ".",
+    filesChanged: 1,
+    structural: opts.structural === true,
+    destructive: opts.destructive === true,
+    candidateFiles: [{ path, content: next }],
+  });
+  if (preflightBlocks(preflight)) {
+    throw new Error(`edit refused: shadow preflight failed (${preflight.reason})`);
+  }
   const written = await executor.executeTool("file_ops.write", { path, content: next }, ctx);
   // P64.5 — the edit ladder's outcome belongs on the Work timeline. The
   // strategy is `exact` because this path only ever applies a single-occurrence

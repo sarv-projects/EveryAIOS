@@ -17,6 +17,25 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P64.6: the shadow preflight checks the candidate, not the tree
+
+**Category:** implementation; no capability rows added, **no checkbox flipped** (P64.6 stays `[PARTIAL]`). **Affected:** `crates/everyaios-core/src/execution.rs` (candidate staging + `parse_shadow_candidate` + `ShadowCandidateFile`), `crates/everyaios-core/src/lib.rs` (re-exports), `packages/coordinator/src/tools.ts` (`candidateFiles` on `runShadowPreflight`; `applyExactEdit` preflight gate), `packages/coordinator/src/p64-lane.test.ts`, `TODO.md` P64.6. Capability identity remains **166**; live TODO count remains **1429 = 1221 done + 208 open**.
+
+**Decisions & Implementation.** The 2026-09-17 entry below records P64.6 as *"applying the candidate to the shadow worktree **before** checking (so the check sees the proposed change, not the pre-existing tree) is the remaining piece."* That was accurate on its date and is not rewritten here; this entry supersedes it. Two things were wrong with the preflight as it stood: it typechecked **the live tree it was pointed at** (so a proposed-but-not-yet-applied change was invisible to it), and nothing in the coordinator ever called it.
+
+1. **`candidateFiles` is staged before the check runs.** `execution/preflight` accepts `candidateFiles: [{path, content}]`. Staging prefers `git worktree add --detach` (a checkout gets the full tree cheaply); a non-git root gets a bounded temp overlay of the candidate plus the manifest/lockfile copies, so `discover_shadow_checks` still fires. The **live root is never written** — that is what makes the verdict an assertion about the proposal.
+2. **Cleanup is unconditional and never upgrades a verdict.** The shadow is removed on every path (`git worktree remove --force` with a plain-delete fallback, or temp-dir delete). A cleanup failure is appended to `reason`; it cannot turn a failure into a pass.
+3. **Parsing is fail-closed and the caps are real.** `parse_shadow_candidate` refuses more than 32 files, absolute paths, any `..` component, and >512 KiB per file. A refused candidate reports `verified:false` with **no receipt** — the same rule as an undiscoverable check, because a receipt is what the rollback path trusts.
+4. **An empty candidate preserves the old behaviour.** `run_preflight` still exists as a thin wrapper, so the existing single-file callers and their tests are unaffected.
+5. **`applyExactEdit` is now a real call site.** It computes the post-state of an exact edit, and where it does so it runs the preflight with `candidateFiles: [{path, content: next}]` **before** the mutating `tool/commit`, refusing the write when `preflightBlocks` is true. An unrunnable preflight (`verified:false`) stays *no evidence* and never blocks, which is the distinction the preflight contract exists to protect. Whether the gate fires is still Rust's decision — `structural`/`destructive` are inputs to `decide_shadow_preflight`, never a way for a caller to bypass it.
+
+**Verification.** `everyaios-core` `cargo test --lib` **707 passed / 0 failed** (25 in `execution`, including the new `p64_shadow_preflight_checks_the_candidate_not_the_tree`, which stages a `broken` and a `fixed` candidate and asserts a failing verdict, a passing verdict, and that the live root never received the staged file); `cargo clippy -p everyaios-core --all-targets -- -D warnings` exit 0; `cargo fmt -p everyaios-core -- --check` clean. Coordinator `bun test` **397 passed / 0 failed / 1299 expect() calls** across 45 files with `npx tsc --noEmit` exit 0, including three new `p64-lane.test.ts` cases (a failing candidate refuses the write before the mutating commit, a passing one lets it through, an unrunnable one never blocks). `check-doc-sync.mjs` exit 0 (166 in sync, 1429 = 1221 + 208); `ipc-parity.mjs` exit 0.
+
+**Not verified — explicit.** No **model-facing** caller declares an edit multi-file / structural / destructive yet, so a preflight is still earned only when a coordinator caller passes those flags; exposing that judgement as a first-class apply path is what remains, and it is why P64.6's checkbox stays open. The `structural`/`destructive` flags were deliberately **not** added to a model-visible tool schema — a model-supplied risk flag would let the model lower its own gate. Candidate staging was exercised on Linux only; a Windows `git` path and the LibreOffice/native-toolchain legs are untested here.
+
+---
+
+
 
 ## 2026-09-17 — P54.5: the coordinator↔PTY seam landed (agent shell reachable + plane observable)
 
