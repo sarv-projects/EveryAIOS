@@ -16,6 +16,10 @@ import {
   mcpAttachRequest,
   mcpAttachCommit,
   mcpDetach,
+  mcpStop,
+  mcpStart,
+  mcpSetAutostart,
+  mcpRefresh,
   mcpCatalog,
   mcpServers,
   mcpExternalTools,
@@ -260,7 +264,8 @@ export default function ConnectorsPanel() {
   const refreshMcp = async () => {
     setMcpError(null)
     try {
-      setMcpList(await mcpServers())
+      const refreshed = await mcpRefresh()
+      setMcpList(refreshed.servers)
       setExternal(await mcpExternalTools())
     } catch (e) {
       // Fail-closed: keep the last good list, surface the failure.
@@ -747,34 +752,104 @@ export default function ConnectorsPanel() {
                             connected
                           </Badge>
                           {s.transport !== 'native' && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
+                                onClick={() => void (async () => {
+                                  try {
+                                    await mcpStop(s.name)
+                                    notify(`MCP: stopped “${s.name}” (identity kept)`)
+                                    await refreshMcp()
+                                  } catch (e) {
+                                    notify(`MCP stop failed: ${String(e)}`)
+                                  }
+                                })()}
+                              >
+                                Stop
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
+                                onClick={() => void (async () => {
+                                  try {
+                                    await mcpDetach(s.name)
+                                    notify(`MCP: detached “${s.name}”`)
+                                    await refreshMcp()
+                                  } catch (e) {
+                                    notify(`MCP detach failed: ${String(e)}`)
+                                  }
+                                })()}
+                              >
+                                Detach
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      ) : s.transport !== 'native' ? (
+                        <div className="flex items-center gap-1.5">
+                          {s.command ? (
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
+                              className="h-7 border-brand/40 text-[10px] text-brand hover:bg-brand/10"
                               onClick={() => void (async () => {
                                 try {
-                                  await mcpDetach(s.name)
-                                  notify(`MCP: detached “${s.name}”`)
+                                  await mcpStart(s.name)
+                                  notify(`MCP: started “${s.name}”`)
                                   await refreshMcp()
                                 } catch (e) {
-                                  notify(`MCP detach failed: ${String(e)}`)
+                                  notify(`MCP start failed: ${String(e)}`)
                                 }
                               })()}
                             >
-                              Detach
+                              Start
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 border-brand/40 text-[10px] text-brand hover:bg-brand/10"
+                              onClick={() => notify(`Connect ${s.name} — use the attach form above`)}
+                            >
+                              Connect
                             </Button>
                           )}
+                          <label className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={s.autoStart !== false}
+                              onChange={(ev) => void (async () => {
+                                try {
+                                  await mcpSetAutostart(s.name, ev.target.checked)
+                                  await refreshMcp()
+                                } catch (e) {
+                                  notify(`MCP autoStart failed: ${String(e)}`)
+                                }
+                              })()}
+                            />
+                            autoStart
+                          </label>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
+                            onClick={() => void (async () => {
+                              try {
+                                await mcpDetach(s.name)
+                                notify(`MCP: detached “${s.name}”`)
+                                await refreshMcp()
+                              } catch (e) {
+                                notify(`MCP detach failed: ${String(e)}`)
+                              }
+                            })()}
+                          >
+                            Detach
+                          </Button>
                         </div>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 border-brand/40 text-[10px] text-brand hover:bg-brand/10"
-                          onClick={() => notify(`Connect ${s.name} — use the attach form above`)}
-                        >
-                          Connect
-                        </Button>
-                      )}
+                      ) : null}
                     </li>
                   )
                 })}

@@ -798,7 +798,7 @@ pub fn run() {
             battery: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             browser: Mutex::new(None),
 
-            mcp_servers: Mutex::new(mcp_cmds::load_attached_servers()),
+            mcp_servers: Arc::new(Mutex::new(mcp_cmds::load_attached_servers())),
             mcp_live: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_remote_flows: Arc::new(Mutex::new(std::collections::HashMap::new())),
             mcp_remote_tokens: Arc::new(Mutex::new(std::collections::HashMap::new())),

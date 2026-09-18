@@ -17,6 +17,18 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P51.28 skill invocation flags + P51.18 MCP autoStart/Start/Stop
+
+**Category:** implementation. **Flipped:** P51.28, P51.18 `[DONE]`. Census **1429 = 1264 done + 165 open**. Capability identity remains **166**.
+
+**Fetched:** Zed `crates/agent_skills/README.md` (`disable-model-invocation` hides from the model catalog; slash still works). AnythingLLM MCP docker docs (Start/Stop without app restart; `anythingllm.autoStart: false` skips automatic start; Stop is not Delete).
+
+1. `compose_stack_for` / `skill/warm_set` / `memory/plan.learnedSkills` omit model-disabled skills; coordinator injects `<skill_warm_set>` from that list.
+2. MCP identity persists `command`/`args`/`autoStart`/`stopped`. `mcp_stop` keeps the row; `mcp_start` respawns; first `tools/call` lazy-starts only if allowed; Connectors Start/Stop/autoStart.
+
+**Verification.** blueprint `p51_disable_model_invocation` 1/0; core `skill_rpc` 2/0; src-tauri `p51_stop_keeps` 1/0; coordinator skill-warm+chat 34/0; UI skills-surfaces 2/0; tsc 0; ipc-parity 0 broken.
+
+---
 ## 2026-09-18 — P60.4/.8–.11 runtime combo + P51.10 Changes Walkthrough
 
 **Category:** implementation. **Flipped:** P60.4, P60.8, P60.9, P60.10, P60.11, P51.10 `[DONE]`. Census **1429 = 1262 done + 167 open**. Capability identity remains **166**.

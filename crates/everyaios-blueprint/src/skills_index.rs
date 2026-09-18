@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// One row of the discovery index.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct IndexEntry {
     pub name: String,
     pub description: String,
@@ -20,6 +20,12 @@ pub struct IndexEntry {
     pub author: String,
     #[serde(default)]
     pub version: String,
+    /// P51.28 — Crush/Zed: listed as a user slash command.
+    #[serde(default)]
+    pub user_invocable: bool,
+    /// P51.28 — model must not auto-select; user `/name` still works.
+    #[serde(default)]
+    pub disable_model_invocation: bool,
 }
 
 impl From<&SkillManifest> for IndexEntry {
@@ -30,6 +36,8 @@ impl From<&SkillManifest> for IndexEntry {
             tags: m.triggers.clone(),
             author: m.author.clone(),
             version: m.version.clone(),
+            user_invocable: m.user_invocable,
+            disable_model_invocation: m.disable_model_invocation,
         }
     }
 }
@@ -109,6 +117,8 @@ pub enum RejectionReason {
     Duplicate,
     /// Conflicts with another selected skill (declared tags collide).
     Conflict { with: String },
+    /// P51.28 — `disable-model-invocation: true`; only an explicit user invoke.
+    ModelInvocationDisabled,
 }
 
 /// The result of a compose-stack validation. Read-only — the caller decides
@@ -130,11 +140,30 @@ impl ComposeOutcome {
 /// Validate a proposed stack of skill names against the index, emitting
 /// selection evidence. Pure: no store writes, no installs. `active` is the
 /// set of skills already loaded this session (for the idempotence flag).
+/// Who is asking for the skill this turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvokeKind {
+    /// Model auto-select from the catalog.
+    ModelAuto,
+    /// User typed `/skill-name` or an equivalent explicit invoke.
+    UserExplicit,
+}
+
 pub fn compose_stack(
     index: &SkillsIndexFile,
     stack: &[String],
     active: &[String],
     query: &str,
+) -> ComposeOutcome {
+    compose_stack_for(index, stack, active, query, InvokeKind::ModelAuto)
+}
+
+pub fn compose_stack_for(
+    index: &SkillsIndexFile,
+    stack: &[String],
+    active: &[String],
+    query: &str,
+    invoke: InvokeKind,
 ) -> ComposeOutcome {
     let mut outcome = ComposeOutcome::default();
     let mut seen: Vec<&str> = Vec::new();
@@ -152,6 +181,12 @@ pub fn compose_stack(
                 .push((name.clone(), RejectionReason::Unknown));
             continue;
         };
+        if invoke == InvokeKind::ModelAuto && entry.disable_model_invocation {
+            outcome
+                .rejected
+                .push((name.clone(), RejectionReason::ModelInvocationDisabled));
+            continue;
+        }
         // Conflict check: a selected skill whose tags collide with an
         // already-selected one is rejected (deterministic, first-wins).
         if let Some(other) = entry.tags.iter().find_map(|t| {
@@ -226,6 +261,36 @@ fn matched_signal(entry: &IndexEntry, query: &str) -> String {
     "explicit request".into()
 }
 
+/// P51.28 — model auto-catalog omits `disable-model-invocation` skills.
+pub fn may_model_auto_invoke(m: &SkillManifest) -> bool {
+    !m.disable_model_invocation
+}
+
+/// P51.28 — slash/picker listing.
+/// Crush: `user-invocable: true`. Zed: `disable-model-invocation` skills
+/// remain slash commands (the only way to run them).
+pub fn may_user_slash_invoke(m: &SkillManifest) -> bool {
+    m.user_invocable || m.disable_model_invocation
+}
+
+/// Warm-set lines for the model prompt. Disabled-model skills stay out.
+pub fn model_warm_set(skills: &[Skill]) -> Vec<String> {
+    skills
+        .iter()
+        .filter(|s| may_model_auto_invoke(&s.manifest))
+        .map(|s| format!("{}: {}", s.manifest.name, s.manifest.description))
+        .collect()
+}
+
+/// Names the user can invoke as `/skill-name`.
+pub fn user_slash_catalog(skills: &[Skill]) -> Vec<String> {
+    skills
+        .iter()
+        .filter(|s| may_user_slash_invoke(&s.manifest))
+        .map(|s| s.manifest.name.clone())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,6 +304,7 @@ mod tests {
                 tags: vec!["refactor".into(), "rename".into()],
                 author: "tester".into(),
                 version: "1.0.0".into(),
+                ..Default::default()
             },
             IndexEntry {
                 name: "data-cleanup".into(),
@@ -246,6 +312,7 @@ mod tests {
                 tags: vec!["cleanup".into()],
                 author: "a".into(),
                 version: "1.0.0".into(),
+                ..Default::default()
             },
         ])
     }
@@ -297,6 +364,7 @@ mod tests {
                 tags: vec!["refactor".into()],
                 author: "a".into(),
                 version: "1".into(),
+                ..Default::default()
             },
             IndexEntry {
                 name: "b".into(),
@@ -304,12 +372,76 @@ mod tests {
                 tags: vec!["refactor".into()],
                 author: "a".into(),
                 version: "1".into(),
+                ..Default::default()
             },
         ]);
         let out = compose_stack(&clash, &["a".into(), "b".into()], &[], "refactor");
         assert!(out
             .rejected
             .contains(&("b".into(), RejectionReason::Conflict { with: "a".into() })));
+    }
+
+    #[test]
+    fn p51_disable_model_invocation_is_user_only() {
+        let idx = SkillsIndexFile::new(vec![IndexEntry {
+            name: "deploy".into(),
+            description: "Deploy the branch".into(),
+            disable_model_invocation: true,
+            user_invocable: true,
+            ..Default::default()
+        }]);
+        let auto = compose_stack(&idx, &["deploy".into()], &[], "deploy");
+        assert!(auto
+            .rejected
+            .iter()
+            .any(|(_, r)| { matches!(r, RejectionReason::ModelInvocationDisabled) }));
+        let user = compose_stack_for(
+            &idx,
+            &["deploy".into()],
+            &[],
+            "deploy",
+            InvokeKind::UserExplicit,
+        );
+        assert!(user.is_valid());
+        assert_eq!(user.selected[0].name, "deploy");
+        let m = SkillManifest {
+            name: "deploy".into(),
+            description: "d".into(),
+            disable_model_invocation: true,
+            user_invocable: true,
+            author: "t".into(),
+            created: "2026-09-18".into(),
+            version: "1".into(),
+            ..Default::default()
+        };
+        assert!(!may_model_auto_invoke(&m));
+        assert!(may_user_slash_invoke(&m));
+        // Zed: a deploy skill with only disable-model-invocation is still `/deploy`.
+        let deploy_only = SkillManifest {
+            name: "deploy".into(),
+            disable_model_invocation: true,
+            user_invocable: false,
+            ..Default::default()
+        };
+        assert!(may_user_slash_invoke(&deploy_only));
+        let auto_skill = Skill {
+            manifest: SkillManifest {
+                name: "notes".into(),
+                description: "Take notes".into(),
+                ..Default::default()
+            },
+            body: String::new(),
+        };
+        let hidden = Skill {
+            manifest: deploy_only.clone(),
+            body: String::new(),
+        };
+        let warm = model_warm_set(&[auto_skill.clone(), hidden.clone()]);
+        assert_eq!(warm, vec!["notes: Take notes".to_string()]);
+        assert_eq!(
+            user_slash_catalog(&[auto_skill, hidden]),
+            vec!["deploy".to_string()]
+        );
     }
 
     #[test]

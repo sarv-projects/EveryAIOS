@@ -29,7 +29,7 @@ pub const MAX_ACTIVE_SKILLS: usize = 20;
 pub const SKILL_MAX_LINES: usize = 500;
 
 /// SKILL.md frontmatter + ownership + body.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct SkillManifest {
     pub name: String,
     pub description: String,
@@ -58,15 +58,14 @@ pub struct SkillManifest {
     pub author: String,
     pub created: String,
     pub version: String,
-    /// P51.28 — user-invocable: the skill is listed in the user's skill
-    /// picker and can be invoked by the human directly. Default false
-    /// (model-selected skills are not automatically user-invocable).
+    /// P51.28 — Crush: listed as a user slash command when true.
+    /// Zed does not hide skills from the user; `disable-model-invocation`
+    /// skills are still slash-invocable even when this is false.
     #[serde(default)]
     pub user_invocable: bool,
-    /// P51.28 — disable-model-invocation: the model must never auto-select
-    /// this skill (human-only surface). The compose stack refuses it with
-    /// [`RejectionReason::ModelInvocationDisabled`]; only an explicit user
-    /// invocation may use it.
+    /// P51.28 — Zed/Crush: hide from the model's catalog. The user can
+    /// still type `/name`. Compose refuses model-auto with
+    /// [`RejectionReason::ModelInvocationDisabled`].
     #[serde(default)]
     pub disable_model_invocation: bool,
 }
@@ -183,6 +182,12 @@ impl Skill {
         out.push_str(&format!("author: {}\n", self.manifest.author));
         out.push_str(&format!("created: {}\n", self.manifest.created));
         out.push_str(&format!("version: {}\n", self.manifest.version));
+        if self.manifest.user_invocable {
+            out.push_str("user-invocable: true\n");
+        }
+        if self.manifest.disable_model_invocation {
+            out.push_str("disable-model-invocation: true\n");
+        }
         out.push_str("---\n");
         out.push_str(&self.body);
         if !self.body.ends_with('\n') {

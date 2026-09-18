@@ -93,7 +93,9 @@ pub use skill_store::{
     MAX_ACTIVE_SKILLS, SKILL_MAX_LINES,
 };
 pub use skills_index::{
-    compose_stack, ComposeOutcome, IndexEntry, RejectionReason, SelectionEvidence, SkillsIndexFile,
+    compose_stack, compose_stack_for, may_model_auto_invoke, may_user_slash_invoke, model_warm_set,
+    user_slash_catalog, ComposeOutcome, IndexEntry, InvokeKind, RejectionReason, SelectionEvidence,
+    SkillsIndexFile,
 };
 pub use spec::{SpecError, TaskSpec};
 pub use subagent::{
