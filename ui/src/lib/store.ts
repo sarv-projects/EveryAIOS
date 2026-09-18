@@ -21,6 +21,7 @@ import {
 import type { ComposerRole, PermissionMode } from './ui-prefs'
 import type { WorkAddress, WorkEventEnvelope, WorkPresence } from './work'
 import type { SessionCapabilityLoadout } from './capabilities'
+import { layoutWalkthroughStops, type WalkthroughStop } from './walkthrough'
 
 // === Types ============================================================
 
@@ -939,6 +940,9 @@ interface AppState {
   workItems: WorkAddress[]
   workPresence?: WorkPresence
   workEvents: WorkEventEnvelope[]
+  /** P51.10 — Changes Walkthrough stops from `chat/walkthrough`. */
+  walkthroughStops: WalkthroughStop[]
+  streamWalkthrough: (stops: unknown[], sessionId?: string, streamId?: string) => void
   setWorkProjection: (items: WorkAddress[], presence?: WorkPresence, events?: WorkEventEnvelope[]) => void
   /** P51.8 — Chat/Cowork lens. Cowork mode folds the live Work Gateway
    * projection (agent cards) into the chat column instead of hiding it in
@@ -1382,6 +1386,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessions: inTauri() ? [] : mockSessions,
   workItems: [],
   workEvents: [],
+  walkthroughStops: [],
   setWorkProjection: (items, presence, events = []) => set({ workItems: items, workPresence: presence, workEvents: events }),
   coworkMode: false,
   setCoworkMode: (on) => set({ coworkMode: on }),
@@ -2493,6 +2498,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...m,
       citations: [...(m.citations ?? []), ...citations],
     }), sid)
+  },
+  streamWalkthrough: (stops) => {
+    set({
+      walkthroughStops: layoutWalkthroughStops(
+        (Array.isArray(stops) ? stops : []) as Array<{
+          seq?: number
+          path?: string
+          hunk?: string
+          narrative?: string
+        }>,
+      ),
+    })
   },
   streamToolCall: (toolId, args, risk, sessionId?, streamId?) => {
     const sid = streamSessionId(sessionId)

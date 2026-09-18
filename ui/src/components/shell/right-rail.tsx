@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAppStore, type ViewId } from '@/lib/store'
 import { AGENT_MAP } from '@/lib/agents'
+import { dispatchOccupancy } from '@/lib/occupancy'
 import { inTauri } from '@/lib/tauri'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -205,7 +206,8 @@ export function ActivityRail() {
     ) || useAppStore((s) => s.workEvents.length > 0 || s.workItems.length > 0)
   // Occupancy is the currently picked Chief — not DEFAULT_ROUTING per view.
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
-  const occupancyAgent = AGENT_MAP[selectedAgentId]
+  const occupancyId = dispatchOccupancy(activeView, selectedAgentId, {})
+  const occupancyAgent = AGENT_MAP[occupancyId]
 
   const handleClick = (item: RailItem) => {
     if (item.id === activeView && !railCollapsed) {

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useAppStore, type ProgressStep } from '@/lib/store'
 import { AGENT_MAP } from '@/lib/agents'
+import { occupancyChief } from '@/lib/occupancy'
 import { cn } from '@/lib/utils'
 
 function StepTypeIcon({ type }: { type: ProgressStep['type'] }) {
@@ -77,7 +78,7 @@ interface Props {
 
 export default function ProgressSteps({ steps }: Props) {
   const selectedAgentId = useAppStore((s) => s.selectedAgentId)
-  const occupancy = AGENT_MAP[selectedAgentId]
+  const occupancy = AGENT_MAP[occupancyChief({ selectedAgentId })]
   return (
     <div className="mt-2 rounded-lg border border-border bg-background/40 px-2.5 py-2">
       <ul className="space-y-0">

@@ -310,6 +310,16 @@ pub enum ChatWireEvent {
         #[serde(flatten)]
         metadata: ChatEventMetadata,
     },
+    /// P51.10 — ordered Changes Walkthrough stops from `execution/multirun`.
+    Walkthrough {
+        #[serde(rename = "streamId")]
+        stream_id: String,
+        #[serde(rename = "sessionId")]
+        session_id: String,
+        stops: Vec<serde_json::Value>,
+        #[serde(flatten)]
+        metadata: ChatEventMetadata,
+    },
 }
 
 /// Parameters for one chat turn (mirrors the coordinator's `chat/stream`).
@@ -2045,6 +2055,19 @@ impl<W: Write + Send + 'static, R: Read + Send + 'static> ChatRelay<W, R> {
                                 session_id: event_session_id.clone(),
                                 citations: params
                                     .get("citations")
+                                    .and_then(|c| c.as_array())
+                                    .cloned()
+                                    .unwrap_or_default(),
+                                stream_id,
+                                metadata: event_metadata(&params),
+                            },
+                        ),
+                        "chat/walkthrough" => emit(
+                            &on_event,
+                            ChatWireEvent::Walkthrough {
+                                session_id: event_session_id.clone(),
+                                stops: params
+                                    .get("stops")
                                     .and_then(|c| c.as_array())
                                     .cloned()
                                     .unwrap_or_default(),

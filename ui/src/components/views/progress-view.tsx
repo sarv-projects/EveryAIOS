@@ -217,6 +217,30 @@ function CuaDagBoard({ workId }: { workId: string }) {
   )
 }
 
+function WalkthroughBoard() {
+  const stops = useAppStore((s) => s.walkthroughStops)
+  if (stops.length === 0) return null
+  return (
+    <div className="border-b border-border px-4 py-2">
+      <div className="mb-1 text-xs font-semibold">Changes Walkthrough</div>
+      <ol className="space-y-1.5">
+        {stops.map((s) => (
+          <li key={`${s.seq}-${s.path}`} className="rounded-md border border-border/50 bg-card/40 px-2 py-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+              <span className="font-mono text-muted-foreground">{s.seq + 1}.</span>
+              {s.title}
+              {s.tag === 'key-change' && (
+                <Badge variant="outline" className="text-[8px]">key change</Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">{s.narrative}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 export default function ProgressView() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -272,6 +296,7 @@ export default function ProgressView() {
       </header>
 
       <CuaDagBoard workId={workItems[0]?.workId ?? session?.id ?? 'default'} />
+      <WalkthroughBoard />
 
       {workItems.length > 0 && (
         <div className="border-b border-border px-4 py-2">

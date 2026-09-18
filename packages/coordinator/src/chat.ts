@@ -55,6 +55,9 @@ import { applyCuaMechanicalVerifyIfPresent } from "./cua-verify";
 import { applyCuaStopIfPresent } from "./cua-stop";
 import { applyRuntimeBindIfPresent } from "./runtime-bind";
 import { applyCuaPerceiveIfPresent } from "./cua-perceive";
+import { applyComboPickIfPresent } from "./combo-pick";
+import { applyFabricIfPresent } from "./fabric";
+import { applySpendSplitIfPresent } from "./spend-split";
 import { resolveMentions } from "./context-providers";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
 import { chiefRegistry } from "./chief";
@@ -227,6 +230,7 @@ export type ChatEvent = (
   | { type: "memory_extracted"; streamId: string; sessionId: string; facts: string[] }
   | { type: "monitor"; streamId: string; jobId: string; changed: boolean; notified: boolean; stopped: boolean; current: string; notifications: number }
   | { type: "citations"; streamId: string; citations: Array<{ index: number; title: string; url: string; snippet?: string; source?: string }> }
+  | { type: "walkthrough"; streamId: string; stops: unknown[] }
   | { type: "plan_start"; streamId: string; planId: string; tasks: number }
   | { type: "plan_step"; streamId: string; planId: string; taskId: string; status: "running" | "done" | "skipped" }
   | { type: "interrupt"; streamId: string; planId: string; breakId: string; title: string; description: string; options: string[] }
@@ -766,17 +770,30 @@ async function runInbuiltTurn(
           ? args.models.filter((m): m is string => typeof m === "string")
           : [];
         if (models.length > 1) {
-          await dispatchMultiRun(request, {
+          const multi = await dispatchMultiRun(request, {
             id: streamId,
             taskId: spec.spec.taskId,
             modelIds: models,
             worktreeIds: models.map((_, i) => `${spec.workspace}-${i}`),
             mode: args.fuse === true || args.mode === "fuse" ? "fuse" : "keep_best",
+            ...(typeof args.diff === "string" ? { diff: args.diff } : {}),
           });
+          const stops = Array.isArray(multi.walkthrough) ? multi.walkthrough : [];
+          if (stops.length > 0) {
+            emit({ type: "walkthrough", streamId, stops });
+          }
         }
         const bound = await applyRuntimeBindIfPresent(request, args);
         if (bound.applied) {
           emit({ type: "stage", streamId, stage: "runtime:bind" });
+        }
+        const combo = await applyComboPickIfPresent(request, args);
+        if (combo.applied) {
+          emit({ type: "stage", streamId, stage: `runtime:pick:${combo.tier ?? "cheap"}` });
+        }
+        const spend = await applySpendSplitIfPresent(request, args);
+        if (spend.applied && spend.warn) {
+          emit({ type: "stage", streamId, stage: "chief:not-delegating" });
         }
         await subAgentTracker.begin(spec.depth);
         try {
@@ -844,6 +861,10 @@ async function runInbuiltTurn(
         const scene = await applyCuaPerceiveIfPresent(request, args);
         if (scene.applied) {
           emit({ type: "stage", streamId, stage: "cua:perceive" });
+        }
+        const fabric = await applyFabricIfPresent(request, args);
+        if (fabric.applied) {
+          emit({ type: "stage", streamId, stage: "cua:fabric" });
         }
       }
       if (toolId === "search.query") {
