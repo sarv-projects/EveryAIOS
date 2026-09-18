@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   canonicalArgsHash,
+  dispatchMultiRun,
   FIRST_CLASS_NATIVE_TOOLS,
   listedToolsToOpenAI,
   LOOP_PINNED_TOOL_IDS,
@@ -311,5 +312,25 @@ describe("ToolExecutor", () => {
     await expect(
       ex.executeTool("file_ops.read", { path: "a" }, { sessionId: "s" }),
     ).rejects.toThrow("loop");
+  });
+});
+
+describe("dispatchMultiRun (P51.10)", () => {
+  test("calls execution/multirun and refuses more than 5 models", async () => {
+    const calls: Array<{ method: string; params: unknown }> = [];
+    const request: ToolRequest = async (method, params) => {
+      calls.push({ method, params });
+      return { id: "mr-1", modelCount: 2, mode: "keep_best" };
+    };
+    const out = await dispatchMultiRun(request, {
+      id: "mr-1",
+      taskId: "t",
+      modelIds: ["a", "b"],
+    });
+    expect(calls[0]?.method).toBe("execution/multirun");
+    expect(out.modelCount).toBe(2);
+    await expect(
+      dispatchMultiRun(request, { id: "x", taskId: "t", modelIds: ["1", "2", "3", "4", "5", "6"] }),
+    ).rejects.toThrow(/at most 5/);
   });
 });

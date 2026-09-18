@@ -254,6 +254,10 @@ export function handleChatEvent(e: ChatWireEvent): void {
       st.streamAppend(e.text ?? "", false, sid, e.streamId);
       st.noteStreamTick(e.tokenCount ?? Math.max(1, Math.round((e.text ?? "").length / 4)), sid, e.streamId);
       break;
+    case "citations":
+      st.streamStart(sid, e.streamId);
+      st.streamCitations(e.citations ?? [], sid, e.streamId);
+      break;
     case "done":
       // `fullText` is authoritative even when it is intentionally empty.
       // A falsy check here used to leave empty successful turns stuck in the

@@ -17,6 +17,25 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — Terminal splits, settings inventory, citations, Scout/Worker/Verifier, voice consumers
+
+**Category:** implementation. **Flipped:** P54.4, P68.8, P52.20, P60.3, P65.1, P50.4.4 `[DONE]`. P50.4.3 / P51.10 / P65.2 stay `[PARTIAL]`. P64.5/P64.6 stay `[PARTIAL]` (no live-model soak). Census **1429 = 1229 done + 200 open**. Capability identity remains **166**.
+
+**Decisions & Implementation.** Fetched Agent-S `Worker.generate_next_action(instruction, obs) → next action` (one act, not click-until-max).
+
+1. **P68.8 / P54.4 splits:** `decideSplit` reuses another live tab or spawns the active profile; `shell-view.tsx` consumes it. Unsplit kills nothing.
+2. **P65.1:** Settings → Providers hydrates `settings_providers_list` (Configured/Popular/All) over the existing catalog — no second registry.
+3. **P52.20:** `search.query` hits emit `chat/citations` → `ChatWireEvent::Citations` → store → `[^n]` + source list.
+4. **P51.10:** `execution/multirun` admits ≤5 models; coordinator `dispatchMultiRun` from `subagent` when `args.models` has 2–5 ids. UI walkthrough still open.
+5. **P60.3:** Scout/Verifier strip writes; Verifier ignores Worker success claims. Spawn `args.role` is the live consumer.
+6. **P50.4.3/4.4:** Tauri `voice_*` over crate VAD + honest `NoopStt`; composer mic captures PCM; read-aloud uses `speechSynthesis`.
+
+**Verification.** `cargo test -p everyaios-core --lib cua::` 8/0; `p51_multirun_ipc_admits` 1/0; `subagent_rpc_scout` 1/0; src-tauri `voice_` 3/0; coordinator `bun test` citations/tools/chat 50/0; UI bun tests for split/groups/citations/voice/capability/routing 30/0; coordinator + UI `tsc --noEmit` 0.
+
+**Not flipped.** P50.2.1/2.2/2.5 packaged E2E; P50.5.2 live SearXNG rerun; P50.4.5–4.7 post-v1; P50.5.8 win/mac; P64.5/P64.6 soak; P65.3–.8.
+
+---
+
 ## 2026-09-18 — P64 batch consumer, ladder fixtures, CUA router, shared-plane MCP list
 
 **Category:** implementation. **Flipped:** P64.3 and P64.9 `[DONE]`. P64.5/P64.6 stay `[PARTIAL]` (no live-model soak). Census **1429 = 1223 done + 206 open**. Capability identity remains **166**.

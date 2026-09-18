@@ -41,19 +41,17 @@ describe('post-v1 capabilities are never advertised as working', () => {
     }
   })
 
-  test('voice is v1-planned (confirmed v1, stack not wired), never live or post-v1', () => {
-    const live = ctx({
-      inTauri: true,
-      sidecarLive: true,
-      vaultUnlocked: true,
-    })
-    for (const id of ['voice-input', 'voice-output'] as const) {
-      const row = capabilityFor(id, live)
-      expect(row.status).toBe('v1-planned')
-      expect(row.reason).toContain('v1 deliverable')
-      expect(row.status).not.toBe('live')
-      expect(row.status).not.toBe('post-v1')
-    }
+  test('voice-input is partial without an STT engine, live only when STT is installed', () => {
+    const row = capabilityFor('voice-input', ctx({ inTauri: true, voiceVadLive: true }))
+    expect(row.status).toBe('partial')
+    expect(row.reason).toContain('not invented')
+    expect(capabilityFor('voice-input', ctx({ inTauri: true, voiceSttInstalled: true })).status).toBe('live')
+    expect(capabilityFor('voice-input', ctx({ inTauri: false })).status).toBe('partial')
+  })
+
+  test('voice-output is live only when speechSynthesis is available', () => {
+    expect(capabilityFor('voice-output', ctx({ speechSynthesisAvailable: true })).status).toBe('live')
+    expect(capabilityFor('voice-output', ctx({})).status).toBe('partial')
   })
 
   test('script-eval is live but explicitly NOT containment', () => {

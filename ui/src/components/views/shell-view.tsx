@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
+import { decideSplit, decideUnsplit } from '@/lib/terminal-split'
 import { useTheme } from '@/components/theme-provider'
 import {
   backendLabel,
@@ -568,24 +569,30 @@ export default function ShellView() {
    */
   const splitActive = useCallback(
     (dir: 'row' | 'col') => {
-      setSplitDir(dir)
-      setFocusedPane(secondaryId ? 'secondary' : 'primary')
-      if (secondaryId) return
-      const other = tabsRef.current.find((t) => t.id !== activeId && t.ptyId !== null)
-      if (other) {
-        setSecondaryId(other.id)
+      const decision = decideSplit({
+        dir,
+        tabs: tabsRef.current.map((t) => ({
+          id: t.id,
+          ptyId: t.ptyId,
+          profileName: t.profileName,
+        })),
+        activeId,
+        secondaryId,
+      })
+      if (decision.kind === 'noop') return
+      setSplitDir(decision.splitDir)
+      if (decision.kind === 'reuse') {
+        setSecondaryId(decision.secondaryId)
+        setFocusedPane('secondary')
         return
       }
-      // No other live tab: open a second one on the active profile. The new
-      // tab goes to the *second* pane, so the pane the user was already in
-      // keeps its session and only the second half changes.
-      const current = tabsRef.current.find((t) => t.id === activeId)
       const profile = registryRef.current?.profiles.find(
-        (p) => p.profileName === (current?.profileName ?? ''),
+        (p) => p.profileName === decision.profileName,
       )
-      if (!profile || !current) return
+      if (!profile) return
+      const keep = decision.keepActiveId
       const id = openProfile(profile)
-      if (activeId) setActiveId(activeId)
+      if (keep) setActiveId(keep)
       setSecondaryId(id)
       setFocusedPane('secondary')
     },
@@ -594,9 +601,10 @@ export default function ShellView() {
 
   /** Collapse the split. Both sessions keep running — nothing is killed. */
   const unsplit = () => {
-    setSplitDir(null)
-    setSecondaryId(null)
-    setFocusedPane('primary')
+    const next = decideUnsplit()
+    setSplitDir(next.splitDir)
+    setSecondaryId(next.secondaryId)
+    setFocusedPane(next.focusedPane)
   }
 
   const offered = registry?.profiles.filter((p) => p.offered) ?? []

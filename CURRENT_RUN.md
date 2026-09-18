@@ -11,7 +11,14 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — V1 remainders: edit batch live, ladder fixtures, CUA router, shared-plane MCP list; committed)**:
+**(Current, 2026-09-18 — V1 remainders wave 2: splits, settings inventory, citations, Scout/Worker/Verifier, voice; uncommitted until verified)**:
+- Scope: P68.8/P54.4 terminal splits (`decideSplit` live in Shell); P65.1 Settings Providers from `settings_providers_list`; P52.20 citations from `search.query`; P51.10 `execution/multirun` from `subagent` models; P60.3 Scout/Worker/Verifier on spawn; P50.4.3 VAD+NoopStt; P50.4.4 speechSynthesis read-aloud. Skip P50.4.5–4.7.
+- Files: `ui/src/lib/{terminal-split,provider-groups,citations,voice}.ts`, `ui/src/components/{views/shell-view,panels/settings-providers,chat/{chat-composer,message-bubble}}`, `packages/coordinator/src/{citations,chat,tools}.ts`, `crates/everyaios-core/src/{cua,execution,chat}.rs`, `src-tauri/src/voice_cmds.rs`.
+- Verified: core `cua::` 8/0, `p51_multirun_ipc_admits` 1/0, `subagent_rpc_scout` 1/0; src-tauri `voice_` 3/0; coordinator bun 50/0 on touched files; UI bun 30/0 on touched files; tsc 0 coordinator + UI.
+- Not flipped: P64.5/P64.6 soak; P50.2.x packaged; P50.5.8 win/mac; post-v1; P65.3–.8.
+- Next: P65 remaining surfaces; P51.10 UI walkthrough; on-device STT for P50.4.3; live-model soak.
+
+**(Previous, 2026-09-18 — V1 remainders: edit batch live, ladder fixtures, CUA router, shared-plane MCP list; committed)**:
 - Scope: P64 Linux remainders after the compact `file_ops.edit` intercept. Consecutive model `file_ops.edit` calls in one round share one `execution/preflight` (`executeEditAwareRound` / `applyEditBatch`). Shared JSON fixtures prove coordinator `applyEditLadder` == Rust `apply_edit_ladder` (Aider fail-closed SEARCH/REPLACE). `SubAgentRuntime::spawn` applies `derive_child_permissions`; inbuilt spawn pins `parentId: root`. MCP `tools/list` advertises façades only (`tool_list_shared_plane`). CUA ladder is code: `route_work_surface` + `vision_gate` + Worker halt-after-two-fails; `desktop.act` refuses office/URL targets. `restore_file_to_bytes` is what `fs_undo_restore` calls (real git-repo test). Heartbeat test waits for a frame instead of a 700ms sleep. P61.12 `digestClass` is the review-after policy hook (Guard wire still open).
 - Files: `crates/everyaios-core/src/{cua,file_undo,tools,lib}.rs`, `crates/everyaios-blueprint/src/subagent.rs`, `crates/everyaios-mcp/src/server.rs`, `packages/{core-engine,coordinator}`, `src-tauri/src/fs_cmds.rs`, `ui/src/lib/interrupts.ts`.
 - Verified: `cargo test -p everyaios-core --lib p59_` 7/0; `p64_edit_ladder` 1/0; `p64_restore` 1/0; `everyaios-blueprint spawn_applies` 1/0; `everyaios-mcp tool_list_shared` + `stdio_lists` 1/0 each; `src-tauri cargo check` 0; coordinator `bun test` chat/p64/index (batch + fixtures); UI `interrupts.test.ts` 16/0; coordinator `tsc --noEmit` 0; core-engine vitest engine.test 14/0.

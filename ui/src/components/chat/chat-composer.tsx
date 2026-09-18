@@ -30,6 +30,8 @@ import {
   disabledSlashSet,
   enabledSlashCommands,
 } from '@/lib/slash-commands'
+import { inTauri } from '@/lib/tauri'
+import { captureUtterance, voiceProcessUtterance } from '@/lib/voice'
 
 /** v3.57 Work Mode — WHAT. Code/browser/Office/terminal are capabilities inside Build. */
 const WORK_MODES: { id: ChatMode; emoji: string; label: string; hint: string }[] = [
@@ -234,6 +236,7 @@ export default function ChatComposer({ budget, centered }: Props) {
   const composerValue = useAppStore((s) => s.composerValue)
   const setComposerValue = useAppStore((s) => s.setComposerValue)
   const notify = useAppStore((s) => s.notify)
+  const [listening, setListening] = useState(false)
   const activeSession = useAppStore((s) =>
     s.sessions.find((x) => x.id === s.activeSessionId)
   )
@@ -710,16 +713,42 @@ export default function ChatComposer({ budget, centered }: Props) {
           rows={1}
         />
         <div className="flex shrink-0 items-center gap-0.5 pb-0.5">
-          {/* P50.4.8 — voice input/output are v1-planned (spec H15/H28,
-              promoted to v1 scope 2026-08-31): the stack is not wired yet, so
-              the control is visibly inert with a truthful status instead of
-              pretending to capture audio. Read-aloud stays in Settings as a
-              staged v1 surface. */}
+          {/* P50.4.3 — mic captures PCM and runs the crate VAD/STT pipeline.
+              No STT engine is installed, so a capture reports the gap instead
+              of inventing a transcript. */}
           <IconBtn
             icon={Mic}
-            label="Voice input (v1-pending)"
-            title="Voice input (VAD/STT) is a v1 deliverable — capture stack not wired in this build; the control is disabled, not coming soon"
-            disabled
+            label={listening ? 'Listening…' : 'Voice input'}
+            title={
+              inTauri()
+                ? listening
+                  ? 'Listening — tap again after you finish speaking'
+                  : 'Capture a voice utterance (VAD is live; STT engine not installed — no invented transcript)'
+                : 'Voice capture needs the Tauri shell'
+            }
+            disabled={!inTauri() || listening}
+            active={listening}
+            onClick={() => {
+              void (async () => {
+                setListening(true)
+                try {
+                  const samples = await captureUtterance(2500)
+                  const ev = await voiceProcessUtterance(samples, 2500, false)
+                  if (ev.transcribed && ev.text.trim()) {
+                    const cur = useAppStore.getState().composerValue
+                    setComposerValue(cur ? `${cur} ${ev.text}` : ev.text)
+                  } else {
+                    notify(
+                      'Heard the mic — no on-device STT engine is installed, so no transcript was invented.',
+                    )
+                  }
+                } catch (e) {
+                  notify(e instanceof Error ? e.message : 'Microphone capture failed', 'error')
+                } finally {
+                  setListening(false)
+                }
+              })()
+            }}
           />
           <Button
             size="icon"

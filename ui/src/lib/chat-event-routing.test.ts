@@ -128,4 +128,18 @@ describe('notification preferences (P58.9)', () => {
     expect(useAppStore.getState().liveNotifications.length).toBe(before + 1)
     restoreWindow()
   })
+
+  test('citations land on the live assistant message (P52.20)', () => {
+    const sid = freshSession()
+    handleChatEvent({ type: 'ttft', sessionId: sid, streamId: 'stream-cite' })
+    handleChatEvent({
+      type: 'citations',
+      sessionId: sid,
+      streamId: 'stream-cite',
+      citations: [{ index: 1, title: 'A', url: 'https://ex.test/a' }],
+    })
+    const msg = lastMessage(sid)
+    expect(msg?.citations?.[0]?.url).toBe('https://ex.test/a')
+    expect(msg?.citations?.[0]?.index).toBe(1)
+  })
 })

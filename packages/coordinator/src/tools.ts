@@ -211,6 +211,16 @@ export const FIRST_CLASS_NATIVE_TOOLS: ListedTool[] = [
           description:
             "EveryAIOS shared cowork capabilities to grant ('shared:office', 'shared:browser', 'shared:desktop', 'shared:calendar')",
         },
+        role: {
+          type: "string",
+          enum: ["scout", "worker", "verifier"],
+          description: "P60.3 Scout (read-only facts) / Worker (execute brief) / Verifier (mechanical checks; never the Worker's claim)",
+        },
+        models: {
+          type: "array",
+          items: { type: "string" },
+          description: "P51.10 optional multi-run: same task on ≤5 models",
+        },
       },
       required: ["agentId", "task"],
     },
@@ -814,6 +824,7 @@ export interface SubAgentSpecShape {
   tools: string[];
   blockedTools: string[];
   depth: number;
+  role?: "scout" | "worker" | "verifier";
 }
 
 /** Summary-only return: summary + status + artifacts, never a transcript. */
@@ -835,6 +846,7 @@ export interface BuildSubAgentSpecOptions {
   blockedTools?: string[];
   /** Assigned by the spawner (parent depth + 1; root = 0). */
   depth?: number;
+  role?: "scout" | "worker" | "verifier";
 }
 
 function sanitizeTaskId(taskId: string): string {
@@ -859,7 +871,7 @@ export function buildSubAgentSpec(opts: BuildSubAgentSpecOptions): SubAgentSpecS
   const tools = [...(opts.tools ?? [])].sort();
   const blocked = [...DELEGATE_BLOCKED_TOOLS, ...(opts.blockedTools ?? [])];
   const blockedTools = [...new Set(blocked)].sort();
-  return {
+  const spec: SubAgentSpecShape = {
     spec: { taskId, goal },
     model,
     workspace: `.everyaios/worktrees/task-${taskId}`,
@@ -868,6 +880,8 @@ export function buildSubAgentSpec(opts: BuildSubAgentSpecOptions): SubAgentSpecS
     blockedTools,
     depth,
   };
+  if (opts.role) spec.role = opts.role;
+  return spec;
 }
 
 /**
@@ -936,6 +950,10 @@ export function subAgentSpecFromToolArgs(
   };
   if ((defaults.parentId ?? null) !== null) opts.parentId = defaults.parentId as string;
   if (defaults.depth !== undefined) opts.depth = defaults.depth;
+  const roleRaw = typeof args.role === "string" ? args.role.trim().toLowerCase() : "";
+  if (roleRaw === "scout" || roleRaw === "worker" || roleRaw === "verifier") {
+    opts.role = roleRaw;
+  }
   return opts;
 }
 
@@ -1081,6 +1099,7 @@ export async function dispatchSubAgent(
     tools: spec.tools,
     blockedTools: spec.blockedTools,
     depth: spec.depth,
+    ...(spec.role ? { role: spec.role } : {}),
   };
   const argsHash = canonicalArgsHash(args);
   const gated = await evaluateGuard(request, {
@@ -1114,6 +1133,40 @@ export async function dispatchSubAgent(
     throw new Error("subagent spawn returned no result — fail-closed");
   }
   return toSummaryOnlyResult(raw as Record<string, unknown>);
+}
+
+/** P51.10 — live consumer of the Rust `execution/multirun` admission (≤5 models). */
+export async function dispatchMultiRun(
+  request: ToolRequest,
+  params: {
+    id: string;
+    taskId: string;
+    modelIds: string[];
+    worktreeIds?: string[];
+    mode?: "keep_best" | "fuse";
+    outcomes?: Array<{ modelId: string; output: string; score: number }>;
+    diff?: string;
+  },
+): Promise<Record<string, unknown>> {
+  if (params.modelIds.length === 0) {
+    throw new Error("multirun requires at least one model — fail-closed");
+  }
+  if (params.modelIds.length > 5) {
+    throw new Error(`multirun supports at most 5 models, got ${params.modelIds.length}`);
+  }
+  const raw = await request("execution/multirun", {
+    id: params.id,
+    taskId: params.taskId,
+    modelIds: params.modelIds,
+    worktreeIds: params.worktreeIds ?? [],
+    mode: params.mode ?? "keep_best",
+    ...(params.outcomes ? { outcomes: params.outcomes } : {}),
+    ...(params.diff ? { diff: params.diff } : {}),
+  });
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("execution/multirun returned no result — fail-closed");
+  }
+  return raw as Record<string, unknown>;
 }
 
 /**
@@ -1724,15 +1777,17 @@ export async function executeEditAwareRound(
   while (i < calls.length) {
     const cur = calls[i]!;
     if (cur.toolId === "file_ops.edit") {
-      const batch: BatchEditParams[] = [];
-      const start = i;
+      const batchCalls: Array<{ toolId: string; args: Record<string, unknown> }> = [];
       while (i < calls.length && calls[i]!.toolId === "file_ops.edit") {
-        batch.push(editArgsFromToolCall(calls[i]!.args));
+        batchCalls.push(calls[i]!);
         i += 1;
       }
-      if (batch.length === 1) {
-        out.push(await dispatch("file_ops.edit", calls[start]!.args));
+      if (batchCalls.length === 1) {
+        // Parse inside dispatch so a malformed single edit still emits
+        // `tool_failed` on the live path instead of throwing at the collector.
+        out.push(await dispatch("file_ops.edit", batchCalls[0]!.args));
       } else {
+        const batch: BatchEditParams[] = batchCalls.map((c) => editArgsFromToolCall(c.args));
         const result = await applyEditBatch(executor, batch, ctx, { root: "." });
         for (const e of result.edits) {
           out.push({

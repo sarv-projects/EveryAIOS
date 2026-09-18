@@ -690,6 +690,82 @@ impl ExecutionKernel {
             // P64.6 — run the shadow preflight: decide, typecheck in the shadow
             // tree, then record the receipt. Was reachable only as a recorder
             // (`execution/record_preflight`) with nothing deciding or running.
+            // P51.10 — admit a ≤5-model fan-out and optionally reduce
+            // outcomes / parse a walkthrough. Construction is the live
+            // consumer of `MultiRun::new` (budget) + `collect` + `walkthrough`.
+            "execution/multirun" => {
+                let id = params
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("multirun")
+                    .to_string();
+                let task_id = params
+                    .get("taskId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let model_ids: Vec<String> = params
+                    .get("modelIds")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let worktree_ids: Vec<String> = params
+                    .get("worktreeIds")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let mode = match params.get("mode").and_then(Value::as_str).unwrap_or("keep_best") {
+                    "fuse" | "Fuse" => crate::multirun::FuseMode::Fuse,
+                    _ => crate::multirun::FuseMode::KeepBest,
+                };
+                let run = crate::multirun::MultiRun::new(
+                    id,
+                    task_id,
+                    model_ids,
+                    worktree_ids,
+                    mode,
+                )?;
+                let collected = params.get("outcomes").and_then(Value::as_array).map(|arr| {
+                    let outcomes: Vec<crate::multirun::RunOutcome> = arr
+                        .iter()
+                        .filter_map(|v| {
+                            Some(crate::multirun::RunOutcome {
+                                model_id: v.get("modelId")?.as_str()?.to_string(),
+                                output: v.get("output")?.as_str()?.to_string(),
+                                score: v.get("score")?.as_f64().unwrap_or(0.0),
+                            })
+                        })
+                        .collect();
+                    crate::multirun::collect(outcomes, mode)
+                });
+                let steps = params
+                    .get("diff")
+                    .and_then(Value::as_str)
+                    .map(crate::multirun::walkthrough);
+                Ok(json!({
+                    "id": run.id,
+                    "taskId": run.task_id,
+                    "modelIds": run.model_ids,
+                    "worktreeIds": run.worktree_ids,
+                    "mode": match run.mode {
+                        crate::multirun::FuseMode::Fuse => "fuse",
+                        crate::multirun::FuseMode::KeepBest => "keep_best",
+                    },
+                    "modelCount": run.model_ids.len(),
+                    "collected": collected,
+                    "walkthrough": steps,
+                }))
+            }
             "execution/preflight" => {
                 let id = params
                     .get("id")
@@ -2279,5 +2355,40 @@ mod tests {
                 &json!({"sessionId": "s", "objective": "x", "taskId": "t", "depth": 9})
             )
             .is_err());
+    }
+
+    #[test]
+    fn p51_multirun_ipc_admits_budget_and_reduces() {
+        let mut k = ExecutionKernel::new();
+        let six = k.handle(
+            "execution/multirun",
+            &json!({
+                "id": "mr-bad",
+                "taskId": "t",
+                "modelIds": ["a","b","c","d","e","f"],
+            }),
+        );
+        assert!(six.is_err(), "six models must fail closed");
+        let v = k
+            .handle(
+                "execution/multirun",
+                &json!({
+                    "id": "mr-1",
+                    "taskId": "t",
+                    "modelIds": ["a", "b"],
+                    "worktreeIds": ["wt-a", "wt-b"],
+                    "mode": "keep_best",
+                    "outcomes": [
+                        {"modelId": "a", "output": "meh", "score": 0.1},
+                        {"modelId": "b", "output": "best", "score": 0.9}
+                    ],
+                    "diff": "diff --git a/x.rs b/x.rs\n@@ -1 +1 @@\n-old\n+new\n"
+                }),
+            )
+            .unwrap();
+        assert_eq!(v["modelCount"], 2);
+        assert_eq!(v["collected"]["output"], "best");
+        assert_eq!(v["collected"]["best_model_id"], "b");
+        assert!(v["walkthrough"].as_array().unwrap().len() >= 1);
     }
 }
