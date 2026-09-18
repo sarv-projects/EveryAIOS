@@ -11,7 +11,20 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — P51.29 MCP external floor + P51.17/30 NPX sandbox launcher + P51.7 exportable citations; committed in 78becc3)**:
+**(Current, 2026-09-18 — Secret and ambient credential protection + MCP sandbox flag hardening)**:
+- Scope:
+  1. Secret & Ambient Credential Protection (CVE-2026-47211): Added `.env`, `.env.local`, `.env.production`, `.env.staging`, `.ssh/`, `.aws/`, `id_rsa`, `id_ed25519`, `service_account.json` to `PROTECTED_PREFIXES` in `crates/everyaios-guard/src/protected_paths.rs` to protect from accidental or malicious recursive deletion and unauthorized access.
+  2. MCP Sandbox Flag Hardening: In `crates/everyaios-mcp/src/npx.rs`, enhanced `trusted_npx_package` to reject argument flags starting with `-` or `_`.
+  3. Execution test clippy cleanup in `crates/everyaios-core/src/execution.rs`.
+- Files: `crates/everyaios-guard/src/protected_paths.rs`, `crates/everyaios-mcp/src/{attach,lib,npx}.rs`, `crates/everyaios-core/src/execution.rs`.
+- Verified: guard `protected_paths::tests` 190/0; mcp `npx::tests` 71/0; core `execution::tests` 746/0; `cargo fmt` clean; `cargo clippy --workspace --all-targets` 0 warnings; `check-doc-sync.mjs` 0 (166 caps, 1429 = 1264 done + 165 open, kernel clear); `ipc-parity.mjs` 0; `clean-profile-boot-check.mjs` PASS; UI type-check 0 errors.
+- Not flipped: P65.8 live-agent acceptance, P64.5/6 live-model turn soak, packaged E2E, Windows/mac installers, post-v1 gated items.
+- Next:
+  1. Live-model multi-turn soak for P64 edit ladder & shadow preflights.
+  2. P65.8 live external agent acceptance probes.
+  3. P50 release qualification & Windows MSI packaging.
+
+**(Previous, 2026-09-18 — P51.29 MCP external floor + P51.17/30 NPX sandbox launcher + P51.7 exportable citations; committed in 78becc3)**:
 - Scope: 
   1. P51.29 OpenWorker MCP-EXTERNAL floor: Third-party MCP tools always register with `family: ToolFamily::External`, `operation: "external_network"`, and `risk: "high"`. In `ToolService::handle`, read-named third-party tools are blocked from auto-approval (`spec.read_only && spec.family != ToolFamily::External`) — a stranger's tool name is never trusted as local read.
   2. P51.17 / P51.30 MCP NPX sandbox resolution: `crates/everyaios-mcp/src/npx.rs` + `attach.rs` implements `resolve_stdio_launch_with`. Resolves launcher from system PATH then `EVERYAIOS_BUNDLED_NODE`, validates packages against `trusted_npx_package` allow-list, and rejects shell escapes (`-c`, `--call`, bash/sh) before spawn.

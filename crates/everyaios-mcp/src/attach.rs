@@ -132,10 +132,12 @@ impl AttachedServer {
         Self::spawn_uncontrolled(command, args)
     }
 
-    fn resolve_or_err(command: &str, args: &[&str]) -> Result<crate::npx::ResolvedLaunch, AttachError> {
-        crate::npx::resolve_stdio_launch(command, args).map_err(|e| {
-            AttachError::Spawn(std::io::Error::other(e.to_string()))
-        })
+    fn resolve_or_err(
+        command: &str,
+        args: &[&str],
+    ) -> Result<crate::npx::ResolvedLaunch, AttachError> {
+        crate::npx::resolve_stdio_launch(command, args)
+            .map_err(|e| AttachError::Spawn(std::io::Error::other(e.to_string())))
     }
 
     /// Spawn the child inside the native OS sandbox (Linux bubblewrap).

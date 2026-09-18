@@ -56,13 +56,20 @@ pub fn trusted_npx_package(spec: &str) -> bool {
     }
     // `@scope/pkg` has exactly one slash; path traversal and Windows
     // separators stay refused.
-    if s.starts_with('.') || s.contains("..") || s.contains('\\') {
+    if s.starts_with('.')
+        || s.starts_with('-')
+        || s.starts_with('_')
+        || s.contains("..")
+        || s.contains('\\')
+    {
         return false;
     }
     if !s.starts_with('@') && s.contains('/') {
         return false;
     }
-    if s.chars().any(|c| matches!(c, ';' | '|' | '&' | '`' | '$' | '\n' | ' ')) {
+    if s.chars()
+        .any(|c| matches!(c, ';' | '|' | '&' | '`' | '$' | '\n' | ' '))
+    {
         return false;
     }
     let body = s.strip_prefix('@').unwrap_or(s);
@@ -78,9 +85,7 @@ pub fn trusted_npx_package(spec: &str) -> bool {
         let mut parts = name.split('/');
         let scope = parts.next().unwrap_or("");
         let pkg = parts.next().unwrap_or("");
-        parts.next().is_none()
-            && slug(scope)
-            && slug(pkg)
+        parts.next().is_none() && slug(scope) && slug(pkg)
     } else {
         slug(name)
     };
@@ -222,7 +227,9 @@ mod tests {
     #[test]
     fn trusted_packages_accept_scoped_and_pinned() {
         assert!(trusted_npx_package("@modelcontextprotocol/server-github"));
-        assert!(trusted_npx_package("@modelcontextprotocol/server-github@1.2.3"));
+        assert!(trusted_npx_package(
+            "@modelcontextprotocol/server-github@1.2.3"
+        ));
         assert!(trusted_npx_package("prettier@3.0.0"));
         assert!(!trusted_npx_package("../evil"));
         assert!(!trusted_npx_package("foo;rm"));
@@ -271,8 +278,8 @@ mod tests {
         fs::create_dir_all(&bun).unwrap();
         let bun_npx = bun.join("npx");
         fs::write(&bun_npx, b"bun").unwrap();
-        let got = resolve_stdio_launch_with("npx", &["@org/mcp"], "/no/such/bin", Some(&bun))
-            .unwrap();
+        let got =
+            resolve_stdio_launch_with("npx", &["@org/mcp"], "/no/such/bin", Some(&bun)).unwrap();
         assert_eq!(got.source, NpxSource::Bundled);
         let _ = fs::remove_dir_all(&tmp);
     }
