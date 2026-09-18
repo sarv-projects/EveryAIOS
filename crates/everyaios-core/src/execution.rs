@@ -2775,7 +2775,7 @@ mod tests {
         assert_eq!(v["modelCount"], 2);
         assert_eq!(v["collected"]["output"], "best");
         assert_eq!(v["collected"]["best_model_id"], "b");
-        assert!(v["walkthrough"].as_array().unwrap().len() >= 1);
+        assert!(!v["walkthrough"].as_array().unwrap().is_empty());
     }
 
     #[test]

@@ -14,10 +14,10 @@
 use serde::{Deserialize, Serialize};
 
 pub mod attach;
-pub mod npx;
 pub mod hijack;
 pub mod loopback;
 pub mod manager;
+pub mod npx;
 pub mod protocol;
 pub mod record;
 pub mod remote;
@@ -25,16 +25,16 @@ pub mod server;
 pub mod store;
 
 pub use attach::{sanitize_attach_name, AttachError, AttachRequest, AttachedServer};
-pub use npx::{
-    npx_package_from_args, resolve_stdio_launch, resolve_stdio_launch_with, trusted_npx_package,
-    NpxError, NpxSource, ResolvedLaunch,
-};
 pub use hijack::{validate_external_tool, HijackError, ToolIdentity, ToolSource};
 pub use loopback::{LoopbackPool, PoolStats};
 pub use manager::{
     install_plan, is_allowed, merge_into_catalog, verify_sha256, ChildHandle, InstallPlan,
     ManagedServer, McpServerManager, PlanError, ProcessSpawner, RegistryIndex, RegistryServer,
     ServerSpawner, ServerState, SpawnError, ToolSurface, ALLOW_LIST,
+};
+pub use npx::{
+    npx_package_from_args, resolve_stdio_launch, resolve_stdio_launch_with, trusted_npx_package,
+    NpxError, NpxSource, ResolvedLaunch,
 };
 pub use remote::{
     build_authorize_url, connect, discover_authorization_server, discover_protected_resource,

@@ -31,6 +31,16 @@ pub static PROTECTED_PREFIXES: &[&str] = &[
     ".openclaw/",
     ".aider/",
     ".mcp.json",
+    // Secret and ambient credential files (CVE-2026-47211 protection).
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".env.staging",
+    ".ssh/",
+    ".aws/",
+    "id_rsa",
+    "id_ed25519",
+    "service_account.json",
 ];
 
 /// Is this canonical path one of our own settings files/dirs?
@@ -169,6 +179,23 @@ mod tests {
             "/proj/.cursor/mcp.json",
             "/proj/.openclaw/config.json",
             "/proj/.mcp.json",
+        ] {
+            assert!(is_protected(p), "{p} must be protected");
+            assert!(rm_critical("rm -rf", &[p]), "{p} must be rm-critical");
+        }
+    }
+
+    /// Secret and ambient credential files must be protected from destructive deletion.
+    #[test]
+    fn secret_and_credential_files_are_protected() {
+        for p in [
+            "/proj/.env",
+            "/proj/.env.local",
+            "/proj/.env.production",
+            "/home/u/.ssh/id_rsa",
+            "/home/u/.ssh/id_ed25519",
+            "/home/u/.aws/credentials",
+            "/proj/service_account.json",
         ] {
             assert!(is_protected(p), "{p} must be protected");
             assert!(rm_critical("rm -rf", &[p]), "{p} must be rm-critical");
