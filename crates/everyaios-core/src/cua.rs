@@ -775,6 +775,122 @@ pub fn apply_node_stop(node: &mut CuaNode, reason: &str) -> bool {
     }
 }
 
+/// P60.1 — five planes that must stay distinct (spec §4.2.5b).
+/// Governance is code, not a prompt. Chief is not the workhorse.
+/// Orchestrator is the Rust DAG. Subagent is a role, not a CLI name.
+/// Harness and model swap independently. No “claude-subagent” type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimePlane {
+    Governance,
+    Chief,
+    Orchestrator,
+    Subagent,
+    HarnessModel,
+}
+
+pub const RUNTIME_PLANES: [RuntimePlane; 5] = [
+    RuntimePlane::Governance,
+    RuntimePlane::Chief,
+    RuntimePlane::Orchestrator,
+    RuntimePlane::Subagent,
+    RuntimePlane::HarnessModel,
+];
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeBinding {
+    pub harness: String,
+    pub model: String,
+    #[serde(default)]
+    pub role: Option<AgentRole>,
+    #[serde(default)]
+    pub chief: Option<String>,
+}
+
+pub fn refuse_cli_named_subagent(label: &str) -> Result<(), String> {
+    let l = label.trim().to_ascii_lowercase();
+    let named = ["claude", "codex", "opencode", "gemini", "cursor"]
+        .iter()
+        .any(|p| l.contains(p));
+    if named && l.contains("subagent") {
+        return Err(
+            "no CLI-named subagent type — harness, model, and role are independent planes".into(),
+        );
+    }
+    Ok(())
+}
+
+pub fn bind_runtime(
+    harness: &str,
+    model: &str,
+    role: Option<AgentRole>,
+    chief: Option<String>,
+) -> Result<RuntimeBinding, String> {
+    refuse_cli_named_subagent(harness)?;
+    refuse_cli_named_subagent(model)?;
+    if harness.trim().is_empty() {
+        return Err("harness required (independent of model)".into());
+    }
+    if model.trim().is_empty() {
+        return Err("model required (independent of harness)".into());
+    }
+    Ok(RuntimeBinding {
+        harness: harness.trim().to_string(),
+        model: model.trim().to_string(),
+        role,
+        chief,
+    })
+}
+
+/// P60.2 — vision-first perception fusion. Fetched Agent-S Worker
+/// `generate_next_action`: `assign_screenshot(obs)` then
+/// `image_content=obs["screenshot"]`. A11y/DOM/OCR/API augment; if the tree
+/// is missing or lying, vision still works. Structure cannot replace pixels.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PerceptionLayers {
+    pub screenshot_ref: Option<String>,
+    pub a11y: Option<String>,
+    pub dom: Option<String>,
+    pub ocr: Option<String>,
+    pub api: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneGraph {
+    pub vision_first: bool,
+    pub structure_augments: bool,
+    pub structure_lying: bool,
+    pub usable: bool,
+}
+
+pub fn fuse_perception(layers: &PerceptionLayers) -> Result<SceneGraph, String> {
+    let vision = layers
+        .screenshot_ref
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    if !vision {
+        return Err(
+            "CUA perception requires a screenshot — structure cannot replace vision".into(),
+        );
+    }
+    let nonempty = |o: &Option<String>| o.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+    let lying = layers.a11y.as_deref() == Some("lying")
+        || layers.dom.as_deref() == Some("lying")
+        || layers.a11y.as_deref() == Some("false");
+    let structure =
+        (nonempty(&layers.a11y) || nonempty(&layers.dom) || nonempty(&layers.ocr)) && !lying;
+    Ok(SceneGraph {
+        vision_first: true,
+        structure_augments: structure,
+        structure_lying: lying,
+        usable: true,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1154,5 +1270,61 @@ mod tests {
         assert!(apply_node_stop(&mut n, "crash"));
         assert_eq!(n.status, CuaNodeStatus::Halted);
         assert_eq!(n.fail_count, 3);
+    }
+
+    #[test]
+    fn p60_five_planes_refuse_cli_named_subagent_and_bind_independently() {
+        assert_eq!(RUNTIME_PLANES.len(), 5);
+        assert!(refuse_cli_named_subagent("claude-subagent").is_err());
+        assert!(refuse_cli_named_subagent("codex-subagent").is_err());
+        let b = bind_runtime(
+            "inbuilt",
+            "local-vl",
+            Some(AgentRole::Worker),
+            Some("inbuilt".into()),
+        )
+        .unwrap();
+        assert_eq!(b.harness, "inbuilt");
+        assert_eq!(b.model, "local-vl");
+        assert_eq!(b.role, Some(AgentRole::Worker));
+        assert!(bind_runtime("claude-subagent", "opus", None, None).is_err());
+        let a = bind_runtime("inbuilt", "cheap", Some(AgentRole::Scout), None).unwrap();
+        let c = bind_runtime("acp:other", "frontier", Some(AgentRole::Worker), None).unwrap();
+        assert_ne!(a.harness, c.harness);
+        assert_ne!(a.model, c.model);
+    }
+
+    #[test]
+    fn p60_perception_fusion_vision_first_structure_augments() {
+        let missing = PerceptionLayers {
+            a11y: Some("button Save".into()),
+            ..Default::default()
+        };
+        assert!(fuse_perception(&missing).is_err());
+        let vision_only = PerceptionLayers {
+            screenshot_ref: Some("shot:1".into()),
+            ..Default::default()
+        };
+        let g = fuse_perception(&vision_only).unwrap();
+        assert!(g.vision_first);
+        assert!(g.usable);
+        assert!(!g.structure_augments);
+        let lying = PerceptionLayers {
+            screenshot_ref: Some("shot:1".into()),
+            a11y: Some("lying".into()),
+            ..Default::default()
+        };
+        let g2 = fuse_perception(&lying).unwrap();
+        assert!(g2.usable);
+        assert!(g2.structure_lying);
+        assert!(!g2.structure_augments);
+        let fused = PerceptionLayers {
+            screenshot_ref: Some("shot:1".into()),
+            a11y: Some("role=button name=Save".into()),
+            ocr: Some("Save".into()),
+            ..Default::default()
+        };
+        let g3 = fuse_perception(&fused).unwrap();
+        assert!(g3.structure_augments);
     }
 }

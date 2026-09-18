@@ -545,6 +545,27 @@ fn subagent_rpc(
             if let Some(role) = role {
                 spec.tools = crate::cua::filter_tools_for_role(role, &spec.tools);
             }
+            // P60.1 — harness and model are independent; a CLI-named
+            // "*-subagent" identity is refused.
+            let harness = params
+                .get("harness")
+                .and_then(|v| v.as_str())
+                .unwrap_or("inbuilt");
+            let model = params.get("model").and_then(|v| v.as_str()).unwrap_or("");
+            let binding = if !model.is_empty() {
+                Some(crate::bind_runtime(
+                    harness,
+                    model,
+                    role,
+                    params
+                        .get("chief")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string),
+                )?)
+            } else {
+                crate::refuse_cli_named_subagent(harness)?;
+                None
+            };
             let task_id = spec.spec.id.clone();
             runtime.spawn(spec).map_err(|e| e.to_string())?;
             Ok(serde_json::json!({
@@ -553,6 +574,9 @@ fn subagent_rpc(
                 "status": "running",
                 "artifacts": [],
                 "role": params.get("role").cloned().unwrap_or(serde_json::Value::Null),
+                "harness": harness,
+                "binding": binding,
+                "planes": crate::RUNTIME_PLANES.len(),
             }))
         }
         other => Err(format!("method not found: {other}")),
@@ -2838,6 +2862,31 @@ mod tests {
         assert!(!granted
             .iter()
             .any(|t| t == "file_ops.write" || t == "desktop.act"));
+        assert_eq!(out["planes"], 5);
+        assert_eq!(out["harness"], "inbuilt");
+        assert_eq!(out["binding"]["model"], "m");
+    }
+
+    #[test]
+    fn subagent_rpc_refuses_cli_named_subagent_harness() {
+        let mut rt = everyaios_blueprint::SubAgentRuntime::new(
+            everyaios_blueprint::SubAgentLimits::default(),
+        );
+        let err = super::subagent_rpc(
+            "subagent/spawn",
+            &serde_json::json!({
+                "spec": { "id": "x", "goal": "g", "context": [], "acceptance": [] },
+                "model": "opus",
+                "workspace": ".",
+                "parentId": "root",
+                "harness": "claude-subagent",
+                "tools": [],
+                "blockedTools": [],
+            }),
+            &mut rt,
+        );
+        assert!(err.is_err());
+        assert!(err.unwrap_err().contains("CLI-named"));
     }
 
     #[cfg(unix)]

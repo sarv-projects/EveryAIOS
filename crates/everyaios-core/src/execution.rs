@@ -832,6 +832,53 @@ impl ExecutionKernel {
                     "status": format!("{:?}", dag.nodes.iter().find(|n| n.id == node_id).map(|n| n.status)),
                 }))
             }
+            "execution/runtime_bind" => {
+                let harness = params
+                    .get("harness")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/runtime_bind requires harness")?;
+                let model = params
+                    .get("model")
+                    .and_then(Value::as_str)
+                    .ok_or("execution/runtime_bind requires model")?;
+                let role = params
+                    .get("role")
+                    .and_then(Value::as_str)
+                    .and_then(crate::AgentRole::parse);
+                let chief = params
+                    .get("chief")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let binding = crate::bind_runtime(harness, model, role, chief)?;
+                Ok(json!({
+                    "ok": true,
+                    "binding": binding,
+                    "planes": crate::RUNTIME_PLANES.len(),
+                    "governanceIsPrompt": false,
+                    "orchestratorIsLlm": false,
+                }))
+            }
+            "execution/cua_perceive" => {
+                let layers: crate::PerceptionLayers = serde_json::from_value(
+                    params
+                        .get("layers")
+                        .cloned()
+                        .ok_or("execution/cua_perceive requires layers")?,
+                )
+                .map_err(|e| format!("execution/cua_perceive: {e}"))?;
+                let graph = crate::fuse_perception(&layers)?;
+                if let Some(root) = params.get("root").and_then(Value::as_str) {
+                    if let Some(node_id) = params.get("nodeId").and_then(Value::as_str) {
+                        if let Ok(mut dag) = crate::load_dag(std::path::Path::new(root)) {
+                            if let Some(node) = dag.nodes.iter_mut().find(|n| n.id == node_id) {
+                                node.screenshot_ref = layers.screenshot_ref.clone();
+                            }
+                            let _ = crate::persist_dag(std::path::Path::new(root), &dag);
+                        }
+                    }
+                }
+                Ok(json!({ "ok": true, "scene": graph }))
+            }
             "execution/cua_stop" => {
                 let root = params
                     .get("root")
@@ -3085,5 +3132,55 @@ mod tests {
             .unwrap();
         assert_eq!(last["dag"]["nodes"][0]["fail_count"], 3);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn p60_runtime_bind_refuses_cli_named_subagent() {
+        let mut k = ExecutionKernel::new();
+        let bad = k.handle(
+            "execution/runtime_bind",
+            &json!({ "harness": "claude-subagent", "model": "opus", "role": "worker" }),
+        );
+        assert!(bad.is_err());
+        let ok = k
+            .handle(
+                "execution/runtime_bind",
+                &json!({
+                    "harness": "inbuilt",
+                    "model": "local-vl",
+                    "role": "worker",
+                    "chief": "inbuilt"
+                }),
+            )
+            .unwrap();
+        assert_eq!(ok["planes"], 5);
+        assert_eq!(ok["governanceIsPrompt"], false);
+        assert_eq!(ok["orchestratorIsLlm"], false);
+        assert_eq!(ok["binding"]["harness"], "inbuilt");
+        assert_eq!(ok["binding"]["model"], "local-vl");
+    }
+
+    #[test]
+    fn p60_cua_perceive_requires_screenshot_tree_may_lie() {
+        let mut k = ExecutionKernel::new();
+        let no_shot = k.handle(
+            "execution/cua_perceive",
+            &json!({ "layers": { "a11y": "button Save" } }),
+        );
+        assert!(no_shot.is_err());
+        let ok = k
+            .handle(
+                "execution/cua_perceive",
+                &json!({
+                    "layers": {
+                        "screenshotRef": "shot:1",
+                        "a11y": "lying"
+                    }
+                }),
+            )
+            .unwrap();
+        assert_eq!(ok["scene"]["visionFirst"], true);
+        assert_eq!(ok["scene"]["usable"], true);
+        assert_eq!(ok["scene"]["structureLying"], true);
     }
 }

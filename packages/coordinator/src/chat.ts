@@ -53,6 +53,8 @@ import { applyCuaSkillPromoteIfPresent } from "./cua-skill";
 import { applyCuaBriefIfPresent } from "./cua-brief";
 import { applyCuaMechanicalVerifyIfPresent } from "./cua-verify";
 import { applyCuaStopIfPresent } from "./cua-stop";
+import { applyRuntimeBindIfPresent } from "./runtime-bind";
+import { applyCuaPerceiveIfPresent } from "./cua-perceive";
 import { resolveMentions } from "./context-providers";
 import { classifyTask, selectModelForTask, type TaskKind } from "./router";
 import { chiefRegistry } from "./chief";
@@ -772,6 +774,10 @@ async function runInbuiltTurn(
             mode: args.fuse === true || args.mode === "fuse" ? "fuse" : "keep_best",
           });
         }
+        const bound = await applyRuntimeBindIfPresent(request, args);
+        if (bound.applied) {
+          emit({ type: "stage", streamId, stage: "runtime:bind" });
+        }
         await subAgentTracker.begin(spec.depth);
         try {
           const result = await dispatchSubAgent(request, spec, ctx);
@@ -834,6 +840,10 @@ async function runInbuiltTurn(
         const stop = await applyCuaStopIfPresent(request, args);
         if (stop.applied) {
           emit({ type: "stage", streamId, stage: `cua:stop:${stop.reason ?? "failed"}` });
+        }
+        const scene = await applyCuaPerceiveIfPresent(request, args);
+        if (scene.applied) {
+          emit({ type: "stage", streamId, stage: "cua:perceive" });
         }
       }
       if (toolId === "search.query") {
