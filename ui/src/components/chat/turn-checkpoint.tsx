@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { History, Loader2, RotateCcw, ShieldAlert, TriangleAlert } from 'lucide-react'
+import { History, Loader2, RotateCcw, ShieldAlert, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { inTauri } from '@/lib/tauri'
 import { fsUndoList, type FsUndo } from '@/lib/fs'
@@ -12,6 +12,7 @@ import {
   restoreCheckpointPaths,
   shortPath,
   snapshotsForSession,
+  type PreflightKind,
   type RestoreResult,
 } from '@/lib/checkpoints'
 
@@ -28,6 +29,12 @@ interface TurnCheckpointProps {
   /** Eager load state matching `files` (timeline). Omit for lazy mode. */
   loadState?: LoadState
   loadError?: string
+  /**
+   * P64.6/P64.7 — shadow-preflight evidence for this turn, when any tool
+   * result carried a verdict. Rendered as an honest badge on the row.
+   */
+  preflight?: PreflightKind
+  preflightNote?: string
   onRestored?: () => void
 }
 
@@ -55,6 +62,8 @@ export function TurnCheckpoint({
   files: eagerFiles,
   loadState: eagerState,
   loadError: eagerError,
+  preflight,
+  preflightNote,
   onRestored,
 }: TurnCheckpointProps) {
   const eager = eagerFiles !== undefined || eagerState !== undefined
@@ -211,6 +220,35 @@ export function TurnCheckpoint({
             {timeLabel && (
               <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
                 {timeLabel}
+              </span>
+            )}
+            {/* P64.6/P64.7 — shadow-preflight evidence, shown only when a
+                verdict actually exists. Never a pass that did not happen. */}
+            {preflight === 'preflighted' && (
+              <span
+                title={preflightNote ?? 'Shadow preflight passed before this edit landed'}
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-px font-mono text-[9px] text-emerald-400"
+              >
+                <ShieldCheck className="h-2.5 w-2.5" aria-hidden />
+                preflighted
+              </span>
+            )}
+            {preflight === 'failed' && (
+              <span
+                title={preflightNote ?? 'Shadow preflight failed but the edit landed'}
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-1.5 py-px font-mono text-[9px] text-rose-400"
+              >
+                <ShieldAlert className="h-2.5 w-2.5" aria-hidden />
+                preflight failed
+              </span>
+            )}
+            {preflight === 'unverified' && (
+              <span
+                title={preflightNote ?? 'Shadow preflight could not run — no evidence'}
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-muted/40 px-1.5 py-px font-mono text-[9px] text-muted-foreground"
+              >
+                <ShieldAlert className="h-2.5 w-2.5" aria-hidden />
+                unverified
               </span>
             )}
           </div>

@@ -317,6 +317,8 @@ export function SessionTimeline() {
                     timestamp={t.timestamp}
                     summary={t.summary}
                     turnIndex={t.turnIndex}
+                    preflight={t.preflight}
+                    preflightNote={t.preflightNote}
                     files={ckptFiles}
                     loadState={ckptFiles.length === 0 ? 'empty' : 'ready'}
                     onRestored={() => setCkptNonce((n) => n + 1)}
