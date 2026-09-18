@@ -240,6 +240,7 @@ export default function LocalModelsPanel() {
   const setSelectedModel = useAppStore((s) => s.setSelectedModel)
   const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
   const canDownload = downloadsAvailable()
+  const ram = ramBytes(hw)
 
   const hardwareFitSummary = useMemo(() => {
     const totalRamGb = ram > 0 ? ram / 1e9 : 8
@@ -359,7 +360,6 @@ export default function LocalModelsPanel() {
     }
   }, [selected, canDownload])
 
-  const ram = ramBytes(hw)
   const gguf = files.filter((f) => f.path.toLowerCase().endsWith('.gguf'))
 
   // P52.1 — per-file fit pre-check at the serving context (native, read-only;

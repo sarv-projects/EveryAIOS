@@ -11,7 +11,29 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — Multi-Step Onboarding Overhaul & Dynamic Hardware-Fit Engine)**:
+**(Current, 2026-09-18 — Comprehensive Documentation Sync & Verification Checkpoint)**:
+- Scope:
+  1. Updated `SPEC-CHANGELOG.md` with top entry detailing:
+     - Multi-Step Onboarding Overhaul (`ui/src/components/onboarding-modal.tsx`) with cycling brand typography animation, engine capability cards with dark/light and semantic cool-blue accent picker, live ACP agent discovery & auto-detection, and optional master passphrase with OS keychain fallback.
+     - Dynamic Hardware-Fit Capacity Profiling (`ui/src/components/panels/local-models-panel.tsx`, `setup-gate.tsx`) eliminating static stubs and computing safe memory headroom zones (<=60%, 60%–85%, >85% RAM) from live probed host RAM/GPU metrics, with live `model_estimate_fit` scoring and progressive disclosure.
+     - Ambient credential & secret file protection (`.env*`, `.ssh/`, `.aws/`, `id_rsa`, `id_ed25519`, `service_account.json`) in `everyaios-guard::protected_paths` (CVE-2026-47211).
+     - MCP stdio launcher hardening in `everyaios-mcp::npx` rejecting argument flags starting with `-` or `_`.
+  2. Updated `DESKTOP-APP-SPEC.md` §A5, §J4, and §4.1 detailing the Onboarding modal sequence and dynamic local model capacity and fit estimation contracts.
+  3. Updated `ARCH/12-UI-SPEC.md` (§4.0a Onboarding modal flow, §4.1a.4 Dynamic local models panel), `ARCH/06-SECURITY-GUARDRAILS.md` (ambient credential floors and MCP flag filtering), and `ARCH/17-NATIVE-AGENT.md` (§17.12.4 live ACP auto-detection and install flow).
+  4. Verified full suite:
+     - `node scripts/check-doc-sync.mjs`: exit 0 (166 capabilities in sync, TODO.md 1429 = 1264 done + 165 open, kernel gate clear).
+     - `node scripts/ipc-parity.mjs`: 0 broken.
+     - `node scripts/clean-profile-boot-check.mjs`: PASS.
+     - UI TypeScript check (`tsc --noEmit`): 0 errors.
+- Files: `SPEC-CHANGELOG.md`, `DESKTOP-APP-SPEC.md`, `ARCH/12-UI-SPEC.md`, `ARCH/06-SECURITY-GUARDRAILS.md`, `ARCH/17-NATIVE-AGENT.md`, `CURRENT_RUN.md`, `ui/src/components/panels/local-models-panel.tsx`.
+- Verified: `ui/node_modules/.bin/tsc --noEmit -p tsconfig.json` 0 errors; `node scripts/check-doc-sync.mjs` exit 0 (166 caps in sync, 1429 = 1264 done + 165 open, kernel gate clear); `node scripts/ipc-parity.mjs` 0 broken; `node scripts/clean-profile-boot-check.mjs` PASS.
+- Next:
+  1. Stage, commit, and push all verified changes to repository.
+  2. Live-model multi-turn soak for P64 edit ladder & shadow preflights.
+  3. P65.8 live external agent acceptance probes.
+  4. P50 release qualification & Windows MSI packaging.
+
+**(Previous, 2026-09-18 — Multi-Step Onboarding Overhaul & Dynamic Hardware-Fit Engine)**:
 - Scope:
   1. Interactive 4-Stage Onboarding Flow (`ui/src/components/onboarding-modal.tsx`):
      - Stage 0: Dynamic cycling typography animation (`EveryAIOS` → `EveryAgent` → `EveryWork` → `EveryDoc` → `EveryModel` → `EveryTask`).

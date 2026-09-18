@@ -246,6 +246,24 @@ Displayed when the agent creates/edits a file. Shows:
 - Modes (Normal / Plan / Research / Quick / Code) are optional; the default is "do the task".
 - **UI reference sources (doc 67 §6, finalization):** Claude Desktop **Views**, Cursor **activity bar**, ChatGPT **Work vs Codex**, Devin Desktop **command center** — all converged on rail + one-open-surface; Office is grouped (ChatGPT Work keeps docs/slides/sheets in "Work", not next to the terminal). AnythingLLM + Cherry Studio are the *first-run* reference ("tasks not modules"); **holaOS** is the closest whole-product competitor (side-by-side app+agent + marketplace UX) — validation only (modified-Apache).
 
+### 4.0a The Interactive 4-Stage Onboarding Modal Flow (`onboarding-modal.tsx`)
+
+On first launch, if `onboardingCompleted` is false, an interactive full-screen modal engages the user with zero cognitive friction:
+
+1. **Stage 0: Brand & Purpose Cycling Animation**
+   - Renders a dynamic typographic cycling title (`EveryAIOS` · `EveryAgent` · `EveryWork` · `EveryDoc` · `EveryModel` · `EveryTask`) with physical spring motion (`framer-motion`).
+   - Introduces EveryAIOS as the universal desktop operating harness and shared cowork plane.
+2. **Stage 1: Engine Capabilities & Theme Customization**
+   - Showcase cards for full-stack engines (Native Agent Orchestrator, Multi-Model Cloud/Local BYOK, Tiered Browser & CDP, Office & IronCalc, Guard-2 Security, 5-Tier Memory).
+   - Dynamic Dark/Light mode toggle and semantic cool-blue accent color customizer (`blue`, `sky`, `emerald`, `violet`, `amber`).
+3. **Stage 2: Live ACP Agent Discovery & Auto-Detection**
+   - Automatically probes host for installed ACP coding agents (`claude`, `codex`, `opencode`, `aider`, `grok`, etc.) via `acpInstallStatus` (`acp_install_status`).
+   - Displays 🟢 *Auto-Detected & Ready* badges for discovered CLIs without requiring redundant re-installation.
+   - For uninstalled agents, provides a one-click *Install* button that initiates a ticketed Guard-2 install flow (`acpInstallRequest` / `acpInstallCommit`).
+4. **Stage 3: Security & Passphrase (Optional)**
+   - Offers an optional master passphrase for power users seeking custom vault encryption.
+   - Defaults to zero-homework transparent OS Keychain / keyring encryption fallback for casual users, ensuring immediate usability without forced credential setup.
+
 ### 4.1 The 48px Activity Rail
 
 ```
@@ -335,6 +353,17 @@ MCP servers, skills, plugins, connectors, Office, Browser, Computer Use, artifac
 ### 4.1a.3 Visual system update
 
 The shell uses a cool blue semantic brand with light/dark themes and selectable accent tokens. Existing `orange-*` utility usage must be migrated to semantic tokens; orange may remain only where an existing status meaning explicitly requires it and must not represent selection or brand. The composer has one calm row—Agent, agent-owned Model, Work Mode, Autonomy—with advanced configuration in a popover/full-screen surface. Accessibility labels and text state accompany every status color.
+
+### 4.1a.4 Dynamic Local Models & Hardware Profiling Panel (`local-models-panel.tsx`)
+
+Settings → Local Models eliminates all hardcoded static presets (e.g. fixed 3B/7B labels) and dynamically tailors recommendations to the host machine:
+- **Host Hardware Profile:** Probes host RAM (`ram_bytes`), CPU cores, and GPU status (`getHardware()` / `local_hardware`).
+- **Dynamic Headroom Zones:** Computes memory safety boundaries directly from total host RAM:
+  - 🟢 **Safe / Fast & Smooth (<= 60% RAM):** Ample headroom for host OS and multi-turn KV cache.
+  - 🟡 **Capable / Moderate (60%–85% RAM):** Balanced performance, may experience memory pressure during deep context turns.
+  - 🔴 **Resource Intensive (> 85% RAM):** Exceeds safe host memory limits; requires dedicated GPU or high VRAM.
+- **Live Per-File Fit Scoring:** Calculates exact memory consumption via Rust `model_estimate_fit` on searched Hugging Face GGUF models.
+- **Progressive Disclosure:** Advanced technical details (quantization formats, KV cache quantization, tensor splits, context limits) are hidden behind a toggle ("Show Advanced / Quantization Details") for casual users.
 
 ### 4.1b Multi-view tabbed panel (v3.0 — VS Code logic)
 
