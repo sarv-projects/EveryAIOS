@@ -17,6 +17,17 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P51.29 MCP external floor + P51.17/30 NPX sandbox launcher + P51.7 exportable citations
+
+**Category:** implementation. Census **1429 = 1264 done + 165 open**. Capability identity remains **166**.
+
+1. `everyaios-core/src/tools.rs`: Third-party MCP tools (family `External`) always enforce `operation: "external_network"`, `risk: "high"`. In `ToolService::handle`, read-named third-party tools are blocked from auto-approval (`spec.read_only && spec.family != ToolFamily::External`) — OpenWorker MCP-EXTERNAL floor. Unit tested in `p51_29_mcp_external`.
+2. `crates/everyaios-mcp/src/npx.rs` + `attach.rs`: Stdio launch resolution with `resolve_stdio_launch_with`. Resolves launcher from system `PATH` then `EVERYAIOS_BUNDLED_NODE`, validates packages against trusted list (`trusted_npx_package`), and rejects shell escapes (`-c`, `--call`, bash/sh) before spawn.
+3. `ui/src/lib/citations.ts` + `message-bubble.tsx`: Added `formatCitationExport` rendering markdown with inline citation marks (`[^n]`) and a sorted `## Sources` reference list.
+
+**Verification.** core `p51_29_mcp_external` 1/0; mcp `npx::tests` 5/0; UI `citations.test.ts` 2/0; tsc 0; ipc-parity 0 broken.
+
+---
 ## 2026-09-18 — P51.28 skill invocation flags + P51.18 MCP autoStart/Start/Stop
 
 **Category:** implementation. **Flipped:** P51.28, P51.18 `[DONE]`. Census **1429 = 1264 done + 165 open**. Capability identity remains **166**.

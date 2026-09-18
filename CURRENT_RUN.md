@@ -11,7 +11,20 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — P51.28 skill invocation + P51.18 MCP autoStart)**:
+**(Current, 2026-09-18 — P51.29 MCP external floor + P51.17/30 NPX sandbox launcher + P51.7 exportable citations; committed in 78becc3)**:
+- Scope: 
+  1. P51.29 OpenWorker MCP-EXTERNAL floor: Third-party MCP tools always register with `family: ToolFamily::External`, `operation: "external_network"`, and `risk: "high"`. In `ToolService::handle`, read-named third-party tools are blocked from auto-approval (`spec.read_only && spec.family != ToolFamily::External`) — a stranger's tool name is never trusted as local read.
+  2. P51.17 / P51.30 MCP NPX sandbox resolution: `crates/everyaios-mcp/src/npx.rs` + `attach.rs` implements `resolve_stdio_launch_with`. Resolves launcher from system PATH then `EVERYAIOS_BUNDLED_NODE`, validates packages against `trusted_npx_package` allow-list, and rejects shell escapes (`-c`, `--call`, bash/sh) before spawn.
+  3. P51.7 Citation export dump: `ui/src/lib/citations.ts` adds `formatCitationExport` (marked body with `[^n]` + sorted `## Sources` markdown block), wired into `messageMarkdown()` in `message-bubble.tsx`.
+- Files: `crates/everyaios-core/src/tools.rs`, `crates/everyaios-mcp/src/{attach,lib,npx}.rs`, `ui/src/components/chat/message-bubble.tsx`, `ui/src/lib/citations.ts`, `ui/src/lib/citations.test.ts`.
+- Verified: core `p51_29_mcp_external` 1/0; mcp `npx::tests` 5/0; UI `citations.test.ts` 2/0; `check-doc-sync.mjs` 0 (166 caps, 1429 = 1264 done + 165 open, kernel clear); `ipc-parity.mjs` 0.
+- Not flipped: P65.8 live-agent acceptance, P64.5/6 live-model turn soak, packaged E2E, Windows/mac installers, post-v1 gated items.
+- Next: 
+  1. Live-model multi-turn soak for P64 edit ladder & shadow preflights.
+  2. P65.8 live external agent acceptance probes.
+  3. P50 release qualification & Windows MSI packaging.
+
+**(Previous, 2026-09-18 — P51.28 skill invocation + P51.18 MCP autoStart)**:
 - Scope: Crush/Zed `disable-model-invocation` / `user-invocable` have live consumers (`skill/warm_set`, compose, Skills badges). AnythingLLM MCP Start/Stop/autoStart/lazy-start: identity survives Stop; first tools/call does not undo an explicit Stop.
 - Verified: blueprint 1/0; core skill_rpc 2/0; src-tauri p51_stop 1/0; coordinator 34/0; UI 2/0; tsc 0; ipc-parity 0 broken.
 - Not flipped: P65.8 probes, P64.5/6 soak, packaged E2E, Windows/mac, post-v1.
@@ -125,20 +138,20 @@
 ---
 
 ## 2. Where We Stopped (Latest Progress)
-- **Completed Deliverables**:
-  - `desktop_app/README.md`: Completely rewritten. Human-readable intro. Expanded 2026 competitor matrix covering Claude (Desktop & Cowork), OpenAI Codex / ChatGPT, Claude Code, Cursor/Windsurf. Architecture in dropdowns. FAQ at the bottom. Committed as `532a8bb`.
-  - `desktop_app/TEST-CASES.md`: Full 83KB specification with all 8 modules, 8 cross-module integration suites, and 50 E2E production use cases.
-  - `ARCH/00-INDEX.md`, `ARCH/01`, `ARCH/02`, `ARCH/16`, `ARCH/17`: "Switzerland of AI" stripped from all.
-  - `DESKTOP-APP-SPEC.md`: "Switzerland of AI" stripped from lines 81 and 91.
-  - `SPEC-CHANGELOG.md`: "Switzerland of AI" stripped from lines 23 and 43.
-  - `.agents/skills/`: All 10 skills aligned.
-  - `.agents/agents/`: All 9 agent definitions aligned.
+- **Completed Deliverables (2026-09-18 Progress Wave — 17 commits landed)**:
+  - **P51.29 / P51.17 / P51.30 / P51.7**: MCP-EXTERNAL floor (`ToolFamily::External`, operation `external_network`, risk `high`, auto-approval blocked on external reads), NPX stdio sandbox launcher (`resolve_stdio_launch_with`, trusted package list, bundled node fallback, shell escape refusal), citation export dump (`formatCitationExport` with `## Sources`).
+  - **P51.28 / P51.18**: Model-disabled skill hiding in model catalog (`disable-model-invocation`), MCP autoStart/Start/Stop lifecycle with persistent identity.
+  - **P60 Swarm & Runtime**: Reliable combo picking (Case A/B/C), spend warning (>20%), distinct five runtime planes, vision-first perception fusion, mechanical disk verification, `BLOCKED != FAILED` policy, five-part brief on CUA nodes.
+  - **P59 CUA Pipeline & Skills**: DAG replanning in Agent-S Manager (`execution/cua_replan`), CUA trace promotion to `SKILL.md`, Progress view CUA DAG visualizer.
+  - **P65 Settings & Security**: Native agent surface protection, mutation rollback on failure, OAuth/skills IPC security matrix, provider & connections inventories.
+  - **P64 Native Agent Plane**: Edit ladder 3 reachable rungs (Exact $\to$ Token-Exact Structured $\to$ Fuzzy), `applyEditBatch`, derived edit risk, staged shadow worktree preflight isolation, timeline checkpoint preflight badges.
+  - **README & Spec Sync**: Human-readable README rewrite, 14-row capability table, 5-column 2026 competitor matrix, 10 FAQ dropdowns.
 - **Verification Evidence (All Passed)**:
-  - `node scripts/check-doc-sync.mjs` → **exit 0** (166 capabilities in sync, 1429 checkboxes intact, kernel gate clear).
+  - `node scripts/check-doc-sync.mjs` → **exit 0** (166 capabilities in sync, 1429 checkboxes intact = 1264 done + 165 open, kernel gate clear).
   - `node scripts/ipc-parity.mjs` → **exit 0** (321 commands registered).
-  - `Select-String -Path README.md -Pattern "Switzerland"` → **0 matches**.
-  - `ui/node_modules/.bin/tsc --noEmit -p tsconfig.json` → **exit 0** (0 type errors).
-  - `clean-profile-boot-check.mjs` → PASS / SKIP as expected without pre-built debug binary.
+  - Rust workspace cargo tests: all unit tests passing (`p51_29_mcp_external`, `npx::tests`, `p60_`, `p59_`, `p64_`, `cua::`).
+  - UI `bun test` and Coordinator `bun test` passing.
+- **Current Census**: **1,429 total = 1,264 done + 165 open** across 1,346 tracked files / 366,004 lines.
 - **Current session reconnaissance (read-only, re-measured 2026-09-16):** `desktop_app` only. True scale measured with `git ls-files`: **1,346 tracked files / 366,004 lines** (`rs` 490 files/185,969 lines · `ts` 425/62,625 · `tsx` 144/40,932 · `md` 136/24,283 · `json` 40/24,348 · `mjs` 14/2,081 · `css` 1/712), plus 21 ARCH docs (00–17 + DIAGRAMS + 2 ADR), 93 RESEARCH docs, 47 `src-tauri` files, 141 UI component files, 331 `#[tauri::command]` functions, 2,764 Rust `#[test]` fns, 27 Rust integration-test files, and 134 TS/TSX test files. (Previous entry said 1,331/361,083 and "310 test files" — superseded by this measurement.)
 - **Fully or substantially read this session:** all 10 `.agents/skills/*/SKILL.md`; root `AGENTS.md`; `README.md`; `package.json`/`pnpm-workspace.yaml`/`tsconfig.json`/`capabilities.yaml`/`.pre-commit-config.yaml`; all 22 crate `Cargo.toml`s + workspace manifest; all 11 package `package.json`s; `tauri.conf.json`; `ARCH/00`–`ARCH/17`, `DIAGRAMS.md`, `ARCH/ADR/0001`+`0002`; `TODO.md`; substantial portions of `DESKTOP-APP-SPEC.md`, `SPEC-CHANGELOG.md`, `capabilities.yaml`; `src-tauri/src/{lib,state,commands,catalog_cmds,acp_cmds}.rs`; every crate's `lib.rs` module map; `crates/everyaios-core/src/{tools,guard_service,execution}.rs`; `crates/everyaios-guard/src/sandbox.rs`; `crates/everyaios-audit/src/session_log.rs`; `crates/everyaios-memory/src/compaction.rs`; `crates/everyaios-vault/src/broker.rs` (partial); `packages/coordinator/src/{index,chat,plan,tools,router}.ts`; `packages/core-ai/src/{chat/system-prompt,context/tiered-compaction}.ts`; `packages/core-tools/src/{permission-gate,trust-ladder}.ts`; `ui/src/{main,App}.tsx`, `ui/src/lib/{bridge,runtime,tauri}.ts`, `ui/src/lib/store.ts` (partial, 450/2947).
 - **Core-code map pass (this wave):** extracted the module-doc header + line count of **every** `.rs`, `.ts` and `.tsx` file in the repo (from each file's own `//!` / leading block comment) to build a verified map, then read in full: `crates/everyaios-ipc/src/{lib,frame,message,channel,handle,budget,socket}.rs` (the whole process contract), `crates/everyaios-types/src/lib.rs`, `crates/everyaios-core/src/{lib,version,capability_manifest,adapter}.rs`, `crates/everyaios-guard/src/{lib,sandbox}.rs`, `crates/everyaios-audit/src/{lib,merkle,session_log}.rs`, `crates/everyaios-memory/src/compaction.rs`, `crates/everyaios-acp/src/acp_cmds`-adjacent domain, `src-tauri/src/{commands,catalog_cmds}.rs`; plus windows of `everyaios-core/src/{chat,guard_service,tools,execution}.rs`, `everyaios-vault/src/broker.rs`, `packages/coordinator/src/{chat,plan,tools,router,index}.ts`, `packages/core-ai/src/{chat/system-prompt,context/tiered-compaction}.ts`, `packages/core-tools/src/{permission-gate,trust-ladder}.ts`.
