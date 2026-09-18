@@ -712,7 +712,27 @@ impl ExecutionKernel {
                     .and_then(Value::as_str)
                     .map(std::path::PathBuf::from)
                     .unwrap_or_else(|| std::path::PathBuf::from("."));
-                self.run_preflight(id, files, structural, destructive, &root)
+                let candidate = match parse_shadow_candidate(params) {
+                    Ok(candidate) => candidate,
+                    Err(err) => {
+                        return Ok(json!({
+                            "id": id,
+                            "needsPreflight": true,
+                            "verified": false,
+                            "passed": false,
+                            "reason": format!("risk gate fired — but the candidate was refused: {err}"),
+                            "checks": [],
+                        }));
+                    }
+                };
+                self.run_preflight_with_candidate(
+                    id,
+                    files,
+                    structural,
+                    destructive,
+                    &root,
+                    &candidate,
+                )
             }
             // P64.6 — record a shadow-preflight outcome on a Work.
             "execution/record_preflight" => {
@@ -935,14 +955,16 @@ impl ExecutionKernel {
 
     /// P64.6 — risk-gated shadow preflight (SPEC I15, TODO P64.6).
     ///
-    /// Decides whether the edit earns a preflight, then typechecks it in the
-    /// shadow tree **before** anything lands. A small `local-write` is not
-    /// preflighted — it verifies after, per the contract.
+    /// Decides whether the edit earns a preflight, stages the candidate into
+    /// an isolated shadow tree (worktree/temp overlay — never the live root),
+    /// then typechecks the shadow **before** anything lands. A small
+    /// `local-write` is not preflighted — it verifies after, per the contract.
     ///
     /// Honest failure mode: when the risk gate says yes but **no** check command
-    /// can be discovered, the reply is `verified: false` and **nothing is
-    /// recorded**. A preflight that could not run must never leave a passing
-    /// receipt behind, because the receipt is what the rollback path trusts.
+    /// can be discovered (or no candidate/staging surface is available), the
+    /// reply is `verified: false` and **nothing is recorded**. A preflight
+    /// that could not run must never leave a passing receipt behind, because
+    /// the receipt is what the rollback path trusts.
     pub fn run_preflight(
         &mut self,
         id: &str,
@@ -950,6 +972,33 @@ impl ExecutionKernel {
         is_structural: bool,
         is_destructive: bool,
         root: &std::path::Path,
+    ) -> Result<Value, String> {
+        self.run_preflight_with_candidate(
+            id,
+            files_changed,
+            is_structural,
+            is_destructive,
+            root,
+            &[],
+        )
+    }
+
+    /// P64.6 — candidate-aware shadow preflight.
+    ///
+    /// `candidate` carries the proposed file contents (`path` + `content`)
+    /// the caller wants checked. They are staged into the isolated shadow
+    /// tree before the typecheck runs, so the verdict describes the proposed
+    /// change rather than the pre-existing tree. An empty candidate preserves
+    /// the legacy behaviour (check the root as given) so existing single-file
+    /// callers keep working without inventing content.
+    pub fn run_preflight_with_candidate(
+        &mut self,
+        id: &str,
+        files_changed: usize,
+        is_structural: bool,
+        is_destructive: bool,
+        root: &std::path::Path,
+        candidate: &[ShadowCandidateFile],
     ) -> Result<Value, String> {
         let decision = decide_shadow_preflight(files_changed, is_structural, is_destructive);
         if !decision.needs_preflight {
@@ -976,14 +1025,31 @@ impl ExecutionKernel {
                 "checks": [],
             }));
         }
-        let results = run_shadow_checks(root, &checks);
+        // P64.6 — stage the candidate into an isolated shadow tree first so the
+        // check sees the proposed change, not the pre-existing tree. The live
+        // root is never touched (worktree add / bounded temp overlay). Cleanup
+        // always runs; a cleanup failure is reported, never a verdict upgrade.
+        let (shadow_root, cleanup) = match stage_shadow_tree(root, candidate) {
+            Ok(staged) => staged,
+            Err(err) => {
+                return Ok(json!({
+                    "id": id,
+                    "needsPreflight": true,
+                    "verified": false,
+                    "passed": false,
+                    "reason": format!("{} — but the shadow tree could not be staged: {err}", decision.reason),
+                    "checks": [],
+                }));
+            }
+        };
+        let results = run_shadow_checks(&shadow_root, &checks);
         let passed = results.len() == checks.len() && results.iter().all(|r| r.success);
         let mut output = String::new();
         for (check, result) in checks.iter().zip(results.iter()) {
             output.push_str(&format!("$ {}\n{}\n", check.label, result.preview));
         }
         let receipt = self.record_preflight(id, passed, &output)?;
-        Ok(json!({
+        let mut reply = json!({
             "id": id,
             "needsPreflight": true,
             "verified": true,
@@ -991,8 +1057,200 @@ impl ExecutionKernel {
             "reason": decision.reason,
             "checks": results,
             "receipt": receipt,
-        }))
+        });
+        if let Err(err) = cleanup.cleanup() {
+            if let Value::Object(map) = &mut reply {
+                let reason = format!("{} (shadow cleanup: {err})", decision.reason);
+                map.insert("reason".into(), Value::String(reason));
+            }
+        }
+        Ok(reply)
     }
+}
+
+/// P64.6 — one proposed file staged into the shadow tree before the check.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ShadowCandidateFile {
+    /// Workspace-relative path (never absolute, never `..`).
+    pub path: String,
+    /// Proposed full file contents.
+    pub content: String,
+}
+
+impl ShadowCandidateFile {
+    pub fn new(path: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            content: content.into(),
+        }
+    }
+}
+
+/// P64.6 — parse the `candidateFiles` wire payload (`[{path, content}]`).
+///
+/// Fail-closed caps: at most 32 files, workspace-relative paths without
+/// traversal, 512 KiB per file. Anything else is an `Err` and the caller
+/// reports `verified: false` rather than checking a partial tree.
+pub fn parse_shadow_candidate(params: &Value) -> Result<Vec<ShadowCandidateFile>, String> {
+    const MAX_CANDIDATE_FILES: usize = 32;
+    const MAX_CANDIDATE_BYTES: usize = 512 * 1024;
+    let files = match params.get("candidateFiles") {
+        None => return Ok(Vec::new()),
+        Some(Value::Null) => return Ok(Vec::new()),
+        Some(files) => files,
+    };
+    let arr = files
+        .as_array()
+        .ok_or("execution/preflight candidateFiles must be an array of {path, content}")?;
+    if arr.len() > MAX_CANDIDATE_FILES {
+        return Err(format!(
+            "execution/preflight candidateFiles exceeds {MAX_CANDIDATE_FILES} files"
+        ));
+    }
+    let mut out = Vec::with_capacity(arr.len());
+    for (i, item) in arr.iter().enumerate() {
+        let path = item.get("path").and_then(Value::as_str).ok_or(format!(
+            "execution/preflight candidateFiles[{i}] requires path"
+        ))?;
+        let content = item.get("content").and_then(Value::as_str).ok_or(format!(
+            "execution/preflight candidateFiles[{i}] requires content"
+        ))?;
+        if path.is_empty() || path.len() > 512 {
+            return Err(format!(
+                "execution/preflight candidateFiles[{i}] has a bad path"
+            ));
+        }
+        if path.starts_with('/') || path.starts_with('\\') {
+            return Err(format!(
+                "execution/preflight candidateFiles[{i}] must be relative"
+            ));
+        }
+        let rel = std::path::Path::new(path);
+        if rel
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            return Err(format!(
+                "execution/preflight candidateFiles[{i}] must not contain `..`"
+            ));
+        }
+        if content.len() > MAX_CANDIDATE_BYTES {
+            return Err(format!(
+                "execution/preflight candidateFiles[{i}] exceeds {MAX_CANDIDATE_BYTES} bytes"
+            ));
+        }
+        out.push(ShadowCandidateFile::new(path, content));
+    }
+    Ok(out)
+}
+
+/// P64.6 — cleanup handle for a staged shadow tree.
+enum ShadowCleanup {
+    Worktree {
+        repo: std::path::PathBuf,
+        path: std::path::PathBuf,
+    },
+    TempDir(std::path::PathBuf),
+    None,
+}
+
+impl ShadowCleanup {
+    fn cleanup(self) -> Result<(), String> {
+        match self {
+            ShadowCleanup::None => Ok(()),
+            ShadowCleanup::TempDir(dir) => {
+                std::fs::remove_dir_all(&dir).map_err(|e| format!("remove shadow temp dir: {e}"))
+            }
+            ShadowCleanup::Worktree { repo, path } => {
+                let name = path
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let status = std::process::Command::new("git")
+                    .current_dir(&repo)
+                    .args(["worktree", "remove", "--force", &name])
+                    .output()
+                    .map_err(|e| format!("shadow worktree remove spawn failed: {e}"))?;
+                if !status.status.success() {
+                    let _ = std::fs::remove_dir_all(&path);
+                    let stderr = String::from_utf8_lossy(&status.stderr).trim().to_string();
+                    return Err(format!("git worktree remove failed: {stderr}"));
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// P64.6 — stage the shadow tree for a candidate-aware preflight.
+///
+/// The live `root` is never written: a git checkout prefers
+/// `git worktree add --detach` (cheap full tree), a non-git root gets a
+/// bounded temp overlay (candidate files + manifest copies so discovery
+/// still fires), and an empty candidate reuses `root` as-is.
+fn stage_shadow_tree(
+    root: &std::path::Path,
+    candidate: &[ShadowCandidateFile],
+) -> Result<(std::path::PathBuf, ShadowCleanup), String> {
+    if candidate.is_empty() {
+        return Ok((root.to_path_buf(), ShadowCleanup::None));
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    if root.join(".git").is_dir() {
+        let dir = std::env::temp_dir().join(format!("eaios-shadow-{}-{stamp}", std::process::id()));
+        let status = std::process::Command::new("git")
+            .current_dir(root)
+            .args(["worktree", "add", "--detach", &dir.to_string_lossy()])
+            .output()
+            .map_err(|e| format!("shadow worktree add spawn failed: {e}"))?;
+        if !status.status.success() {
+            let stderr = String::from_utf8_lossy(&status.stderr).trim().to_string();
+            return Err(format!("git worktree add failed: {stderr}"));
+        }
+        for file in candidate {
+            let dest = dir.join(&file.path);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("shadow stage mkdir: {e}"))?;
+            }
+            std::fs::write(&dest, &file.content).map_err(|e| format!("shadow stage write: {e}"))?;
+        }
+        return Ok((
+            dir.clone(),
+            ShadowCleanup::Worktree {
+                repo: root.to_path_buf(),
+                path: dir,
+            },
+        ));
+    }
+    let dir =
+        std::env::temp_dir().join(format!("eaios-shadow-nogit-{}-{stamp}", std::process::id()));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("shadow stage mkdir: {e}"))?;
+    for name in [
+        "Cargo.toml",
+        "package.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lock",
+        "bun.lockb",
+    ] {
+        let src = root.join(name);
+        if src.is_file() {
+            if let Ok(bytes) = std::fs::read(&src) {
+                let _ = std::fs::write(dir.join(name), bytes);
+            }
+        }
+    }
+    for file in candidate {
+        let dest = dir.join(&file.path);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("shadow stage mkdir: {e}"))?;
+        }
+        std::fs::write(&dest, &file.content).map_err(|e| format!("shadow stage write: {e}"))?;
+    }
+    Ok((dir.clone(), ShadowCleanup::TempDir(dir)))
 }
 
 /// P64.6 — risk-gated shadow-preflight decision (SPEC I15).
@@ -1801,7 +2059,76 @@ mod tests {
         assert_eq!(discovered.len(), 1);
         assert_eq!(discovered[0].program, "cargo");
         assert_eq!(discovered[0].args, vec!["check", "--quiet"]);
+        // P64.6 — candidate parsing is fail-closed: traversal, absolute paths,
+        // non-objects and oversized payloads never reach the tree.
+        let ok_params = json!({"candidateFiles": [{"path": "src/a.rs", "content": "ok"}]});
+        assert_eq!(parse_shadow_candidate(&ok_params).unwrap().len(), 1);
+        assert!(parse_shadow_candidate(&json!({})).unwrap().is_empty());
+        assert!(parse_shadow_candidate(
+            &json!({"candidateFiles": [{"path": "../evil", "content": "x"}]})
+        )
+        .is_err());
+        assert!(parse_shadow_candidate(
+            &json!({"candidateFiles": [{"path": "/abs", "content": "x"}]})
+        )
+        .is_err());
+        assert!(parse_shadow_candidate(&json!({"candidateFiles": "nope"})).is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P64.6 — the candidate is checked, not the pre-existing tree.
+    ///
+    /// The declared check reads the staged candidate file, so a `broken`
+    /// candidate fails the gate and a `fixed` one passes; the live root is
+    /// never written (no `probe.txt` lands there). Both shadows are removed by
+    /// the call.
+    #[test]
+    fn p64_shadow_preflight_checks_the_candidate_not_the_tree() {
+        let mut k = ExecutionKernel::new();
+        let ex = k.begin(
+            ExecutionTrigger::Chat,
+            "s",
+            "candidate",
+            None,
+            String::new(),
+            String::new(),
+            Vec::new(),
+        );
+        let root = std::env::temp_dir().join(format!("eaios-candidate-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        // The declared check reads the staged candidate file: a `broken`
+        // candidate fails the gate, a `fixed` one passes, and the live root is
+        // never touched (no `probe.txt` lands there). Both shadows are removed
+        // by the call. The script is self-contained (no repo-local file) so the
+        // verdict can only come from the staged candidate.
+        std::fs::write(
+            root.join("package.json"),
+            "{\"scripts\": {\"check\": \"grep -q '^fixed$' probe.txt\"}}",
+        )
+        .unwrap();
+        let candidate = |content: &str| vec![ShadowCandidateFile::new("probe.txt", content)];
+        let broken = k
+            .run_preflight_with_candidate(&ex.id, 2, false, false, &root, &candidate("broken"))
+            .expect("broken candidate preflights");
+        assert_eq!(broken["verified"], true);
+        assert_eq!(
+            broken["passed"], false,
+            "the staged broken candidate must fail"
+        );
+        let fixed = k
+            .run_preflight_with_candidate(&ex.id, 2, false, false, &root, &candidate("fixed"))
+            .expect("fixed candidate preflights");
+        assert_eq!(fixed["verified"], true);
+        assert_eq!(
+            fixed["passed"], true,
+            "the staged fixed candidate must pass"
+        );
+        assert!(
+            !root.join("probe.txt").exists(),
+            "the live root is never written — only the shadow"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// P64.6 — a preflight really runs the discovered command, and a failing one

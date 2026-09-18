@@ -502,6 +502,41 @@ describe("P64.6 — shadow preflight seam (risk-gated typecheck before commit)",
       });
     });
 
+    test("carries the staged candidate so the check sees the proposal, not the tree", async () => {
+      const seen: Array<{ method: string; params: unknown }> = [];
+      const ex = new ToolExecutor(async (method, params) => {
+        seen.push({ method, params });
+        return {
+          needsPreflight: true,
+          verified: true,
+          passed: true,
+          reason: "multi-file edit preflights in a shadow tree",
+        };
+      });
+      ex.setExecutionId("ex-12");
+      const out = await ex.runShadowPreflight({
+        root: "/repo/.everyaios/worktrees/task-2",
+        filesChanged: 2,
+        candidateFiles: [{ path: "src/a.ts", content: "export const a = 1\n" }],
+      });
+      const params = seen[0]?.params as Record<string, unknown>;
+      expect(params.candidateFiles).toEqual([
+        { path: "src/a.ts", content: "export const a = 1\n" },
+      ]);
+      expect(out.passed).toBe(true);
+      // No candidate → the key is omitted entirely (the legacy
+      // check-the-root-as-given behaviour), never sent as `undefined`.
+      const seen2: Array<{ method: string; params: unknown }> = [];
+      const ex2 = new ToolExecutor(async (method, params) => {
+        seen2.push({ method, params });
+        return { needsPreflight: false, verified: false, passed: false, reason: "small write" };
+      });
+      ex2.setExecutionId("ex-13");
+      await ex2.runShadowPreflight({ root: "/repo", filesChanged: 1 });
+      const params2 = seen2[0]?.params as Record<string, unknown>;
+      expect("candidateFiles" in params2).toBe(false);
+    });
+
     test("with no execution bound it reports no-evidence, not a pass", async () => {
       const ex = new ToolExecutor(async () => ({}));
       const out = await ex.runShadowPreflight({ root: "/repo", filesChanged: 3 });
@@ -536,5 +571,89 @@ describe("P64.6 — shadow preflight seam (risk-gated typecheck before commit)",
       // Unrunnable is not a failure — it must not be turned into a refusal.
       expect(preflightBlocks({ ...failed, verified: false, passed: false })).toBe(false);
       expect(preflightBlocks({ ...failed, passed: true })).toBe(false);
+  });
+
+  /**
+   * P64.6 — the production call site: a *failed* candidate preflight must
+   * refuse the write, and a passing / unrunnable one must let it through.
+   */
+  function editPath(verdict: Partial<ShadowPreflightResult>) {
+    const calls: string[] = [];
+    /** Tool ids that actually reached `tool/commit` (the write path). */
+    const committed: string[] = [];
+    const request = async (method: string, params: unknown) => {
+      const p = (params ?? {}) as Record<string, unknown>;
+      calls.push(method);
+      if (method === "guard/evaluate") return { action: "allow", ticketId: "tkt-1" };
+      if (method === "guard/use") return { consumed: true };
+      if (method === "tool/exec") return { action: "allow", ticketId: "tkt-1", argsHash: "h" };
+      if (method === "tool/commit") {
+        if (typeof p.toolId === "string") committed.push(p.toolId);
+        if (p.toolId === "file_ops.read") return { ok: true, content: "line one\nTARGET\n" };
+        return { ok: true, content: { written: true } };
+      }
+      if (method === "execution/preflight") return verdict;
+      return {};
+    };
+    return { request, calls, committed };
+  }
+
+  test("a failing candidate preflight refuses the write before it lands", async () => {
+    const { request, calls, committed } = editPath({
+      needsPreflight: true,
+      verified: true,
+      passed: false,
+      reason: "cargo check failed",
+    });
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-20");
+    await expect(
+      applyExactEdit(
+        ex,
+        { path: "src/a.ts", target: "TARGET", replacement: "NEXT" },
+        { sessionId: "s" },
+        { structural: true, root: "/repo" },
+      ),
+    ).rejects.toThrow(/shadow preflight failed/);
+    expect(calls).toContain("execution/preflight");
+    // The read committed (it had to, to build the candidate) but **the write
+    // never did** — the refusal lands before the mutating commit.
+    expect(committed).toContain("file_ops.read");
+    expect(committed).not.toContain("file_ops.write");
+  });
+
+  test("a passing candidate preflight lets the edit land", async () => {
+    const { request, calls } = editPath({
+      needsPreflight: true,
+      verified: true,
+      passed: true,
+      reason: "structural edit preflights in a shadow tree",
+    });
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-21");
+    await applyExactEdit(
+      ex,
+      { path: "src/a.ts", target: "TARGET", replacement: "NEXT" },
+      { sessionId: "s" },
+      { structural: true, root: "/repo" },
+    );
+    expect(calls).toContain("tool/commit");
+  });
+
+  test("an unrunnable preflight is no evidence and never blocks the edit", async () => {
+    const { request, calls } = editPath({
+      needsPreflight: true,
+      verified: false,
+      passed: false,
+      reason: "no typecheck command was discovered",
+    });
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-22");
+    await applyExactEdit(
+      ex,
+      { path: "src/a.ts", target: "TARGET", replacement: "NEXT" },
+      { sessionId: "s" },
+    );
+    expect(calls).toContain("tool/commit");
   });
 });
