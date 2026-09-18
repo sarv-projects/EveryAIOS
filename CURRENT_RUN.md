@@ -11,7 +11,12 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — P60.6 mechanical verify + P60.7 BLOCKED≠FAILED)**:
+**(Current, 2026-09-18 — P60.1 five-way split + P60.2 perception fusion)**:
+- Scope: five distinct runtime planes (no CLI-named subagent); vision-first scene graph (structure augments, lying tree still usable).
+- Verified: core `p60_` 11/0; `subagent_rpc` 3/0; coordinator runtime-bind/cua-perceive 4/0; tsc 0.
+- Not flipped: P60.4/.8–.11, P65.8, P51.10 UI walkthrough, P50.4.3 STT engine, soak, Windows/mac, post-v1.
+
+**(Previous, 2026-09-18 — P60.6 mechanical verify + P60.7 BLOCKED≠FAILED)**:
 - Scope: independent disk/command verify (Worker claim ignored); permission/missing-info is Blocked and does not burn fail budget; FAILED×3 reclaims.
 - Verified: core `p60_` 7/0; coordinator cua-verify/cua-stop 4/0; tsc 0.
 - Not flipped: P60.1/.2/.4/.8–.11, P65.8, packaged E2E, soak, Windows/mac, post-v1.

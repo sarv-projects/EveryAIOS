@@ -17,6 +17,19 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-18 — P60.1 five-way split + P60.2 vision-first perception fusion
+
+**Category:** implementation. **Flipped:** P60.1, P60.2 `[DONE]`. Census **1429 = 1256 done + 173 open**. Capability identity remains **166**.
+
+**Fetched:** Agent-S Worker `generate_next_action` — `assign_screenshot(obs)` then `image_content=obs["screenshot"]`. A11y is linearized separately and does not replace pixels. Spec §4.2.5b five distinct planes; no architecture named after one CLI.
+
+1. `RuntimePlane` ×5; `bind_runtime` / `execution/runtime_bind`; `subagent/spawn` refuses `claude-subagent`. Coordinator `applyRuntimeBindIfPresent`.
+2. `fuse_perception` requires a screenshot ref. Lying/missing a11y still `usable`. Live: `execution/cua_perceive`.
+
+**Verification.** core `p60_` 11/0; `subagent_rpc` 3/0; coordinator 4/0; tsc 0.
+
+---
+
 ## 2026-09-18 — P60.6 mechanical verify + P60.7 BLOCKED ≠ FAILED
 
 **Category:** implementation. **Flipped:** P60.6, P60.7 `[DONE]`. Census **1429 = 1254 done + 175 open**. Capability identity remains **166**.
