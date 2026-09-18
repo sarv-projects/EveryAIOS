@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAppStore } from '@/lib/store'
 import { useTheme, type Accent } from '@/components/theme-provider'
 import { inTauri, invoke } from '@/lib/tauri'
+import { acpInstallStatus, acpInstallRequest, acpInstallCommit, acpIdFor } from '@/lib/acp'
 import { AGENTS } from '@/lib/agents'
 import { cn } from '@/lib/utils'
 
@@ -124,7 +125,7 @@ export function OnboardingModal() {
     return () => clearInterval(interval)
   }, [step])
 
-  // Real-time Agent Auto-Detection
+  // Real-time Agent Auto-Detection via ACP Harness
   const scanAgents = async () => {
     setScanning(true)
     const detected: Record<string, boolean> = {
@@ -133,14 +134,16 @@ export function OnboardingModal() {
 
     if (inTauri()) {
       try {
-        const res = await invoke<{ installed?: string[]; known?: string[] }>('acp_installed_agents')
-        if (res?.installed) {
-          for (const id of res.installed) {
-            detected[id] = true
+        const statusMap = await acpInstallStatus()
+        for (const ag of AGENTS) {
+          const acpId = acpIdFor(ag.id)
+          const state = statusMap[acpId] || statusMap[ag.id]
+          if (state?.installed || state?.discovered || state?.launchable) {
+            detected[ag.id] = true
           }
         }
       } catch {
-        // In local discovery fallback
+        // Fallback to local discovery
       }
     } else {
       // Browser preview simulated detection
@@ -169,12 +172,16 @@ export function OnboardingModal() {
     setInstallingAgent(agentId)
     try {
       if (inTauri()) {
-        await invoke('acp_install_agent', { agentId })
+        const acpId = acpIdFor(agentId)
+        const req = await acpInstallRequest(acpId)
+        if (req.ticketId) {
+          await acpInstallCommit(acpId, req.ticketId)
+        }
       }
       setDetectedAgents((prev) => ({ ...prev, [agentId]: true }))
       notify(`Agent ${agentId} installed and ready.`)
-    } catch {
-      notify(`Install note: install CLI globally via terminal, or use auto-detected path.`)
+    } catch (e) {
+      notify(e instanceof Error ? e.message : `Install note: install CLI globally via terminal, or use auto-detected path.`)
     } finally {
       setInstallingAgent(null)
     }
