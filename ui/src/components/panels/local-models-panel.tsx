@@ -234,11 +234,54 @@ export default function LocalModelsPanel() {
   const [gallery, setGallery] = useState<GalleryIndex | null>(null)
   const [galleryError, setGalleryError] = useState<string | null>(null)
   const [galleryBusy, setGalleryBusy] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const notify = useAppStore((s) => s.notify)
   const setSelectedAgent = useAppStore((s) => s.setSelectedAgent)
   const setSelectedModel = useAppStore((s) => s.setSelectedModel)
   const setLocalRuntime = useAppStore((s) => s.setLocalRuntime)
   const canDownload = downloadsAvailable()
+
+  const HARDWARE_TIERS = useMemo(() => [
+    {
+      id: 'tier-3b',
+      title: 'Recommended (Fast & Smooth)',
+      models: 'Llama 3.2 3B / Qwen 2.5 3B',
+      ramReq: '~2.2 GB RAM',
+      desc: 'Instant startup, fast token response. Fits all standard laptops & PCs (8GB+ RAM).',
+      repoId: 'unsloth/Llama-3.2-3B-Instruct-GGUF',
+      filename: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+      status: 'fast',
+      dotColor: 'bg-emerald-400',
+      badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      fits: ram >= 4e9,
+    },
+    {
+      id: 'tier-7b',
+      title: 'Capable (Moderate Speed)',
+      models: 'Qwen 2.5 7B / Llama 3.1 8B',
+      ramReq: '~5.8 GB RAM',
+      desc: 'Balanced reasoning and coding accuracy. Recommended for 16GB+ RAM systems.',
+      repoId: 'Qwen/Qwen2.5-7B-Instruct-GGUF',
+      filename: 'qwen2.5-7b-instruct-q4_k_m.gguf',
+      status: 'moderate',
+      dotColor: 'bg-amber-400',
+      badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      fits: ram >= 8e9,
+    },
+    {
+      id: 'tier-32b',
+      title: 'Resource Intensive (Deep Reasoning)',
+      models: 'DeepSeek R1 32B / Llama 3.3 70B',
+      ramReq: '24 GB+ RAM / Dedicated GPU',
+      desc: 'Maximum coding intelligence. Requires high-spec workstation or dedicated VRAM.',
+      repoId: 'unsloth/DeepSeek-R1-Distill-Qwen-32B-GGUF',
+      filename: 'DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf',
+      status: 'intensive',
+      dotColor: 'bg-red-400',
+      badgeBg: 'bg-red-500/10 text-red-400 border-red-500/20',
+      fits: ram >= 24e9,
+    },
+  ], [ram])
 
   const refreshNative = useCallback(async () => {
     if (!canDownload) return
@@ -567,45 +610,68 @@ export default function LocalModelsPanel() {
       )}
 
       {tab === 'discover' && (
-        <div className="flex min-h-0 flex-1 flex-col">
-          {installed.length === 0 && registry.length === 0 && firstCard && (
-            <div className="mb-3 rounded-lg border border-brand/30 bg-brand/5 p-3">
-              <div className="text-[12px] font-semibold text-foreground">Your first model</div>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Live from Hugging Face Hub (current Hub sort). Nothing is named in source — this
-                card is whatever the Hub returns first. Downloads are verified by sha256 and
-                registered as <span className="font-mono">local://hf/…</span> for the picker.
-              </p>
-              <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-border/50 bg-background/50 px-2 py-1.5">
-                <div className="min-w-0">
-                  <div className="truncate text-[11px] font-medium">{firstCard.id}</div>
-                  <div className="font-mono text-[10px] text-muted-foreground">
-                    ↓ {formatDownloads(firstCard.downloads)} · ★ {firstCard.likes}
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  className="h-7 shrink-0 bg-brand px-2 text-[10px] text-white hover:bg-brand-hover"
-                  disabled={busyFile !== null}
-                  onClick={() => {
-                    void listHubFiles(firstCard.id)
-                      .then((f) => {
-                        const gg = f.find((x) => /Q4_K_M/i.test(x.path)) ?? f.find((x) => x.path.endsWith('.gguf')) ?? f[0]
-                        if (gg) return download(firstCard.id, gg)
-                        setNativeError('No GGUF/safetensors files listed on this repo main branch.')
-                      })
-                  }}
-                >
-                  {busyFile ? (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  ) : (
-                    <Download className="mr-1 h-3 w-3" />
-                  )}
-                  Download
-                </Button>
+        <div className="flex min-h-0 flex-1 flex-col space-y-3">
+          {/* System Hardware Profile & Traffic Light Tiers */}
+          <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2.5">
+              <div className="flex items-center gap-2">
+                <Cpu className="h-4 w-4 text-brand" />
+                <span className="text-xs font-semibold text-foreground">System Hardware Profile</span>
+              </div>
+              <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+                <Badge variant="outline" className="border-border/60 font-mono text-[10px]">
+                  RAM: {formatBytes(ram)}
+                </Badge>
+                {hw?.gpu && hw.gpu !== '—' && (
+                  <Badge variant="outline" className="border-border/60 font-mono text-[10px]">
+                    GPU: {hw.gpu}
+                  </Badge>
+                )}
+                <Badge variant="outline" className="border-border/60 font-mono text-[10px]">
+                  CPU: {cpuCores(hw) || '—'} Cores
+                </Badge>
               </div>
             </div>
-          )}
+
+            {/* 3 Traffic Light Hardware Fit Tiers */}
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              {HARDWARE_TIERS.map((t) => (
+                <div
+                  key={t.id}
+                  className={cn(
+                    'flex flex-col justify-between rounded-lg border p-2.5 transition-all',
+                    t.badgeBg,
+                  )}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn('inline-block h-2 w-2 rounded-full', t.dotColor)} />
+                        <span className="text-[11px] font-semibold text-foreground">{t.title}</span>
+                      </div>
+                      <span className="font-mono text-[9px] opacity-80">{t.ramReq}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] font-medium text-foreground">{t.models}</div>
+                    <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{t.desc}</p>
+                  </div>
+
+                  <div className="mt-2.5 pt-1 border-t border-border/30">
+                    <Button
+                      size="sm"
+                      className="h-6 w-full bg-brand text-[10px] text-black hover:bg-brand/90 font-medium"
+                      disabled={busyFile !== null || !canDownload}
+                      onClick={() => {
+                        void download(t.repoId, { path: t.filename, size: 0, type: 'file' })
+                      }}
+                    >
+                      <Download className="mr-1 h-3 w-3" />
+                      1-Click Download
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="mb-2 flex items-center gap-2">
             <div className="relative flex-1">
@@ -741,22 +807,31 @@ export default function LocalModelsPanel() {
                       <Badge className="bg-sky-500/15 px-1 text-[8px] text-sky-300">MLX</Badge>
                     )}
                   </div>
-                  <div className="mt-3 text-[11px] font-semibold">Download options</div>
-                  {recommended && (
-                    <div className="mt-1 font-mono text-[10px] text-emerald-300">
-                      Recommended for your hardware: <span className="font-bold">{recommended.quant}</span>
-                      {' '}(fits in {formatBytes(recommended.availableRamBytes)} free RAM)
-                    </div>
-                  )}
-                  <div className="mt-1.5 rounded-md border border-border/60 bg-background/40 p-2">
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-[11px] font-semibold">Download Options</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                      className="text-[10px] text-brand hover:underline font-mono"
+                    >
+                      {showAdvanced ? 'Hide Technical Details' : 'Show Advanced / Quantization'}
+                    </button>
+                  </div>
+
+                  <div className="mt-1.5 rounded-md border border-border/60 bg-background/40 p-2.5">
                     {chosen ? (
                       <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0 font-mono text-[10px] text-muted-foreground">
-                          {quantFromPath(chosen.path)} · {formatBytes(chosen.size)} · {chosen.path}
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-foreground">
+                            {showAdvanced ? quantFromPath(chosen.path) : 'Optimal Build (Ready to Run)'}
+                          </div>
+                          <div className="font-mono text-[10px] text-muted-foreground">
+                            Size: {formatBytes(chosen.size)} • {showAdvanced ? chosen.path : 'Pre-configured for your RAM'}
+                          </div>
                         </div>
                         <Button
                           size="sm"
-                          className="h-7 shrink-0 bg-brand px-2.5 text-[10px] text-white hover:bg-brand-hover"
+                          className="h-7 shrink-0 bg-brand px-3 text-[10px] text-black hover:bg-brand/90 font-medium"
                           disabled={busyFile !== null}
                           onClick={() => download(selected.id, chosen)}
                         >
@@ -765,7 +840,7 @@ export default function LocalModelsPanel() {
                           ) : (
                             <Download className="mr-1 h-3 w-3" />
                           )}
-                          Download
+                          Download &amp; Activate
                         </Button>
                       </div>
                     ) : (
@@ -773,8 +848,10 @@ export default function LocalModelsPanel() {
                         No GGUF listed on main yet — Hub tree empty or failed.
                       </div>
                     )}
-                    {gguf.length > 1 && (
-                      <div className="mt-2 space-y-1.5">
+
+                    {showAdvanced && gguf.length > 1 && (
+                      <div className="mt-3 border-t border-border/40 pt-2 space-y-1.5">
+                        <div className="text-[10px] font-medium text-muted-foreground">Available Quantization Formats:</div>
                         <div className="flex flex-wrap gap-1">
                           {gguf.slice(0, 10).map((f) => {
                             const q = quantFromPath(f.path)
@@ -807,7 +884,7 @@ export default function LocalModelsPanel() {
                           })}
                         </div>
                         {canDownload && (
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
                             <span className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
                               <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
                               fits
@@ -815,28 +892,8 @@ export default function LocalModelsPanel() {
                               slow
                               <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />
                               won't fit
-                              <span className="text-border-foreground/50">— estimate at {FIT_CTX_LABEL} ctx, file + KV vs RAM (+VRAM)</span>
+                              <span className="text-border-foreground/50">— estimate at {FIT_CTX_LABEL} ctx</span>
                             </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 border-brand/40 px-2 text-[10px] text-brand hover:bg-brand/10"
-                              disabled={busyFile !== null || pickingBest}
-                              onClick={() => void autoPick()}
-                              title="Let the native picker choose the best build for this machine (prefers a Q4_K_M build, CPU fallback). Download still needs your confirm."
-                            >
-                              {pickingBest ? (
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              ) : (
-                                <Sparkles className="mr-1 h-3 w-3" />
-                              )}
-                              Auto-pick for this hardware
-                            </Button>
-                            {autoPicked && chosen && (
-                              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] text-emerald-300">
-                                Auto-picked {quantFromPath(chosen.path)} — you can switch below.
-                              </span>
-                            )}
                           </div>
                         )}
                       </div>
