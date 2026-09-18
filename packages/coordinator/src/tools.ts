@@ -595,8 +595,8 @@ export class ToolExecutor {
     }
   }
 
-  async listTools(): Promise<ListedTool[]> {
-    const out = (await this.request("tool/list", {})) as {
+  async listTools(plane: "all" | "shared" = "all"): Promise<ListedTool[]> {
+    const out = (await this.request("tool/list", { plane })) as {
       tools?: ListedTool[];
     };
     return out.tools ?? [];
@@ -1708,6 +1708,50 @@ export interface BatchEditResult {
  * - a write failure mid-batch is reported with how many files had already
  *   landed, so a partial success is never disguised as a clean failure.
  */
+/**
+ * P64.5 — Aider `apply_edits` list: consecutive `file_ops.edit` calls in one
+ * model round share a single shadow preflight (`filesChanged = N`). Other
+ * tools stay per-call. This is the live consumer for `applyEditBatch`.
+ */
+export async function executeEditAwareRound(
+  executor: ToolExecutor,
+  calls: Array<{ toolId: string; args: Record<string, unknown> }>,
+  ctx: { sessionId: string; agentId?: string },
+  dispatch: (toolId: string, args: Record<string, unknown>) => Promise<unknown>,
+): Promise<unknown[]> {
+  const out: unknown[] = [];
+  let i = 0;
+  while (i < calls.length) {
+    const cur = calls[i]!;
+    if (cur.toolId === "file_ops.edit") {
+      const batch: BatchEditParams[] = [];
+      const start = i;
+      while (i < calls.length && calls[i]!.toolId === "file_ops.edit") {
+        batch.push(editArgsFromToolCall(calls[i]!.args));
+        i += 1;
+      }
+      if (batch.length === 1) {
+        out.push(await dispatch("file_ops.edit", calls[start]!.args));
+      } else {
+        const result = await applyEditBatch(executor, batch, ctx, { root: "." });
+        for (const e of result.edits) {
+          out.push({
+            ok: true,
+            path: e.path,
+            strategy: e.strategy,
+            filesChanged: result.filesChanged,
+            preflight: result.preflight,
+          });
+        }
+      }
+      continue;
+    }
+    out.push(await dispatch(cur.toolId, cur.args));
+    i += 1;
+  }
+  return out;
+}
+
 export async function applyEditBatch(
   executor: ToolExecutor,
   edits: BatchEditParams[],

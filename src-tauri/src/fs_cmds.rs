@@ -292,18 +292,8 @@ pub fn fs_undo_restore(
     let undo_session = undo.session_id.clone();
     drop(undos);
 
-    match undo.before {
-        Some(bytes) => {
-            if let Some(parent) = p.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            std::fs::write(&p, &bytes).map_err(|e| format!("{path}: {e}"))?;
-        }
-        None => {
-            // Snapshot was a creation — restore means delete the new file.
-            let _ = std::fs::remove_file(&p);
-        }
-    }
+    everyaios_core::restore_file_to_bytes(&p, undo.before.as_deref())
+        .map_err(|e| format!("{path}: {e}"))?;
     let seq = crate::control::record_mutation(
         &state,
         crate::control::AuthKind::HumanGesture,

@@ -18,6 +18,7 @@ import {
   applyEditLadder,
   applyEditBatch,
   applyExactEdit,
+  executeEditAwareRound,
   applyExactOnce,
   applyFuzzyEdit,
   applyStructuredEdit,
@@ -1035,5 +1036,30 @@ test("a batch rides the ladder per file, so one fuzzy recovery is allowed", asyn
     await expect(applyEditBatch(ex, TWO, { sessionId: "s" })).rejects.toThrow(
       /stopped at b\.ts: 1 of 2 file\(s\) already landed \(a\.ts\) — disk full/,
     );
+  });
+
+  test("executeEditAwareRound batches consecutive file_ops.edit", async () => {
+    const { request, preflights } = batchHarness(TWO_CONTENTS, {
+      needsPreflight: true,
+      verified: true,
+      passed: true,
+      reason: "ok",
+    });
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-round");
+    const out = await executeEditAwareRound(
+      ex,
+      [
+        { toolId: "file_ops.edit", args: { path: "a.ts", old: "const A = 1;", new: "const A = 10;" } },
+        { toolId: "file_ops.edit", args: { path: "b.ts", old: "const B = 2;", new: "const B = 20;" } },
+      ],
+      { sessionId: "s" },
+      async () => {
+        throw new Error("non-edit dispatch must not run");
+      },
+    );
+    expect(preflights).toHaveLength(1);
+    expect(preflights[0]!.filesChanged).toBe(2);
+    expect(out).toHaveLength(2);
   });
 });

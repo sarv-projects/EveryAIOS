@@ -1,0 +1,43 @@
+{
+  "comment": "Shared differential fixtures for apply_edit_ladder (Rust) and applyEditLadder (coordinator). Aider SEARCH/REPLACE: exact first, fail-closed on 0 or 2+ matches, whitespace token rung, fuzzy last.",
+  "cases": [
+    {
+      "id": "exact-single",
+      "content": "a XX b",
+      "old": "XX",
+      "new": "YY",
+      "strategy": "exact",
+      "out": "a YY b"
+    },
+    {
+      "id": "structured-whitespace",
+      "content": "fn  alpha( )  {}\n",
+      "old": "fn alpha() {}",
+      "new": "fn beta() {}",
+      "strategy": "structured",
+      "outContains": "beta"
+    },
+    {
+      "id": "fuzzy-gapped",
+      "content": "let a = 1;\nlet b = 2;\nlet c = 3;\n",
+      "old": "let a = 1;\nlet c = 3;",
+      "new": "let a = 9;",
+      "strategy": "fuzzy",
+      "out": "let a = 9;\n"
+    },
+    {
+      "id": "ambiguous-refuses",
+      "content": "xx xx",
+      "old": "xx",
+      "new": "yy",
+      "error": true
+    },
+    {
+      "id": "not-found-refuses",
+      "content": "hello",
+      "old": "zzz",
+      "new": "yyy",
+      "error": true
+    }
+  ]
+}

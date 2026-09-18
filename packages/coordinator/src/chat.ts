@@ -40,8 +40,8 @@ import {
   subAgentTracker,
   ToolExecutor,
   applyExactEdit,
+  executeEditAwareRound,
   editArgsFromToolCall,
-  type ApplyExactEditOptions,
   type ListedTool,
   type OpenAIFunctionTool,
 } from "./tools";
@@ -709,6 +709,96 @@ async function runInbuiltTurn(
     }
   }
 
+  const dispatchOneTool = async (toolId: string, args: Record<string, unknown>) => {
+    const ctx: { sessionId: string; agentId?: string } = { sessionId };
+    if (params.agentId !== undefined) ctx.agentId = params.agentId;
+    emit({ type: "stage", streamId, stage: `tool:${toolId}:running` });
+    if (hooks) {
+      const hookCtx = await runStage("preExecute", hooks, {
+        stage: "preExecute",
+        streamId,
+        toolId,
+        args,
+      });
+      if (hookCtx.veto === true) {
+        return { ok: false, error: `blocked by preExecute hook (${toolId})` };
+      }
+    }
+    try {
+      if (toolId === "subagent") {
+        if (!request) {
+          throw new Error("subagent spawn unavailable — no host channel (no silent fallback)");
+        }
+        const spec = buildSubAgentSpec(
+          subAgentSpecFromToolArgs(args, { parentId: "root", depth: 0 }),
+        );
+        await subAgentTracker.begin(spec.depth);
+        try {
+          const result = await dispatchSubAgent(request, spec, ctx);
+          emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
+          if (hooks) {
+            await runStage("postExecute", hooks, {
+              stage: "postExecute",
+              streamId,
+              toolId,
+              result,
+            });
+          }
+          return result;
+        } finally {
+          subAgentTracker.release();
+        }
+      }
+      if (toolId === "file_ops.edit") {
+        if (!toolExecutor) {
+          throw new Error("edit gate unavailable — no tool executor (no silent fallback)");
+        }
+        const result = await applyExactEdit(
+          toolExecutor,
+          editArgsFromToolCall(args),
+          ctx,
+          { root: "." },
+        );
+        emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
+        if (hooks) {
+          await runStage("postExecute", hooks, {
+            stage: "postExecute",
+            streamId,
+            toolId,
+            result,
+          });
+        }
+        return result;
+      }
+      if (!toolExecutor) {
+        throw new Error("tool executor unavailable");
+      }
+      const result = await toolExecutor.executeTool(toolId, args, ctx);
+      emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
+      if (hooks) {
+        await runStage("postExecute", hooks, {
+          stage: "postExecute",
+          streamId,
+          toolId,
+          result,
+        });
+      }
+      return result;
+    } catch (toolErr) {
+      const message = toolErr instanceof Error ? toolErr.message : String(toolErr);
+      emit({
+        type: "error",
+        streamId,
+        code: "tool_failed",
+        message,
+        retryable: true,
+        toolId,
+        args,
+      });
+      throw toolErr;
+    }
+  };
+
   const engine = new ConversationEngine({
     // P1.5 — full 12-segment cache-affine pipeline (core-ai system-prompt.ts
     // + desktop SOUL.md identity slot + J6 <user_document> wrapping). The
@@ -906,107 +996,16 @@ async function runInbuiltTurn(
     ...(toolExecutor
       ? {
           executeTool: async (toolId: string, args: Record<string, unknown>) => {
+            return dispatchOneTool(toolId, args);
+          },
+          executeTools: async (
+            calls: Array<{ toolId: string; args: Record<string, unknown> }>,
+          ) => {
             const ctx: { sessionId: string; agentId?: string } = { sessionId };
             if (params.agentId !== undefined) ctx.agentId = params.agentId;
-            emit({ type: "stage", streamId, stage: `tool:${toolId}:running` });
-            // P30.11 — preExecute hook: veto (ctx.veto) blocks the call.
-            if (hooks) {
-              const hookCtx = await runStage("preExecute", hooks, {
-                stage: "preExecute",
-                streamId,
-                toolId,
-                args,
-              });
-              if (hookCtx.veto === true) {
-                return { ok: false, error: `blocked by preExecute hook (${toolId})` };
-              }
-            }
-            try {
-              // P64.4 — the `subagent` first-class tool binds to the worktree
-              // shape (spec-only fresh context, inherited denies, depth cap)
-              // with max_concurrent 3 / max_total 6 enforced through the
-              // shared gate. The parent receives the summary-only result.
-              if (toolId === "subagent") {
-                if (!request) {
-                  throw new Error("subagent spawn unavailable — no host channel (no silent fallback)");
-                }
-                const spec = buildSubAgentSpec(
-                  subAgentSpecFromToolArgs(args, { parentId: sessionId, depth: 1 }),
-                );
-                await subAgentTracker.begin(spec.depth);
-                try {
-                  const result = await dispatchSubAgent(request, spec, ctx);
-                  emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
-                  if (hooks) {
-                    await runStage("postExecute", hooks, {
-                      stage: "postExecute",
-                      streamId,
-                      toolId,
-                      result,
-                    });
-                  }
-                  return result;
-                } finally {
-                  subAgentTracker.release();
-                }
-              }
-              // P64.5/P64.6 — the model's edit call rides the ladder and the
-              // shadow gate. `file_ops.edit` is a `write`-tier catalog tool
-              // (same operation and risk as `file_ops.write`), so this is not a
-              // privilege change; it is the *ordering* change: the proposed
-              // post-state is preflighted through `execution/preflight` before
-              // any byte lands, instead of splicing unchecked. Rust applies the
-              // write itself — the coordinator splices only to build the
-              // candidate, so the bytes the gate inspected are the bytes
-              // `file_ops.write` commits. Without this arm the call fell
-              // through to the direct executor and the gate never saw it
-              // (the same silent-miss class P64.3 fixed for the repo map).
-              if (toolId === "file_ops.edit") {
-                if (!toolExecutor) {
-                  throw new Error("edit gate unavailable — no tool executor (no silent fallback)");
-                }
-                const result = await applyExactEdit(
-                  toolExecutor,
-                  editArgsFromToolCall(args),
-                  ctx,
-                  { root: "." },
-                );
-                emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
-                if (hooks) {
-                  await runStage("postExecute", hooks, {
-                    stage: "postExecute",
-                    streamId,
-                    toolId,
-                    result,
-                  });
-                }
-                return result;
-              }
-
-              const result = await toolExecutor.executeTool(toolId, args, ctx);
-              emit({ type: "stage", streamId, stage: `tool:${toolId}:done` });
-              if (hooks) {
-                await runStage("postExecute", hooks, {
-                  stage: "postExecute",
-                  streamId,
-                  toolId,
-                  result,
-                });
-              }
-              return result;
-            } catch (toolErr) {
-              const message = toolErr instanceof Error ? toolErr.message : String(toolErr);
-              emit({
-                type: "error",
-                streamId,
-                code: "tool_failed",
-                message,
-                retryable: true,
-                toolId,
-                args,
-              });
-              throw toolErr;
-            }
+            return executeEditAwareRound(toolExecutor, calls, ctx, (id, a) =>
+              dispatchOneTool(id, a),
+            );
           },
         }
       : {}),

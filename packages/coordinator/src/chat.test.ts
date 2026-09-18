@@ -1005,4 +1005,51 @@ describe("P64.5/P64.6 — the model's edit call rides the ladder + shadow gate",
       | undefined;
     expect(failed?.message).toContain("file_ops.edit requires");
   });
+
+  test("two file_ops.edit in one round share one preflight (applyEditBatch)", async () => {
+    const { events, emit } = collector();
+    const preflights: Record<string, unknown>[] = [];
+    const files: Record<string, string> = {
+      "a.ts": "fn a() {}\n",
+      "b.ts": "fn b() {}\n",
+    };
+    const request = async (method: string, params: unknown) => {
+      const p = (params ?? {}) as Record<string, unknown>;
+      if (method === "memory/plan") return { coreFacts: [] };
+      if (method === "execution/begin") return { id: "ex:batch" };
+      if (method === "execution/preflight") {
+        preflights.push(p);
+        return { needsPreflight: true, verified: true, passed: true, reason: "ok" };
+      }
+      if (method === "tool/exec") return { action: "allow", ticketId: "tkt:b", argsHash: "h" };
+      if (method === "tool/commit") {
+        const args = p.args as { path?: string; content?: string };
+        if (p.toolId === "file_ops.read") return { ok: true, content: files[args.path ?? ""] ?? "" };
+        if (p.toolId === "file_ops.write") return { ok: true, content: "wrote" };
+        throw new Error(`unexpected commit ${String(p.toolId)}`);
+      }
+      return {};
+    };
+    let round = 0;
+    const bridge: ProviderBridge = {
+      async *streamChat(_req, signal) {
+        if (signal.aborted) return;
+        if (round === 0) {
+          round += 1;
+          yield { type: "tool_call", id: "file_ops.edit", args: { path: "a.ts", old: "fn a() {}", new: "fn a2() {}" } };
+          yield { type: "tool_call", id: "file_ops.edit", args: { path: "b.ts", old: "fn b() {}", new: "fn b2() {}" } };
+          yield { type: "done" };
+          return;
+        }
+        yield { type: "text", text: "batched" };
+        yield { type: "done" };
+      },
+    };
+    await runChatStream(PARAMS, emit, bridge, 10, request);
+    expect(preflights).toHaveLength(1);
+    expect(preflights[0]).toMatchObject({ filesChanged: 2 });
+    const cands = preflights[0]?.candidateFiles as Array<{ path: string }> | undefined;
+    expect(cands?.map((c) => c.path).sort()).toEqual(["a.ts", "b.ts"]);
+    expect(events.some((e) => e.type === "error")).toBe(false);
+  });
 });

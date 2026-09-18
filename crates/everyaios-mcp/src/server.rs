@@ -147,8 +147,50 @@ pub struct ToolListEntry {
     pub open_world: bool,
 }
 
+/// P64.9 — the list an **external** MCP client sees: shared-plane façades
+/// plus reconciled third-party tools. Native 51-tool ids stay callable by
+/// name (same handler) but are not advertised, so an external agent never
+/// receives a flat dump of primitives.
+pub fn tool_list_shared_plane(catalog: &ToolCatalog, ttl_ms: u64) -> ToolListResponse {
+    let mut tools: Vec<ToolListEntry> = crate::SHARED_FACADES
+        .iter()
+        .map(|f| ToolListEntry {
+            name: f.name.to_string(),
+            description: f.description.to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "url": { "type": "string" },
+                    "query": { "type": "string" }
+                }
+            }),
+            read_only: f.read_only,
+            open_world: false,
+        })
+        .collect();
+    for e in catalog.external_tools() {
+        tools.push(ToolListEntry {
+            name: e.name.clone(),
+            description: e.description.clone(),
+            input_schema: e.input_schema.clone(),
+            read_only: e.read_only,
+            open_world: e.open_world,
+        });
+    }
+    tools.sort_by(|a, b| a.name.cmp(&b.name));
+    let tag = etag(&tools);
+    ToolListResponse {
+        tools,
+        ttl_ms,
+        etag: tag,
+    }
+}
+
 /// Render the built-in catalog + reconciled external tools as a single
 /// cacheable list. `ttl_ms` is the startup-latency target (doc 61 §7.2).
+/// Kept for in-process native callers; MCP `tools/list` uses
+/// [`tool_list_shared_plane`].
 pub fn tool_list(catalog: &ToolCatalog, ttl_ms: u64) -> ToolListResponse {
     let mut tools: Vec<ToolListEntry> = all_tools()
         .iter()
@@ -339,8 +381,10 @@ impl<H: ToolCallHandler> McpServer<H> {
             }
             "ping" => serde_json::to_string(&rpc_ok(id, serde_json::json!({})))
                 .unwrap_or_else(|_| rpc_error(Value::Null, -32603, "serialization failed")),
-            "tools/list" => serde_json::to_string(&rpc_ok(id, tool_list(&self.catalog, 300_000)))
-                .unwrap_or_else(|_| rpc_error(Value::Null, -32603, "serialization failed")),
+            "tools/list" => {
+                serde_json::to_string(&rpc_ok(id, tool_list_shared_plane(&self.catalog, 300_000)))
+                    .unwrap_or_else(|_| rpc_error(Value::Null, -32603, "serialization failed"))
+            }
             "tools/call" => {
                 let params = request.get("params").cloned().unwrap_or(Value::Null);
                 let name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -348,7 +392,8 @@ impl<H: ToolCallHandler> McpServer<H> {
                     .get("arguments")
                     .cloned()
                     .unwrap_or_else(|| serde_json::json!({}));
-                let known = all_tools().iter().any(|t| t.name == name)
+                let known = crate::find_facade(name).is_some()
+                    || all_tools().iter().any(|t| t.name == name)
                     || self.catalog.origin(name).is_some();
                 if !known {
                     return rpc_error(id, -32602, "unknown tool");
@@ -629,6 +674,20 @@ mod tests {
             open_world: false,
             source: src.into(),
         }
+    }
+
+    #[test]
+    fn tool_list_shared_plane_advertises_facades_not_primitives() {
+        let cat = ToolCatalog::new();
+        let resp = tool_list_shared_plane(&cat, 300_000);
+        assert_eq!(resp.tools.len(), crate::SHARED_FACADES.len());
+        let names: Vec<&str> = resp.tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(names.contains(&"office.edit"));
+        assert!(names.contains(&"computer_use.act"));
+        assert!(
+            !names.contains(&"snapshot"),
+            "external agents must not see the 51-tool dump"
+        );
     }
 
     #[test]

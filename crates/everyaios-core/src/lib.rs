@@ -26,6 +26,7 @@ pub mod config;
 pub mod connector_approvals;
 pub mod connector_hub;
 pub mod connectors;
+pub mod cua;
 pub mod decline;
 pub mod diagnose;
 pub mod distill;
@@ -34,6 +35,7 @@ pub mod email;
 pub mod eval_service;
 pub mod execution;
 pub mod export;
+pub mod file_undo;
 pub mod forge;
 pub mod git_commit;
 pub mod git_queue;
@@ -117,6 +119,11 @@ pub use challenge::{
 };
 pub use chat::{ChatRelay, ChatRelayError, ChatStreamParams, ChatWireEvent, UserDocument};
 pub use config::{Config, ConfigError};
+pub use cua::{
+    load_dag, persist_dag, route_work_surface, screen_text_is_untrusted, vision_gate, worker_step,
+    ComputerUseDag, CuaNode, CuaNodeStatus, VisionGateError, WorkSurface, CUA_REQUIRES_VISION,
+    IDENTICAL_FAIL_HALT,
+};
 pub use doctor::{run_doctor, Check, DoctorProbe, DoctorReport, LiveProbe, Status as DoctorStatus};
 pub use eval_service::EvalService;
 pub use everyaios_mcp::ExternalTool;
@@ -135,6 +142,7 @@ pub use export::{
     render_json_export, render_markdown_export, wipe_facts, wipe_messages, ExportMessage,
     MemoryMirror, ObsidianNote, WipeScope,
 };
+pub use file_undo::restore_file_to_bytes;
 pub use guard_service::{
     AskReason, BlockExplanation, GuardDecision, GuardLifecycle, GuardService, PendingGuardCard,
 };
