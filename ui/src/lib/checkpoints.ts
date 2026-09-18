@@ -10,6 +10,9 @@ import { inTauri } from './tauri'
 import { fsUndoRestore, type FsUndo } from './fs'
 import type { ChatMessage, ProgressStep, ToolCallRecord } from './store'
 
+/** P64.6/P64.7 — the shadow-preflight evidence surfaced on a checkpoint row. */
+export type PreflightKind = 'preflighted' | 'failed' | 'unverified'
+
 /** A mutating turn derived from the real transcript (never seeded). */
 export interface CheckpointTurn {
   messageId: string
@@ -19,6 +22,14 @@ export interface CheckpointTurn {
   toolIds: string[]
   /** Zero-based index of the assistant message among assistant turns. */
   turnIndex: number
+  /**
+   * P64.6/P64.7 — the strongest shadow-preflight evidence among this turn's
+   * edit results: `preflighted` beats `unverified`; a `failed` verdict on a
+   * landed edit wins outright (the discrepancy the row must show). Undefined
+   * when no tool result carried a verdict.
+   */
+  preflight?: PreflightKind
+  preflightNote?: string
 }
 
 const MUTATING_STEP_TYPES: ReadonlySet<ProgressStep['type']> = new Set([
@@ -29,6 +40,39 @@ const MUTATING_STEP_TYPES: ReadonlySet<ProgressStep['type']> = new Set([
   'code',
   'file',
 ])
+
+/**
+ * P64.6/P64.7 — plain-English shadow-preflight note for a tool result, or
+ * undefined when this edit carried no preflight evidence. Three honest
+ * states, never rounded up:
+ *  - `preflighted`: the shadow check ran and passed (Rust recorded a
+ *    `shadow_preflight` receipt the rollback path trusts);
+ *  - `failed`: the check ran and failed — but the edit landed anyway, which
+ *    means a later non-gated write or retry bypassed the gate; that is a
+ *    discrepancy, so the row says so and restore is the remedy;
+ *  - `unverified`: the gate did not fire or the check could not run —
+ *    no evidence either way, never rendered as a pass.
+ * Reads only these four fields; the payload may carry extra keys safely.
+ */
+export function preflightOutcome(result: unknown):
+  | { kind: 'preflighted' | 'failed' | 'unverified'; note: string }
+  | undefined {
+  if (result === null || typeof result !== 'object') return undefined
+  const r = result as Record<string, unknown>
+  const p = r.preflight
+  if (p === null || typeof p !== 'object') return undefined
+  const pf = p as Record<string, unknown>
+  const verified = pf.verified === true
+  const passed = pf.passed === true
+  if (!verified) {
+    return { kind: 'unverified', note: 'Shadow preflight could not run — no evidence' }
+  }
+  if (passed) return { kind: 'preflighted', note: 'Shadow preflight passed before this edit landed' }
+  return {
+    kind: 'failed',
+    note: 'Shadow preflight failed but the edit landed — restoring is the remedy',
+  }
+}
 
 /**
  * Whether a tool id performs a mutation. Matches the ids the harness sells
@@ -97,6 +141,26 @@ export function checkpointSummary(m: Pick<ChatMessage, 'toolCalls' | 'steps'>): 
 }
 
 /**
+ * P64.6/P64.7 — strongest shadow-preflight evidence among a turn's results,
+ * ranked `failed` > `preflighted` > `unverified` (a failing verdict on a
+ * landed edit is the discrepancy the checkpoint row must not hide).
+ */
+function strongestPreflight(
+  results: unknown[],
+): { kind: PreflightKind; note: string } | undefined {
+  let best: { rank: number; kind: PreflightKind; note: string } | undefined
+  for (const r of results) {
+    const out = preflightOutcome(r)
+    if (!out) continue
+    const rank = out.kind === 'failed' ? 2 : out.kind === 'preflighted' ? 1 : 0
+    if (best === undefined || rank > best.rank) {
+      best = { rank, kind: out.kind, note: out.note }
+    }
+  }
+  return best && { kind: best.kind, note: best.note }
+}
+
+/**
  * Derive one checkpoint per mutating assistant turn, in transcript order.
  * Pure — safe to call during render via useMemo.
  */
@@ -107,12 +171,14 @@ export function deriveCheckpointTurns(messages: ChatMessage[]): CheckpointTurn[]
     if (m.role !== 'assistant') continue
     turn += 1
     if (!isMutatingMessage(m)) continue
+    const pf = strongestPreflight((m.toolCalls ?? []).filter(isMutatingToolCall).map((t) => t.result))
     out.push({
       messageId: m.id,
       timestamp: m.timestamp,
       summary: checkpointSummary(m),
       toolIds: [...new Set((m.toolCalls ?? []).filter(isMutatingToolCall).map((t) => t.toolId))].slice(0, 4),
       turnIndex: turn,
+      ...(pf ? { preflight: pf.kind, preflightNote: pf.note } : {}),
     })
   }
   return out

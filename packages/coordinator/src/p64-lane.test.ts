@@ -718,4 +718,29 @@ describe("P64.6 — shadow preflight seam (risk-gated typecheck before commit)",
   test("deriveEditRisk: destructive is never derived from an in-place splice", () => {
     expect(deriveEditRisk({ target: "a", replacement: "" }).destructive).toBe(false);
   });
+
+  test("a landed edit returns its preflight verdict for the checkpoint timeline", async () => {
+    // P64.6/P64.7 — the result the transcript stores is what the UI derives
+    // the checkpoint badge from, so the verdict must ride with the edit.
+    const { request } = editPath({
+      needsPreflight: true,
+      verified: true,
+      passed: true,
+      reason: "structural edit preflights in a shadow tree",
+    });
+    const ex = new ToolExecutor(request);
+    ex.setExecutionId("ex-24");
+    const out = (await applyExactEdit(
+      ex,
+      { path: "src/a.ts", target: "TARGET", replacement: "NEXT" },
+      { sessionId: "s" },
+      { structural: true, root: "/repo" },
+    )) as { preflight?: Record<string, unknown> };
+    expect(out.preflight).toEqual({
+      needsPreflight: true,
+      verified: true,
+      passed: true,
+      reason: "structural edit preflights in a shadow tree",
+    });
+  });
 });

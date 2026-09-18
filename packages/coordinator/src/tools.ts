@@ -1290,5 +1290,20 @@ export async function applyExactEdit(
   // match; an absent or failed receipt returns false and is never allowed to
   // undo an edit that already landed.
   await executor.recordVerifiedEdit("exact", path, executor.lastTicketId);
-  return written;
+  // P64.6/P64.7 — the preflight verdict rides with the edit result so the
+  // transcript carries the evidence the checkpoint timeline shows. No new
+  // channel: the verdict is the same object Rust recorded as the Work's
+  // `shadow_preflight` receipt (or the honest no-evidence verdict when the
+  // preflight could not run).
+  return {
+    ok: true,
+    path,
+    written,
+    preflight: {
+      needsPreflight: preflight.needsPreflight,
+      verified: preflight.verified,
+      passed: preflight.passed,
+      reason: preflight.reason,
+    },
+  };
 }
