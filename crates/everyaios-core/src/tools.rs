@@ -2551,12 +2551,16 @@ impl EditShapeSource for LexicalShapeSource {
         let mut out = Vec::new();
         for line in content.lines() {
             let t = line.trim_start();
-            // Strip common visibility/decoration prefixes.
-            let t = t
-                .strip_prefix("pub ")
-                .unwrap_or(t)
-                .strip_prefix("async ")
-                .unwrap_or(t);
+            // Strip common visibility/decoration prefixes. Each binding must
+            // shadow the previous one so the next strip sees the *stripped*
+            // text: the previous chain read `.strip_prefix("pub ")
+            // .unwrap_or(t).strip_prefix("async ").unwrap_or(t)`, and that
+            // second `unwrap_or(t)` bound the pre-strip `t` — so a `pub fn`
+            // (not `pub async`) was restored *with* its `pub ` prefix and then
+            // matched no keyword, hiding every pub-decorated declaration from
+            // the probe.
+            let t = t.strip_prefix("pub ").unwrap_or(t);
+            let t = t.strip_prefix("async ").unwrap_or(t);
             for kw in [
                 "fn ", "struct ", "enum ", "const ", "static ", "class ", "def ",
             ] {
@@ -2612,31 +2616,68 @@ pub fn apply_exact_once(
     }
 }
 
-/// P64.5 — rung 2: structured edit = text-splice + reparse shape. The splice
-/// itself is exact; the shape check then verifies the symbol multiset did not
-/// change unexpectedly (an edit that silently deletes a `fn` or invents a new
-/// top-level symbol is refused rather than committed). A tree-sitter
-/// `EditShapeSource` can replace the lexical one without touching this
-/// function.
+/// P64.5 — strip every whitespace character, keeping a byte index map back into
+/// the original so a token match can be converted into a raw splice range.
+fn whitespace_free(s: &str) -> (String, Vec<usize>) {
+    let mut text = String::with_capacity(s.len());
+    let mut map = Vec::with_capacity(s.len());
+    for (i, ch) in s.char_indices() {
+        if ch.is_whitespace() {
+            continue;
+        }
+        text.push(ch);
+        map.push(i);
+    }
+    (text, map)
+}
+
+/// P64.5 — rung 2: structured edit = token-exact splice + reparse shape.
+///
+/// `old` is located by *token* equality: whitespace is insignificant (so a
+/// re-indented, re-wrapped, or reformatted target still matches exactly), while
+/// every other character must match byte for byte. That makes this rung
+/// strictly stricter than the fuzzy rung — it refuses any window whose tokens
+/// are not exactly `old`'s — and strictly more tolerant than the exact rung,
+/// which is what makes it a real rung rather than a second exact check.
+///
+/// The raw byte range the token match maps to is spliced, then the shape check
+/// verifies the symbol multiset did not change by more than ±1 (one renamed
+/// declaration is legitimate because `old` held the name; two or more is a
+/// corruption signal). A tree-sitter `EditShapeSource` can replace the lexical
+/// probe without touching this function.
 pub fn apply_structured_edit(
     content: &str,
     old: &str,
     new: &str,
     shape: &dyn EditShapeSource,
 ) -> Result<(String, EditStrategy), EditError> {
-    let (spliced, _) = apply_exact_once(content, old, new)?;
-    let mut before = shape.symbols(content);
-    let mut after = shape.symbols(&spliced);
-    before.sort();
-    after.sort();
-    // The splice may legitimately rename one symbol (old text held the name);
-    // anything beyond a ±1 shape delta is a corruption signal.
-    let delta = before.len().abs_diff(after.len());
-    if delta > 1 {
-        return Err(EditError::ShapeChanged {
-            before: before.len(),
-            after: after.len(),
-        });
+    if old.is_empty() {
+        return Err(EditError::EmptyOld);
+    }
+    let (c_text, c_map) = whitespace_free(content);
+    let (t_text, _) = whitespace_free(old);
+    if t_text.is_empty() {
+        return Err(EditError::EmptyOld);
+    }
+    let byte_pos = match count_occurrences(&c_text, &t_text) {
+        0 => return Err(EditError::NotFound),
+        1 => c_text.find(&t_text).unwrap_or(0),
+        n => return Err(EditError::Ambiguous { count: n }),
+    };
+    // Map the token range back to raw byte offsets. `c_map` is indexed by char
+    // position while `byte_pos`/`t_text` are byte lengths, so convert first.
+    let start_idx = c_text[..byte_pos].chars().count();
+    let t_len = t_text.chars().count();
+    let first_byte = c_map[start_idx];
+    let last_byte = c_map[start_idx + t_len - 1] + 1;
+    let mut spliced = String::with_capacity(content.len() + new.len());
+    spliced.push_str(&content[..first_byte]);
+    spliced.push_str(new);
+    spliced.push_str(&content[last_byte..]);
+    let before = shape.symbols(content).len();
+    let after = shape.symbols(&spliced).len();
+    if before.abs_diff(after) > 1 {
+        return Err(EditError::ShapeChanged { before, after });
     }
     Ok((spliced, EditStrategy::Structured))
 }
@@ -2756,8 +2797,11 @@ pub fn apply_edit_ladder(
         Ok(ok) => return Ok(ok),
         Err(e) => e,
     };
-    // Structured is only meaningful when exact was ambiguous-or-missing due
-    // to trivial shape noise; attempt it second.
+    // Rung 2 tolerates whitespace-only differences while requiring every other
+    // character to match exactly — exactly the "trivial shape noise" that made
+    // rung 1 miss. Rung 3 is the most tolerant (gaps and reordering allowed).
+    // Strictest-first means the recorded strategy is the least tolerant rung
+    // that is still able to apply the splice.
     if let Ok(ok) = apply_structured_edit(content, old, new, shape) {
         return Ok(ok);
     }
@@ -3977,6 +4021,64 @@ mod tests {
     }
 
     #[test]
+    fn p64_shape_source_sees_pub_and_async_declarations() {
+        let shape = LexicalShapeSource;
+        // `pub`-decorated declarations must be visible to the probe. Before the
+        // prefix fix they were restored with their `pub ` prefix and matched no
+        // keyword, so a `pub`-only file had an empty shape and every splice into
+        // it passed the delta check unconditionally.
+        assert_eq!(
+            shape.symbols(
+                "pub fn public_api() {}\npub struct Config {}\nasync fn worker() {}\npub async fn spawn() {}\n// fn in_a_comment() {}\n",
+            ),
+            vec![
+                "fn public_api".to_string(),
+                "fn spawn".to_string(),
+                "fn worker".to_string(),
+                "struct Config".to_string(),
+            ]
+        );
+        // A splice that removes two declarations is now a visible shape change
+        // (3 → 1 symbols), so the rung refuses instead of splicing silently.
+        let content = "pub fn a() {}\npub fn b() {}\npub fn c() {}\n";
+        assert!(
+            apply_structured_edit(content, "pub fn b() {}\npub fn c() {}\n", "", &shape).is_err()
+        );
+    }
+
+    #[test]
+    fn p64_structured_rung_matches_tokens_but_refuses_ambiguity() {
+        let shape = LexicalShapeSource;
+        // Whitespace-only differences: rung 2 locates it (rung 1 could not see
+        // it at all before — it needed byte equality).
+        let content = "fn  alpha( )  {\n    let x = 1;\n}\n";
+        assert!(apply_exact_once(content, "fn alpha() {\nlet x = 1;", "X").is_err());
+        let (spliced, strategy) = apply_structured_edit(
+            content,
+            "fn alpha() {\nlet x = 1;",
+            "fn beta() {\nlet x = 2;",
+            &shape,
+        )
+        .unwrap();
+        assert_eq!(strategy, EditStrategy::Structured);
+        assert!(spliced.contains("fn beta()"));
+        // The whole token window is replaced, so the raw formatting inside it
+        // is gone; text outside it is untouched byte for byte.
+        assert_eq!(spliced, "fn beta() {\nlet x = 2;\n}\n");
+        // A non-whitespace difference is not something rung 2 may paper over.
+        assert!(matches!(
+            apply_structured_edit(content, "fn gamma() {", "z", &shape),
+            Err(crate::tools::EditError::NotFound)
+        ));
+        // Two matching windows are still ambiguous — rung 2 preserves the
+        // fail-closed gate that rung 1 enforces.
+        assert!(matches!(
+            apply_structured_edit("a b\na b\n", "a b", "c", &shape),
+            Err(crate::tools::EditError::Ambiguous { count: 2 })
+        ));
+    }
+
+    #[test]
     fn p64_fuzzy_fallback_tolerates_whitespace_but_stays_ordered() {
         let content = "fn  alpha( )  {\n    let x = 1;\n}\n";
         // Exact misses on whitespace, fuzzy (normalized) hits once.
@@ -4001,12 +4103,24 @@ mod tests {
         let shape = LexicalShapeSource;
         let (out, s) = apply_edit_ladder("a XX b", "XX", "YY", &shape).unwrap();
         assert_eq!((out.as_str(), s), ("a YY b", EditStrategy::Exact));
-        // Whitespace-noisy content falls through exact → fuzzy.
+        // Whitespace-noisy content falls through exact → structured: the tokens
+        // are identical, so rung 2 locates it exactly. Previously rung 2 was a
+        // second exact check (it re-ran `apply_exact_once`), so it could never
+        // fire and this case landed on the fuzzy rung instead.
         let content = "fn  alpha( )  {}\n";
         let (out2, s2) =
             apply_edit_ladder(content, "fn alpha() {}", "fn beta() {}", &shape).unwrap();
         assert!(out2.contains("beta"));
-        assert!(s2 == EditStrategy::Structured || s2 == EditStrategy::Fuzzy);
+        assert_eq!(s2, EditStrategy::Structured);
+        // A gap between hunks is beyond rung 2's *contiguous* token match, so this
+        // one lands on rung 3 and is recorded as fuzzy — the rungs are ordered
+        // strictest-first, so the recorded strategy is the least tolerant rung
+        // that could apply the splice.
+        let gapped = "let a = 1;\nlet b = 2;\nlet c = 3;\n";
+        let (out3, s3) =
+            apply_edit_ladder(gapped, "let a = 1;\nlet c = 3;", "let a = 9;", &shape).unwrap();
+        assert_eq!(s3, EditStrategy::Fuzzy);
+        assert_eq!(out3, "let a = 9;\n");
     }
 
     #[test]

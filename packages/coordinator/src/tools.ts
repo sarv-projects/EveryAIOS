@@ -1117,14 +1117,26 @@ export async function dispatchSubAgent(
 }
 
 /**
- * P64.5 — unified native edit shape, coordinator side (Tier-1 lane).
+ * P64.5 — unified native edit ladder shape, coordinator side (Tier-1 lane).
  *
- * Single-occurrence exact edit, fail-closed on ambiguity: the target must
- * match exactly one contiguous block of the file. Every mutation rides the
- * existing Guard-2 ticket flow (`ToolExecutor.executeTool` →
- * evaluate → useTicket → tool/commit); this module never applies an edit
- * itself and never bypasses the ticket. No new edit engine is introduced —
- * reads and writes reuse the registered `file_ops` handlers.
+ * Three rungs, tried in order and each failing closed on zero or 2+ matches:
+ * exact single-occurrence splice → structured (exact splice + declaration-shape
+ * reparse) → fuzzy (whitespace-insensitive ordered multi-hunk). They mirror
+ * `everyaios-core::tools::{apply_exact_once, apply_structured_edit,
+ * apply_fuzzy_edit, apply_edit_ladder}` rung for rung, and the rung that
+ * succeeds is recorded as the edit's strategy on the Work receipt.
+ *
+ * The ladder is computed here, not delegated to Rust's `file_ops.edit`, for one
+ * reason: the shadow preflight gate (`execution/preflight`) must inspect the
+ * post-state *before* the write lands, and a handler that commits cannot hand
+ * back a pre-commit candidate. Rust's `file_ops.edit` remains the applier of
+ * record for the native tool path; this is a mirror of a deterministic
+ * algorithm, not a second engine.
+ *
+ * Every mutation rides the existing Guard-2 ticket flow (`ToolExecutor.executeTool`
+ * → evaluate → useTicket → tool/commit); this module never applies an edit
+ * itself and never bypasses the ticket. Reads and writes reuse the registered
+ * `file_ops` handlers.
  */
 
 /** One exact edit request: replace a single `target` block with `replacement`. */
@@ -1167,10 +1179,11 @@ export function assertSingleMatch(content: string, target: string): void {
 }
 
 /**
- * Read → single-match gate → ticketed write. Reads the file through the
- * executor, refuses on zero/ambiguous matches before any ticket is consumed
- * for the write, then commits the spliced content via the standard
- * `file_ops.write` Guard-2 path. Returns the commit payload.
+ * Read → ladder → shadow gate → ticketed write. Reads the file through the
+ * executor, splices it through the edit ladder (which refuses zero/ambiguous
+ * matches before any ticket is consumed for the write), asks Rust's gate to
+ * preflight the proposed post-state, then commits via the standard
+ * `file_ops.write` Guard-2 path.
  */
 export interface ApplyExactEditOptions {
   /**
@@ -1244,6 +1257,312 @@ export function deriveEditRisk(params: {
   return { structural: false, destructive: false, filesChanged: 1 };
 }
 
+/** P64.5 — the ladder's rungs, mirroring `EditStrategy` in
+ * `everyaios-core::tools`. */
+export type EditStrategy = "exact" | "structured" | "fuzzy"
+
+/** P64.5 — payload cap, mirroring `everyaios_core::tools::P64_MAX_EDIT_BYTES`. */
+export const P64_MAX_EDIT_BYTES = 50 * 1024
+
+/** One applied rung: the post-state plus the strategy that produced it. */
+export interface LadderResult {
+  content: string
+  strategy: EditStrategy
+}
+
+/**
+ * Mirror of Rust `str::lines()`: split on `\n`, drop the trailing empty
+ * element left by a final newline, and strip a trailing `\r` from each line.
+ * Required for byte-faithful parity with Rust `apply_fuzzy_edit` — a bare
+ * `split("\n")` would invent a trailing empty line that Rust never sees.
+ */
+function rustLines(s: string): string[] {
+  if (s.length === 0) return []
+  const raw = s.split("\n")
+  if (s.endsWith("\n")) raw.pop()
+  return raw.map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l))
+}
+
+/** Mirror of Rust `norm_line`: every whitespace character stripped, so
+ * `fn  alpha( )  {` compares equal to `fn alpha() {`. Deliberately the most
+ * tolerant comparison in the codebase — it is the last rung, so tolerance is
+ * affordable while the 0/2+ gate still fails closed. */
+function normalizeFuzzyLine(s: string): string {
+  return s.replace(/\s+/g, "")
+}
+
+const DECL_KEYWORDS = ["fn ", "struct ", "enum ", "const ", "static ", "class ", "def "] as const
+
+/**
+ * P64.5 — the dependency-free shape probe behind the structured rung, mirroring
+ * Rust `LexicalShapeSource::symbols`. A declaration is a line whose text, after
+ * stripping `pub`/`async` decoration, begins with a declaration keyword. Only
+ * the *count* is ever compared (never a tree), so a tree-sitter source can
+ * replace this without touching the ladder.
+ *
+ * Deviation from the Rust source, deliberate: Rust's strip chain is
+ * `t.strip_prefix("pub ").unwrap_or(t).strip_prefix("async ").unwrap_or(t)`,
+ * whose second `unwrap_or` binds the **pre-strip** `t` — so a `pub fn` that is
+ * not `pub async` is restored *with* its `pub ` prefix and then matches no
+ * keyword, hiding every `pub`-decorated declaration from the probe. This
+ * version strips decoration in a loop instead. The visible effect is strictly
+ * more sensitive (a `pub`-declaration delta is now detected rather than
+ * ignored); the shape check only ever *refuses* a splice, and a refusal falls
+ * through to the fuzzy rung, so this can never corrupt an edit — it can only
+ * change which rung's strategy is recorded.
+ */
+export function lexicalSymbols(content: string): string[] {
+  const out: string[] = []
+  for (const line of rustLines(content)) {
+    let t = line.trimStart()
+    for (;;) {
+      const stripped =
+        t.startsWith("pub ") ? t.slice(4) : t.startsWith("async ") ? t.slice(6) : undefined
+      if (stripped === undefined) break
+      t = stripped
+    }
+    const kw = DECL_KEYWORDS.find((k) => t.startsWith(k))
+    if (kw === undefined) continue
+    const sym = /^[A-Za-z0-9_]+/.exec(t.slice(kw.length))?.[0]
+    if (sym !== undefined && sym.length > 0) out.push(`${kw}${sym}`)
+  }
+  return out.sort()
+}
+
+/**
+ * P64.5 rung 1 — exact single-occurrence splice, mirroring Rust
+ * `apply_exact_once`. Fails closed on 0 matches (refusing to guess which site
+ * was meant) and on 2+ (refusing to pick one) — the ambiguity invariant every
+ * rung in the ladder preserves.
+ */
+export function applyExactOnce(
+  content: string,
+  target: string,
+  replacement: string,
+): LadderResult {
+  if (target.length === 0) {
+    throw new Error("edit refused: `target` must not be empty")
+  }
+  const bytes = target.length + replacement.length
+  if (bytes > P64_MAX_EDIT_BYTES * 4) {
+    throw new Error(
+      `edit refused: payload ${bytes} bytes over the ${P64_MAX_EDIT_BYTES * 4} byte cap`,
+    )
+  }
+  const n = countOccurrences(content, target)
+  if (n === 0) {
+    throw new Error("edit refused: no occurrence found (0 matches); provide more context")
+  }
+  if (n > 1) {
+    throw new Error(
+      `edit refused: ambiguous match (${n} occurrences); provide more context for a single occurrence`,
+    )
+  }
+  return { content: content.replace(target, replacement), strategy: "exact" }
+}
+
+/**
+ * P64.5 — strip every whitespace character, keeping a code-unit index map back
+ * into the original so a token match can be converted into a raw splice range.
+ * Mirrors Rust `whitespace_free`.
+ */
+function whitespaceFree(s: string): { text: string; map: number[] } {
+  let text = ""
+  const map: number[] = []
+  for (let i = 0; i < s.length; i += 1) {
+    const ch = s[i] as string
+    if (/\s/.test(ch)) continue
+    text += ch
+    map.push(i)
+  }
+  return { text, map }
+}
+
+/**
+ * P64.5 rung 2 — structured edit: a token-exact splice followed by a shape
+ * reparse, mirroring Rust `apply_structured_edit`.
+ *
+ * `target` is located by **token** equality: whitespace is insignificant (so a
+ * re-indented, re-wrapped, or reformatted target still matches exactly) while
+ * every other character must match. That makes this rung strictly stricter than
+ * the fuzzy rung (which tolerates extra lines between hunks) and strictly more
+ * tolerant than the exact rung (which needs byte equality) — which is what
+ * makes it a real rung rather than a second exact check.
+ *
+ * It does **not** check the shape before matching: `shapeChanged` is raised only
+ * after a unique token match produced a splice. In the ladder a shape refusal
+ * falls through to the fuzzy rung, which applies the same splice without the
+ * shape check, so this rung selects the recorded strategy rather than hard-
+ * blocking the edit; it is a hard refusal only for direct callers.
+ */
+export function applyStructuredEdit(
+  content: string,
+  target: string,
+  replacement: string,
+): LadderResult {
+  if (target.length === 0) {
+    throw new Error("edit refused: `target` must not be empty")
+  }
+  const c = whitespaceFree(content)
+  const t = whitespaceFree(target)
+  if (t.text.length === 0) {
+    throw new Error("edit refused: `target` must not be empty")
+  }
+  const n = countOccurrences(c.text, t.text)
+  if (n === 0) {
+    throw new Error("edit refused: no occurrence found (0 matches); provide more context")
+  }
+  if (n > 1) {
+    throw new Error(
+      `edit refused: ambiguous match (${n} occurrences); provide more context for a single occurrence`,
+    )
+  }
+  const at = c.text.indexOf(t.text)
+  const firstByte = c.map[at] as number
+  const lastByte = (c.map[at + t.text.length - 1] as number) + 1
+  const spliced = content.slice(0, firstByte) + replacement + content.slice(lastByte)
+  const before = lexicalSymbols(content).length
+  const after = lexicalSymbols(spliced).length
+  if (Math.abs(before - after) > 1) {
+    throw new Error(
+      `edit refused: structured reparse changed symbol shape (${before} → ${after}); refusing rather than corrupting`,
+    )
+  }
+  return { content: spliced, strategy: "structured" }
+}
+
+/**
+ * P64.5 rung 3 — order-tolerant fuzzy fallback, mirroring Rust
+ * `apply_fuzzy_edit`.
+ *
+ * The target's non-empty normalized lines must appear as an ordered
+ * subsequence of the content's normalized lines; gaps are allowed (extra
+ * unmodified lines between hunks), reordering is not (it would risk splicing
+ * the wrong region). Whitespace-insensitive, so a re-indented or
+ * reformatted target still matches. Fails closed on 0 or 2+ candidate windows —
+ * tolerance is in the *comparison*, never in the ambiguity gate.
+ */
+export function applyFuzzyEdit(
+  content: string,
+  target: string,
+  replacement: string,
+): LadderResult {
+  if (target.length === 0) {
+    throw new Error("edit refused: `target` must not be empty")
+  }
+  const want = rustLines(target)
+    .map(normalizeFuzzyLine)
+    .filter((l) => l.length > 0)
+  if (want.length === 0) {
+    throw new Error("edit refused: `target` must not be empty")
+  }
+  const have = rustLines(content).map(normalizeFuzzyLine)
+  // Candidate windows: each content line equal to the first wanted line, where
+  // every remaining wanted line then appears in order after it.
+  const starts: number[] = []
+  for (let i = 0; i < have.length; i += 1) {
+    if (have[i] !== want[0]) continue
+    let j = i
+    let ok = true
+    for (const w of want.slice(1)) {
+      let found = false
+      j += 1
+      while (j < have.length) {
+        if (have[j] === w) {
+          found = true
+          break
+        }
+        j += 1
+      }
+      if (!found) {
+        ok = false
+        break
+      }
+    }
+    if (ok) starts.push(i)
+  }
+  if (starts.length === 0) {
+    throw new Error("edit refused: no occurrence found (0 matches); provide more context")
+  }
+  if (starts.length > 1) {
+    throw new Error(
+      `edit refused: ambiguous match (${starts.length} occurrences); provide more context for a single occurrence`,
+    )
+  }
+  const start = starts[0] as number
+  // Re-locate the last matched line so the raw range [start, end] can be
+  // replaced by the replacement text (which may itself be multi-line).
+  let end = start
+  for (const w of want.slice(1)) {
+    end += 1
+    while (end < have.length && have[end] !== w) end += 1
+  }
+  const raw = rustLines(content)
+  const out: string[] = []
+  for (let i = 0; i < raw.length; i += 1) {
+    if (i === start) out.push(replacement)
+    if (!(i >= start && i <= end)) out.push(raw[i] as string)
+  }
+  let joined = out.join("\n")
+  // Trailing-newline fidelity: preserve the original file ending.
+  if (content.endsWith("\n") && !joined.endsWith("\n")) joined += "\n"
+  return { content: joined, strategy: "fuzzy" }
+}
+
+/**
+ * P64.5 — the unified ladder: exact → structured → fuzzy, mirroring Rust
+ * `apply_edit_ladder`. The first rung that succeeds wins; if all three refuse,
+ * the **first** refusal (exact's) is thrown, because it is the most actionable
+ * message for the model ("provide more context").
+ *
+ * Why this exists on the coordinator side rather than only in Rust: the shadow
+ * preflight gate must inspect the *post-state* before the write lands, so the
+ * post-state has to be computable here. Rust's `file_ops.edit` cannot supply it
+ * without committing the edit first. The ladder is deterministic and pure, so
+ * this is a mirror of an algorithm, not a second engine — Rust's
+ * `file_ops.edit` remains the applier of record for the native tool path, and
+ * whichever rung this returns is the strategy recorded on the Work receipt.
+ */
+export function applyEditLadder(
+  content: string,
+  target: string,
+  replacement: string,
+): LadderResult {
+  if (target.length === 0) {
+    throw new Error("edit refused: `target` must not be empty")
+  }
+  if (content.length > P64_MAX_EDIT_BYTES * 8 || target.length > P64_MAX_EDIT_BYTES) {
+    throw new Error(
+      `edit refused: payload ${Math.max(content.length, target.length)} bytes over the ${P64_MAX_EDIT_BYTES} byte cap`,
+    )
+  }
+  let firstErr: unknown
+  try {
+    return applyExactOnce(content, target, replacement)
+  } catch (e) {
+    firstErr = e
+  }
+  try {
+    return applyStructuredEdit(content, target, replacement)
+  } catch {
+    // Rung 2 only handles whitespace-only noise; anything else falls through.
+  }
+  try {
+    return applyFuzzyEdit(content, target, replacement)
+  } catch {
+    // All rungs refused — report exact's verdict below.
+  }
+  throw firstErr instanceof Error ? firstErr : new Error(String(firstErr))
+}
+
+/**
+ * P64.5/P64.6 — the coordinator's composite edit path: read, splice through the
+ * ladder, preflight the proposed post-state, then write.
+ *
+ * The name is historical (this path began as the exact-only rung); it now rides
+ * the full ladder, and the rung that actually spliced the file is returned as
+ * `strategy` and recorded as the Work's verified-edit receipt.
+ */
 export async function applyExactEdit(
   executor: ToolExecutor,
   params: ExactEditParams,
@@ -1262,8 +1581,14 @@ export async function applyExactEdit(
       : typeof (read as { content?: unknown })?.content === "string"
         ? String((read as { content: unknown }).content)
         : JSON.stringify(read ?? "");
-  assertSingleMatch(content, params.target);
-  const next = content.replace(params.target, params.replacement);
+  // P64.5 — the full ladder, not just the exact rung: a target that misses
+  // exactly because of re-indentation or reformatting still lands through the
+  // fuzzy rung instead of being refused outright, and every rung keeps the
+  // fail-closed 0/2+ ambiguity gate. The post-state is computed here (rather
+  // than by Rust's `file_ops.edit`) because the shadow gate below must inspect
+  // it *before* the write lands.
+  const applied = applyEditLadder(content, params.target, params.replacement)
+  const next = applied.content
   // P64.6 — the proposed post-state is fully known here, so it is the one place
   // this path can hand a real candidate to the shadow preflight: Rust decides
   // whether the gate fires, stages the candidate into an isolated tree, runs the
@@ -1285,11 +1610,11 @@ export async function applyExactEdit(
     throw new Error(`edit refused: shadow preflight failed (${preflight.reason})`);
   }
   const written = await executor.executeTool("file_ops.write", { path, content: next }, ctx);
-  // P64.5 — the edit ladder's outcome belongs on the Work timeline. The
-  // strategy is `exact` because this path only ever applies a single-occurrence
-  // match; an absent or failed receipt returns false and is never allowed to
-  // undo an edit that already landed.
-  await executor.recordVerifiedEdit("exact", path, executor.lastTicketId);
+  // P64.5 — the edit ladder's outcome belongs on the Work timeline: which rung
+  // actually spliced this file (`exact` / `structured` / `fuzzy`). An absent or
+  // failed receipt returns false and is never allowed to undo an edit that has
+  // already landed.
+  await executor.recordVerifiedEdit(applied.strategy, path, executor.lastTicketId);
   // P64.6/P64.7 — the preflight verdict rides with the edit result so the
   // transcript carries the evidence the checkpoint timeline shows. No new
   // channel: the verdict is the same object Rust recorded as the Work's
@@ -1298,6 +1623,9 @@ export async function applyExactEdit(
   return {
     ok: true,
     path,
+    // P64.5 — which rung spliced the file. Surfaced so a caller (and the
+    // checkpoint timeline) can tell an exact hit from a fuzzy recovery.
+    strategy: applied.strategy,
     written,
     preflight: {
       needsPreflight: preflight.needsPreflight,
@@ -1306,4 +1634,140 @@ export async function applyExactEdit(
       reason: preflight.reason,
     },
   };
+}
+
+/**
+ * P64.5 — one file's edit inside a batch: the same shape as
+ * `ExactEditParams`, applied through the same ladder.
+ */
+export interface BatchEditParams {
+  path: string
+  target: string
+  replacement: string
+}
+
+/** One landed file in a batch, with the rung that spliced it. */
+export interface BatchEditOutcome {
+  path: string
+  strategy: EditStrategy
+}
+
+/** P64.5 — the batch's result: every landed file plus the shared gate verdict. */
+export interface BatchEditResult {
+  ok: true
+  filesChanged: number
+  edits: BatchEditOutcome[]
+  preflight: {
+    needsPreflight: boolean
+    verified: boolean
+    passed: boolean
+    reason: string
+  }
+}
+
+/**
+ * P64.5 — apply several files' edits as one gated unit, which is what gives the
+ * shadow gate's multi-file arm (`filesChanged > 1`) a production input.
+ *
+ * Contract:
+ * - every edit is spliced through the same ladder as a single edit (so one
+ *   file's fuzzy recovery is fine, and every rung still fails closed on 0/2+);
+ * - the **whole batch shares one preflight**: all post-states are staged as
+ *   candidates into a single `execution/preflight` call with
+ *   `filesChanged = edits.length`, so a structural/multi-file risk is judged
+ *   once against the combined change rather than file by file;
+ * - a failing verdict refuses **every** file — nothing is written — because a
+ *   multi-file change that does not typecheck together is exactly the failure
+ *   the gate exists to stop;
+ * - a duplicate path is refused up front: the second edit's candidate would be
+ *   computed against the pre-first-edit content and the staged tree would not
+ *   match what lands;
+ * - a write failure mid-batch is reported with how many files had already
+ *   landed, so a partial success is never disguised as a clean failure.
+ */
+export async function applyEditBatch(
+  executor: ToolExecutor,
+  edits: BatchEditParams[],
+  ctx: { sessionId: string; agentId?: string } = { sessionId: "default" },
+  opts: ApplyExactEditOptions = {},
+): Promise<BatchEditResult> {
+  if (edits.length === 0) {
+    throw new Error("batch edit has no edits — fail-closed")
+  }
+  const seen = new Set<string>()
+  for (const e of edits) {
+    const p = e.path.trim()
+    if (p.length === 0) throw new Error("edit path is empty — fail-closed")
+    if (e.target.length === 0) {
+      throw new Error(`edit target is empty for ${p} — fail-closed (supply the block to replace)`)
+    }
+    if (seen.has(p)) {
+      throw new Error(
+        `batch edit lists ${p} twice — fail-closed (apply the two edits to that file sequentially)`,
+      )
+    }
+    seen.add(p)
+  }
+
+  // Read + splice every file first, so nothing is written until the single
+  // shared preflight has judged the combined post-state.
+  const staged: Array<{ path: string; next: string; strategy: EditStrategy }> = []
+  let structural = false
+  for (const e of edits) {
+    const path = e.path.trim()
+    const read = (await executor.executeTool("file_ops.read", { path }, ctx)) as unknown
+    const content =
+      typeof read === "string"
+        ? read
+        : typeof (read as { content?: unknown })?.content === "string"
+          ? String((read as { content: unknown }).content)
+          : JSON.stringify(read ?? "")
+    const applied = applyEditLadder(content, e.target, e.replacement)
+    const derived = deriveEditRisk({ target: e.target, replacement: e.replacement })
+    structural = structural || derived.structural
+    staged.push({ path, next: applied.content, strategy: applied.strategy })
+  }
+
+  // One gate call for the whole batch: `filesChanged > 1` is the multi-file
+  // arm, and the candidates are every file's post-state, not just the first.
+  const preflight = await executor.runShadowPreflight({
+    root: opts.root ?? ".",
+    filesChanged: staged.length,
+    structural: structural || opts.structural === true,
+    destructive: opts.destructive === true,
+    candidateFiles: staged.map((s) => ({ path: s.path, content: s.next })),
+  })
+  if (preflightBlocks(preflight)) {
+    throw new Error(
+      `batch edit refused: shadow preflight failed for ${staged.length} file(s) (${preflight.reason})`,
+    )
+  }
+
+  const landed: BatchEditOutcome[] = []
+  for (const s of staged) {
+    try {
+      await executor.executeTool("file_ops.write", { path: s.path, content: s.next }, ctx)
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err)
+      throw new Error(
+        `batch edit stopped at ${s.path}: ${landed.length} of ${staged.length} file(s) already landed (${landed
+          .map((l) => l.path)
+          .join(", ") || "none"}) — ${why}`,
+      )
+    }
+    await executor.recordVerifiedEdit(s.strategy, s.path, executor.lastTicketId)
+    landed.push({ path: s.path, strategy: s.strategy })
+  }
+
+  return {
+    ok: true,
+    filesChanged: landed.length,
+    edits: landed,
+    preflight: {
+      needsPreflight: preflight.needsPreflight,
+      verified: preflight.verified,
+      passed: preflight.passed,
+      reason: preflight.reason,
+    },
+  }
 }
