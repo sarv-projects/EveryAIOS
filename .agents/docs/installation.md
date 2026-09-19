@@ -45,7 +45,11 @@ python3 .agents/skills/codebase-intelligence/scripts/codegraph.py query "nativeC
 python3 .agents/skills/codebase-intelligence/scripts/codegraph.py stats
 ```
 
-All subcommands accept a global `--root <path>` (default: current directory).
+To target a different tree, pass `--root` as a **global** option before the subcommand:
+
+```bash
+python3 .agents/skills/codebase-intelligence/scripts/codegraph.py --root /path/to/repo index
+```
 
 ## Available subcommands
 

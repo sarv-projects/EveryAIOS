@@ -471,5 +471,6 @@ python3 .agents/skills/codebase-intelligence/scripts/codegraph.py path <from> <t
 python3 .agents/skills/codebase-intelligence/scripts/codegraph.py stats
 ```
 
-Every subcommand accepts a global `--root <path>` (default: current directory). The index
-is written under `.code-intelligence/` and is gitignored.
+`--root` is a global option and must precede the subcommand; it defaults to the current
+directory, so it may be omitted when you are already at the repository root. The index is
+written under `.code-intelligence/` and is gitignored.
