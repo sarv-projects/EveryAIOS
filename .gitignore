@@ -44,3 +44,16 @@ src-tauri/bin/
 # Benchmark test artifacts
 .everyaios_bench/
 packages/coordinator/.everyaios_bench/
+
+# Code intelligence artifacts (agent-agnostic code analysis)
+.code-intelligence/
+
+# Optional local semantic/static-analysis caches
+.scip/
+.codeql/
+
+# Python state (codebase-intelligence skill: venvs and bytecode caches)
+.venv/
+venv/
+__pycache__/
+*.pyc

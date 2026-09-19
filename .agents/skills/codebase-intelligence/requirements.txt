@@ -1,0 +1,7 @@
+# Core local indexing dependencies
+networkx>=3.0
+pathspec>=0.12
+
+# Preferred cross-language Tree-sitter parsing / structure / imports / symbols.
+# Install separately when working offline with a pre-populated wheel cache.
+tree-sitter-language-pack
