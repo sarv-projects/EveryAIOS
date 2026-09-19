@@ -298,13 +298,22 @@ export function assertNoAgentConfigWrite(binding: BackendBindingView): void {
  * cowork grants are additional; they must not replace native occupancy
  * or flip `modelOwner` to EveryAIOS-managed.
  */
-export function nativeSurfaceNotReplaced(row: AgentSettings): boolean {
+export function nativeSurfaceNotReplaced(
+  row: Pick<AgentSettings, 'protocol' | 'modelOwner' | 'backendBinding'> & {
+    /**
+     * Absent on a partial or legacy row (e.g. an older shell reply, or a
+     * capability probe that failed). Treated as empty, never a crash.
+     */
+    nativeCapabilities?: string[]
+    sharedCapabilities?: string[]
+  },
+): boolean {
   if (row.protocol === 'acp' || row.protocol === 'mcp') {
     if (row.modelOwner === 'managed' || row.modelOwner === 'native') return false
     if (row.backendBinding?.writesToAgentConfig) return false
   }
-  const native = new Set(row.nativeCapabilities)
-  for (const cap of row.sharedCapabilities) {
+  const native = new Set(row.nativeCapabilities ?? [])
+  for (const cap of row.sharedCapabilities ?? []) {
     if (native.has(cap)) return false
   }
   return true

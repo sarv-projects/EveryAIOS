@@ -130,6 +130,30 @@ impl DocxEngine {
         let expected = self.render_block(address)?;
         let patched = patch::apply_block_patch(&xml, &block, &expected, new_text)?;
         self.current.insert(block.part, patched);
+        // A patch may change the part's length, which shifts the byte range of
+        // every later block. Rebuild from the bytes we just wrote so the next
+        // `render_block` / `patch_block` addresses the current XML, not the
+        // layout the engine saw at `open`.
+        self.refresh_tree()?;
+        Ok(())
+    }
+
+    /// Re-parse the block tree (addresses, kinds, ranges, render) from the
+    /// current part bytes.
+    fn refresh_tree(&mut self) -> Result<(), OfficeError> {
+        let body = self
+            .current
+            .get(BODY_PART)
+            .ok_or(OfficeError::Internal)?
+            .clone();
+        let mut headers: Vec<(String, Vec<u8>)> = Vec::new();
+        for rel in self.parts.header_footer_rels() {
+            let target = self.parts.resolve_target(rel);
+            if let Some(bytes) = self.current.get(&target) {
+                headers.push((target, bytes.clone()));
+            }
+        }
+        self.tree = build_blocks(&body, BODY_PART, &headers)?;
         Ok(())
     }
 
@@ -286,6 +310,37 @@ mod tests {
                 OfficeError::StaleEdit { .. } | OfficeError::BlockNotFound(_)
             ),
             "stale edit must be rejected, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn render_and_repatch_after_length_changing_edit() {
+        // Regression: a length-changing patch shifts every later block's byte
+        // range. Before the tree was refreshed, `render_block` then failed with
+        // BlockNotFound and a second edit on a later block addressed stale XML.
+        let mut e = engine();
+        e.patch_block("p1", "A considerably longer first paragraph than before")
+            .unwrap();
+
+        assert_eq!(
+            e.render_block("p1").unwrap(),
+            "A considerably longer first paragraph than before"
+        );
+        // Later blocks still resolve at their new offsets.
+        assert_eq!(e.render_block("p2").unwrap(), "Line one\nline two");
+        assert_eq!(e.render_block("t1:r1c1:p1").unwrap(), "cell A1");
+        assert!(e.render_text().starts_with("A considerably longer"));
+
+        // A second edit on a later block is applied to the current XML.
+        e.patch_block("p2", "Line one\nline two v2").unwrap();
+        let out = e.save().unwrap();
+        let mut a = OoxmlArchive::open(out).unwrap();
+        let s = String::from_utf8(a.read_part("word/document.xml").unwrap()).unwrap();
+        assert!(s.contains("A considerably longer first paragraph than before"));
+        assert!(s.contains("line two v2"));
+        assert!(
+            s.contains("cell B1"),
+            "untouched cell must survive two edits"
         );
     }
 

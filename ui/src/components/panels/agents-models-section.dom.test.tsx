@@ -25,7 +25,23 @@ afterAll(() => {
 })
 
 beforeEach(async () => {
-  installShell()
+  // Register the capability row the surface fetches on mount. Left unregistered,
+  // the harness answers `{}` — which is a partial row, and must render, not throw.
+  installShell({
+    settings_agent_get: () => ({
+      agentId: 'everyaios-native',
+      installed: true,
+      protocol: 'inbuilt',
+      authMode: 'subscription',
+      nativeCapabilities: ['chat', 'tools'],
+      sharedCapabilities: [],
+      modelOwner: 'native',
+      configOptions: [],
+      readiness: 'ready',
+      location: { kind: 'managed', executable: 'everyaios', installRoot: '/opt/everyaios', version: '1.0.0' },
+      sessionLoadout: [],
+    }),
+  })
   await withAct(() =>
     useAppStore.setState({
       selectedAgentId: 'everyaios-native',
@@ -39,7 +55,8 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
-  mounted.unmount()
+  // A mount that throws must surface that error, not a secondary crash here.
+  mounted?.unmount()
   removeShell()
 })
 
@@ -53,6 +70,18 @@ describe('P60 — Settings renders one agent surface', () => {
     expect(tabs).toEqual(['Runtimes', 'Routing'])
     // The old peer "Native models" tab is gone.
     expect(tabs).not.toContain('Native models')
+  })
+
+  test('a partial capability row renders instead of throwing', async () => {
+    // Regression: the shell can answer with a row that predates the
+    // capability fields (or a probe that failed). Rendering it must degrade,
+    // not crash the whole panel.
+    mounted.unmount()
+    installShell({ settings_agent_get: () => ({}) })
+    mounted = await mount(<Section />)
+
+    await waitFor(() => mounted.container.querySelector('[role="tablist"]') !== null)
+    expect((mounted.container.textContent ?? '').includes('Native capabilities')).toBe(true)
   })
 
   test('the Native model catalog is a disclosure on the Native card', async () => {

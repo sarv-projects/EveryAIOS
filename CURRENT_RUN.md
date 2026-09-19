@@ -11,7 +11,26 @@
 ---
 
 ## 1. Active Goal
-**(Current, 2026-09-18 — Comprehensive Documentation Sync & Verification Checkpoint)**:
+**(Current, 2026-09-19 — V1 Acceptance Evidence Suites (Tracks 2/3/5) + Windows-Incomplete Status)**:
+- Scope: added reproducible, evidence-gated acceptance harnesses over already-landed engines, completed the P64.7 audit-receipt half, and stated the platform gap explicitly.
+  1. `crates/everyaios-office/tests/acceptance_suite.rs` (4) — IronCalc 0.8 XLSX recalc over a DSL-written dependency graph; byte-preserving docx patch + byte-exact `Snapshot` rollback; PDF author/inspect/replace/rotate; PPTX shape patch + slide add/remove.
+  2. `crates/everyaios-vault/tests/acceptance_vault_hydration.rs` (2) — SQLCipher at-rest + multi-session restart hydration + wrong-key fail-closed.
+  3. `crates/everyaios-memory/tests/acceptance_memory_fusion.rs` (2) — BM25 + deterministic RRF fusion; ACT-R multi-day decay + importance floor.
+  4. `crates/everyaios-acp/tests/acceptance_acp_handshake.rs` (4) — NDJSON framing; spawned-agent handshake; mediated capabilities; ticketed `session/request_permission` round-trip.
+  5. `crates/everyaios-browser/tests/acceptance_cdp.rs` (2, `EVERYAIOS_LIVE_TEST=1`) — real headless-Chrome pairing, a11y snapshot, ref + coordinate click, read-back.
+  6. `crates/everyaios-core/tests/acceptance_edit_ladder.rs` (5) — three ladder rungs, fail-closed refusals, risk-gated shadow preflight, 12-turn multi-language soak, shadow-check command contract.
+  7. `crates/everyaios-core/tests/acceptance_terminal_automation.rs` (4) — `terminal.automationProfile` per-platform selection + fallback + a real resolved shell command.
+  8. `crates/everyaios-blueprint/tests/acceptance_skill_distillation.rs` (3) — classification, compile + drift, versioned `SKILL.md` behind the sandbox gate.
+  9. P64.7: `RestoreResult.receipts` + `restoreFullyAudited` threaded through `restoreCheckpointPaths` and surfaced in `turn-checkpoint.tsx`; `ui/src/lib/checkpoints-restore.test.ts` (12).
+- Windows: **not implemented/verified** — P68.7 (ConPTY/pwsh) and P57.6/WGC + WinUia were deliberately out of scope (no Windows host). Documented in `TODO.md` (P54.5/P68.7) and `SPEC-CHANGELOG.md`.
+- Fixed while writing the suites (both were latent, neither was caused by the new tests):
+  1. **`DocxEngine` stale block tree.** `patch_block` wrote new part bytes but kept the tree/ranges built at `open`, so a length-changing edit made the next `render_block` fail with `BlockNotFound` and a second edit target stale XML. Added `DocxEngine::refresh_tree()` (called after every successful patch) and a regression test; the office acceptance suite now renders through the same engine instance with no reopen.
+  2. **Settings panel crash on a partial capability row.** `nativeSurfaceNotReplaced` iterated `row.nativeCapabilities` / `row.sharedCapabilities` unguarded, and the DOM harness answers unregistered commands with `{}` — so `agents-models-section` threw during mount and `afterEach` then failed on `mounted.unmount()`. Both are fixed: the helper now types those fields optional and treats them as empty, and the DOM test registers a realistic `settings_agent_get` row, guards `afterEach`, and pins the partial-row path.
+- Verified: all 7 Rust acceptance suites green (24 tests) + office lib 174/0; CDP 2/2 against real Chrome; UI `bun test` **398 pass / 0 fail**; `cargo clippy --workspace --all-targets` 0 warnings; `cargo fmt --check` clean; `tsc --noEmit` 0; `check-doc-sync.mjs` exit 0; `ipc-parity.mjs` 0 broken; `clean-profile-boot-check.mjs` PASS.
+- Files: 8 new Rust acceptance test files + `ui/src/lib/checkpoints-restore.test.ts`, `ui/src/lib/checkpoints.ts`, `ui/src/components/chat/turn-checkpoint.tsx`, `crates/everyaios-office/src/docx/mod.rs`, `ui/src/lib/settings.ts`, `ui/src/components/panels/agents-models-section.tsx`, `ui/src/components/panels/agents-models-section.dom.test.tsx`, `TODO.md`, `SPEC-CHANGELOG.md`, `CURRENT_RUN.md`.
+- Next: 1) live-model multi-turn soak on a real repo (P64.5/P64.6); 2) Windows acceptance pass for ConPTY (P68.7) + WGC/WinUia (P57.6/P66.7); 3) live external-agent ACP probes (P65.8).
+
+**(Previous, 2026-09-18 — Comprehensive Documentation Sync & Verification Checkpoint)**:
 - Scope:
   1. Updated `SPEC-CHANGELOG.md` with top entry detailing:
      - Multi-Step Onboarding Overhaul (`ui/src/components/onboarding-modal.tsx`) with cycling brand typography animation, engine capability cards with dark/light and semantic cool-blue accent picker, live ACP agent discovery & auto-detection, and optional master passphrase with OS keychain fallback.

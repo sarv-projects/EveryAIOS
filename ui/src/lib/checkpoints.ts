@@ -188,6 +188,19 @@ export function deriveCheckpointTurns(messages: ChatMessage[]): CheckpointTurn[]
 export interface RestoreResult {
   restored: string[]
   failed: { path: string; error: string }[]
+  /**
+   * P64.7 — the shell's audit sequence for each restored file. A restore is a
+   * real disk write the Rust side records as a human-gesture receipt; keeping
+   * the sequence lets the UI verify the rollback was audited rather than only
+   * asserting the write returned `ok`.
+   */
+  receipts: RestoreReceipt[]
+}
+
+/** P64.7 — one restored file's audit receipt (path → shell audit sequence). */
+export interface RestoreReceipt {
+  path: string
+  auditSeq: number
 }
 
 /**
@@ -205,16 +218,32 @@ export async function restoreCheckpointPaths(paths: string[]): Promise<RestoreRe
   }
   const restored: string[] = []
   const failed: { path: string; error: string }[] = []
+  const receipts: RestoreReceipt[] = []
   for (const path of paths) {
     try {
       const res = await fsUndoRestore(path)
-      if (res?.ok) restored.push(path)
-      else failed.push({ path, error: 'The shell did not confirm the restore.' })
+      if (res?.ok) {
+        restored.push(path)
+        receipts.push({ path, auditSeq: typeof res.auditSeq === 'number' ? res.auditSeq : 0 })
+      } else {
+        failed.push({ path, error: 'The shell did not confirm the restore.' })
+      }
     } catch (e) {
       failed.push({ path, error: e instanceof Error ? e.message : 'Restore failed.' })
     }
   }
-  return { restored, failed }
+  return { restored, failed, receipts }
+}
+
+/**
+ * P64.7 — whether every restored file carried a positive audit sequence.
+ * A restore that landed but produced no audit receipt is reported honestly as
+ * unverified (never rounded up to "audited"); with nothing restored this is
+ * false.
+ */
+export function restoreFullyAudited(result: Pick<RestoreResult, 'restored' | 'receipts'>): boolean {
+  if (result.restored.length === 0) return false
+  return result.receipts.length === result.restored.length && result.receipts.every((r) => r.auditSeq > 0)
 }
 
 /** Whether a restore failure looks like it needs a Guard-2 decision. */

@@ -10,6 +10,7 @@ import { useAppStore } from '@/lib/store'
 import {
   needsGuardApproval,
   restoreCheckpointPaths,
+  restoreFullyAudited,
   shortPath,
   snapshotsForSession,
   type PreflightKind,
@@ -194,7 +195,7 @@ export function TurnCheckpoint({
       if (r.failed.length === 0) setConfirmOpen(false)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Restore failed.'
-      setResult({ restored: [], failed: paths.map((path) => ({ path, error: msg })) })
+      setResult({ restored: [], failed: paths.map((path) => ({ path, error: msg })), receipts: [] })
       setApprovalNeeded(needsGuardApproval(msg))
     } finally {
       setRestoring(false)
@@ -434,6 +435,18 @@ export function TurnCheckpoint({
                       Restored {result.restored.length} of{' '}
                       {result.restored.length + result.failed.length} files —{' '}
                       {result.failed.length} still need attention.
+                    </p>
+                  )}
+                  {/* P64.7 — the shell audits a restore as a human-gesture
+                      receipt. Show the sequence when present; a restore with
+                      no receipt is reported as unverified, never as audited. */}
+                  {result.restored.length > 0 && (
+                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                      {restoreFullyAudited(result)
+                        ? `Audited rollback · receipt${result.receipts.length === 1 ? '' : 's'} #${result.receipts
+                            .map((r) => r.auditSeq)
+                            .join(', #')}`
+                        : 'Restored without an audit receipt — verify in Guard.'}
                     </p>
                   )}
                   {result.failed.length > 0 && (
