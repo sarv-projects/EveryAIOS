@@ -23,6 +23,7 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 import re
 import sqlite3
 import struct
@@ -746,6 +747,39 @@ def _cargo_package_name(text: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _cargo_crate_dirs(
+    all_files: set[str], root: Path | None = None
+) -> dict[str, str]:
+    """Map Rust package names to the module root of the crate they declare.
+
+    A dependency on another crate is written by package name in code
+    (`everyaios_guard::ticket::…`), never as a path, so the name has to be read
+    back from each tracked `Cargo.toml`. Declared names use `-` while code uses
+    `_`, so the key is normalised. Member manifests of a virtual workspace root
+    are skipped: only a real `[package]` declares a crate.
+    """
+    base_path = Path(root) if root is not None else Path(".")
+    crates: dict[str, str] = {}
+    for path in sorted(all_files):
+        if posixpath.basename(path) != "Cargo.toml":
+            continue
+        try:
+            text = (base_path / path).read_text(errors="replace")
+        except OSError:
+            continue
+        if not re.search(r"(?m)^\[package\]", text):
+            continue
+        name = _cargo_package_name(text)
+        if not name:
+            continue
+        manifest_dir = posixpath.dirname(path)
+        module_root = posixpath.join(manifest_dir, "src")
+        if not any(f.startswith(module_root + "/") for f in all_files):
+            module_root = manifest_dir
+        crates.setdefault(name.replace("-", "_"), module_root)
+    return crates
+
+
 def _rust_module_dir(source_file: str) -> str:
     """Directory that a Rust `mod` / `self` / `super` path resolves against."""
     parent = posixpath.dirname(source_file)
@@ -755,9 +789,148 @@ def _rust_module_dir(source_file: str) -> str:
     return posixpath.join(parent, stem)
 
 
-def resolve_import(target_raw: str, source_file: str, all_files: set[str]) -> str | None:
-    """Resolve a raw import target to a repo-relative file path."""
-    source_dir = str(Path(source_file).parent)
+def _find_crate_root(source_file: str, all_files: set[str]) -> str | None:
+    """Directory that `crate::` paths in `source_file` resolve against.
+
+    Walks up to the nearest tracked `Cargo.toml` and returns the package's
+    module root: `<manifest_dir>/src` when that directory holds the crate root
+    (`lib.rs` / `main.rs`), otherwise the manifest directory itself. Returns
+    None when no manifest is tracked, so `crate::` paths stay unresolved rather
+    than being guessed.
+    """
+    directory = posixpath.dirname(source_file)
+    while True:
+        manifest = posixpath.join(directory, "Cargo.toml") if directory else "Cargo.toml"
+        if manifest in all_files:
+            for crate_root in ("lib.rs", "main.rs"):
+                if posixpath.join(directory, "src", crate_root) in all_files:
+                    return posixpath.join(directory, "src")
+            return directory
+        if not directory:
+            return None
+        directory = posixpath.dirname(directory)
+
+
+def _resolve_module_path(
+    base_dir: str, parts: list[str], all_files: set[str]
+) -> str | None:
+    """Probe `<base_dir>/<parts>` from full length down to one segment.
+
+    `use crate::guard::tickets` names a module, while `use crate::guard::Ticket`
+    names an item inside one, and the two are indistinguishable from the path
+    alone. Truncating a trailing segment at a time resolves both without
+    inventing an edge: a path that matches no file returns None instead of
+    collapsing to the crate root.
+    """
+    real = [p for p in parts if p]
+    if not real or (len(real) == 1 and real[0][:1].isupper()):
+        # `crate::*` names the module root, and `<Crate>::<Item>` names an item
+        # the module root re-exports. Both land on the root file, and only if
+        # that file actually exists.
+        for crate_root in ("lib.rs", "main.rs"):
+            candidate = posixpath.join(base_dir, crate_root)
+            if candidate in all_files:
+                return candidate
+        return None
+
+    for end in range(len(real), 0, -1):
+        base = posixpath.join(base_dir, *real[:end])
+        for candidate in (
+            base + ".rs",
+            posixpath.join(base, "mod.rs"),
+            posixpath.join(base, "lib.rs"),
+        ):
+            if candidate in all_files:
+                return candidate
+    return None
+
+
+def _resolve_rust_module(
+    parts: list[str], source_file: str, all_files: set[str]
+) -> str | None:
+    """Resolve a `crate::`-relative Rust module path to its declaring file."""
+    crate_root = _find_crate_root(source_file, all_files)
+    if crate_root is None:
+        return None
+    return _resolve_module_path(crate_root, parts, all_files)
+
+
+def _probe_module(base: str, all_files: set[str]) -> str | None:
+    """Probe `base` for a module file, trying extensions then index stems."""
+    for ext in ("",) + TS_EXTS + (".py", ".rs", ".java"):
+        if base + ext in all_files:
+            return base + ext
+    for stem in TS_INDEX_STEMS:
+        for ext in TS_EXTS:
+            candidate = posixpath.join(base, stem + ext)
+            if candidate in all_files:
+                return candidate
+    return None
+
+
+def _ts_path_aliases(
+    all_files: set[str], root: Path | None = None
+) -> dict[str, tuple[str, str]]:
+    """Map declared TypeScript path-alias patterns to repo-relative prefixes.
+
+    Reads `compilerOptions.baseUrl` + `paths` from every tracked
+    `tsconfig*.json`, so `@/lib/tauri` in `ui/` resolves to `ui/src/lib/tauri`
+    because `ui/tsconfig.json` declares it, not because the name looks like a
+    path. Patterns without a wildcard are skipped: a bare alias is ambiguous
+    with the package specifiers this resolver deliberately leaves unresolved.
+
+    Each value is `(config_dir, prefix)`, so an alias only applies to importers
+    under the config that declares it — two packages may both define `@/*`.
+    """
+    base_path = Path(root) if root is not None else Path(".")
+    aliases: dict[str, tuple[str, str]] = {}
+    for path in sorted(all_files):
+        if not path.endswith(".json"):
+            continue
+        if not posixpath.basename(path).startswith("tsconfig"):
+            continue
+        options = _load_jsonc(base_path / path).get("compilerOptions") or {}
+        base_url = options.get("baseUrl") or "."
+        base_dir = posixpath.join(posixpath.dirname(path), base_url)
+        for pattern, targets in (options.get("paths") or {}).items():
+            if "*" not in pattern or not isinstance(targets, list) or not targets:
+                continue
+            target = targets[0]
+            if not isinstance(target, str):
+                continue
+            # Only one wildcard is substituted, so a target with several
+            # placeholders cannot be expanded faithfully — skip it.
+            if target.count("*") != 1:
+                continue
+            aliases.setdefault(pattern, (
+                posixpath.dirname(path),
+                posixpath.normpath(
+                    posixpath.join(base_dir, target.replace("*", ""))
+                ).rstrip("/"),
+            ))
+    return aliases
+
+
+def resolve_import(
+    target_raw: str,
+    source_file: str,
+    all_files: set[str],
+    kind: str | None = None,
+    aliases: dict[str, tuple[str, str]] | None = None,
+    crates: dict[str, str] | None = None,
+) -> str | None:
+    """Resolve a raw import target to a repo-relative file path.
+
+    `kind` is the declaration kind recorded by the extractor (`use`, `mod`,
+    `extern`, `import`, `export-from`). It disambiguates targets whose specifier
+    alone is not enough, such as a bodiless `mod foo;`.
+
+    `aliases` maps declared TS path-alias patterns to repo-relative prefixes and
+    `crates` maps Rust package names to crate module roots. Both are computed
+    once per index run and passed in to keep them off the hot path; when omitted
+    they are derived from `all_files`.
+    """
+    source_dir = posixpath.dirname(source_file)
 
     # Strip wildcard suffix: use crate::foo::* → crate::foo
     clean = target_raw.rstrip("*").rstrip()
@@ -769,30 +942,42 @@ def resolve_import(target_raw: str, source_file: str, all_files: set[str]) -> st
         parts = clean.replace("crate::", "").split("::")
         return _resolve_rust_module(parts, source_file, all_files)
 
-    # Rust: super::foo → resolve relative to parent module
+    # Rust: super::foo → resolve against the parent module's directory
     if clean.startswith("super::"):
-        # Count super:: levels
         super_count = 0
         rest = clean
         while rest.startswith("super::"):
             super_count += 1
-            rest = rest[7:]
-        # Walk up super_count times from source_dir
-        base = Path(source_dir)
+            rest = rest[len("super::"):]
+        base = _rust_module_dir(source_file)
         for _ in range(super_count):
-            base = base.parent
-        parts = rest.split("::") if rest else []
-        if not parts:
-            # use super::* → parent module file
-            for ext in (".rs", "/mod.rs", "/lib.rs"):
-                candidate = str(base) + ext
-                if candidate in all_files:
-                    return candidate
-            return None
-        # Resolve remaining path relative to base
-        mod_path = "/".join(parts)
-        for ext in (".rs", "/mod.rs", "/lib.rs", ""):
-            candidate = str(base / mod_path.lstrip("/")) + ext
+            base = posixpath.dirname(base)
+        return _resolve_module_path(base, rest.split("::"), all_files)
+
+    # Rust: self::foo → resolve against this module's own directory
+    if clean.startswith("self::"):
+        return _resolve_module_path(
+            _rust_module_dir(source_file), clean[len("self::"):].split("::"), all_files
+        )
+
+    # Rust workspace crates are addressed by package name, never by path.
+    if crates is None:
+        crates = _cargo_crate_dirs(all_files)
+    head, _, remainder = clean.partition("::")
+    crate_root = crates.get(head)
+    if crate_root is not None:
+        return _resolve_module_path(crate_root, remainder.split("::"), all_files)
+
+    # Rust sibling modules: a bodiless `mod foo;` (and a bare `use foo;`) names a
+    # file beside the declaring module. An `extern crate` names a dependency,
+    # which has no repo file to point at.
+    if kind == "extern":
+        return None
+    if kind == "mod" or (
+        source_file.endswith(".rs") and "::" not in clean and not clean.startswith(".")
+    ):
+        base = posixpath.join(_rust_module_dir(source_file), clean)
+        for candidate in (base + ".rs", posixpath.join(base, "mod.rs")):
             if candidate in all_files:
                 return candidate
         return None
@@ -814,27 +999,36 @@ def resolve_import(target_raw: str, source_file: str, all_files: set[str]) -> st
         while rest.startswith("."):
             dot_count += 1
             rest = rest[1:]
-        base = Path(source_dir)
+        base = source_dir
         for _ in range(dot_count - 1):  # . = 1 level, .. = 2 levels
-            base = base.parent
-        parts = rest.strip("/").split("/") if rest.strip("/") else []
-        resolved = str(base / "/".join(parts)) if parts else str(base)
-        for ext in ("", ".ts", ".tsx", ".js", ".mjs", ".py", ".rs", "/index.ts", "/index.js"):
-            candidate = resolved + ext
-            if candidate in all_files:
-                return candidate
-        return None
+            base = posixpath.dirname(base)
+        parts = [p for p in rest.strip("/").split("/") if p]
+        resolved = posixpath.join(base, *parts) if parts else base
+        return _probe_module(resolved, all_files)
+
+    # Declared TypeScript path aliases (`@/*` → `src/*`) take precedence over the
+    # package-style probe, which would otherwise treat `@/lib/x` as a package.
+    if aliases is None:
+        aliases = _ts_path_aliases(all_files)
+    for pattern, (config_dir, prefix) in aliases.items():
+        if config_dir and not source_file.startswith(config_dir + "/"):
+            continue
+        head, _, tail = pattern.partition("*")
+        if not clean.startswith(head) or not clean.endswith(tail):
+            continue
+        middle = clean[len(head): len(clean) - len(tail)] if tail else clean[len(head):]
+        resolved = _probe_module(posixpath.join(prefix, middle), all_files)
+        if resolved is not None:
+            return resolved
 
     # Absolute imports (package-style, TS/JS/Python)
-    parts = clean.split("/")
-    for ext in ("", ".ts", ".tsx", ".js", ".mjs", ".py", ".rs"):
-        candidate = "/".join(parts) + ext
-        if candidate in all_files:
-            return candidate
-    for ext in ("/index.ts", "/index.js", "/mod.rs"):
-        candidate = "/".join(parts) + ext
-        if candidate in all_files:
-            return candidate
+    joined = "/".join(clean.split("/"))
+    probed = _probe_module(joined, all_files)
+    if probed is not None:
+        return probed
+    for ext in ("/mod.rs", "/__init__.py"):
+        if joined + ext in all_files:
+            return joined + ext
 
     return None
 
@@ -854,6 +1048,11 @@ def build_graph(conn: sqlite3.Connection) -> dict[str, float]:
 
     for row in conn.execute("SELECT file, target_resolved FROM imports WHERE target_resolved IS NOT NULL"):
         src, dst = row
+        # A file cannot depend on itself; a resolved self-reference means the
+        # specifier matched a same-named local module while actually naming an
+        # external crate, so it is dropped rather than recorded as an edge.
+        if dst == src:
+            continue
         if dst in file_set:
             conn.execute(
                 "INSERT OR REPLACE INTO edges (src_file, dst_file, kind, weight) VALUES (?, ?, 'import', 1.0)",
@@ -947,6 +1146,8 @@ def cmd_index(root: Path, force: bool = False) -> None:
     all_files = git_tracked_files(root)
     included = [f for f in all_files if should_include(f)]
     all_files_set = set(included)
+    aliases = _ts_path_aliases(all_files_set, root)
+    crates = _cargo_crate_dirs(all_files_set, root)
 
     # Load cached Merkle tree
     cached_merkle: dict[str, str] = {}
@@ -1030,7 +1231,9 @@ def cmd_index(root: Path, force: bool = False) -> None:
             refs_inserted += 1
 
         for imp in imps:
-            resolved = resolve_import(imp["target_raw"], path, all_files_set)
+            resolved = resolve_import(
+                imp["target_raw"], path, all_files_set, imp.get("kind"), aliases, crates
+            )
             conn.execute(
                 "INSERT INTO imports (file, target_raw, target_resolved) VALUES (?, ?, ?)",
                 (imp["file"], imp["target_raw"], resolved),
@@ -1358,7 +1561,10 @@ def cmd_export(root: Path, fmt: str = "json") -> None:
             return
         G = nx.DiGraph()
         for row in conn.execute("SELECT * FROM files"):
-            G.add_node(row[0], lang=row[2], size=row[3])
+            # `lang` is NULL for files with no extractable language (markdown,
+            # JSON, manifests). GraphML has no null value, so it is written as
+            # an empty string rather than dropping the node.
+            G.add_node(row[0], lang=row[2] or "", size=row[3] or 0)
         for row in conn.execute("SELECT * FROM edges"):
             G.add_edge(row[0], row[1], kind=row[2], weight=row[3])
         out_path = db_dir / "export.graphml"
