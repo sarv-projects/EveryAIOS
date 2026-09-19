@@ -17,6 +17,30 @@ Each entry records the date or release marker, change category, affected section
 - A citation or implementation detail may remain in the spec only when it is itself a current behavioral constraint; its historical or evidentiary explanation belongs here.
 
 ---
+## 2026-09-19 — V1 Acceptance Evidence Suites (Tracks 2/3/5) + Explicit Windows-Incomplete Status
+
+**Category:** verification/evidence. **Flipped:** none — no capability checkbox changes. This entry adds reproducible acceptance harnesses over already-landed engines and states the platform gaps explicitly (evidence-gated readiness §17.12.6).
+
+**Added (acceptance suites proving real OS effects on a Linux host):**
+- `crates/everyaios-office/tests/acceptance_suite.rs` — IronCalc 0.8 XLSX recalculation over a DSL-written dependency graph (SUM / IF / COUNTIF / VLOOKUP + chained arithmetic), byte-preserving OOXML docx patch (untouched ZIP entries preserved raw) + byte-exact `Snapshot` rollback, PDF author/inspect/replace/rotate, PPTX shape patch + slide add/remove with `<p:sldIdLst>` re-derived. **4/4 green.**
+- `crates/everyaios-vault/tests/acceptance_vault_hydration.rs` — SQLCipher encryption-at-rest, multi-session write/upsert/delete across a simulated restart with byte-exact hydration, wrong-key fail-closed. **2/2 green.**
+- `crates/everyaios-memory/tests/acceptance_memory_fusion.rs` — BM25 (Okapi) ranking + deterministic RRF fusion, ACT-R multi-day decay, importance floor, fused recall. **2/2 green.**
+- `crates/everyaios-acp/tests/acceptance_acp_handshake.rs` — NDJSON framing with partial-line buffering, spawned-agent initialize/session-new/prompt/shutdown, mediated capabilities, and a ticketed `session/request_permission` allow/deny round-trip. **4/4 green.**
+- `crates/everyaios-browser/tests/acceptance_cdp.rs` — live headless-Chrome CDP pairing, a11y snapshot with stable refs, ref click + coordinate `ClickAt`, read-back verification. **2/2 green against real Chrome** (`EVERYAIOS_LIVE_TEST=1`).
+- `crates/everyaios-core/tests/acceptance_edit_ladder.rs` — the three reachable ladder rungs selected on their own inputs, fail-closed missing/ambiguous/empty/oversize, risk-gated shadow-preflight decision, a 12-turn multi-language soak, and the shadow-check command contract. **5/5 green.**
+- `crates/everyaios-blueprint/tests/acceptance_skill_distillation.rs` — workflow classification (a cognitive step disqualifies), compile + drift detection, versioned `SKILL.md` learn-and-save behind the sandbox gate (patch-bump on re-learn; a refusing gate blocks the save). **3/3 green.**
+- `crates/everyaios-core/tests/acceptance_terminal_automation.rs` — `terminal.automationProfile` per-platform selection + default fallback + a real resolved shell command (the profile `script.run` executes on). **4/4 green.**
+- UI: `ui/src/lib/checkpoints-restore.test.ts` plus P64.7 audit-receipt threading (`RestoreResult.receipts` / `restoreFullyAudited`) surfaced in `turn-checkpoint.tsx`. **23/23 green** (with the existing preflight suite).
+
+**Not verified — explicit (Windows not implemented/tested):**
+- **P68.7 (Windows ConPTY acceptance) remains NOT DONE.** No Windows host: `pwsh.exe`/`cmd.exe` ConPTY spawn, the pwsh OSC 633 integration script, `terminal_resize`, and profile injection are **not implemented/verified**. Deliberately out of scope; only the cross-platform automation-profile resolution half is covered above.
+- **P57.6 / P66.7 Windows halves remain open.** Windows Graphics Capture (`platform/wgc.rs`) and WinUia `InvokePattern`/hit-testing have never run on a Windows host; the CDP suite here is the cross-platform browser half only.
+- **P64.5/P64.6 remain PARTIAL.** The soak is a deterministic fixture, not a live-model turn soak on a real repo.
+
+**Census unchanged** (no capability flips).
+
+---
+
 ## 2026-09-18 — Multi-Step Onboarding Overhaul + Dynamic Hardware-Fit Engine + Secret Path Floor & MCP Hardening
 
 **Category:** implementation. Census **1429 = 1264 done + 165 open**. Capability identity remains **166**.

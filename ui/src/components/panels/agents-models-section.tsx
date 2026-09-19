@@ -486,9 +486,9 @@ function AgentDetailCards({ agent }: { agent: AgentRuntime }) {
             : 'What this runtime itself exposes. Model, sign-in, and routing stay in its own config — managed here only by reference.'}
         </p>
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {(live && nativeSurfaceNotReplaced(live) && live.nativeCapabilities.length
+          {((live && nativeSurfaceNotReplaced(live) && live.nativeCapabilities?.length
             ? live.nativeCapabilities
-            : agent.capabilities
+            : agent.capabilities) ?? []
           ).map((c) => (
             <Badge key={c} variant="secondary" className="bg-background/60 text-[8px] font-normal text-muted-foreground">
               {CAPABILITY_LABELS[c as keyof typeof CAPABILITY_LABELS] ?? c}
