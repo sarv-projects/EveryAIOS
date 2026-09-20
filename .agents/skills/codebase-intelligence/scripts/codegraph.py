@@ -911,6 +911,36 @@ def _ts_path_aliases(
     return aliases
 
 
+def _workspace_package_map(
+    all_files: set[str], root: Path | None = None
+) -> dict[str, str]:
+    """Map TS workspace package names to their source directories.
+
+    Reads `name` from every tracked ``packages/*/package.json`` and maps it to
+    the package's ``src/`` directory, so ``@personal-ai/core-domain`` resolves to
+    ``packages/core-domain/src/``. Packages whose ``src/`` dir doesn't exist are
+    skipped — they are stubs or purely published packages with no in-tree source.
+    """
+    base_path = Path(root) if root is not None else Path(".")
+    pkgs: dict[str, str] = {}
+    for path in sorted(all_files):
+        parts = path.split("/")
+        if len(parts) != 3 or parts[0] != "packages" or parts[2] != "package.json":
+            continue
+        try:
+            config = json.loads((base_path / path).read_text(errors="replace"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        name = config.get("name")
+        if not isinstance(name, str) or not name.startswith("@"):
+            continue
+        pkg_dir = posixpath.dirname(path)
+        src_dir = posixpath.join(pkg_dir, "src")
+        if any(f.startswith(src_dir + "/") for f in all_files):
+            pkgs[name] = src_dir
+    return pkgs
+
+
 def resolve_import(
     target_raw: str,
     source_file: str,
@@ -918,6 +948,7 @@ def resolve_import(
     kind: str | None = None,
     aliases: dict[str, tuple[str, str]] | None = None,
     crates: dict[str, str] | None = None,
+    ws_pkgs: dict[str, str] | None = None,
 ) -> str | None:
     """Resolve a raw import target to a repo-relative file path.
 
@@ -925,10 +956,9 @@ def resolve_import(
     `extern`, `import`, `export-from`). It disambiguates targets whose specifier
     alone is not enough, such as a bodiless `mod foo;`.
 
-    `aliases` maps declared TS path-alias patterns to repo-relative prefixes and
-    `crates` maps Rust package names to crate module roots. Both are computed
-    once per index run and passed in to keep them off the hot path; when omitted
-    they are derived from `all_files`.
+    `aliases`, `crates`, and `ws_pkgs` are computed once per index run and
+    passed in to keep them off the hot path; when omitted they are derived from
+    `all_files`.
     """
     source_dir = posixpath.dirname(source_file)
 
@@ -1005,6 +1035,16 @@ def resolve_import(
         parts = [p for p in rest.strip("/").split("/") if p]
         resolved = posixpath.join(base, *parts) if parts else base
         return _probe_module(resolved, all_files)
+
+    # Workspace TS packages (`@personal-ai/core-domain` → packages/core-domain/src/)
+    if ws_pkgs is None:
+        ws_pkgs = _workspace_package_map(all_files)
+    for pkg_name, pkg_src in ws_pkgs.items():
+        if clean == pkg_name or clean.startswith(pkg_name + "/"):
+            subpath = clean[len(pkg_name):].lstrip("/")
+            if subpath:
+                return _probe_module(posixpath.join(pkg_src, subpath), all_files)
+            return _probe_module(posixpath.join(pkg_src, "index"), all_files)
 
     # Declared TypeScript path aliases (`@/*` → `src/*`) take precedence over the
     # package-style probe, which would otherwise treat `@/lib/x` as a package.
@@ -1148,6 +1188,7 @@ def cmd_index(root: Path, force: bool = False) -> None:
     all_files_set = set(included)
     aliases = _ts_path_aliases(all_files_set, root)
     crates = _cargo_crate_dirs(all_files_set, root)
+    ws_pkgs = _workspace_package_map(all_files_set, root)
 
     # Load cached Merkle tree
     cached_merkle: dict[str, str] = {}
@@ -1232,7 +1273,8 @@ def cmd_index(root: Path, force: bool = False) -> None:
 
         for imp in imps:
             resolved = resolve_import(
-                imp["target_raw"], path, all_files_set, imp.get("kind"), aliases, crates
+                imp["target_raw"], path, all_files_set, imp.get("kind"), aliases, crates,
+                ws_pkgs,
             )
             conn.execute(
                 "INSERT INTO imports (file, target_raw, target_resolved) VALUES (?, ?, ?)",
