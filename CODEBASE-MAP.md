@@ -7531,7 +7531,7 @@ matches unrelated identifiers. Counts above 50 are flagged `(noisy)` and carry n
 
 ## 13. Non-source inventory — every remaining tracked file
 
-The 141 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
+The 143 tracked files that are not Rust, TypeScript, or an npm manifest. Every one has a `####`
 entry below — nothing is summarised away at this level. Line counts are omitted for binaries.
 The `wired:` verdicts in §13.7 are name searches over CI YAML, `package.json` scripts, and sibling scripts — the
 same heuristic class as §11, so a script invoked through a variable or a wrapper reads as unwired.
@@ -7544,9 +7544,9 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 | §13.4 | 26 |
 | §13.5 | 7 |
 | §13.6 | 38 |
-| §13.7 | 19 |
-| §13.8 | 16 |
-| **TOTAL** | **141** |
+| §13.7 | 20 |
+| §13.8 | 17 |
+| **TOTAL** | **143** |
 
 ### 13.1 Rust manifests
 
@@ -7669,10 +7669,10 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 *The GitHub workflows and the pre-commit hook config, with the scripts each one invokes.*
 
-#### `.github/workflows/ci.yml` — 10.3 KB · 283 lines
+#### `.github/workflows/ci.yml` — 10.5 KB · 285 lines
 - **ci** · triggers: `push`, `pull_request` · jobs (6): `docs-sync`, `rust`, `office-oracle`, `ui`, `sidecar`, `tauri-check`
 - steps: 10 · runners: `ubuntu-latest`, `${{ matrix.os }}`
-- invokes: `check-doc-sync.mjs`
+- invokes: `check-doc-sync.mjs`, `gen-codebase-map.mjs`
 
 #### `.github/workflows/nightly-e2e.yml` — 4.9 KB · 142 lines
 - **nightly-e2e** · triggers: `schedule`, `workflow_dispatch` · jobs (3): `full-suite`, `office-oracle`, `sidecar`
@@ -7966,7 +7966,7 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 *The CI, e2e, and perf tooling, each with a wiring verdict: is this script named by a workflow, a `package.json` script, or another script?*
 
-#### `.agents/skills/codebase-intelligence/scripts/codegraph.py` — 59.8 KB · 1,640 lines
+#### `.agents/skills/codebase-intelligence/scripts/codegraph.py` — 61.5 KB · 1,682 lines
 - purpose: ---------------------------------------------------------------------------
 - **no reference found** — not named by any workflow, package script, or sibling script
 
@@ -7975,7 +7975,7 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 
 #### `scripts/check-doc-sync.mjs` — 8.4 KB · 211 lines
 - purpose: EveryAIOS doc-sync check (Fix 2) — run in CI and pre-commit.
-- wired: CI ×3
+- wired: CI ×3 · other scripts ×1
 
 #### `scripts/clean-profile-boot-check.mjs` — 7.2 KB · 168 lines
 - purpose: P50.1.7 — clean-profile boot verification (setup/offline states, no seeds).
@@ -8012,13 +8012,17 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 - purpose: P50.5.1 — Real vertical chat E2E.
 - **no reference found** — not named by any workflow, package script, or sibling script
 
+#### `scripts/gen-codebase-map.mjs` — 64.3 KB · 1,538 lines
+- purpose: EveryAIOS — CODEBASE-MAP.md generator.
+- wired: CI ×1
+
 #### `scripts/gen-icons.py` — 2.5 KB · 69 lines
 - purpose: Vertical purple->blue gradient inside a rounded square
 - **no reference found** — not named by any workflow, package script, or sibling script
 
 #### `scripts/ipc-parity.mjs` — 11.0 KB · 275 lines
 - purpose: P50.3.1 — IPC parity inventory (checked, not hand-maintained).
-- wired: CI ×1 · package.json ×1 · other scripts ×2
+- wired: CI ×1 · package.json ×1 · other scripts ×4
 
 #### `scripts/measure-perf-p45.mjs` — 5.0 KB · 148 lines
 - purpose: (measure-perf-p45.mjs)
@@ -8064,6 +8068,9 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `crates/everyaios-core/tests/fixtures/p64_edit_ladder.json` — 1.0 KB · 44 lines
 - data file — 2 top-level keys
 
+#### `docs/codebase/freshness.json` — 3.0 KB · 70 lines
+- data file — 10 top-level keys
+
 #### `packages/core-providers/src/generated/model-catalog.backup.json` — 94.3 KB · 4,168 lines
 - data file — 6 top-level keys
 
@@ -8102,7 +8109,7 @@ _None._
 
 ## 14. Documentation index — every tracked `.md`
 
-**All 153 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
+**All 165 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
 first draft said the corpus was "listed with their headings" but was in fact only listed by name. These are the repo's
 claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in them, not capability drift — tag them [C] per §0.
 
@@ -8120,9 +8127,10 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | RESEARCH/2026-ai-landscape — other research | 11 | 937 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,708 |
 | deploy/ — deployment docs | 1 | 105 |
-| root — specs, handover, and this map | 11 | 9,655 |
+| docs/codebase/ | 10 | 722 |
+| root — specs, handover, and this map | 13 | 19,464 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **153** | **29,760** |
+| **TOTAL** | **165** | **40,291** |
 
 ### 14.1 .agents/
 
@@ -8849,7 +8857,69 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: The desktop stays the **control plane** (Guard-2, audit, memory, receipts).
 
-### 14.11 root — specs, handover, and this map
+### 14.11 docs/codebase/
+
+#### `docs/codebase/README.md` — 73 lines · 3.6 KB
+> EveryAIOS — Codebase Understanding
+
+- opening: Generated understanding artifacts for the EveryAIOS desktop harness.
+
+#### `docs/codebase/architecture.md` — 67 lines · 4.0 KB
+> Architecture
+
+- opening: flowchart TD UI["L4 Cockpit — ui/ (React 19, Zustand 5, Tailwind 4)"] -->|"nativeCall() — Tauri IPC, protocol v1"| TAURI["L3 Tauri shell — src-tauri/ (339 commands, ~46 *_cmds.rs)"] TAURI -->|"direct
+
+#### `docs/codebase/components.md` — 95 lines · 6.1 KB
+> Components
+
+- opening: Responsibilities are quoted from each crate's `//!` module doc where one exists.
+
+#### `docs/codebase/data-and-state.md` — 50 lines · 3.2 KB
+> Data and State
+
+- opening: - **Event ledger replay:** session state (plan, checkpoints, receipts, approvals) is durable in the ledger, so restarts resume from the last completed turn rather than model memory — `DESKTOP-APP-SPEC
+
+#### `docs/codebase/decisions.md` — 84 lines · 3.8 KB
+> Decisions
+
+- opening: Architectural rationale with provenance. Where rationale cannot be proven from docs, code, or Git history, that is stated explicitly.
+
+#### `docs/codebase/external-systems.md` — 54 lines · 2.6 KB
+> External Systems
+
+- opening: - **Credential custody:** SQLCipher key-ring in `crates/everyaios-vault` (ARCH/03, J8).
+
+#### `docs/codebase/flows.md` — 80 lines · 4.4 KB
+> Flows
+
+- opening: Execution paths at file granularity. Evidence type is stated per step: **[G]** = file-level graph edge (codegraph, confidence B), **[S]** = read from source, **[D]** = from repo docs (`AGENTS.md`, `ARCH/`, `DESKTOP-APP-SPEC.md`).
+
+#### `docs/codebase/hotspots.md` — 79 lines · 3.6 KB
+> Hotspots
+
+- opening: Graph-derived signals from the codegraph index (commit `f99a5d9`, tree-sitter, 2,203 file-level edges).
+
+#### `docs/codebase/invariants.md` — 75 lines · 3.4 KB
+> Invariants
+
+- opening: Only rules the implementation or tests actually support.
+
+#### `docs/codebase/tests-and-verification.md` — 65 lines · 2.8 KB
+> Tests and Verification
+
+- opening: cargo test # all Rust unit + integration tests cargo test -p everyaios-core # single crate pnpm test # all Vitest suites pnpm --filter ui tsc --noEmit # UI typecheck
+
+### 14.12 root — specs, handover, and this map
+
+#### `AGENTS.md` — 263 lines · 10.6 KB
+> Repository Agent Instructions
+
+- opening: This file is intentionally **agent-agnostic**.
+
+#### `CODEBASE-MAP.md` — 9,578 lines · 871.7 KB
+> EveryAIOS — Complete Codebase Map (HLD + LLD)
+
+- opening: **Generated by:** `node scripts/gen-codebase-map.mjs` (regenerates §9–§15; the narrative in §1–§8 is hand-authored).
 
 #### `COMPETITIVE-POSITIONING.md` — 79 lines · 7.0 KB
 > Competitive Positioning — P16 Deltas (doc 68, 2026-08-15)
@@ -8861,10 +8931,8 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **INSTRUCTION FOR ALL CODING AGENTS**: 1.
 
-#### `DESIGN.md` — 32 lines · 1.4 KB
-> EveryAIOS Design System
-
-- opening: This file is the repository-level design context for UI agents.
+#### `DESIGN.md` — 0 lines · 0 B
+> (empty)
 
 #### `DESKTOP-APP-SPEC.md` — 1,531 lines · 327.2 KB
 > DESKTOP-APP-SPEC.md — Complete Product Specification
@@ -8906,7 +8974,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: **Date**: September 16, 2026 **Target**: EveryAIOS Desktop Cowork Runtime & Multi-Agent Swarm Subsystems **Scope**: Two-Plane Native Architecture, External Agent Swapping (OpenCode, Grok Build, Codex,
 
-### 14.12 ui/ — UI design docs
+### 14.13 ui/ — UI design docs
 
 #### `ui/DESIGN-SYSTEM.md` — 83 lines · 6.8 KB
 > EveryAIOS Design System (P11.1)
@@ -9290,7 +9358,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 ### 15.3 Full file index (every git-tracked path, grouped by directory)
 
-- `./` — .gitignore, .pre-commit-config.yaml, 8cfdc45d-f91f-4857-8ca5-9777c8ae4822.png, COMPETITIVE-POSITIONING.md, CURRENT_RUN.md, DESIGN.md, DESKTOP-APP-SPEC.md, LICENSE, LICENSE-APACHE, LICENSE-MIT, README.md, SPEC-CHANGELOG.md, TEST-CASES.md, TODO.md, UI-DESIGN-PROMPT.md, UX-TESTING-PLAN.md, bun.lock, capabilities.yaml, package-lock.json, package.json, pnpm-lock.yaml, pnpm-workspace.yaml, testcases.md, tsconfig.json
+- `./` — .gitignore, .pre-commit-config.yaml, 8cfdc45d-f91f-4857-8ca5-9777c8ae4822.png, AGENTS.md, CODEBASE-MAP.md, COMPETITIVE-POSITIONING.md, CURRENT_RUN.md, DESIGN.md, DESKTOP-APP-SPEC.md, LICENSE, LICENSE-APACHE, LICENSE-MIT, README.md, SPEC-CHANGELOG.md, TEST-CASES.md, TODO.md, UI-DESIGN-PROMPT.md, UX-TESTING-PLAN.md, bun.lock, capabilities.yaml, package-lock.json, package.json, pnpm-lock.yaml, pnpm-workspace.yaml, testcases.md, tsconfig.json
 - `.agents/` — README.md
 - `.agents/docs/` — README.md, agent-agnostic-compatibility.md, architecture-and-protocol.md, installation.md, research.md
 - `.agents/skills/codebase-intelligence/` — SKILL.md, requirements.txt
@@ -9375,6 +9443,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `crates/everyaios-vault/src/` — auth_bridge.rs, broker.rs, credential_broker.rs, egress.rs, keyring.rs, ledger.rs, lib.rs, local.rs, local_tests.rs, oauth.rs, oauth_tests.rs, session.rs, session_budget.rs, session_tests.rs, tier.rs
 - `crates/everyaios-vault/tests/` — acceptance_vault_hydration.rs
 - `deploy/` — BYO-HOST.md, Dockerfile, com.everyaios.node.plist, docker-compose.yml, everyaios-node.service, fly.toml
+- `docs/codebase/` — README.md, architecture.md, components.md, data-and-state.md, decisions.md, external-systems.md, flows.md, freshness.json, hotspots.md, invariants.md, tests-and-verification.md
 - `packages/coordinator/` — package.json, tsconfig.json
 - `packages/coordinator/src/` — agent-builder.test.ts, agent-patterns.test.ts, agent-patterns.ts, agui.ts, budget.test.ts, budget.ts, capability-seams.test.ts, capability-seams.ts, catalog.test.ts, catalog.ts, channel-a.test.ts, channel-a.ts, chat.test.ts, chat.ts, chief-dispatch.test.ts, chief.test.ts, chief.ts, chunking.test.ts, chunking.ts, citations.test.ts, citations.ts, combo-pick.test.ts, combo-pick.ts, companion.ts, connector-bridge.ts, context-providers.ts, context-trace.test.ts, context-trace.ts, core-providers.smoke.test.ts, cowork-swarm-verification.test.ts, cua-brief.test.ts, cua-brief.ts, cua-perceive.test.ts, cua-perceive.ts, cua-replan.test.ts, cua-replan.ts, cua-route.test.ts, cua-route.ts, cua-skill.test.ts, cua-skill.ts, cua-stop.test.ts, cua-stop.ts, cua-verify.test.ts, cua-verify.ts, dream-diary.test.ts, dream-diary.ts, edit-strategies.ts, external-inbox.test.ts, external-inbox.ts, fabric.test.ts, fabric.ts, first-class-tools.test.ts, first-class-tools.ts, fleet.test.ts, fleet.ts, frame.ts, goal.test.ts, goal.ts, guard.test.ts, guard.ts, h32.test.ts, h32.ts, heap.test.ts, heap.ts, index.test.ts, index.ts, intent.ts, live-agent-harness.test.ts, mcp-bridge.test.ts, mcp-bridge.ts, mcp-catalog.test.ts, mcp-catalog.ts, mcp-install.test.ts, mcp-install.ts, mcp-manager.test.ts, mcp-manager.ts, mention.test.ts, mention.ts, message.ts, migration-import.test.ts, migration-import.ts, observations.test.ts, observations.ts, orphan.ts, p64-ladder-diff.test.ts, p64-lane.test.ts, patch-overlay.test.ts, patch-overlay.ts, persona-registry.test.ts, persona-registry.ts, plan.test.ts, plan.ts, prompt.test.ts, prompt.ts, real-tasks-benchmark.test.ts, reflection-agui.test.ts, reflection.ts, resumable.test.ts, resumable.ts, router-scorer.test.ts, router.ts, run-identity.ts, runtime-bind.test.ts, runtime-bind.ts, scheduler.test.ts, scheduler.ts, scorer.test.ts, scorer.ts, skill-warm.test.ts, skill-warm.ts, spend-split.test.ts, spend-split.ts, stream-session.test.ts, stream-session.ts, surfaces.test.ts, surfaces.ts, tools.test.ts, tools.ts, waterfall.test.ts, waterfall.ts, work-events.ts
 - `packages/core-agents/` — package.json, tsconfig.json
@@ -9435,7 +9504,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `packages/core-tools/.turbo/` — turbo-build.log, turbo-test.log, turbo-type-check.log
 - `packages/core-tools/src/` — image-generation.ts, index.ts, permission-gate.ts, tool-function-calling.ts, tool-runtime.ts, trust-ladder.ts, types.ts
 - `packages/core-tools/src/__tests__/` — tool-runtime.test.ts, trust-ladder.test.ts
-- `scripts/` — check-doc-sync.mjs, clean-profile-boot-check.mjs, gen-icons.py, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, verify-packaged-e2e.mjs, zen-free-probe.mjs
+- `scripts/` — check-doc-sync.mjs, clean-profile-boot-check.mjs, gen-codebase-map.mjs, gen-icons.py, ipc-parity.mjs, measure-perf-p45.mjs, p45-live-measurements.json, verify-packaged-e2e.mjs, zen-free-probe.mjs
 - `scripts/e2e/` — debug-cancel.mjs, debug-probe.mjs, failure-injection.mjs, searxng-settings.yml, security-gate.mjs, vertical-chat.mjs
 - `scripts/e2e/lib/` — protocol.mjs, provider.mjs
 - `src-tauri/` — Cargo.lock, Cargo.toml, build.rs, tauri.conf.json
@@ -9465,12 +9534,12 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | --- | ---: |
 | `.rs` | 504 |
 | `.ts` | 477 |
-| `.md` | 153 |
+| `.md` | 165 |
 | `.tsx` | 146 |
-| `.json` | 41 |
+| `.json` | 42 |
 | `.log` | 37 |
 | `.toml` | 25 |
-| `.mjs` | 14 |
+| `.mjs` | 15 |
 | `.yml` | 7 |
 | `(no extension)` | 6 |
 | `.png` | 5 |
@@ -9484,9 +9553,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.ico` | 1 |
 | `.js` | 1 |
 | `.css` | 1 |
-| **TOTAL tracked** | **1434** |
+| **TOTAL tracked** | **1448** |
 
-Lines counted across the 1428 tracked text files at generation time: **398,858**.
+Lines counted across the 1442 tracked text files at generation time: **411,041**.
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
@@ -9497,9 +9566,9 @@ Each section registers the files it gives an entry to; this table is a diff agai
 | §9 Rust — per-file `####` | 504 |
 | §10 TS/TSX — per-file `####` | 623 |
 | §12.2 npm manifests | 13 |
-| §13 non-source inventory | 141 |
-| §14 documentation index | 153 |
-| **TOTAL** | **1434 / 1434** |
+| §13 non-source inventory | 143 |
+| §14 documentation index | 165 |
+| **TOTAL** | **1448 / 1448** |
 
 **100% of tracked files have an entry, and that is mechanically enforced:** the generator exits non-zero if this
 list is ever non-empty. Note what this does *not* claim — an entry is accounting, not explanation. §9/§10

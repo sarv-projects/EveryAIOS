@@ -1,0 +1,69 @@
+{
+  "generated_at": "2026-09-20",
+  "commit": "f99a5d9f1054b7c92f10eabd3fcd7e4afca6d8ed",
+  "commit_date": "2026-09-20T06:27:19+00:00",
+  "index": {
+    "tool": ".agents/skills/codebase-intelligence/scripts/codegraph.py",
+    "location": ".code-intelligence/ (gitignored, disposable)",
+    "schema_version": 2,
+    "extractor": "tree-sitter",
+    "tree_sitter_available": true,
+    "networkx_available": true,
+    "stats": {
+      "total_files": 1426,
+      "total_defs": 15742,
+      "total_refs": 466232,
+      "total_imports": 8279,
+      "total_edges": 2203,
+      "imports_resolved": 4653,
+      "resolution_rate": "56.2%",
+      "phantom_edges": 0,
+      "self_loops": 0,
+      "cross_layer_edges": 0,
+      "cross_crate_edges": 74
+    },
+    "merkle_root": "e1ada6b44ef529f4...",
+    "index_runtime_seconds": 12.5
+  },
+  "files_included": "git-tracked files passing codegraph's should_include filter (source, docs, config)",
+  "files_excluded": [
+    "gitignored paths (.venv, node_modules, dist, target, .code-intelligence)",
+    "untracked working-tree files",
+    "non-extractable extensions (indexed as files with lang=NULL, no symbols)"
+  ],
+  "semantic_providers": {
+    "resolver_tier": "B (tree-sitter + language rules + config-declared mappings)",
+    "lsp": "not configured",
+    "scip": "not configured",
+    "config_declared_mappings": [
+      "workspace crate names from crates/*/Cargo.toml ([package] name)",
+      "tsconfig.json paths aliases (ui/tsconfig.json: @/* -> ui/src/*)",
+      "workspace package names from packages/*/package.json (@personal-ai/*, @everyaios/*)"
+    ]
+  },
+  "artifact_provenance": {
+    "graph_derived": [
+      "hotspots.md (PageRank, in/out degrees, orphan count)",
+      "architecture.md boundary claims (zero cross-layer import edges)",
+      "components.md hub in-degrees and test file counts"
+    ],
+    "source_read": [
+      "flows.md seam symbols (ticket.rs, ipc lib.rs, runtime.ts, tauri.ts, audit lib.rs)",
+      "invariants.md I3, I4, I7",
+      "components.md crate module docs (quoted from crates/*/src/lib.rs)"
+    ],
+    "doc_derived": [
+      "flows.md F1/F3 step sequences (file-level, not symbol-traced)",
+      "invariants.md I2 relay detail, I5, I8",
+      "decisions.md D3, D5 rationale"
+    ]
+  },
+  "partial_coverage_notes": [
+    "44% of imports unresolved: dynamic imports, re-export chains, CSS/JSON/asset specifiers, external crate items beyond module paths",
+    "393 'use super::*' targets intentionally unresolved (only 6 are top-level; resolving them would fabricate ~387 self-edges)",
+    "flows.md steps are file-level; intra-step call order is reconstructed from seams and docs, not symbol-traced",
+    "no test-coverage data collected; test mapping is by naming/location convention",
+    "understanding artifacts must be regenerated after architectural or behavioral changes; do not treat a stale set as evidence"
+  ],
+  "refresh_policy": "re-run codegraph index after structural changes; regenerate this artifact set after architectural or behavioral changes"
+}
