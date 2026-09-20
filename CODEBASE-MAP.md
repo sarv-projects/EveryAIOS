@@ -8068,8 +8068,8 @@ same heuristic class as §11, so a script invoked through a variable or a wrappe
 #### `crates/everyaios-core/tests/fixtures/p64_edit_ladder.json` — 1.0 KB · 44 lines
 - data file — 2 top-level keys
 
-#### `docs/codebase/freshness.json` — 3.0 KB · 70 lines
-- data file — 10 top-level keys
+#### `docs/codebase/freshness.json` — 5.1 KB · 83 lines
+- data file — 12 top-level keys
 
 #### `packages/core-providers/src/generated/model-catalog.backup.json` — 94.3 KB · 4,168 lines
 - data file — 6 top-level keys
@@ -8127,10 +8127,10 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | RESEARCH/2026-ai-landscape — other research | 11 | 937 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,708 |
 | deploy/ — deployment docs | 1 | 105 |
-| docs/codebase/ | 10 | 722 |
+| docs/codebase/ | 10 | 730 |
 | root — specs, handover, and this map | 12 | 19,461 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **164** | **40,288** |
+| **TOTAL** | **164** | **40,296** |
 
 ### 14.1 .agents/
 
@@ -8864,7 +8864,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Generated understanding artifacts for the EveryAIOS desktop harness.
 
-#### `docs/codebase/architecture.md` — 67 lines · 4.0 KB
+#### `docs/codebase/architecture.md` — 70 lines · 4.2 KB
 > Architecture
 
 - opening: flowchart TD UI["L4 Cockpit — ui/ (React 19, Zustand 5, Tailwind 4)"] -->|"nativeCall() — Tauri IPC, protocol v1"| TAURI["L3 Tauri shell — src-tauri/ (339 commands, ~46 *_cmds.rs)"] TAURI -->|"direct
@@ -8894,10 +8894,10 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: Execution paths at file granularity. Evidence type is stated per step: **[G]** = file-level graph edge (codegraph, confidence B), **[S]** = read from source, **[D]** = from repo docs (`AGENTS.md`, `ARCH/`, `DESKTOP-APP-SPEC.md`).
 
-#### `docs/codebase/hotspots.md` — 79 lines · 3.6 KB
+#### `docs/codebase/hotspots.md` — 84 lines · 3.9 KB
 > Hotspots
 
-- opening: Graph-derived signals from the codegraph index (commit `f99a5d9`, tree-sitter, 2,203 file-level edges).
+- opening: Graph-derived signals from the codegraph index (commit `911234c`, tree-sitter, 2,203 file-level edges).
 
 #### `docs/codebase/invariants.md` — 75 lines · 3.4 KB
 > Invariants
@@ -9552,7 +9552,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.css` | 1 |
 | **TOTAL tracked** | **1447** |
 
-Lines counted across the 1441 tracked text files at generation time: **411,038**.
+Lines counted across the 1441 tracked text files at generation time: **411,059**.
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 

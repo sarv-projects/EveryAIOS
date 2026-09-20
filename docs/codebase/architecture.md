@@ -45,11 +45,14 @@ credential storage — not by convention. See [invariants.md](invariants.md).
 
 ## Observed boundary discipline (graph evidence)
 
-The codegraph file-level import graph (commit `f99a5d9`, 2,203 edges) shows
-**zero import edges crossing the `ui/`, `packages/`, and `crates/` boundaries**:
-every edge is intra-layer. The layers communicate only over the IPC seams
-named above. This matches the architecture claim in `AGENTS.md` §10 and is the
-graph-level signature of "IPC-decoupled, not import-coupled".
+The codegraph file-level import graph (commit `911234c`, 2,203 edges) shows
+**zero import edges crossing between the `ui/`, `packages/`, and `crates/`
+trees**. The only edges that leave their own tree are the 63 `src-tauri/` →
+`crates/` edges — the designed L3 shell → L2 kernel seam, where the Tauri layer
+delegates by direct Rust call. Nothing imports from `ui/` into `packages/` or
+`crates/`, or the reverse; those two seams are IPC-only. This matches the
+architecture claim in `AGENTS.md` §10 and is the graph-level signature of
+"IPC-decoupled, not import-coupled".
 
 ## Architectural boundaries to respect when changing code
 

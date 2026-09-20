@@ -1,6 +1,6 @@
 # Hotspots
 
-Graph-derived signals from the codegraph index (commit `f99a5d9`, tree-sitter,
+Graph-derived signals from the codegraph index (commit `911234c`, tree-sitter,
 2,203 file-level edges). These are **indicators for where to look and what to
 protect when changing code — not quality scores**.
 
@@ -8,21 +8,21 @@ protect when changing code — not quality scores**.
 
 | # | File | Score | in | out |
 |---|---|---|---|---|
-| 1 | `packages/core-domain/src/index.ts` | 0.0347 | 98 | 0 |
-| 2 | `ui/src/lib/utils.ts` | 0.0308 | 115 | 0 |
-| 3 | `ui/src/lib/runtime.ts` | 0.0271 | 43 | 0 |
-| 4 | `ui/src/lib/tauri.ts` | 0.0162 | 76 | 1 |
+| 1 | `packages/core-domain/src/index.ts` | 0.0345 | 98 | 0 |
+| 2 | `ui/src/lib/utils.ts` | 0.0307 | 115 | 0 |
+| 3 | `ui/src/lib/runtime.ts` | 0.0270 | 43 | 0 |
+| 4 | `ui/src/lib/tauri.ts` | 0.0161 | 76 | 1 |
 | 5 | `ui/src/lib/store.ts` | 0.0104 | 94 | 10 |
 | 6 | `src-tauri/src/lib.rs` | 0.0098 | 35 | 48 |
 | 7 | `crates/everyaios-cdp/src/lib.rs` | 0.0093 | 13 | 5 |
 | 8 | `crates/everyaios-vault/src/lib.rs` | 0.0082 | 24 | 11 |
-| 9 | `crates/everyaios-storage/src/lib.rs` | 0.0061 | 8 | 18 |
-| 10 | `crates/everyaios-browser/src/lib.rs` | 0.0040 | 11 | 24 |
+| 9 | `crates/everyaios-storage/src/lib.rs` | 0.0060 | 8 | 18 |
+| 10 | `crates/everyaios-browser/src/lib.rs` | 0.0043 | 11 | 24 |
 | 11 | `crates/everyaios-mcp/src/lib.rs` | 0.0040 | 10 | 10 |
-| 12 | `crates/everyaios-desktop/src/types.rs` | 0.0037 | 11 | 0 |
+| 12 | `crates/everyaios-desktop/src/types.rs` | 0.0040 | 11 | 0 |
 | 13 | `ui/src/components/ui/button.tsx` | 0.0037 | 51 | 1 |
 | 14 | `ui/src/lib/acp.ts` | 0.0037 | 5 | 2 |
-| 15 | `ui/src/lib/agents.ts` | 0.0037 | 21 | 1 |
+| 15 | `ui/src/lib/agents.ts` | 0.0036 | 21 | 1 |
 
 Reproduce: `.venv/bin/python .agents/skills/codebase-intelligence/scripts/codegraph.py report --top 15`
 
@@ -56,7 +56,7 @@ is needed.
 
 ## Orphans
 
-396 files show zero graph edges. Sample inspected: documentation and
+406 files show zero graph edges. Sample inspected: documentation and
 configuration (`*.md`, `.agents/` content). This is expected for non-code
 assets; a code file appearing here after a refactor would signal dead or
 disconnected code — worth an occasional look, not an alarm.
@@ -74,5 +74,10 @@ mods), but per-file mapping is unproven — see
 - Graph is file-level; 44% of imports remain unresolved (dynamic imports,
   re-exports, assets, external crates) — centrality under-counts files reached
   only through unresolved specifiers.
+- **Per-edge provenance is not persisted.** `edges.resolution_method` and
+  `edges.confidence` exist in the schema but are NULL for all 2,203 edges (and
+  both columns are NULL for all 8,279 imports). The `B` band claimed for this
+  index is a whole-index assertion, not a recorded fact per edge — treat any
+  per-edge confidence tier read out of this index as unverified.
 - A moved/renamed file updates only after `codegraph.py index` runs
   (incremental; mtime+size pre-check, SHA-256 authoritative).

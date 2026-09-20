@@ -1,7 +1,7 @@
 {
   "generated_at": "2026-09-20",
-  "commit": "f99a5d9f1054b7c92f10eabd3fcd7e4afca6d8ed",
-  "commit_date": "2026-09-20T06:27:19+00:00",
+  "commit": "911234c46b98ebeeb417f2362f9e97e38a9fa6cd",
+  "commit_date": "2026-09-20T07:23:21+00:00",
   "index": {
     "tool": ".agents/skills/codebase-intelligence/scripts/codegraph.py",
     "location": ".code-intelligence/ (gitignored, disposable)",
@@ -10,7 +10,7 @@
     "tree_sitter_available": true,
     "networkx_available": true,
     "stats": {
-      "total_files": 1426,
+      "total_files": 1436,
       "total_defs": 15742,
       "total_refs": 466232,
       "total_imports": 8279,
@@ -22,8 +22,19 @@
       "cross_layer_edges": 0,
       "cross_crate_edges": 74
     },
-    "merkle_root": "e1ada6b44ef529f4...",
-    "index_runtime_seconds": 12.5
+    "merkle_root": "481ab7b9ec0d18af...",
+    "index_runtime_seconds": 0.2,
+    "last_run_mode": "incremental — 12 files re-parsed, 1424 unchanged, 0 defs/refs/imports inserted"
+  },
+  "reverification": {
+    "date": "2026-09-20",
+    "method": "direct SQLite reads against .code-intelligence/index.sqlite3 (edges, imports, files, meta tables), independent of codegraph.py's own report subcommand",
+    "confirmed": [
+      "2,203 edges, all kind='import'; 74 cross-crate edges concentrated core→guard (17), core→blueprint (10), browser→cdp (9) — matches components.md and hotspots.md",
+      "0 edges cross between ui/, packages/ and crates/, so invariant I6 holds. The only outer-boundary crossings are 63 src-tauri → crates edges: that is the designed L3 shell → L2 kernel seam, not a boundary violation",
+      "files.sha256 is populated for content-addressed incrementality, and meta.last_root_hash equals the reported Merkle root"
+    ],
+    "unchanged_since_f99a5d9": "the 12 files added by 3d80e6b are documentation, so every structural count above is identical to the set built at f99a5d9; only the file total (1426 → 1436) and the provenance pointers moved"
   },
   "files_included": "git-tracked files passing codegraph's should_include filter (source, docs, config)",
   "files_excluded": [
@@ -61,9 +72,11 @@
   "partial_coverage_notes": [
     "44% of imports unresolved: dynamic imports, re-export chains, CSS/JSON/asset specifiers, external crate items beyond module paths",
     "393 'use super::*' targets intentionally unresolved (only 6 are top-level; resolving them would fabricate ~387 self-edges)",
+    "per-edge provenance is not persisted: `edges.resolution_method` and `edges.confidence` exist in the schema (codegraph.py:247-258, 275-276) but are NULL for all 2,203 edges, and `imports.resolution_method`/`imports.confidence` are NULL for all 8,279 imports. The confidence band above (B) is therefore asserted for the index as a whole, not recorded per edge — do not read a per-edge tier out of this index",
     "flows.md steps are file-level; intra-step call order is reconstructed from seams and docs, not symbol-traced",
     "no test-coverage data collected; test mapping is by naming/location convention",
     "understanding artifacts must be regenerated after architectural or behavioral changes; do not treat a stale set as evidence"
   ],
-  "refresh_policy": "re-run codegraph index after structural changes; regenerate this artifact set after architectural or behavioral changes"
+  "refresh_policy": "re-run codegraph index after structural changes; regenerate this artifact set after architectural or behavioral changes",
+  "map_generation_note": "CODEBASE-MAP.md's §14 documentation index renders the map's own line/byte size, so a single `gen-codebase-map.mjs` run always trails the file it just wrote. Run it twice (or to a passing `--check`) after any file-count change. At 911234c the first pass had left a deleted file (DESIGN.md) listed and the Markdown census at 165/13 instead of 164/12. Second hazard: §14 records the line count of every tracked `.md`, so editing any Markdown file — including this artifact set — invalidates the map again. Finish all Markdown edits first, then run the generator last, to convergence."
 }
