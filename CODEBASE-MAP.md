@@ -8109,7 +8109,7 @@ _None._
 
 ## 14. Documentation index — every tracked `.md`
 
-**All 164 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
+**All 179 Markdown files** carry an entry: title, size, and opening sentence. This closes the gap where the
 first draft said the corpus was "listed with their headings" but was in fact only listed by name. These are the repo's
 claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in them, not capability drift — tag them [C] per §0.
 
@@ -8123,14 +8123,14 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | .agents/skills/codebase-intelligence/references/ | 7 | 466 |
 | .agents/skills/skill-creator/ | 1 | 85 |
 | .agents/templates/ | 1 | 169 |
-| ARCH — the design set (+ DIAGRAMS & ADR) | 20 | 4,906 |
+| ARCH — the design set (+ DIAGRAMS & ADR) | 35 | 7,874 |
 | RESEARCH/2026-ai-landscape — other research | 11 | 970 |
 | RESEARCH/desktop_app — the prior-art & competitor corpus | 93 | 12,987 |
 | deploy/ — deployment docs | 1 | 105 |
 | docs/codebase/ | 10 | 960 |
-| root — specs, handover, and this map | 12 | 19,848 |
+| root — specs, handover, and this map | 12 | 19,923 |
 | ui/ — UI design docs | 1 | 83 |
-| **TOTAL** | **164** | **41,505** |
+| **TOTAL** | **179** | **44,548** |
 
 ### 14.1 .agents/
 
@@ -8321,10 +8321,85 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: - **Status:** accepted - **Date:** 2026-08-16 - **Applies to:** `ui/`, `TODO.md` UI sections, `ARCH/12-UI-SPEC.md`
 
+#### `ARCH/ADR/0003-architecture-thaw-core-authority.md` — 115 lines · 6.5 KB
+> ADR-0003 — Architecture thaw: ARCH/CORE.md becomes the root authority
+
+- opening: - **Status:** accepted - **Date:** 2026-09-20 - **Applies to:** all of `ARCH/`, `../DESKTOP-APP-SPEC.md`, `../TODO.md`, `../capabilities.yaml` - **Supersedes:** the freeze declaration at `../SPEC-CHAN
+
+#### `ARCH/ADR/0004-behaviour-profile-invariant.md` — 73 lines · 4.2 KB
+> ADR-0004 — Add I27: behavioural policy compiles per adapter
+
+- opening: - **Status:** accepted - **Date:** 2026-09-20 - **Applies to:** `CORE.md` §6 · `AGENT.md` §5.2–§5.3 · `EXTERNAL-AGENTS.md` §8 - **Amends:** [`0003-architecture-thaw-core-authority.md`](0003-architectu
+
+#### `ARCH/AGENT.md` — 279 lines · 15.8 KB
+> ARCH/AGENT — the agent model: binding, adapter, bridge
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
+
+#### `ARCH/CAPABILITIES.md` — 219 lines · 8.4 KB
+> ARCH/CAPABILITIES — capability packs, tools, actions, skills, viewers
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §9.
+
+#### `ARCH/CONTEXT.md` — 217 lines · 8.8 KB
+> ARCH/CONTEXT — context engineering: history, surface, prompt
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §8.
+
+#### `ARCH/CORE.md` — 667 lines · 40.1 KB
+> ARCH/CORE — The EveryAIOS Core Architecture (single architectural authority)
+
+- opening: **Status:** Architecture authority. This file is the **root** of the `ARCH/` set: every other architecture document derives from it and none may weaken it.
+
+#### `ARCH/DESKTOP.md` — 106 lines · 4.5 KB
+> ARCH/DESKTOP — computer use: driving the real OS
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
+
 #### `ARCH/DIAGRAMS.md` — 1,144 lines · 45.7 KB
 > EveryAIOS — Architecture & Flow Diagrams (Mermaid)
 
 - opening: **Generated:** 2026-09-15 · **Spec version:** v3.78 (current contract; the two-plane content in diagram 27 froze at v3.75 — see `SPEC-CHANGELOG.md`) · **Diagrams:** 28 (diagram 0 is the canonical back
+
+#### `ARCH/EXTERNAL-AGENTS.md` — 231 lines · 12.7 KB
+> ARCH/EXTERNAL-AGENTS — protocol surfaces and the shared plane
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
+
+#### `ARCH/MEMORY.md` — 161 lines · 6.5 KB
+> ARCH/MEMORY — four memory classes, progressive disclosure
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §10.
+
+#### `ARCH/RECOVERY.md` — 132 lines · 4.9 KB
+> ARCH/RECOVERY — durable Work, uncertain effects, safe resume
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §5.2 and §6.
+
+#### `ARCH/ROUTING.md` — 113 lines · 4.7 KB
+> ARCH/ROUTING — catalog, router, credentials, transport, ledger
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §4 and §8.
+
+#### `ARCH/SECURITY.md` — 161 lines · 6.9 KB
+> ARCH/SECURITY — one gate, one authorization model
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §6 and §7.5.
+
+#### `ARCH/SESSION.md` — 152 lines · 6.5 KB
+> ARCH/SESSION — Space, Project, Workspace, Chat, Work
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md).
+
+#### `ARCH/UI.md` — 152 lines · 6.8 KB
+> ARCH/UI — the cockpit as a projection, and the File Workbench
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §3 and §5.
+
+#### `ARCH/WORK.md` — 190 lines · 8.2 KB
+> ARCH/WORK — Work, Run, Step, Effect, Event and the projection rule
+
+- opening: **Status:** Subsystem contract, derived from [`CORE.md`](CORE.md) §3 and §5.
 
 ### 14.8 RESEARCH/2026-ai-landscape — other research
 
@@ -8916,7 +8991,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 
 - opening: This file is intentionally **agent-agnostic**.
 
-#### `CODEBASE-MAP.md` — 9,575 lines · 878.7 KB
+#### `CODEBASE-MAP.md` — 9,650 lines · 882.2 KB
 > EveryAIOS — Complete Codebase Map (HLD + LLD)
 
 - opening: **Generated by:** `node scripts/gen-codebase-map.mjs` (regenerates §9–§15; the narrative in §1–§8 is hand-authored).
@@ -9364,8 +9439,8 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 - `.agents/skills/skill-creator/` — SKILL.md
 - `.agents/templates/` — AGENTS.template.md
 - `.github/workflows/` — ci.yml, nightly-e2e.yml, p50-gates.yml, perf-regression.yml, release.yml
-- `ARCH/` — 00-INDEX.md, 01-SYSTEM-ARCHITECTURE.md, 02-MODULE-LAYOUT.md, 03-BYOK-KEYRINGS.md, 04-OFFICE-ENGINE.md, 05-TOKEN-ECONOMY.md, 06-SECURITY-GUARDRAILS.md, 07-MEMORY-CONTEXT.md, 08-BROWSER-LAYER.md, 09-FEATURE-MATRIX.md, 10-BUILD-PLAN.md, 11-AI-CHAT-FEATURES.md, 12-UI-SPEC.md, 13-PROMPT-ANATOMY.md, 15-CONNECT-STORE.md, 16-CHAT-LOOP-RUST-PORT.md, 17-NATIVE-AGENT.md, DIAGRAMS.md
-- `ARCH/ADR/` — 0001-connector-platform-mcp-first.md, 0002-ui-v2-cockpit-replaces-v1-router-pages.md
+- `ARCH/` — 00-INDEX.md, 01-SYSTEM-ARCHITECTURE.md, 02-MODULE-LAYOUT.md, 03-BYOK-KEYRINGS.md, 04-OFFICE-ENGINE.md, 05-TOKEN-ECONOMY.md, 06-SECURITY-GUARDRAILS.md, 07-MEMORY-CONTEXT.md, 08-BROWSER-LAYER.md, 09-FEATURE-MATRIX.md, 10-BUILD-PLAN.md, 11-AI-CHAT-FEATURES.md, 12-UI-SPEC.md, 13-PROMPT-ANATOMY.md, 15-CONNECT-STORE.md, 16-CHAT-LOOP-RUST-PORT.md, 17-NATIVE-AGENT.md, AGENT.md, CAPABILITIES.md, CONTEXT.md, CORE.md, DESKTOP.md, DIAGRAMS.md, EXTERNAL-AGENTS.md, MEMORY.md, RECOVERY.md, ROUTING.md, SECURITY.md, SESSION.md, UI.md, WORK.md
+- `ARCH/ADR/` — 0001-connector-platform-mcp-first.md, 0002-ui-v2-cockpit-replaces-v1-router-pages.md, 0003-architecture-thaw-core-authority.md, 0004-behaviour-profile-invariant.md
 - `RESEARCH/2026-ai-landscape/` — 00-INDEX.md, 01-master-landscape-2026.md, 02-search-landscape.md, 03-deep-research-engines.md, 04-desktop-apps-deep-dive.md, 05-agent-os-computer-use.md, 06-local-model-stack.md, 07-composio-deep-dive.md, 08-automation-architectures.md, 09-repo-reality-check.md, 10-steal-shortlist.md
 - `RESEARCH/desktop_app/` — 00-INDEX.md, 01-anythingllm-feature-blueprint.md, 02-hermes-agent-feature-blueprint.md, 03-ultra-agentic-evolvable-orchestration.md, 04-reality-check-pasted-blueprint.md, 05-coding-agents-comparison.md, 06-browser-automation-and-scraping.md, 07-deep-research-and-data-analysis.md, 08-desktop-ai-app-competitor-landscape.md, 09-agentic-os-and-computer-use.md, 10-business-automation-tool-kit.md, 11-rest-of-the-chat-mentions-ledger.md, 12-composio-vs-nango-connector-infrastructure.md, 13-connector-hub-design.md, 14-repo-implementation-ledger-1-agents-coding.md, 15-repo-implementation-ledger-2-apps-tools-connectors.md, 16-feature-implementation-tier1-agents.md, 17-feature-implementation-tier1-web-connectors.md, 18-feature-implementation-tier2-medium.md, 19-byok-provider-implementation-reference.md, 20-infra-libs-new-ledger.md, 21-agents-search-scraping-new-ledger.md, 22-skills-specials-and-v2-bucket.md, 23-deep-dive-partial-and-not-done-repos.md, 24-completion-pass-resolutions.md, 25-deep-code-gap-resolutions.md, 26-tier2-code-level-upgrade.md, 27-master-repo-ledger.md, 28-genoffice-deep-dive.md, 29-libreoffice-core-deep-dive.md, 30-agent-os-family-deep-dive.md, 31-context-compression-family-deep-dive.md, 32-context-mode-and-tokenmining.md, 33-browseros-deep-dive.md, 34-final-pass-and-sota-2026.md, 35-openwebui-vane-computer-deep-dive.md, 36-composio-community-batch.md, 37-command-code-taste-deep-dive.md, 38-opencode-hermes-code-re-read.md, 39-nooa-deep-dive.md, 40-new-repos-and-platform-notes.md, 41-steal-vs-reference-master-index.md, 42-ipc-architecture-validation.md, 43-landmines-reinforcement-landscape.md, 44-modularity-deep-dive-vscode-zed-hermes.md, 45-acp-agent-client-protocol-deep-dive.md, 46-aider-devin-deep-dive.md, 47-terminal-agents-ide-extensions-deep-dive.md, 48-computer-use-agents-deep-dive.md, 49-storage-intelligence-deep-dive.md, 50-generative-ui-image-voice-gaps.md, 51-aider-recheck-2026-08.md, 52-gap-pass-2-analysis.md, 53-formalization-gaps.md, 54-third-party-dep-audit.md, 55-agent-browser-obscura-steel-deep-dive.md, 56-warp-cowork-cronflow-copilot-devin.md, 57-acp-registry-subscription-auth.md, 58-repo-batch-2-omniroute-forge-office.md, 59-omniroute-deep-dive.md, 60-tencentdb-agent-memory-deep-dive.md, 61-desktop-agent-land-grab-2026.md, 62-cost-optimization-event-driven-eval.md, 63-thirty-seven-repo-steal-ledger.md, 64-giants-code-level-deep-dive.md, 65-batch-3-agents-scraping-search-ui-deep-dive.md, 66-anomalyco-org-deep-dive.md, 67-capability-deltas-sites-heartbeat-ui-final.md, 68-final-all-rounder-market-research.md, 69-acp-agent-ecosystem-harness-deep-dive.md, 70-mcp-directory-inbuilt-analysis.md, 71-batch-4-coding-agents-skills-harnesses.md, 72-batch-5-codeintel-parallel-search.md, 73-batch-6-computer-use-full-control.md, 74-mcp-server-manager-builtin.md, 75-anthropic-skills-plugins-cowork.md, 76-batch-7-design-browser-selfheal.md, 77-batch-8-workflows-graphify-browser.md, 78-batch-9-marketplace-gws-jobs.md, 79-local-model-fetch-download-core.md, 80-competitive-positioning-review.md, 81-non-model-moat-roadmap.md, 82-innovation-priority-decisions.md, 83-competitor-batch-openworker-ccswitch-skales-dsh.md, 84-casual-vs-power-user-ux.md, 85-work-gateway-durable-session-cowork-openclaw-podium-codex.md, 86-competitor-desktop-deep-dive-2026-09.md, 87-local-models-composer-chat-ui-2026-09.md, 88-first-five-minutes-casual-surface-audit-2026-09.md, 89-guard-network-and-config-floor-audit-2026-09.md, 90-native-agent-peer-schemas-2026-09.md, 91-windows-agent-cowork-ui-2026-09.md, DESKTOP-APP-SPEC.md
 - `crates/` — .gitignore, Cargo.lock, Cargo.toml
@@ -9531,7 +9606,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | --- | ---: |
 | `.rs` | 504 |
 | `.ts` | 477 |
-| `.md` | 164 |
+| `.md` | 179 |
 | `.tsx` | 146 |
 | `.json` | 42 |
 | `.log` | 37 |
@@ -9550,9 +9625,9 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 | `.ico` | 1 |
 | `.js` | 1 |
 | `.css` | 1 |
-| **TOTAL tracked** | **1447** |
+| **TOTAL tracked** | **1462** |
 
-Lines counted across the 1441 tracked text files at generation time: **412,300**.
+Lines counted across the 1456 tracked text files at generation time: **415,343**.
 
 ### 15.5 Coverage audit — is any tracked file unaccounted for?
 
@@ -9564,8 +9639,8 @@ Each section registers the files it gives an entry to; this table is a diff agai
 | §10 TS/TSX — per-file `####` | 623 |
 | §12.2 npm manifests | 13 |
 | §13 non-source inventory | 143 |
-| §14 documentation index | 164 |
-| **TOTAL** | **1447 / 1447** |
+| §14 documentation index | 179 |
+| **TOTAL** | **1462 / 1462** |
 
 **100% of tracked files have an entry, and that is mechanically enforced:** the generator exits non-zero if this
 list is ever non-empty. Note what this does *not* claim — an entry is accounting, not explanation. §9/§10
