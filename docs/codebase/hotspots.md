@@ -1,6 +1,6 @@
 # Hotspots
 
-Graph-derived signals from the codegraph index (commit `911234c`, tree-sitter,
+Graph-derived signals from the codegraph index (commit `c574ea4`, tree-sitter,
 2,203 file-level edges). These are **indicators for where to look and what to
 protect when changing code — not quality scores**.
 

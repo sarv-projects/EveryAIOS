@@ -65,7 +65,7 @@ CI gates (`.github/workflows/ci.yml`): `docs-sync`, `rust`, `office-oracle`,
 ## Index freshness
 
 Structural facts in this set come from the codegraph index (`schema_version` 2,
-tree-sitter extractor) built at commit `911234c`. Full provenance and coverage
+tree-sitter extractor) built at commit `c574ea4`. Full provenance and coverage
 notes: [freshness.json](freshness.json). Refresh policy: re-run
 `.agents/skills/codebase-intelligence/scripts/codegraph.py index` after
 structural changes, and regenerate this set after architectural or behavioral

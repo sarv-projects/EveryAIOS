@@ -45,7 +45,7 @@ credential storage — not by convention. See [invariants.md](invariants.md).
 
 ## Observed boundary discipline (graph evidence)
 
-The codegraph file-level import graph (commit `911234c`, 2,203 edges) shows
+The codegraph file-level import graph (commit `c574ea4`, 2,203 edges) shows
 **zero import edges crossing between the `ui/`, `packages/`, and `crates/`
 trees**. The only edges that leave their own tree are the 63 `src-tauri/` →
 `crates/` edges — the designed L3 shell → L2 kernel seam, where the Tauri layer

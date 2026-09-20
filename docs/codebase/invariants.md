@@ -46,7 +46,7 @@ test enforces it, "doc" means the contract text commits to it (weakest tier).
 
 - **Rule:** `ui/`, `packages/`, `crates/` communicate only over the IPC seams
   (Tauri commands; stdio JSON-RPC).
-- **Evidence:** codegraph file graph at commit `f99a5d9`: 0 cross-boundary
+- **Evidence:** codegraph file graph at commit `8323120`: 0 cross-boundary
   import edges among the three trees (2,203 edges total, all intra-layer).
   This is a measured fact at file granularity, re-checkable by re-running the
   index. (Tier: B, machine-verifiable)

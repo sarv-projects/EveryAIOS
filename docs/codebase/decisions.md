@@ -54,7 +54,7 @@ docs, code, or Git history, that is stated explicitly.
   intelligence kit ships a portable indexer with documented divergences from
   its upstream.
 - **Provenance:** `.agents/README.md` "Provenance and local divergences"
-  section (2026-09-19); commit `799ee38`.
+  section (2026-09-19); commit `e0ed4ff`.
 
 ## D7 — Codegraph resolver was completed, not rewritten
 
@@ -63,7 +63,7 @@ docs, code, or Git history, that is stated explicitly.
   import `kind`, add config-declared mappings (workspace crates from
   `Cargo.toml`, tsconfig `paths`, workspace packages from `package.json`) — all
   config-declared, none heuristic-guessed.
-- **Provenance:** Git `94b22d2` (fix refactor completion) and `f99a5d9`
+- **Provenance:** Git `3803cb6` (fix refactor completion) and `8323120`
   (workspace package resolution); measured results in both commit messages
   (41 → 2,087 → 2,203 edges).
 

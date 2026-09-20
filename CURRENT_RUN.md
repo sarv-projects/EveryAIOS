@@ -87,7 +87,7 @@
   2. P65.8 live external agent acceptance probes.
   3. P50 release qualification & Windows MSI packaging.
 
-**(Previous, 2026-09-18 — P51.29 MCP external floor + P51.17/30 NPX sandbox launcher + P51.7 exportable citations; committed in 78becc3)**:
+**(Previous, 2026-09-18 — P51.29 MCP external floor + P51.17/30 NPX sandbox launcher + P51.7 exportable citations; committed in 12c977b)**:
 - Scope: 
   1. P51.29 OpenWorker MCP-EXTERNAL floor: Third-party MCP tools always register with `family: ToolFamily::External`, `operation: "external_network"`, and `risk: "high"`. In `ToolService::handle`, read-named third-party tools are blocked from auto-approval (`spec.read_only && spec.family != ToolFamily::External`) — a stranger's tool name is never trusted as local read.
   2. P51.17 / P51.30 MCP NPX sandbox resolution: `crates/everyaios-mcp/src/npx.rs` + `attach.rs` implements `resolve_stdio_launch_with`. Resolves launcher from system PATH then `EVERYAIOS_BUNDLED_NODE`, validates packages against `trusted_npx_package` allow-list, and rejects shell escapes (`-c`, `--call`, bash/sh) before spawn.
@@ -198,7 +198,7 @@
 **(Previous, 2026-09-17 — README complete rewrite + full "Switzerland of AI" removal + expanded 2026 multi-tool comparison matrix)**:
 
 **COMPLETED THIS SESSION:**
-1. **README.md — Complete Human-Friendly Rewrite & 2026 Multi-Tool Matrix** (`fa2a491`, `ba83ab2`, `532a8bb`):
+1. **README.md — Complete Human-Friendly Rewrite & 2026 Multi-Tool Matrix** (`6dff825`, `c673e0e`, `1a1baf1`):
    - Removed all ASCII box diagrams, competitive bashing, and engineering-heavy architecture sections from the top.
    - Flow: Beautiful casual intro → "What can you actually do with it?" → "Capabilities at a glance" (14 key dimensions) → "How it compares" (expanded late-2026 matrix across EveryAIOS, Claude Desktop & Cowork, OpenAI Codex / ChatGPT, Claude Code CLI, and Cursor / Windsurf) → "The Universal Harness Advantage" note → Installer status → Run from source → Plain-English module table → Architecture in `<details>` dropdown → 10 FAQ dropdowns.
    - Objective, factual, respectful comparison showing EveryAIOS's unique role as a host and desktop operating harness.
@@ -209,7 +209,7 @@
    - `README.md` and `TEST-CASES.md` — stripped.
    - `COMPETITIVE-POSITIONING.md` — intentionally untouched (internal strategic doc, not public surface).
 3. **Verification**: `node scripts/check-doc-sync.mjs` → exit 0 (166 capabilities, 1429 checkboxes, kernel gate clear).
-4. **Committed & pushed**: `532a8bb` → `origin/main`.
+4. **Committed & pushed**: `1a1baf1` → `origin/main`.
 
 ---
 
@@ -250,30 +250,30 @@
   - Implemented≠shipped: `tree-sitter` is **not a dependency** (codeintel repomap is lexical; "tree-sitter precision is a later, optional upgrade" per its own module doc); `hf-hub` is not a dependency (the HF client is hand-rolled over `ureq`).
   - Runtime security boundary as built: strict CSP in `tauri.conf.json`; `src-tauri/capabilities/*.json` grant only `core:*` window controls + `dialog:allow-open` (no `fs`/`shell`/`http` plugin privileges); `guard_cmds::guard_respond` rejects any caller whose window label is not the guard window; the guard window loads only the bundled `guard.html` via `WebviewUrl::App`.
   - Not verified here: the **49 test files under `packages/core-*` are executed by no CI workflow**; `vitest` is not installed in this checkout so those suites could not be run; no Windows target was compiled or run (this host is Linux).
-  - Process note: this handover file was concurrently rewritten by another session mid-verification (HEAD moved `974e9ac` → `5419977` → `39ea45e` while tests ran, superseding the earlier draft bullets of this same section). The numbers above are pinned to the working tree as observed during each run; treat neither session's narrative as authority over the other's executed evidence.
-- **Working Tree**: Clean and up to date with `origin/main` at commit `f879d8e`.
+  - Process note: this handover file was concurrently rewritten by another session mid-verification (HEAD moved `08fe892` → `c9de476` → `4f61eb7` while tests ran, superseding the earlier draft bullets of this same section). The numbers above are pinned to the working tree as observed during each run; treat neither session's narrative as authority over the other's executed evidence.
+- **Working Tree**: Clean and up to date with `origin/main` at commit `6bf1fa6`.
 - **Commits on `origin/main` (`github.com:sarv-projects/EveryAIOS.git`)**:
-  - `f879d8e` — `docs(readme): modernize frontier model references and competitor capabilities`
-  - `12de9ee` — `docs(readme): update capability matrix, native agent plane, and architecture`
-  - `39ea45e` — `docs: update specification, architecture, changelog, and delivery status for native plane and release gates`
-  - `5419977` — `fix(guard): add fallback return for sandbox capabilities and stabilize e2e harness`
-  - `974e9ac` — **verified actual subject is the single character `\`** (`git log -1 --format=%s 974e9ac`); this entry previously repeated the intended message `perf: record fresh p45 live performance benchmark measurements`, which is not the commit's real subject. Touches only `scripts/p45-live-measurements.json`.
-  - `758d25f` — `feat(guard): add windows and macos sandbox capabilities and worktree branch restore`
-  - `c0d453a` — `feat(coordinator): wire native tools, context providers, and add performance measurement suite`
-  - `3bf7bcf` — `test(coordinator): implement real-world cowork and software benchmark suite`
-  - `5ff3c49` — `fix(tauri): correct calendar command return types and add live agent harness verification`
-  - `7916591` — `test(coordinator): add multi-agent swarm and cowork capability verification suite`
-  - `c2e04ea` — `docs: document multi-agent swarm fleet, avoidance store, calendar ipc, and context mode`
-  - `4d1e938` — `feat(core): implement multi-agent fleet worktrees, failure avoidance store, and calendar schema`
-  - `e40be8a` — `docs: reconcile runtime evidence status and audit ledger`
-  - `c6152d9` — `feat(theme): migrate default brand tokens to cool-blue and add user-selectable accents (P66.5)`
-  - `a43c220` — `feat(acp): implement session capability loadout and agent import verification`
-  - `8228d74` — `docs: update hero tagline hierarchy and external agent harnesses in README`
-  - `7dfd2d2` — `docs: highlight full capabilities including background automations, deep search, and storage intelligence in README`
-  - `61bfdd5` — `docs: modernize frontier model references and highlight agent support in README`
-  - `d08d438` — `docs: remove external screenshot from README`
-  - `25c1284` — `docs: update comparison table and features with 2026 ecosystem capabilities`
-  - `76872c5` — `feat(terminal): one PTY plane — shell integration, provenance, and agent terminal executor (v3.80)`
+  - `6bf1fa6` — `docs(readme): modernize frontier model references and competitor capabilities`
+  - `506a26d` — `docs(readme): update capability matrix, native agent plane, and architecture`
+  - `4f61eb7` — `docs: update specification, architecture, changelog, and delivery status for native plane and release gates`
+  - `c9de476` — `fix(guard): add fallback return for sandbox capabilities and stabilize e2e harness`
+  - `08fe892` — **verified actual subject is the single character `\`** (`git log -1 --format=%s 08fe892`); this entry previously repeated the intended message `perf: record fresh p45 live performance benchmark measurements`, which is not the commit's real subject. Touches only `scripts/p45-live-measurements.json`.
+  - `ffb6d86` — `feat(guard): add windows and macos sandbox capabilities and worktree branch restore`
+  - `8b6bdaa` — `feat(coordinator): wire native tools, context providers, and add performance measurement suite`
+  - `a8bfc07` — `test(coordinator): implement real-world cowork and software benchmark suite`
+  - `f6cabaf` — `fix(tauri): correct calendar command return types and add live agent harness verification`
+  - `a582e8b` — `test(coordinator): add multi-agent swarm and cowork capability verification suite`
+  - `0b946bf` — `docs: document multi-agent swarm fleet, avoidance store, calendar ipc, and context mode`
+  - `5e659cd` — `feat(core): implement multi-agent fleet worktrees, failure avoidance store, and calendar schema`
+  - `0aa07c6` — `docs: reconcile runtime evidence status and audit ledger`
+  - `5499572` — `feat(theme): migrate default brand tokens to cool-blue and add user-selectable accents (P66.5)`
+  - `044e4ae` — `feat(acp): implement session capability loadout and agent import verification`
+  - `95acf00` — `docs: update hero tagline hierarchy and external agent harnesses in README`
+  - `0475bf2` — `docs: highlight full capabilities including background automations, deep search, and storage intelligence in README`
+  - `926af35` — `docs: modernize frontier model references and highlight agent support in README`
+  - `5a8a136` — `docs: remove external screenshot from README`
+  - `a0f960b` — `docs: update comparison table and features with 2026 ecosystem capabilities`
+  - `7b25f8c` — `feat(terminal): one PTY plane — shell integration, provenance, and agent terminal executor (v3.80)`
 - **Verification evidence (last green run)**:
   - `cargo test -p everyaios-core`: `666 passed, 0 failed` (including `governor::tests`, `worktrees::tests`, `git_queue::tests`).
   - `cargo test -p everyaios-guard`: `all passed, 0 failed` (including `sandbox::tests`, `loopguard::tests`, `netfloor::tests`).
@@ -440,8 +440,8 @@ Tag legend: `[V]` verified by an executed command this session · `[V-prior]` ve
 8. **~~Stale doc-comment in `AppState`~~ — RETRACTED 2026-09-16.** `src-tauri/src/state.rs` was re-read: there is **no** dangling `shell_cmds` doc-comment. The only remaining `shell_cmds` references are accurate historical notes in `commands.rs`/`terminal_cmds.rs`/`work_cmds.rs` explaining that the retired piped path is gone. The prior claim was wrong; nothing to fix. `[V]`
 
 ### D. BUGS / DEFECTS
-1. **Malformed commit subject in `main` history.** `974e9ac`'s full subject is a single backslash `\` (`git log --format=%h %s`). Still present, 5 commits from HEAD. `[V]`
-2. **The Conventional-Commits rule is violated throughout history**, not just once. Non-conventional subjects still reachable: `9db3dd3`, `f71fd26`, `6c6d87a`, `df85f67`, `645e949` ("ui updates"), `802205a`, `81688f1`, `2372b04`, `14a6de3`, `974e9ac`. Any current complaint about the newest commits is a pre-existing pattern. `[V]`
+1. **Malformed commit subject in `main` history.** `08fe892`'s full subject is a single backslash `\` (`git log --format=%h %s`). Still present, 5 commits from HEAD. `[V]`
+2. **The Conventional-Commits rule is violated throughout history**, not just once. Non-conventional subjects still reachable: `9db3dd3`, `f71fd26`, `6c6d87a`, `df85f67`, `645e949` ("ui updates"), `802205a`, `81688f1`, `2372b04`, `14a6de3`, `08fe892`. Any current complaint about the newest commits is a pre-existing pattern. `[V]`
 3. **~~Timing-flaky release gate~~ — FIXED 2026-09-16.** `bench_browser_snapshot_tree_build` no longer asserts on a single wall-clock sample. The root cause is real and was measured: five consecutive samples on an idle machine spread **8.71 ms → 26.94 ms (≈3×)**, so under `cargo test`'s parallel runner one unlucky sample can clear any tight budget while the code is fine. It now takes the **best of 5** samples — the minimum excludes additive noise, and a genuine regression raises the minimum too, so the gate still bites. `[V]`
 4. **~~Environment-dependent failing tests with no skip gate~~ — FIXED 2026-09-16.** `live-agent-harness.test.ts` now probes for the real binaries and `test.skipIf(!hasBinary)`-skips them with a named warning line. Negative test (restricted `PATH`): **4 skip / 0 fail** where it previously produced 2 failed + 2 errors; with the binaries present it is **7 pass / 0 fail**. `[V]`
 5. **~~Second flaky test~~ — RETRACTED 2026-09-16.** `llamafile_healthy_probes_health_endpoint` (`crates/everyaios-core/src/local_tests.rs`) is **already hardened**: a 200×10 ms readiness poll, a 12-attempt probe retry loop, and an environmental-skip path that first proves the mock answers a blocking `GET` before blaming the code under test. The flake it described no longer exists; nothing was changed. `[V]`
@@ -459,7 +459,7 @@ Tag legend: `[V]` verified by an executed command this session · `[V-prior]` ve
 Fresh this session:
 - `node scripts/check-doc-sync.mjs` → **exit 0** — 166 capabilities in sync (yaml == ARCH/09 == spec §0); TODO.md 1428 = 1220 done + 208 open matches header; shell chrome v3.80 matches the changelog; kernel gate clear. `[V]`
 - `node scripts/ipc-parity.mjs` → **exit 0** — 330 registered · 326 defined · 270 UI-invoked · **0 broken** · 0 unregistered definitions · 0 dead events · 60 ghosts · 1 unused event. `[V]`
-- Working tree **clean**, HEAD `f879d8e`. `[V]`
+- Working tree **clean**, HEAD `6bf1fa6`. `[V]`
 
 Prior wave (not re-run by me):
 - `security-gate.mjs` PASS across S1–S6 (guard deny 189, p10 10, audit 56, mcp 60, parity 0 broken, approval provenance). `[V-prior]`
@@ -761,10 +761,10 @@ correctly name-filtered.
 
 **Scope taken:** finish the in-flight Tier-2 (P65) item — make the Settings
 Control Center backend actually reachable, and give the UI one typed seam onto
-it. This closes the defect that the prior commit (`792dbaf`) left behind.
+it. This closes the defect that the prior commit (`4762664`) left behind.
 
 ### The defect inherited at HEAD
-`792dbaf` added `src-tauri/src/settings_cmds.rs` (1,608 LOC, 11 `#[tauri::command]`
+`4762664` added `src-tauri/src/settings_cmds.rs` (1,608 LOC, 11 `#[tauri::command]`
 fns, all the §17.12.2 read models + the §17.12.3 mutation funnel) but **never
 declared the module** and **never registered the commands**. `grep -r settings_cmds
 src-tauri/` returned zero matches. It was invisible to the compiler, unreachable
@@ -883,7 +883,7 @@ from the UI, and would have **failed** `tests/registration_sync.rs` — which wa
 
 **Item taken:** P65.4 (Tier 2, Settings Control Center). The plan's target file
 `ui/src/components/settings/schedules-tab.tsx` does not exist; the real surface is
-`ui/src/components/panels/schedules-section.tsx` (landed in `792dbaf`).
+`ui/src/components/panels/schedules-section.tsx` (landed in `4762664`).
 
 ### Resolved the §2G finding-4 open decision
 `ScheduleSettings` carried no `name` and no run count, so the Settings surface
@@ -952,11 +952,11 @@ import was removed (no dangling references).
 ## 2I. Implementation wave 6 (2026-09-17) — P65.3 Channels & Connectors Inventory
 
 **Item taken:** P65.3 (Tier 2). Plan target files `ui/src/components/settings/connectors-tab.tsx`
-do not exist; the real surfaces are `ui/src/lib/connections.ts` (new in `792dbaf`) and
+do not exist; the real surfaces are `ui/src/lib/connections.ts` (new in `4762664`) and
 `ui/src/components/panels/connectors-panel.tsx`.
 
 ### Found: TWO incompatible types named `ConnectionRecord`
-`792dbaf` added a TypeScript `ConnectionRecord` in `ui/src/lib/connections.ts` while
+`4762664` added a TypeScript `ConnectionRecord` in `ui/src/lib/connections.ts` while
 `settings_cmds.rs` implements the §17.12.2 `ConnectionRecord`. They disagree on all
 three axes, so importing "`ConnectionRecord`" from either module silently gave a
 different shape — precisely the contract drift `everyaios-types` exists to remove on
@@ -1351,7 +1351,7 @@ landed (best-effort, matching how `chat.ts` treats the kernel as optional).
 `ui/src/components/panels/agents-models-section.tsx:483` contained
 `(agent.launchable ?? agent.status === 'installed' || native)`, which is
 **TS5076** (`??` and `||` cannot be mixed without parentheses). It came in with
-`792dbaf` — the same WIP commit that shipped the orphaned `settings_cmds.rs`.
+`4762664` — the same WIP commit that shipped the orphaned `settings_cmds.rs`.
 Since `tsc --noEmit` is the UI's *sole* mechanical gate, the UI package was
 failing its only gate at HEAD. Fixed to `launchable ?? (installed || native)`,
 which is the intent already expressed at line 398 of the same file and matches
@@ -2126,8 +2126,8 @@ nothing in it); a throwing read is best-effort and never fails the turn.
 
 ### Commits (vendor-neutral, pushed to `origin/main`)
 
-- `df7ff10` `feat(core): serve the terminal plane over a read-only terminal/* arm (P54.5)`
-- `12b5218` `feat(coordinator): mount the loop's own tools every turn and read the shell (P54.5)`
+- `0bba64c` `feat(core): serve the terminal plane over a read-only terminal/* arm (P54.5)`
+- `d74cbfd` `feat(coordinator): mount the loop's own tools every turn and read the shell (P54.5)`
 
 ### Disk
 
@@ -2192,7 +2192,7 @@ stayed fast. `/` is now **21 G used / 8.8 G free (71%)**; `/tmp` has 73 G free.
 ---
 
 ## 5. File Change Ledger (Most Recent First)
-- **2026-09-17 wave 19 (P54.5 coordinator→PTY seam — see §2Y, committed `df7ff10` + `12b5218`, pushed):** `crates/everyaios-core/src/terminal.rs` (new `TerminalCommandView` / `TerminalSessionView` / `TerminalPlaneStatus` read models, `detached_plane_status()`, `TerminalPlaneObserver` trait, `impl … for PtyHost`, 2 real-PTY tests) · `crates/everyaios-core/src/chat.rs` (`terminal_plane` relay field + `attach_terminal_plane`, `terminal_rpc` façade with `NO_TERMINAL_PLANE`, the `terminal/*` arm before the `method not found` catch-all, 2 frame-level relay tests) · `crates/everyaios-core/src/tools.rs` (honest `script.run` description + `code` arg description; it said rquickjs/JavaScript) · `src-tauri/src/lib.rs` (attach the observer over the same `Arc<PtyHost>` the executor holds, before the relay is published) · `src-tauri/src/terminal_cmds.rs` (the 4 read commands now serialize the shared structs) · `packages/coordinator/src/tools.ts` (`LOOP_PINNED_TOOL_IDS` + pinning in `resolveActiveTools` with `previouslyUsed` as the top class; `TerminalPlaneStatus`/`TerminalSessionView` types; `terminalPlaneStatus`/`terminalLastCommand`) · `packages/coordinator/src/chat.ts` (plane state injected below `CACHE_BOUNDARY` as a logged block) · `packages/coordinator/src/context-trace.ts` (`terminal_plane` context source) · `packages/coordinator/src/{tools,chat}.test.ts` (7 new tests) · `desktop_app/ARCH/17-NATIVE-AGENT.md` (§17.4.1 loop-pinning rule + why; §17.4.2 shell-execution heading, corrected row, `terminal/*` read-only table; §17.1 `everyaios-script` row un-linked from `script.run`) · `desktop_app/TODO.md` (P54.5 row + P54 summary row) · `desktop_app/CURRENT_RUN.md` (§2Y + this ledger entry).
+- **2026-09-17 wave 19 (P54.5 coordinator→PTY seam — see §2Y, committed `0bba64c` + `d74cbfd`, pushed):** `crates/everyaios-core/src/terminal.rs` (new `TerminalCommandView` / `TerminalSessionView` / `TerminalPlaneStatus` read models, `detached_plane_status()`, `TerminalPlaneObserver` trait, `impl … for PtyHost`, 2 real-PTY tests) · `crates/everyaios-core/src/chat.rs` (`terminal_plane` relay field + `attach_terminal_plane`, `terminal_rpc` façade with `NO_TERMINAL_PLANE`, the `terminal/*` arm before the `method not found` catch-all, 2 frame-level relay tests) · `crates/everyaios-core/src/tools.rs` (honest `script.run` description + `code` arg description; it said rquickjs/JavaScript) · `src-tauri/src/lib.rs` (attach the observer over the same `Arc<PtyHost>` the executor holds, before the relay is published) · `src-tauri/src/terminal_cmds.rs` (the 4 read commands now serialize the shared structs) · `packages/coordinator/src/tools.ts` (`LOOP_PINNED_TOOL_IDS` + pinning in `resolveActiveTools` with `previouslyUsed` as the top class; `TerminalPlaneStatus`/`TerminalSessionView` types; `terminalPlaneStatus`/`terminalLastCommand`) · `packages/coordinator/src/chat.ts` (plane state injected below `CACHE_BOUNDARY` as a logged block) · `packages/coordinator/src/context-trace.ts` (`terminal_plane` context source) · `packages/coordinator/src/{tools,chat}.test.ts` (7 new tests) · `desktop_app/ARCH/17-NATIVE-AGENT.md` (§17.4.1 loop-pinning rule + why; §17.4.2 shell-execution heading, corrected row, `terminal/*` read-only table; §17.1 `everyaios-script` row un-linked from `script.run`) · `desktop_app/TODO.md` (P54.5 row + P54 summary row) · `desktop_app/CURRENT_RUN.md` (§2Y + this ledger entry).
 - **2026-09-16 implementation wave 3 (this session, uncommitted — see §2E):** `crates/everyaios-vault/src/keyring.rs` (`reveal_for_metadata_probe` + shared `highest_priority_credential`, 6 tests) · `crates/everyaios-vault/src/broker.rs` (`ModelsProbe`, `Broker::probe_models`/`models_url`, `ProviderEndpoint::models_url`, `credential_safe_url`, `BrokerError::InsecureEndpoint`, 8 tests) · `crates/everyaios-vault/src/lib.rs` (exports) · `crates/everyaios-catalog/src/fetch.rs` (shared `endpoint_probe_result`, public `count_models`) · `crates/everyaios-catalog/src/lib.rs` (exports) · `src-tauri/src/catalog_cmds.rs` (`probe_provider_vault`, `observation_from_probe`, `sweep_connected_providers`, `spawn_observation_sweep`, `spawn_boot_observation_sweep`, `record_observation_in` takes the registry, 3 tests) · `src-tauri/src/lib.rs` (boot + setup/unlock sweep hooks; `AppHandle` on `vault_setup`/`vault_unlock`) · `DESKTOP-APP-SPEC.md` + `ARCH/09-FEATURE-MATRIX.md` + `TODO.md` (A11 vault-mediated probing).
 - **2026-09-16 implementation wave 2 (this session, uncommitted — see §2D):** `crates/everyaios-catalog/src/observations.rs` (**new** — durable per-provider observation store, `apply_observations`, `health_of`, `apply_observation_health`, 8 tests) · `crates/everyaios-catalog/src/{lib,probe,routing_feed}.rs` (module + exports; **vacuous `hard_caps_verified` fix** + test; `health_of` accessor) · `src-tauri/src/catalog_cmds.rs` (record observation on probe, `observed_registry`/`observation_file`, `observedAt`/`reachable`/`observedModelCount` row fields, 4 write-back tests) · `src-tauri/src/discovery_cmds.rs` (observed registry + observation-derived routing health) · `src-tauri/src/vault_cmds.rs` (rationale'd `#[allow]` for the 10-arg IPC command) · `ui/src/lib/providers.ts` + `ui/src/components/panels/settings-providers.tsx` (`observedAt`/`reachable`/`observedModelCount` + `last check failed` badge) · `DESKTOP-APP-SPEC.md` + `ARCH/09-FEATURE-MATRIX.md` + `TODO.md` (A11 landed state + remaining gap) · **computer-use autonomous path:** `crates/everyaios-desktop/src/{lib,policy}.rs` (provenance through the audit path) · `crates/everyaios-core/src/chat.rs` (`ChatRelay::attach_desktop`) · `src-tauri/src/desktop_cmds.rs` (`DesktopEngineBackend`, `publish_desktop_backend`, helper tests) · `src-tauri/src/lib.rs` (boot attach before relay publish).
 - **2026-09-16 implementation wave (this session, uncommitted — see §2C):** `crates/everyaios-vault/src/broker.rs` (incremental stream API + 2 tests) · `crates/everyaios-core/src/openai_server.rs` (tool calling + SSE pieces + 6 tests) · `crates/everyaios-core/src/lib.rs` (re-exports) · `src-tauri/src/openai_cmds.rs` (forward tools, shape `tool_calls`, override `stream`) · `crates/everyaios-core/tests/p10_bench.rs` (best-of-5) · `packages/coordinator/src/live-agent-harness.test.ts` (binary-presence skip gate) · `.github/workflows/ci.yml` (vendored `core-*` test step) · `scripts/check-doc-sync.mjs` (TODO revision stamp guard) · `TODO.md` · `DESKTOP-APP-SPEC.md` · `ARCH/09-FEATURE-MATRIX.md` · `.agents/skills/browser-computer-use/SKILL.md` · `crates/everyaios-core/src/agui.rs` + `chat.rs` (AG-UI build-state honesty) · fmt-only: `everyaios-cdp/src/{browser,lib}.rs`, `everyaios-core/src/{git_queue,governor,shell_integration,terminal,worktrees}.rs`, `everyaios-memory/src/avoid.rs`, `everyaios-vault/src/lib.rs` · clippy: `everyaios-guard/src/{ticket,netfloor}.rs`, `everyaios-desktop/src/{apps,launch}.rs`, `everyaios-desktop/tests/live_linux_e2e.rs`, `everyaios-core/src/sync_transport.rs`.

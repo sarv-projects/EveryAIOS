@@ -8897,7 +8897,7 @@ claims *about itself*; `scripts/check-doc-sync.mjs` gates index/count drift in t
 #### `docs/codebase/hotspots.md` — 84 lines · 3.9 KB
 > Hotspots
 
-- opening: Graph-derived signals from the codegraph index (commit `911234c`, tree-sitter, 2,203 file-level edges).
+- opening: Graph-derived signals from the codegraph index (commit `c574ea4`, tree-sitter, 2,203 file-level edges).
 
 #### `docs/codebase/invariants.md` — 75 lines · 3.4 KB
 > Invariants
